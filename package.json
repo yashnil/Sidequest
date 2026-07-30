@@ -1,0 +1,35 @@
+{
+  "name": "sidequest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "config": {
+    "port": "4200"
+  },
+  "scripts": {
+    "dev": "PORT=${PORT:-$npm_package_config_port} npm run dev --workspace @sidequest/web",
+    "build": "npm run build --workspace @sidequest/web",
+    "start": "PORT=${PORT:-$npm_package_config_port} npm run start --workspace @sidequest/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.1.2",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.8.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,108 @@
+@import 'tailwindcss';
+
+/*
+ * Sidequest looks like a printed field guide, not a SaaS dashboard: warm paper,
+ * a serif for anything editorial, ink-on-paper contrast, and colour reserved for
+ * things that carry meaning (fit, season, warnings).
+ */
+@theme {
+  --color-paper: #faf7f2;
+  --color-paper-raised: #ffffff;
+  --color-paper-sunk: #f2ede4;
+  --color-ink: #1c1917;
+  --color-ink-muted: #57534e;
+  --color-ink-faint: #8a8279;
+  --color-rule: #e2dcd1;
+
+  --color-pine: #2f5d50;
+  --color-pine-soft: #e3ede9;
+  --color-amber: #a85c22;
+  --color-amber-soft: #f7ead9;
+  --color-slate-blue: #3c5a77;
+  --color-slate-blue-soft: #e4ebf2;
+  --color-clay: #9a3f36;
+  --color-clay-soft: #f6e3e0;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  --radius-card: 0.875rem;
+}
+
+/*
+ * Dark mode overrides the custom properties `@theme` emitted on :root. It cannot
+ * be another `@theme` block — those are collected at build time regardless of the
+ * media query they sit in, which would make the dark palette unconditional.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #14130f;
+    --color-paper-raised: #1e1c18;
+    --color-paper-sunk: #26231d;
+    --color-ink: #f3efe7;
+    --color-ink-muted: #b8b1a6;
+    --color-ink-faint: #918a80;
+    --color-rule: #35312a;
+
+    --color-pine: #8cc0ad;
+    --color-pine-soft: #1e332c;
+    --color-amber: #e0a066;
+    --color-amber-soft: #37281c;
+    --color-slate-blue: #9bbcd8;
+    --color-slate-blue-soft: #1d2831;
+    --color-clay: #e29a90;
+    --color-clay-soft: #38231f;
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* A single, consistent focus treatment. Never removed, never invisible. */
+  :focus-visible {
+    outline: 2px solid var(--color-pine);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-pine-soft);
+    color: var(--color-ink);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  /* Faint paper texture — enough to read as material, not enough to notice. */
+  .paper-grain {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      color-mix(in srgb, var(--color-ink) 4%, transparent) 1px,
+      transparent 0
+    );
+    background-size: 22px 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
