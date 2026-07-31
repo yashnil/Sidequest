@@ -10,6 +10,7 @@ import type {
   SelectionStatus,
   TravelerProfile,
   TripBasics,
+  WeatherDataset,
 } from '@sidequest/core';
 import type { TravelTimeMatrix } from '@sidequest/geo';
 
@@ -114,11 +115,30 @@ export interface PlannerInput {
    * open are two different questions, and a plan has to pass both.
    */
   hours: OperatingHoursDataset;
+  /**
+   * What the sky is expected to do, resolved and validated at the same boundary.
+   * The weakest of the three and the only one that may not decide legality: it
+   * chooses between days that access and hours have already allowed, and it
+   * carries the daylight windows — which are a fact rather than a prediction and
+   * are the one part of this that does constrain.
+   *
+   * Always present, never optional. A trip whose forecast could not be fetched
+   * gets a dataset full of `unavailable` days, because the difference between
+   * "we looked and could not find out" and "nobody looked" is exactly what a
+   * traveller needs told.
+   */
+  weather: WeatherDataset;
   /** Matrix id for the trip base. Days start and end here. */
   baseId: string;
   config?: Partial<PlannerConfig>;
   /** Injected so output is reproducible in tests. */
   generatedAt?: string;
+  /**
+   * "Now", for the one question that needs it: whether the forecast behind this
+   * plan has aged past its own freshness window. Injected rather than read, so a
+   * staleness test does not have to wait six hours.
+   */
+  now?: Date;
 }
 
 export type PlanFailureCode =

@@ -11,9 +11,11 @@ import {
   type TravelerProfile,
   type UnscheduledPlace,
   type ValidationIssue,
+  type WeatherDataset,
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
 import { isOpenOnDate } from './schedule';
+import { validateDayWeather } from './validate-weather';
 import type { PlannerConfig } from './types';
 import type { Place } from '@sidequest/core';
 
@@ -27,6 +29,9 @@ export interface ValidationInput {
   baseId: string;
   access: AccessDataset;
   hours: OperatingHoursDataset;
+  weather: WeatherDataset;
+  /** "Now", for the staleness check only. Injected so the test is instant. */
+  now?: Date;
 }
 
 /**
@@ -159,6 +164,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
 
     issues.push(...validateDayTransport(day, input));
     issues.push(...validateDayHours(day, input));
+    issues.push(...validateDayWeather(day, input));
 
     const strenuousAllowed = profile.derived.preferredPhysicalIntensity === 'strenuous' ? 2 : 1;
     if (day.totals.strenuousCount > strenuousAllowed) {

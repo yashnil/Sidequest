@@ -30,6 +30,15 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * has since stopped being true. When in doubt, bump: a rebuild costs a click and
  * keeps every selection.
  *
+ * 5 — days are placed against weather and daylight. Each day carries the
+ * evidence it was built from and which kind that was (a forecast, a historical
+ * pattern, or nothing at all), weather-sensitive visits carry their own
+ * assessment, and daylight-only visits are now scheduled inside a computed
+ * sunrise-to-sunset window rather than merely flagged. A version-4 plan was
+ * built with none of that: rendering it on a screen that now discusses weather
+ * would imply a check that never happened, and it can contain a signed
+ * daylight-only visit that ends after dark.
+ *
  * 4 — Manzanar became two places. The compound record's visitor-centre hours no
  * longer belong to the site that kept its id, so a version-3 plan can quote a
  * window against a place that has none. Any change to the shape of the place
@@ -46,7 +55,7 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * split driving from riding, walking and waiting, and every day carries a
  * transport summary.
  */
-export const ITINERARY_VERSION = 4 as const;
+export const ITINERARY_VERSION = 5 as const;
 
 /** What a block of time on a day actually is. */
 export const ITINERARY_ITEM_KINDS = [
@@ -143,6 +152,36 @@ export const bookingRequirementSchema = z.object({
 });
 export type BookingRequirement = z.infer<typeof bookingRequirementSchema>;
 
+/**
+ * The weather a scheduled visit was placed against.
+ *
+ * Persisted with the plan for the same two reasons the opening-hours evidence
+ * is: a stored itinerary has to be able to explain its own shape — "the exposed
+ * hike is on Tuesday because Tuesday was the clear day in the forecast we read
+ * at 08:12" — and a validator has to be able to catch a timeline that has
+ * drifted from the evidence it claims to respect.
+ *
+ * `evidence` is the field that stops this being a lie. A record that says
+ * `historical_pattern` may not be rendered in forecast language anywhere, and a
+ * `forecast` carries the moment it was fetched so the UI can say when it goes
+ * stale. Only present on activities the weather actually bore on.
+ */
+export const scheduledWeatherSchema = z.object({
+  evidence: z.enum(['forecast', 'historical_pattern', 'unavailable']),
+  suitability: z.enum(['favorable', 'workable', 'poor', 'incompatible', 'unknown']),
+  /** One sentence. The reason the traveller reads. */
+  summary: z.string().min(1),
+  /** Stable codes, so the UI and validator do not parse prose. */
+  reasonCodes: z.array(z.string().min(1)).default([]),
+  /** Which weather point this came from, and what it cannot speak for. */
+  locationId: z.string().min(1),
+  locationLabel: z.string().min(1),
+  /** ISO instant, on forecast evidence only. */
+  fetchedAt: z.string().datetime().optional(),
+  provider: z.string().min(1),
+});
+export type ScheduledWeather = z.infer<typeof scheduledWeatherSchema>;
+
 export const itineraryItemSchema = z
   .object({
     id: z.string().min(1),
@@ -163,19 +202,35 @@ export const itineraryItemSchema = z
     physicalIntensity: physicalIntensitySchema.optional(),
     /** Set on activities whose opening hours constrained where they were placed. */
     hours: scheduledHoursSchema.optional(),
+    /** Set on activities the weather bore on. Absent means it did not. */
+    weather: scheduledWeatherSchema.optional(),
     /** Set when this visit needs booking or a permit the traveller must arrange. */
     booking: bookingRequirementSchema.optional(),
     /**
-     * Officially signed for daylight use only. Carried so the traveller is told
-     * and so the fact survives into a stored plan — *not* enforced: Sidequest
-     * has no sunrise or sunset times yet, and every surface that shows this says
-     * as much rather than implying the light was checked.
+     * Officially signed for daylight use only.
+     *
+     * As of version 5 this is *enforced*, not merely recorded: the visit is
+     * scheduled inside a sunrise-to-sunset window computed for the place's own
+     * weather point, with a buffer before sunset so the traveller is not walking
+     * back to the car in the dark. `daylight` carries the window that was used,
+     * so the timeline can state it and a validator can check it.
+     *
+     * The window is absent when no solar record could be computed. That is not
+     * a licence to schedule freely — it means the light was not checked, the
+     * copy says so, and the day is left as the other constraints made it.
      *
      * Optional rather than defaulted: absent means "not daylight-limited", and
      * every travel, meal and rest item on the timeline would otherwise have to
      * carry a `false` that says nothing.
      */
     daylightOnly: z.boolean().optional(),
+    daylight: z
+      .object({
+        sunriseMinute: minuteOfDaySchema,
+        sunsetMinute: minuteOfDaySchema,
+        source: z.string().min(1),
+      })
+      .optional(),
     /**
      * A fact about this stop that changes without notice and that Sidequest has
      * not checked today. Never implies the opposite when absent — it means there
@@ -279,6 +334,81 @@ export const dayAvailabilitySchema = z.object({
 });
 export type DayAvailability = z.infer<typeof dayAvailabilitySchema>;
 
+/**
+ * Somewhere else to go if the weather takes the day.
+ *
+ * A backup is a promise, so every field here exists to keep it honest. It names
+ * a real place from this traveller's own board, one they have not marked as
+ * uninteresting, that is reachable and open on this date, that is genuinely less
+ * exposed to whatever is forecast, and that is not already on the plan
+ * somewhere. If no candidate clears all of that, the day carries no backup and
+ * says so — an invented fallback is worse than an admitted gap, because the
+ * traveller only discovers the difference standing in the rain.
+ *
+ * Backups are kept apart from `items` on purpose. They are not scheduled, they
+ * consume none of the day's capacity, and nothing in the totals counts them.
+ */
+export const dayBackupSchema = z.object({
+  placeId: z.string().min(1),
+  name: z.string().min(1),
+  /** What about the weather would send the traveller here. */
+  trigger: z.string().min(1),
+  /** Why this one copes better than what it would replace. */
+  why: z.string().min(1),
+  /** Which scheduled stop it stands in for, when it stands in for one. */
+  replacesPlaceId: z.string().min(1).optional(),
+  /** How you would get there, in one clause. */
+  accessSummary: z.string().min(1),
+  /** When it is open on this date, in one clause. */
+  openingSummary: z.string().min(1),
+  driveMinutesFromBase: z.number().int().min(0),
+  /** Anything about it that still needs checking. Never suppressed. */
+  caution: z.string().min(1).optional(),
+});
+export type DayBackup = z.infer<typeof dayBackupSchema>;
+
+/**
+ * What the weather did to this day, and what it could not tell us.
+ *
+ * Derived from the evidence and the finished timeline rather than declared
+ * alongside them, so it cannot drift. `evidence` is load-bearing: it decides
+ * which words the UI is allowed to use, and mixing a forecast day and a
+ * historical-pattern day under one label is the single most misleading thing
+ * this feature could do.
+ */
+export const dayWeatherSummarySchema = z.object({
+  /** Which kind of knowledge this day rests on. `unavailable` is a real answer. */
+  evidence: z.enum(['forecast', 'historical_pattern', 'unavailable']),
+  /** The weather point the day's stops mostly sat under. */
+  locationId: z.string().min(1).optional(),
+  locationLabel: z.string().min(1).optional(),
+  /** One sentence describing the day. Never a forecast when evidence is not. */
+  summary: z.string().min(1),
+  temperatureMaxC: z.number().optional(),
+  temperatureMinC: z.number().optional(),
+  precipitationProbabilityPercent: z.number().min(0).max(100).nullable().default(null),
+  precipitationMm: z.number().min(0).optional(),
+  snowfallCm: z.number().min(0).optional(),
+  windGustMaxKph: z.number().min(0).optional(),
+  condition: z.string().min(1).optional(),
+  sunriseMinute: minuteOfDaySchema.optional(),
+  sunsetMinute: minuteOfDaySchema.optional(),
+  /** ISO instant the forecast was retrieved. Absent on other evidence kinds. */
+  fetchedAt: z.string().datetime().optional(),
+  /** Minutes after `fetchedAt` beyond which the UI must call it stale. */
+  staleAfterMinutes: z.number().int().min(1).optional(),
+  /** Why weather moved something, in the traveller's words. Empty is normal. */
+  decisions: z.array(z.string().min(1)).default([]),
+  /** Weather facts worth reading before committing to the day. */
+  cautions: z.array(z.string().min(1)).default([]),
+  backups: z.array(dayBackupSchema).default([]),
+  /** Set when nothing on the board could serve as an honest backup. */
+  noBackupReason: z.string().min(1).optional(),
+  provider: z.string().min(1),
+  attribution: z.string().min(1),
+});
+export type DayWeatherSummary = z.infer<typeof dayWeatherSummarySchema>;
+
 export const itineraryDaySchema = z.object({
   dayNumber: z.number().int().min(1),
   date: isoDateSchema,
@@ -291,6 +421,7 @@ export const itineraryDaySchema = z.object({
   totals: dayTotalsSchema,
   transport: dayTransportSchema,
   availability: dayAvailabilitySchema,
+  weather: dayWeatherSummarySchema,
   intensity: z.enum(['light', 'moderate', 'intense']),
   warnings: z.array(z.string().min(1)).default([]),
 });
@@ -357,6 +488,13 @@ export const UNSCHEDULED_REASON_CODES = [
   'closed_on_trip_dates',
   /** Open on some day, but never for long enough, or never early enough. */
   'hours_do_not_fit',
+  /**
+   * A typed requirement of the place is contradicted by the weather on every
+   * date it could otherwise have gone on. Two situations only: an unsurfaced
+   * approach that needs dry ground, and a signed daylight-only site with no day
+   * long enough. Never "it looked like rain".
+   */
+  'weather_incompatible',
 ] as const;
 export const unscheduledReasonCodeSchema = z.enum(UNSCHEDULED_REASON_CODES);
 export type UnscheduledReasonCode = z.infer<typeof unscheduledReasonCodeSchema>;
@@ -431,6 +569,32 @@ export const VALIDATION_ISSUE_CODES = [
   'missing_operating_data',
   /** The stored hours evidence disagrees with the times on the timeline. */
   'operating_evidence_inconsistent',
+  // --- Weather and daylight ----------------------------------------------
+  // A fourth block, kept apart from the three above for the reason they are
+  // kept apart from each other: a traveller told "this does not work" deserves
+  // to know whether it was the road, the gate, the clock or the sky. Only the
+  // first two of these are errors — the rest are cautions, because a forecast
+  // is an opinion and blocking a plan on one would be overreach.
+  /** A signed daylight-only visit is scheduled outside the computed daylight. */
+  'scheduled_outside_daylight',
+  /** A typed weather requirement of the place is contradicted on its day. */
+  'weather_incompatible_scheduled',
+  /** Scheduled on a day the weather works against, with no better day free. */
+  'poor_weather_scheduled',
+  /** The forecast behind this plan has aged past its own freshness window. */
+  'weather_evidence_stale',
+  /** No weather could be obtained, so nothing was placed against it. */
+  'weather_unavailable',
+  /** The plan quotes weather against a place that has none recorded. */
+  'weather_evidence_inconsistent',
+  /** Historical patterns were used to rank days, which they cannot support. */
+  'historical_pattern_used_as_forecast',
+  /** A backup is closed, unreachable, disliked, duplicated or no safer. */
+  'backup_not_usable',
+  /** A weather-sensitive day has no honest fallback available. */
+  'no_weather_backup',
+  /** A place the traveller chose by hand could not be placed for weather. */
+  'weather_blocked_manual_include',
 ] as const;
 export const validationIssueCodeSchema = z.enum(VALIDATION_ISSUE_CODES);
 export type ValidationIssueCode = z.infer<typeof validationIssueCodeSchema>;
@@ -457,6 +621,10 @@ export const REVISION_ACTION_CODES = [
   'separated_strenuous',
   /** Took a stop out of a shared access group so the rest of it still fits. */
   'shortened_access_group',
+  /** Put a weather-sensitive stop on a legal day with a better forecast. */
+  'moved_for_weather',
+  /** Attached a concrete fallback to a day the weather could take. */
+  'attached_backup',
   'left_unresolved',
 ] as const;
 export const revisionActionCodeSchema = z.enum(REVISION_ACTION_CODES);
@@ -477,6 +645,17 @@ export const planDiagnosticsSchema = z.object({
   matrixNote: z.string().min(1),
   /** Which generation of opening-hours data the plan was built against. */
   operatingHoursVersion: z.number().int().min(1),
+  /**
+   * The weather behind the plan's shape. `weatherEvidence` is the mixture the
+   * trip actually held — a trip that starts inside the forecast horizon and ends
+   * outside it legitimately holds two kinds at once, and flattening that to one
+   * label would either invent a forecast or discard a real one.
+   */
+  weatherDatasetVersion: z.number().int().min(1),
+  weatherProvider: z.string().min(1),
+  weatherEvidence: z.array(z.enum(['forecast', 'historical_pattern', 'unavailable'])).min(1),
+  /** When the dataset behind this plan was assembled. */
+  weatherGeneratedAt: z.string().min(1),
   revisionPasses: z.number().int().min(0),
   revisions: z.array(revisionActionSchema),
   capacity: z.object({
@@ -572,12 +751,26 @@ export function itineraryStructureFingerprint(itinerary: Itinerary): string {
               ? `${item.hours.openMinute}-${item.hours.closeMinute}/${item.hours.lastAdmissionMinute ?? '-'}`
               : '-',
             item.booking ? item.booking.kind : '-',
+            // The weather *decision*, not the weather. A model revising its
+            // precipitation figure must not change the fingerprint; a stop
+            // moving day, or a daylight window closing earlier, must.
+            item.weather ? `${item.weather.evidence}/${item.weather.suitability}` : '-',
+            item.daylight
+              ? `${item.daylight.sunriseMinute}-${item.daylight.sunsetMinute}`
+              : '-',
           ].join(':'),
         )
         .join('|');
       const transport = [day.transport.primaryMode, ...day.transport.serviceIds].join('+');
       const anchor = day.availability.anchorPlaceId ?? '-';
-      return `${day.dayNumber}@${day.date}#${day.window.startMinute}-${day.window.endMinute}{${transport}}<${anchor}>[${items}]`;
+      // Backups are structure: they are a commitment the plan makes about where
+      // the traveller goes instead, and a narration layer must not be able to
+      // swap one for another it likes the sound of.
+      const weather = [
+        day.weather.evidence,
+        ...day.weather.backups.map((backup) => backup.placeId),
+      ].join('+');
+      return `${day.dayNumber}@${day.date}#${day.window.startMinute}-${day.window.endMinute}{${transport}}<${anchor}>(${weather})[${items}]`;
     })
     .join('\n');
 

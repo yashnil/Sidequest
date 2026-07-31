@@ -1,12 +1,16 @@
 import {
+  DAYLIGHT_END_BUFFER_MINUTES,
   ITINERARY_VERSION,
   itinerarySchema,
   tripDates,
+  WEATHER_DATASET_VERSION,
+  type DayBackup,
   type Itinerary,
   type ItineraryDay,
   type MinuteInterval,
   type Place,
   type UnscheduledPlace,
+  type WeatherEvidenceKind,
 } from '@sidequest/core';
 import { MatrixError, tryLeg, validateMatrix } from '@sidequest/geo';
 import {
@@ -25,6 +29,11 @@ import {
   resolveOperatingHours,
   type PlaceDayHours,
 } from './hours';
+import {
+  chooseBackups,
+  summariseDayWeather,
+  type BackupCandidate,
+} from './backups';
 import { reviseDayPlans, type DayPlan } from './revise';
 import {
   buildDay,
@@ -36,6 +45,13 @@ import {
 } from './schedule';
 import { buildTransportStrategy } from './strategy';
 import { statusFor, validateItinerary, validateStrategy } from './validate';
+import {
+  narrowByDaylight,
+  resolveWeather,
+  weatherKeyFor,
+  weatherPreference,
+  type PlaceDayWeather,
+} from './weather';
 import { buildDailyWindows } from './windows';
 import {
   PLANNER_VERSION,
@@ -56,14 +72,20 @@ import {
  *    6. resolve date-aware access           16. validate the finished plan
  *    7. drop what cannot be reached         17. revise, bounded, deterministically
  *    8. resolve date-aware opening hours    18. derive the transport strategy
- *    9. drop what is never open in reach    19. return plan, diagnostics, conflicts
- *   10. group geographically and by access
+ *    9. resolve weather and daylight        19. return plan, diagnostics, conflicts
+ *   10. drop what no day can legally hold
+ *   11. group geographically and by access
  *
- * Steps 6 and 8 answer two different questions and both have to pass. Access
- * asks whether the traveller can legally get there and back; hours ask whether
- * anyone will let them in when they arrive. A place can be reachable and shut,
- * or open and unreachable, and collapsing the two is how a plan drives eighty
- * minutes to a locked gate.
+ * Steps 6, 8 and 9 answer different questions and all have to pass. Access asks
+ * whether the traveller can legally get there and back; hours ask whether anyone
+ * will let them in when they arrive; daylight asks whether there is any light
+ * left to do it in. A place can be reachable and shut, or open and unreachable,
+ * and collapsing them is how a plan drives eighty minutes to a locked gate.
+ *
+ * Weather is the odd one out and is treated as such. It never promotes and it
+ * never grants: it chooses between days the first three have already allowed,
+ * and it cautions about the one that gets picked. The only part of step 9 that
+ * constrains is daylight, which is arithmetic rather than a prediction.
  *
  * Pure: no I/O, no clock, no randomness. Same inputs in, byte-identical plan out.
  * Both the travel-time matrix and the access dataset arrive as data rather than
@@ -162,6 +184,22 @@ export function planTrip(input: PlannerInput): PlanResult {
   });
   const dayByDate = new Map(days.map((day) => [day.date, day]));
 
+  // --- Weather and daylight ----------------------------------------------
+  const weatherByPlaceDate = resolveWeather({
+    places: reachable.map((candidate) => ({
+      place: candidate.place,
+      durationMinutes: candidate.durationMinutes,
+      daylightOnly:
+        hoursByPlaceDate.get(hoursKey(candidate.place.id, dates[0]!))?.daylightOnly ?? false,
+    })),
+    dates,
+    dataset: input.weather,
+    avoidances: input.profile.avoidances,
+  });
+
+  const daylightOnlyFor = (placeId: string, date: string): boolean =>
+    hoursByPlaceDate.get(hoursKey(placeId, date))?.daylightOnly ?? false;
+
   /**
    * The intersection that decides everything downstream: the day's usable
    * hours, narrowed by the window the way in allows, then tested against the
@@ -179,7 +217,11 @@ export function planTrip(input: PlannerInput): PlanResult {
     const unit = unitByPlaceId.get(candidate.place.id);
     const resolved = unit ? accessByUnitDate.get(accessKey(unit.key, date)) : undefined;
     if (!resolved?.available) return null;
-    return {
+    // Daylight folded in here as well as in the layout, so a signed
+    // sunrise-to-sunset site with no long-enough day is reported as impossible
+    // up front rather than silently failing to fit later.
+    return narrowByDaylight(
+      {
       startMinute: Math.max(
         // You cannot be standing at a place before you have travelled to it.
         // Without this the filter is optimistic enough to call a stop feasible
@@ -193,7 +235,10 @@ export function planTrip(input: PlannerInput): PlanResult {
         day.window.endMinute,
         resolved.option.latestActivityEnd ?? Number.POSITIVE_INFINITY,
       ),
-    };
+      },
+      weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, date)),
+      daylightOnlyFor(candidate.place.id, date),
+    );
   };
 
   const openDates = new Map<string, ReadonlySet<string>>(
@@ -218,7 +263,50 @@ export function planTrip(input: PlannerInput): PlanResult {
   const plannable: PlanningCandidate[] = [];
   for (const candidate of reachable) {
     if ((openDates.get(candidate.place.id)?.size ?? 0) > 0) {
+      /**
+       * Reachable, open, and ruled out by the weather on every single day.
+       *
+       * Only the two hard cases can land here — an unsurfaced approach that
+       * needs dry ground, and a signed daylight-only site with no long enough
+       * day. A merely poor forecast never does: that stays on the plan with a
+       * caution, because refusing to show somebody a trip on the strength of a
+       * precipitation figure would be overreach.
+       *
+       * The distinction matters most for a manual pick. Told "there was no
+       * room", a traveller changes the wrong thing; told "the track in needs
+       * dry ground and every day of your trip is wet", they can decide.
+       */
+      const dayOptions = dates.filter((date) => openDates.get(candidate.place.id)?.has(date));
+      const blocked = dayOptions.every(
+        (date) =>
+          weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, date))?.assessment
+            .suitability === 'incompatible',
+      );
+      if (dayOptions.length > 0 && blocked) {
+        unscheduled.push(weatherBlocked(candidate, weatherByPlaceDate, dayOptions));
+        continue;
+      }
       plannable.push(candidate);
+      continue;
+    }
+    // Daylight is folded into `boundsFor`, so a signed sunrise-to-sunset site
+    // that no day is long enough for arrives here looking like an hours
+    // problem. Telling somebody their visit "does not fit inside its opening
+    // hours" when the real answer is "there is not enough light in December"
+    // sends them to change the wrong thing.
+    if (
+      daylightOnlyFor(candidate.place.id, dates[0]!) &&
+      dates.every((date) => {
+        const weather = weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, date));
+        const daylight = weather?.solar;
+        return (
+          daylight !== undefined &&
+          daylight.sunsetMinute - DAYLIGHT_END_BUFFER_MINUTES - daylight.sunriseMinute <
+            candidate.durationMinutes
+        );
+      })
+    ) {
+      unscheduled.push(weatherBlocked(candidate, weatherByPlaceDate, dates));
       continue;
     }
     unscheduled.push(hoursBlocked(candidate, hoursByPlaceDate, dates));
@@ -234,6 +322,29 @@ export function planTrip(input: PlannerInput): PlanResult {
     return map;
   };
 
+  /**
+   * The zone the base town sits in. A day with nothing scheduled is still a day
+   * somewhere, and that somewhere is where the traveller is sleeping.
+   */
+  const baseLocationId = input.weather.locations.find((location) =>
+    location.placeIds.some((placeId) =>
+      input.candidates.some(
+        (candidate) =>
+          candidate.place.id === placeId && candidate.place.relationship === 'base',
+      ),
+    ),
+  )?.id;
+
+  /** Weather for one day, keyed by place — everything the layout needs. */
+  const weatherFor = (date: string): Map<string, PlaceDayWeather> => {
+    const map = new Map<string, PlaceDayWeather>();
+    for (const candidate of reachable) {
+      const entry = weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, date));
+      if (entry) map.set(candidate.place.id, entry);
+    }
+    return map;
+  };
+
   const contextFor = (day: DayPlan['day']): LayoutContext => ({
     day,
     baseId: input.baseId,
@@ -242,6 +353,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     config,
     profile: input.profile,
     hours: hoursFor(day.date),
+    weather: weatherFor(day.date),
   });
 
   const maxStrenuousPerDay =
@@ -271,7 +383,29 @@ export function planTrip(input: PlannerInput): PlanResult {
     unitByPlaceId,
     feasibleDates,
     openDates,
+    (placeIds, date) => weatherPreference(placeIds, date, weatherByPlaceDate),
   );
+
+  /**
+   * What geography alone would have done, kept so the finished plan can say
+   * which stops the weather actually moved. Recomputed rather than inferred:
+   * asserting "we moved this for the forecast" is only honest if the
+   * counterfactual was really run.
+   */
+  const geographicOnly = new Map<string, number>();
+  for (const assignment of assignToDays(
+    plannable,
+    days,
+    input.matrix,
+    input.baseId,
+    unitByPlaceId,
+    feasibleDates,
+    openDates,
+  )) {
+    for (const candidate of assignment.candidates) {
+      geographicOnly.set(candidate.place.id, assignment.day.dayNumber);
+    }
+  }
   let dayPlans: DayPlan[] = [];
   const overflow: PlanningCandidate[] = [];
 
@@ -312,6 +446,19 @@ export function planTrip(input: PlannerInput): PlanResult {
     );
     for (const plan of ordered) {
       if (!isOpenOnDate(candidate.place, plan.day.date)) continue;
+      // Never onto a day that separates it from the rest of its access group.
+      //
+      // `accessGroup` means "one road, one fee, one long drive out and back" —
+      // Devils Postpile and Rainbow Falls are behind one shuttle boarding, and
+      // splitting them across two days means paying for the valley twice and
+      // driving to it twice. Clustering guarantees they start life on one day;
+      // this is the pass that could quietly undo it, and it did: with the
+      // weather layer choosing a different day for the cluster, one member
+      // overflowed and landed on a day of its own.
+      //
+      // Leaving it unscheduled with a reason is the honest outcome. A stop that
+      // costs a second round trip up a shuttle-only valley is not the same stop.
+      if (splitsAccessGroup(candidate, plan, dayPlans)) continue;
       // The deterministic reassignment the spill pass has always been: a stop
       // that lost its first choice of day gets offered every other legal one,
       // nearest-detour first. Hours narrow "legal" without changing the search.
@@ -371,14 +518,155 @@ export function planTrip(input: PlannerInput): PlanResult {
         });
       }
 
+      const onDay = plan.accepted
+        .filter((candidate) => placed.has(candidate.place.id))
+        .map((candidate) => ({
+          candidate,
+          weather: weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, plan.day.date)),
+        }))
+        .filter(
+          (entry): entry is { candidate: PlanningCandidate; weather: PlaceDayWeather } =>
+            entry.weather !== undefined,
+        );
+
       return buildDay(
         context,
         plan.accepted.filter((candidate) => placed.has(candidate.place.id)),
         layout,
         summariseDayTransport(scheduled, layout, input.access),
+        weatherForDay(plan, onDay, scheduledEverywhere(plans)),
       );
     });
     return { days, dropped };
+  };
+
+  /** Every place on the plan, so a fallback is never something already booked. */
+  const scheduledEverywhere = (plans: readonly DayPlan[]): Set<string> =>
+    new Set(plans.flatMap((plan) => plan.accepted.map((candidate) => candidate.place.id)));
+
+  /**
+   * The day's weather block: what it rested on, what the weather changed, and
+   * where else to go if it turns.
+   */
+  const weatherForDay = (
+    plan: DayPlan,
+    onDay: readonly { candidate: PlanningCandidate; weather: PlaceDayWeather }[],
+    scheduledPlaceIds: ReadonlySet<string>,
+  ) => {
+    /**
+     * At risk on suitability alone, not on whether the evidence can rank days.
+     *
+     * Gating this on `rankable` looked right — patterns cannot move a stop, so
+     * why look for a fallback? — and produced exactly the silence this feature
+     * exists to prevent: a far-future July day at Manzanar showed "typically
+     * 38 °C" as a caution, offered nothing, and said nothing about why. The
+     * caution list has never been gated on `rankable`, so the two disagreed and
+     * the validator reported a day with a problem and no answer.
+     *
+     * A seasonal pattern is a perfectly good reason to have somewhere else in
+     * mind. It is only a bad reason to *reorder the week*, and that restriction
+     * lives in `weatherPreference`, where it belongs.
+     */
+    const atRisk = onDay.filter(
+      (entry) =>
+        entry.weather.assessment.suitability === 'poor' ||
+        entry.weather.assessment.suitability === 'incompatible',
+    );
+
+    // Only stops the weather genuinely moved, measured against the assignment
+    // geography alone would have produced.
+    const decisions: string[] = [];
+    for (const { candidate, weather } of onDay) {
+      const would = geographicOnly.get(candidate.place.id);
+      if (would === undefined || would === plan.day.dayNumber || !weather.assessment.rankable) {
+        continue;
+      }
+      /**
+       * Two different sentences, because "moved here because the forecast is
+       * better" printed above "thunderstorms forecast" reads as nonsense — and
+       * it is the *true* case that reads worst. A stop can be moved onto a poor
+       * day because every other day was worse still, and saying that plainly is
+       * both more honest and more useful than a cheerful sentence the next line
+       * contradicts.
+       */
+      const poor =
+        weather.assessment.suitability === 'poor' ||
+        weather.assessment.suitability === 'incompatible';
+      decisions.push(
+        poor
+          ? `${candidate.place.name} moved off day ${would} — this was the least bad day for it in the forecast, not a good one. ${weather.assessment.summary}`
+          : `${candidate.place.name} is on this day rather than day ${would} because the forecast suits it better here. ${weather.assessment.summary}`,
+      );
+    }
+
+    const pool: BackupCandidate[] = reachable
+      .filter((candidate) => !scheduledPlaceIds.has(candidate.place.id))
+      .map((candidate) => ({
+        place: candidate.place,
+        driveMinutesFromBase: candidate.driveMinutesFromBase,
+        selectionStatus: candidate.selectionStatus,
+        reachable: feasibleDates.get(unitByPlaceId.get(candidate.place.id)?.key ?? '')?.has(plan.day.date) ?? false,
+        hours: hoursByPlaceDate.get(hoursKey(candidate.place.id, plan.day.date)),
+        weather: weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, plan.day.date)),
+      }));
+
+    const backups: DayBackup[] = chooseBackups({
+      date: plan.day.date,
+      scheduledPlaceIds,
+      atRisk,
+      pool,
+      maxDriveMinutes: input.profile.transport.maxDailyDriveMinutes,
+    });
+
+    return summariseDayWeather({
+      date: plan.day.date,
+      onDay,
+      representative: representativeWeather(onDay, plan.day.date),
+      decisions,
+      backups,
+      ...(atRisk.length > 0 && backups.length === 0
+        ? {
+            noBackupReason:
+              'Nothing else on your board is both reachable that day and genuinely less exposed to this, so we are not going to invent a fallback.',
+          }
+        : {}),
+    });
+  };
+
+  /**
+   * Which weather point speaks for the day as a whole.
+   *
+   * The zone most of the day's stops sit under, and the base town's when a day
+   * has no stops at all. Picking the most extreme one instead would make an
+   * afternoon at the gondola summit describe a morning in the village.
+   */
+  const representativeWeather = (
+    onDay: readonly { weather: PlaceDayWeather }[],
+    date: string,
+  ): PlaceDayWeather | undefined => {
+    if (onDay.length === 0) {
+      // The base's own zone. `reachable[0]` was the first version and it is
+      // whichever candidate happened to sort first — so a rest day in Mammoth
+      // could be headlined with the Owens Valley's 38 °C, four thousand feet
+      // below and seventy miles away. That is the one-point-for-a-region failure
+      // this whole layer exists to prevent, reintroduced in a fallback.
+      const atBase = reachable.find(
+        (candidate) =>
+          weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, date))?.locationId ===
+          baseLocationId,
+      );
+      return atBase
+        ? weatherByPlaceDate.get(weatherKeyFor(atBase.place.id, date))
+        : undefined;
+    }
+    const counts = new Map<string, number>();
+    for (const entry of onDay) {
+      counts.set(entry.weather.locationId, (counts.get(entry.weather.locationId) ?? 0) + 1);
+    }
+    const winner = [...counts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    )[0]?.[0];
+    return onDay.find((entry) => entry.weather.locationId === winner)?.weather;
   };
 
   let build = buildAll(dayPlans);
@@ -393,6 +681,8 @@ export function planTrip(input: PlannerInput): PlanResult {
     baseId: input.baseId,
     access: input.access,
     hours: input.hours,
+    weather: input.weather,
+    ...(input.now ? { now: input.now } : {}),
   });
   let issues = validateItinerary(validationInput());
 
@@ -486,6 +776,10 @@ export function planTrip(input: PlannerInput): PlanResult {
       matrixProvenance: input.matrix.provenance.kind,
       matrixNote: input.matrix.provenance.note,
       operatingHoursVersion: input.hours.version,
+      weatherDatasetVersion: WEATHER_DATASET_VERSION,
+      weatherProvider: input.weather.providerName,
+      weatherEvidence: evidenceKinds(built),
+      weatherGeneratedAt: input.weather.generatedAt,
       revisionPasses: passes,
       revisions,
       capacity: {
@@ -597,6 +891,37 @@ function hoursBlocked(
   };
 }
 
+/**
+ * A place the weather rules out on every day this trip could have taken it.
+ *
+ * The reason names the specific typed requirement that failed, because that is
+ * the only thing the traveller can act on. "Bad weather" would be true and
+ * useless; "the dirt road in needs dry ground" tells them to look at the
+ * forecast themselves and decide, which is theirs to decide.
+ */
+function weatherBlocked(
+  candidate: PlanningCandidate,
+  weatherByPlaceDate: ReadonlyMap<string, PlaceDayWeather>,
+  dates: readonly string[],
+): UnscheduledPlace {
+  const first = dates
+    .map((date) => weatherByPlaceDate.get(weatherKeyFor(candidate.place.id, date)))
+    .find((entry) => entry?.assessment.suitability === 'incompatible');
+  const reason = first?.assessment.reasons.find((entry) => entry.weight <= -0.5);
+
+  return {
+    placeId: candidate.place.id,
+    name: candidate.place.name,
+    wasManual: candidate.manual,
+    reasonCode: 'weather_incompatible',
+    reason: reason
+      ? `${candidate.place.name} is out on every day of this trip: ${reason.text}.`
+      : `${candidate.place.name} cannot be done in the weather forecast for any day of this trip.`,
+    suggestedRemedy:
+      'Move your dates, or keep it in mind and check the forecast again nearer the time.',
+  };
+}
+
 function reasonCodeForAccess(code: string | undefined): UnscheduledPlace['reasonCode'] {
   switch (code) {
     case 'service_out_of_season':
@@ -670,6 +995,24 @@ function unscheduledFor(
   };
 }
 
+/**
+ * Whether putting this candidate on this day would separate it from members of
+ * its own access group already placed on a different one.
+ */
+function splitsAccessGroup(
+  candidate: PlanningCandidate,
+  target: DayPlan,
+  plans: readonly DayPlan[],
+): boolean {
+  const group = candidate.place.accessGroup?.id;
+  if (!group) return false;
+  return plans.some(
+    (plan) =>
+      plan.day.dayNumber !== target.day.dayNumber &&
+      plan.accepted.some((entry) => entry.place.accessGroup?.id === group),
+  );
+}
+
 function dedupeUnscheduled(entries: readonly UnscheduledPlace[]): UnscheduledPlace[] {
   const byId = new Map<string, UnscheduledPlace>();
   for (const entry of entries) {
@@ -706,3 +1049,17 @@ function hours(minutes: number): number {
 }
 
 export { validateItinerary, statusFor } from './validate';
+
+
+/**
+ * The mixture of evidence the finished plan actually rests on.
+ *
+ * A list rather than a single label, because a trip that starts inside the
+ * forecast horizon and ends outside it genuinely holds two kinds at once, and
+ * collapsing that to one word would either invent a forecast for the last day or
+ * throw away a real one for the first.
+ */
+function evidenceKinds(days: readonly ItineraryDay[]): WeatherEvidenceKind[] {
+  const kinds = new Set<WeatherEvidenceKind>(days.map((day) => day.weather.evidence));
+  return kinds.size > 0 ? [...kinds].sort() : ['unavailable'];
+}

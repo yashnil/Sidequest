@@ -2,6 +2,8 @@ import type { PlaceAccessAssessment } from '../access/feasibility';
 import type { OperatingAssessment } from '../hours/availability';
 import type { AccessDataset } from '../schemas/access';
 import type { OperatingHoursDataset } from '../schemas/hours';
+import type { WeatherDataset } from '../schemas/weather';
+import { assessPlaceWeather, type PlaceWeatherAssessment } from '../weather/board';
 import type { BoardGroup } from '../schemas/discovery';
 import { BOARD_GROUPS } from '../schemas/discovery';
 import type { Place } from '../schemas/place';
@@ -28,6 +30,12 @@ export interface DiscoveryCandidate {
   access: PlaceAccessAssessment;
   /** Date-aware opening hours. A separate question from whether you can get there. */
   operating: OperatingAssessment;
+  /**
+   * What the weather over the trip's dates says about this place — a forecast
+   * where there is one, the seasonal pattern where there is not, and plainly
+   * nothing where neither could be had.
+   */
+  weather: PlaceWeatherAssessment;
   worthDetour: WorthDetourLabel;
   group: BoardGroup;
 }
@@ -46,11 +54,17 @@ export interface BuildBoardInput {
   dates: string[];
   access: AccessDataset;
   hours: OperatingHoursDataset;
+  /**
+   * Optional, and the omission is meaningful rather than lazy: a board built
+   * without it says nothing about weather anywhere, which is the honest result
+   * when no forecast could be reached.
+   */
+  weather?: WeatherDataset;
   travelerNeeds: TravelerNeed[];
 }
 
 export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
-  const { region, places, profile, months, dates, access, hours, travelerNeeds } = input;
+  const { region, places, profile, months, dates, access, hours, weather, travelerNeeds } = input;
   const expansion = expandRegion({ region, places, profile, months, dates, access, hours });
 
   const assessments = [...expansion.base, ...expansion.satellites, ...expansion.beyondRadius];
@@ -67,6 +81,13 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
         season: assessment.season,
         access: assessment.access,
         operating: assessment.operating,
+        weather: assessPlaceWeather({
+          place: assessment.place,
+          dataset: weather,
+          dates,
+          avoidances: profile.avoidances,
+          daylightOnly: assessment.operating.daylightOnly,
+        }),
         worthDetour: worthDetourLabel(assessment.detourClass, fit.band),
         group: groupFor(assessment.place, fit.band),
       };
@@ -100,7 +121,7 @@ function groupFor(place: Place, band: FitAssessment['band']): BoardGroup {
   if (place.popularityScore >= 0.7) return 'must_see_classics';
   if (place.category === 'scenic_drive' || place.category === 'viewpoint') return 'scenic_detours';
   if (
-    place.worksInBadWeather &&
+    place.weather.poorWeatherBackup &&
     (place.physicalIntensity === 'none' || place.physicalIntensity === 'easy')
   ) {
     return 'low_effort_backups';

@@ -1,3 +1,4 @@
+import { isMeaningfullyBetter } from '@sidequest/core';
 import { clusterByTravelTime, type TravelTimeMatrix } from '@sidequest/geo';
 import type { AccessUnit } from './access';
 import type { PlannedDay } from './windows';
@@ -64,6 +65,53 @@ function buildUnits(
 }
 
 /**
+ * Weather's entire authority over day assignment, in one function.
+ *
+ * It arrives *after* legality: `pool` already holds only the days on which every
+ * reachable, open part of this cluster works, and every day in it is a day the
+ * plan would have been happy with. So the choice here can never produce an
+ * illegal itinerary — the worst it can do is pick a legal day that is slightly
+ * less balanced than the one load-spreading would have chosen.
+ *
+ * It is also deliberately reluctant. Clustering has already spent effort making
+ * each day geographically coherent, and every move trades some of that for a
+ * prediction. `isMeaningfullyBetter` is the exchange rate: it takes a genuine
+ * change of category — settled to showery, clear to shut-in — before anything
+ * moves, so a plan cannot reshuffle over the difference between a 19% and a 21%
+ * chance of rain, which is a difference no traveller could perceive and no
+ * forecast could support.
+ *
+ * Ties fall back to the balanced choice, so identical inputs always produce the
+ * identical plan.
+ */
+function preferByWeather(
+  cluster: { placeIds: string[] },
+  pool: readonly PlannedDay[],
+  balanced: PlannedDay | undefined,
+  weatherPreferenceFor: (placeIds: readonly string[], date: string) => number | null,
+): PlannedDay | undefined {
+  if (!balanced || pool.length < 2) return balanced;
+
+  const incumbent = weatherPreferenceFor(cluster.placeIds, balanced.date);
+  if (incumbent === null) return balanced;
+
+  let best = balanced;
+  let bestScore = incumbent;
+  for (const day of pool) {
+    const score = weatherPreferenceFor(cluster.placeIds, day.date);
+    if (score === null) continue;
+    // Strictly greater, so an equal score never displaces the balanced choice
+    // and the comparison order cannot leak into the result.
+    if (score > bestScore) {
+      best = day;
+      bestScore = score;
+    }
+  }
+
+  return isMeaningfullyBetter(bestScore, incumbent) ? best : balanced;
+}
+
+/**
  * Below this a day cannot hold even the shortest stop plus the drive to it, so it
  * must not be handed a geographic cluster. Giving a 30-minute departure morning a
  * quarter of the trip's places strands them: they overflow into a second pass and
@@ -95,6 +143,13 @@ export function assignToDays(
   feasibleDates: ReadonlyMap<string, ReadonlySet<string>>,
   /** Place id → the dates it is open long enough to visit. Absent means unconstrained. */
   openDates: ReadonlyMap<string, ReadonlySet<string>>,
+  /**
+   * How much a set of places wants a date, 0–1, or null when there is nothing
+   * to go on. Null is the normal answer beyond the forecast horizon and it
+   * means "leave the assignment exactly as geography made it" — which is the
+   * only honest thing a fortnight of past Augusts can say about next Tuesday.
+   */
+  weatherPreferenceFor: (placeIds: readonly string[], date: string) => number | null = () => null,
 ): DayAssignment[] {
   const usableDays = days.filter((day) => day.capacityMinutes >= MIN_PLANNABLE_MINUTES);
   if (usableDays.length === 0 || eligible.length === 0) {
@@ -170,9 +225,10 @@ export function assignToDays(
   for (const cluster of orderedClusters) {
     const best = Math.max(...orderedDays.map((day) => workableParts(cluster, day.date)));
     const pool = orderedDays.filter((day) => workableParts(cluster, day.date) === best);
-    const day = [...pool].sort(
+    const balanced = [...pool].sort(
       (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
     )[0];
+    const day = preferByWeather(cluster, pool, balanced, weatherPreferenceFor);
     if (!day) continue;
     clustersPerDay.set(day.dayNumber, (clustersPerDay.get(day.dayNumber) ?? 0) + 1);
     assignmentByDay.get(day.dayNumber)?.push(...cluster.candidates);

@@ -11,8 +11,8 @@ import {
   placeCategorySchema,
   roadSurfaceSchema,
   timeOfDaySchema,
-  weatherSensitivitySchema,
 } from './common';
+import { placeWeatherProfileSchema } from './weather';
 
 /**
  * Where the data came from. Provenance is a first-class field rather than an
@@ -121,9 +121,11 @@ export const placeSchema = z.object({
   popularityScore: z.number().min(0).max(1),
   /** 0-1 how far off the standard tourist track it is. */
   hiddenGemScore: z.number().min(0).max(1),
-  weatherSensitivity: weatherSensitivitySchema,
-  /** Works as a wet- or bad-weather fallback. */
-  worksInBadWeather: z.boolean(),
+  /**
+   * How this place reacts to weather, on the axes that change a decision.
+   * Canonical facts about the place itself — never a forecast, never a date.
+   */
+  weather: placeWeatherProfileSchema,
   bestTimeOfDay: timeOfDaySchema.default('any'),
   seasonalAccess: seasonalAccessSchema,
   access: placeAccessSchema,

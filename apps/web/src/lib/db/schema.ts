@@ -108,6 +108,18 @@ CREATE TABLE IF NOT EXISTS itinerary_items (
   PRIMARY KEY (trip_id, day_number, position)
 );
 
+-- Weather fetched from an external provider, remembered so that rendering a
+-- page does not mean a forecast request. Not itinerary data: a plan carries its
+-- own copy of the evidence it was built from, so this table can be emptied at
+-- any moment without changing a single stored trip.
+CREATE TABLE IF NOT EXISTS weather_cache (
+  cache_key TEXT PRIMARY KEY,
+  payload_json TEXT NOT NULL,
+  stored_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_cache_stored ON weather_cache(stored_at);
+
 CREATE INDEX IF NOT EXISTS idx_itinerary_days_trip ON itinerary_days(trip_id);
 CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_day ON itinerary_items(trip_id, day_number);
 `;
@@ -141,4 +153,5 @@ export const COLUMN_MIGRATIONS: readonly {
     column: 'availability_json',
     definition: "TEXT NOT NULL DEFAULT '{}'",
   },
+  { table: 'itinerary_days', column: 'weather_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
 ];

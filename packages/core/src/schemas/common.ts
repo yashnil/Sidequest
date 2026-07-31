@@ -110,6 +110,15 @@ export const AVOIDANCES = [
   'remote_areas_without_services',
   'expensive_activities',
   'cold_water',
+  /**
+   * The two weather avoidances. Separate from `cold_water`, which is about
+   * getting into a lake, and from `high_altitude_exertion`, which is about
+   * effort. These two are read against the actual forecast or the historical
+   * pattern for the day a place would land on, so a traveller who says "not in
+   * the heat" is not sent to the valley floor in August.
+   */
+  'extreme_heat',
+  'extreme_cold',
 ] as const;
 export const avoidanceSchema = z.enum(AVOIDANCES);
 export type Avoidance = z.infer<typeof avoidanceSchema>;
@@ -125,6 +134,8 @@ export const AVOIDANCE_LABELS: Record<Avoidance, string> = {
   remote_areas_without_services: 'Remote areas with no services',
   expensive_activities: 'Expensive activities',
   cold_water: 'Cold water',
+  extreme_heat: 'Being out in extreme heat',
+  extreme_cold: 'Being out in extreme cold',
 };
 
 export const PACES = ['slow', 'balanced', 'fast'] as const;
@@ -187,9 +198,10 @@ export const CROWD_LEVELS = ['quiet', 'moderate', 'busy', 'very_busy'] as const;
 export const crowdLevelSchema = z.enum(CROWD_LEVELS);
 export type CrowdLevel = z.infer<typeof crowdLevelSchema>;
 
-export const WEATHER_SENSITIVITIES = ['low', 'moderate', 'high'] as const;
-export const weatherSensitivitySchema = z.enum(WEATHER_SENSITIVITIES);
-export type WeatherSensitivity = z.infer<typeof weatherSensitivitySchema>;
+// Weather sensitivity used to live here as a single three-value enum. It now
+// lives in `schemas/weather.ts` as a typed profile, because one scalar could not
+// tell "shuts on wind" from "a cloudy sunset is worthless" from "no shade in
+// August" — and the planner has to act differently on each.
 
 export const ROAD_SURFACES = ['paved', 'partly_unpaved', 'unpaved'] as const;
 export const roadSurfaceSchema = z.enum(ROAD_SURFACES);

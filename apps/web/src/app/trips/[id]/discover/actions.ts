@@ -66,7 +66,7 @@ export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
       return { ok: false, error: 'Finish the questionnaire first so we know what to pick for.' };
     }
 
-    const resolved = resolveTripRegion(trip);
+    const resolved = await resolveTripRegion(trip);
     if (!resolved.ok) return { ok: false, error: resolved.error };
 
     const board = boardFor(trip, profile, resolved.context);

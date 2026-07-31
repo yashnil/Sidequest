@@ -11,6 +11,7 @@ import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange, formatMinutes } from '@/lib/format';
 import { getProfile, getSelections, getTrip, hasItinerary } from '@/lib/db/repository';
+import { boardWeatherBackups } from '@sidequest/core';
 import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const profile = getProfile(id);
   if (!profile) redirect(`/trips/${id}/questionnaire`);
 
-  const resolved = resolveTripRegion(trip);
+  const resolved = await resolveTripRegion(trip);
   if (!resolved.ok) notFound();
   const { region } = resolved.context;
 
@@ -104,6 +105,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               autoPickNotes={suggestion.notes}
               targetCount={suggestion.targetCount}
               hasItinerary={planned}
+              weatherBackups={boardWeatherBackups(board.candidates)}
             />
           )}
         </div>

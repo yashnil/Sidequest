@@ -1,15 +1,18 @@
+import 'server-only';
 import {
   buildDiscoveryBoard,
   EASTERN_SIERRA_ACCESS,
   EASTERN_SIERRA_BASE_ID,
   EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_PLACES,
+  EASTERN_SIERRA_WEATHER_LOCATIONS,
   easternSierraTravelMatrix,
   REGIONS,
   tripDates,
   tripMonths,
   validateAccessDataset,
   validateOperatingHoursDataset,
+  validateWeatherDataset,
   type AccessDataset,
   type DiscoveryBoard,
   type OperatingHoursDataset,
@@ -17,8 +20,10 @@ import {
   type Region,
   type TravelerProfile,
   type Trip,
+  type WeatherDataset,
 } from '@sidequest/core';
 import type { TravelTimeMatrix } from '@sidequest/geo';
+import { resolveTripWeather, weatherProviderFor } from './weather';
 
 /**
  * Everything a region contributes to planning, resolved in one place.
@@ -35,6 +40,13 @@ export interface RegionContext {
   places: Place[];
   access: AccessDataset;
   hours: OperatingHoursDataset;
+  /**
+   * The forecast, the seasonal pattern, or an honest record of neither. Unlike
+   * the two above this is genuinely fetched, which is why resolving a region
+   * became asynchronous — and why every failure path below has to end in a
+   * dataset rather than an exception.
+   */
+  weather: WeatherDataset;
   matrix: TravelTimeMatrix;
   baseId: string;
   months: number[];
@@ -45,7 +57,7 @@ export type RegionResolution =
   | { ok: true; context: RegionContext }
   | { ok: false; error: string };
 
-export function resolveTripRegion(trip: Trip): RegionResolution {
+export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
   const region = REGIONS.find((item) => item.id === trip.basics.regionId);
   if (!region) return { ok: false, error: 'We do not have that region mapped.' };
 
@@ -84,6 +96,50 @@ export function resolveTripRegion(trip: Trip): RegionResolution {
     };
   }
 
+  const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
+
+  /**
+   * Weather, and the one place in this function where a failure does not stop
+   * the trip.
+   *
+   * Access and hours are matters of record: if they will not validate, the
+   * honest thing is to refuse to plan, because guessing at them puts somebody at
+   * a locked gate. Weather is a forecast — useful, and not something a trip
+   * depends on. So a provider that is down produces a dataset of `unavailable`
+   * days, the plan is built without weather reasoning, and every surface says
+   * so. `resolveTripWeather` never throws; it degrades in a fixed order and the
+   * bottom of that order is "we do not know", never "it is fine".
+   */
+  const expectedWeather = {
+    regionId: region.id,
+    dates,
+    placeIds: places.map((place) => place.id),
+  };
+  let weather: WeatherDataset;
+  try {
+    weather = validateWeatherDataset(
+      await resolveTripWeather({ regionId: region.id, dates }),
+      expectedWeather,
+    );
+  } catch (error) {
+    // The validator throws, and here that must not reach the page. Every other
+    // dataset in this function refuses to plan when it will not validate,
+    // because guessing at a road or a closing time puts somebody at a locked
+    // gate. Weather is not like that: a trip without it is a slightly less
+    // clever trip, and taking the discovery board down because a forecast came
+    // back short would be the tail wagging the dog.
+    console.error('Weather data for this trip is unusable', error);
+    weather = validateWeatherDataset(
+      await weatherProviderFor('off').getWeather({
+        regionId: region.id,
+        locations: EASTERN_SIERRA_WEATHER_LOCATIONS,
+        dates,
+        now: new Date(),
+      }),
+      expectedWeather,
+    );
+  }
+
   return {
     ok: true,
     context: {
@@ -91,10 +147,11 @@ export function resolveTripRegion(trip: Trip): RegionResolution {
       places,
       access,
       hours,
+      weather,
       matrix: easternSierraTravelMatrix(),
       baseId: EASTERN_SIERRA_BASE_ID,
       months: tripMonths(trip.basics.startDate, trip.basics.endDate),
-      dates: tripDates(trip.basics.startDate, trip.basics.endDate),
+      dates,
     },
   };
 }
@@ -113,6 +170,7 @@ export function boardFor(
     dates: context.dates,
     access: context.access,
     hours: context.hours,
+    weather: context.weather,
     travelerNeeds: trip.basics.travelerNeeds,
   });
 }

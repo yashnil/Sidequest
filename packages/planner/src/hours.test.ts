@@ -747,6 +747,7 @@ describe('Manzanar — an outdoor site and a staffed facility, modelled apart', 
       baseId: scenario.baseId,
       access: scenario.access,
       hours: scenario.hours,
+      weather: scenario.weather,
     });
     expect(issues.some((issue) => issue.code === 'operating_evidence_inconsistent')).toBe(true);
   });

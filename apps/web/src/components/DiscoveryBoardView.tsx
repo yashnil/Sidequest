@@ -8,12 +8,15 @@ import {
   FIT_BAND_METER,
   OPERATING_BADGE_LABELS,
   PLACE_CATEGORY_LABELS,
+  PLACE_WEATHER_BADGE_LABELS,
   SELECTION_STATUS_LABELS,
   WORTH_DETOUR_COPY,
   type AccessBadge,
   type BoardGroup,
+  type BoardWeatherBackups,
   type DiscoveryCandidate,
   type OperatingBadge,
+  type PlaceWeatherBadge,
   type SelectionStatus,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type BadgeTone } from './ui';
@@ -35,9 +38,15 @@ export function DiscoveryBoardView({
   autoPickNotes,
   targetCount,
   hasItinerary,
+  weatherBackups,
 }: {
   tripId: string;
   groups: SerializedGroup[];
+  /**
+   * Derived from this trip's weather, not from what any place fundamentally is.
+   * Null when nothing on the board is in trouble, which is most of the time.
+   */
+  weatherBackups: BoardWeatherBackups | null;
   initialSelections: SelectionMap;
   autoPickNotes: string[];
   targetCount: number;
@@ -177,6 +186,14 @@ export function DiscoveryBoardView({
               </div>
             </section>
           ))}
+
+          <WeatherBackups
+            backups={weatherBackups}
+            selections={optimistic}
+            onChoose={choose}
+          />
+
+          <WeatherCredit groups={groups} />
         </div>
       )}
     </div>
@@ -217,6 +234,172 @@ const ACCESS_BADGE_TONE: Record<AccessBadge, BadgeTone> = {
  * hours" across the board would drown the three cards where the hours genuinely
  * decide whether the day works.
  */
+/**
+ * Weather badge tones, in the same vocabulary as everything else on a card:
+ * pine confirms, blue offers an alternative, amber cautions, neutral states a
+ * fact. Capped at three per card upstream, and `workable` weather earns nothing
+ * — the board already carries access and hours badges, and a card wearing eight
+ * of them communicates less than one wearing two.
+ */
+const WEATHER_BADGE_TONE: Record<PlaceWeatherBadge, BadgeTone> = {
+  best_on_a_day: 'pine',
+  good_in_the_forecast: 'pine',
+  poor_in_the_forecast: 'amber',
+  visibility_dependent: 'neutral',
+  poor_weather_friendly: 'blue',
+  daylight_only: 'neutral',
+  seasonal_pattern: 'neutral',
+  weather_unknown: 'neutral',
+};
+
+/**
+ * What to have in reserve, if the weather takes something.
+ *
+ * A cross-cut rather than a group: every place here already has a primary
+ * section above, and the point is precisely that the good bad-weather options
+ * are scattered across "hidden gems", "must-see classics" and "scenic detours"
+ * where nobody would think to look for them on a wet morning. So this is a list
+ * of names rather than a second set of cards — duplicating twenty-three cards to
+ * surface four of them would make the board longer and less useful.
+ *
+ * It appears only when something is actually at risk, and the two registers are
+ * kept apart because they are different claims: a forecast is about *your dates*,
+ * a seasonal pattern is about *this time of year* and is preparation rather than
+ * prediction.
+ *
+ * Nothing here is scheduled, and saying so is not pedantry — a traveller who
+ * reads this as "we have handled it" would arrive expecting a plan that does not
+ * exist.
+ */
+function WeatherBackups({
+  backups,
+  selections,
+  onChoose,
+}: {
+  backups: BoardWeatherBackups | null;
+  selections: SelectionMap;
+  onChoose: (placeId: string, status: SelectionStatus) => void;
+}) {
+  if (!backups) return null;
+
+  // Filtered against live state rather than the server's snapshot, so a place
+  // the traveller has just ruled out disappears from here immediately. Offering
+  // somebody a fallback they have already said no to teaches them their answers
+  // are decorative.
+  const usable = backups.suggestions.filter(
+    (backup) => selections[backup.placeId] !== 'excluded',
+  );
+  const atRisk = backups.atRisk.filter((entry) => selections[entry.placeId] !== 'excluded');
+  if (atRisk.length === 0) return null;
+
+  const forecast = backups.evidence === 'forecast';
+
+  return (
+    <section aria-labelledby="weather-backups" className="border-t border-rule pt-8">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="weather-backups" className="font-display text-2xl text-ink">
+          If the weather turns
+        </h2>
+        <Badge tone={forecast ? 'blue' : 'neutral'}>
+          {forecast ? 'Forecast' : 'Seasonal pattern'}
+        </Badge>
+      </div>
+
+      <p className="mt-1 max-w-2xl text-sm text-ink-muted">
+        {forecast
+          ? `The forecast works against ${listNames(atRisk.map((entry) => entry.name))} on your dates.`
+          : `${listNames(atRisk.map((entry) => entry.name))} can be a washout at this time of year — this is preparation, not a forecast for your dates.`}{' '}
+        {usable.length > 0
+          ? 'These hold up better, and are near enough to swap in on the morning. Nothing here is scheduled.'
+          : ''}
+      </p>
+
+      {usable.length === 0 ? (
+        <p className="mt-4 max-w-2xl rounded-md bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">Nothing on your board fits.</span> Everything
+          else here is either too far, shut on your dates, or exposed to the same weather — so
+          we are not going to invent a fallback. Widening how far you will go would open up the
+          sheltered stops down the valley.
+        </p>
+      ) : (
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {usable.map((backup) => (
+            <li
+              key={backup.placeId}
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-md border border-rule p-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">{backup.name}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{backup.why}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-ink-faint">
+                  {backup.driveMinutes === 0 ? 'in town' : `${backup.driveMinutes} min`}
+                </span>
+                <button
+                  type="button"
+                  className={buttonClass('ghost', 'sm')}
+                  onClick={() => onChoose(backup.placeId, 'maybe')}
+                  aria-pressed={selections[backup.placeId] === 'maybe'}
+                >
+                  Keep in mind
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** "A and B", "A, B and 2 more" — a list a person would actually say out loud. */
+function listNames(names: readonly string[]): string {
+  if (names.length === 0) return 'some of your choices';
+  if (names.length === 1) return names[0]!;
+  const shown = names.slice(0, 3);
+  const rest = names.length - shown.length;
+  // "A, B and C" or "A, B, C and 4 more" — never the "and … and" the first
+  // version produced by gluing a tail onto an already-conjoined list.
+  const tail = rest > 0 ? `${rest} more` : shown.pop()!;
+  return `${shown.join(', ')} and ${tail}`;
+}
+
+/**
+ * The licence line, once, at the foot of the board.
+ *
+ * The cards quote provider numbers — "a 76% chance of rain" — and Open-Meteo's
+ * data is CC BY 4.0, so the notice has to appear wherever the data does. Once
+ * per page rather than once per card: twenty-three copies of the same sentence
+ * is not attribution, it is noise, and the itinerary does the same thing in the
+ * same quiet type.
+ */
+function WeatherCredit({ groups }: { groups: readonly SerializedGroup[] }) {
+  const candidates = groups.flatMap((group) => group.candidates);
+  const notice = candidates.find((candidate) => candidate.weather.attribution)?.weather
+    .attribution;
+  const label = candidates.find((candidate) => candidate.weather.evidenceLabel)?.weather
+    .evidenceLabel;
+  if (!notice) return null;
+
+  return (
+    <p className="text-[11px] leading-relaxed text-ink-faint">
+      {label ? `${label} for your dates. ` : ''}
+      {notice} Conditions change; we have not checked today.
+    </p>
+  );
+}
+
+/** "Thu 13 Aug" — enough to point at a day without spelling out a date. */
+function shortDay(date: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
 const OPERATING_BADGE_ORDER: readonly OperatingBadge[] = [
   'closed_on_your_dates',
   'closed_some_days',
@@ -271,7 +454,7 @@ function PlaceCard({
   status: SelectionStatus | undefined;
   onChoose: (placeId: string, status: SelectionStatus) => void;
 }) {
-  const { place, fit, season, access, operating } = candidate;
+  const { place, fit, season, access, operating, weather } = candidate;
   const blocked = fit.band === 'not_workable';
 
   return (
@@ -314,6 +497,17 @@ function PlaceCard({
 
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">{place.shortDescription}</p>
 
+        {/*
+          One sentence, and only when the weather over these dates would change
+          the decision. The verb has to match the evidence: "looks like the day
+          for this one" is sayable about a forecast and not about ten past
+          Augusts, so the sentence is built where the evidence is known rather
+          than assembled here from parts.
+        */}
+        {weather.note ? (
+          <p className="mt-2 text-xs leading-relaxed text-ink-faint">{weather.note}</p>
+        ) : null}
+
         <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
           <Stat label="From base">
             {candidate.detourClass === 'base'
@@ -344,7 +538,13 @@ function PlaceCard({
               {OPERATING_BADGE_LABELS[badge]}
             </Badge>
           ))}
-          {place.worksInBadWeather ? <Badge tone="blue">Bad-weather option</Badge> : null}
+          {candidate.weather.badges.map((badge) => (
+            <Badge key={badge} tone={WEATHER_BADGE_TONE[badge]}>
+              {badge === 'best_on_a_day' && candidate.weather.bestDate
+                ? `Best on ${shortDay(candidate.weather.bestDate)}`
+                : PLACE_WEATHER_BADGE_LABELS[badge]}
+            </Badge>
+          ))}
         </div>
 
         {access.status === 'partial' ? (

@@ -53,10 +53,20 @@ export function ItineraryView({
   itinerary,
   tripId,
   dateLabel,
+  renderedAt,
 }: {
   itinerary: Itinerary;
   tripId: string;
   dateLabel: string;
+  /**
+   * When the server rendered this page, as epoch milliseconds.
+   *
+   * Passed in rather than read here so every day on the page judges the same
+   * forecast against the same instant, and so the check is a pure function of
+   * its props — a component that reads the clock during render can show two
+   * different answers for one plan.
+   */
+  renderedAt: number;
 }) {
   const status = ITINERARY_STATUS_COPY[itinerary.status];
   const conflicts = itinerary.unscheduled.filter((entry) => entry.wasManual);
@@ -123,10 +133,12 @@ export function ItineraryView({
 
       <TransportPlan strategy={itinerary.transportStrategy} />
 
+      <WeatherPlan itinerary={itinerary} />
+
       <ol className="mt-10 space-y-12">
         {itinerary.days.map((day) => (
           <li key={day.dayNumber}>
-            <DayCard day={day} />
+            <DayCard day={day} renderedAt={renderedAt} />
           </li>
         ))}
       </ol>
@@ -192,6 +204,111 @@ export function ItineraryView({
  * deliberately coarse and the disclosure is not tucked away, because a modelled
  * drive time presented with a dashboard's confidence is worse than no number.
  */
+/**
+ * The trip's weather position, in one panel.
+ *
+ * Its only real job is to name the kind of knowledge behind the plan before the
+ * traveller reads a single number. A trip planned three days out and one planned
+ * six months out are both perfectly useful and they are not the same product:
+ * the first can say Thursday is the day for the ridge, the second can only say
+ * what Augusts here are like. Rendering them identically would make the second
+ * one a lie.
+ */
+function WeatherPlan({ itinerary }: { itinerary: Itinerary }) {
+  const days = itinerary.days;
+  const kinds = [...new Set(days.map((day) => day.weather.evidence))];
+  const attribution = days.find((day) => day.weather.attribution)?.weather.attribution;
+  const points = [
+    ...new Set(days.map((day) => day.weather.locationLabel).filter(Boolean)),
+  ] as string[];
+  const fetchedAt = days.find((day) => day.weather.fetchedAt)?.weather.fetchedAt;
+  const decisions = days.flatMap((day) => day.weather.decisions);
+  const label =
+    kinds.length > 1
+      ? 'Mixed evidence'
+      : kinds[0] === 'forecast'
+        ? 'Forecast'
+        : kinds[0] === 'historical_pattern'
+          ? 'Historical pattern'
+          : 'No weather data';
+
+  return (
+    <Panel className="mt-6 p-6" as="section">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 className="font-display text-xl text-ink">Weather</h2>
+        <Badge tone={kinds.includes('forecast') ? 'blue' : 'neutral'}>{label}</Badge>
+      </div>
+
+      <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+        {/*
+          Branching on what is actually mixed, not merely on there being more
+          than one kind. A five-day trip wholly inside the horizon with one date
+          the provider skipped is `['forecast','unavailable']` — and telling that
+          traveller "part of this trip is beyond the forecast window" is untrue
+          and, worse, hides the real problem, which is a missing day.
+        */}
+        {kinds.includes('historical_pattern') && kinds.includes('forecast')
+          ? 'Part of this trip is inside the forecast window and part of it is not. The days that have a forecast are marked as such; the rest carry what this time of year usually does, which is not the same thing.'
+          : kinds.length > 1 && kinds.includes('unavailable')
+            ? 'We could not get weather for every day of this trip. The days we could are marked; the rest have not been checked against anything, and we have not guessed.'
+            : kinds[0] === 'forecast'
+            ? 'Your dates are inside the forecast window, so the days below were placed against an actual forecast for each one.'
+            : kinds[0] === 'historical_pattern'
+              ? 'Your dates are too far out for a forecast. The days below carry what this period has historically done here — useful for what to pack and what to have in reserve, and no help at all in telling one of your days from another. We have not moved anything on the strength of it.'
+              : 'We could not reach a weather source for your dates, so nothing in this plan has been placed against one. Rebuild closer to the time.'}
+      </p>
+
+      {/*
+        Only where there is weather to explain. With none, this paragraph is a
+        lecture about elevation attached to four days of "we do not know".
+      */}
+      {points.length > 0 && kinds.some((kind) => kind !== 'unavailable') ? (
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          Taken at {points.length === 1 ? 'one point' : `${points.length} separate points`}:{' '}
+          {points.join(', ')}. The valley floor runs about ten degrees warmer than town in
+          summer and the high country several degrees colder, so one number for the region
+          would be wrong at both ends.
+        </p>
+      ) : null}
+
+      {decisions.length > 0 ? (
+        <div className="mt-5 rounded-lg bg-paper-sunk p-4">
+          <p className="text-xs font-medium text-ink">What the weather changed</p>
+          <ul className="mt-1 space-y-1 text-sm leading-relaxed text-ink-muted">
+            {decisions.map((decision) => (
+              <li key={decision}>{decision}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="mt-5 text-[11px] leading-relaxed text-ink-faint">
+        {attribution ?? 'No weather source was reached for this trip.'}
+        {fetchedAt ? ` Read ${formatReadAt(fetchedAt)}.` : ''} Conditions change; we
+        have not checked today.
+      </p>
+    </Panel>
+  );
+}
+
+/**
+ * When the forecast was read, in the traveller's own time.
+ *
+ * `toUTCString()` printed "Thu, 30 Jul 2026 22:12:00 GMT" on a product whose
+ * entire time model is wall-clock where you are standing. Nobody planning a trip
+ * to Mammoth thinks in GMT.
+ */
+function formatReadAt(iso: string): string {
+  return new Date(iso).toLocaleString('en-GB', {
+    timeZone: 'America/Los_Angeles',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
   const { totals } = strategy;
 
@@ -461,7 +578,122 @@ function DayHours({ day }: { day: ItineraryDay }) {
   );
 }
 
-function DayCard({ day }: { day: ItineraryDay }) {
+/**
+ * The weather tone map, in the house vocabulary.
+ *
+ * pine = confirmed good, blue = an alternative worth knowing about, amber =
+ * caution, clay = blocking. `workable` earns nothing at all, which is the point:
+ * most days most of the time are simply fine, and a badge on every row is a
+ * badge nobody reads.
+ */
+const WEATHER_TONE: Record<string, BadgeTone> = {
+  favorable: 'pine',
+  poor: 'amber',
+  incompatible: 'clay',
+  unknown: 'neutral',
+  workable: 'neutral',
+};
+
+const WEATHER_BADGE: Record<string, string> = {
+  favorable: 'Good weather for it',
+  poor: 'Weather against it',
+  incompatible: 'Not in this weather',
+  unknown: 'No weather data',
+  workable: '',
+};
+
+/**
+ * What the weather did to this day, and where else to go if it turns.
+ *
+ * The evidence label is the load-bearing part and it is never omitted. "Forecast"
+ * and "Historical pattern" are different claims — one is about Thursday, the
+ * other about Augusts — and a reader who cannot tell which they are looking at
+ * has been given a number without its meaning. So the label leads, the numbers
+ * follow, and the attribution sits underneath in the same quiet type the
+ * transport data disclosure uses.
+ */
+function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number }) {
+  const { weather } = day;
+  // `renderedAt` rather than `Date.now()`: this is a stored plan being read
+  // back, so "how old is the forecast" has to be answered once, on the server,
+  // against the same instant for every day — otherwise two days on one page can
+  // disagree about whether the same forecast is stale.
+  const stale =
+    weather.evidence === 'forecast' && weather.fetchedAt
+      ? renderedAt - Date.parse(weather.fetchedAt) > (weather.staleAfterMinutes ?? 360) * 60_000
+      : false;
+
+  return (
+    <section
+      className="mt-3 border-t border-rule pt-3"
+      aria-label={`Weather on day ${day.dayNumber}`}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <Badge tone={weather.evidence === 'forecast' ? 'blue' : 'neutral'}>
+          {weather.evidence === 'forecast'
+            ? 'Forecast'
+            : weather.evidence === 'historical_pattern'
+              ? 'Historical pattern'
+              : 'No weather data'}
+        </Badge>
+        {weather.locationLabel ? (
+          <span className="text-xs text-ink-faint">{weather.locationLabel}</span>
+        ) : null}
+        {stale ? <Badge tone="amber">Read a while ago</Badge> : null}
+      </div>
+
+      <p className="mt-2 text-sm leading-relaxed text-ink-muted">{weather.summary}</p>
+
+      {weather.sunriseMinute !== undefined && weather.sunsetMinute !== undefined ? (
+        <p className="mt-1 text-xs text-ink-faint">
+          Light from {formatMinuteOfDay(weather.sunriseMinute)} to{' '}
+          {formatMinuteOfDay(weather.sunsetMinute)}.
+        </p>
+      ) : null}
+
+      {weather.decisions.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-ink-muted">
+          {weather.decisions.map((decision) => (
+            <li key={decision}>{decision}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {weather.backups.length > 0 ? (
+        <div className="mt-2 rounded-md border border-slate-blue/40 p-2.5">
+          <p className="text-xs font-medium text-slate-blue">
+            {weather.backups.length === 1 ? 'If it turns' : 'If it turns, either of these'}
+          </p>
+          <ul className="mt-1 space-y-1.5 text-xs leading-relaxed text-ink-muted">
+            {weather.backups.map((backup) => (
+              <li key={backup.placeId}>
+                <span className="font-medium text-ink">{backup.name}</span> — {backup.why}{' '}
+                {backup.openingSummary} {backup.accessSummary}
+                {backup.caution ? <span className="text-ink-faint"> {backup.caution}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {weather.noBackupReason ? (
+        <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">No strong fallback for this one.</span>{' '}
+          {weather.noBackupReason}
+        </p>
+      ) : null}
+
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+        {weather.attribution}
+        {weather.evidence === 'historical_pattern'
+          ? ' These are patterns from past years, not a forecast for your dates.'
+          : ''}
+      </p>
+    </section>
+  );
+}
+
+function DayCard({ day, renderedAt }: { day: ItineraryDay; renderedAt: number }) {
   const isEmpty = day.totals.activityMinutes === 0;
 
   return (
@@ -490,6 +722,7 @@ function DayCard({ day }: { day: ItineraryDay }) {
 
         {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
         <DayHours day={day} />
+        <DayWeather day={day} renderedAt={renderedAt} />
 
         {day.window.note ? (
           <p className="mt-3 text-sm text-ink-faint">{day.window.note}</p>
@@ -571,7 +804,11 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
           {item.physicalIntensity && item.physicalIntensity !== 'none' ? (
             <Badge>{item.physicalIntensity}</Badge>
           ) : null}
-          {item.weatherSensitive ? <Badge tone="amber">Weather-dependent</Badge> : null}
+          {item.weather && item.weather.suitability !== 'workable' ? (
+            <Badge tone={WEATHER_TONE[item.weather.suitability]}>
+              {WEATHER_BADGE[item.weather.suitability]}
+            </Badge>
+          ) : null}
           {item.booking ? (
             <Badge tone="amber">{BOOKING_KIND_LABELS[item.booking.kind]}</Badge>
           ) : null}
