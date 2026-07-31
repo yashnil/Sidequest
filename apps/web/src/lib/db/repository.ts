@@ -2,6 +2,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import {
   discoverySelectionSchema,
+  foodSelectionSchema,
   ITINERARY_VERSION,
   itinerarySchema,
   migrateTravelerProfile,
@@ -12,6 +13,7 @@ import {
   tripBasicsSchema,
   tripSchema,
   type DiscoverySelection,
+  type FoodSelection,
   type QuestionnaireAnswers,
   type SelectionSource,
   type SelectionStatus,
@@ -273,6 +275,52 @@ export function clearItinerary(tripId: string): void {
   apply();
 }
 
+/**
+ * What the traveller said about where they would like to eat.
+ *
+ * Kept apart from `getSelections` for the reason the table is kept apart: a
+ * venue is a preference about a meal, and letting it arrive in the same list as
+ * the places would put it in front of the frequency caps and the day capacity,
+ * neither of which it belongs to.
+ */
+export function getFoodSelections(tripId: string): FoodSelection[] {
+  const rows = getDb()
+    .prepare('SELECT venue_id, status, source, updated_at FROM food_selections WHERE trip_id = ?')
+    .all(tripId) as FoodSelectionRow[];
+  return rows.map((row) =>
+    foodSelectionSchema.parse({
+      venueId: row.venue_id,
+      status: row.status,
+      source: row.source,
+      updatedAt: row.updated_at,
+    }),
+  );
+}
+
+export function setFoodSelection(
+  tripId: string,
+  venueId: string,
+  status: FoodSelection['status'],
+  source: SelectionSource,
+): void {
+  const now = new Date().toISOString();
+  foodSelectionSchema.parse({ venueId, status, source, updatedAt: now });
+  getDb()
+    .prepare(
+      `INSERT INTO food_selections (trip_id, venue_id, status, source, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(trip_id, venue_id) DO UPDATE SET
+         status = excluded.status, source = excluded.source, updated_at = excluded.updated_at`,
+    )
+    .run(tripId, venueId, status, source, now);
+}
+
+export function clearFoodSelection(tripId: string, venueId: string): void {
+  getDb()
+    .prepare('DELETE FROM food_selections WHERE trip_id = ? AND venue_id = ?')
+    .run(tripId, venueId);
+}
+
 export function clearSelection(tripId: string, placeId: string): void {
   getDb()
     .prepare('DELETE FROM discovery_selections WHERE trip_id = ? AND place_id = ?')
@@ -304,6 +352,13 @@ export function replaceAutoSelections(tripId: string, placeIds: string[]): void 
 // Itineraries
 // ---------------------------------------------------------------------------
 
+interface FoodSelectionRow {
+  venue_id: string;
+  status: string;
+  source: string;
+  updated_at: string;
+}
+
 interface ItineraryRow {
   trip_id: string;
   version: number;
@@ -315,6 +370,7 @@ interface ItineraryRow {
   status: string;
   summary: string;
   transport_strategy_json: string;
+  food_plan_json: string;
   issues_json: string;
   unscheduled_json: string;
   diagnostics_json: string;
@@ -332,6 +388,7 @@ interface ItineraryDayRow {
   transport_json: string;
   availability_json: string;
   weather_json: string;
+  food_json: string;
   warnings_json: string;
 }
 
@@ -377,11 +434,11 @@ export function saveItinerary(itinerary: Itinerary): void {
 
     db.prepare(
       `INSERT INTO itineraries (trip_id, version, region_id, base_id, base_name, start_date, end_date,
-         status, summary, transport_strategy_json, issues_json, unscheduled_json, diagnostics_json,
-         created_at, updated_at)
+         status, summary, transport_strategy_json, food_plan_json, issues_json, unscheduled_json,
+         diagnostics_json, created_at, updated_at)
        VALUES (@trip_id, @version, @region_id, @base_id, @base_name, @start_date, @end_date,
-         @status, @summary, @transport_strategy_json, @issues_json, @unscheduled_json,
-         @diagnostics_json, @created_at, @updated_at)`,
+         @status, @summary, @transport_strategy_json, @food_plan_json, @issues_json,
+         @unscheduled_json, @diagnostics_json, @created_at, @updated_at)`,
     ).run({
       trip_id: value.tripId,
       version: value.version,
@@ -393,6 +450,7 @@ export function saveItinerary(itinerary: Itinerary): void {
       status: value.status,
       summary: value.summary,
       transport_strategy_json: JSON.stringify(value.transportStrategy),
+      food_plan_json: JSON.stringify(value.foodPlan),
       issues_json: JSON.stringify(value.issues),
       unscheduled_json: JSON.stringify(value.unscheduled),
       diagnostics_json: JSON.stringify(value.diagnostics),
@@ -402,8 +460,9 @@ export function saveItinerary(itinerary: Itinerary): void {
 
     const insertDay = db.prepare(
       `INSERT INTO itinerary_days (trip_id, day_number, date, base_id, base_name, theme, intensity,
-         window_json, totals_json, transport_json, availability_json, weather_json, warnings_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         window_json, totals_json, transport_json, availability_json, weather_json, food_json,
+         warnings_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertItem = db.prepare(
       `INSERT INTO itinerary_items (trip_id, day_number, position, kind, place_id, start_minute, end_minute, item_json)
@@ -424,6 +483,7 @@ export function saveItinerary(itinerary: Itinerary): void {
         JSON.stringify(day.transport),
         JSON.stringify(day.availability),
         JSON.stringify(day.weather),
+        JSON.stringify(day.food),
         JSON.stringify(day.warnings),
       );
       day.items.forEach((item, position) => {
@@ -489,6 +549,7 @@ export function getItinerary(tripId: string): Itinerary | null {
     status: head.status,
     summary: head.summary,
     transportStrategy: JSON.parse(head.transport_strategy_json),
+    foodPlan: JSON.parse(head.food_plan_json),
     issues: JSON.parse(head.issues_json),
     unscheduled: JSON.parse(head.unscheduled_json),
     diagnostics: JSON.parse(head.diagnostics_json),
@@ -504,6 +565,7 @@ export function getItinerary(tripId: string): Itinerary | null {
       transport: JSON.parse(row.transport_json),
       availability: JSON.parse(row.availability_json),
       weather: JSON.parse(row.weather_json),
+      food: JSON.parse(row.food_json),
       warnings: JSON.parse(row.warnings_json),
       items: itemsByDay.get(row.day_number) ?? [],
     })),

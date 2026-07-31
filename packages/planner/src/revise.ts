@@ -1,3 +1,4 @@
+import { FOOD_ISSUE_CODES } from '@sidequest/core';
 import type {
   RevisionAction,
   UnscheduledReasonCode,
@@ -55,6 +56,15 @@ export function reviseDayPlans(
       continue;
     }
 
+    /**
+     * A food problem never costs a stop.
+     *
+     * This reviser is subtractive over the day's *activities*, so letting a
+     * closed bakery or an unconfirmed dietary claim through here would fix the
+     * meal by deleting a lake. The pipeline handles these by rebuilding the day
+     * without its food, which is the thing that should give way.
+     */
+    if (FOOD_ISSUE_CODES.has(issue.code)) continue;
     if (issue.dayNumber === undefined || handledDays.has(issue.dayNumber)) continue;
     const plan = next.find((entry) => entry.day.dayNumber === issue.dayNumber);
     if (!plan || plan.accepted.length === 0) continue;

@@ -5,7 +5,9 @@ export * from './schemas/provenance';
 // make it ambiguous and therefore invisible to consumers.
 export * from './schemas/access';
 export * from './schemas/hours';
+export * from './schemas/poi';
 export * from './schemas/place';
+export * from './schemas/food';
 export * from './schemas/region';
 export * from './schemas/trip';
 export * from './schemas/profile';
@@ -23,6 +25,10 @@ export * from './access/provider';
 
 export * from './hours/availability';
 export * from './hours/provider';
+
+export * from './food/availability';
+export * from './food/board';
+export * from './food/provider';
 
 export * from './weather/board';
 export * from './weather/board-backups';

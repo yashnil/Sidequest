@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS itineraries (
   status                   TEXT NOT NULL,
   summary                  TEXT NOT NULL,
   transport_strategy_json  TEXT NOT NULL DEFAULT '{}',
+  food_plan_json           TEXT NOT NULL DEFAULT '{}',
   issues_json              TEXT NOT NULL DEFAULT '[]',
   unscheduled_json         TEXT NOT NULL DEFAULT '[]',
   diagnostics_json         TEXT NOT NULL,
@@ -92,6 +93,8 @@ CREATE TABLE IF NOT EXISTS itinerary_days (
   totals_json    TEXT NOT NULL,
   transport_json TEXT NOT NULL DEFAULT '{}',
   availability_json TEXT NOT NULL DEFAULT '{}',
+  weather_json   TEXT NOT NULL DEFAULT '{}',
+  food_json      TEXT NOT NULL DEFAULT '{}',
   warnings_json  TEXT NOT NULL DEFAULT '[]',
   PRIMARY KEY (trip_id, day_number)
 );
@@ -107,6 +110,24 @@ CREATE TABLE IF NOT EXISTS itinerary_items (
   item_json    TEXT NOT NULL,
   PRIMARY KEY (trip_id, day_number, position)
 );
+
+-- What the traveller said about where they would like to eat.
+--
+-- Its own table rather than a status on discovery_selections: a food venue is
+-- not a place, must never be counted against the activity-frequency caps, and
+-- has only two meaningful answers rather than three. The planner reads it as a
+-- preference, never as a promise — a venue that will not fit the route comes
+-- back as a visible conflict.
+CREATE TABLE IF NOT EXISTS food_selections (
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  venue_id   TEXT NOT NULL,
+  status     TEXT NOT NULL,
+  source     TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (trip_id, venue_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_food_selections_trip ON food_selections(trip_id);
 
 -- Weather fetched from an external provider, remembered so that rendering a
 -- page does not mean a forecast request. Not itinerary data: a plan carries its
@@ -154,4 +175,6 @@ export const COLUMN_MIGRATIONS: readonly {
     definition: "TEXT NOT NULL DEFAULT '{}'",
   },
   { table: 'itinerary_days', column: 'weather_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  { table: 'itineraries', column: 'food_plan_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  { table: 'itinerary_days', column: 'food_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
 ];

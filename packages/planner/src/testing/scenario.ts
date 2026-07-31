@@ -5,6 +5,7 @@ import {
   EASTERN_SIERRA,
   EASTERN_SIERRA_BASE_ID,
   EASTERN_SIERRA_ACCESS,
+  EASTERN_SIERRA_FOOD,
   EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_PLACES,
   EASTERN_SIERRA_WEATHER_LOCATIONS,
@@ -19,6 +20,8 @@ import {
 import { buildTravelerProfile, defaultAnswers } from '@sidequest/core';
 import type {
   AccessDataset,
+  FoodDataset,
+  FoodSelection,
   OperatingHoursDataset,
   Place,
   QuestionnaireContext,
@@ -121,6 +124,15 @@ export interface ScenarioOptions {
    * rather than of the day it is run on.
    */
   now?: Date;
+  /**
+   * Swap the food data to exercise a closed venue, a strict dietary claim, or a
+   * region with nothing in it at all. Pass `null` for "no food data reached the
+   * planner", which is a different state from an empty dataset and reads
+   * differently on screen.
+   */
+  food?: FoodDataset | null;
+  /** Venues the traveller asked for, or asked not to be sent to, on the board. */
+  foodSelections?: readonly FoodSelection[];
 }
 
 export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
@@ -211,6 +223,8 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     access: options.access ?? EASTERN_SIERRA_ACCESS,
     hours: options.hours ?? EASTERN_SIERRA_HOURS,
     weather,
+    ...(options.food === null ? {} : { food: options.food ?? EASTERN_SIERRA_FOOD }),
+    ...(options.foodSelections ? { foodSelections: options.foodSelections } : {}),
     now,
     baseId: EASTERN_SIERRA_BASE_ID,
     generatedAt: '2026-07-30T12:00:00.000Z',

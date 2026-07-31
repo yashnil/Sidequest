@@ -7,11 +7,18 @@ import {
   type SelectionStatus,
 } from '@sidequest/core';
 import { DiscoveryBoardView } from '@/components/DiscoveryBoardView';
+import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
 import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange, formatMinutes } from '@/lib/format';
-import { getProfile, getSelections, getTrip, hasItinerary } from '@/lib/db/repository';
-import { boardWeatherBackups } from '@sidequest/core';
+import {
+  getFoodSelections,
+  getProfile,
+  getSelections,
+  getTrip,
+  hasItinerary,
+} from '@/lib/db/repository';
+import { boardWeatherBackups, foodBoardFor } from '@sidequest/core';
 import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +41,20 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const personality = tripPersonality(profile, days);
 
   const planned = hasItinerary(id);
+
+  /**
+   * Derived rather than stored, and short by construction. A region with no food
+   * data simply has no section, which is the honest outcome and not an error.
+   */
+  const foodStops = resolved.context.food
+    ? foodBoardFor({
+        dataset: resolved.context.food,
+        profile,
+        dates: resolved.context.dates,
+      })
+    : [];
+  const foodChoices: FoodChoiceMap = {};
+  for (const entry of getFoodSelections(id)) foodChoices[entry.venueId] = entry.status;
   const stored = getSelections(id);
   const selections: Record<string, SelectionStatus | undefined> = {};
   for (const selection of stored) selections[selection.placeId] = selection.status;
@@ -108,6 +129,10 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               weatherBackups={boardWeatherBackups(board.candidates)}
             />
           )}
+
+          {foodStops.length > 0 ? (
+            <FoodStopsBoard tripId={id} entries={foodStops} initialChoices={foodChoices} />
+          ) : null}
         </div>
 
         <aside className="order-1 space-y-6 lg:order-2 lg:sticky lg:top-6">

@@ -476,7 +476,7 @@ describe('the Eastern Sierra hours fixture', () => {
     expect(operatingOn(centre, '2026-08-14').status).toBe('open');
   });
 
-  it('marks daylight dependence without inventing sunrise or sunset', () => {
+  it('marks daylight dependence, and says the window is worked out', () => {
     const daylight = EASTERN_SIERRA_HOURS.calendars.filter((entry) => entry.daylightOnly);
     expect(daylight.map((entry) => entry.placeId).sort()).toEqual([
       'mammoth-lakes-basin',
@@ -488,7 +488,10 @@ describe('the Eastern Sierra hours fixture', () => {
       const assessment = assessOperatingHours({ calendar: entry, dates: AUGUST });
       expect(assessment.hoursSummary).toBeNull();
       expect(assessment.badges).toContain('daylight_only');
-      expect(assessment.cautions.join(' ')).toMatch(/do not work out sunrise and sunset/i);
+      // The caution says the window is computed, because since the daylight
+      // slice it is. It used to say the opposite, which was true when it was
+      // written and had quietly stopped being true.
+      expect(assessment.cautions.join(' ')).toMatch(/scheduled inside the daylight/i);
     }
   });
 

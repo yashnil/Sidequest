@@ -1,13 +1,24 @@
 import Link from 'next/link';
 import {
   BOOKING_KIND_LABELS,
+  DIETARY_EVIDENCE_COPY,
+  DIETARY_NEED_LABELS,
+  FOOD_SERVICE_TYPE_LABELS,
   formatMinuteOfDay,
   ITINERARY_STATUS_COPY,
+  MEAL_SLOT_LABELS,
+  PRICE_BAND_LABELS,
+  PRICE_BAND_WORDS,
+  PRICE_EVIDENCE_COPY,
+  RESERVATION_LABELS,
   TRANSPORT_MODE_LABELS,
   type DailyWindow,
+  type FoodPlan,
+  type FoodStopKind,
   type Itinerary,
   type ItineraryDay,
   type ItineraryItem,
+  type ScheduledFood,
   type TransportStrategy,
 } from '@sidequest/core';
 import { Badge, Panel, buttonClass, cx, type BadgeTone } from './ui';
@@ -25,6 +36,20 @@ const KIND_STYLE: Record<ItineraryItem['kind'], { rail: string; label: string }>
   meal: { rail: 'bg-amber', label: 'Meal' },
   rest: { rail: 'bg-amber', label: 'Rest' },
   free_time: { rail: 'bg-rule', label: 'Free' },
+};
+
+/**
+ * What a food block actually is, said in the row's own eyebrow.
+ *
+ * A packed lunch is not a restaurant visit and a shop is not a meal, and using
+ * one word for all three is how a plan reads as though it has booked something
+ * it has not.
+ */
+const FOOD_STOP_LABEL: Record<FoodStopKind, string> = {
+  venue: '',
+  grocery: 'Supplies',
+  packed: 'Carried',
+  unplanned: 'Time held',
 };
 
 /**
@@ -134,6 +159,8 @@ export function ItineraryView({
       <TransportPlan strategy={itinerary.transportStrategy} />
 
       <WeatherPlan itinerary={itinerary} />
+
+      <FoodPlanPanel plan={itinerary.foodPlan} />
 
       <ol className="mt-10 space-y-12">
         {itinerary.days.map((day) => (
@@ -723,6 +750,7 @@ function DayCard({ day, renderedAt }: { day: ItineraryDay; renderedAt: number })
         {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
         <DayHours day={day} />
         <DayWeather day={day} renderedAt={renderedAt} />
+        <DayFood day={day} />
 
         {day.window.note ? (
           <p className="mt-3 text-sm text-ink-faint">{day.window.note}</p>
@@ -750,6 +778,262 @@ function DayCard({ day, renderedAt }: { day: ItineraryDay; renderedAt: number })
           ))}
         </ul>
       ) : null}
+    </Panel>
+  );
+}
+
+/**
+ * What is worth saying about a meal that the row above it has not said already.
+ *
+ * The rule the hours block already lives by: only what bears on this decision.
+ * A venue's opening window is printed when the meal sits near an edge of it and
+ * not when it does not; a dietary line appears only for something the traveller
+ * actually told us about; and the alternatives are two names, not a menu.
+ *
+ * Nothing here claims a venue is safe, and nothing implies a booking exists.
+ */
+function FoodDetail({ food }: { food: ScheduledFood }) {
+  const supported = food.dietary.filter((claim) => claim.evidence !== 'unknown');
+  // A twenty-minute shop is not a meal. Asking a supermarket to confirm how it
+  // handles an allergy — in the one place a traveller can read every label
+  // themselves — is the kind of caution that teaches people to skip cautions.
+  const isShop = food.stopKind === 'grocery';
+  return (
+    <>
+      {food.hours ? (
+        <p className="mt-1 text-xs tabular-nums text-ink-faint">
+          Open {formatMinuteOfDay(food.hours.openMinute)}–
+          {formatMinuteOfDay(food.hours.closeMinute)}
+          {food.hours.periodLabel ? ` · ${food.hours.periodLabel}` : ''}
+          {food.hours.confidence !== 'published' ? ' · closing time is ours, not theirs' : ''}
+        </p>
+      ) : null}
+
+      {food.cuisineLabel ? (
+        <p className="mt-1 text-xs text-ink-faint">{food.cuisineLabel}</p>
+      ) : null}
+
+      {supported.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-ink-muted">
+          {supported.map((claim) => (
+            <li key={claim.need}>
+              <span className="font-medium text-ink">{DIETARY_NEED_LABELS[claim.need]}</span>{' '}
+              <span className="text-ink-faint">
+                — {DIETARY_EVIDENCE_COPY[claim.evidence]}.
+              </span>{' '}
+              {claim.note}
+              {claim.sourceUrl ? (
+                <>
+                  {' '}
+                  <a
+                    className="underline underline-offset-2"
+                    href={claim.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    their page
+                  </a>
+                </>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {food.dietaryUnverified.length > 0 && !isShop ? (
+        <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">Nobody has confirmed this either way.</span>{' '}
+          {food.venueName ?? 'This place'} has nothing on record about{' '}
+          {food.dietaryUnverified.map((need) => DIETARY_NEED_LABELS[need].toLowerCase()).join(', ')}.
+          Ring them before you count on it.
+        </p>
+      ) : null}
+
+      {food.reservation &&
+      (food.reservation.requirement === 'required' ||
+        food.reservation.requirement === 'recommended') ? (
+        <p className="mt-2 rounded-md border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
+          <span className="font-medium text-clay">You have to book this yourself.</span>{' '}
+          {food.reservation.note ?? 'We have not booked anything.'}
+          {food.reservation.bookingUrl ? (
+            <>
+              {' '}
+              <a
+                className="underline underline-offset-2"
+                href={food.reservation.bookingUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Their booking page
+              </a>
+              .
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      {food.alternatives.length > 0 ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-ink-faint">
+            Other options here ({food.alternatives.length})
+          </summary>
+          <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
+            {food.alternatives.map((option) => (
+              <li key={option.venueId}>
+                <span className="font-medium text-ink">{option.name}</span> — {option.tradeoff}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      {food.hours ? (
+        <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+          {food.hours.sourceKind === 'official' ? 'Hours from' : 'Hours written from'}{' '}
+          {food.hours.sourceUrl ? (
+            <a
+              className="underline underline-offset-2"
+              href={food.hours.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {food.hours.sourceName}
+            </a>
+          ) : (
+            food.hours.sourceName
+          )}
+          {food.hours.lastVerified ? `, read ${food.hours.lastVerified}` : ''}. We have not checked
+          today.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * What this day's food plan is, as a day rather than as a list of meals.
+ *
+ * Renders nothing at all on an ordinary day, which is most of them: everything a
+ * meal row can say for itself, it says for itself. What is left is what only a
+ * day can say — that lunch has to be carried, that the shopping happened this
+ * morning for tomorrow, that a table needs booking.
+ */
+function DayFood({ day }: { day: ItineraryDay }) {
+  const { food } = day;
+  if (food.notes.length === 0 && food.reservations.length === 0) return null;
+
+  return (
+    <section
+      className="mt-3 border-t border-rule pt-3"
+      aria-label={`Food on day ${day.dayNumber}`}
+    >
+      <h4 className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">Eating</h4>
+      {food.notes.length > 0 ? (
+        <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
+          {food.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+      {food.reservations.length > 0 ? (
+        <p className="mt-2 rounded-md border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
+          <span className="font-medium text-clay">
+            {food.reservations.length === 1
+              ? 'One table to book'
+              : `${food.reservations.length} tables to book`}
+            .
+          </span>{' '}
+          {food.reservations.map((entry) => entry.venueName).join(', ')}. We have not booked
+          anything.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * The trip's food position.
+ *
+ * Deliberately short, and deliberately without a total. Four venues in this
+ * whole region publish prices, so a trip food cost would be a guess with a
+ * currency symbol on it — and the one number everybody would then plan around.
+ */
+function FoodPlanPanel({ plan }: { plan: FoodPlan }) {
+  const facts: { label: string; value: string }[] = [];
+  if (plan.specialMealBudget > 0) {
+    facts.push({
+      label: 'Meals meant to be an event',
+      value: `${plan.specialMealsPlanned} of ${plan.specialMealBudget}`,
+    });
+  }
+  if (plan.groceryDayNumbers.length > 0) {
+    facts.push({ label: 'Shopping days', value: plan.groceryDayNumbers.join(', ') });
+  }
+  if (plan.packedDayNumbers.length > 0) {
+    facts.push({ label: 'Carrying lunch', value: `Day ${plan.packedDayNumbers.join(', ')}` });
+  }
+  if (plan.daysWithoutVerifiedOption.length > 0) {
+    facts.push({
+      label: 'Days you pick yourself',
+      value: plan.daysWithoutVerifiedOption.join(', '),
+    });
+  }
+
+  return (
+    <Panel as="section" className="mt-8 p-5 sm:p-6" labelledBy="food-plan">
+      <h2 className="font-display text-xl text-ink" id="food-plan">
+        Eating
+      </h2>
+      <p className="mt-1 text-sm leading-relaxed text-ink-muted">{plan.headline}</p>
+      <p className="mt-1 text-sm leading-relaxed text-ink-muted">{plan.style}</p>
+
+      {facts.length > 0 ? (
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {facts.map((fact) => (
+            <div key={fact.label}>
+              <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+                {fact.label}
+              </dt>
+              <dd className="mt-0.5 text-sm text-ink tabular-nums">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      {plan.localSpecialties.length > 0 ? (
+        <p className="mt-4 text-sm leading-relaxed text-ink-muted">
+          Worth ordering:{' '}
+          <span className="text-ink">{plan.localSpecialties.join(', ')}</span>.
+        </p>
+      ) : null}
+
+      {plan.dietaryDisclosure ? (
+        <p className="mt-4 rounded-md bg-amber-soft p-3 text-xs leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">
+            {plan.dietaryNeeds.map((need) => DIETARY_NEED_LABELS[need]).join(', ')}.
+          </span>{' '}
+          {plan.dietaryDisclosure}
+        </p>
+      ) : null}
+
+      {plan.unusedChoices.length > 0 ? (
+        <div className="mt-4 rounded-md border border-clay/40 p-3">
+          <p className="text-xs font-medium text-clay">
+            {plan.unusedChoices.length === 1
+              ? 'One place you asked for is not on the plan'
+              : `${plan.unusedChoices.length} places you asked for are not on the plan`}
+          </p>
+          <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
+            {plan.unusedChoices.map((choice) => (
+              <li key={choice.venueId}>
+                <span className="font-medium text-ink">{choice.name}</span> — {choice.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="mt-4 text-[11px] leading-relaxed text-ink-faint">{plan.dataDisclosure}</p>
     </Panel>
   );
 }
@@ -796,10 +1080,30 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
               {TRANSPORT_MODE_LABELS[item.travel.mode]}
             </span>
+          ) : item.food ? (
+            <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+              {[MEAL_SLOT_LABELS[item.food.slot], FOOD_STOP_LABEL[item.food.stopKind]]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
           ) : style.label ? (
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
               {style.label}
             </span>
+          ) : null}
+          {item.food?.serviceType && item.food.stopKind === 'venue' ? (
+            <Badge>{FOOD_SERVICE_TYPE_LABELS[item.food.serviceType]}</Badge>
+          ) : null}
+          {item.food?.priceBand ? (
+            <Badge title={`${PRICE_BAND_WORDS[item.food.priceBand]} — ${item.food.priceEvidence ? PRICE_EVIDENCE_COPY[item.food.priceEvidence] : ''}`}>
+              {PRICE_BAND_LABELS[item.food.priceBand]}
+            </Badge>
+          ) : null}
+          {item.food?.isSpecialMeal ? <Badge tone="pine">Your one big one</Badge> : null}
+          {item.food?.reservation &&
+          (item.food.reservation.requirement === 'required' ||
+            item.food.reservation.requirement === 'recommended') ? (
+            <Badge tone="amber">{RESERVATION_LABELS[item.food.reservation.requirement]}</Badge>
           ) : null}
           {item.physicalIntensity && item.physicalIntensity !== 'none' ? (
             <Badge>{item.physicalIntensity}</Badge>
@@ -825,6 +1129,8 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
         ) : null}
 
         <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.reason}</p>
+
+        {item.food ? <FoodDetail food={item.food} /> : null}
 
         {item.travel ? (
           <p className="mt-1 text-xs text-ink-faint">
@@ -869,8 +1175,12 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
 
         {item.daylightOnly ? (
           <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-            Signed for daylight use only. We do not work out sunrise and sunset yet, so check how
-            much light your dates give you.
+            Signed for daylight use only.{' '}
+            {item.daylight
+              ? `Placed inside ${formatMinuteOfDay(item.daylight.sunriseMinute)}–${formatMinuteOfDay(
+                  item.daylight.sunsetMinute,
+                )} for this date.`
+              : 'We could not work out sunrise and sunset for this one, so check the light yourself.'}
           </p>
         ) : null}
 

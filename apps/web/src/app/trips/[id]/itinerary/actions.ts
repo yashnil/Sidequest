@@ -3,7 +3,13 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { planTrip } from '@sidequest/planner';
-import { getProfile, getSelections, getTrip, saveItinerary } from '@/lib/db/repository';
+import {
+  getFoodSelections,
+  getProfile,
+  getSelections,
+  getTrip,
+  saveItinerary,
+} from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export interface BuildResult {
@@ -53,6 +59,11 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
       access: context.access,
       hours: context.hours,
       weather: context.weather,
+      // Optional on purpose: a region with no usable food data still gets a
+      // plan, and the difference between "we have none" and "we have none that
+      // fitted" is what the meal rows then say.
+      ...(context.food ? { food: context.food } : {}),
+      foodSelections: getFoodSelections(tripId),
       // Without this the staleness check is unreachable in production: it is
       // gated on `now` precisely so a test does not have to wait six hours, and
       // omitting it here meant a forecast served from cache could be planned

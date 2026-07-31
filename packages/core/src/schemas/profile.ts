@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { transportPrioritySchema } from './access';
 import {
+  breakfastStyleSchema,
+  dietaryNeedSchema,
+  foodPreferencesSchema,
+  foodStyleSchema,
+  specialMealAppetiteSchema,
+} from './food';
+import {
   avoidanceSchema,
   budgetStyleSchema,
   costLevelSchema,
@@ -47,6 +54,33 @@ export const questionnaireAnswersSchema = z.object({
   avoidances: z.array(avoidanceSchema).default([]),
   mobilityLimited: z.boolean(),
   accessibilityNotes: z.string().max(500).optional(),
+  /**
+   * Food. Six questions, all defaulted for the same reason `willUseShuttles` is:
+   * `answers_json` is stored raw and reparsed on every read, so a saved trip must
+   * not become unreadable because a later build asked one more question.
+   *
+   * Six and not sixteen. The questionnaire is the thing that buys the traveller
+   * out of ten hours of tab-juggling, and turning it into a restaurant survey to
+   * feed a scorer would be spending the budget it exists to save. Everything else
+   * the food planner needs — how many meals a day has, whether a route passes
+   * anywhere, what a stop costs in detour minutes — comes from the itinerary,
+   * which is the whole point of doing this after the days are laid out.
+   */
+  breakfastStyle: breakfastStyleSchema.default('coffee_light'),
+  foodStyle: foodStyleSchema.default('balanced'),
+  specialMealAppetite: specialMealAppetiteSchema.default('one'),
+  /** Whether a grocery stop and a rucksack are an acceptable answer to lunch. */
+  willPackLunch: z.boolean().default(true),
+  dietaryNeeds: z.array(dietaryNeedSchema).default([]),
+  /**
+   * The line between "I would rather" and "I cannot".
+   *
+   * Asked as its own question because the two produce different plans and
+   * different sentences. A soft preference lets an unconfirmed venue win on
+   * other merits; a strict requirement makes "nobody has confirmed this" a
+   * reason to look elsewhere, and makes a packed lunch the safer answer.
+   */
+  dietaryStrict: z.boolean().default(false),
 });
 export type QuestionnaireAnswers = z.infer<typeof questionnaireAnswersSchema>;
 
@@ -87,12 +121,19 @@ export const derivedProfileSchema = z.object({
 export type DerivedProfile = z.infer<typeof derivedProfileSchema>;
 
 /**
+ * 3 — food became a planning input rather than an absence. The traveller has a
+ * breakfast habit, a dining style, an appetite for special meals, a position on
+ * carrying a packed lunch, and — kept deliberately apart from all of those —
+ * dietary needs and whether they are requirements or leanings.
+ *
  * 2 — transport became a planning constraint rather than a set of road-comfort
  * booleans: driving and total transportation now have separate budgets, and the
  * traveller's shuttle, walking and optimisation preferences are first-class.
- * `migrateTravelerProfile` upgrades v1 rows on read.
+ *
+ * `migrateTravelerProfile` rebuilds any older row from the answers that produced
+ * it, so a bump here costs a stored profile nothing.
  */
-export const TRAVELER_PROFILE_VERSION = 2 as const;
+export const TRAVELER_PROFILE_VERSION = 3 as const;
 
 export const travelerProfileSchema = z.object({
   version: z.literal(TRAVELER_PROFILE_VERSION),
@@ -125,6 +166,12 @@ export const travelerProfileSchema = z.object({
     maxAccessWalkMinutes: z.number().int().min(0).max(120),
     priority: transportPrioritySchema,
   }),
+  /**
+   * How they eat, kept beside `transport` rather than inside `derived` for the
+   * same reason: it mixes stated answers with values derived from them once, and
+   * every consumer should read the derived ones rather than re-deriving.
+   */
+  food: foodPreferencesSchema,
   regionalExpansion: regionalExpansionSchema,
   detourToleranceMinutes: z.number().int().min(0).max(180),
   avoidances: z.array(avoidanceSchema),

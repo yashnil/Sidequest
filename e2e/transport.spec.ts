@@ -24,7 +24,12 @@ async function startTrip(page: Page, dates = AUGUST) {
 
 /** Steps through to the transport step, leaving it on screen. */
 async function reachTransportStep(page: Page) {
-  for (const heading of ['How should the days feel?', 'What is the spending style?', 'Famous or off the track?']) {
+  for (const heading of [
+    'How should the days feel?',
+    'What is the spending style?',
+    'How do you want to eat?',
+    'Famous or off the track?',
+  ]) {
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByRole('heading', { name: heading })).toBeVisible();
   }

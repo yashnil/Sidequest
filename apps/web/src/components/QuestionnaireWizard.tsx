@@ -3,7 +3,11 @@
 import { useMemo, useState, useTransition } from 'react';
 import {
   AVOIDANCE_OPTIONS,
+  BREAKFAST_STYLE_OPTIONS,
   BUDGET_OPTIONS,
+  DIETARY_NEED_OPTIONS,
+  FOOD_STYLE_OPTIONS,
+  SPECIAL_MEAL_OPTIONS,
   CROWD_TOLERANCE_OPTIONS,
   DAILY_INTENSITY_OPTIONS,
   DAY_START_OPTIONS,
@@ -21,6 +25,7 @@ import {
   normalizeAnswers,
   tripPersonality,
   type Avoidance,
+  type DietaryNeed,
   type Interest,
   type InterestLevel,
   type QuestionnaireAnswers,
@@ -70,6 +75,13 @@ export function QuestionnaireWizard({
 
   function setInterest(interest: Interest, level: InterestLevel) {
     update({ interests: { ...answers.interests, [interest]: level } });
+  }
+
+  function toggleDietary(need: DietaryNeed, checked: boolean) {
+    const next = checked
+      ? [...answers.dietaryNeeds, need]
+      : answers.dietaryNeeds.filter((entry) => entry !== need);
+    update({ dietaryNeeds: [...new Set(next)].sort() });
   }
 
   function toggleAvoidance(avoidance: Avoidance, checked: boolean) {
@@ -209,6 +221,69 @@ export function QuestionnaireWizard({
             value={answers.budgetStyle}
             onChange={(budgetStyle) => update({ budgetStyle })}
           />
+        ) : null}
+
+        {step.id === 'food' ? (
+          <>
+            <ChoiceGroup
+              legend="What does breakfast look like?"
+              options={BREAKFAST_STYLE_OPTIONS}
+              value={answers.breakfastStyle}
+              onChange={(breakfastStyle) => update({ breakfastStyle })}
+            />
+            <ChoiceGroup
+              legend="And the rest of the day?"
+              options={FOOD_STYLE_OPTIONS}
+              value={answers.foodStyle}
+              onChange={(foodStyle) => update({ foodStyle })}
+            />
+            {isQuestionVisible('specialMealAppetite', { answers, context }) ? (
+              <ChoiceGroup
+                legend="How many meals should be an event?"
+                options={SPECIAL_MEAL_OPTIONS}
+                value={answers.specialMealAppetite}
+                onChange={(specialMealAppetite) => update({ specialMealAppetite })}
+              />
+            ) : null}
+            <Toggle
+              label="Happy to pick up a lunch and carry it"
+              detail="Some of the best days out here have nowhere at all to buy food."
+              checked={answers.willPackLunch}
+              onChange={(willPackLunch) => update({ willPackLunch })}
+            />
+            <Fieldset
+              legend="Anything you do not eat?"
+              hint="We only ever say a place can handle one of these when the place itself has published that it can."
+            >
+              <div className="flex flex-wrap gap-2">
+                {DIETARY_NEED_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={cx(
+                      'relative cursor-pointer rounded-full border border-rule px-3.5 py-1.5 text-sm text-ink-muted has-[:checked]:border-pine has-[:checked]:bg-pine-soft has-[:checked]:text-pine',
+                      FOCUS_RING,
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className={OVERLAY_INPUT}
+                      checked={answers.dietaryNeeds.includes(option.value)}
+                      onChange={(event) => toggleDietary(option.value, event.target.checked)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </Fieldset>
+            {isQuestionVisible('dietaryStrict', { answers, context }) ? (
+              <Toggle
+                label="These are requirements, not preferences"
+                detail="Say yes and we stop treating “nobody has confirmed it” as good enough."
+                checked={answers.dietaryStrict}
+                onChange={(dietaryStrict) => update({ dietaryStrict })}
+              />
+            ) : null}
+          </>
         ) : null}
 
         {step.id === 'discovery' ? (

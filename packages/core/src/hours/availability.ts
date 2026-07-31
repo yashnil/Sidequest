@@ -49,13 +49,33 @@ export interface DateOperating {
 }
 
 /**
+ * The part of a calendar that decides what is open on a date.
+ *
+ * `OperatingCalendar` and `FoodOpeningCalendar` both satisfy this structurally,
+ * and they should: "which of my recurring periods covers 14 August, and is that
+ * a weekday I open?" is one question with one right answer, and asking it twice
+ * in two files is how two layers end up disagreeing about a Tuesday. What the
+ * two calendars do *not* share — an admission requirement, a daylight-only flag,
+ * a closing time we had to estimate — stays on its own model, because those
+ * change different decisions.
+ */
+export type RecurringCalendar =
+  | { kind: 'always_open' }
+  | { kind: 'unknown' }
+  | {
+      kind: 'scheduled';
+      periods: readonly OperatingPeriod[];
+      closedAnnualDates: readonly string[];
+    };
+
+/**
  * Hours on one date.
  *
  * A place with no matching period is closed, not unknown — the calendar claims
  * to be complete, and "we listed summer and winter and your date is neither" is
  * a statement that it is shut, which is exactly right for a seasonal attraction.
  */
-export function operatingOn(calendar: OperatingCalendar, date: string): DateOperating {
+export function operatingOn(calendar: RecurringCalendar, date: string): DateOperating {
   if (calendar.kind === 'always_open') {
     return { date, status: 'always_open', windows: [], periodLabel: null, closedReason: null };
   }
@@ -153,11 +173,16 @@ export const OPERATING_BADGE_LABELS: Record<OperatingBadge, string> = {
 };
 
 /**
- * Said the same way everywhere, and deliberately admits the gap rather than
- * implying a check nobody performed.
+ * Said the same way everywhere.
+ *
+ * It used to end "we do not work out sunrise and sunset yet", which was true
+ * when it was written and stopped being true the moment the daylight layer
+ * landed — the planner has computed the window and scheduled inside it ever
+ * since. Copy that describes a limitation the product no longer has is the same
+ * kind of lie as copy that claims a capability it does not.
  */
 export const DAYLIGHT_ONLY_CAUTION =
-  'Signed for daylight use only. We do not work out sunrise and sunset yet, so check how much light your dates give you.';
+  'Signed for daylight use only, so it is scheduled inside the daylight your dates actually give you.';
 
 export interface OperatingAssessment {
   placeId: string;

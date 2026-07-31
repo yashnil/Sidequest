@@ -23,6 +23,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
   for (const heading of [
     'How should the days feel?',
     'What is the spending style?',
+    'How do you want to eat?',
     'Famous or off the track?',
     'How are you getting around?',
     'How far from Mammoth Lakes?',
@@ -62,7 +63,10 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
   // Real scheduled content: clock times, drives, a meal, and free time.
   await expect(page.getByText(/\d+ min on the road/).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Lunch' }).first()).toBeVisible();
-  await expect(page.getByText('Free time').first()).toBeVisible();
+  // Slack is a deliberate output, not leftover space. Asserted on the day's own
+  // free-hours badge rather than on a "Free time" row: a day whose meals now name
+  // real places can spend its gaps at a table and still be an unhurried day.
+  await expect(page.getByText(/(\d+ min|\d+ hr( \d+ min)?) free/).first()).toBeVisible();
 
   // Travel times are labelled as modelled, never presented as measured.
   await expect(page.getByText(/modelled travel time/).first()).toBeVisible();

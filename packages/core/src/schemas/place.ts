@@ -1,33 +1,17 @@
 import { z } from 'zod';
 import {
   closureRiskSchema,
-  coordinatesSchema,
   costLevelSchema,
   crowdLevelSchema,
   interestSchema,
-  isoDateSchema,
   parkingDifficultySchema,
   physicalIntensitySchema,
   placeCategorySchema,
   roadSurfaceSchema,
   timeOfDaySchema,
 } from './common';
+import { POI_BASE_FIELDS } from './poi';
 import { placeWeatherProfileSchema } from './weather';
-
-/**
- * Where the data came from. Provenance is a first-class field rather than an
- * afterthought: curated seed rows and future API rows must be distinguishable,
- * and confidence has to travel with the record for the honesty of the UI copy.
- */
-export const placeSourceSchema = z.object({
-  name: z.string().min(1),
-  kind: z.enum(['curated', 'osm', 'google_places', 'opentripmap', 'wikivoyage', 'official']),
-  url: z.string().url().optional(),
-  /** 0-1. Curated-and-checked rows sit high; scraped rows will sit lower. */
-  confidence: z.number().min(0).max(1),
-  lastVerified: isoDateSchema,
-});
-export type PlaceSource = z.infer<typeof placeSourceSchema>;
 
 /**
  * When the place itself is reachable at all — the snow gate, not the shuttle.
@@ -96,14 +80,9 @@ export const travelFromBaseSchema = z.object({
 export type TravelFromBase = z.infer<typeof travelFromBaseSchema>;
 
 export const placeSchema = z.object({
-  id: z.string().min(1),
-  regionId: z.string().min(1),
-  name: z.string().min(1),
-  locality: z.string().min(1),
-  shortDescription: z.string().min(1).max(280),
+  ...POI_BASE_FIELDS,
   /** Base = you sleep here / it is the anchor. Satellite = you travel out to it. */
   relationship: z.enum(['base', 'satellite']),
-  coordinates: coordinatesSchema,
   category: placeCategorySchema,
   /**
    * Interests this place genuinely satisfies, ordered by how central each one is
@@ -112,7 +91,6 @@ export const placeSchema = z.object({
    * ceilings are counted against. A viewpoint hike is a hike first.
    */
   interests: z.array(interestSchema).min(1),
-  tags: z.array(z.string().min(1)).default([]),
   typicalDurationMinutes: z.number().int().min(15).max(600),
   costLevel: costLevelSchema,
   physicalIntensity: physicalIntensitySchema,
@@ -135,7 +113,6 @@ export const placeSchema = z.object({
   /** Practical caveat shown verbatim on the card when present. */
   logisticsNote: z.string().min(1).optional(),
   imageUrl: z.string().url().optional(),
-  source: placeSourceSchema,
 });
 export type Place = z.infer<typeof placeSchema>;
 

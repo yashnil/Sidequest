@@ -49,6 +49,7 @@ test('captures the journey and stays free of console errors and overflow', async
   await advance(page, 'How should the days feel?');
   await shot('04-rhythm');
   await advance(page, 'What is the spending style?');
+  await advance(page, 'How do you want to eat?');
   await advance(page, 'Famous or off the track?');
   await page.getByRole('radio', { name: /Crowds ruin it/ }).check();
   await shot('05-discovery');

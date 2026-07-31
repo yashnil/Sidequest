@@ -23,6 +23,25 @@ export const discoverySelectionSchema = z.object({
 });
 export type DiscoverySelection = z.infer<typeof discoverySelectionSchema>;
 
+/**
+ * The traveller's decision about a food venue.
+ *
+ * Deliberately its own table and its own type rather than a `DiscoverySelection`
+ * with a venue id in the `placeId` field. Only two of the three statuses mean
+ * anything here — a venue is somewhere you *would like* to eat or somewhere you
+ * would rather not, and there is no "maybe" that the planner could act on
+ * differently — and food selections must never be counted against the
+ * activity-frequency caps or the day's capacity, which is exactly what would
+ * happen if they arrived in the same list.
+ */
+export const foodSelectionSchema = z.object({
+  venueId: z.string().min(1),
+  status: z.enum(['included', 'excluded']),
+  source: selectionSourceSchema,
+  updatedAt: z.string().min(1),
+});
+export type FoodSelection = z.infer<typeof foodSelectionSchema>;
+
 export const BOARD_GROUPS = [
   'must_see_classics',
   'hidden_gems',

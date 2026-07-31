@@ -49,6 +49,12 @@ interface CorridorNode {
    * the corridor rule always applies.
    */
   spurGroup: string | null;
+  /**
+   * Road distance from base, for nodes that are not `Place`s and so have no
+   * `travelFromBase` to read it from. Authored to the same accuracy as the
+   * minutes beside it, which is to say: modelled, and labelled as such.
+   */
+  distanceKm?: number;
 }
 
 /**
@@ -88,7 +94,67 @@ const CORRIDOR: Record<string, CorridorNode> = {
   'mono-lake-south-tufa': { corridorMinutes: 45, spurMinutes: 5, spurGroup: 'mono-basin' },
   'tioga-pass-tuolumne': { corridorMinutes: 45, spurMinutes: 30, spurGroup: 'highway-120' },
   'bodie-state-historic-park': { corridorMinutes: 57, spurMinutes: 23, spurGroup: 'bodie-road' },
+
+  /**
+   * Food routing nodes.
+   *
+   * A food venue is not a `Place` and does not get its own row in the place
+   * table, but it does need a position the matrix can price a detour from — the
+   * whole point of this slice is that "is that café on the way?" is answered
+   * with the same machinery as "how long to the lake?", rather than with a
+   * straight-line distance wearing a road time's clothes.
+   *
+   * They are *road positions*, not venues: several restaurants share one, which
+   * is exactly right at this model's resolution. A corridor model cannot tell
+   * one end of a main street from the other, and pretending otherwise by giving
+   * every venue its own node would manufacture precision that is not there.
+   */
+  'node-mammoth-main-street': {
+    corridorMinutes: 0,
+    spurMinutes: 1,
+    spurGroup: 'mammoth-town',
+    distanceKm: 1,
+  },
+  'node-mammoth-old-mammoth-road': {
+    corridorMinutes: 0,
+    spurMinutes: 2,
+    spurGroup: 'mammoth-town',
+    distanceKm: 2,
+  },
+  'node-june-lake-village': {
+    corridorMinutes: 25,
+    spurMinutes: 10,
+    spurGroup: 'highway-158',
+    distanceKm: 35,
+  },
+  'node-silver-lake': {
+    corridorMinutes: 25,
+    spurMinutes: 18,
+    spurGroup: 'highway-158',
+    distanceKm: 43,
+  },
+  'node-lee-vining-junction': {
+    corridorMinutes: 42,
+    spurMinutes: 0,
+    spurGroup: null,
+    distanceKm: 50,
+  },
+  'node-bishop-north': { corridorMinutes: -42, spurMinutes: 0, spurGroup: null, distanceKm: 68 },
 };
+
+/**
+ * Ids that exist only to price a detour. Included in the default matrix so the
+ * food layer can measure against them, and excluded from `easternSierraPoints`
+ * so nothing mistakes one for somewhere to go.
+ */
+export const EASTERN_SIERRA_FOOD_ROUTING_IDS = [
+  'node-mammoth-main-street',
+  'node-mammoth-old-mammoth-road',
+  'node-june-lake-village',
+  'node-silver-lake',
+  'node-lee-vining-junction',
+  'node-bishop-north',
+] as const;
 
 /** Distance is split along the same corridor/spur proportions as time. */
 interface CorridorGeometry extends CorridorNode {
@@ -103,7 +169,7 @@ function geometryFor(id: string): CorridorGeometry {
   }
   const totalMinutes = Math.abs(node.corridorMinutes) + node.spurMinutes;
   const place = EASTERN_SIERRA_PLACES.find((candidate) => candidate.id === id);
-  const totalKm = place?.travelFromBase.distanceKm ?? 0;
+  const totalKm = node.distanceKm ?? place?.travelFromBase.distanceKm ?? 0;
 
   if (totalMinutes === 0) {
     return { ...node, corridorKm: 0, spurKm: 0 };
@@ -151,7 +217,9 @@ export function easternSierraPoints(): GeoPoint[] {
  * Round to whole minutes so the output is stable and comparable.
  */
 export function easternSierraTravelMatrix(ids?: readonly string[]): TravelTimeMatrix {
-  const pointIds = ids ? [...ids] : easternSierraPoints().map((point) => point.id);
+  const pointIds = ids
+    ? [...ids]
+    : [...easternSierraPoints().map((point) => point.id), ...EASTERN_SIERRA_FOOD_ROUTING_IDS];
   const geometry = pointIds.map((id) => geometryFor(id));
 
   return {

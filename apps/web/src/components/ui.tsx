@@ -44,10 +44,17 @@ export function Panel({
   children,
   className,
   as: Tag = 'div',
+  labelledBy,
 }: {
   children: ReactNode;
   className?: string;
   as?: 'div' | 'section' | 'article' | 'aside';
+  /**
+   * The id of the heading that names this panel. Named explicitly rather than
+   * spreading arbitrary props: a `Panel as="section"` with no accessible name is
+   * not a landmark, and a screen reader announces it as an unlabelled region.
+   */
+  labelledBy?: string;
 }) {
   return (
     <Tag
@@ -55,6 +62,7 @@ export function Panel({
         'rounded-[var(--radius-card)] border border-rule bg-paper-raised',
         className,
       )}
+      {...(labelledBy ? { 'aria-labelledby': labelledBy } : {})}
     >
       {children}
     </Tag>

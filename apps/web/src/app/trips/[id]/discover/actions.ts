@@ -8,11 +8,13 @@ import {
   type SelectionStatus,
 } from '@sidequest/core';
 import {
+  clearFoodSelection,
   clearSelection,
   getProfile,
   getSelections,
   getTrip,
   replaceAutoSelections,
+  setFoodSelection,
   setSelection,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
@@ -49,6 +51,34 @@ export async function setSelectionAction(
   } catch (error) {
     console.error('Failed to save selection', error);
     return { ok: false, error: 'That choice did not save. We have put the card back how it was.' };
+  }
+}
+
+/**
+ * The traveller's opinion about a place to eat.
+ *
+ * Deliberately its own action rather than a third status on `setSelectionAction`:
+ * a venue is not a place, has only two useful answers, and must never reach the
+ * code that counts activity slots. `null` clears the opinion altogether, which
+ * is a third state and a different thing from saying no.
+ */
+export async function setFoodSelectionAction(
+  tripId: string,
+  venueId: string,
+  status: 'included' | 'excluded' | null,
+): Promise<ActionResult> {
+  try {
+    if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+    if (status === null) {
+      clearFoodSelection(tripId, venueId);
+    } else {
+      setFoodSelection(tripId, venueId, status, 'user');
+    }
+    revalidatePath(`/trips/${tripId}/discover`);
+    return { ok: true };
+  } catch (error) {
+    console.error('Failed to save a food choice', error);
+    return { ok: false, error: 'That choice did not save. We have put it back how it was.' };
   }
 }
 
