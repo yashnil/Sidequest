@@ -51,6 +51,7 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
       selections,
       matrix: context.matrix,
       access: context.access,
+      hours: context.hours,
       baseId: context.baseId,
     });
 

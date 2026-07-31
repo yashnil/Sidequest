@@ -90,6 +90,8 @@ export type BlockerCode =
   | 'service_unavailable'
   | 'mode_declined'
   | 'closed_on_your_dates'
+  /** Reachable, but nobody will let you in on any day of this trip. */
+  | 'no_open_hours'
   | 'exceeds_daily_travel'
   | 'avoided_interest'
   | 'rough_road'
@@ -227,6 +229,35 @@ export function scorePlace(
   } else if (place.seasonalAccess.closureRisk === 'high' && season.note) {
     cautions.push(season.note);
   }
+  // --- Opening hours ------------------------------------------------------
+  // A separate gate from the season above, and from transport below. The season
+  // says whether the road is open; this says whether anyone is there to let you
+  // in. A place can pass one and fail the other, and the card has to say which.
+  const operating = assessment.operating;
+  if (operating.status === 'closed_throughout') {
+    blockers.push({
+      code: 'no_open_hours',
+      // Any weekday closure among the dates is the more specific answer, and on
+      // a trip that straddles a season boundary it need not be the first one.
+      message: `${place.name} is shut on every day of your trip${
+        operating.byDate.some((entry) => entry.closedReason === 'closed_weekday')
+          ? ' — your dates fall on the days of the week it does not open.'
+          : ' — your dates fall outside its season.'
+      }`,
+    });
+  } else if (operating.status === 'open_some_days') {
+    cautions.push(
+      `Open on ${operating.openDates.length} of your ${operating.byDate.length} days — we will only put it on one of those.`,
+    );
+  }
+  if (operating.status === 'unknown') {
+    cautions.push(
+      'We could not confirm its opening hours. Check them before you build a day around it.',
+    );
+  }
+  if (operating.lastAdmissionSummary) cautions.push(operating.lastAdmissionSummary);
+  cautions.push(...operating.cautions);
+
   // --- Transport ----------------------------------------------------------
   // Whether the traveller can get here at all is not a score, it is a fact, and
   // it comes from the access rules rather than from a guess about this place.

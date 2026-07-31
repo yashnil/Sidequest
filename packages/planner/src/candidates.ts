@@ -103,6 +103,11 @@ function reasonCodeForBlocker(code: string | undefined): UnscheduledReasonCode {
   switch (code) {
     case 'closed_on_your_dates':
       return 'seasonally_closed';
+    // A different fact with a different remedy: the road is open and the doors
+    // are not. Collapsing the two would send someone to check road conditions
+    // about a museum that shuts on Wednesdays.
+    case 'no_open_hours':
+      return 'closed_on_trip_dates';
     case 'exceeds_daily_travel':
       return 'exceeds_daily_travel';
     case 'mobility':
@@ -128,6 +133,10 @@ function remedyFor(code: string | undefined): { suggestedRemedy?: string } {
   switch (code) {
     case 'closed_on_your_dates':
       return { suggestedRemedy: 'Move your dates into its open season, or drop it from the board.' };
+    case 'no_open_hours':
+      return {
+        suggestedRemedy: 'Move your dates onto days it opens, or drop it from the board.',
+      };
     case 'exceeds_daily_travel':
       return { suggestedRemedy: 'Raise your daily travel limit in the questionnaire, or treat this as a trip of its own.' };
     case 'rough_road':

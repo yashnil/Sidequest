@@ -8,6 +8,7 @@ import {
 import {
   easternSierraTravelMatrix,
   EASTERN_SIERRA_ACCESS,
+  EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_BASE_ID,
   placeById,
 } from '@sidequest/core';
@@ -193,6 +194,7 @@ describe('validator', () => {
     placesById,
     baseId: scenario.baseId,
     access: EASTERN_SIERRA_ACCESS,
+    hours: EASTERN_SIERRA_HOURS,
   };
 
   function dayWith(overrides: Partial<ItineraryDay>): ItineraryDay {
@@ -212,6 +214,12 @@ describe('validator', () => {
         parkingNotes: [],
         accessNotes: [],
         verifyBeforeTravel: [],
+      },
+      availability: {
+        flexiblePlaceIds: [],
+        cautions: [],
+        verifyBeforeTravel: [],
+        bookings: [],
       },
       intensity: 'moderate',
       warnings: [],

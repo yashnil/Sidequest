@@ -93,6 +93,8 @@ export function assignToDays(
   unitByPlaceId: ReadonlyMap<string, AccessUnit>,
   /** Unit key → the dates a legal way in exists. Absent means unconstrained. */
   feasibleDates: ReadonlyMap<string, ReadonlySet<string>>,
+  /** Place id → the dates it is open long enough to visit. Absent means unconstrained. */
+  openDates: ReadonlyMap<string, ReadonlySet<string>>,
 ): DayAssignment[] {
   const usableDays = days.filter((day) => day.capacityMinutes >= MIN_PLANNABLE_MINUTES);
   if (usableDays.length === 0 || eligible.length === 0) {
@@ -123,6 +125,7 @@ export function assignToDays(
           ),
         ),
       ],
+      placeIds: members.flatMap((unit) => unit.members.map((member) => member.place.id)),
       weight: members.length > 0 ? Math.max(...members.map((unit) => unit.maxDriveMinutes)) : 0,
       topPriority: members.length > 0 ? Math.max(...members.map((unit) => unit.topPriority)) : 0,
     };
@@ -140,23 +143,33 @@ export function assignToDays(
   for (const day of days) assignmentByDay.set(day.dayNumber, []);
 
   /**
-   * How many of a cluster's units can legally be reached on a given date.
+   * How much of a cluster genuinely works on a given date — counting both
+   * halves of the question, because they fail independently.
    *
-   * Without this, geography alone decides the day and a shuttle-served valley
-   * lands on a Tuesday the shuttle does not run — the packer then rejects it and
-   * it spills into an overflow pass, by which time every other day is full of
-   * auto-picks. A traveller's hand-picked stop loses to a Sunday.
+   * Without the access half, geography alone decides the day and a
+   * shuttle-served valley lands on a Tuesday the shuttle does not run. Without
+   * the hours half, a state park that shuts on Wednesdays lands on Wednesday.
+   * Either way the packer then rejects it and it spills into an overflow pass,
+   * by which time every other day is full of auto-picks — and a traveller's
+   * hand-picked stop loses to a weekday.
    */
-  const reachableUnits = (cluster: (typeof clusterLoads)[number], date: string) =>
-    cluster.unitKeys.filter((key) => feasibleDates.get(key)?.has(date) ?? true).length;
+  const workableParts = (cluster: (typeof clusterLoads)[number], date: string) => {
+    const reachableUnits = cluster.unitKeys.filter(
+      (key) => feasibleDates.get(key)?.has(date) ?? true,
+    ).length;
+    const openPlaces = cluster.placeIds.filter(
+      (placeId) => openDates.get(placeId)?.has(date) ?? true,
+    ).length;
+    return reachableUnits + openPlaces;
+  };
 
   // Fewest clusters so far wins, and `sort` is stable, so the capacity order
   // already baked into `orderedDays` breaks every tie. Fully deterministic.
   const clustersPerDay = new Map<number, number>();
 
   for (const cluster of orderedClusters) {
-    const best = Math.max(...orderedDays.map((day) => reachableUnits(cluster, day.date)));
-    const pool = orderedDays.filter((day) => reachableUnits(cluster, day.date) === best);
+    const best = Math.max(...orderedDays.map((day) => workableParts(cluster, day.date)));
+    const pool = orderedDays.filter((day) => workableParts(cluster, day.date) === best);
     const day = [...pool].sort(
       (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
     )[0];

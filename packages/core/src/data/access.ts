@@ -483,7 +483,7 @@ export const EASTERN_SIERRA_ACCESS_RULES: AccessRule[] = [
       'https://www.fs.usda.gov/r05/inyo/recreation/convict-lake',
       { confidence: 0.95 },
     ),
-    { notes: ['Open 24 hours a day, year round, on a paved road with no fee.'] },
+    { notes: ['A paved road in, with no fee and no gate.'] },
   ),
   driveTo(
     'rule-hot-creek',
@@ -501,7 +501,7 @@ export const EASTERN_SIERRA_ACCESS_RULES: AccessRule[] = [
     ),
     {
       notes: [
-        'Two miles of paved road then three of gravel. Day use only, 06:00 to 22:00, no fee, vault toilets and no drinking water.',
+        'Two miles of paved road then three of gravel. No fee, vault toilets and no drinking water.',
       ],
     },
   ),
@@ -526,7 +526,7 @@ export const EASTERN_SIERRA_ACCESS_RULES: AccessRule[] = [
       'https://www.fs.usda.gov/r05/inyo/recreation/south-tufa',
       { confidence: 0.85 },
     ),
-    { notes: ['Open around the clock. $3 per person per day for anyone 16 or over.'] },
+    { notes: ['$3 per person per day for anyone 16 or over, payable on site.'] },
   ),
   driveTo(
     'rule-bodie',
@@ -539,7 +539,7 @@ export const EASTERN_SIERRA_ACCESS_RULES: AccessRule[] = [
     {
       months: [4, 5, 6, 7, 8, 9, 10, 11],
       notes: [
-        'Ten miles of pavement then three of unsurfaced road. The park closes at 18:00 from May to Labor Day and at 16:00 the rest of the year, so a late start does not work.',
+        'Ten miles of pavement then three of unsurfaced road.',
         'State Route 270 is on the Caltrans District 9 winter closure list.',
       ],
     },
@@ -570,7 +570,7 @@ export const EASTERN_SIERRA_ACCESS_RULES: AccessRule[] = [
   ),
   driveTo(
     'rule-owens-valley-south',
-    ['manzanar-historic-site', 'alabama-hills'],
+    ['manzanar-historic-site', 'manzanar-visitor-center', 'alabama-hills'],
     'Southern Owens Valley by car',
     authored('Sidequest curated', { confidence: 0.7 }),
     {

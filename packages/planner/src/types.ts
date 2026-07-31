@@ -4,6 +4,7 @@ import type {
   DiscoverySelection,
   Interest,
   Itinerary,
+  OperatingHoursDataset,
   Place,
   Region,
   SelectionStatus,
@@ -107,6 +108,12 @@ export interface PlannerInput {
    * pure function of them.
    */
   access: AccessDataset;
+  /**
+   * When each place is actually accepting visitors, resolved and validated at
+   * the same boundary. Kept separate from `access` on purpose: reachable and
+   * open are two different questions, and a plan has to pass both.
+   */
+  hours: OperatingHoursDataset;
   /** Matrix id for the trip base. Days start and end here. */
   baseId: string;
   config?: Partial<PlannerConfig>;

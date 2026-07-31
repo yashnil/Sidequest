@@ -3,15 +3,26 @@ import {
   formatMinuteOfDay,
   INTEREST_LABELS,
   TRANSPORT_MODE_LABELS,
+  type BookingRequirement,
+  type DayAvailability,
   type Interest,
   type ItineraryDay,
   type ItineraryItem,
+  type MinuteInterval,
+  type OpeningWindowOnDate,
   type Place,
+  type ScheduledHours,
   type TransportMode,
   type TravelerProfile,
 } from '@sidequest/core';
 import { leg, orderStops, type TravelTimeMatrix } from '@sidequest/geo';
 import type { AccessLegPlan, AccessOption, AccessUnit } from './access';
+import {
+  latestStartOn,
+  placeVisit,
+  type HoursBlockCode,
+  type PlaceDayHours,
+} from './hours';
 import type { PlannedDay } from './windows';
 import type { PlannerConfig, PlanningCandidate } from './types';
 
@@ -35,15 +46,21 @@ export interface ScheduledUnit {
 }
 
 /**
- * A way the day breaks the access rules. Distinct from a validation issue: these
- * are found while building, and a day that has one is never offered.
+ * A way the day cannot legally be executed. Distinct from a validation issue:
+ * these are found while building, and a day that has one is never offered.
+ *
+ * `kind` keeps the two failures apart on purpose. "The last bus left" and "the
+ * gate was shut" are different problems with different remedies, and a traveller
+ * told only that a stop "did not work" has been told nothing.
  */
-export interface AccessViolation {
+export interface LayoutViolation {
+  kind: 'access' | 'hours';
   code:
     | 'missed_last_return'
     | 'missed_last_outbound'
     | 'access_window_too_short'
-    | 'missing_travel_data';
+    | 'missing_travel_data'
+    | HoursBlockCode;
   message: string;
   placeId?: string;
 }
@@ -61,7 +78,7 @@ export interface DayLayout {
   travelKm: number;
   freeMinutes: number;
   strenuousCount: number;
-  violations: AccessViolation[];
+  violations: LayoutViolation[];
   /** Modes actually used, in first-use order. */
   modes: TransportMode[];
 }
@@ -73,6 +90,11 @@ export interface LayoutContext {
   matrix: TravelTimeMatrix;
   config: PlannerConfig;
   profile: TravelerProfile;
+  /**
+   * Opening hours for this day only, by place id. Already resolved against
+   * `day.date`, so nothing downstream has to know a calendar exists.
+   */
+  hours: ReadonlyMap<string, PlaceDayHours>;
 }
 
 /**
@@ -93,7 +115,7 @@ export function layoutDay(
 ): DayLayout {
   const { day, baseId, baseName, matrix, config } = context;
   const items: ItineraryItem[] = [];
-  const violations: AccessViolation[] = [];
+  const violations: LayoutViolation[] = [];
   const modes: TransportMode[] = [];
 
   let cursor = day.window.startMinute;
@@ -135,23 +157,78 @@ export function layoutDay(
    */
   let vehicleAt = baseId;
 
-  const maybeLunch = () => {
-    if (lunchInserted || !dayIsLongEnough || cursor < config.lunchEarliestMinute) return;
+  /**
+   * Lunch is split into "is it due?" and "put it there" because a stop's
+   * legality now depends on when the traveller actually arrives, and lunch is
+   * forty-five minutes of that. Deciding whether to eat before knowing whether
+   * the next stop is still open would be how a plan eats its way past a last
+   * admission.
+   */
+  const lunchDueAt = (minute: number) =>
+    !lunchInserted && dayIsLongEnough && minute >= config.lunchEarliestMinute;
+
+  const commitLunch = (minute: number): number => {
     items.push(
       mealItem(
         day.dayNumber,
         'Lunch',
-        cursor,
+        minute,
         config.lunchMinutes,
         'Slotted in before the next stop rather than skipped.',
       ),
     );
-    cursor += config.lunchMinutes;
     lunchInserted = true;
+    return minute + config.lunchMinutes;
+  };
+
+  const maybeLunch = () => {
+    if (lunchDueAt(cursor)) cursor = commitLunch(cursor);
   };
 
   for (const scheduled of units) {
-    const { option, members } = scheduled;
+    const { option } = scheduled;
+
+    /**
+     * The bounds a visit inside this unit has to sit between, before its own
+     * opening hours are even consulted: the day's usable hours, narrowed by the
+     * way in. On a shuttle-served unit `latestActivityEnd` is the moment after
+     * which you cannot get back out — the constraint that has been computed
+     * since the transport slice and, until now, never read.
+     */
+    const bounds: MinuteInterval = {
+      startMinute: Math.max(
+        day.window.startMinute,
+        option.earliestActivityStart ?? Number.NEGATIVE_INFINITY,
+      ),
+      endMinute: Math.min(
+        day.window.endMinute,
+        option.latestActivityEnd ?? Number.POSITIVE_INFINITY,
+      ),
+    };
+
+    /**
+     * Which of this unit's stops are worth going out for, decided *before* a
+     * single leg is pushed.
+     *
+     * Sound because a later arrival can only make a visit less legal, never
+     * more: testing against the clock as it stands now — before the drive, the
+     * boarding and the walk in, all of which only advance it — cannot reject
+     * anything that would have worked later. Anything it does reject is
+     * genuinely impossible.
+     *
+     * Doing it here rather than inside the loop is what stops a day from
+     * driving out, boarding a shuttle and walking to a gate that is shut. The
+     * walk legs are named after these members, so with the filter in front of
+     * them the timeline can never point at a stop it does not visit.
+     */
+    const members: PlanningCandidate[] = [];
+    for (const candidate of scheduled.members) {
+      const placement = visitFor(context, candidate, cursor, bounds);
+      if (placement.ok) members.push(candidate);
+      else violations.push(placement.violation);
+    }
+    // Nothing here can be done: do not pay for the journey out to it.
+    if (members.length === 0) continue;
 
     // --- Approach: get to the gateway --------------------------------------
     if (option.approachMinutes === null && atRoutingId !== vehicleAt && homeward) {
@@ -188,19 +265,29 @@ export function layoutDay(
     }
 
     if (option.approachMinutes === null) {
-      // Leaving later beats standing at a stop: if the first thing this day does
-      // is catch a service, set off in time to meet it rather than in time to
-      // wait for it.
-      if (option.service && items.length === 0) {
+      /**
+       * Leaving later beats standing about: if the first thing this day does is
+       * catch a service or wait for a gate, set off in time to meet it rather
+       * than in time to queue for it. Restricted to the first move of the day
+       * because that is the only point where delaying costs nothing — mid-route
+       * the traveller is already somewhere, and pushing the clock forward there
+       * would eat into a later stop's hours.
+       */
+      if (items.length === 0) {
         const ride = tryHop(matrix, atRoutingId, option.gatewayRoutingId);
-        const leadIn =
-          (ride ? ride.minutes + config.bufferMinutes : 0) +
-          option.service.transferBufferMinutes;
-        cursor = Math.max(cursor, option.service.window.firstDeparture - leadIn);
+        const driveIn = ride ? ride.minutes + config.bufferMinutes : 0;
+        if (option.service) {
+          const leadIn = driveIn + option.service.transferBufferMinutes;
+          cursor = Math.max(cursor, option.service.window.firstDeparture - leadIn);
+        } else {
+          const opensAt = openingMinuteFor(context, members[0]);
+          if (opensAt !== null) cursor = Math.max(cursor, opensAt - driveIn);
+        }
       }
       const hop = tryHop(matrix, atRoutingId, option.gatewayRoutingId);
       if (!hop) {
         violations.push({
+          kind: 'access',
           code: 'missing_travel_data',
           message: `No travel time is recorded from ${atName} to ${option.gatewayName ?? option.gatewayRoutingId}.`,
           ...(members[0] ? { placeId: members[0].place.id } : {}),
@@ -297,6 +384,7 @@ export function layoutDay(
         const boarding = Math.max(readyToBoard, option.service.window.firstDeparture);
         if (boarding > option.service.window.lastOutboundDeparture) {
           violations.push({
+            kind: 'access',
             code: 'missed_last_outbound',
             message: `The last ${option.service.label} in leaves at ${formatMinuteOfDay(
               option.service.window.lastOutboundDeparture,
@@ -352,51 +440,89 @@ export function layoutDay(
     }
 
     // --- The reason you came -----------------------------------------------
-    members.forEach((candidate, index) => {
+    let previous: PlanningCandidate | null = null;
+    for (const candidate of members) {
+      /**
+       * Everything is measured before anything is pushed.
+       *
+       * A stop that turns out to be shut must not leave a transfer leg pointing
+       * at it, or a lunch eaten on the way to it, sitting on the timeline. So
+       * the arrival time is computed through the transfer and through lunch, the
+       * legality test runs against that, and only then is any of it committed.
+       */
       const measured =
-        index > 0 && !option.service
-          ? tryHop(matrix, members[index - 1]!.place.id, candidate.place.id)
-          : null;
+        previous && !option.service ? tryHop(matrix, previous.place.id, candidate.place.id) : null;
       const transfer =
         measured !== null
           ? { mode: 'drive' as const, minutes: measured.minutes }
           : option.internalTransfer;
+      const transferMinutes = previous && transfer.minutes > 0 ? transfer.minutes : 0;
 
-      if (index > 0 && transfer.minutes > 0) {
+      const afterTransfer = cursor + transferMinutes;
+      const lunchMinutes = lunchDueAt(afterTransfer) ? config.lunchMinutes : 0;
+      const arrival = afterTransfer + lunchMinutes;
+
+      // The real arrival, which is later than the one the pre-filter used and so
+      // can still fail. Rare, and never leaves a leg pointing at nothing,
+      // because the walk legs were named from the pre-filtered set.
+      const placement = visitFor(context, candidate, arrival, bounds);
+      if (!placement.ok) {
+        violations.push(placement.violation);
+        continue;
+      }
+
+      if (transferMinutes > 0 && previous) {
         items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
           title: `${TRANSPORT_MODE_LABELS[transfer.mode]} to ${candidate.place.name}`,
           startMinute: cursor,
-          endMinute: cursor + transfer.minutes,
-          durationMinutes: transfer.minutes,
+          endMinute: cursor + transferMinutes,
+          durationMinutes: transferMinutes,
           reason: 'Both sit inside the same access area, so this is a short hop.',
           weatherSensitive: false,
           travel: {
-            fromId: members[index - 1]!.place.id,
+            fromId: previous.place.id,
             toId: candidate.place.id,
-            fromName: members[index - 1]!.place.name,
+            fromName: previous.place.name,
             toName: candidate.place.name,
-            minutes: transfer.minutes,
+            minutes: transferMinutes,
             km: 0,
             mode: transfer.mode,
             role: 'transfer',
             provenance: measured ? matrix.provenance.kind : 'estimated',
           },
         });
-        cursor += transfer.minutes;
+        cursor += transferMinutes;
         if (transfer.mode === 'drive') {
-          driveMinutes += transfer.minutes;
+          driveMinutes += transferMinutes;
           if (measured) travelKm += measured.km;
           vehicleAt = candidate.place.id;
-        } else if (transfer.mode === 'walk') walkMinutes += transfer.minutes;
-        else transitMinutes += transfer.minutes;
+        } else if (transfer.mode === 'walk') walkMinutes += transferMinutes;
+        else transitMinutes += transferMinutes;
         useMode(transfer.mode);
       }
 
-      maybeLunch();
+      if (lunchMinutes > 0) cursor = commitLunch(cursor);
+
+      // Turning up before the doors open does not get you in sooner. The gap is
+      // shown rather than hidden, so nobody sets off at seven for a nine o'clock
+      // opening believing the plan needed them to.
+      if (placement.startMinute > cursor) {
+        cursor = pushWaitForOpening(
+          items,
+          day.dayNumber,
+          cursor,
+          placement.startMinute,
+          candidate.place.name,
+          placement.window?.openMinute ?? null,
+        );
+      }
 
       const place = candidate.place;
+      const hours = context.hours.get(place.id);
+      const evidence = scheduledHoursFrom(hours, placement.window);
+      const booking = hours ? bookingFor(place, hours) : undefined;
       items.push({
         id: `activity-${day.dayNumber}-${place.id}`,
         kind: 'activity',
@@ -410,9 +536,16 @@ export function layoutDay(
         physicalIntensity: place.physicalIntensity,
         ...(place.seasonalAccess.note ? { seasonalNote: place.seasonalAccess.note } : {}),
         ...(place.logisticsNote ? { accessWarning: place.logisticsNote } : {}),
+        ...(evidence ? { hours: evidence } : {}),
+        ...(booking ? { booking } : {}),
+        ...(hours?.daylightOnly ? { daylightOnly: true } : {}),
+        ...(hours?.requiresVerification && hours.verifyNote
+          ? { verifyBeforeTravel: hours.verifyNote }
+          : {}),
       });
       cursor += candidate.durationMinutes;
       activityMinutes += candidate.durationMinutes;
+      previous = candidate;
 
       if (place.physicalIntensity === 'strenuous') {
         strenuousCount += 1;
@@ -428,7 +561,7 @@ export function layoutDay(
         });
         cursor += config.restAfterStrenuousMinutes;
       }
-    });
+    }
 
     // --- Exit legs: walk out, wait, ride back -------------------------------
     for (const plan of option.exitLegs) {
@@ -471,21 +604,21 @@ export function layoutDay(
         // woods. Checked against where the clock actually stands, not an estimate.
         if (cursor > option.service.window.lastReturnDeparture) {
           violations.push({
+            kind: 'access',
             code: 'missed_last_return',
             message: `The last ${option.service.label} out leaves at ${formatMinuteOfDay(
               option.service.window.lastReturnDeparture,
             )} and this day does not reach the stop until ${formatMinuteOfDay(cursor)}.`,
-            ...(members[members.length - 1]
-              ? { placeId: members[members.length - 1]!.place.id }
-              : {}),
+            ...(previous ? { placeId: previous.place.id } : {}),
           });
         }
       }
-      const last = members[members.length - 1];
+      // The walk out starts from the last stop actually made, not from the last
+      // stop the unit contains — the packer routinely takes a subset.
       cursor = pushLeg(
         items,
-        plan.role === 'walk' && last
-          ? { ...plan, fromId: last.place.id, fromName: last.place.name }
+        plan.role === 'walk' && previous
+          ? { ...plan, fromId: previous.place.id, fromName: previous.place.name }
           : plan,
         day.dayNumber,
         cursor,
@@ -496,9 +629,19 @@ export function layoutDay(
       useMode(plan.mode);
     }
 
-    atRoutingId = option.exitRoutingId;
-    atName = exitLabel(option, members, atName);
-    if (!option.service && option.approachMinutes === null) vehicleAt = option.exitRoutingId;
+    /**
+     * Where the traveller — and the car — actually stand now.
+     *
+     * `option.exitRoutingId` is computed over the *unit's* members, which is
+     * right when you rode in and are back at the boarding point, and wrong when
+     * you drove and the day took only some of the unit's stops: the onward drive
+     * would then be measured from a place nobody went to, and the car recorded
+     * as parked there. With a service the exit is the gateway either way.
+     */
+    const exitedFrom = option.service ? option.exitRoutingId : (previous?.place.id ?? option.exitRoutingId);
+    atRoutingId = exitedFrom;
+    atName = option.service ? option.gatewayName : (previous?.place.name ?? atName);
+    if (!option.service && option.approachMinutes === null) vehicleAt = exitedFrom;
   }
 
   // --- Home ----------------------------------------------------------------
@@ -532,6 +675,7 @@ export function layoutDay(
     const hop = tryHop(matrix, atRoutingId, baseId);
     if (!hop) {
       violations.push({
+        kind: 'access',
         code: 'missing_travel_data',
         message: `No travel time is recorded from ${atName} back to ${baseName}.`,
       });
@@ -665,15 +809,6 @@ function gatewayLabel(option: AccessOption, members: readonly PlanningCandidate[
   return members[0]?.place.name ?? option.gatewayName;
 }
 
-function exitLabel(
-  option: AccessOption,
-  members: readonly PlanningCandidate[],
-  fallback: string,
-): string {
-  if (option.service) return option.gatewayName;
-  return members[members.length - 1]?.place.name ?? fallback;
-}
-
 function tryHop(
   matrix: TravelTimeMatrix,
   fromId: string,
@@ -706,6 +841,89 @@ function pushFreeTime(
     weatherSensitive: false,
   });
   return to;
+}
+
+/**
+ * The gap between getting there and being let in.
+ *
+ * Shown rather than swallowed: a hole in the timeline reads as a mistake, and
+ * hiding the wait would leave the traveller unable to see that leaving half an
+ * hour later costs them nothing. Not subject to the free-time minimum, because
+ * this block exists to explain an adjacency rather than to offer a rest.
+ */
+function pushWaitForOpening(
+  items: ItineraryItem[],
+  dayNumber: number,
+  from: number,
+  to: number,
+  placeName: string,
+  openMinute: number | null,
+): number {
+  const span = to - from;
+  if (span <= 0) return from;
+  items.push({
+    id: `open-wait-${dayNumber}-${from}`,
+    kind: 'free_time',
+    title: `Time before ${placeName} opens`,
+    startMinute: from,
+    endMinute: to,
+    durationMinutes: span,
+    reason:
+      openMinute === null
+        ? 'A gap before the next stop can start.'
+        : `${placeName} opens at ${formatMinuteOfDay(openMinute)}. Getting there earlier does not get you in sooner.`,
+    weatherSensitive: false,
+  });
+  return to;
+}
+
+/**
+ * The evidence a visit was placed against, carried onto the item so a stored
+ * plan can explain itself and a validator can check it. Absent for a place with
+ * no hours to respect — an empty badge on a roadside viewpoint is noise.
+ */
+function scheduledHoursFrom(
+  hours: PlaceDayHours | undefined,
+  window: { openMinute: number; closeMinute: number; lastAdmissionMinute: number | null } | null,
+): ScheduledHours | undefined {
+  if (!hours || !window) return undefined;
+  return {
+    openMinute: window.openMinute,
+    closeMinute: window.closeMinute,
+    ...(window.lastAdmissionMinute !== null
+      ? { lastAdmissionMinute: window.lastAdmissionMinute }
+      : {}),
+    ...(hours.periodLabel ? { periodLabel: hours.periodLabel } : {}),
+    sourceKind: hours.provenance.kind,
+    sourceName: hours.provenance.sourceName,
+    ...(hours.provenance.sourceUrl ? { sourceUrl: hours.provenance.sourceUrl } : {}),
+    ...(hours.provenance.lastVerified ? { lastVerified: hours.provenance.lastVerified } : {}),
+    confidence: hours.provenance.confidence,
+  };
+}
+
+/**
+ * A booking the traveller has to make themselves. Never resolved here: the plan
+ * hands back the requirement and the official link, and says nothing that could
+ * be read as "this is arranged".
+ */
+function bookingFor(place: Place, hours: PlaceDayHours): BookingRequirement | undefined {
+  const { admission } = hours;
+  const kind = admission.timedEntry
+    ? 'timed_entry'
+    : admission.reservationRequired
+      ? 'reservation'
+      : admission.permitRequired
+        ? 'permit'
+        : null;
+  if (!kind) return undefined;
+  return {
+    placeId: place.id,
+    name: place.name,
+    kind,
+    ...(admission.note ? { note: admission.note } : {}),
+    ...(admission.bookingUrl ? { url: admission.bookingUrl } : {}),
+  };
 }
 
 function mealItem(
@@ -801,13 +1019,14 @@ export function packDay(
     }
 
     const tentative = [...accepted, candidate];
-    const scheduled = scheduleUnits(context, tentative, options);
-    const layout = layoutDay(context, scheduled);
+    const { layout } = layoutBestOrder(context, tentative, options);
 
     const fitsClock = layout.endMinute <= day.window.endMinute;
     const fitsCapacity = layout.activityMinutes + layout.travelMinutes <= day.capacityMinutes;
     const fitsDriving = layout.driveMinutes <= options.maxDailyDriveMinutes;
     const fitsTransport = layout.travelMinutes <= options.maxDailyTransportMinutes;
+    // Covers both kinds of illegality: no way out, and no way in through the
+    // door. A day with either is never offered.
     const legalAccess = layout.violations.length === 0;
     const requiredFree = tentative.length >= SLACK_APPLIES_FROM_STOP ? slackFloor : 0;
     const keepsSlack = layout.freeMinutes >= requiredFree;
@@ -820,6 +1039,137 @@ export function packDay(
   }
 
   return { accepted, overflow };
+}
+
+/**
+ * Comparing deadlines, including the `Infinity` most places have.
+ *
+ * `Infinity - Infinity` is `NaN`, and a comparator that returns `NaN` produces
+ * an implementation-defined order — which in a planner that promises byte-identical
+ * output for identical input is not a style problem.
+ */
+function byDeadline(a: number, b: number): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+/** When this stop must have started by, on this day. `Infinity` if it never shuts. */
+function latestStartFor(context: LayoutContext, candidate: PlanningCandidate): number {
+  return latestStartOn(context.hours.get(candidate.place.id), candidate.durationMinutes);
+}
+
+/**
+ * One legality test for a stop, used by both the pre-filter and the real
+ * placement so the two can never come to different conclusions.
+ *
+ * The missing-record branch is unreachable through the provider boundary, which
+ * refuses a dataset that leaves a place out. It exists because refusing is the
+ * safe way to be wrong: the alternative is scheduling on hours nobody holds.
+ */
+function visitFor(
+  context: LayoutContext,
+  candidate: PlanningCandidate,
+  arrivalMinute: number,
+  bounds: MinuteInterval,
+): { ok: true; startMinute: number; window: OpeningWindowOnDate | null } | { ok: false; violation: LayoutViolation } {
+  const hours = context.hours.get(candidate.place.id);
+  if (!hours) {
+    return {
+      ok: false,
+      violation: {
+        kind: 'hours',
+        code: 'no_window_in_reach',
+        message: `We hold no opening-hours record for ${candidate.place.name}, so we will not put it on a day.`,
+        placeId: candidate.place.id,
+      },
+    };
+  }
+
+  const placement = placeVisit({
+    hours,
+    placeName: candidate.place.name,
+    arrivalMinute,
+    durationMinutes: candidate.durationMinutes,
+    bounds,
+  });
+  return placement.ok
+    ? { ok: true, startMinute: placement.startMinute, window: placement.window }
+    : {
+        ok: false,
+        violation: {
+          kind: 'hours',
+          code: placement.code,
+          message: placement.message,
+          placeId: candidate.place.id,
+        },
+      };
+}
+
+/** The earliest this stop opens today, or null when it has no opening time. */
+function openingMinuteFor(
+  context: LayoutContext,
+  candidate: PlanningCandidate | undefined,
+): number | null {
+  if (!candidate) return null;
+  const hours = context.hours.get(candidate.place.id);
+  if (!hours || hours.status !== 'open' || hours.windows.length === 0) return null;
+  return Math.min(...hours.windows.map((window) => window.openMinute));
+}
+
+/**
+ * Lays the day out and, if the road order breaks somebody's opening hours,
+ * tries the one alternative worth trying.
+ *
+ * The shortest route is not the right route when it arrives after closing. But
+ * a general constrained-ordering search is both slow and a good way to produce a
+ * day that zig-zags across a valley to save four minutes at a gate, so the
+ * choice is deliberately between exactly two candidate orders:
+ *
+ *   1. **road order** — the existing behaviour, and what nearly every day uses.
+ *   2. **deadline order** — earliest closing time first, road order breaking
+ *      ties. Only reached when the first produced a violation.
+ *
+ * The first legal one wins; if neither is legal the first is returned, so the
+ * violations that get reported are the ones from the plan the traveller would
+ * otherwise have been handed. Two fixed orders, evaluated in a fixed sequence:
+ * the result is deterministic and there is no search to oscillate.
+ */
+export function layoutBestOrder(
+  context: LayoutContext,
+  candidates: readonly PlanningCandidate[],
+  options: Pick<PackOptions, 'accessByUnit' | 'unitByPlaceId'>,
+): { scheduled: ScheduledUnit[]; layout: DayLayout } {
+  const byRoad = scheduleUnits(context, candidates, options);
+  const first = layoutDay(context, byRoad);
+  if (first.violations.length === 0) return { scheduled: byRoad, layout: first };
+
+  const byClosing = orderByDeadline(context, byRoad);
+  if (sameOrder(byRoad, byClosing)) return { scheduled: byRoad, layout: first };
+
+  const second = layoutDay(context, byClosing);
+  return second.violations.length === 0
+    ? { scheduled: byClosing, layout: second }
+    : { scheduled: byRoad, layout: first };
+}
+
+function orderByDeadline(
+  context: LayoutContext,
+  scheduled: readonly ScheduledUnit[],
+): ScheduledUnit[] {
+  const roadPosition = new Map(scheduled.map((entry, index) => [entry.unit.key, index]));
+  const unitDeadline = (entry: ScheduledUnit) =>
+    Math.min(...entry.members.map((member) => latestStartFor(context, member)));
+
+  return [...scheduled].sort(
+    (a, b) =>
+      byDeadline(unitDeadline(a), unitDeadline(b)) ||
+      (roadPosition.get(a.unit.key) ?? 0) - (roadPosition.get(b.unit.key) ?? 0) ||
+      a.unit.key.localeCompare(b.unit.key),
+  );
+}
+
+function sameOrder(a: readonly ScheduledUnit[], b: readonly ScheduledUnit[]): boolean {
+  return a.length === b.length && a.every((entry, index) => entry.unit.key === b[index]!.unit.key);
 }
 
 /**
@@ -867,12 +1217,19 @@ export function scheduleUnits(
   return pending
     .map((entry) => ({
       ...entry,
-      // Inside a unit, keep the order the unit was built in — nearest the base
-      // first — so a shuttle run reads as a route rather than a shuffle.
+      /**
+       * Inside a unit, whatever shuts first goes first — and since almost
+       * nothing in this region shuts at all, that is `Infinity` for both sides
+       * and the tie-break does the work: the order the unit was built in,
+       * nearest the base first, so a shuttle run reads as a route rather than a
+       * shuffle. It only reorders when two stops behind one gate genuinely keep
+       * different hours, which is exactly when it should.
+       */
       members: [...entry.members].sort(
         (a, b) =>
+          byDeadline(latestStartFor(context, a), latestStartFor(context, b)) ||
           entry.unit.members.findIndex((member) => member.place.id === a.place.id) -
-          entry.unit.members.findIndex((member) => member.place.id === b.place.id),
+            entry.unit.members.findIndex((member) => member.place.id === b.place.id),
       ),
     }))
     .sort(
@@ -923,9 +1280,87 @@ export function buildDay(
       strenuousCount: layout.strenuousCount,
     },
     transport,
+    availability: summariseAvailability(context, layout),
     intensity,
     warnings: [...new Set(warnings)],
   };
+}
+
+/**
+ * What the day's opening hours did to its shape, read back off the timeline
+ * rather than declared alongside it — so it cannot claim something the schedule
+ * does not show.
+ *
+ * The anchor is the point of this. A day holding one place that shuts at four
+ * and three that never shut is really "be at the one with a closing time by this
+ * hour, and move the rest around it", and saying that is more use than four
+ * rows of times for the traveller to compare themselves.
+ */
+function summariseAvailability(context: LayoutContext, layout: DayLayout): DayAvailability {
+  const activities = layout.items.filter((item) => item.kind === 'activity' && item.placeId);
+
+  /**
+   * Having hours is not the same as being constrained by them. A day-use site
+   * posted 06:00 to 22:00 on a day that runs 07:30 to 19:00 has no bearing on
+   * anything, and calling it the day's anchor would bury the one stop that
+   * genuinely does decide the shape.
+   */
+  const binds = (item: (typeof activities)[number]) =>
+    item.hours !== undefined &&
+    (item.hours.openMinute > context.day.window.startMinute ||
+      item.hours.closeMinute < context.day.window.endMinute ||
+      item.hours.lastAdmissionMinute !== undefined);
+
+  const constrained = activities.filter(binds);
+  const flexiblePlaceIds = activities
+    .filter((item) => !binds(item))
+    .map((item) => item.placeId!)
+    .sort();
+
+  // Tightest closing time wins: that is the one you can actually miss.
+  const anchor = [...constrained].sort(
+    (a, b) =>
+      a.hours!.closeMinute - b.hours!.closeMinute || a.placeId!.localeCompare(b.placeId!),
+  )[0];
+
+  const cautions: string[] = [];
+  const verifyBeforeTravel: string[] = [];
+  const bookings: BookingRequirement[] = [];
+
+  for (const item of activities) {
+    if (item.verifyBeforeTravel) verifyBeforeTravel.push(item.verifyBeforeTravel);
+    if (item.booking) bookings.push(item.booking);
+    const hours = context.hours.get(item.placeId!);
+    if (hours?.status === 'unknown') {
+      cautions.push(
+        `We could not confirm opening hours for ${item.title}. Check before you build the day around it.`,
+      );
+    }
+  }
+  for (const violation of layout.violations) {
+    if (violation.kind === 'hours') cautions.push(violation.message);
+  }
+
+  return {
+    ...(anchor?.placeId ? { anchorPlaceId: anchor.placeId } : {}),
+    ...(anchor?.hours ? { anchorNote: anchorNoteFor(anchor.title, anchor.hours) } : {}),
+    flexiblePlaceIds,
+    cautions: [...new Set(cautions)],
+    verifyBeforeTravel: [...new Set(verifyBeforeTravel)],
+    bookings: [...new Map(bookings.map((entry) => [entry.placeId, entry])).values()].sort((a, b) =>
+      a.placeId.localeCompare(b.placeId),
+    ),
+  };
+}
+
+/** Names the edge that actually binds, rather than reciting the whole window. */
+function anchorNoteFor(title: string, hours: ScheduledHours): string {
+  const opens = `opens at ${formatMinuteOfDay(hours.openMinute)}`;
+  const closes = `closes at ${formatMinuteOfDay(hours.closeMinute)}`;
+  if (hours.lastAdmissionMinute !== undefined) {
+    return `${title} sets the shape of this day: it ${opens}, ${closes}, and stops letting people in at ${formatMinuteOfDay(hours.lastAdmissionMinute)}.`;
+  }
+  return `${title} sets the shape of this day: it ${opens} and ${closes}.`;
 }
 
 function classifyIntensity(
