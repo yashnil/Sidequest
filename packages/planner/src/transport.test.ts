@@ -286,7 +286,14 @@ describe('scenario 2 — the Reds Meadow shared-access day', () => {
     expect(legs.filter((leg) => leg.role === 'return' && leg.serviceId)).toHaveLength(1);
     // One wait each way: queueing to get in, and standing at the stop to get out.
     expect(legs.filter((leg) => leg.role === 'wait')).toHaveLength(2);
-    expect(legs.filter((leg) => leg.role === 'approach' && leg.mode === 'drive')).toHaveLength(1);
+    // Scoped to the boarding point. The day may also drive a couple of minutes
+    // to a bakery on the way out of town, which is a real approach leg and not
+    // a second run at the valley.
+    expect(
+      legs.filter(
+        (leg) => leg.role === 'approach' && leg.mode === 'drive' && /Gondola Building/.test(leg.toName),
+      ),
+    ).toHaveLength(1);
   });
 
   it('is standing at the stop before the last bus leaves, not as it leaves', () => {
@@ -308,7 +315,11 @@ describe('scenario 2 — the Reds Meadow shared-access day', () => {
   });
 
   it('drives to the boarding point rather than to the valley', () => {
-    const approach = travelLegs(valleyDay!).find((leg) => leg.role === 'approach');
+    // The last approach before the first boarding leg: the one that actually
+    // delivers the traveller to the shuttle, whatever it stopped for first.
+    const legs = travelLegs(valleyDay!);
+    const boarding = legs.findIndex((leg) => leg.role === 'wait');
+    const approach = legs.slice(0, boarding).filter((leg) => leg.role === 'approach').at(-1);
     expect(approach?.mode).toBe('drive');
     expect(approach?.toName).toMatch(/Gondola Building/);
   });
@@ -316,8 +327,20 @@ describe('scenario 2 — the Reds Meadow shared-access day', () => {
   it('lays the sequence out in order: drive, board, ride, walk, visit, walk, ride back', () => {
     const shape = valleyDay!.items
       .filter((item) => item.kind === 'travel' || item.kind === 'activity')
-      .map((item) => (item.kind === 'activity' ? 'visit' : item.travel!.role));
-    expect(shape.slice(0, 5)).toEqual(['approach', 'wait', 'ride', 'walk', 'visit']);
+      .map((item) => ({
+        role: item.kind === 'activity' ? 'visit' : item.travel!.role,
+        toName: item.kind === 'activity' ? item.title : item.travel!.toName,
+      }));
+    // From the leg that reaches the boarding point. Anything before it belongs
+    // to the morning rather than to the valley.
+    const gateway = shape.findIndex((entry) => /Gondola Building/.test(entry.toName));
+    expect(shape.slice(gateway, gateway + 5).map((entry) => entry.role)).toEqual([
+      'approach',
+      'wait',
+      'ride',
+      'walk',
+      'visit',
+    ]);
 
     // The valley portion closes the way it opened: walk out, wait, ride back.
     // Asserted on the shuttle legs rather than on the tail of the day, because
@@ -472,10 +495,17 @@ describe('a service that is not running is not a gateway', () => {
       entry.items.some((item) => item.placeId === 'devils-postpile'),
     )!;
 
-    const approach = travelLegs(day).find((leg) => leg.role === 'approach')!;
-    expect(approach.toId).toBe('devils-postpile');
+    // The leg that reaches the valley, not whatever the morning stopped at
+    // first. Out of season there is no boarding point to drive to instead.
+    const approach = travelLegs(day).find(
+      (leg) => leg.role === 'approach' && leg.toId === 'devils-postpile',
+    )!;
+    expect(approach).toBeDefined();
     // The authored drive time to the valley, not the 12 minutes to Main Lodge.
-    expect(approach.minutes).toBe(45);
+    // Measured from wherever the day set off, which may be a cafe a minute out
+    // of town rather than the base itself.
+    expect(approach.minutes).toBeGreaterThanOrEqual(45);
+    expect(approach.minutes).toBeLessThanOrEqual(48);
     expect(travelLegs(day).some((leg) => leg.toId === 'panorama-gondola')).toBe(false);
   });
 

@@ -6,6 +6,7 @@ import {
   type PhysicalIntensity,
   type RegionalExpansion,
 } from '../schemas/common';
+import type { FoodPreferences, FoodStyle, PriceBand } from '../schemas/food';
 import {
   questionnaireAnswersSchema,
   TRAVELER_PROFILE_VERSION,
@@ -45,6 +46,12 @@ export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnsw
     detourToleranceMinutes: 60,
     avoidances: context.travelerNeeds.includes('mobility_limited') ? ['strenuous_activity'] : [],
     mobilityLimited: context.travelerNeeds.includes('mobility_limited'),
+    breakfastStyle: 'coffee_light',
+    foodStyle: 'balanced',
+    specialMealAppetite: 'one',
+    willPackLunch: true,
+    dietaryNeeds: [],
+    dietaryStrict: false,
   };
 }
 
@@ -91,8 +98,79 @@ export function normalizeAnswers(
       next.avoidances.push('strenuous_activity');
     }
   }
+  next.dietaryNeeds = [...new Set(next.dietaryNeeds)].sort();
+  // "These are strict" is a statement about a list. With nothing in the list it
+  // is a stray boolean that would make every meal carry a verification note
+  // about needs nobody has.
+  if (next.dietaryNeeds.length === 0) next.dietaryStrict = false;
+  if (!isQuestionVisible('specialMealAppetite', { answers: next, context })) {
+    next.specialMealAppetite = 'none';
+  }
+
   next.avoidances = [...new Set(next.avoidances)].sort();
   return next;
+}
+
+/**
+ * How many meals across a trip may be an event.
+ *
+ * The rule the whole budget layer rests on, and it is deliberately blunt:
+ * appetite sets the pace, trip length sets the ceiling, and a four-day trip
+ * gets one special meal even from somebody who eats out constantly at home,
+ * because four special meals in four days is not a holiday, it is a tasting
+ * tour. `often` is the only setting that scales roughly with the trip.
+ */
+export function specialMealBudget(
+  appetite: QuestionnaireAnswers['specialMealAppetite'],
+  days: number,
+): number {
+  const trip = Math.max(1, days);
+  switch (appetite) {
+    case 'none':
+      return 0;
+    case 'one':
+      return 1;
+    case 'a_few':
+      return Math.min(3, Math.max(1, Math.floor(trip / 3)));
+    case 'often':
+      return Math.min(6, Math.max(2, Math.floor(trip / 2)));
+  }
+}
+
+/**
+ * The band an ordinary meal should stay at or below.
+ *
+ * Read off the food style rather than the budget style, because they are
+ * different questions: somebody happy to pay for a gondola ticket every day may
+ * still want tacos every night, and somebody on a tight overall budget may be
+ * saving it precisely for one dinner. The special-meal quota above is what lets
+ * that second person have theirs without this ceiling stopping it.
+ */
+const EVERYDAY_BAND: Record<FoodStyle, PriceBand> = {
+  budget: 'budget',
+  local_casual: 'moderate',
+  balanced: 'moderate',
+  destination: 'upscale',
+};
+
+export function deriveFoodPreferences(
+  answers: QuestionnaireAnswers,
+  context: QuestionnaireContext,
+): FoodPreferences {
+  return {
+    breakfastStyle: answers.breakfastStyle,
+    style: answers.foodStyle,
+    specialMealAppetite: answers.specialMealAppetite,
+    willPackLunch: answers.willPackLunch,
+    dietaryNeeds: [...answers.dietaryNeeds],
+    dietaryStrict: answers.dietaryStrict,
+    specialMealBudget: specialMealBudget(answers.specialMealAppetite, context.tripDays),
+    everydayPriceBand: EVERYDAY_BAND[answers.foodStyle],
+    // `depends` deliberately reads as yes. Somebody who said "it depends on the
+    // day" has asked to be given the choice, and a named cafe they can walk past
+    // is a choice; an empty morning is not.
+    wantsBreakfastVenue: answers.breakfastStyle !== 'skip',
+  };
 }
 
 const EXPANSION_CEILING_MINUTES: Record<RegionalExpansion, number> = {
@@ -283,6 +361,7 @@ export function buildTravelerProfile(
     crowdTolerance: answers.crowdTolerance,
     avoidTouristTraps: answers.avoidTouristTraps,
     transport: transportPreferencesFrom(answers),
+    food: deriveFoodPreferences(answers, context),
     regionalExpansion: answers.regionalExpansion,
     detourToleranceMinutes: answers.detourToleranceMinutes,
     avoidances: answers.avoidances,

@@ -10,6 +10,7 @@ import { EASTERN_SIERRA_WEATHER_LOCATIONS } from './weather';
 export * from './access';
 export * from './hours';
 export * from './weather';
+export * from './food';
 export { EASTERN_SIERRA, EASTERN_SIERRA_PLACES, REGIONS, resolveRegion };
 
 export function placeById(id: string): Place | undefined {

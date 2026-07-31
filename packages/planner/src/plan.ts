@@ -1,5 +1,6 @@
 import {
   DAYLIGHT_END_BUFFER_MINUTES,
+  FOOD_ISSUE_CODES,
   ITINERARY_VERSION,
   itinerarySchema,
   tripDates,
@@ -34,12 +35,15 @@ import {
   summariseDayWeather,
   type BackupCandidate,
 } from './backups';
+import { resolveFood, type FoodContext } from './food';
+import { buildFoodPlan } from './food-plan';
 import { reviseDayPlans, type DayPlan } from './revise';
 import {
   buildDay,
   isOpenOnDate,
   layoutBestOrder,
   packDay,
+  type DayLayout,
   type LayoutContext,
   type PackOptions,
 } from './schedule';
@@ -345,6 +349,19 @@ export function planTrip(input: PlannerInput): PlanResult {
     return map;
   };
 
+  /**
+   * Resolved once, from the day assignment, and then held still.
+   *
+   * The packer re-lays every day out repeatedly while deciding what fits, and
+   * the reviser can take a stop off a day and force the whole thing to be built
+   * again. If the food plan were recomputed against each of those it would
+   * oscillate — a day loses its last stop, stops being remote, gains a
+   * restaurant, and now fits again. Resolving against the geographic assignment
+   * once means the shortlists are stable for the whole run, which is what makes
+   * two identical inputs produce two identical plans.
+   */
+  let foodContext: FoodContext | null = null;
+
   const contextFor = (day: DayPlan['day']): LayoutContext => ({
     day,
     baseId: input.baseId,
@@ -354,7 +371,26 @@ export function planTrip(input: PlannerInput): PlanResult {
     profile: input.profile,
     hours: hoursFor(day.date),
     weather: weatherFor(day.date),
+    food: foodContext,
   });
+
+  /**
+   * Deciding what fits is done without food, always.
+   *
+   * A restaurant is a preference; a lake is what the traveller asked for. The
+   * packer measures each candidate against the day's driving and transport caps,
+   * and with a coffee stop and a dinner detour already on the clock those caps
+   * are reached sooner — so the first thing the food layer did, before this
+   * existed, was push Rainbow Falls, Bishop and the Sherwin Lakes trail off the
+   * plan entirely to make room for lunch. Food is added to the day the packer
+   * settled on, and if it will not fit inside it, the food goes rather than the
+   * stop.
+   */
+  const packingContextFor = (day: DayPlan['day']): LayoutContext => ({
+    ...contextFor(day),
+    food: null,
+  });
+
 
   const maxStrenuousPerDay =
     input.profile.derived.preferredPhysicalIntensity === 'strenuous' ? 2 : 1;
@@ -411,7 +447,7 @@ export function planTrip(input: PlannerInput): PlanResult {
 
   for (const assignment of assignments) {
     const packed = packDay(
-      contextFor(assignment.day),
+      packingContextFor(assignment.day),
       assignment.candidates,
       packOptionsFor(assignment.day),
     );
@@ -464,7 +500,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       // nearest-detour first. Hours narrow "legal" without changing the search.
       if (!openDates.get(candidate.place.id)?.has(plan.day.date)) continue;
       const trial = packDay(
-        contextFor(plan.day),
+        packingContextFor(plan.day),
         [...plan.accepted, candidate],
         packOptionsFor(plan.day),
       );
@@ -482,6 +518,32 @@ export function planTrip(input: PlannerInput): PlanResult {
     unscheduled.push(unscheduledFor(candidate, days.length, accessByUnitDate, unitByPlaceId, dates));
   }
 
+  /**
+   * Food is resolved from the days as the packer actually settled them.
+   *
+   * Not from the geographic assignment, which is what it read at first: that set
+   * is a superset the packer then trims, so a day that was *offered* the Reds
+   * Meadow valley and did not take it was still shopping for a packed lunch at
+   * half seven and then eating in a restaurant at noon. What each day needs is a
+   * property of what is on it.
+   *
+   * Resolved once, here, and then held still. The reviser can take a stop off a
+   * day and force the whole thing to be rebuilt, and recomputing against each of
+   * those would let the food plan oscillate — a day loses its last stop, stops
+   * being remote, gains a restaurant, and now fits again.
+   */
+  if (input.food) {
+    foodContext = resolveFood({
+      dataset: input.food,
+      profile: input.profile,
+      selections: input.foodSelections ?? [],
+      days: dayPlans.map((plan) => ({ day: plan.day, candidates: plan.accepted })),
+      matrix: input.matrix,
+      baseId: input.baseId,
+      windows: config.mealWindows,
+    });
+  }
+
   // --- Build, validate, revise -------------------------------------------
   /**
    * Builds every day, and records anything the layout could not actually place.
@@ -495,12 +557,96 @@ export function planTrip(input: PlannerInput): PlanResult {
    * only what is really on the day, and the caller turns the rest into
    * conflicts. Nothing the traveller chose can go missing without a reason.
    */
+  /** Days where the meals gave way so the stops could stay. Reported, not hidden. */
+  let foodYielded: number[] = [];
+  /**
+   * Days whose food the validator rejected, and which are therefore rebuilt
+   * without it.
+   *
+   * The one bounded revision the food layer gets. It runs once, before the stop
+   * reviser, and always in the same direction: the meals go, the stops stay. A
+   * reviser that could swap one restaurant for another would need somewhere to
+   * remember what it had already tried, and an itinerary planner that sometimes
+   * fails to terminate is worse than one that occasionally serves a plain lunch.
+   */
+  const foodSuppressed = new Set<number>();
+
+  /**
+   * Whether the food-bearing layout costs the day anything it should not.
+   *
+   * Deliberately blunt and one-directional. Food may lengthen the day and it may
+   * add driving — a coffee two minutes off the route is two minutes of driving,
+   * and pretending otherwise would put the layout and the validator's own re-sum
+   * of the totals into disagreement, which is how a day once emptied itself one
+   * stop at a time. What food may not do is cost a stop, break a cap, or invent
+   * a new violation.
+   */
+  const foodFits = (plain: DayLayout, withFood: DayLayout): boolean => {
+    if (withFood.violations.length > plain.violations.length) return false;
+    /**
+     * The same stops, in the same order.
+     *
+     * Not merely the same count. `layoutBestOrder` tries a second ordering when
+     * the first has violations, so a day that only just fits can come back
+     * rearranged once the meals are on it — and it did: an Owens Valley day
+     * flipped Bishop in front of Manzanar, which is a different trip presented
+     * as a two-minute coffee detour. Food decides where you eat on the route.
+     * It does not get a vote on the route.
+     */
+    const sequence = (layout: DayLayout) =>
+      layout.items
+        .filter((item) => item.kind === 'activity')
+        .map((item) => item.placeId ?? '')
+        .join('>');
+    if (sequence(withFood) !== sequence(plain)) return false;
+    if (withFood.driveMinutes > input.profile.transport.maxDailyDriveMinutes) return false;
+    if (withFood.travelMinutes > input.profile.transport.maxDailyTransportMinutes) return false;
+    /**
+     * Every extra minute at the wheel has to be accounted for by a detour the
+     * plan owns up to.
+     *
+     * Both layouts choose their own stop order, and a food-bearing one is free
+     * to pick a different one. That is fine when it is the detours doing it and
+     * a lie when it is not: a day that quietly re-routes to suit a bakery and
+     * adds forty minutes of driving would be shown as a two-minute detour.
+     */
+    const claimed = withFood.items.reduce(
+      (sum, item) => sum + (item.food?.detourMinutes ?? 0),
+      0,
+    );
+    if (withFood.driveMinutes > plain.driveMinutes + claimed) return false;
+    return true;
+  };
+
   const buildAll = (plans: readonly DayPlan[]) => {
+    foodYielded = [];
     const dropped = new Map<string, { candidate: PlanningCandidate; message: string }>();
     const days = plans.map((plan) => {
-      const context = contextFor(plan.day);
       const options = packOptionsFor(plan.day);
-      const { scheduled, layout } = layoutBestOrder(context, plan.accepted, options);
+      /**
+       * The day, laid out twice: as the packer settled it, and again with the
+       * food on. The food version is kept only if it costs nothing that matters.
+       *
+       * "Nothing that matters" is exact: the same stops, no new way for the day
+       * to be illegal, and both travel budgets still respected. Anything else
+       * and the meals fall back to blocks of held time, which is what a
+       * version-5 plan had and is a great deal better than a plan that quietly
+       * traded Rainbow Falls for lunch.
+       */
+      const plain = layoutBestOrder(packingContextFor(plan.day), plan.accepted, options);
+      const withFood =
+        foodContext && !foodSuppressed.has(plan.day.dayNumber)
+          ? layoutBestOrder(contextFor(plan.day), plan.accepted, options)
+          : plain;
+      const keepFood = withFood !== plain && foodFits(plain.layout, withFood.layout);
+      const context = keepFood ? contextFor(plan.day) : packingContextFor(plan.day);
+      const { scheduled, layout } = keepFood ? withFood : plain;
+      // A day whose food was suppressed by the validator is already reported,
+      // with the right reason. Counting it here as well printed two revision
+      // notes for one decision, the second of them naming a limit nothing hit.
+      if (foodContext && !keepFood && !foodSuppressed.has(plan.day.dayNumber)) {
+        foodYielded.push(plan.day.dayNumber);
+      }
 
       const placed = new Set(
         layout.items
@@ -671,6 +817,18 @@ export function planTrip(input: PlannerInput): PlanResult {
 
   let build = buildAll(dayPlans);
   let built = build.days;
+  /**
+   * Derived from whatever the days currently hold, and rebuilt each time the
+   * reviser changes them, so the validator is never reading a food plan for a
+   * trip that no longer exists.
+   */
+  const currentFoodPlan = () =>
+    buildFoodPlan({
+      days: built,
+      profile: input.profile,
+      food: foodContext,
+      dataset: input.food ?? null,
+    });
   const validationInput = () => ({
     days: built,
     unscheduled,
@@ -682,12 +840,41 @@ export function planTrip(input: PlannerInput): PlanResult {
     access: input.access,
     hours: input.hours,
     weather: input.weather,
+    foodPlan: currentFoodPlan(),
+    hadFoodDataset: input.food !== undefined,
     ...(input.now ? { now: input.now } : {}),
   });
   let issues = validateItinerary(validationInput());
 
   const revisions = [];
   let passes = 0;
+
+  const foodErrorDays = [
+    ...new Set(
+      issues
+        .filter(
+          (issue) =>
+            issue.severity === 'error' &&
+            FOOD_ISSUE_CODES.has(issue.code) &&
+            issue.dayNumber !== undefined,
+        )
+        .map((issue) => issue.dayNumber!),
+    ),
+  ].sort((a, b) => a - b);
+
+  if (foodErrorDays.length > 0) {
+    for (const dayNumber of foodErrorDays) {
+      foodSuppressed.add(dayNumber);
+      revisions.push({
+        code: 'changed_meal' as const,
+        description: `Took the meals off day ${dayNumber} rather than the stops: what we had picked did not hold up.`,
+        dayNumber,
+      });
+    }
+    build = buildAll(dayPlans);
+    built = build.days;
+    issues = validateItinerary(validationInput());
+  }
 
   while (passes < config.maxRevisionPasses && issues.some((issue) => issue.severity === 'error')) {
     const outcome = reviseDayPlans(dayPlans, issues);
@@ -745,6 +932,19 @@ export function planTrip(input: PlannerInput): PlanResult {
     { usable: 0, activity: 0, travel: 0, free: 0 },
   );
 
+  /**
+   * Days that kept their stops and lost their meals. Said out loud, because a
+   * plan that quietly stops naming restaurants on one day of four looks like a
+   * gap in the data rather than a decision.
+   */
+  for (const dayNumber of [...foodYielded].sort((a, b) => a - b)) {
+    revisions.push({
+      code: 'changed_meal' as const,
+      description: `Day ${dayNumber} holds time for its meals rather than naming places: getting to and from them would have taken the day past a limit you set.`,
+      dayNumber,
+    });
+  }
+
   const transportStrategy = buildTransportStrategy({
     days: built,
     profile: input.profile,
@@ -767,6 +967,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     status: statusFor(issues),
     summary: summarise(built, scheduledCount, unscheduled.length),
     transportStrategy,
+    foodPlan: currentFoodPlan(),
     days: built,
     unscheduled: dedupeUnscheduled(unscheduled),
     issues,
@@ -780,6 +981,8 @@ export function planTrip(input: PlannerInput): PlanResult {
       weatherProvider: input.weather.providerName,
       weatherEvidence: evidenceKinds(built),
       weatherGeneratedAt: input.weather.generatedAt,
+      foodDatasetVersion: input.food?.version ?? 0,
+      foodVenuesConsidered: input.food?.venues.length ?? 0,
       revisionPasses: passes,
       revisions,
       capacity: {

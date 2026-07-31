@@ -316,7 +316,7 @@ function forecastReasons(
   if (profile.approachDegradesWhenWet && (heavy || day.snowfallCm >= t.snowfallCm)) {
     reasons.push({
       code: 'rough_approach_when_wet',
-      text: 'the unsurfaced approach will be rougher going after this much rain',
+      text: 'the unsurfaced approach is likely to be rougher going after this much rain',
       weight: -0.35,
     });
   }

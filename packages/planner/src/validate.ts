@@ -15,9 +15,10 @@ import {
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
 import { isOpenOnDate } from './schedule';
+import { validateDayFood, validateTripFood } from './validate-food';
 import { validateDayWeather } from './validate-weather';
 import type { PlannerConfig } from './types';
-import type { Place } from '@sidequest/core';
+import type { FoodPlan, Place } from '@sidequest/core';
 
 export interface ValidationInput {
   days: readonly ItineraryDay[];
@@ -30,6 +31,10 @@ export interface ValidationInput {
   access: AccessDataset;
   hours: OperatingHoursDataset;
   weather: WeatherDataset;
+  /** Derived from the finished plan, so the checks read the same thing the UI does. */
+  foodPlan: FoodPlan;
+  /** Whether any food data reached the planner. Absent is not the same as empty. */
+  hadFoodDataset: boolean;
   /** "Now", for the staleness check only. Injected so the test is instant. */
   now?: Date;
 }
@@ -48,10 +53,30 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
   const { days, profile, config, matrix, placesById, baseId } = input;
 
   const seenPlaces = new Map<string, number>();
+  const foodInput = {
+    profile,
+    config,
+    foodPlan: input.foodPlan,
+    hadDataset: input.hadFoodDataset,
+  };
   let scheduledAnything = false;
 
   for (const day of days) {
     const items = [...day.items].sort((a, b) => a.startMinute - b.startMinute);
+
+    /**
+     * Only an *evening* meal earns the allowance. Keyed off the dinner hour
+     * rather than off "the last meal", because the last meal on a day that ends
+     * at half twelve is lunch, and letting every afternoon stop run
+     * three-quarters of an hour past the window is not what this is for.
+     */
+    const lastMealStart =
+      items
+        .filter(
+          (entry) =>
+            entry.kind === 'meal' && entry.startMinute >= config.mealWindows.dinner.earliest,
+        )
+        .at(-1)?.startMinute ?? null;
 
     for (const item of items) {
       if (item.endMinute < item.startMinute || item.durationMinutes < 0) {
@@ -70,7 +95,24 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
           dayNumber: day.dayNumber,
         });
       }
-      if (item.startMinute < day.window.startMinute || item.endMinute > day.window.endMinute) {
+      /**
+       * The window bounds what the planner *schedules*. An evening meal is the
+       * one thing a traveller carries on past it, so the last meal of the day —
+       * and getting home from it — may finish a little outside.
+       *
+       * Without this a balanced-pace day ending at seven could hold an hour of
+       * dinner and not a minute more, and every real restaurant in this region
+       * takes longer than an hour: the plan held time for a meal instead of
+       * naming one on days that had a table free. The allowance is one-sided,
+       * starts at the last meal, and nothing may *begin* outside the window.
+       */
+      const ceiling =
+        lastMealStart !== null &&
+        item.startMinute >= lastMealStart &&
+        (item.kind === 'meal' || item.kind === 'travel')
+          ? day.window.endMinute + config.mealOverrunAllowanceMinutes
+          : day.window.endMinute;
+      if (item.startMinute < day.window.startMinute || item.endMinute > ceiling) {
         issues.push({
           code: 'item_outside_window',
           severity: 'error',
@@ -165,6 +207,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
     issues.push(...validateDayTransport(day, input));
     issues.push(...validateDayHours(day, input));
     issues.push(...validateDayWeather(day, input));
+    issues.push(...validateDayFood(day, foodInput));
 
     const strenuousAllowed = profile.derived.preferredPhysicalIntensity === 'strenuous' ? 2 : 1;
     if (day.totals.strenuousCount > strenuousAllowed) {
@@ -255,6 +298,8 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
       message: 'Nothing could be scheduled from your selections.',
     });
   }
+
+  issues.push(...validateTripFood(days, foodInput));
 
   return issues;
 }

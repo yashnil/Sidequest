@@ -34,7 +34,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
         <Recovery
           tripId={id}
           title="This plan is from an earlier version of Sidequest"
-          body="Some of what it was built on has changed since — which opening hours we check, whether the weather and the daylight were worked out at all, or how a place is described — so parts of it could now be out of date, and we will not show you that as though it were current. Head back to the board and press Rebuild; every choice you made is still there."
+          body="Some of what it was built on has changed since — which opening hours we check, whether the weather and the daylight were worked out at all, whether the meals name anywhere or are simply gaps in the day, or how a place is described — so parts of it could now be out of date, and we will not show you that as though it were current. Head back to the board and press Rebuild; every choice you made is still there."
         />
       );
     }

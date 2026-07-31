@@ -2,7 +2,10 @@ import type {
   AccessDataset,
   DiscoveryCandidate,
   DiscoverySelection,
+  FoodDataset,
+  FoodSelection,
   Interest,
+  MealSlot,
   Itinerary,
   OperatingHoursDataset,
   Place,
@@ -42,11 +45,34 @@ export interface PlannerConfig {
   bufferMinutes: number;
   /** Longer decompression after something strenuous. */
   restAfterStrenuousMinutes: number;
-  lunchEarliestMinute: number;
-  lunchLatestMinute: number;
-  lunchMinutes: number;
-  dinnerEarliestMinute: number;
-  dinnerMinutes: number;
+  /**
+   * When each meal stops being that meal.
+   *
+   * One record rather than five loose constants, because they were five loose
+   * constants and two of them had already gone bad: `lunchLatestMinute` was
+   * declared and never read, so lunch had no upper bound at all, and a second
+   * copy of the dinner hour written in the food layer quietly moved dinner from
+   * six to five across every plan in the product.
+   *
+   * These are product rules about naming, not claims about when a person should
+   * eat. Breakfast at eleven is lunch; dinner at half four is not dinner. The
+   * planner leaves a slot empty rather than stretch one.
+   */
+  mealWindows: Record<MealSlot, { earliest: number; latest: number }>;
+  /** How long a meal block runs when no venue is behind it. */
+  unplannedMealMinutes: Record<MealSlot, number>;
+  /**
+   * How far past the day's window the last meal of the day may run.
+   *
+   * The window bounds what the planner *schedules*; a meal at the end of it is
+   * the one thing a traveller carries on past that line. Without an allowance a
+   * balanced-pace day ending at seven could hold an hour of dinner and not a
+   * minute more, and every real restaurant in this region takes longer than an
+   * hour — so the plan held time for a meal instead of naming one, on days that
+   * had a perfectly good table free. One-sided, and only the last meal may use
+   * it: the layout and the validator read the same number.
+   */
+  mealOverrunAllowanceMinutes: number;
   /** A day shorter than this does not get a sit-down meal block. */
   minDayMinutesForLunch: number;
   /** Day end by pace, as minutes from midnight. */
@@ -74,11 +100,14 @@ export interface PlannerConfig {
 export const DEFAULT_PLANNER_CONFIG: PlannerConfig = {
   bufferMinutes: 15,
   restAfterStrenuousMinutes: 30,
-  lunchEarliestMinute: 11 * 60 + 30,
-  lunchLatestMinute: 14 * 60 + 30,
-  lunchMinutes: 45,
-  dinnerEarliestMinute: 18 * 60,
-  dinnerMinutes: 60,
+  mealWindows: {
+    breakfast: { earliest: 6 * 60, latest: 10 * 60 + 30 },
+    lunch: { earliest: 11 * 60 + 30, latest: 14 * 60 + 30 },
+    dinner: { earliest: 18 * 60, latest: 21 * 60 },
+    snack: { earliest: 9 * 60, latest: 17 * 60 },
+  },
+  unplannedMealMinutes: { breakfast: 30, lunch: 45, dinner: 60, snack: 20 },
+  mealOverrunAllowanceMinutes: 45,
   minDayMinutesForLunch: 5 * 60,
   dayEndByPace: { slow: 18 * 60, balanced: 19 * 60, fast: 20 * 60 },
   dayStartByPreference: { early: 7 * 60 + 30, normal: 9 * 60, relaxed: 10 * 60 + 30 },
@@ -128,6 +157,19 @@ export interface PlannerInput {
    * traveller needs told.
    */
   weather: WeatherDataset;
+  /**
+   * Where the traveller could eat, resolved and validated at the same boundary
+   * as the three above.
+   *
+   * Optional, and the only one of the five that is — because "we have no food
+   * data for this region" is a state the product has to work in, and works in
+   * honestly: every meal block is still there, and every one of them says it is
+   * time held rather than somewhere named. Undefined and an empty dataset are
+   * different things and the plan says which it had.
+   */
+  food?: FoodDataset;
+  /** Venues the traveller asked for, or asked not to be sent to, on the board. */
+  foodSelections?: readonly FoodSelection[];
   /** Matrix id for the trip base. Days start and end here. */
   baseId: string;
   config?: Partial<PlannerConfig>;

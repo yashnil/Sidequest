@@ -3,6 +3,7 @@ import {
   buildDiscoveryBoard,
   EASTERN_SIERRA_ACCESS,
   EASTERN_SIERRA_BASE_ID,
+  EASTERN_SIERRA_FOOD,
   EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_PLACES,
   EASTERN_SIERRA_WEATHER_LOCATIONS,
@@ -11,10 +12,12 @@ import {
   tripDates,
   tripMonths,
   validateAccessDataset,
+  validateFoodDataset,
   validateOperatingHoursDataset,
   validateWeatherDataset,
   type AccessDataset,
   type DiscoveryBoard,
+  type FoodDataset,
   type OperatingHoursDataset,
   type Place,
   type Region,
@@ -47,6 +50,17 @@ export interface RegionContext {
    * dataset rather than an exception.
    */
   weather: WeatherDataset;
+  /**
+   * Where the traveller could eat. Curated like access and hours rather than
+   * fetched like weather, and validated on every request for the same reason
+   * they are: the check costs nothing and it is the boundary a live places
+   * provider will have to cross.
+   *
+   * Null when the data will not validate. Unlike a road or a closing time, food
+   * is not something a trip depends on — so the honest failure is to plan
+   * without it and say so on every meal, not to refuse to plan at all.
+   */
+  food: FoodDataset | null;
   matrix: TravelTimeMatrix;
   baseId: string;
   months: number[];
@@ -99,6 +113,27 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
   const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
 
   /**
+   * Food, and the second place in this function where a failure does not stop
+   * the trip.
+   *
+   * Access and hours are matters of record: guessing at them puts somebody at a
+   * locked gate, so a dataset that will not validate refuses to plan. Food is a
+   * preference layer. A region with no usable food data still gets a plan, with
+   * every meal saying plainly that it is time held rather than somewhere named,
+   * and `SIDEQUEST_FOOD_PROVIDER=off` is how that path is exercised without
+   * breaking anything.
+   */
+  let food: FoodDataset | null = null;
+  if (process.env.SIDEQUEST_FOOD_PROVIDER !== 'off') {
+    try {
+      food = validateFoodDataset(EASTERN_SIERRA_FOOD, { regionId: region.id });
+    } catch (error) {
+      console.error('Food data for this region is unusable', error);
+      food = null;
+    }
+  }
+
+  /**
    * Weather, and the one place in this function where a failure does not stop
    * the trip.
    *
@@ -148,6 +183,7 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
       access,
       hours,
       weather,
+      food,
       matrix: easternSierraTravelMatrix(),
       baseId: EASTERN_SIERRA_BASE_ID,
       months: tripMonths(trip.basics.startDate, trip.basics.endDate),

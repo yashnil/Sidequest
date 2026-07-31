@@ -35,6 +35,10 @@ async function completeQuestionnaire(page: Page) {
   await page.getByRole('radio', { name: /^Mid-range/ }).check();
   await page.getByRole('button', { name: 'Continue' }).click();
 
+  // Food
+  await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
   // Discovery
   await page.getByRole('radio', { name: /^A real mix/ }).check();
   await page.getByRole('radio', { name: /Crowds ruin it/ }).check();
@@ -72,7 +76,9 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
 
   // The region, not just the town.
   for (const name of ['Convict Lake', 'Mono Lake South Tufa', 'June Lake Loop', 'Minaret Vista']) {
-    await expect(page.getByRole('heading', { name })).toBeVisible();
+    // Exact, because the food section below the board holds a "Restaurant at
+    // Convict Lake" and a loose name match finds both.
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
   }
 
   // Grouped the way the brief asks for.
@@ -163,7 +169,7 @@ test('a winter trip is told plainly what is shut rather than shown a broken plan
   await expect(postpile.getByText('Why this will not work')).toBeVisible();
 
   // Year-round places are unaffected.
-  await expect(page.getByRole('heading', { name: 'Convict Lake' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Convict Lake', exact: true })).toBeVisible();
 });
 
 test('the questionnaire adapts and refuses to continue on an empty profile', async ({ page }) => {
@@ -181,6 +187,7 @@ test('the questionnaire adapts and refuses to continue on an empty profile', asy
   // change in step order fails loudly instead of silently skipping a step.
   for (const heading of [
     'What is the spending style?',
+    'How do you want to eat?',
     'Famous or off the track?',
     'How are you getting around?',
   ]) {

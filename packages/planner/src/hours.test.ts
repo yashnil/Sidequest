@@ -13,6 +13,7 @@ import {
 } from '@sidequest/core';
 import { planTrip } from './plan';
 import { buildScenario, type ScenarioOptions } from './testing/scenario';
+import { DEFAULT_PLANNER_CONFIG } from './types';
 import { resolveConfig } from './types';
 import { validateItinerary } from './validate';
 
@@ -455,9 +456,17 @@ describe('scenario 9 — a place with no staffed hours', () => {
 
   it('is still bounded by the day, the travel and the way out', () => {
     for (const day of itinerary.days) {
+      // The last meal of the day, and the leg home from it, are allowed to run
+      // a little past the window — the window bounds what gets scheduled, and
+      // an evening meal is the one thing a traveller carries on past it.
+      const lastMeal = day.items.filter((item) => item.kind === 'meal').at(-1)?.startMinute;
       for (const item of day.items) {
         expect(item.startMinute).toBeGreaterThanOrEqual(day.window.startMinute);
-        expect(item.endMinute).toBeLessThanOrEqual(day.window.endMinute);
+        const ceiling =
+          lastMeal !== undefined && item.startMinute >= lastMeal
+            ? day.window.endMinute + DEFAULT_PLANNER_CONFIG.mealOverrunAllowanceMinutes
+            : day.window.endMinute;
+        expect(item.endMinute).toBeLessThanOrEqual(ceiling);
       }
     }
   });
@@ -657,7 +666,10 @@ describe('Manzanar — an outdoor site and a staffed facility, modelled apart', 
       (item) => item.travel?.role === 'approach' && item.travel.toId.startsWith('manzanar'),
     );
     expect(approaches).toHaveLength(1);
-    expect(approaches[0]!.travel!.minutes).toBe(95);
+    // Ninety-five from base, plus whatever the morning's coffee stop put between
+    // the two. One drive out, however it started.
+    expect(approaches[0]!.travel!.minutes).toBeGreaterThanOrEqual(95);
+    expect(approaches[0]!.travel!.minutes).toBeLessThanOrEqual(99);
 
     // Nothing at all between the two halves: same car park, back to back.
     const between = day.items.filter(
@@ -745,6 +757,8 @@ describe('Manzanar — an outdoor site and a staffed facility, modelled apart', 
       matrix: scenario.matrix,
       placesById: new Map(scenario.candidates.map((c) => [c.place.id, c.place])),
       baseId: scenario.baseId,
+      foodPlan: stale.foodPlan,
+      hadFoodDataset: true,
       access: scenario.access,
       hours: scenario.hours,
       weather: scenario.weather,

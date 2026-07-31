@@ -12,6 +12,14 @@ import {
   type Pace,
   type RegionalExpansion,
 } from '../schemas/common';
+import {
+  DIETARY_NEED_LABELS,
+  DIETARY_NEEDS,
+  type BreakfastStyle,
+  type DietaryNeed,
+  type FoodStyle,
+  type SpecialMealAppetite,
+} from '../schemas/food';
 import type { QuestionnaireAnswers } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 
@@ -19,6 +27,7 @@ export const QUESTIONNAIRE_STEPS = [
   'interests',
   'rhythm',
   'budget',
+  'food',
   'discovery',
   'transport',
   'region',
@@ -57,6 +66,12 @@ export const STEP_DEFINITIONS: readonly StepDefinition[] = [
     intro: 'Used for which paid activities make the cut, not to pad a total.',
   },
   {
+    id: 'food',
+    title: 'How do you want to eat?',
+    intro:
+      'Meals get placed on the route you are already taking, so this changes where the days go, not just what is on the card.',
+  },
+  {
     id: 'discovery',
     title: 'Famous or off the track?',
     intro: 'The Eastern Sierra has both. The mix is up to you.',
@@ -93,12 +108,14 @@ export type ConditionalQuestionId =
   | 'roadComfort'
   | 'maxDailyTravelMinutes'
   | 'shuttleUse'
-  | 'detourToleranceMinutes';
+  | 'detourToleranceMinutes'
+  | 'specialMealAppetite'
+  | 'dietaryStrict';
 
 export interface AdaptiveInput {
   answers: Pick<
     QuestionnaireAnswers,
-    'crowdTolerance' | 'willDrive' | 'regionalExpansion'
+    'crowdTolerance' | 'willDrive' | 'regionalExpansion' | 'foodStyle' | 'dietaryNeeds'
   >;
   context: QuestionnaireContext;
 }
@@ -123,6 +140,14 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
     // "Stay in town" already answers this.
     case 'detourToleranceMinutes':
       return answers.regionalExpansion !== 'destination_only';
+    // Somebody eating as cheaply as they can has already said no to this, and
+    // asking anyway invites an answer the budget rule will then overrule.
+    case 'specialMealAppetite':
+      return answers.foodStyle !== 'budget';
+    // "Are these strict?" is a question about a list. With nothing in it there
+    // is nothing to be strict about.
+    case 'dietaryStrict':
+      return answers.dietaryNeeds.length > 0;
     default:
       return true;
   }
@@ -203,6 +228,33 @@ export const TRANSPORT_PRIORITY_OPTIONS: readonly Option<TransportPriority>[] = 
 export const AVOIDANCE_OPTIONS: readonly Option<Avoidance>[] = AVOIDANCES.map((value) => ({
   value,
   label: AVOIDANCE_LABELS[value],
+  detail: '',
+}));
+
+export const BREAKFAST_STYLE_OPTIONS: readonly Option<BreakfastStyle>[] = [
+  { value: 'skip', label: 'I skip it', detail: 'Do not book me a breakfast' },
+  { value: 'coffee_light', label: 'Coffee and something', detail: 'Quick, and on the way out' },
+  { value: 'full', label: 'A proper sit-down', detail: 'Worth starting the day later for' },
+  { value: 'depends', label: 'Depends on the day', detail: 'Early start, quick. Slow morning, longer' },
+];
+
+export const FOOD_STYLE_OPTIONS: readonly Option<FoodStyle>[] = [
+  { value: 'budget', label: 'Keep it cheap', detail: 'Bakeries, groceries, taco counters' },
+  { value: 'local_casual', label: 'Local and casual', detail: 'Where the town actually eats' },
+  { value: 'balanced', label: 'Mostly casual, one good one', detail: 'Spend it where it counts' },
+  { value: 'destination', label: 'The meal is the point', detail: 'Happy to plan a day around dinner' },
+];
+
+export const SPECIAL_MEAL_OPTIONS: readonly Option<SpecialMealAppetite>[] = [
+  { value: 'none', label: 'None', detail: 'No occasion dinners' },
+  { value: 'one', label: 'One', detail: 'A single evening worth dressing for' },
+  { value: 'a_few', label: 'A few', detail: 'More than one, not every night' },
+  { value: 'often', label: 'Most nights', detail: 'This is what the trip is for' },
+];
+
+export const DIETARY_NEED_OPTIONS: readonly Option<DietaryNeed>[] = DIETARY_NEEDS.map((value) => ({
+  value,
+  label: DIETARY_NEED_LABELS[value],
   detail: '',
 }));
 

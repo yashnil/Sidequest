@@ -37,6 +37,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
   for (const heading of [
     'How should the days feel?',
     'What is the spending style?',
+    'How do you want to eat?',
     'Famous or off the track?',
     'How are you getting around?',
   ]) {

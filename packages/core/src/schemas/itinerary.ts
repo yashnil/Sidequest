@@ -5,6 +5,7 @@ import {
   minuteOfDaySchema,
   physicalIntensitySchema,
 } from './common';
+import { dayFoodSummarySchema, foodPlanSchema, scheduledFoodSchema } from './food';
 
 export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay } from './common';
 
@@ -29,6 +30,15 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * standing between a traveller and a screen that confidently states a fact which
  * has since stopped being true. When in doubt, bump: a rebuild costs a click and
  * keeps every selection.
+ *
+ * 6 — meals are placed on the route rather than assumed at base. A meal item can
+ * name a real venue, the window it was placed in, what that costs in detour
+ * minutes and where the facts came from; days carry a food summary; and a
+ * grocery run or a packed lunch is a scheduled thing rather than a gap. A
+ * version-5 plan has "Lunch, 45 min" and nothing behind it — rendering that on a
+ * screen which now names restaurants and quotes their hours would imply a check
+ * that never happened, and its dinner block sits at base on a day whose route
+ * ended forty minutes away.
  *
  * 5 — days are placed against weather and daylight. Each day carries the
  * evidence it was built from and which kind that was (a forecast, a historical
@@ -55,7 +65,7 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * split driving from riding, walking and waiting, and every day carries a
  * transport summary.
  */
-export const ITINERARY_VERSION = 5 as const;
+export const ITINERARY_VERSION = 6 as const;
 
 /** What a block of time on a day actually is. */
 export const ITINERARY_ITEM_KINDS = [
@@ -190,7 +200,16 @@ export const itineraryItemSchema = z
     startMinute: minuteOfDaySchema,
     endMinute: minuteOfDaySchema,
     durationMinutes: z.number().int().min(0),
-    /** Present on `activity` items; absent on meals, rest and free time. */
+    /**
+     * The attraction this item is about. Present on `activity` items and on the
+     * travel legs that reach them; absent on meals, rest and free time.
+     *
+     * A scheduled meal names its venue in `food.venueId` rather than here, on
+     * purpose: a food venue is not a `Place` and does not appear in `places`, so
+     * putting its id in this field would make every consumer that resolves
+     * `placeId` against the place table — the validator's duplicate check, the
+     * day theme, the fingerprint's activity comparison — silently miss.
+     */
     placeId: z.string().min(1).optional(),
     travel: travelSegmentSchema.optional(),
     /** Why the planner put this here. Shown to the traveller. */
@@ -206,6 +225,12 @@ export const itineraryItemSchema = z
     weather: scheduledWeatherSchema.optional(),
     /** Set when this visit needs booking or a permit the traveller must arrange. */
     booking: bookingRequirementSchema.optional(),
+    /**
+     * Set on `meal` items the food planner decided. Absent means the block is a
+     * bare gap in the day — which is what every meal on a version-5 plan was,
+     * and is still the honest output when nothing verified fitted.
+     */
+    food: scheduledFoodSchema.optional(),
     /**
      * Officially signed for daylight use only.
      *
@@ -422,6 +447,7 @@ export const itineraryDaySchema = z.object({
   transport: dayTransportSchema,
   availability: dayAvailabilitySchema,
   weather: dayWeatherSummarySchema,
+  food: dayFoodSummarySchema,
   intensity: z.enum(['light', 'moderate', 'intense']),
   warnings: z.array(z.string().min(1)).default([]),
 });
@@ -595,8 +621,81 @@ export const VALIDATION_ISSUE_CODES = [
   'no_weather_backup',
   /** A place the traveller chose by hand could not be placed for weather. */
   'weather_blocked_manual_include',
+  // --- Food ---------------------------------------------------------------
+  // A fifth block. Food is the softest of the five layers and its severities
+  // say so: exactly four errors, and every one of them is a fact rather than a
+  // preference — a shut door, a shop visited after the food was needed, a
+  // declared requirement the venue itself says it cannot meet, and a plan whose
+  // stored summary disagrees with its own timeline. "Nothing good near this
+  // trailhead" is a caution, and blocking a trip on one would teach people to
+  // ignore the warnings that matter.
+  /** A meal is scheduled at a venue that is shut on that date. */
+  'food_venue_closed_on_date',
+  /** A meal starts inside opening hours and runs past the closing time. */
+  'meal_ends_after_venue_closes',
+  /** Supplies are bought after the day that needs them has started. */
+  'grocery_after_supplies_needed',
+  /** The venue states it cannot meet a requirement the traveller declared. */
+  'strict_dietary_conflict',
+  /** A declared requirement nobody has confirmed this venue can meet. */
+  'dietary_support_unverified',
+  /** The hours behind a meal are ours, or a listing's, rather than the venue's. */
+  'food_hours_unverified',
+  /** The detour to a meal is past what the traveller said they would accept. */
+  'food_detour_exceeds_tolerance',
+  /** A booking the traveller has to make themselves and has not. */
+  'food_reservation_unresolved',
+  /** More special meals than the trip length and budget support. */
+  'special_meal_quota_exceeded',
+  /** A meal sits above the price band the traveller asked to stay inside. */
+  'food_budget_mismatch',
+  /** The same venue twice when other legal options existed. */
+  'duplicate_food_venue',
+  /** A packed meal with nowhere on the plan the food could have come from. */
+  'packed_food_without_preparation',
+  /** No verified venue fitted this day's route, hours and requirements. */
+  'no_verified_food_option',
+  /** A long day with nothing to eat scheduled on it at all. */
+  'long_day_without_food',
+  /** A venue the traveller asked for on the board could not be worked in. */
+  'food_choice_unscheduled',
+  /** A scheduled venue carries no source we could name. */
+  'food_venue_missing_provenance',
+  /** The day's stored food summary disagrees with the day's own timeline. */
+  'food_plan_inconsistent',
+  /** No food data reached the planner, so no meal names anywhere to eat. */
+  'food_data_unavailable',
 ] as const;
 export const validationIssueCodeSchema = z.enum(VALIDATION_ISSUE_CODES);
+
+/**
+ * The food block, as a set the reviser can test against.
+ *
+ * It exists so that the one thing the reviser must never do stays impossible:
+ * a food problem is fixed by taking the food off the day, never by taking a
+ * stop off it. Without this the generic "an error on day 3 means drop day 3's
+ * lowest-priority stop" rule would trade Rainbow Falls for a closed bakery.
+ */
+export const FOOD_ISSUE_CODES: ReadonlySet<ValidationIssueCode> = new Set([
+  'food_venue_closed_on_date',
+  'meal_ends_after_venue_closes',
+  'grocery_after_supplies_needed',
+  'strict_dietary_conflict',
+  'dietary_support_unverified',
+  'food_hours_unverified',
+  'food_detour_exceeds_tolerance',
+  'food_reservation_unresolved',
+  'special_meal_quota_exceeded',
+  'food_budget_mismatch',
+  'duplicate_food_venue',
+  'packed_food_without_preparation',
+  'no_verified_food_option',
+  'long_day_without_food',
+  'food_choice_unscheduled',
+  'food_venue_missing_provenance',
+  'food_plan_inconsistent',
+  'food_data_unavailable',
+]);
 export type ValidationIssueCode = z.infer<typeof validationIssueCodeSchema>;
 
 export const ISSUE_SEVERITIES = ['error', 'warning', 'info'] as const;
@@ -625,6 +724,8 @@ export const REVISION_ACTION_CODES = [
   'moved_for_weather',
   /** Attached a concrete fallback to a day the weather could take. */
   'attached_backup',
+  /** Swapped a meal for one that fits the route, the clock or the budget. */
+  'changed_meal',
   'left_unresolved',
 ] as const;
 export const revisionActionCodeSchema = z.enum(REVISION_ACTION_CODES);
@@ -656,6 +757,14 @@ export const planDiagnosticsSchema = z.object({
   weatherEvidence: z.array(z.enum(['forecast', 'historical_pattern', 'unavailable'])).min(1),
   /** When the dataset behind this plan was assembled. */
   weatherGeneratedAt: z.string().min(1),
+  /**
+   * Which generation of food data the plan was built against, or zero when none
+   * reached it. Zero is a real answer and a different one from "version 1 with
+   * nothing in it" — the second means we looked at the region and found nothing.
+   */
+  foodDatasetVersion: z.number().int().min(0),
+  /** How many venues were in scope. Zero is a real and reportable answer. */
+  foodVenuesConsidered: z.number().int().min(0),
   revisionPasses: z.number().int().min(0),
   revisions: z.array(revisionActionSchema),
   capacity: z.object({
@@ -707,6 +816,7 @@ export const itinerarySchema = z.object({
   status: itineraryStatusSchema,
   summary: z.string().min(1),
   transportStrategy: transportStrategySchema,
+  foodPlan: foodPlanSchema,
   days: z.array(itineraryDaySchema).min(1),
   unscheduled: z.array(unscheduledPlaceSchema),
   issues: z.array(validationIssueSchema),
@@ -757,6 +867,15 @@ export function itineraryStructureFingerprint(itinerary: Itinerary): string {
             item.weather ? `${item.weather.evidence}/${item.weather.suitability}` : '-',
             item.daylight
               ? `${item.daylight.sunriseMinute}-${item.daylight.sunsetMinute}`
+              : '-',
+            // The food *decision*: which slot, what kind of stop, which venue,
+            // and how far off the route it sits. A narration layer may rewrite
+            // why a restaurant suits somebody; it may not swap the restaurant,
+            // turn a packed lunch into a booking, or quietly shave the detour.
+            // The price band and the dietary prose stay out — those describe
+            // the choice rather than being it.
+            item.food
+              ? `${item.food.slot}/${item.food.stopKind}/${item.food.venueId ?? '-'}/${item.food.detourMinutes}`
               : '-',
           ].join(':'),
         )

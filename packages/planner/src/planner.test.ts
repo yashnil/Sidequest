@@ -8,6 +8,7 @@ import {
 import {
   easternSierraTravelMatrix,
   EASTERN_SIERRA_ACCESS,
+  EASTERN_SIERRA_FOOD,
   EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_BASE_ID,
   placeById,
@@ -18,6 +19,7 @@ import { resolveCandidates } from './candidates';
 import { reviseDayPlans } from './revise';
 import { validateItinerary } from './validate';
 import { isOpenOnDate } from './schedule';
+import { buildFoodPlan } from './food-plan';
 import { DEFAULT_PLANNER_CONFIG, resolveConfig, type PlannerInput } from './types';
 import { buildScenario, type ScenarioOptions } from './testing/scenario';
 
@@ -196,6 +198,13 @@ describe('validator', () => {
     access: EASTERN_SIERRA_ACCESS,
     hours: EASTERN_SIERRA_HOURS,
     weather: scenario.weather,
+    foodPlan: buildFoodPlan({
+      days: [],
+      profile: scenario.profile,
+      food: null,
+      dataset: EASTERN_SIERRA_FOOD,
+    }),
+    hadFoodDataset: true,
   };
 
   function dayWith(overrides: Partial<ItineraryDay>): ItineraryDay {
@@ -231,6 +240,13 @@ describe('validator', () => {
         backups: [],
         provider: 'none',
         attribution: 'Fixture day with no weather attached.',
+      },
+      food: {
+        summary: 'Fixture day with no food attached.',
+        slots: [],
+        remote: false,
+        notes: [],
+        reservations: [],
       },
       intensity: 'moderate',
       warnings: [],
@@ -415,9 +431,17 @@ describe('scenario 1 — the standard four-day Mammoth trip', () => {
       for (let index = 0; index + 1 < sorted.length; index += 1) {
         expect(sorted[index + 1]!.startMinute).toBeGreaterThanOrEqual(sorted[index]!.endMinute);
       }
+      // The last meal of the day, and the leg home from it, are allowed to run
+      // a little past the window — the window bounds what gets scheduled, and
+      // an evening meal is the one thing a traveller carries on past it.
+      const lastMeal = day.items.filter((item) => item.kind === 'meal').at(-1)?.startMinute;
       for (const item of day.items) {
         expect(item.startMinute).toBeGreaterThanOrEqual(day.window.startMinute);
-        expect(item.endMinute).toBeLessThanOrEqual(day.window.endMinute);
+        const ceiling =
+          lastMeal !== undefined && item.startMinute >= lastMeal
+            ? day.window.endMinute + DEFAULT_PLANNER_CONFIG.mealOverrunAllowanceMinutes
+            : day.window.endMinute;
+        expect(item.endMinute).toBeLessThanOrEqual(ceiling);
       }
     }
   });

@@ -30,7 +30,16 @@ import {
   narrowByDaylight,
   type PlaceDayWeather,
 } from './weather';
-import { weatherPenaltyAt } from '@sidequest/core';
+import { weatherPenaltyAt, type MealSlot, type ScheduledFood } from '@sidequest/core';
+import {
+  alternativesFor,
+  chooseFoodStop,
+  chooseProvisioningStop,
+  PACKED_MEAL_MINUTES,
+  type FoodChoice,
+  type FoodContext,
+  type FoodDayPlan,
+} from './food';
 import type { PlannedDay } from './windows';
 import type { PlannerConfig, PlanningCandidate } from './types';
 
@@ -110,6 +119,13 @@ export interface LayoutContext {
    * than a prediction.
    */
   weather: ReadonlyMap<string, PlaceDayWeather>;
+  /**
+   * What this day may eat, and where from. Null when no food data reached the
+   * planner at all — in which case meals fall back to the bare blocks that
+   * every version-5 plan had, which is the honest output rather than a silent
+   * absence.
+   */
+  food: FoodContext | null;
 }
 
 /**
@@ -143,6 +159,15 @@ export function layoutDay(
   let strenuousCount = 0;
   let lunchInserted = false;
   let sequence = 0;
+  /**
+   * Whether the day has set off yet.
+   *
+   * Not `items.length === 0`, which is what it was: breakfast and the shopping
+   * are committed before the first unit, so on any day with a coffee stop the
+   * "leave later rather than queue at the stop" rule silently stopped applying
+   * and the traveller waited at the boarding point instead.
+   */
+  let hasLeftBase = false;
 
   const dayIsLongEnough = day.window.usableMinutes >= config.minDayMinutesForLunch;
   const useMode = (mode: TransportMode) => {
@@ -172,33 +197,432 @@ export function layoutDay(
    */
   let vehicleAt = baseId;
 
+  const foodPlan: FoodDayPlan | null = context.food?.byDay.get(day.dayNumber) ?? null;
+  const wantsSlot = (slot: MealSlot) =>
+    foodPlan?.slots.some((entry) => entry.slot === slot) ?? slot !== 'breakfast';
+
+  /**
+   * A food stop, committed to the timeline.
+   *
+   * Everything it touches — the clock, the travel buckets, where the car is,
+   * where the traveller is standing — is the same state the rest of the layout
+   * reads, which is the point: a drive to a restaurant is a drive, counted in
+   * the same bucket as a drive to a lake, so the validator's independent re-sum
+   * of the day's totals cannot disagree with the layout about what happened.
+   * The last time those two disagreed the reviser emptied a day one stop at a
+   * time.
+   */
+  const commitFood = (
+    choice: FoodChoice,
+    options: {
+      title: string;
+      reason: string;
+      returnAfter: boolean;
+      food: ScheduledFood;
+      /** Where the leg to the venue starts, which is not always where the unit is. */
+      fromId: string;
+      fromName: string;
+    },
+  ): void => {
+    /**
+     * Wait first, then travel.
+     *
+     * The other way round put the walk to a bakery at eight in the morning and
+     * then stood the traveller outside it until half eleven, because lunch is
+     * not lunch before half eleven. Nobody does that. The gap belongs before the
+     * journey, and what it is called depends on what is actually holding things
+     * up: a shut door, or the clock.
+     */
+    const departAt = choice.startMinute - choice.approachMinutes;
+    if (departAt > cursor) {
+      cursor =
+        choice.opensAtMinute !== null && departAt >= cursor + FOOD_WAIT_BLOCK_MINUTES
+          ? pushWaitForOpening(
+              items,
+              day.dayNumber,
+              cursor,
+              departAt,
+              choice.venue.name,
+              choice.opensAtMinute,
+            )
+          : pushFreeTime(items, day, config, cursor, departAt);
+      cursor = Math.max(cursor, departAt);
+    }
+
+    /**
+     * On foot, the traveller always comes back.
+     *
+     * A car can be left at the cafe and driven on from there; feet cannot. This
+     * used to be left to the caller, and a car-free traveller who walked four
+     * minutes to a coffee shop was then driven one minute home by a fallback
+     * that assumed anyone away from base had a vehicle.
+     */
+    const returnAfter = options.returnAfter || choice.approachMode === 'walk';
+
+    if (choice.approachMinutes > 0) {
+      items.push({
+        id: `travel-${day.dayNumber}-${sequence++}`,
+        kind: 'travel',
+        title: `${TRANSPORT_MODE_LABELS[choice.approachMode]} to ${choice.venue.name}`,
+        startMinute: cursor,
+        endMinute: cursor + choice.approachMinutes,
+        durationMinutes: choice.approachMinutes,
+        // Says what the leg is. What it *costs* is the meal row's business, and
+        // printing the same figure twice a centimetre apart is how a reader
+        // learns to skip both.
+        reason: `${choice.approachMinutes} min ${
+          choice.approachMode === 'walk' ? 'on foot' : 'on the road'
+        }, in the model.`,
+        weatherSensitive: false,
+        travel: {
+          fromId: options.fromId,
+          toId: choice.venue.routingId,
+          fromName: options.fromName,
+          toName: choice.venue.name,
+          minutes: choice.approachMinutes,
+          km: choice.approachKm,
+          mode: choice.approachMode,
+          role: 'approach',
+          provenance: choice.approachMode === 'drive' ? matrix.provenance.kind : 'estimated',
+        },
+      });
+      cursor += choice.approachMinutes;
+      if (choice.approachMode === 'drive') {
+        driveMinutes += choice.approachMinutes;
+        travelKm += choice.approachKm;
+        vehicleAt = choice.venue.routingId;
+      } else {
+        walkMinutes += choice.approachMinutes;
+      }
+      useMode(choice.approachMode);
+    }
+
+    cursor = Math.max(cursor, choice.startMinute);
+
+    items.push({
+      id: `meal-${day.dayNumber}-${options.food.slot}-${cursor}`,
+      kind: 'meal',
+      title: options.title,
+      startMinute: cursor,
+      endMinute: cursor + choice.stopMinutes,
+      durationMinutes: choice.stopMinutes,
+      reason: options.reason,
+      weatherSensitive: false,
+      food: options.food,
+    });
+    cursor += choice.stopMinutes;
+
+    if (returnAfter && choice.approachMinutes > 0) {
+      items.push({
+        id: `travel-${day.dayNumber}-${sequence++}`,
+        kind: 'travel',
+        title: `${TRANSPORT_MODE_LABELS[choice.approachMode]} back to ${options.fromName}`,
+        startMinute: cursor,
+        endMinute: cursor + choice.approachMinutes,
+        durationMinutes: choice.approachMinutes,
+        reason: 'Back the way you came.',
+        weatherSensitive: false,
+        travel: {
+          fromId: choice.venue.routingId,
+          toId: options.fromId,
+          fromName: choice.venue.name,
+          toName: options.fromName,
+          minutes: choice.approachMinutes,
+          km: choice.approachKm,
+          mode: choice.approachMode,
+          role: 'return',
+          provenance: choice.approachMode === 'drive' ? matrix.provenance.kind : 'estimated',
+        },
+      });
+      cursor += choice.approachMinutes;
+      if (choice.approachMode === 'drive') {
+        driveMinutes += choice.approachMinutes;
+        travelKm += choice.approachKm;
+        // The car came back too. Without this the vehicle stays parked at the
+        // restaurant and the next drive of the day is measured from a car park
+        // the traveller has already left.
+        vehicleAt = options.fromId;
+      } else {
+        walkMinutes += choice.approachMinutes;
+      }
+    } else if (choice.approachMinutes > 0) {
+      atRoutingId = choice.venue.routingId;
+      atName = choice.venue.name;
+    }
+  };
+
+  /** What a slot looks like when nothing verified fitted. Never a fabricated venue. */
+  const pushBareMeal = (slot: MealSlot, title: string, start: number, reason: string): number => {
+    const minutes = config.unplannedMealMinutes[slot];
+    items.push({
+      ...mealItem(day.dayNumber, title, start, minutes, reason),
+      food: {
+        slot,
+        stopKind: 'unplanned',
+        dietary: [],
+        dietaryUnverified: [],
+        routeContext: 'at_base',
+        detourMinutes: 0,
+        isSpecialMeal: false,
+        fromUserChoice: false,
+        alternatives: [],
+      },
+    });
+    return start + minutes;
+  };
+
+  const foodRequest = (
+    slot: MealSlot,
+    fromRoutingId: string,
+    toRoutingId: string | null,
+    at: number,
+    returnsToOrigin: boolean,
+  ) => ({
+    windows: config.mealWindows,
+    returnsToOrigin,
+    slot,
+    plan: foodPlan!,
+    profile: context.profile,
+    dataset: context.food!.dataset,
+    matrix,
+    fromRoutingId,
+    toRoutingId,
+    cursor: at,
+    // The final meal of the day may finish a little past the window; the
+    // validator allows exactly the same margin, and the two constants are the
+    // same constant so they cannot drift apart.
+    // The last meal of the day, and the leg home from it, may run a little past
+    // the window. The validator allows exactly the same margin, off the same
+    // config field, so the two cannot drift apart.
+    latest: day.window.endMinute + (slot === 'dinner' ? config.mealOverrunAllowanceMinutes : 0),
+    canDrive: context.profile.transport.willDrive,
+  });
+
+  const attachAlternatives = (
+    choice: FoodChoice,
+    slot: MealSlot,
+    fromRoutingId: string,
+  ): ScheduledFood => ({
+    ...choice.food,
+    alternatives: alternativesFor({
+      plan: foodPlan!,
+      dataset: context.food!.dataset,
+      slot,
+      chosenVenueId: choice.venue.id,
+      matrix,
+      fromRoutingId,
+    }),
+  });
+
+  const hasFood = () => foodPlan !== null && context.food !== null;
+
   /**
    * Lunch is split into "is it due?" and "put it there" because a stop's
    * legality now depends on when the traveller actually arrives, and lunch is
    * forty-five minutes of that. Deciding whether to eat before knowing whether
    * the next stop is still open would be how a plan eats its way past a last
-   * admission.
+   * admission. With a real venue behind it the same split does more work still:
+   * the venue's own travel to the door, the wait if it has not opened, and its
+   * service time are all inside the number the next stop is then tested against.
    */
   const lunchDueAt = (minute: number) =>
-    !lunchInserted && dayIsLongEnough && minute >= config.lunchEarliestMinute;
+    !lunchInserted &&
+    dayIsLongEnough &&
+    wantsSlot('lunch') &&
+    minute >= config.mealWindows.lunch.earliest;
 
-  const commitLunch = (minute: number): number => {
-    items.push(
-      mealItem(
+  const lunchIsPacked = () =>
+    foodPlan?.slots.some((entry) => entry.slot === 'lunch' && entry.fallback === 'packed') ?? false;
+
+  /**
+   * What lunch looks like from here, measured and not yet committed.
+   *
+   * `minutes` is everything the day loses to it, including the leg to the door
+   * and any wait for it to open. `resumeAt` is where the traveller ends up
+   * standing afterwards, which is the venue on a route detour and where they
+   * already were otherwise — the next leg is measured from that, not from the
+   * stop they left.
+   */
+  type LunchPlanned =
+    | { kind: 'none'; minutes: 0 }
+    | { kind: 'packed'; minutes: number }
+    | { kind: 'bare'; minutes: number }
+    | { kind: 'venue'; minutes: number; choice: FoodChoice; resumeAt: string };
+
+  const planLunch = (
+    at: number,
+    fromId: string,
+    toId: string | null,
+    drivesOn: boolean,
+  ): LunchPlanned => {
+    if (!lunchDueAt(at)) return { kind: 'none', minutes: 0 };
+    /**
+     * On a day the source says has no food, the rucksack wins.
+     *
+     * The other order was tried and is worse: a venue lunch would sometimes be
+     * legal on such a day because the route happens to pass town at midday, and
+     * the traveller would then be carrying a bought lunch *and* sitting in a
+     * diner — the shopping having been done at half seven, before anything knew
+     * how the afternoon would go.
+     */
+    if (lunchIsPacked()) return { kind: 'packed', minutes: PACKED_MEAL_MINUTES };
+    const choice = hasFood() ? chooseFoodStop(foodRequest('lunch', fromId, toId, at, !drivesOn)) : null;
+    if (choice) {
+      return {
+        kind: 'venue',
+        minutes: choice.startMinute - at + choice.stopMinutes,
+        choice,
+        resumeAt: choice.venue.routingId,
+      };
+    }
+    if (lunchIsPacked()) return { kind: 'packed', minutes: PACKED_MEAL_MINUTES };
+    return { kind: 'bare', minutes: config.unplannedMealMinutes.lunch };
+  };
+
+  /** Lunch where the traveller already is, because there is no detour to take. */
+  const planLunchInPlace = (at: number): LunchPlanned => {
+    if (!lunchDueAt(at)) return { kind: 'none', minutes: 0 };
+    if (lunchIsPacked()) return { kind: 'packed', minutes: PACKED_MEAL_MINUTES };
+    return { kind: 'bare', minutes: config.unplannedMealMinutes.lunch };
+  };
+
+  const commitPackedLunch = (): void => {
+    const supplied = foodPlan?.provisionedOnDay ?? null;
+    items.push({
+      ...mealItem(
         day.dayNumber,
-        'Lunch',
-        minute,
-        config.lunchMinutes,
-        'Slotted in before the next stop rather than skipped.',
+        'Packed lunch',
+        cursor,
+        PACKED_MEAL_MINUTES,
+        supplied === null
+          ? 'Nothing verified is open near where this day goes, so this is the lunch you brought.'
+          : supplied === day.dayNumber
+            ? 'What you picked up this morning. There is nothing to buy once you are out here.'
+            : 'What you picked up the evening before. There is nothing to buy once you are out here.',
       ),
-    );
+      food: {
+        slot: 'lunch',
+        stopKind: 'packed',
+        dietary: [],
+        dietaryUnverified: [],
+        routeContext: 'on_route',
+        detourMinutes: 0,
+        ...(supplied !== null ? { preparedOnDayNumber: supplied } : {}),
+        isSpecialMeal: false,
+        fromUserChoice: false,
+        alternatives: [],
+      },
+    });
+    cursor += PACKED_MEAL_MINUTES;
     lunchInserted = true;
-    return minute + config.lunchMinutes;
   };
 
-  const maybeLunch = () => {
-    if (lunchDueAt(cursor)) cursor = commitLunch(cursor);
+  const commitLunch = (
+    planned: LunchPlanned,
+    fromId: string,
+    fromName: string,
+    /** True when the traveller drives on from the venue rather than back. */
+    drivesOn: boolean,
+  ): void => {
+    if (planned.kind === 'none') return;
+    if (planned.kind === 'packed') {
+      commitPackedLunch();
+      return;
+    }
+    if (planned.kind === 'bare') {
+      cursor = pushBareMeal(
+        'lunch',
+        'Lunch',
+        cursor,
+        hasFood()
+          ? 'Nothing open near this stretch of the day fitted, so this is time set aside rather than somewhere named.'
+          : 'Slotted in before the next stop rather than skipped.',
+      );
+      lunchInserted = true;
+      return;
+    }
+    commitFood(planned.choice, {
+      title: planned.choice.venue.name,
+      reason: foodReason(planned.choice, 'lunch'),
+      returnAfter: !drivesOn,
+      food: attachAlternatives(planned.choice, 'lunch', fromId),
+      fromId,
+      fromName,
+    });
+    lunchInserted = true;
   };
+
+  /**
+   * Lunch before setting off, when the clock has already got there.
+   *
+   * `drivesOn` is not cosmetic. A stop reached by car that the traveller then
+   * walks away from leaves the car outside it, and the day carries on as though
+   * it were at base — which is how one of these ended up "driving" to dinner
+   * from a car park it had ridden a trolley away from.
+   */
+  const maybeLunch = (toRoutingId: string | null, drivesOn: boolean) => {
+    const planned = planLunch(cursor, atRoutingId, toRoutingId, drivesOn);
+    commitLunch(planned, atRoutingId, atName, drivesOn);
+  };
+
+  /**
+   * The start of the day, before a single wheel turns.
+   *
+   * Breakfast and the shopping both belong here and nowhere else. A grocery run
+   * has to happen *before* the walk it is meant to feed, and a coffee has to be
+   * on the way out rather than a reason to come back into town — so both are
+   * measured from base, towards wherever the day is actually going first, and
+   * the leg to the door is charged for.
+   */
+  const firstHeading = units[0]?.option.gatewayRoutingId ?? null;
+  /**
+   * Whether the day leaves base at the wheel.
+   *
+   * If it does not — the first move is a walk to a trolley stop — then a food
+   * stop reached by driving has to bring the car back, or it is left outside a
+   * diner while the traveller rides away and walks home from the Village. The
+   * day then "drove" to dinner from a base the car was not at, and the drive out
+   * to fetch it appeared nowhere.
+   */
+  const leavesByCar = units[0] ? units[0].option.approachMinutes === null : true;
+  if (hasFood() && foodPlan!.provisionForDay !== null) {
+    // Filed as a snack slot rather than a meal: it is not one, the day summary
+    // filters it out of the meal list, and the window checks are bypassed for a
+    // provisioning stop anyway — a shop at half seven is the point of it.
+    const stop = chooseProvisioningStop(foodRequest('snack', atRoutingId, firstHeading, cursor, !leavesByCar));
+    if (stop) {
+      const forDay = foodPlan!.provisionForDay!;
+      commitFood(stop, {
+        title: `${stop.venue.name} — supplies`,
+        reason:
+          forDay === day.dayNumber
+            ? 'Lunch and something for the walk, before you head out. There is nothing to buy where this day goes.'
+            : `Lunch and trail food for day ${forDay}, which has nowhere to buy any.`,
+        returnAfter: !leavesByCar,
+        food: {
+          ...stop.food,
+          stopKind: 'grocery',
+          suppliesDayNumber: forDay,
+        },
+        fromId: atRoutingId,
+        fromName: atName,
+      });
+    }
+  }
+
+  if (hasFood() && wantsSlot('breakfast')) {
+    const stop = chooseFoodStop(foodRequest('breakfast', atRoutingId, firstHeading, cursor, !leavesByCar));
+    if (stop) {
+      commitFood(stop, {
+        title: stop.venue.name,
+        reason: foodReason(stop, 'breakfast', context.profile.food.breakfastStyle === 'skip'),
+        returnAfter: !leavesByCar,
+        food: attachAlternatives(stop, 'breakfast', atRoutingId),
+        fromId: atRoutingId,
+        fromName: atName,
+      });
+    }
+  }
 
   for (const scheduled of units) {
     const { option } = scheduled;
@@ -288,7 +712,7 @@ export function layoutDay(
        * the traveller is already somewhere, and pushing the clock forward there
        * would eat into a later stop's hours.
        */
-      if (items.length === 0) {
+      if (!hasLeftBase) {
         const ride = tryHop(matrix, atRoutingId, option.gatewayRoutingId);
         const driveIn = ride ? ride.minutes + config.bufferMinutes : 0;
         if (option.service) {
@@ -299,8 +723,8 @@ export function layoutDay(
           if (opensAt !== null) cursor = Math.max(cursor, opensAt - driveIn);
         }
       }
-      const hop = tryHop(matrix, atRoutingId, option.gatewayRoutingId);
-      if (!hop) {
+      const direct = tryHop(matrix, atRoutingId, option.gatewayRoutingId);
+      if (!direct) {
         violations.push({
           kind: 'access',
           code: 'missing_travel_data',
@@ -309,8 +733,19 @@ export function layoutDay(
         });
         continue;
       }
-      if (hop.minutes > 0) {
-        maybeLunch();
+      if (direct.minutes > 0) {
+        maybeLunch(option.gatewayRoutingId, true);
+        /**
+         * Measured again, after lunch, because lunch may have moved the
+         * traveller.
+         *
+         * It was measured once, before — and then labelled with the position
+         * afterwards, so a leg read "from the bakery to Inyo Craters, 50 min"
+         * when the bakery is 26 minutes from Inyo Craters and 50 is the distance
+         * from the canyon they had already left. Twenty-four minutes of driving
+         * that never happened, on a leg whose own endpoints disproved it.
+         */
+        const hop = tryHop(matrix, atRoutingId, option.gatewayRoutingId) ?? direct;
         // Transition slack rides on the travel block rather than sitting as an
         // invisible gap: parking, boots, and getting going are real minutes.
         const duration = hop.minutes + config.bufferMinutes;
@@ -341,10 +776,11 @@ export function layoutDay(
         travelKm += hop.km;
         useMode('drive');
         homeward = null;
+        hasLeftBase = true;
         vehicleAt = option.gatewayRoutingId;
       }
     } else if (atRoutingId !== option.gatewayRoutingId && option.approachMinutes > 0) {
-      if (option.service && items.length === 0) {
+      if (option.service && !hasLeftBase) {
         cursor = Math.max(
           cursor,
           option.service.window.firstDeparture -
@@ -352,7 +788,7 @@ export function layoutDay(
             option.service.transferBufferMinutes,
         );
       }
-      maybeLunch();
+      maybeLunch(option.gatewayRoutingId, false);
       const toName = gatewayLabel(option, members);
       items.push({
         id: `travel-${day.dayNumber}-${sequence++}`,
@@ -379,6 +815,7 @@ export function layoutDay(
       if (option.approachMode === 'walk') walkMinutes += option.approachMinutes;
       else transitMinutes += option.approachMinutes;
       useMode(option.approachMode);
+      hasLeftBase = true;
       homeward = { mode: option.approachMode, minutes: option.approachMinutes };
     } else if (option.approachMinutes !== null && option.approachMinutes > 0) {
       // Already standing at this gateway, so nothing to travel — but the way
@@ -471,54 +908,116 @@ export function layoutDay(
         measured !== null
           ? { mode: 'drive' as const, minutes: measured.minutes }
           : option.internalTransfer;
-      const transferMinutes = previous && transfer.minutes > 0 ? transfer.minutes : 0;
+      const straightMinutes = previous && transfer.minutes > 0 ? transfer.minutes : 0;
 
-      const afterTransfer = cursor + transferMinutes;
-      const lunchMinutes = lunchDueAt(afterTransfer) ? config.lunchMinutes : 0;
-      const arrival = afterTransfer + lunchMinutes;
+      /**
+       * Lunch, decided from where the traveller actually is and where they are
+       * actually going next.
+       *
+       * A venue only gets to sit between two stops when the traveller is driving
+       * themselves between them. Inside a shuttle-served unit there is no detour
+       * to take: you are on somebody else's vehicle, and inventing a restaurant
+       * stop on it would be inventing a road.
+       */
+      const canDetour = previous !== null && !option.service;
+      const lunchFromId = previous?.place.id ?? atRoutingId;
+      const lunchFromName = previous?.place.name ?? atName;
+      /**
+       * Where the clock is when lunch becomes due depends on whether a venue is
+       * going to sit between the two stops.
+       *
+       * With one, the traveller stops on the way and the question is asked from
+       * where they are standing now. Without one, they drive straight there and
+       * eat at the far end — which is what the planner has always done, and
+       * asking too early would move every unvenued lunch forward by the length
+       * of the transfer.
+       */
+      const viaVenue = canDetour ? planLunch(cursor, lunchFromId, candidate.place.id, true) : null;
+      const planned: LunchPlanned =
+        viaVenue?.kind === 'venue' ? viaVenue : planLunchInPlace(cursor + straightMinutes);
+
+      // With a venue in the middle the onward leg starts from its door, so the
+      // transfer that follows is a different journey from the one that would
+      // have happened. Both the leg and its cost are recomputed, never assumed.
+      const onward =
+        planned.kind === 'venue' && canDetour
+          ? tryHop(matrix, planned.resumeAt, candidate.place.id)
+          : null;
+      /**
+       * With no measured leg from the venue to the next stop there is no venue
+       * lunch. Falling back to the straight-through minutes was worse than
+       * useless: the leg was pushed *from the venue* carrying the distance and
+       * the duration of a journey that started somewhere else.
+       */
+      const viaVenueUsable = planned.kind === 'venue' && canDetour && onward !== null;
+      const finalPlan: LunchPlanned = viaVenueUsable
+        ? planned
+        : planned.kind === 'venue'
+          ? planLunchInPlace(cursor + straightMinutes)
+          : planned;
+      const transferMinutes = viaVenueUsable ? onward!.minutes : straightMinutes;
+      const arrival = viaVenueUsable
+        ? cursor + finalPlan.minutes + transferMinutes
+        : cursor + transferMinutes + finalPlan.minutes;
 
       // The real arrival, which is later than the one the pre-filter used and so
       // can still fail. Rare, and never leaves a leg pointing at nothing,
-      // because the walk legs were named from the pre-filtered set.
+      // because the walk legs were named from the pre-filtered set — and never
+      // leaves a lunch eaten on the way to somewhere the day never reaches.
       const placement = visitFor(context, candidate, arrival, bounds);
       if (!placement.ok) {
         violations.push(placement.violation);
         continue;
       }
 
-      if (transferMinutes > 0 && previous) {
+      const pushTransfer = (fromId: string, fromName: string, minutes: number): void => {
+        if (minutes <= 0 || !previous) return;
         items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
           title: `${TRANSPORT_MODE_LABELS[transfer.mode]} to ${candidate.place.name}`,
           startMinute: cursor,
-          endMinute: cursor + transferMinutes,
-          durationMinutes: transferMinutes,
-          reason: 'Both sit inside the same access area, so this is a short hop.',
+          endMinute: cursor + minutes,
+          durationMinutes: minutes,
+          reason:
+            fromId === previous.place.id
+              ? 'Both sit inside the same access area, so this is a short hop.'
+              : 'On from lunch to the next stop.',
           weatherSensitive: false,
           travel: {
-            fromId: previous.place.id,
+            fromId,
             toId: candidate.place.id,
-            fromName: previous.place.name,
+            fromName,
             toName: candidate.place.name,
-            minutes: transferMinutes,
+            minutes,
             km: 0,
             mode: transfer.mode,
             role: 'transfer',
             provenance: measured ? matrix.provenance.kind : 'estimated',
           },
         });
-        cursor += transferMinutes;
+        cursor += minutes;
         if (transfer.mode === 'drive') {
-          driveMinutes += transferMinutes;
-          if (measured) travelKm += measured.km;
+          driveMinutes += minutes;
+          // The distance of the leg actually made, not of the one that would
+          // have been made without a stop for lunch in the middle of it.
+          if (viaVenueUsable && onward) travelKm += onward.km;
+          else if (measured) travelKm += measured.km;
           vehicleAt = candidate.place.id;
-        } else if (transfer.mode === 'walk') walkMinutes += transferMinutes;
-        else transitMinutes += transferMinutes;
+        } else if (transfer.mode === 'walk') walkMinutes += minutes;
+        else transitMinutes += minutes;
         useMode(transfer.mode);
-      }
+      };
 
-      if (lunchMinutes > 0) cursor = commitLunch(cursor);
+      if (viaVenueUsable && finalPlan.kind === 'venue') {
+        // Reached by car and left by car: the transfer straight after it is the
+        // same vehicle carrying on to the next stop.
+        commitLunch(finalPlan, lunchFromId, lunchFromName, true);
+        pushTransfer(finalPlan.resumeAt, finalPlan.choice.venue.name, transferMinutes);
+      } else {
+        pushTransfer(lunchFromId, lunchFromName, transferMinutes);
+        commitLunch(finalPlan, candidate.place.id, candidate.place.name, false);
+      }
 
       // Turning up before the doors open does not get you in sooner. The gap is
       // shown rather than hidden, so nobody sets off at seven for a nine o'clock
@@ -674,6 +1173,52 @@ export function layoutDay(
     if (!option.service && option.approachMinutes === null) vehicleAt = exitedFrom;
   }
 
+  /**
+   * Dinner where the day actually ended, rather than back at base.
+   *
+   * Only when returning first would be a real backtrack — a stop forty minutes
+   * south of town at six in the evening should eat in Bishop, not drive past
+   * three restaurants to reach a fourth in Mammoth and then not drive back.
+   * Below that threshold the traveller goes home first, which is what they would
+   * do, and dinner is chosen from base a few lines further down.
+   */
+  /**
+   * The car has to be where the traveller is standing before a meal out can be
+   * a drive.
+   *
+   * A function rather than a value, and computed here rather than a hundred
+   * lines further down, because both the route-end dinner and the dinner at
+   * base need it and the first of them used to run without it: a day that rode
+   * a trolley out and walked back had the traveller "driving" to a restaurant
+   * from a stop the car was nowhere near, and then walking home from it on
+   * minutes measured for a completely different journey.
+   */
+  const carIsToHand = () => !context.profile.transport.willDrive || vehicleAt === atRoutingId;
+
+  let dinnerInserted = false;
+  if (hasFood() && carIsToHand() && wantsSlot('dinner') && atRoutingId !== baseId) {
+    const home = tryHop(matrix, atRoutingId, baseId);
+    const wouldReachBase = cursor + (home?.minutes ?? 0) + config.bufferMinutes;
+    if (
+      home !== null &&
+      home.minutes >= DINNER_AT_ROUTE_END_MINUTES &&
+      wouldReachBase >= config.mealWindows.dinner.earliest
+    ) {
+      const stop = chooseFoodStop(foodRequest('dinner', atRoutingId, baseId, cursor, false));
+      if (stop && stop.detourMinutes < home.minutes) {
+        commitFood(stop, {
+          title: stop.venue.name,
+          reason: dinnerAtEndReason(stop, home.minutes),
+          returnAfter: false,
+          food: attachAlternatives(stop, 'dinner', atRoutingId),
+          fromId: atRoutingId,
+          fromName: atName,
+        });
+        dinnerInserted = true;
+      }
+    }
+  }
+
   // --- Home ----------------------------------------------------------------
   if (atRoutingId !== baseId && homeward) {
     items.push({
@@ -736,30 +1281,93 @@ export function layoutDay(
       driveMinutes += hop.minutes;
       travelKm += hop.km;
       useMode('drive');
+      vehicleAt = baseId;
     }
   }
 
-  // Lunch never found a gap mid-route; give it one now if the clock allows.
-  if (!lunchInserted && dayIsLongEnough && cursor + config.lunchMinutes <= day.window.endMinute) {
-    items.push(
-      mealItem(day.dayNumber, 'Lunch', cursor, config.lunchMinutes, 'Late, but better than skipping it.'),
-    );
-    cursor += config.lunchMinutes;
+  /**
+   * The traveller is home.
+   *
+   * This used to be left unsaid, and nothing read it — every leg after the last
+   * unit was measured from the base id directly. The food layer is the first
+   * thing to ask "where are you now?" after the homeward drive, and got the
+   * trailhead: it picked a restaurant eighteen minutes from a car park the
+   * traveller had left half an hour earlier, and then drove them back to it.
+   */
+  if (atRoutingId !== baseId) {
+    atRoutingId = baseId;
+    atName = baseName;
   }
 
+  // Lunch never found a gap mid-route; give it one now if the clock allows.
   if (
-    day.window.endMinute >= config.dinnerEarliestMinute &&
-    cursor + config.dinnerMinutes <= day.window.endMinute
+    !lunchInserted &&
+    dayIsLongEnough &&
+    wantsSlot('lunch') &&
+    cursor + config.unplannedMealMinutes.lunch <= day.window.endMinute
   ) {
-    const dinnerStart = Math.max(cursor, config.dinnerEarliestMinute);
-    if (dinnerStart + config.dinnerMinutes <= day.window.endMinute) {
-      if (dinnerStart > cursor) {
-        cursor = pushFreeTime(items, day, config, cursor, dinnerStart);
+    if (lunchIsPacked()) {
+      commitPackedLunch();
+    } else {
+      const late =
+        hasFood() && carIsToHand()
+          ? chooseFoodStop(foodRequest('lunch', atRoutingId, null, cursor, true))
+          : null;
+      if (late && late.startMinute + late.stopMinutes <= day.window.endMinute) {
+        commitFood(late, {
+          title: late.venue.name,
+          reason: foodReason(late, 'lunch'),
+          returnAfter: true,
+          food: attachAlternatives(late, 'lunch', atRoutingId),
+          fromId: atRoutingId,
+          fromName: atName,
+        });
+      } else {
+        cursor = pushBareMeal('lunch', 'Lunch', cursor, 'Late, but better than skipping it.');
       }
-      items.push(
-        mealItem(day.dayNumber, 'Dinner', cursor, config.dinnerMinutes, 'Back at base, nothing booked.'),
-      );
-      cursor += config.dinnerMinutes;
+    }
+  }
+
+  if (!dinnerInserted && wantsSlot('dinner') && day.window.endMinute >= config.mealWindows.dinner.earliest) {
+    // The guard belongs on the venue, not on the whole block. It used to wrap
+    // both, so a day whose car ended up elsewhere got no dinner row at all —
+    // not even the held hour every version-5 plan gave it.
+    const stop = hasFood() && carIsToHand()
+      ? chooseFoodStop(
+          foodRequest('dinner', atRoutingId, null, Math.max(cursor, config.mealWindows.dinner.earliest), true),
+        )
+      : null;
+    if (
+      stop &&
+      stop.startMinute + stop.stopMinutes + stop.approachMinutes <=
+        day.window.endMinute + config.mealOverrunAllowanceMinutes
+    ) {
+      if (stop.startMinute - stop.approachMinutes > cursor) {
+        cursor = pushFreeTime(items, day, config, cursor, stop.startMinute - stop.approachMinutes);
+      }
+      commitFood(stop, {
+        title: stop.venue.name,
+        reason: foodReason(stop, 'dinner'),
+        returnAfter: true,
+        food: attachAlternatives(stop, 'dinner', atRoutingId),
+        fromId: atRoutingId,
+        fromName: atName,
+      });
+    } else if (cursor + config.unplannedMealMinutes.dinner <= day.window.endMinute) {
+      const dinnerStart = Math.max(cursor, config.mealWindows.dinner.earliest);
+      if (dinnerStart + config.unplannedMealMinutes.dinner <= day.window.endMinute) {
+        if (dinnerStart > cursor) {
+          cursor = pushFreeTime(items, day, config, cursor, dinnerStart);
+        }
+        cursor = pushBareMeal(
+          'dinner',
+          'Dinner',
+          cursor,
+          hasFood()
+            ? 'Nothing verified was open and near enough at this hour, so this is time held for dinner rather than somewhere named.'
+            : 'Back at base, nothing booked.',
+        );
+      }
     }
   }
 
@@ -973,6 +1581,63 @@ function mealItem(
     reason,
     weatherSensitive: false,
   };
+}
+
+/**
+ * Below this, going home first is what anybody would do, so dinner waits until
+ * they are back rather than being taken on the way. Twenty-five minutes is the
+ * point where the return leg stops being incidental and starts being a decision.
+ */
+const DINNER_AT_ROUTE_END_MINUTES = 25;
+
+/**
+ * Below this, a wait outside a closed door is not worth a row of its own.
+ *
+ * Lower than the free-time threshold on purpose: half an hour of unbooked
+ * afternoon is a gift and worth naming, whereas ten minutes outside a brewery
+ * that opens at noon is an explanation for why the next row does not start
+ * immediately, and leaving that unexplained reads as a hole in the timeline.
+ */
+const FOOD_WAIT_BLOCK_MINUTES = 10;
+
+/**
+ * Why this meal, here.
+ *
+ * One clause per branch, and each branch ends where its clause ends — the rule
+ * the backup copy already lives by, because anything that appends further words
+ * to one of these produces half a sentence. Never prints a score.
+ */
+function foodReason(choice: FoodChoice, slot: MealSlot, unrequested = false): string {
+  const venue = choice.venue;
+  if (choice.food.isSpecialMeal) {
+    return `Your one meal on this trip that is meant to be an event, and the route already comes this way.`;
+  }
+  if (slot === 'breakfast') {
+    if (unrequested) {
+      return choice.detourMinutes === 0
+        ? `You said you skip breakfast, so this is a stop rather than a meal — it is on the way out and adds nothing to the drive.`
+        : `You said you skip breakfast, so take this or leave it. It is ${choice.detourMinutes} min out of the way in the model, before a long day.`;
+    }
+    return choice.detourMinutes === 0
+      ? `On the way out, so it costs the morning nothing.`
+      : `${choice.detourMinutes} min out of the way in the model, on the way to the first stop.`;
+  }
+  if (venue.localSpecialty) {
+    return choice.detourMinutes === 0
+      ? `${venue.localSpecialty.label} — what this place is actually known for, and it is right on the route.`
+      : `${venue.localSpecialty.label} — what this place is actually known for, for ${choice.detourMinutes} min off the route.`;
+  }
+  if (choice.routeContext === 'on_route') {
+    return `Where the day already is, so this costs no extra driving.`;
+  }
+  if (choice.routeContext === 'at_base') {
+    return `A short hop from where you are staying, after the day is done.`;
+  }
+  return `${choice.detourMinutes} min off the route in the model, which is the closest thing that was open and fits how you said you wanted to eat.`;
+}
+
+function dinnerAtEndReason(choice: FoodChoice, homeMinutes: number): string {
+  return `Eaten where the day ended rather than driving the ${homeMinutes} min back to base first and coming out again.`;
 }
 
 function reasonFor(candidate: PlanningCandidate): string {
@@ -1445,9 +2110,93 @@ export function buildDay(
     transport,
     availability: summariseAvailability(context, layout),
     weather: weather ?? unknownDayWeather(),
+    food: summariseFood(context, layout),
     intensity,
     warnings: [...new Set(warnings)],
   };
+}
+
+/**
+ * What the day's food plan actually is, read back off the timeline rather than
+ * declared alongside it — so it cannot claim a restaurant the schedule does not
+ * contain, and the validator can catch it if it ever tries.
+ *
+ * Deliberately says nothing a meal row already says. The day block is for what
+ * a *day* can say that a stop cannot: that lunch has to be carried, that the
+ * shopping happened this morning for tomorrow, that a booking is outstanding.
+ * Repeating the venue's opening hours a centimetre below the row that prints
+ * them is how a reader learns to skip both.
+ */
+function summariseFood(context: LayoutContext, layout: DayLayout): ItineraryDay['food'] {
+  const meals = layout.items.filter((item) => item.kind === 'meal');
+  const plan = context.food?.byDay.get(context.day.dayNumber) ?? null;
+  const slots = meals
+    .map((item) => item.food?.slot)
+    .filter((slot): slot is MealSlot => slot !== undefined && slot !== 'snack');
+
+  const notes: string[] = [];
+  const reservations: ItineraryDay['food']['reservations'] = [];
+
+  for (const item of meals) {
+    const food = item.food;
+    if (!food) continue;
+    if (
+      food.reservation &&
+      (food.reservation.requirement === 'required' || food.reservation.requirement === 'recommended') &&
+      food.venueName
+    ) {
+      reservations.push({
+        venueName: food.venueName,
+        requirement: food.reservation.requirement,
+        ...(food.reservation.note ? { note: food.reservation.note } : {}),
+        ...(food.reservation.bookingUrl ? { bookingUrl: food.reservation.bookingUrl } : {}),
+      });
+    }
+    if (food.stopKind === 'grocery' && food.suppliesDayNumber !== undefined) {
+      // Only the cross-day case: the row itself already says why you are in a
+      // supermarket at half seven on the morning it feeds.
+      if (food.suppliesDayNumber !== context.day.dayNumber) {
+        notes.push(`The shopping is for day ${food.suppliesDayNumber}, which has nowhere to buy any.`);
+      }
+    }
+  }
+
+  const packed = meals.some((item) => item.food?.stopKind === 'packed');
+  if (plan?.remote && plan.gapNote) notes.push(plan.gapNote);
+  // Deliberately nothing about held time. The row says it, and the validator
+  // says it, and a third copy a centimetre below the second is how a reader
+  // learns to skip all three.
+
+  return {
+    summary: foodDaySummary({ meals, packed, remote: plan?.remote ?? false }),
+    slots: [...new Set(slots)],
+    remote: plan?.remote ?? false,
+    notes: [...new Set(notes)],
+    reservations,
+  };
+}
+
+function foodDaySummary(input: {
+  meals: readonly ItineraryItem[];
+  packed: boolean;
+  remote: boolean;
+}): string {
+  const named = input.meals
+    .map((item) => item.food)
+    .filter((food) => food?.stopKind === 'venue' && food.venueName)
+    .map((food) => food!.venueName!);
+
+  if (named.length === 0 && input.packed) {
+    return 'Carried food, because there is nothing verified to buy where this day goes.';
+  }
+  if (named.length === 0) {
+    return 'No named places today — time is held for meals, but nothing we can vouch for fitted.';
+  }
+  const list =
+    named.length === 1
+      ? named[0]!
+      : `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
+  return input.packed ? `${list}, plus a lunch you carry.` : list;
 }
 
 /**
