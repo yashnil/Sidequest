@@ -27,7 +27,7 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
     return { ok: false, error: 'Finish the questionnaire first — we need your profile to plan around.' };
   }
 
-  const resolved = resolveTripRegion(trip);
+  const resolved = await resolveTripRegion(trip);
   if (!resolved.ok) return { ok: false, error: resolved.error };
   const { context } = resolved;
 
@@ -52,6 +52,12 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
       matrix: context.matrix,
       access: context.access,
       hours: context.hours,
+      weather: context.weather,
+      // Without this the staleness check is unreachable in production: it is
+      // gated on `now` precisely so a test does not have to wait six hours, and
+      // omitting it here meant a forecast served from cache could be planned
+      // against and validated as fresh.
+      now: new Date(),
       baseId: context.baseId,
     });
 

@@ -77,7 +77,7 @@ export async function completeQuestionnaireAction(
     // on the write that finishes the questionnaire, rather than as a side effect
     // of rendering the board. Re-running the questionnaire re-seeds it, and any
     // card the traveller had already decided by hand is left alone.
-    const resolved = resolveTripRegion(trip);
+    const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
       const board = boardFor(trip, profile, resolved.context);
       const selection = autoSelect({ candidates: board.candidates, profile, tripDays });

@@ -11,7 +11,9 @@ import {
   type MinuteInterval,
   type OpeningWindowOnDate,
   type Place,
+  type DayWeatherSummary,
   type ScheduledHours,
+  type ScheduledWeather,
   type TransportMode,
   type TravelerProfile,
 } from '@sidequest/core';
@@ -23,6 +25,12 @@ import {
   type HoursBlockCode,
   type PlaceDayHours,
 } from './hours';
+import {
+  isWeatherWorthFlagging,
+  narrowByDaylight,
+  type PlaceDayWeather,
+} from './weather';
+import { weatherPenaltyAt } from '@sidequest/core';
 import type { PlannedDay } from './windows';
 import type { PlannerConfig, PlanningCandidate } from './types';
 
@@ -95,6 +103,13 @@ export interface LayoutContext {
    * `day.date`, so nothing downstream has to know a calendar exists.
    */
   hours: ReadonlyMap<string, PlaceDayHours>;
+  /**
+   * Weather and daylight for every stop on this date, resolved at the same
+   * boundary as the hours. Weather only ever narrows or cautions here; the one
+   * thing in it that constrains legality is daylight, which is a fact rather
+   * than a prediction.
+   */
+  weather: ReadonlyMap<string, PlaceDayWeather>;
 }
 
 /**
@@ -523,6 +538,8 @@ export function layoutDay(
       const hours = context.hours.get(place.id);
       const evidence = scheduledHoursFrom(hours, placement.window);
       const booking = hours ? bookingFor(place, hours) : undefined;
+      const weather = context.weather.get(place.id);
+      const weatherEvidence = scheduledWeatherFrom(weather);
       items.push({
         id: `activity-${day.dayNumber}-${place.id}`,
         kind: 'activity',
@@ -532,13 +549,26 @@ export function layoutDay(
         durationMinutes: candidate.durationMinutes,
         placeId: place.id,
         reason: reasonFor(candidate),
-        weatherSensitive: place.weatherSensitivity === 'high',
+        // Was `weatherSensitivity === 'high'`, which fired on four places out of
+        // twenty-three whatever the sky was doing. It now means what the badge
+        // beside it says: the weather on *this* day works against *this* stop.
+        weatherSensitive: isWeatherWorthFlagging(weather),
         physicalIntensity: place.physicalIntensity,
         ...(place.seasonalAccess.note ? { seasonalNote: place.seasonalAccess.note } : {}),
         ...(place.logisticsNote ? { accessWarning: place.logisticsNote } : {}),
         ...(evidence ? { hours: evidence } : {}),
         ...(booking ? { booking } : {}),
+        ...(weatherEvidence ? { weather: weatherEvidence } : {}),
         ...(hours?.daylightOnly ? { daylightOnly: true } : {}),
+        ...(hours?.daylightOnly && weather?.solar
+          ? {
+              daylight: {
+                sunriseMinute: weather.solar.sunriseMinute,
+                sunsetMinute: weather.solar.sunsetMinute,
+                source: weather.solar.source,
+              },
+            }
+          : {}),
         ...(hours?.requiresVerification && hours.verifyNote
           ? { verifyBeforeTravel: hours.verifyNote }
           : {}),
@@ -1085,12 +1115,42 @@ function visitFor(
     };
   }
 
+  /**
+   * Daylight, folded in before the opening hours are consulted.
+   *
+   * A place signed sunrise-to-sunset has a closing time like any other; the
+   * only difference is that nobody prints it, so it has to be computed. Doing
+   * it here rather than at one of the two call sites means the pre-filter and
+   * the real placement cannot disagree — which is the same reason `visitFor`
+   * exists at all.
+   *
+   * `narrowByDaylight` returns the original bounds untouched when there is no
+   * solar record: an uncomputed sunset must not shrink anything, because "we
+   * did not work out the light" is not "the light runs out".
+   */
+  const daylit = narrowByDaylight(
+    bounds,
+    context.weather.get(candidate.place.id),
+    hours.daylightOnly,
+  );
+  if (!daylit) {
+    return {
+      ok: false,
+      violation: {
+        kind: 'hours',
+        code: 'no_window_in_reach',
+        message: `${candidate.place.name} is signed for daylight use only, and there is no daylight left inside what the rest of this day allows.`,
+        placeId: candidate.place.id,
+      },
+    };
+  }
+
   const placement = placeVisit({
     hours,
     placeName: candidate.place.name,
     arrivalMinute,
     durationMinutes: candidate.durationMinutes,
-    bounds,
+    bounds: daylit,
   });
   return placement.ok
     ? { ok: true, startMinute: placement.startMinute, window: placement.window }
@@ -1141,15 +1201,119 @@ export function layoutBestOrder(
 ): { scheduled: ScheduledUnit[]; layout: DayLayout } {
   const byRoad = scheduleUnits(context, candidates, options);
   const first = layoutDay(context, byRoad);
-  if (first.violations.length === 0) return { scheduled: byRoad, layout: first };
+  if (first.violations.length === 0) {
+    return preferByHourlyWeather(context, byRoad, first);
+  }
 
   const byClosing = orderByDeadline(context, byRoad);
   if (sameOrder(byRoad, byClosing)) return { scheduled: byRoad, layout: first };
 
   const second = layoutDay(context, byClosing);
   return second.violations.length === 0
-    ? { scheduled: byClosing, layout: second }
+    ? preferByHourlyWeather(context, byClosing, second)
     : { scheduled: byRoad, layout: first };
+}
+
+/**
+ * The third fixed order, and the only one weather is allowed to propose.
+ *
+ * On a summer afternoon in the Sierra the difference between starting an exposed
+ * walk at nine and at two is the difference between a hike and a thunderstorm,
+ * and the provider does return hour-by-hour values that can say which. So when
+ * — and only when — there is genuine hourly evidence, one alternative order is
+ * tried: the stops the weather most disfavours placed earliest.
+ *
+ * Three things keep this from being an optimiser:
+ *
+ * 1. It is one extra candidate order, not a search. There is nothing to
+ *    oscillate and the result is a pure function of the inputs.
+ * 2. The alternative has to be *legal on its own terms* — it goes through the
+ *    same `layoutDay`, so access windows, opening hours, last admissions and
+ *    daylight all still apply. Weather cannot buy a relaxation of any of them.
+ * 3. It has to be meaningfully better, not merely different, or the day stays
+ *    as the road left it. Reordering somebody's morning to move a 12% chance of
+ *    rain to a 9% one is churn dressed up as intelligence.
+ *
+ * With no hourly data — every date past the forecast horizon, and every provider
+ * that returns daily values only — this returns the road order untouched, which
+ * is the honest behaviour rather than a degraded one.
+ */
+function preferByHourlyWeather(
+  context: LayoutContext,
+  scheduled: ScheduledUnit[],
+  layout: DayLayout,
+): { scheduled: ScheduledUnit[]; layout: DayLayout } {
+  const incumbent = weatherPenaltyOf(context, layout);
+  if (incumbent === null) return { scheduled, layout };
+
+  const byWeather = orderByWeather(context, scheduled);
+  if (sameOrder(scheduled, byWeather)) return { scheduled, layout };
+
+  const alternative = layoutDay(context, byWeather);
+  if (alternative.violations.length > 0) return { scheduled, layout };
+
+  const challenger = weatherPenaltyOf(context, alternative);
+  if (challenger === null) return { scheduled, layout };
+
+  return challenger <= incumbent - HOURLY_WEATHER_MARGIN
+    ? { scheduled: byWeather, layout: alternative }
+    : { scheduled, layout };
+}
+
+/**
+ * How much better an alternative order has to be before a day is rearranged.
+ *
+ * The penalty scale runs roughly 0 for a settled hour to 2 or so for a
+ * thunderstorm at an exposed stop, so a quarter of a point is about the width of
+ * one category — showers appearing, or a gust threshold being crossed. Anything
+ * finer than that is noise the forecast cannot support.
+ */
+const HOURLY_WEATHER_MARGIN = 0.25;
+
+/** Mean hourly weather cost of the activities on a laid-out day, or null. */
+function weatherPenaltyOf(context: LayoutContext, layout: DayLayout): number | null {
+  const scores: number[] = [];
+  for (const item of layout.items) {
+    if (item.kind !== 'activity' || !item.placeId) continue;
+    const weather = context.weather.get(item.placeId);
+    if (!weather) continue;
+    const penalty = weatherPenaltyAt({
+      day: weather.evidence,
+      profile: weather.profile,
+      startMinute: item.startMinute,
+      durationMinutes: item.durationMinutes,
+    });
+    if (penalty !== null) scores.push(penalty);
+  }
+  if (scores.length === 0) return null;
+  return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+}
+
+/**
+ * Units ordered so the stops the weather most disfavours come first.
+ *
+ * Ranked on the worst hour anywhere in the day rather than on the stop's current
+ * slot, so the ordering is a property of the day rather than of the layout it
+ * came from — which is what stops it depending on its own output. Ties fall back
+ * to the incoming order, so an ordinary day is unchanged.
+ */
+function orderByWeather(
+  context: LayoutContext,
+  units: readonly ScheduledUnit[],
+): ScheduledUnit[] {
+  const position = new Map(units.map((unit, index) => [unit.unit.key, index]));
+  const exposure = (unit: ScheduledUnit): number => {
+    const scores = unit.members
+      .map((member) => context.weather.get(member.place.id))
+      .filter((entry): entry is PlaceDayWeather => entry !== undefined)
+      .map((entry) => entry.assessment.score);
+    return scores.length === 0 ? 1 : Math.min(...scores);
+  };
+  return [...units].sort(
+    (a, b) =>
+      exposure(a) - exposure(b) ||
+      (position.get(a.unit.key) ?? 0) - (position.get(b.unit.key) ?? 0),
+  );
 }
 
 function orderByDeadline(
@@ -1245,6 +1409,7 @@ export function buildDay(
   accepted: readonly PlanningCandidate[],
   layout: DayLayout,
   transport: ItineraryDay['transport'],
+  weather?: DayWeatherSummary,
 ): ItineraryDay {
   const { day, baseId, baseName, profile } = context;
   const intensity = classifyIntensity(layout, profile);
@@ -1253,11 +1418,9 @@ export function buildDay(
   if (day.window.usableMinutes === 0) {
     warnings.push('There are no usable hours on this day once travel in or out is accounted for.');
   }
-  for (const candidate of accepted) {
-    if (candidate.place.weatherSensitivity === 'high') {
-      warnings.push(`${candidate.place.name} is weather-dependent — have a fallback in mind.`);
-    }
-  }
+  // The old warning here told the traveller to "have a fallback in mind", which
+  // is the product handing back its own job. Weather cautions now live on the
+  // day's weather block, next to the concrete fallback the planner found.
   for (const violation of layout.violations) warnings.push(violation.message);
 
   return {
@@ -1281,6 +1444,7 @@ export function buildDay(
     },
     transport,
     availability: summariseAvailability(context, layout),
+    weather: weather ?? unknownDayWeather(),
     intensity,
     warnings: [...new Set(warnings)],
   };
@@ -1405,3 +1569,58 @@ function themeFor(accepted: readonly PlanningCandidate[], baseName: string): str
 }
 
 export { formatMinuteOfDay };
+
+
+/**
+ * The weather evidence carried onto a scheduled visit.
+ *
+ * Only where the weather actually bore on the stop. A clear Tuesday at a place
+ * nothing about the weather touches carries nothing at all — the same rule the
+ * opening-hours evidence follows, and for the same reason: a badge on every row
+ * is a badge nobody reads.
+ */
+function scheduledWeatherFrom(weather: PlaceDayWeather | undefined): ScheduledWeather | undefined {
+  if (!weather) return undefined;
+  const { assessment } = weather;
+  const worthSaying =
+    assessment.suitability === 'poor' ||
+    assessment.suitability === 'incompatible' ||
+    assessment.suitability === 'favorable' ||
+    assessment.suitability === 'unknown';
+  if (!worthSaying) return undefined;
+
+  return {
+    evidence: assessment.evidence,
+    suitability: assessment.suitability,
+    summary: assessment.summary,
+    reasonCodes: assessment.reasons.map((reason) => reason.code),
+    locationId: weather.locationId,
+    locationLabel: weather.locationLabel,
+    ...(weather.evidence.kind === 'forecast' ? { fetchedAt: weather.evidence.fetchedAt } : {}),
+    provider:
+      weather.evidence.kind === 'unavailable'
+        ? weather.evidence.attemptedProvider
+        : weather.evidence.attribution.provider,
+  };
+}
+
+/**
+ * The day-weather block for a day nobody could resolve weather for.
+ *
+ * Reachable only when a caller builds a day without passing one, which the
+ * planner never does. It exists so the shape is total and the honest answer —
+ * "we do not know" — is the one that survives, rather than an empty object that
+ * a reader would take for a clear day.
+ */
+function unknownDayWeather(): DayWeatherSummary {
+  return {
+    evidence: 'unavailable',
+    summary: 'We have no weather for this day, so nothing here was placed against it.',
+    precipitationProbabilityPercent: null,
+    decisions: [],
+    cautions: [],
+    backups: [],
+    provider: 'none',
+    attribution: 'No weather source was reached for this trip.',
+  };
+}

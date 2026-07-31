@@ -45,7 +45,10 @@ export default defineConfig({
     // The app and the tests now share one port, so stop `npm run dev` first —
     // reusing a running dev server here would silently test a different build
     // against the development database.
-    command: `SIDEQUEST_DB_PATH=./data/e2e.db PORT=${PORT} npm run start --workspace @sidequest/web`,
+    // The fixture weather provider, so a browser test asserts against weather it
+    // chose rather than against whatever the sky was doing that morning — and so
+    // an end-to-end run never depends on an external service being reachable.
+    command: `SIDEQUEST_DB_PATH=./data/e2e.db SIDEQUEST_WEATHER_PROVIDER=fixture PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

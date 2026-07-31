@@ -195,6 +195,7 @@ describe('validator', () => {
     baseId: scenario.baseId,
     access: EASTERN_SIERRA_ACCESS,
     hours: EASTERN_SIERRA_HOURS,
+    weather: scenario.weather,
   };
 
   function dayWith(overrides: Partial<ItineraryDay>): ItineraryDay {
@@ -220,6 +221,16 @@ describe('validator', () => {
         cautions: [],
         verifyBeforeTravel: [],
         bookings: [],
+      },
+      weather: {
+        evidence: 'unavailable',
+        summary: 'No weather in this fixture.',
+        precipitationProbabilityPercent: null,
+        decisions: [],
+        cautions: [],
+        backups: [],
+        provider: 'none',
+        attribution: 'Fixture day with no weather attached.',
       },
       intensity: 'moderate',
       warnings: [],

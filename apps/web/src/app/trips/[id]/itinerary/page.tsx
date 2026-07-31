@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ItineraryView } from '@/components/ItineraryView';
+import { renderInstant } from '@/lib/clock';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange } from '@/lib/format';
 import { getItinerary, getTrip, StaleItineraryError } from '@/lib/db/repository';
@@ -33,7 +34,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
         <Recovery
           tripId={id}
           title="This plan is from an earlier version of Sidequest"
-          body="Some of what it was built on has changed since — which opening hours we check, or how a place is described — so parts of it could now be out of date, and we will not show you that as though it were current. Head back to the board and press Rebuild; every choice you made is still there."
+          body="Some of what it was built on has changed since — which opening hours we check, whether the weather and the daylight were worked out at all, or how a place is described — so parts of it could now be out of date, and we will not show you that as though it were current. Head back to the board and press Rebuild; every choice you made is still there."
         />
       );
     }
@@ -62,6 +63,10 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       itinerary={itinerary}
       tripId={id}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
+      // Read once, on the server, so every day on the page judges the same
+      // forecast against the same instant. See `lib/clock` for why this is a
+      // function rather than an inline clock read.
+      renderedAt={renderInstant()}
     />
   );
 }

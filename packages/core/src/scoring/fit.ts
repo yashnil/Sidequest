@@ -540,7 +540,7 @@ function buildReasons(input: ReasonInput): string[] {
     reasons.push('Free, which keeps the trip inside the budget you set.');
   }
 
-  if (place.worksInBadWeather && place.weatherSensitivity === 'low') {
+  if (place.weather.poorWeatherBackup) {
     reasons.push('Holds up even if the weather turns.');
   }
 

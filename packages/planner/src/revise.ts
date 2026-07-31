@@ -128,6 +128,12 @@ function actionCodeFor(issue: ValidationIssue): RevisionAction['code'] {
     case 'missed_last_return':
     case 'access_window_too_short':
       return 'shortened_access_group';
+    case 'scheduled_outside_daylight':
+    case 'weather_incompatible_scheduled':
+      // The day-assignment pass already offered every legal day and this one
+      // was the best available, so what is left to change is the day's
+      // contents rather than which day it is on.
+      return 'dropped_lowest_priority';
     default:
       return 'dropped_lowest_priority';
   }
@@ -153,6 +159,9 @@ function unscheduledCodeFor(issue: ValidationIssue): UnscheduledReasonCode {
     case 'no_operating_window_in_access_window':
     case 'operating_evidence_inconsistent':
       return 'hours_do_not_fit';
+    case 'scheduled_outside_daylight':
+    case 'weather_incompatible_scheduled':
+      return 'weather_incompatible';
     case 'required_mode_unavailable':
       return 'transport_mode_unavailable';
     case 'service_out_of_season':
@@ -196,6 +205,10 @@ function reasonForRemoval(issue: ValidationIssue): string {
       return 'the visit would still have been going after it closed.';
     case 'no_operating_window_in_access_window':
       return 'its opening hours and the only way out of there never overlap.';
+    case 'scheduled_outside_daylight':
+      return 'there is not enough daylight on any day of this trip to fit it in, and it is signed for daylight use only.';
+    case 'weather_incompatible_scheduled':
+      return 'the weather on every day that could have taken it rules it out.';
     case 'duplicate_place':
       return 'it was already scheduled on another day.';
     case 'items_overlap':

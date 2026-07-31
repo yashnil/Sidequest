@@ -11,6 +11,7 @@ export * from './schemas/trip';
 export * from './schemas/profile';
 export * from './schemas/discovery';
 export * from './schemas/itinerary';
+export * from './schemas/weather';
 
 export * from './questionnaire/definition';
 export * from './questionnaire/transform';
@@ -22,6 +23,12 @@ export * from './access/provider';
 
 export * from './hours/availability';
 export * from './hours/provider';
+
+export * from './weather/board';
+export * from './weather/board-backups';
+export * from './weather/conditions';
+export * from './weather/provider';
+export * from './weather/solar';
 
 export * from './region/season';
 export * from './region/expansion';

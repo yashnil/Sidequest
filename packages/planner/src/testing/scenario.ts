@@ -7,6 +7,8 @@ import {
   EASTERN_SIERRA_ACCESS,
   EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_PLACES,
+  EASTERN_SIERRA_WEATHER_LOCATIONS,
+  buildFixtureWeather,
   easternSierraTravelMatrix,
   tripDates,
   tripMonths,
@@ -18,8 +20,10 @@ import { buildTravelerProfile, defaultAnswers } from '@sidequest/core';
 import type {
   AccessDataset,
   OperatingHoursDataset,
+  Place,
   QuestionnaireContext,
   TravelerNeed,
+  WeatherDataset,
 } from '@sidequest/core';
 import type { PlannerInput } from '../types';
 
@@ -29,6 +33,16 @@ import type { PlannerInput } from '../types';
  * Going through the real pipeline rather than hand-building candidates is what
  * makes the golden scenarios meaningful.
  */
+
+/**
+ * The instant every scenario is planned "at", unless it says otherwise.
+ *
+ * Fixed so the forecast horizon is a property of the test rather than of the
+ * afternoon somebody runs it: the August trip below sits thirteen days out from
+ * here, which puts it inside the horizon and gives it a real forecast. Move this
+ * and half the golden scenarios quietly become historical patterns.
+ */
+export const FIXED_NOW = new Date('2026-07-30T12:00:00.000Z');
 
 export const AUGUST_BASICS: TripBasics = {
   mode: 'known_destination',
@@ -84,10 +98,29 @@ export interface ScenarioOptions {
   /** Extra manual includes layered on top of the auto-pick. */
   manualIncludes?: string[];
   manualExcludes?: string[];
+  /**
+   * Swap a place record to exercise a fact no fixture place actually has — a
+   * source-backed dry-conditions closure, say. Ids are unchanged, so the travel
+   * matrix, the access rules and the operating calendars all still apply.
+   */
+  places?: Place[];
   /** Swap the access data to exercise an out-of-season or weekday-gapped service. */
   access?: AccessDataset;
   /** Swap the opening hours to exercise a closed weekday, a last admission, a booking. */
   hours?: OperatingHoursDataset;
+  /**
+   * Swap the weather to exercise a clear day against a stormy one, a trip past
+   * the forecast horizon, or a provider that did not answer. Left alone it is
+   * the deterministic fixture, evaluated against `now` — so a scenario that
+   * says nothing about weather still gets a real, reproducible forecast.
+   */
+  weather?: WeatherDataset;
+  /**
+   * "Now". Fixed by default so the forecast horizon — and therefore whether the
+   * trip gets a forecast or a historical pattern — is a property of the test
+   * rather than of the day it is run on.
+   */
+  now?: Date;
 }
 
 export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
@@ -109,14 +142,25 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
   };
   const profile = buildTravelerProfile(merged, context);
 
+  const now = options.now ?? FIXED_NOW;
+  const weather =
+    options.weather ??
+    buildFixtureWeather({
+      regionId: EASTERN_SIERRA.id,
+      locations: EASTERN_SIERRA_WEATHER_LOCATIONS,
+      dates: tripDates(basics.startDate, basics.endDate),
+      now,
+    });
+
   const board = buildDiscoveryBoard({
     region: EASTERN_SIERRA,
-    places: EASTERN_SIERRA_PLACES,
+    places: options.places ?? EASTERN_SIERRA_PLACES,
     profile,
     months: tripMonths(basics.startDate, basics.endDate),
     dates: tripDates(basics.startDate, basics.endDate),
     access: options.access ?? EASTERN_SIERRA_ACCESS,
     hours: options.hours ?? EASTERN_SIERRA_HOURS,
+    weather,
     travelerNeeds,
   });
 
@@ -166,6 +210,8 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     matrix: easternSierraTravelMatrix(),
     access: options.access ?? EASTERN_SIERRA_ACCESS,
     hours: options.hours ?? EASTERN_SIERRA_HOURS,
+    weather,
+    now,
     baseId: EASTERN_SIERRA_BASE_ID,
     generatedAt: '2026-07-30T12:00:00.000Z',
   };
