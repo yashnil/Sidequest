@@ -2,16 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import {
-  buildDiscoveryBoard,
-  EASTERN_SIERRA_BASE_ID,
-  EASTERN_SIERRA_PLACES,
-  easternSierraTravelMatrix,
-  REGIONS,
-  tripMonths,
-} from '@sidequest/core';
 import { planTrip } from '@sidequest/planner';
 import { getProfile, getSelections, getTrip, saveItinerary } from '@/lib/db/repository';
+import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export interface BuildResult {
   ok: boolean;
@@ -34,8 +27,9 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
     return { ok: false, error: 'Finish the questionnaire first — we need your profile to plan around.' };
   }
 
-  const region = REGIONS.find((item) => item.id === trip.basics.regionId);
-  if (!region) return { ok: false, error: 'We do not have that region mapped.' };
+  const resolved = resolveTripRegion(trip);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  const { context } = resolved;
 
   const selections = getSelections(tripId);
   if (selections.filter((entry) => entry.status !== 'excluded').length === 0) {
@@ -46,23 +40,18 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
   }
 
   try {
-    const board = buildDiscoveryBoard({
-      region,
-      places: EASTERN_SIERRA_PLACES,
-      profile,
-      months: tripMonths(trip.basics.startDate, trip.basics.endDate),
-      travelerNeeds: trip.basics.travelerNeeds,
-    });
+    const board = boardFor(trip, profile, context);
 
     const result = planTrip({
       tripId,
       basics: trip.basics,
       profile,
-      region,
+      region: context.region,
       candidates: board.candidates,
       selections,
-      matrix: easternSierraTravelMatrix(),
-      baseId: EASTERN_SIERRA_BASE_ID,
+      matrix: context.matrix,
+      access: context.access,
+      baseId: context.baseId,
     });
 
     if (!result.ok) {

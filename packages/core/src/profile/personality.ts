@@ -89,8 +89,8 @@ export function tripPersonality(profile: TravelerProfile, tripDays: number): Tri
     {
       label: 'Getting around',
       value: profile.transport.willDrive
-        ? `Driving, up to ${profile.transport.maxDailyTravelMinutes} min a day`
-        : 'No car — town and trolley only',
+        ? `Driving, up to ${profile.transport.maxDailyDriveMinutes} min at the wheel a day`
+        : 'No car — shuttles, buses and walking',
     },
     { label: 'Range', value: REGIONAL_EXPANSION_LABELS[profile.regionalExpansion] },
     { label: 'Detour limit', value: `${profile.derived.effectiveDetourMinutes} min from base` },

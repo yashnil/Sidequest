@@ -16,6 +16,33 @@ export const isoDateSchema = z
 
 export const isoTimeSchema = z.string().regex(ISO_TIME, 'Expected a 24-hour HH:MM time');
 
+/**
+ * THE TIME MODEL
+ *
+ * Every clock time in the domain is an integer number of minutes from local
+ * midnight, and the calendar date lives separately as a `YYYY-MM-DD` label. No
+ * `Date`, no offsets, no DST. A trip plan and a bus timetable are both wall-clock
+ * by nature — "the last bus leaves at 19:00" means 19:00 where you are standing —
+ * and modelling either as an absolute instant invites exactly the off-by-one-day
+ * and timezone bugs that make an itinerary subtly, expensively wrong.
+ */
+export const MINUTES_PER_DAY = 24 * 60;
+
+export const minuteOfDaySchema = z.number().int().min(0).max(MINUTES_PER_DAY);
+
+export function formatMinuteOfDay(minute: number): string {
+  const clamped = Math.max(0, Math.min(MINUTES_PER_DAY, Math.round(minute)));
+  const hours = Math.floor(clamped / 60) % 24;
+  const minutes = clamped % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+export function parseMinuteOfDay(value: string): number {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+  if (!match) throw new Error(`"${value}" is not an HH:MM time.`);
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 export const coordinatesSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),

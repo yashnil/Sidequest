@@ -5,7 +5,12 @@ import {
   type ItineraryDay,
   type TravelerProfile,
 } from '@sidequest/core';
-import { easternSierraTravelMatrix, EASTERN_SIERRA_BASE_ID, placeById } from '@sidequest/core';
+import {
+  easternSierraTravelMatrix,
+  EASTERN_SIERRA_ACCESS,
+  EASTERN_SIERRA_BASE_ID,
+  placeById,
+} from '@sidequest/core';
 import { planTrip } from './plan';
 import { buildDailyWindows, eachDate } from './windows';
 import { resolveCandidates } from './candidates';
@@ -187,6 +192,7 @@ describe('validator', () => {
     matrix: scenario.matrix,
     placesById,
     baseId: scenario.baseId,
+    access: EASTERN_SIERRA_ACCESS,
   };
 
   function dayWith(overrides: Partial<ItineraryDay>): ItineraryDay {
@@ -198,7 +204,15 @@ describe('validator', () => {
       theme: 'Test',
       window: { startMinute: 480, endMinute: 1080, usableMinutes: 600 },
       items: [],
-      totals: { activityMinutes: 0, travelMinutes: 0, travelKm: 0, freeMinutes: 0, strenuousCount: 0 },
+      totals: { activityMinutes: 0, travelMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 0, freeMinutes: 0, strenuousCount: 0 },
+      transport: {
+        primaryMode: 'drive',
+        modes: ['drive'],
+        serviceIds: [],
+        parkingNotes: [],
+        accessNotes: [],
+        verifyBeforeTravel: [],
+      },
       intensity: 'moderate',
       warnings: [],
       ...overrides,
@@ -261,14 +275,14 @@ describe('validator', () => {
 
   it('catches excessive driving and excessive intensity', () => {
     const overDriven = dayWith({
-      totals: { activityMinutes: 60, travelMinutes: 900, travelKm: 500, freeMinutes: 0, strenuousCount: 0 },
+      totals: { activityMinutes: 60, travelMinutes: 900, driveMinutes: 900, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 500, freeMinutes: 0, strenuousCount: 0 },
     });
     expect(
-      validateItinerary({ ...common, days: [overDriven] }).some((issue) => issue.code === 'daily_travel_exceeded'),
+      validateItinerary({ ...common, days: [overDriven] }).some((issue) => issue.code === 'daily_drive_exceeded'),
     ).toBe(true);
 
     const overWorked = dayWith({
-      totals: { activityMinutes: 400, travelMinutes: 60, travelKm: 40, freeMinutes: 0, strenuousCount: 3 },
+      totals: { activityMinutes: 400, travelMinutes: 60, driveMinutes: 60, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 40, freeMinutes: 0, strenuousCount: 3 },
     });
     expect(
       validateItinerary({ ...common, days: [overWorked] }).some((issue) => issue.code === 'intensity_exceeded'),
@@ -277,7 +291,7 @@ describe('validator', () => {
 
   it('warns about a long day with nothing to eat', () => {
     const day = dayWith({
-      totals: { activityMinutes: 300, travelMinutes: 30, travelKm: 20, freeMinutes: 0, strenuousCount: 0 },
+      totals: { activityMinutes: 300, travelMinutes: 30, driveMinutes: 30, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 20, freeMinutes: 0, strenuousCount: 0 },
       items: [
         { id: 'a', kind: 'activity', title: 'A', startMinute: 500, endMinute: 800, durationMinutes: 300, placeId: 'convict-lake', reason: 'r', weatherSensitive: false },
       ],
@@ -503,9 +517,11 @@ describe('scenario 4 — a strict driving limit', () => {
 
   it('keeps every day inside the hard driving budget', () => {
     for (const day of itinerary.days) {
-      expect(day.totals.travelMinutes).toBeLessThanOrEqual(limit);
+      // The limit is on *driving*. Riding a shuttle and walking to the stop are
+      // real minutes, but they are not the thing the traveller capped.
+      expect(day.totals.driveMinutes).toBeLessThanOrEqual(limit);
     }
-    expect(errors(itinerary).filter((issue) => issue.code === 'daily_travel_exceeded')).toEqual([]);
+    expect(errors(itinerary).filter((issue) => issue.code === 'daily_drive_exceeded')).toEqual([]);
   });
 
   it('does not pretend a distant satellite is nearby', () => {

@@ -1,3 +1,9 @@
+import {
+  assessPlaceAccess,
+  capabilityFromProfile,
+  type PlaceAccessAssessment,
+} from '../access/feasibility';
+import type { AccessDataset } from '../schemas/access';
 import type { Place } from '../schemas/place';
 import type { TravelerProfile } from '../schemas/profile';
 import type { Region, WorthDetourLabel } from '../schemas/region';
@@ -10,9 +16,11 @@ export interface SatelliteAssessment {
   detourClass: DetourClass;
   driveMinutes: number;
   distanceKm: number;
-  /** Round-trip drive time as a share of the traveller's daily travel budget. */
+  /** Round-trip drive time as a share of the traveller's daily driving budget. */
   travelBudgetShare: number;
   season: SeasonAssessment;
+  /** Whether this traveller can legally reach it, date by date. */
+  access: PlaceAccessAssessment;
 }
 
 export interface RegionExpansion {
@@ -31,6 +39,12 @@ export interface ExpansionInput {
   profile: TravelerProfile;
   /** Calendar months the trip covers. */
   months: number[];
+  /**
+   * Every date of the trip. Months are enough to say "the road is shut in
+   * February"; only dates can say "the shuttle does not run on a Tuesday".
+   */
+  dates: string[];
+  access: AccessDataset;
 }
 
 /**
@@ -41,21 +55,34 @@ export interface ExpansionInput {
  * stay separable.
  */
 export function expandRegion(input: ExpansionInput): RegionExpansion {
-  const { region, places, profile, months } = input;
+  const { region, places, profile, months, dates, access } = input;
   const radiusMinutes = profile.derived.effectiveDetourMinutes;
-  const maxDaily = profile.transport.maxDailyTravelMinutes;
+  const maxDaily = profile.transport.maxDailyDriveMinutes;
+  const capability = capabilityFromProfile(profile);
 
   const assessed = places
     .filter((place) => place.regionId === region.id)
     .map<SatelliteAssessment>((place) => {
       const driveMinutes = place.travelFromBase.driveMinutes;
+      const placeAccess = assessPlaceAccess({
+        placeId: place.id,
+        dataset: access,
+        dates,
+        capability,
+      });
       return {
         place,
-        detourClass: classifyDetour(place, driveMinutes, radiusMinutes, maxDaily),
+        detourClass: classifyDetour(place, driveMinutes, radiusMinutes, maxDaily, placeAccess),
         driveMinutes,
         distanceKm: place.travelFromBase.distanceKm,
-        travelBudgetShare: maxDaily > 0 ? (driveMinutes * 2) / maxDaily : 1,
+        // A driving budget only constrains a journey the traveller drives. Being
+        // carried there on a shuttle does not spend it.
+        travelBudgetShare:
+          maxDaily > 0 && placeAccess.requiredModes.includes('drive')
+            ? (driveMinutes * 2) / maxDaily
+            : 0,
         season: assessSeason(place, months),
+        access: placeAccess,
       };
     })
     .sort((a, b) => a.driveMinutes - b.driveMinutes || a.place.id.localeCompare(b.place.id));
@@ -75,12 +102,15 @@ function classifyDetour(
   place: Place,
   driveMinutes: number,
   radiusMinutes: number,
-  maxDailyTravelMinutes: number,
+  maxDailyDriveMinutes: number,
+  access: PlaceAccessAssessment,
 ): DetourClass {
   if (place.relationship === 'base') return 'base';
-  // A satellite you cannot drive to and back from within the day's travel budget
-  // is out of reach no matter how appealing it is.
-  if (driveMinutes * 2 > maxDailyTravelMinutes) return 'too_far';
+  // A satellite you cannot drive to and back from within the day's driving
+  // budget is out of reach no matter how appealing it is — unless the traveller
+  // is not the one driving, in which case the budget does not apply.
+  const drivesThere = access.requiredModes.includes('drive');
+  if (drivesThere && driveMinutes * 2 > maxDailyDriveMinutes) return 'too_far';
   if (driveMinutes <= radiusMinutes) return 'in_tolerance';
   if (driveMinutes <= radiusMinutes * 1.5) return 'stretch';
   return 'too_far';

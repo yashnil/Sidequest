@@ -18,7 +18,11 @@ export const EASTERN_SIERRA: Region = {
     'mono county',
   ],
   transportSummary:
-    'Effectively a car region. A free town trolley covers Mammoth Lakes and the Lakes Basin in summer, but every satellite below needs your own vehicle.',
+    'A corridor with everything hanging off one highway. A vehicle is what turns a town into a region here.',
+  noVehicleSummary:
+    'Adding a vehicle would open the whole Highway 395 corridor — Convict Lake, Hot Creek, Mono Lake and everything north of town.',
+  seasonalRoadSummary:
+    'Several approach roads here are on the Caltrans District 9 winter closure list and reopen on the snowpack, not on a date.',
 };
 
 export const REGIONS: Region[] = [EASTERN_SIERRA];

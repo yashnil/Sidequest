@@ -1,4 +1,5 @@
 export * from './schemas/common';
+export * from './schemas/access';
 export * from './schemas/place';
 export * from './schemas/region';
 export * from './schemas/trip';
@@ -8,6 +9,9 @@ export * from './schemas/itinerary';
 
 export * from './questionnaire/definition';
 export * from './questionnaire/transform';
+
+export * from './access/feasibility';
+export * from './access/provider';
 
 export * from './region/season';
 export * from './region/expansion';

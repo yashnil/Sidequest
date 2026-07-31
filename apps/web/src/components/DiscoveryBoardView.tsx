@@ -2,17 +2,19 @@
 
 import { useOptimistic, useState, useTransition } from 'react';
 import {
+  ACCESS_BADGE_LABELS,
   BOARD_GROUP_COPY,
   FIT_BAND_LABELS,
   FIT_BAND_METER,
   PLACE_CATEGORY_LABELS,
   SELECTION_STATUS_LABELS,
   WORTH_DETOUR_COPY,
+  type AccessBadge,
   type BoardGroup,
   type DiscoveryCandidate,
   type SelectionStatus,
 } from '@sidequest/core';
-import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx } from './ui';
+import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type BadgeTone } from './ui';
 import { BuildTripButton } from './BuildTripButton';
 import { formatCost, formatDistance, formatIntensity, formatMinutes } from '@/lib/format';
 import { autoPickAction, setSelectionAction } from '@/app/trips/[id]/discover/actions';
@@ -179,6 +181,32 @@ export function DiscoveryBoardView({
   );
 }
 
+/**
+ * Which access facts earn a badge, in the order they matter to a decision.
+ *
+ * `shuttle_available` and `no_transit` are deliberately absent: "there is also a
+ * bus" and "there is no bus" are true of almost every card here, and a badge
+ * that is always on is a badge nobody reads. They appear in the card's cautions
+ * instead, where they belong.
+ */
+const ACCESS_BADGE_ORDER: readonly AccessBadge[] = [
+  'shuttle_required',
+  'car_required',
+  'seasonal_service',
+  'permit_required',
+  'verify_conditions',
+];
+
+const ACCESS_BADGE_TONE: Record<AccessBadge, BadgeTone> = {
+  car_required: 'neutral',
+  shuttle_required: 'blue',
+  shuttle_available: 'blue',
+  seasonal_service: 'amber',
+  no_transit: 'neutral',
+  permit_required: 'amber',
+  verify_conditions: 'amber',
+};
+
 const STATUS_STYLE: Record<SelectionStatus, string> = {
   included: 'border-pine bg-pine-soft text-pine',
   maybe: 'border-slate-blue bg-slate-blue-soft text-slate-blue',
@@ -194,7 +222,7 @@ function PlaceCard({
   status: SelectionStatus | undefined;
   onChoose: (placeId: string, status: SelectionStatus) => void;
 }) {
-  const { place, fit, season } = candidate;
+  const { place, fit, season, access } = candidate;
   const blocked = fit.band === 'not_workable';
 
   return (
@@ -239,9 +267,24 @@ function PlaceCard({
           {place.hiddenGemScore >= 0.6 ? <Badge tone="amber">Hidden gem</Badge> : null}
           {season.status === 'partially_open' ? <Badge tone="amber">Part of your dates</Badge> : null}
           {season.status === 'closed' ? <Badge tone="clay">Closed on your dates</Badge> : null}
-          {season.shuttleRequired ? <Badge tone="blue">Shuttle</Badge> : null}
+          {/*
+            Only the badges that change what the traveller has to do. A card that
+            wears every flag it qualifies for teaches people to stop reading them.
+          */}
+          {ACCESS_BADGE_ORDER.filter((badge) => access.badges.includes(badge)).map((badge) => (
+            <Badge key={badge} tone={ACCESS_BADGE_TONE[badge]}>
+              {ACCESS_BADGE_LABELS[badge]}
+            </Badge>
+          ))}
           {place.worksInBadWeather ? <Badge tone="blue">Bad-weather option</Badge> : null}
         </div>
+
+        {access.status === 'partial' ? (
+          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            Reachable on {access.usableDates.length} of your{' '}
+            {access.byDate.length} days — we will only put it on one of those.
+          </p>
+        ) : null}
 
         {fit.blockers.length > 0 ? (
           <div className="mt-4 rounded-lg bg-clay-soft p-3">
@@ -277,6 +320,17 @@ function PlaceCard({
         ) : null}
 
         <div className="mt-auto pt-4">
+          {/*
+            A choice that has become impossible stays visible as a conflict.
+            Silently flipping it to "Skip" would rewrite what someone asked for
+            and hide the one fact they need in order to change their mind.
+          */}
+          {blocked && status === 'included' ? (
+            <p className="mb-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
+              You picked this, and it no longer works on these dates. We have kept
+              your choice — change your dates, your transport answers, or skip it.
+            </p>
+          ) : null}
           <div
             className="flex gap-1.5"
             role="group"
@@ -285,7 +339,7 @@ function PlaceCard({
             {(['included', 'maybe', 'excluded'] as const).map((option) => {
               // Offering "Include" on a stop we just explained is impossible would
               // let the traveller build a plan that cannot run.
-              const unavailable = blocked && option === 'included';
+              const unavailable = blocked && option === 'included' && status !== 'included';
               return (
                 <button
                   key={option}
@@ -293,7 +347,9 @@ function PlaceCard({
                   onClick={() => onChoose(place.id, option)}
                   disabled={unavailable}
                   aria-pressed={status === option}
-                  title={unavailable ? 'This one will not work on your dates or with your answers' : undefined}
+                  // The reason names the actual constraint. "Low logistics fit"
+                  // tells nobody which of their answers to change.
+                  title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
                   className={cx(
                     'flex-1 rounded-md border px-2 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
                     unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',

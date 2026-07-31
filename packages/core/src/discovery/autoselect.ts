@@ -53,7 +53,8 @@ export function autoSelect(input: AutoSelectInput): AutoSelection {
   // it with a real travel-time matrix. Half the trip's total travel allowance
   // keeps the board from pre-selecting a week of driving without starving the
   // cheap stops fifteen minutes from town.
-  const driveBudget = Math.round(tripDays * profile.transport.maxDailyTravelMinutes * 0.5);
+  // Only stops the traveller drives to draw it down; a shuttle day does not.
+  const driveBudget = Math.round(tripDays * profile.transport.maxDailyDriveMinutes * 0.5);
   const maxPerCategory = Math.max(2, Math.ceil(targetCount / 3));
   const maxStretch = 1;
   const maxHidden = Math.ceil(targetCount * derived.hiddenGemTarget) + 1;
@@ -144,7 +145,7 @@ export function autoSelect(input: AutoSelectInput): AutoSelection {
       candidate.place.category,
       (categoryCounts.get(candidate.place.category) ?? 0) + 1,
     );
-    driveUsed += candidate.driveMinutes;
+    if (drivesThere(candidate)) driveUsed += candidate.driveMinutes;
     if (candidate.detourClass === 'stretch') stretchUsed += 1;
     if (isHiddenGem(candidate)) hiddenUsed += 1;
     if (candidate.place.popularityScore >= 0.7) classicUsed += 1;
@@ -204,7 +205,12 @@ interface TakeContext {
 
 type TakeCheck =
   | { ok: true }
-  | { ok: false; reason: 'frequency' | 'category' | 'drive' | 'stretch' | 'mix' };
+  | { ok: false; reason: 'frequency' | 'category' | 'drive' | 'stretch' | 'mix' | 'access' };
+
+/** True when this candidate spends the traveller's own driving budget. */
+function drivesThere(candidate: DiscoveryCandidate): boolean {
+  return candidate.access.requiredModes.includes('drive');
+}
 
 /**
  * What one stop costs against the traveller's frequency ceilings. A place spends
@@ -231,8 +237,14 @@ function canTake(candidate: DiscoveryCandidate, ctx: TakeContext): TakeCheck {
   if ((ctx.categoryCounts.get(candidate.place.category) ?? 0) >= ctx.maxPerCategory) {
     return { ok: false, reason: 'category' };
   }
-  if (ctx.driveUsed + candidate.driveMinutes > ctx.driveBudget) {
+  if (drivesThere(candidate) && ctx.driveUsed + candidate.driveMinutes > ctx.driveBudget) {
     return { ok: false, reason: 'drive' };
+  }
+  // Auto-pick must never propose something the traveller cannot legally reach on
+  // any day of their trip. The board explains why; the pre-selection just leaves
+  // it alone.
+  if (candidate.access.status === 'blocked') {
+    return { ok: false, reason: 'access' };
   }
   if (candidate.detourClass === 'stretch' && ctx.stretchUsed >= ctx.maxStretch) {
     return { ok: false, reason: 'stretch' };

@@ -1,4 +1,8 @@
-import type { RevisionAction, ValidationIssue } from '@sidequest/core';
+import type {
+  RevisionAction,
+  UnscheduledReasonCode,
+  ValidationIssue,
+} from '@sidequest/core';
 import type { PlannedDay } from './windows';
 import type { PlanningCandidate } from './types';
 
@@ -10,7 +14,7 @@ export interface DayPlan {
 export interface RevisionOutcome {
   dayPlans: DayPlan[];
   /** Candidates the revision took out; they become unscheduled with a reason. */
-  removed: { candidate: PlanningCandidate; reason: string }[];
+  removed: { candidate: PlanningCandidate; reason: string; code: UnscheduledReasonCode }[];
   actions: RevisionAction[];
   /** True when something actually changed and another pass is worth running. */
   changed: boolean;
@@ -60,7 +64,11 @@ export function reviseDayPlans(
 
     plan.accepted = plan.accepted.filter((candidate) => candidate.place.id !== victim.place.id);
     handledDays.add(issue.dayNumber);
-    removed.push({ candidate: victim, reason: reasonForRemoval(issue) });
+    removed.push({
+      candidate: victim,
+      reason: reasonForRemoval(issue),
+      code: unscheduledCodeFor(issue),
+    });
     actions.push({
       code: actionCodeFor(issue),
       description: `Took ${victim.place.name} off day ${issue.dayNumber}: ${reasonForRemoval(issue)}`,
@@ -102,21 +110,60 @@ function actionCodeFor(issue: ValidationIssue): RevisionAction['code'] {
   switch (issue.code) {
     case 'intensity_exceeded':
       return 'separated_strenuous';
-    case 'daily_travel_exceeded':
+    case 'daily_drive_exceeded':
+    case 'daily_transport_exceeded':
     case 'edge_day_overfull':
       return 'dropped_lowest_priority';
     case 'place_unavailable':
     case 'duplicate_place':
       return 'moved_to_another_day';
+    case 'missed_last_return':
+    case 'access_window_too_short':
+      return 'shortened_access_group';
     default:
       return 'dropped_lowest_priority';
   }
 }
 
+/** So an unscheduled entry can say *which* limit took it out, not just "no room". */
+function unscheduledCodeFor(issue: ValidationIssue): UnscheduledReasonCode {
+  switch (issue.code) {
+    case 'missed_last_return':
+      return 'missed_last_return';
+    case 'daily_drive_exceeded':
+    case 'daily_transport_exceeded':
+      return 'exceeds_daily_travel';
+    case 'intensity_exceeded':
+      return 'exceeds_intensity';
+    case 'place_unavailable':
+      return 'seasonally_closed';
+    case 'required_mode_unavailable':
+      return 'transport_mode_unavailable';
+    case 'service_out_of_season':
+    case 'service_not_operating_on_date':
+      return 'service_not_operating';
+    case 'road_surface_incompatible':
+    case 'remote_area_incompatible':
+      return 'not_feasible';
+    default:
+      return 'no_time_left';
+  }
+}
+
 function reasonForRemoval(issue: ValidationIssue): string {
   switch (issue.code) {
-    case 'daily_travel_exceeded':
+    case 'daily_drive_exceeded':
       return 'the day was over your driving limit.';
+    case 'daily_transport_exceeded':
+      return 'the day spent more time getting places than you wanted to.';
+    case 'missed_last_return':
+      return 'the day would not have finished before the last way out.';
+    case 'access_window_too_short':
+      return 'there was not enough time between the first way in and the last way out.';
+    case 'road_surface_incompatible':
+      return 'the approach is a road surface you asked us to avoid.';
+    case 'remote_area_incompatible':
+      return 'it is out where there are no services, which you asked us to avoid.';
     case 'intensity_exceeded':
       return 'it stacked too much hard effort into one day.';
     case 'edge_day_overfull':

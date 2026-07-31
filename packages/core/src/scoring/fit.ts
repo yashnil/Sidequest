@@ -10,6 +10,7 @@ import type { TravelerProfile } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 import type { SatelliteAssessment } from '../region/expansion';
 import { describeOpenSeason } from '../region/season';
+import type { AccessBlockerCode } from '../access/feasibility';
 
 /**
  * Transparent, deterministic fit scoring.
@@ -85,6 +86,9 @@ export const FIT_BAND_METER: Record<FitBand, number> = {
 
 export type BlockerCode =
   | 'needs_car'
+  | 'no_way_in'
+  | 'service_unavailable'
+  | 'mode_declined'
   | 'closed_on_your_dates'
   | 'exceeds_daily_travel'
   | 'avoided_interest'
@@ -93,6 +97,31 @@ export type BlockerCode =
   | 'too_strenuous'
   | 'mobility'
   | 'too_expensive';
+
+/**
+ * Access blockers speak the language of transport; fit blockers speak the
+ * language of the board. This is the one place the two vocabularies meet, so a
+ * card can say "there is no way to reach this without your own vehicle" rather
+ * than "logistics".
+ */
+function blockerCodeFor(code: AccessBlockerCode): BlockerCode {
+  switch (code) {
+    case 'needs_private_vehicle':
+      return 'needs_car';
+    case 'service_out_of_season':
+    case 'service_not_operating':
+    case 'private_vehicle_prohibited':
+      return 'service_unavailable';
+    // Not "the service is unavailable" — the service runs, and the traveller
+    // ruled it out. Different fact, different remedy.
+    case 'shuttle_declined':
+      return 'mode_declined';
+    case 'walk_too_long':
+      return 'too_strenuous';
+    default:
+      return 'no_way_in';
+  }
+}
 
 export interface Blocker {
   code: BlockerCode;
@@ -185,8 +214,7 @@ export function scorePlace(
   }
 
   // --- Season -------------------------------------------------------------
-  let seasonFit = season.status === 'open' ? 1 : season.status === 'partially_open' ? 0.55 : 0;
-  if (season.shuttleRequired) seasonFit = clamp01(seasonFit - 0.1);
+  const seasonFit = season.status === 'open' ? 1 : season.status === 'partially_open' ? 0.55 : 0;
   if (season.status === 'closed') {
     blockers.push({
       code: 'closed_on_your_dates',
@@ -199,27 +227,26 @@ export function scorePlace(
   } else if (place.seasonalAccess.closureRisk === 'high' && season.note) {
     cautions.push(season.note);
   }
-  if (season.shuttleRequired) {
-    cautions.push('A mandatory shuttle replaces private vehicles here in peak season.');
-  }
-
   // --- Transport ----------------------------------------------------------
-  let transportFit = 1;
-  if (place.access.requiresCar && !profile.transport.willDrive) {
-    transportFit = place.access.transitPossible ? 0.5 : 0;
-    if (!place.access.transitPossible) {
-      blockers.push({
-        code: 'needs_car',
-        message: 'There is no way to reach this without your own vehicle.',
-      });
-    } else {
-      cautions.push('Reachable without a car, but only via a shuttle.');
+  // Whether the traveller can get here at all is not a score, it is a fact, and
+  // it comes from the access rules rather than from a guess about this place.
+  const access = assessment.access;
+  let transportFit = access.status === 'open' ? 1 : access.status === 'partial' ? 0.55 : 0;
+  if (access.status === 'blocked') {
+    for (const blocker of access.blockers) {
+      blockers.push({ code: blockerCodeFor(blocker.code), message: blocker.message });
+    }
+  } else {
+    cautions.push(...access.cautions);
+    if (access.requiredModes.includes('shuttle') || access.requiredModes.includes('public_bus')) {
+      // Someone else is driving, which is a different day and worth saying.
+      transportFit = Math.min(transportFit, 0.9);
     }
   }
   if (assessment.travelBudgetShare > 1) {
     blockers.push({
       code: 'exceeds_daily_travel',
-      message: `${driveMinutes * 2} min of driving round trip is past the ${profile.transport.maxDailyTravelMinutes} min you said you would accept in a day.`,
+      message: `${driveMinutes * 2} min of driving round trip is past the ${profile.transport.maxDailyDriveMinutes} min at the wheel you said you would accept in a day.`,
     });
   }
 

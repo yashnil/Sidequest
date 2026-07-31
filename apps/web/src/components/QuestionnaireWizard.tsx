@@ -13,6 +13,7 @@ import {
   INTEREST_LEVELS,
   PACE_OPTIONS,
   REGIONAL_EXPANSION_OPTIONS,
+  TRANSPORT_PRIORITY_OPTIONS,
   STEP_DEFINITIONS,
   availableRegionalExpansions,
   buildTravelerProfile,
@@ -260,20 +261,52 @@ export function QuestionnaireWizard({
               </>
             ) : (
               <Note>
-                Without a car we will keep to the town, the Lakes Basin trolley and the Reds Meadow
-                shuttle. That is a real constraint here, not a preference.
+                Without a car we will keep to town, the free summer trolley up to the Lakes Basin
+                and the bus down to Bishop. That is a real constraint here, not a preference — most
+                of this region has no scheduled service at all.
               </Note>
             )}
             {visible('maxDailyTravelMinutes') ? (
               <SliderField
-                label="Most you want to spend travelling in a day"
+                label="Most you want to spend at the wheel in a day"
                 value={answers.maxDailyTravelMinutes}
                 min={60}
                 max={360}
                 step={15}
                 format={formatMinutes}
                 onChange={(maxDailyTravelMinutes) => update({ maxDailyTravelMinutes })}
-                hint="Round trip. Anything that cannot fit inside this gets ruled out rather than quietly squeezed in."
+                hint="Round trip, driving only. Time on a shuttle counts separately — being carried is not the same as driving."
+              />
+            ) : null}
+            {visible('shuttleUse') ? (
+              <Toggle
+                label="Shuttles and buses are fine"
+                detail="Some places here bar private vehicles in season. Saying no closes those off entirely."
+                checked={answers.willUseShuttles}
+                onChange={(willUseShuttles) => update({ willUseShuttles })}
+              />
+            ) : null}
+            <SliderField
+              label="Furthest you would walk to reach a stop"
+              value={answers.maxAccessWalkMinutes}
+              min={0}
+              max={60}
+              step={5}
+              format={formatMinutes}
+              onChange={(maxAccessWalkMinutes) => update({ maxAccessWalkMinutes })}
+              hint="Getting from the car park or the bus stop to the thing itself, not the walking you came for."
+            />
+            {/*
+              Every option here trades driving against being driven, so it only
+              means anything to someone who could do either. Without a car there
+              is never more than one way in.
+            */}
+            {visible('shuttleUse') ? (
+              <ChoiceGroup
+                legend="When there is more than one way in, what matters?"
+                options={TRANSPORT_PRIORITY_OPTIONS}
+                value={answers.transportPriority}
+                onChange={(transportPriority) => update({ transportPriority })}
               />
             ) : null}
           </>

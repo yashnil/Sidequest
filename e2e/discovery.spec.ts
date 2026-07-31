@@ -191,7 +191,7 @@ test('the questionnaire adapts and refuses to continue on an empty profile', asy
 
   await page.getByLabel('You will have a car').uncheck();
   await expect(page.getByText('Steep mountain roads are fine')).toBeHidden();
-  await expect(page.getByText(/Without a car we will keep to the town/)).toBeVisible();
+  await expect(page.getByText(/Without a car we will keep to town/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('radio', { name: /Up to ~2 hours/ })).toHaveCount(0);

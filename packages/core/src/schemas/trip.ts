@@ -77,6 +77,29 @@ export function countNights(startDate: string, endDate: string): number {
   return Math.max(0, Math.round((end - start) / 86_400_000));
 }
 
+/**
+ * Every calendar date of the trip, inclusive.
+ *
+ * Stepped in UTC because these are labels on a calendar, not instants — reading
+ * them locally is how a trip gains or loses a day across a timezone boundary,
+ * and how a Thursday-only shuttle silently becomes a Wednesday one.
+ */
+export function tripDates(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(`${startDate}T00:00:00Z`);
+  const last = new Date(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(last.getTime())) return dates;
+
+  // Guard against a malformed range producing an unbounded loop.
+  let guard = 0;
+  while (cursor <= last && guard < 400) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+    guard += 1;
+  }
+  return dates;
+}
+
 /** Calendar months (1-12) the trip touches, used for seasonal access checks. */
 export function tripMonths(startDate: string, endDate: string): number[] {
   const start = new Date(`${startDate}T00:00:00Z`);

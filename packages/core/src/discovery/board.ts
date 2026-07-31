@@ -1,3 +1,5 @@
+import type { PlaceAccessAssessment } from '../access/feasibility';
+import type { AccessDataset } from '../schemas/access';
 import type { BoardGroup } from '../schemas/discovery';
 import { BOARD_GROUPS } from '../schemas/discovery';
 import type { Place } from '../schemas/place';
@@ -20,6 +22,8 @@ export interface DiscoveryCandidate {
   driveMinutes: number;
   distanceKm: number;
   season: SeasonAssessment;
+  /** Date-aware transport feasibility, shown on the card and read by the planner. */
+  access: PlaceAccessAssessment;
   worthDetour: WorthDetourLabel;
   group: BoardGroup;
 }
@@ -35,12 +39,14 @@ export interface BuildBoardInput {
   places: Place[];
   profile: TravelerProfile;
   months: number[];
+  dates: string[];
+  access: AccessDataset;
   travelerNeeds: TravelerNeed[];
 }
 
 export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
-  const { region, places, profile, months, travelerNeeds } = input;
-  const expansion = expandRegion({ region, places, profile, months });
+  const { region, places, profile, months, dates, access, travelerNeeds } = input;
+  const expansion = expandRegion({ region, places, profile, months, dates, access });
 
   const assessments = [...expansion.base, ...expansion.satellites, ...expansion.beyondRadius];
 
@@ -54,6 +60,7 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
         driveMinutes: assessment.driveMinutes,
         distanceKm: assessment.distanceKm,
         season: assessment.season,
+        access: assessment.access,
         worthDetour: worthDetourLabel(assessment.detourClass, fit.band),
         group: groupFor(assessment.place, fit.band),
       };

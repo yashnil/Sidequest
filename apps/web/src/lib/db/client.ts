@@ -2,7 +2,7 @@ import 'server-only';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { SCHEMA_SQL } from './schema';
+import { COLUMN_MIGRATIONS, SCHEMA_SQL } from './schema';
 
 /**
  * Local persistence driver.
@@ -37,7 +37,32 @@ export function getDb(): Database.Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA_SQL);
+  applyColumnMigrations(db);
 
   globalForDb.sidequestDb = db;
   return db;
+}
+
+/**
+ * Brings an existing database up to the current column set.
+ *
+ * SQLite cannot express "add this column if it is not already there" in DDL, so
+ * the check is explicit. Wrapped in one transaction: a half-migrated schema is
+ * worse than an unmigrated one, because the failure surfaces later and further
+ * from its cause.
+ */
+function applyColumnMigrations(db: Database.Database): void {
+  const apply = db.transaction(() => {
+    for (const migration of COLUMN_MIGRATIONS) {
+      const columns = db
+        .prepare(`PRAGMA table_info(${migration.table})`)
+        .all() as { name: string }[];
+      if (columns.length === 0) continue;
+      if (columns.some((column) => column.name === migration.column)) continue;
+      db.exec(
+        `ALTER TABLE ${migration.table} ADD COLUMN ${migration.column} ${migration.definition}`,
+      );
+    }
+  });
+  apply();
 }

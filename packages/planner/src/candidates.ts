@@ -108,6 +108,16 @@ function reasonCodeForBlocker(code: string | undefined): UnscheduledReasonCode {
     case 'mobility':
     case 'too_strenuous':
       return 'exceeds_intensity';
+    // Transport blockers keep their own codes all the way to the conflict list,
+    // so the traveller is told which of their answers to change rather than
+    // being handed a generic "this will not work".
+    case 'needs_car':
+    case 'mode_declined':
+      return 'transport_mode_unavailable';
+    case 'service_unavailable':
+      return 'service_not_operating';
+    case 'no_way_in':
+      return 'access_unavailable';
     default:
       return 'not_feasible';
   }
@@ -127,6 +137,12 @@ function remedyFor(code: string | undefined): { suggestedRemedy?: string } {
       return { suggestedRemedy: 'Raise the effort level you are happy with, or pick a gentler alternative from the board.' };
     case 'needs_car':
       return { suggestedRemedy: 'This needs a vehicle. Renting one would open up most of the region.' };
+    case 'service_unavailable':
+      return { suggestedRemedy: 'Move your dates into the season the service runs, or drop it.' };
+    case 'mode_declined':
+      return {
+        suggestedRemedy: 'Say you are willing to use a shuttle — it is the only way in here.',
+      };
     default:
       return {};
   }

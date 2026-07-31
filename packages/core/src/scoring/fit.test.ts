@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildDiscoveryBoard, type DiscoveryCandidate } from '../discovery/board';
-import { EASTERN_SIERRA, EASTERN_SIERRA_PLACES } from '../data/index';
 import type { QuestionnaireAnswers } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 import {
-  AUGUST_MONTHS,
-  JANUARY_MONTHS,
+  AUGUST_DATES,
+  JANUARY_DATES,
   MAMMOTH_HIKER_ANSWERS,
+  boardContext,
   context,
   interests,
   profile,
@@ -14,15 +14,13 @@ import {
 
 function board(
   overrides: Partial<QuestionnaireAnswers> = MAMMOTH_HIKER_ANSWERS,
-  months = AUGUST_MONTHS,
+  dates = AUGUST_DATES,
   travelerNeeds: TravelerNeed[] = [],
 ) {
   const ctx = context({ travelerNeeds });
   return buildDiscoveryBoard({
-    region: EASTERN_SIERRA,
-    places: EASTERN_SIERRA_PLACES,
+    ...boardContext(dates),
     profile: profile(overrides, ctx),
-    months,
     travelerNeeds,
   });
 }
@@ -105,17 +103,45 @@ describe('personal fit, not popularity', () => {
 });
 
 describe('feasibility gates', () => {
-  it('blocks car-only places for a traveller without a car, and keeps the shuttle-served ones', () => {
+  it('blocks car-only places for a traveller without a car, and keeps the ones a service reaches', () => {
     const { candidates } = board({ ...MAMMOTH_HIKER_ANSWERS, willDrive: false });
     expect(find(candidates, 'convict-lake').fit.blockers.map((b) => b.code)).toContain('needs_car');
     expect(find(candidates, 'convict-lake').fit.band).toBe('not_workable');
-    // Reachable on the town trolley and the Reds Meadow shuttle respectively.
+
+    // The free trolley reaches the Lakes Basin in summer, and the Mammoth
+    // Express reaches Bishop seven days a week all year.
     expect(find(candidates, 'mammoth-lakes-basin').fit.band).not.toBe('not_workable');
-    expect(find(candidates, 'devils-postpile').fit.band).not.toBe('not_workable');
+    expect(find(candidates, 'bishop-town').fit.band).not.toBe('not_workable');
+
+    // Devils Postpile is *not* one of them, and this is the case the old
+    // `transitPossible` boolean got wrong. There is a mandatory shuttle, but it
+    // boards at Mammoth Mountain Main Lodge, which nothing scheduled reaches —
+    // so a car-free traveller cannot get to the thing that would carry them in.
+    expect(find(candidates, 'devils-postpile').fit.band).toBe('not_workable');
+    expect(find(candidates, 'devils-postpile').fit.blockers.map((b) => b.code)).toContain(
+      'needs_car',
+    );
+  });
+
+  it('opens the shuttle-served places back up once there is a car to reach the boarding point', () => {
+    const { candidates } = board();
+    const postpile = find(candidates, 'devils-postpile');
+    expect(postpile.fit.band).not.toBe('not_workable');
+    expect(postpile.access.requiredModes).toEqual(expect.arrayContaining(['drive', 'shuttle']));
+    expect(postpile.access.badges).toContain('shuttle_required');
+  });
+
+  it('refuses a shuttle-only place when the traveller ruled shuttles out', () => {
+    const { candidates } = board({ ...MAMMOTH_HIKER_ANSWERS, willUseShuttles: false });
+    const postpile = find(candidates, 'devils-postpile');
+    expect(postpile.fit.band).toBe('not_workable');
+    expect(postpile.fit.blockers[0]?.message).toMatch(/shuttle/i);
+    // A place you simply drive to is untouched by that answer.
+    expect(find(candidates, 'convict-lake').fit.band).not.toBe('not_workable');
   });
 
   it('blocks anything closed on the traveller’s dates and says so', () => {
-    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, JANUARY_MONTHS);
+    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, JANUARY_DATES);
     const postpile = find(candidates, 'devils-postpile');
     expect(postpile.fit.band).toBe('not_workable');
     expect(postpile.fit.blockers[0]?.code).toBe('closed_on_your_dates');
@@ -125,7 +151,7 @@ describe('feasibility gates', () => {
   });
 
   it('blocks terrain beyond a group with limited mobility', () => {
-    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, AUGUST_MONTHS, ['mobility_limited']);
+    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, AUGUST_DATES, ['mobility_limited']);
     expect(find(candidates, 'sherwin-lakes-trail').fit.blockers.map((b) => b.code)).toContain(
       'mobility',
     );
@@ -186,7 +212,7 @@ describe('feasibility gates', () => {
   });
 
   it('sorts everything unworkable below everything workable', () => {
-    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, JANUARY_MONTHS);
+    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, JANUARY_DATES);
     const firstBlocked = candidates.findIndex((c) => c.fit.band === 'not_workable');
     const lastWorkable = candidates.map((c) => c.fit.band).lastIndexOf('good');
     if (firstBlocked >= 0 && lastWorkable >= 0) {
@@ -219,7 +245,7 @@ describe('explanations', () => {
   });
 
   it('offers no reasons for something it just told you not to do', () => {
-    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, JANUARY_MONTHS);
+    const { candidates } = board(MAMMOTH_HIKER_ANSWERS, JANUARY_DATES);
     const postpile = find(candidates, 'devils-postpile');
     expect(postpile.fit.reasons).toHaveLength(0);
     expect(postpile.fit.blockers.length).toBeGreaterThan(0);

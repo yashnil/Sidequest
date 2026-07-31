@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TRAVELER_PROFILE_VERSION } from '../schemas/profile';
 import {
   availableRegionalExpansions,
   isQuestionVisible,
@@ -137,7 +138,7 @@ describe('questionnaire validation', () => {
 describe('profile transformation', () => {
   it('produces a schema-valid, versioned profile', () => {
     const built = buildTravelerProfile(answers(MAMMOTH_HIKER_ANSWERS), ctx());
-    expect(built.version).toBe(1);
+    expect(built.version).toBe(TRAVELER_PROFILE_VERSION);
     expect(built.interests.scenic_viewpoints).toBe('core');
     expect(built.transport.willDrive).toBe(true);
   });

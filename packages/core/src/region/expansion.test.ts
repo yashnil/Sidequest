@@ -1,20 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { expandRegion, worthDetourLabel } from './expansion';
 import { assessSeason, describeOpenSeason } from './season';
-import { EASTERN_SIERRA, EASTERN_SIERRA_PLACES, placeById } from '../data/index';
-import { AUGUST_MONTHS, JANUARY_MONTHS, MAMMOTH_HIKER_ANSWERS, context, profile } from '../testing/fixtures';
+import { EASTERN_SIERRA, EASTERN_SIERRA_ACCESS, EASTERN_SIERRA_PLACES, placeById } from '../data/index';
+import { assessPlaceAccess, capabilityFromProfile } from '../access/feasibility';
+import {
+  AUGUST_DATES,
+  AUGUST_MONTHS,
+  JANUARY_MONTHS,
+  MAMMOTH_HIKER_ANSWERS,
+  boardContext,
+  context,
+  profile,
+} from '../testing/fixtures';
 
 const expand = (
   overrides: Parameters<typeof profile>[0] = MAMMOTH_HIKER_ANSWERS,
-  months = AUGUST_MONTHS,
+  dates = AUGUST_DATES,
   ctx = context(),
-) =>
-  expandRegion({
+) => {
+  const shared = boardContext(dates);
+  return expandRegion({
     region: EASTERN_SIERRA,
     places: EASTERN_SIERRA_PLACES,
     profile: profile(overrides, ctx),
-    months,
+    months: shared.months,
+    dates: shared.dates,
+    access: shared.access,
   });
+};
 
 describe('regional expansion', () => {
   it('turns a destination into a base plus satellites', () => {
@@ -86,10 +99,32 @@ describe('seasonal access', () => {
     expect(assessSeason(postpile, JANUARY_MONTHS).status).toBe('closed');
   });
 
-  it('flags the peak-season shuttle', () => {
+  it('leaves the shuttle to the access rules rather than answering by month', () => {
+    // `assessSeason` answers "is the road open"; it deliberately no longer
+    // answers "is a shuttle mandatory", because that question needs a weekday
+    // and an hour and this one only ever had a month.
     const postpile = placeById('devils-postpile')!;
-    expect(assessSeason(postpile, AUGUST_MONTHS).shuttleRequired).toBe(true);
-    expect(assessSeason(postpile, [10]).shuttleRequired).toBe(false);
+    expect(assessSeason(postpile, AUGUST_MONTHS)).not.toHaveProperty('shuttleRequired');
+    expect(assessSeason(postpile, [10]).status).toBe('open');
+
+    const capability = capabilityFromProfile(profile(MAMMOTH_HIKER_ANSWERS, context()));
+    const august = assessPlaceAccess({
+      placeId: 'devils-postpile',
+      dataset: EASTERN_SIERRA_ACCESS,
+      dates: ['2026-08-12'],
+      capability,
+    });
+    expect(august.requiredModes).toContain('shuttle');
+
+    // October: the road is open and the shuttle has stopped, so you drive.
+    const october = assessPlaceAccess({
+      placeId: 'devils-postpile',
+      dataset: EASTERN_SIERRA_ACCESS,
+      dates: ['2026-10-12'],
+      capability,
+    });
+    expect(october.requiredModes).not.toContain('shuttle');
+    expect(october.requiredModes).toContain('drive');
   });
 
   it('reports a partially open window when a trip straddles the closure', () => {
