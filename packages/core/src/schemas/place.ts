@@ -30,28 +30,34 @@ export const placeSourceSchema = z.object({
 export type PlaceSource = z.infer<typeof placeSourceSchema>;
 
 /**
- * Seasonal reality. The Eastern Sierra is the archetype for why this cannot be a
- * boolean: Devils Postpile is road-closed most of the year and shuttle-only in
- * peak summer, while Tioga Pass simply does not exist as an option in April.
+ * When the place itself is reachable at all — the snow gate, not the shuttle.
+ *
+ * `shuttleMonths` used to live here and no longer does. Whether a shuttle
+ * replaces private vehicles is a property of a *service calendar*, which has
+ * days of the week and hours; a month list on the place could only ever be a
+ * second, coarser answer to a question `schemas/access.ts` already answers
+ * properly, and the two had already drifted apart.
  */
-export const seasonalAccessSchema = z
-  .object({
-    /** Months (1-12) the place is normally reachable. */
-    openMonths: z.array(z.number().int().min(1).max(12)).min(1).max(12),
-    closureRisk: closureRiskSchema,
-    /** Months where a mandatory shuttle replaces private vehicles. */
-    shuttleMonths: z.array(z.number().int().min(1).max(12)).max(12).default([]),
-    note: z.string().min(1).optional(),
-  })
-  .refine(
-    (value) => value.shuttleMonths.every((month) => value.openMonths.includes(month)),
-    'Shuttle months must be a subset of open months',
-  );
+export const seasonalAccessSchema = z.object({
+  /** Months (1-12) the place is normally reachable. */
+  openMonths: z.array(z.number().int().min(1).max(12)).min(1).max(12),
+  closureRisk: closureRiskSchema,
+  note: z.string().min(1).optional(),
+});
 export type SeasonalAccess = z.infer<typeof seasonalAccessSchema>;
 
+/**
+ * The physical facts of getting to the door: what the road is like and what is
+ * there when you arrive.
+ *
+ * Deliberately *not* "do you need a car" or "is transit possible". Those two
+ * booleans lived here until they proved unwritable — Devils Postpile is
+ * shuttle-only between fixed hours in some months and drivable in others, and
+ * the Lakes Basin trolley runs June to mid-September and stops at 17:30. A field
+ * that has to be true and false on different days of the same trip is not a
+ * field. Both now come from date-aware access rules; see `schemas/access.ts`.
+ */
 export const placeAccessSchema = z.object({
-  requiresCar: z.boolean(),
-  transitPossible: z.boolean(),
   roadSurface: roadSurfaceSchema,
   mountainRoad: z.boolean(),
   parkingDifficulty: parkingDifficultySchema,

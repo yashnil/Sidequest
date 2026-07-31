@@ -66,7 +66,7 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
 
   // Travel times are labelled as modelled, never presented as measured.
   await expect(page.getByText(/modelled travel time/).first()).toBeVisible();
-  await expect(page.getByText(/not measured road data/)).toBeVisible();
+  await expect(page.getByText(/not measured road data/).first()).toBeVisible();
 });
 
 test('the itinerary survives a refresh', async ({ page }) => {

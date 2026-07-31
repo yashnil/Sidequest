@@ -4,15 +4,17 @@ import {
   countTripDays,
   EASTERN_SIERRA,
   EASTERN_SIERRA_BASE_ID,
+  EASTERN_SIERRA_ACCESS,
   EASTERN_SIERRA_PLACES,
   easternSierraTravelMatrix,
+  tripDates,
   tripMonths,
   type DiscoverySelection,
   type QuestionnaireAnswers,
   type TripBasics,
 } from '@sidequest/core';
 import { buildTravelerProfile, defaultAnswers } from '@sidequest/core';
-import type { QuestionnaireContext, TravelerNeed } from '@sidequest/core';
+import type { AccessDataset, QuestionnaireContext, TravelerNeed } from '@sidequest/core';
 import type { PlannerInput } from '../types';
 
 /**
@@ -76,6 +78,8 @@ export interface ScenarioOptions {
   /** Extra manual includes layered on top of the auto-pick. */
   manualIncludes?: string[];
   manualExcludes?: string[];
+  /** Swap the access data to exercise an out-of-season or weekday-gapped service. */
+  access?: AccessDataset;
 }
 
 export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
@@ -102,6 +106,8 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     places: EASTERN_SIERRA_PLACES,
     profile,
     months: tripMonths(basics.startDate, basics.endDate),
+    dates: tripDates(basics.startDate, basics.endDate),
+    access: options.access ?? EASTERN_SIERRA_ACCESS,
     travelerNeeds,
   });
 
@@ -149,6 +155,7 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     candidates: board.candidates,
     selections,
     matrix: easternSierraTravelMatrix(),
+    access: options.access ?? EASTERN_SIERRA_ACCESS,
     baseId: EASTERN_SIERRA_BASE_ID,
     generatedAt: '2026-07-30T12:00:00.000Z',
   };

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { transportPrioritySchema } from './access';
 import {
   avoidanceSchema,
   budgetStyleSchema,
@@ -33,6 +34,14 @@ export const questionnaireAnswersSchema = z.object({
   comfortableMountainRoads: z.boolean(),
   comfortableGravelRoads: z.boolean(),
   maxDailyTravelMinutes: z.number().int().min(30).max(480),
+  /**
+   * Added after the first questionnaire shipped. Defaults keep every answer set
+   * already in the database parseable — a saved trip must not become unreadable
+   * because a later build asked one more question.
+   */
+  willUseShuttles: z.boolean().default(true),
+  maxAccessWalkMinutes: z.number().int().min(0).max(120).default(25),
+  transportPriority: transportPrioritySchema.default('best_value'),
   regionalExpansion: regionalExpansionSchema,
   detourToleranceMinutes: z.number().int().min(0).max(180),
   avoidances: z.array(avoidanceSchema).default([]),
@@ -77,7 +86,13 @@ export const derivedProfileSchema = z.object({
 });
 export type DerivedProfile = z.infer<typeof derivedProfileSchema>;
 
-export const TRAVELER_PROFILE_VERSION = 1 as const;
+/**
+ * 2 — transport became a planning constraint rather than a set of road-comfort
+ * booleans: driving and total transportation now have separate budgets, and the
+ * traveller's shuttle, walking and optimisation preferences are first-class.
+ * `migrateTravelerProfile` upgrades v1 rows on read.
+ */
+export const TRAVELER_PROFILE_VERSION = 2 as const;
 
 export const travelerProfileSchema = z.object({
   version: z.literal(TRAVELER_PROFILE_VERSION),
@@ -89,11 +104,26 @@ export const travelerProfileSchema = z.object({
   discoveryMix: discoveryMixSchema,
   crowdTolerance: crowdToleranceSchema,
   avoidTouristTraps: z.boolean(),
+  /**
+   * Two budgets, not one.
+   *
+   * An hour behind the wheel on a mountain road and an hour on a shuttle with a
+   * book are not the same hour, and a traveller who caps their driving has not
+   * capped their willingness to be transported. Collapsing them into a single
+   * number is what makes a car-free plan look impossible and a shuttle day look
+   * like a violation.
+   */
   transport: z.object({
     willDrive: z.boolean(),
     comfortableMountainRoads: z.boolean(),
     comfortableGravelRoads: z.boolean(),
-    maxDailyTravelMinutes: z.number().int().min(30).max(480),
+    /** Minutes at the wheel a single day may contain. Zero without a car. */
+    maxDailyDriveMinutes: z.number().int().min(0).max(480),
+    /** Driving plus riding plus walking to reach things. Always the larger cap. */
+    maxDailyTransportMinutes: z.number().int().min(30).max(600),
+    willUseShuttles: z.boolean(),
+    maxAccessWalkMinutes: z.number().int().min(0).max(120),
+    priority: transportPrioritySchema,
   }),
   regionalExpansion: regionalExpansionSchema,
   detourToleranceMinutes: z.number().int().min(0).max(180),

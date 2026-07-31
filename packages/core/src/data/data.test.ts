@@ -38,8 +38,11 @@ describe('seed data', () => {
     const postpile = EASTERN_SIERRA_PLACES.find((place) => place.id === 'devils-postpile');
     expect(postpile).toBeDefined();
     expect(postpile?.seasonalAccess.openMonths).not.toContain(1);
-    expect(postpile?.seasonalAccess.shuttleMonths.length).toBeGreaterThan(0);
     expect(postpile?.seasonalAccess.closureRisk).toBe('high');
+    // The shuttle is no longer a month list on the place. Whether one replaces
+    // private vehicles is a service calendar's business, and this is where that
+    // separation is asserted rather than assumed.
+    expect(postpile?.seasonalAccess).not.toHaveProperty('shuttleMonths');
   });
 
   it('resolves the destination a traveller would actually type', () => {

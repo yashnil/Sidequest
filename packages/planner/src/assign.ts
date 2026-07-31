@@ -1,4 +1,5 @@
 import { clusterByTravelTime, type TravelTimeMatrix } from '@sidequest/geo';
+import type { AccessUnit } from './access';
 import type { PlannedDay } from './windows';
 import type { PlanningCandidate } from './types';
 
@@ -8,8 +9,18 @@ export interface DayAssignment {
 }
 
 /**
- * A set of candidates that must travel together — either one place on its own, or
- * everything behind a shared gate such as the Reds Meadow shuttle.
+ * A set of candidates that must travel together.
+ *
+ * Two independent reasons to bind places into one unit, and both are needed:
+ *
+ * - `Place.accessGroup` — "these have to happen on the same day". One road, one
+ *   fee, one long drive out and back. Minaret Vista and Devils Postpile qualify
+ *   even though you reach them by different means.
+ * - `AccessUnit` — "these share one entry sequence". Devils Postpile and Rainbow
+ *   Falls are one boarding; splitting them would pay for the shuttle twice.
+ *
+ * Clustering uses the coarser of the two, so a shared access sequence can never
+ * be broken across days by a geographic decision.
  */
 interface PlanningUnit {
   key: string;
@@ -20,10 +31,16 @@ interface PlanningUnit {
   topPriority: number;
 }
 
-function buildUnits(candidates: readonly PlanningCandidate[]): PlanningUnit[] {
+function buildUnits(
+  candidates: readonly PlanningCandidate[],
+  unitByPlaceId: ReadonlyMap<string, AccessUnit>,
+): PlanningUnit[] {
   const byKey = new Map<string, PlanningCandidate[]>();
   for (const candidate of candidates) {
-    const key = candidate.place.accessGroup?.id ?? candidate.place.id;
+    const key =
+      candidate.place.accessGroup?.id ??
+      unitByPlaceId.get(candidate.place.id)?.key ??
+      candidate.place.id;
     const bucket = byKey.get(key);
     if (bucket) bucket.push(candidate);
     else byKey.set(key, [candidate]);
@@ -73,13 +90,16 @@ export function assignToDays(
   days: readonly PlannedDay[],
   matrix: TravelTimeMatrix,
   baseId: string,
+  unitByPlaceId: ReadonlyMap<string, AccessUnit>,
+  /** Unit key → the dates a legal way in exists. Absent means unconstrained. */
+  feasibleDates: ReadonlyMap<string, ReadonlySet<string>>,
 ): DayAssignment[] {
   const usableDays = days.filter((day) => day.capacityMinutes >= MIN_PLANNABLE_MINUTES);
   if (usableDays.length === 0 || eligible.length === 0) {
     return days.map((day) => ({ day, candidates: [] }));
   }
 
-  const units = buildUnits(eligible);
+  const units = buildUnits(eligible, unitByPlaceId);
   const clusters = clusterByTravelTime(
     matrix,
     units.map((unit) => unit.representativeId),
@@ -94,6 +114,15 @@ export function assignToDays(
       .filter((unit): unit is PlanningUnit => unit !== undefined);
     return {
       candidates: members.flatMap((unit) => unit.members),
+      // The access units inside this geographic cluster, so day assignment can
+      // ask "can this actually be reached on that date?".
+      unitKeys: [
+        ...new Set(
+          members.flatMap((unit) =>
+            unit.members.map((member) => unitByPlaceId.get(member.place.id)?.key ?? unit.key),
+          ),
+        ),
+      ],
       weight: members.length > 0 ? Math.max(...members.map((unit) => unit.maxDriveMinutes)) : 0,
       topPriority: members.length > 0 ? Math.max(...members.map((unit) => unit.topPriority)) : 0,
     };
@@ -110,12 +139,31 @@ export function assignToDays(
   const assignmentByDay = new Map<number, PlanningCandidate[]>();
   for (const day of days) assignmentByDay.set(day.dayNumber, []);
 
-  orderedClusters.forEach((cluster, index) => {
-    const day = orderedDays[index % orderedDays.length];
-    if (!day) return;
-    const bucket = assignmentByDay.get(day.dayNumber);
-    if (bucket) bucket.push(...cluster.candidates);
-  });
+  /**
+   * How many of a cluster's units can legally be reached on a given date.
+   *
+   * Without this, geography alone decides the day and a shuttle-served valley
+   * lands on a Tuesday the shuttle does not run — the packer then rejects it and
+   * it spills into an overflow pass, by which time every other day is full of
+   * auto-picks. A traveller's hand-picked stop loses to a Sunday.
+   */
+  const reachableUnits = (cluster: (typeof clusterLoads)[number], date: string) =>
+    cluster.unitKeys.filter((key) => feasibleDates.get(key)?.has(date) ?? true).length;
+
+  // Fewest clusters so far wins, and `sort` is stable, so the capacity order
+  // already baked into `orderedDays` breaks every tie. Fully deterministic.
+  const clustersPerDay = new Map<number, number>();
+
+  for (const cluster of orderedClusters) {
+    const best = Math.max(...orderedDays.map((day) => reachableUnits(cluster, day.date)));
+    const pool = orderedDays.filter((day) => reachableUnits(cluster, day.date) === best);
+    const day = [...pool].sort(
+      (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
+    )[0];
+    if (!day) continue;
+    clustersPerDay.set(day.dayNumber, (clustersPerDay.get(day.dayNumber) ?? 0) + 1);
+    assignmentByDay.get(day.dayNumber)?.push(...cluster.candidates);
+  }
 
   return days.map((day) => ({
     day,

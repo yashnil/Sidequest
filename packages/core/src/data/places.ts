@@ -64,12 +64,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [5, 6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Lake Mary Road is gated to vehicles for winter; the corridor stays open for non-motorised access and the road reopens once the snow clears.',
     },
     access: {
-      requiresCar: false,
-      transitPossible: true,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'moderate',
@@ -101,10 +98,8 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     weatherSensitivity: 'low',
     worksInBadWeather: true,
     bestTimeOfDay: 'any',
-    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none', shuttleMonths: [] },
+    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none' },
     access: {
-      requiresCar: false,
-      transitPossible: true,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -137,12 +132,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Summer scenic operation runs roughly mid-June to mid-September. Outside that the gondola serves ski operations only.',
     },
     access: {
-      requiresCar: false,
-      transitPossible: true,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -177,12 +169,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Reached via Minaret Summit Road, which is gated by snow through spring.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'easy',
@@ -222,12 +211,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'high',
-      shuttleMonths: [6, 7, 8, 9],
       note: 'Reds Meadow Road is snow-closed most of the year. Across the last 27 years it has opened anywhere between late May and late July. In peak season a mandatory shuttle replaces private vehicles between 07:00 and 19:00.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: true,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'hard',
@@ -267,12 +253,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'high',
-      shuttleMonths: [6, 7, 8, 9],
       note: 'Same road, same gate and same shuttle as Devils Postpile — the two are one outing.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: true,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'hard',
@@ -312,12 +295,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: ALL_MONTHS,
       closureRisk: 'none',
-      shuttleMonths: [],
       note: 'Listed by Inyo National Forest as open 24 hours a day, year round, on a paved road off Highway 395.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -352,12 +332,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [4, 5, 6, 7, 8, 9, 10, 11],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'The access road is unmaintained in deep winter.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'partly_unpaved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -392,12 +369,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [4, 5, 6, 7, 8, 9, 10, 11],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Caltrans gates the northern half of Highway 158 for winter, usually in November or December. It is one of the first seasonal closures to reopen in spring — in 2026 it opened on 23 March. The southern end stays open for the ski area.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'easy',
@@ -437,12 +411,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: ALL_MONTHS,
       closureRisk: 'none',
-      shuttleMonths: [],
       note: 'Open all year; the final stretch of road can hold snow in midwinter.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -477,12 +448,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [4, 5, 6, 7, 8, 9, 10, 11],
       closureRisk: 'high',
-      shuttleMonths: [],
       note: 'Caltrans gates Highway 270 itself for winter, so in the cold months you cannot even reach the dirt section by car. The park stays open, but winter access is on skis, snowshoes or a snowmobile.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'partly_unpaved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -517,12 +485,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [4, 5, 6, 7, 8, 9, 10, 11],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'The dirt approach turns to mud or snow outside the dry months.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'unpaved',
       mountainRoad: false,
       parkingDifficulty: 'moderate',
@@ -557,12 +522,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [5, 6, 7, 8, 9, 10, 11],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'On Minaret Road, which closes above town in winter.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -595,12 +557,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'The forest road in is snow-covered outside summer and autumn.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'partly_unpaved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -634,12 +593,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [5, 6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Reached by an unpaved forest road that is impassable under snow.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'unpaved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -673,12 +629,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'The trailhead road is not maintained in winter.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'easy',
@@ -712,12 +665,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Rock Creek Road is closed in winter. The Little Lakes Valley permit season runs 1 May to 1 November, but the Mosquito Flat trailhead can hold snow well into June.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'hard',
@@ -752,12 +702,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'seasonal',
-      shuttleMonths: [],
       note: 'Snow-free from roughly June through October.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'partly_unpaved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -791,12 +738,9 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     seasonalAccess: {
       openMonths: [6, 7, 8, 9, 10],
       closureRisk: 'high',
-      shuttleMonths: [],
       note: 'Highway 120 over Tioga Pass is closed by snow roughly November through late May or June, and the opening date moves by weeks each year.',
     },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: true,
       parkingDifficulty: 'hard',
@@ -828,10 +772,8 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     weatherSensitivity: 'low',
     worksInBadWeather: true,
     bestTimeOfDay: 'any',
-    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none', shuttleMonths: [] },
+    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none' },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -862,10 +804,8 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     weatherSensitivity: 'low',
     worksInBadWeather: true,
     bestTimeOfDay: 'any',
-    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none', shuttleMonths: [] },
+    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none' },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'paved',
       mountainRoad: false,
       parkingDifficulty: 'easy',
@@ -896,10 +836,8 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     weatherSensitivity: 'low',
     worksInBadWeather: true,
     bestTimeOfDay: 'sunrise',
-    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none', shuttleMonths: [] },
+    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none' },
     access: {
-      requiresCar: true,
-      transitPossible: false,
       roadSurface: 'partly_unpaved',
       mountainRoad: false,
       parkingDifficulty: 'easy',

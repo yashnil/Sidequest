@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { autoSelect } from './autoselect';
 import { buildDiscoveryBoard, type DiscoveryBoard } from './board';
-import { EASTERN_SIERRA, EASTERN_SIERRA_PLACES, placeById } from '../data/index';
+import { placeById } from '../data/index';
 import type { QuestionnaireAnswers, TravelerProfile } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 import {
-  AUGUST_MONTHS,
-  JANUARY_MONTHS,
+  AUGUST_DATES,
+  JANUARY_DATES,
   MAMMOTH_HIKER_ANSWERS,
+  boardContext,
   context,
   interests,
   profile,
@@ -15,7 +16,7 @@ import {
 
 function setup(
   overrides: Partial<QuestionnaireAnswers> = MAMMOTH_HIKER_ANSWERS,
-  months = AUGUST_MONTHS,
+  dates = AUGUST_DATES,
   travelerNeeds: TravelerNeed[] = [],
   tripDays = 4,
 ): { board: DiscoveryBoard; profile: TravelerProfile; tripDays: number } {
@@ -23,10 +24,8 @@ function setup(
   const built = profile(overrides, ctx);
   return {
     board: buildDiscoveryBoard({
-      region: EASTERN_SIERRA,
-      places: EASTERN_SIERRA_PLACES,
+      ...boardContext(dates),
       profile: built,
-      months,
       travelerNeeds,
     }),
     profile: built,
@@ -34,8 +33,8 @@ function setup(
   };
 }
 
-function pick(overrides: Partial<QuestionnaireAnswers> = MAMMOTH_HIKER_ANSWERS, months = AUGUST_MONTHS, needs: TravelerNeed[] = [], tripDays = 4) {
-  const { board, profile: built } = setup(overrides, months, needs, tripDays);
+function pick(overrides: Partial<QuestionnaireAnswers> = MAMMOTH_HIKER_ANSWERS, dates = AUGUST_DATES, needs: TravelerNeed[] = [], tripDays = 4) {
+  const { board, profile: built } = setup(overrides, dates, needs, tripDays);
   return { ...autoSelect({ candidates: board.candidates, profile: built, tripDays }), board, profile: built };
 }
 
@@ -64,7 +63,7 @@ describe('discovery board grouping', () => {
   });
 
   it('puts unworkable places in the skip group with an explanation', () => {
-    const { board } = setup(MAMMOTH_HIKER_ANSWERS, JANUARY_MONTHS);
+    const { board } = setup(MAMMOTH_HIKER_ANSWERS, JANUARY_DATES);
     const skip = board.groups.find((entry) => entry.group === 'weak_fit');
     expect(skip).toBeDefined();
     const postpile = skip?.candidates.find((c) => c.place.id === 'devils-postpile');
@@ -88,8 +87,8 @@ describe('auto-selection', () => {
   });
 
   it('scales the number of picks to trip length and pace', () => {
-    const short = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_MONTHS, [], 3);
-    const long = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_MONTHS, [], 7);
+    const short = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_DATES, [], 3);
+    const long = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_DATES, [], 7);
     expect(long.targetCount).toBeGreaterThan(short.targetCount);
 
     const slow = pick({ ...MAMMOTH_HIKER_ANSWERS, pace: 'slow' });
@@ -98,7 +97,7 @@ describe('auto-selection', () => {
   });
 
   it('never pre-selects something unworkable', () => {
-    const { selectedIds, board } = pick(MAMMOTH_HIKER_ANSWERS, JANUARY_MONTHS);
+    const { selectedIds, board } = pick(MAMMOTH_HIKER_ANSWERS, JANUARY_DATES);
     for (const id of selectedIds) {
       const candidate = board.candidates.find((c) => c.place.id === id);
       expect(candidate?.fit.band).not.toBe('not_workable');
@@ -129,7 +128,7 @@ describe('auto-selection', () => {
   it('keeps total driving inside a sane share of the travel budget', () => {
     const { stats, profile: built } = pick();
     expect(stats.totalDriveMinutesOneWay).toBeLessThanOrEqual(
-      4 * built.transport.maxDailyTravelMinutes * 0.5,
+      4 * built.transport.maxDailyDriveMinutes * 0.5,
     );
   });
 
@@ -145,10 +144,10 @@ describe('auto-selection', () => {
     // On a short trip the traveller's own "a few times" ceilings bind harder than
     // a stylistic preference, so the mix can only reorder the board. Give the trip
     // room and the mix has to change what is actually picked.
-    const balanced = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_MONTHS, [], 7);
+    const balanced = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_DATES, [], 7);
     const deepCuts = pick(
       { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'deep_cuts' },
-      AUGUST_MONTHS,
+      AUGUST_DATES,
       [],
       7,
     );
@@ -169,7 +168,7 @@ describe('auto-selection', () => {
   });
 
   it('respects a mobility need by only picking low-effort stops', () => {
-    const { selectedIds, board } = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_MONTHS, ['mobility_limited']);
+    const { selectedIds, board } = pick(MAMMOTH_HIKER_ANSWERS, AUGUST_DATES, ['mobility_limited']);
     expect(selectedIds.length).toBeGreaterThan(0);
     for (const id of selectedIds) {
       const intensity = board.candidates.find((c) => c.place.id === id)?.place.physicalIntensity;
@@ -181,9 +180,9 @@ describe('auto-selection', () => {
     const { selectedIds, board } = pick({ ...MAMMOTH_HIKER_ANSWERS, willDrive: false });
     for (const id of selectedIds) {
       const candidate = board.candidates.find((c) => c.place.id === id);
-      expect(
-        candidate?.place.access.requiresCar === false || candidate?.place.access.transitPossible,
-      ).toBe(true);
+      // Nothing auto-picked may need a vehicle the traveller does not have.
+      expect(candidate?.access.requiredModes).not.toContain('drive');
+      expect(candidate?.access.status).not.toBe('blocked');
     }
   });
 

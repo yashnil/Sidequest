@@ -1,8 +1,10 @@
 export * from './types';
 export * from './windows';
 export * from './candidates';
+export * from './access';
 export * from './assign';
 export * from './schedule';
+export * from './strategy';
 export * from './revise';
 export { planTrip } from './plan';
-export { validateItinerary, statusFor } from './validate';
+export { validateItinerary, validateStrategy, statusFor } from './validate';

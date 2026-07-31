@@ -3,12 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import {
   autoSelect,
-  buildDiscoveryBoard,
   countTripDays,
-  EASTERN_SIERRA_PLACES,
-  REGIONS,
   selectionStatusSchema,
-  tripMonths,
   type SelectionStatus,
 } from '@sidequest/core';
 import {
@@ -19,6 +15,7 @@ import {
   replaceAutoSelections,
   setSelection,
 } from '@/lib/db/repository';
+import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export interface ActionResult {
   ok: boolean;
@@ -69,16 +66,10 @@ export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
       return { ok: false, error: 'Finish the questionnaire first so we know what to pick for.' };
     }
 
-    const region = REGIONS.find((item) => item.id === trip.basics.regionId);
-    if (!region) return { ok: false, error: 'We do not have that region mapped.' };
+    const resolved = resolveTripRegion(trip);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
 
-    const board = buildDiscoveryBoard({
-      region,
-      places: EASTERN_SIERRA_PLACES,
-      profile,
-      months: tripMonths(trip.basics.startDate, trip.basics.endDate),
-      travelerNeeds: trip.basics.travelerNeeds,
-    });
+    const board = boardFor(trip, profile, resolved.context);
     const selection = autoSelect({
       candidates: board.candidates,
       profile,

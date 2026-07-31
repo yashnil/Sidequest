@@ -1,3 +1,4 @@
+import type { TransportPriority } from '../schemas/access';
 import {
   AVOIDANCES,
   AVOIDANCE_LABELS,
@@ -91,6 +92,7 @@ export type ConditionalQuestionId =
   | 'avoidTouristTraps'
   | 'roadComfort'
   | 'maxDailyTravelMinutes'
+  | 'shuttleUse'
   | 'detourToleranceMinutes';
 
 export interface AdaptiveInput {
@@ -113,6 +115,10 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
       return answers.crowdTolerance !== 'dont_mind';
     case 'roadComfort':
     case 'maxDailyTravelMinutes':
+      return answers.willDrive;
+    // Only a driver gets to opt out of shuttles. Without a car they are not a
+    // preference, they are the entire transport plan.
+    case 'shuttleUse':
       return answers.willDrive;
     // "Stay in town" already answers this.
     case 'detourToleranceMinutes':
@@ -181,6 +187,17 @@ export const REGIONAL_EXPANSION_OPTIONS: readonly Option<RegionalExpansion>[] = 
   { value: 'nearby_60', label: 'Within ~1 hour', detail: 'Adds June Lake Loop and Mono Lake' },
   { value: 'nearby_120', label: 'Up to ~2 hours', detail: 'Adds Bodie, Bishop, Rock Creek' },
   { value: 'best_regional', label: 'Best of the Eastern Sierra', detail: 'Go wherever it is worth it' },
+];
+
+/**
+ * How to choose between two legal ways in. A soft preference: it orders the
+ * options the access data supports, and never makes an impossible one possible.
+ */
+export const TRANSPORT_PRIORITY_OPTIONS: readonly Option<TransportPriority>[] = [
+  { value: 'best_value', label: 'Best overall', detail: 'Sensible trade of time, cost and hassle' },
+  { value: 'least_stressful', label: 'Least stressful', detail: 'Let someone else drive where you can' },
+  { value: 'fastest', label: 'Fastest', detail: 'Fewest minutes in transit, whatever it costs' },
+  { value: 'cheapest', label: 'Cheapest', detail: 'Ride rather than pay to park' },
 ];
 
 export const AVOIDANCE_OPTIONS: readonly Option<Avoidance>[] = AVOIDANCES.map((value) => ({

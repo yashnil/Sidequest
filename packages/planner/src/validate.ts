@@ -1,5 +1,7 @@
 import {
   formatMinuteOfDay,
+  serviceAvailabilityOn,
+  type AccessDataset,
   type Itinerary,
   type ItineraryDay,
   type TravelerProfile,
@@ -19,6 +21,7 @@ export interface ValidationInput {
   matrix: TravelTimeMatrix;
   placesById: ReadonlyMap<string, Place>;
   baseId: string;
+  access: AccessDataset;
 }
 
 /**
@@ -129,14 +132,27 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
       }
     }
 
-    if (day.totals.travelMinutes > profile.transport.maxDailyTravelMinutes) {
+    // Two budgets, checked separately. An hour at the wheel and an hour on a bus
+    // are not interchangeable, and a traveller who capped their driving has not
+    // capped their willingness to be carried.
+    if (day.totals.driveMinutes > profile.transport.maxDailyDriveMinutes) {
       issues.push({
-        code: 'daily_travel_exceeded',
+        code: 'daily_drive_exceeded',
         severity: 'error',
-        message: `Day ${day.dayNumber} has ${day.totals.travelMinutes} min of driving, past the ${profile.transport.maxDailyTravelMinutes} min you set.`,
+        message: `Day ${day.dayNumber} has ${day.totals.driveMinutes} min at the wheel, past the ${profile.transport.maxDailyDriveMinutes} min you set.`,
         dayNumber: day.dayNumber,
       });
     }
+    if (day.totals.travelMinutes > profile.transport.maxDailyTransportMinutes) {
+      issues.push({
+        code: 'daily_transport_exceeded',
+        severity: 'error',
+        message: `Day ${day.dayNumber} spends ${day.totals.travelMinutes} min getting places, past the ${profile.transport.maxDailyTransportMinutes} min of total travel this trip allows for.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+
+    issues.push(...validateDayTransport(day, input));
 
     const strenuousAllowed = profile.derived.preferredPhysicalIntensity === 'strenuous' ? 2 : 1;
     if (day.totals.strenuousCount > strenuousAllowed) {
@@ -161,7 +177,6 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
     const activityItems = day.items.filter((item) => item.kind === 'activity');
     if (activityItems.length > 0) {
       const first = day.items[0];
-      const last = day.items[day.items.length - 1];
       const startsAtBase = first?.kind === 'travel' ? first.travel?.fromId === baseId : true;
       const endsAtBase = lastTravelReturnsToBase(day, baseId);
       if (!startsAtBase || !endsAtBase) {
@@ -172,7 +187,6 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
           dayNumber: day.dayNumber,
         });
       }
-      void last;
     }
   }
 
@@ -228,6 +242,251 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
       severity: 'warning',
       message: 'Nothing could be scheduled from your selections.',
     });
+  }
+
+  return issues;
+}
+
+/**
+ * The trip-level strategy against the days it claims to describe.
+ *
+ * Run after the strategy is derived rather than inside the main pass, because a
+ * strategy that contradicts its own itinerary is a defect in this code, not a
+ * problem with the traveller's choices — and it should be impossible.
+ */
+export function validateStrategy(
+  strategy: Itinerary['transportStrategy'],
+  days: readonly ItineraryDay[],
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const modesUsed = new Set(days.flatMap((day) => day.transport.modes));
+
+  if (modesUsed.size > 0 && !modesUsed.has(strategy.primaryMode)) {
+    issues.push({
+      code: 'strategy_mode_mismatch',
+      severity: 'error',
+      message: `The plan recommends travelling by ${strategy.primaryMode}, but no day actually does.`,
+    });
+  }
+
+  const actual = days.reduce(
+    (acc, day) => ({
+      drive: acc.drive + day.totals.driveMinutes,
+      transit: acc.transit + day.totals.transitMinutes,
+      walk: acc.walk + day.totals.walkMinutes,
+      wait: acc.wait + day.totals.waitMinutes,
+    }),
+    { drive: 0, transit: 0, walk: 0, wait: 0 },
+  );
+  if (
+    actual.drive !== strategy.totals.driveMinutes ||
+    actual.transit !== strategy.totals.transitMinutes ||
+    actual.walk !== strategy.totals.walkMinutes ||
+    actual.wait !== strategy.totals.waitMinutes
+  ) {
+    issues.push({
+      code: 'inconsistent_transport_totals',
+      severity: 'error',
+      message: 'The transportation summary does not add up to the days it describes.',
+    });
+  }
+
+  return issues;
+}
+
+/**
+ * The transportation half of the check.
+ *
+ * The scheduler already refuses to build most of these — it is the right place
+ * to prevent them. This exists because "the builder is careful" is an assumption,
+ * and an assumption about the last bus out of a valley with no phone signal is
+ * one worth having a second opinion on.
+ */
+function validateDayTransport(day: ItineraryDay, input: ValidationInput): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { profile, access, placesById } = input;
+  const travelItems = day.items.filter((item) => item.kind === 'travel' && item.travel);
+
+  // 1. Totals must equal what is on the timeline, or every budget check above is
+  //    checking a number nobody produced.
+  // Classified exactly as the layout classifies it — by mode, with waiting split
+  // out — because the whole point of this check is that the two agree. A leg
+  // counted as walking here and as riding there is how a budget silently stops
+  // being enforced.
+  const summed = travelItems.reduce(
+    (acc, item) => {
+      const travel = item.travel!;
+      if (travel.mode === 'drive') acc.drive += travel.minutes;
+      else if (travel.role === 'wait') acc.wait += travel.minutes;
+      else if (travel.mode === 'walk') acc.walk += travel.minutes;
+      else acc.transit += travel.minutes;
+      return acc;
+    },
+    { drive: 0, transit: 0, walk: 0, wait: 0 },
+  );
+  if (
+    summed.drive !== day.totals.driveMinutes ||
+    summed.transit !== day.totals.transitMinutes ||
+    summed.walk !== day.totals.walkMinutes ||
+    summed.wait !== day.totals.waitMinutes
+  ) {
+    issues.push({
+      code: 'inconsistent_transport_totals',
+      severity: 'error',
+      message: `Day ${day.dayNumber}'s transport totals do not match the legs on its timeline.`,
+      dayNumber: day.dayNumber,
+    });
+  }
+
+  for (const item of travelItems) {
+    const travel = item.travel!;
+    if (!travel.fromId || !travel.toId || !travel.fromName || !travel.toName) {
+      issues.push({
+        code: 'transport_leg_without_endpoint',
+        severity: 'error',
+        message: `A leg on day ${day.dayNumber} does not say where it starts or ends.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+    if (travel.mode === 'drive' && !profile.transport.willDrive) {
+      issues.push({
+        code: 'required_mode_unavailable',
+        severity: 'error',
+        message: `Day ${day.dayNumber} has you driving, and you told us you would not have a car.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+    if (
+      (travel.mode === 'shuttle' || travel.mode === 'public_bus') &&
+      !profile.transport.willUseShuttles
+    ) {
+      issues.push({
+        code: 'required_mode_unavailable',
+        severity: 'error',
+        message: `Day ${day.dayNumber} puts you on a ${travel.mode === 'shuttle' ? 'shuttle' : 'bus'}, which you asked us to leave out.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+  }
+
+  // 2. Boarding the same service twice in a day means the shared-access grouping
+  //    failed and the traveller is paying and queueing twice.
+  const boardings = travelItems
+    .filter((item) => item.travel!.role === 'ride' && item.travel!.serviceId)
+    .map((item) => item.travel!.serviceId!);
+  for (const serviceId of new Set(boardings)) {
+    if (boardings.filter((id) => id === serviceId).length > 1) {
+      issues.push({
+        code: 'duplicate_access_sequence',
+        severity: 'error',
+        message: `Day ${day.dayNumber} boards the same service more than once. Everything behind it should be one trip in and one trip out.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+  }
+
+  // 3. The services this day leans on must actually run on this date.
+  for (const serviceId of day.transport.serviceIds) {
+    const service = access.services.find((entry) => entry.id === serviceId);
+    if (!service) {
+      issues.push({
+        code: 'missing_access_data',
+        severity: 'error',
+        message: `Day ${day.dayNumber} depends on a service we have no timetable for.`,
+        dayNumber: day.dayNumber,
+      });
+      continue;
+    }
+    const availability = serviceAvailabilityOn(service, day.date);
+    if (!availability.available) {
+      issues.push({
+        code:
+          availability.reason === 'out_of_season'
+            ? 'service_out_of_season'
+            : 'service_not_operating_on_date',
+        severity: 'error',
+        message: `${service.label} does not run on ${day.date}, and day ${day.dayNumber} is built around it.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+
+    // 4. The last way out. The failure this whole layer exists to prevent.
+    const returnLeg = travelItems.find(
+      (item) => item.travel!.role === 'return' && item.travel!.serviceId === serviceId,
+    );
+    if (returnLeg && returnLeg.startMinute > service.window.lastReturnDeparture) {
+      issues.push({
+        code: 'missed_last_return',
+        severity: 'error',
+        message: `Day ${day.dayNumber} reaches the stop at ${formatMinuteOfDay(returnLeg.startMinute)}, after the last ${service.label} out at ${formatMinuteOfDay(service.window.lastReturnDeparture)}.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+    // In and back out, including the wait each way and the walk at the far end —
+    // the same arithmetic the layout performs, so the two cannot disagree.
+    const rule = access.rules.find((entry) => entry.serviceId === service.id);
+    const roundTrip =
+      service.rideMinutes * 2 +
+      service.transferBufferMinutes * 2 +
+      (rule?.walkMinutesFromDropOff ?? 0) * 2;
+    if (service.window.lastReturnDeparture - service.window.firstDeparture < roundTrip) {
+      issues.push({
+        code: 'access_window_too_short',
+        severity: 'error',
+        message: `${service.label} does not run long enough in a day to get in and back out.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+  }
+
+  // 5. Road and remoteness preferences, checked against what was actually
+  //    scheduled rather than only against what was offered.
+  for (const item of day.items) {
+    if (item.kind !== 'activity' || !item.placeId) continue;
+    const place = placesById.get(item.placeId);
+    if (!place) continue;
+
+    const roughRoad = place.access.roadSurface !== 'paved';
+    const drivesThere = day.transport.modes.includes('drive');
+    if (
+      roughRoad &&
+      drivesThere &&
+      (profile.avoidances.includes('rough_or_gravel_roads') ||
+        (place.access.roadSurface === 'unpaved' && !profile.transport.comfortableGravelRoads))
+    ) {
+      issues.push({
+        code: 'road_surface_incompatible',
+        severity: 'error',
+        message: `${place.name} is reached on an unpaved road, which you asked us to avoid.`,
+        dayNumber: day.dayNumber,
+        placeId: place.id,
+      });
+    }
+    if (
+      place.access.remoteNoServices &&
+      profile.avoidances.includes('remote_areas_without_services')
+    ) {
+      issues.push({
+        code: 'remote_area_incompatible',
+        severity: 'error',
+        message: `${place.name} is out where there are no services, which you asked us to avoid.`,
+        dayNumber: day.dayNumber,
+        placeId: place.id,
+      });
+    }
+    if (
+      place.access.parkingDifficulty === 'hard' &&
+      drivesThere &&
+      day.transport.serviceIds.length === 0
+    ) {
+      issues.push({
+        code: 'parking_unavailable',
+        severity: 'warning',
+        message: `${place.name} has a lot that fills early. Arriving late may mean no space.`,
+        dayNumber: day.dayNumber,
+        placeId: place.id,
+      });
+    }
   }
 
   return issues;

@@ -2,9 +2,12 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import {
   discoverySelectionSchema,
+  ITINERARY_VERSION,
   itinerarySchema,
+  migrateTravelerProfile,
   type Itinerary,
   questionnaireAnswersSchema,
+  countTripDays,
   travelerProfileSchema,
   tripBasicsSchema,
   tripSchema,
@@ -172,12 +175,46 @@ export function getAnswers(tripId: string): QuestionnaireAnswers | null {
   return questionnaireAnswersSchema.parse(JSON.parse(row.answers_json));
 }
 
+/**
+ * Reads the profile, upgrading it in place when an older build wrote it.
+ *
+ * The answers are the durable artefact; the profile is derived from them. So a
+ * profile that no longer parses is rebuilt from its own answers rather than
+ * hand-mapped field by field — no bespoke migration code to drift, and a trip
+ * created before transport preferences existed keeps working with the defaults
+ * those questions now carry.
+ *
+ * The upgrade is written back so the next read is a plain parse.
+ */
 export function getProfile(tripId: string): TravelerProfile | null {
   const row = getDb()
     .prepare('SELECT * FROM traveler_profiles WHERE trip_id = ?')
     .get(tripId) as ProfileRow | undefined;
   if (!row?.profile_json) return null;
-  return travelerProfileSchema.parse(JSON.parse(row.profile_json));
+
+  const current = travelerProfileSchema.safeParse(JSON.parse(row.profile_json));
+  if (current.success) return current.data;
+
+  const trip = getTrip(tripId);
+  const answers = questionnaireAnswersSchema.safeParse(JSON.parse(row.answers_json));
+  if (!trip || !answers.success) return null;
+
+  const migrated = migrateTravelerProfile(answers.data, {
+    travelerNeeds: trip.basics.travelerNeeds,
+    tripDays: countTripDays(trip.basics.startDate, trip.basics.endDate),
+  });
+  if (!migrated) return null;
+
+  // Written back so the next read is a plain parse — but *only* the profile.
+  // Routing this through `saveProfile` would also set the trip to `profiled`,
+  // so merely opening a planned trip would demote it.
+  getDb()
+    .prepare(
+      `UPDATE traveler_profiles SET profile_version = ?, profile_json = ?, updated_at = ?
+       WHERE trip_id = ?`,
+    )
+    .run(migrated.version, JSON.stringify(migrated), new Date().toISOString(), tripId);
+  return migrated;
 }
 
 export function getSelections(tripId: string): DiscoverySelection[] {
@@ -215,6 +252,25 @@ export function setSelection(
     )
     .run(tripId, placeId, status, source, new Date().toISOString());
   setTripStatus(tripId, 'discovering');
+}
+
+/**
+ * Drops a stored plan.
+ *
+ * Called when the profile changes: an itinerary is a function of the answers it
+ * was built from, so once those change the stored plan describes a trip nobody
+ * asked for. Deleting it is honest — the traveller lands on the board, which
+ * offers Build my trip — whereas leaving it would show a transport strategy
+ * derived from answers they have just replaced.
+ */
+export function clearItinerary(tripId: string): void {
+  const db = getDb();
+  const apply = db.transaction(() => {
+    db.prepare('DELETE FROM itinerary_items WHERE trip_id = ?').run(tripId);
+    db.prepare('DELETE FROM itinerary_days WHERE trip_id = ?').run(tripId);
+    db.prepare('DELETE FROM itineraries WHERE trip_id = ?').run(tripId);
+  });
+  apply();
 }
 
 export function clearSelection(tripId: string, placeId: string): void {
@@ -258,6 +314,7 @@ interface ItineraryRow {
   end_date: string;
   status: string;
   summary: string;
+  transport_strategy_json: string;
   issues_json: string;
   unscheduled_json: string;
   diagnostics_json: string;
@@ -272,7 +329,25 @@ interface ItineraryDayRow {
   intensity: string;
   window_json: string;
   totals_json: string;
+  transport_json: string;
   warnings_json: string;
+}
+
+/**
+ * A stored plan written by an older build.
+ *
+ * Thrown rather than returned so the caller cannot mistake it for "no plan yet".
+ * The two states need different screens: one offers a rebuild that keeps every
+ * selection, the other says the trip has not been built at all.
+ */
+export class StaleItineraryError extends Error {
+  readonly storedVersion: number;
+
+  constructor(storedVersion: number) {
+    super(`Stored itinerary is version ${storedVersion}; this build writes ${ITINERARY_VERSION}.`);
+    this.name = 'StaleItineraryError';
+    this.storedVersion = storedVersion;
+  }
 }
 
 interface ItineraryItemRow {
@@ -300,9 +375,11 @@ export function saveItinerary(itinerary: Itinerary): void {
 
     db.prepare(
       `INSERT INTO itineraries (trip_id, version, region_id, base_id, base_name, start_date, end_date,
-         status, summary, issues_json, unscheduled_json, diagnostics_json, created_at, updated_at)
+         status, summary, transport_strategy_json, issues_json, unscheduled_json, diagnostics_json,
+         created_at, updated_at)
        VALUES (@trip_id, @version, @region_id, @base_id, @base_name, @start_date, @end_date,
-         @status, @summary, @issues_json, @unscheduled_json, @diagnostics_json, @created_at, @updated_at)`,
+         @status, @summary, @transport_strategy_json, @issues_json, @unscheduled_json,
+         @diagnostics_json, @created_at, @updated_at)`,
     ).run({
       trip_id: value.tripId,
       version: value.version,
@@ -313,6 +390,7 @@ export function saveItinerary(itinerary: Itinerary): void {
       end_date: value.endDate,
       status: value.status,
       summary: value.summary,
+      transport_strategy_json: JSON.stringify(value.transportStrategy),
       issues_json: JSON.stringify(value.issues),
       unscheduled_json: JSON.stringify(value.unscheduled),
       diagnostics_json: JSON.stringify(value.diagnostics),
@@ -322,8 +400,8 @@ export function saveItinerary(itinerary: Itinerary): void {
 
     const insertDay = db.prepare(
       `INSERT INTO itinerary_days (trip_id, day_number, date, base_id, base_name, theme, intensity,
-         window_json, totals_json, warnings_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         window_json, totals_json, transport_json, warnings_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertItem = db.prepare(
       `INSERT INTO itinerary_items (trip_id, day_number, position, kind, place_id, start_minute, end_minute, item_json)
@@ -341,6 +419,7 @@ export function saveItinerary(itinerary: Itinerary): void {
         day.intensity,
         JSON.stringify(day.window),
         JSON.stringify(day.totals),
+        JSON.stringify(day.transport),
         JSON.stringify(day.warnings),
       );
       day.items.forEach((item, position) => {
@@ -377,6 +456,9 @@ export function getItinerary(tripId: string): Itinerary | null {
     | ItineraryRow
     | undefined;
   if (!head) return null;
+  // An older plan cannot be coerced into the current shape without inventing the
+  // transport it never recorded. Say so, and let the caller offer a rebuild.
+  if (head.version !== ITINERARY_VERSION) throw new StaleItineraryError(head.version);
 
   const dayRows = db
     .prepare('SELECT * FROM itinerary_days WHERE trip_id = ? ORDER BY day_number')
@@ -402,6 +484,7 @@ export function getItinerary(tripId: string): Itinerary | null {
     endDate: head.end_date,
     status: head.status,
     summary: head.summary,
+    transportStrategy: JSON.parse(head.transport_strategy_json),
     issues: JSON.parse(head.issues_json),
     unscheduled: JSON.parse(head.unscheduled_json),
     diagnostics: JSON.parse(head.diagnostics_json),
@@ -414,6 +497,7 @@ export function getItinerary(tripId: string): Itinerary | null {
       intensity: row.intensity,
       window: JSON.parse(row.window_json),
       totals: JSON.parse(row.totals_json),
+      transport: JSON.parse(row.transport_json),
       warnings: JSON.parse(row.warnings_json),
       items: itemsByDay.get(row.day_number) ?? [],
     })),

@@ -3,22 +3,20 @@
 import { redirect } from 'next/navigation';
 import {
   autoSelect,
-  buildDiscoveryBoard,
   buildTravelerProfile,
   countTripDays,
-  EASTERN_SIERRA_PLACES,
   questionnaireAnswersSchema,
-  REGIONS,
-  tripMonths,
   validatedQuestionnaireAnswersSchema,
   type QuestionnaireAnswers,
 } from '@sidequest/core';
 import {
+  clearItinerary,
   getTrip,
   replaceAutoSelections,
   saveAnswers,
   saveProfile,
 } from '@/lib/db/repository';
+import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export interface SaveResult {
   ok: boolean;
@@ -69,21 +67,19 @@ export async function completeQuestionnaireAction(
       tripDays,
     });
     saveProfile(tripId, parsed.data, profile);
+    // The stored plan was built from the answers that have just been replaced.
+    // Keeping it would show a transport strategy derived from a profile that no
+    // longer exists, with nothing to say so.
+    clearItinerary(tripId);
 
     // Seed the board with a balanced starting set so the traveller arrives at
     // something to confirm rather than an empty grid to work through. Done here,
     // on the write that finishes the questionnaire, rather than as a side effect
     // of rendering the board. Re-running the questionnaire re-seeds it, and any
     // card the traveller had already decided by hand is left alone.
-    const region = REGIONS.find((item) => item.id === trip.basics.regionId);
-    if (region) {
-      const board = buildDiscoveryBoard({
-        region,
-        places: EASTERN_SIERRA_PLACES,
-        profile,
-        months: tripMonths(trip.basics.startDate, trip.basics.endDate),
-        travelerNeeds: trip.basics.travelerNeeds,
-      });
+    const resolved = resolveTripRegion(trip);
+    if (resolved.ok) {
+      const board = boardFor(trip, profile, resolved.context);
       const selection = autoSelect({ candidates: board.candidates, profile, tripDays });
       replaceAutoSelections(tripId, selection.selectedIds);
     }

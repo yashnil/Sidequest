@@ -63,33 +63,35 @@ CREATE INDEX IF NOT EXISTS idx_discovery_selections_trip ON discovery_selections
 --
 -- One itinerary per trip: rebuilding replaces it wholesale, inside a transaction.
 CREATE TABLE IF NOT EXISTS itineraries (
-  trip_id          TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
-  version          INTEGER NOT NULL,
-  region_id        TEXT NOT NULL,
-  base_id          TEXT NOT NULL,
-  base_name        TEXT NOT NULL,
-  start_date       TEXT NOT NULL,
-  end_date         TEXT NOT NULL,
-  status           TEXT NOT NULL,
-  summary          TEXT NOT NULL,
-  issues_json      TEXT NOT NULL DEFAULT '[]',
-  unscheduled_json TEXT NOT NULL DEFAULT '[]',
-  diagnostics_json TEXT NOT NULL,
-  created_at       TEXT NOT NULL,
-  updated_at       TEXT NOT NULL
+  trip_id                  TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  version                  INTEGER NOT NULL,
+  region_id                TEXT NOT NULL,
+  base_id                  TEXT NOT NULL,
+  base_name                TEXT NOT NULL,
+  start_date               TEXT NOT NULL,
+  end_date                 TEXT NOT NULL,
+  status                   TEXT NOT NULL,
+  summary                  TEXT NOT NULL,
+  transport_strategy_json  TEXT NOT NULL DEFAULT '{}',
+  issues_json              TEXT NOT NULL DEFAULT '[]',
+  unscheduled_json         TEXT NOT NULL DEFAULT '[]',
+  diagnostics_json         TEXT NOT NULL,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS itinerary_days (
-  trip_id       TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
-  day_number    INTEGER NOT NULL,
-  date          TEXT NOT NULL,
-  base_id       TEXT NOT NULL,
-  base_name     TEXT NOT NULL,
-  theme         TEXT NOT NULL,
-  intensity     TEXT NOT NULL,
-  window_json   TEXT NOT NULL,
-  totals_json   TEXT NOT NULL,
-  warnings_json TEXT NOT NULL DEFAULT '[]',
+  trip_id        TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  day_number     INTEGER NOT NULL,
+  date           TEXT NOT NULL,
+  base_id        TEXT NOT NULL,
+  base_name      TEXT NOT NULL,
+  theme          TEXT NOT NULL,
+  intensity      TEXT NOT NULL,
+  window_json    TEXT NOT NULL,
+  totals_json    TEXT NOT NULL,
+  transport_json TEXT NOT NULL DEFAULT '{}',
+  warnings_json  TEXT NOT NULL DEFAULT '[]',
   PRIMARY KEY (trip_id, day_number)
 );
 
@@ -108,3 +110,29 @@ CREATE TABLE IF NOT EXISTS itinerary_items (
 CREATE INDEX IF NOT EXISTS idx_itinerary_days_trip ON itinerary_days(trip_id);
 CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_day ON itinerary_items(trip_id, day_number);
 `;
+
+/**
+ * Additive column migrations.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so a
+ * database created by an earlier build would silently lack every column added
+ * since — and the first write would fail with a message about SQL syntax rather
+ * than about what actually happened. Each entry is checked against
+ * `PRAGMA table_info` and applied only when missing, so running this repeatedly
+ * is safe and a fresh database skips it entirely.
+ *
+ * Every added column carries a NOT NULL default, because a row written before
+ * the column existed still has to parse afterwards.
+ */
+export const COLUMN_MIGRATIONS: readonly {
+  table: string;
+  column: string;
+  definition: string;
+}[] = [
+  {
+    table: 'itineraries',
+    column: 'transport_strategy_json',
+    definition: "TEXT NOT NULL DEFAULT '{}'",
+  },
+  { table: 'itinerary_days', column: 'transport_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+];

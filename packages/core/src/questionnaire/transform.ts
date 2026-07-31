@@ -7,6 +7,7 @@ import {
   type RegionalExpansion,
 } from '../schemas/common';
 import {
+  questionnaireAnswersSchema,
   TRAVELER_PROFILE_VERSION,
   travelerProfileSchema,
   type DerivedProfile,
@@ -37,6 +38,9 @@ export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnsw
     comfortableMountainRoads: true,
     comfortableGravelRoads: false,
     maxDailyTravelMinutes: 150,
+    willUseShuttles: true,
+    maxAccessWalkMinutes: 25,
+    transportPriority: 'best_value',
     regionalExpansion: 'nearby_60',
     detourToleranceMinutes: 60,
     avoidances: context.travelerNeeds.includes('mobility_limited') ? ['strenuous_activity'] : [],
@@ -65,6 +69,12 @@ export function normalizeAnswers(
   if (!isQuestionVisible('roadComfort', input)) {
     next.comfortableMountainRoads = false;
     next.comfortableGravelRoads = false;
+  }
+  // Someone without a car is only reachable by shuttle, bus and foot. Letting a
+  // stale "no shuttles" answer survive would leave them with an empty board and
+  // no explanation for it.
+  if (!isQuestionVisible('shuttleUse', input)) {
+    next.willUseShuttles = true;
   }
 
   const allowedExpansions = availableRegionalExpansions(next.willDrive);
@@ -95,6 +105,25 @@ const EXPANSION_CEILING_MINUTES: Record<RegionalExpansion, number> = {
 
 /** Without a car, only the base town and its trolley stops are realistically reachable. */
 const NO_CAR_DETOUR_MINUTES = 20;
+
+/**
+ * How much riding and walking a day may hold on top of the driving budget.
+ *
+ * Not a preference the traveller stated — nobody has an opinion about this until
+ * they are made to have one — so it is a stated default rather than a hidden
+ * question. Ninety minutes covers a shuttle in, a shuttle out and the walk at
+ * each end, which is what an access day actually costs.
+ */
+export const ACCESS_TRAVEL_ALLOWANCE_MINUTES = 90;
+
+/**
+ * Total transport budget for a traveller with no car.
+ *
+ * They never see the driving question, so there is nothing to add an allowance
+ * to. This is what a day of shuttles, buses and walking can realistically hold
+ * before it stops being a holiday.
+ */
+export const NO_CAR_TRANSPORT_MINUTES = 150;
 
 const SLOTS_BY_PACE = { slow: 2, balanced: 3, fast: 4 } as const;
 const HIDDEN_GEM_TARGET = {
@@ -187,6 +216,33 @@ export function deriveProfileValues(
   };
 }
 
+/**
+ * The traveller's transportation position, in the shape the planner reads.
+ *
+ * The questionnaire keeps asking one question about driving because that is the
+ * question a person can answer. Splitting it into a driving cap and a total
+ * transportation cap happens here, once, where it is testable.
+ */
+export function transportPreferencesFrom(
+  answers: QuestionnaireAnswers,
+): TravelerProfile['transport'] {
+  const maxDailyDriveMinutes = answers.willDrive ? answers.maxDailyTravelMinutes : 0;
+  const maxDailyTransportMinutes = answers.willDrive
+    ? Math.min(600, maxDailyDriveMinutes + ACCESS_TRAVEL_ALLOWANCE_MINUTES)
+    : NO_CAR_TRANSPORT_MINUTES;
+
+  return {
+    willDrive: answers.willDrive,
+    comfortableMountainRoads: answers.comfortableMountainRoads,
+    comfortableGravelRoads: answers.comfortableGravelRoads,
+    maxDailyDriveMinutes,
+    maxDailyTransportMinutes,
+    willUseShuttles: answers.willUseShuttles,
+    maxAccessWalkMinutes: answers.maxAccessWalkMinutes,
+    priority: answers.transportPriority,
+  };
+}
+
 function frequencyCap(level: InterestLevel, days: number): number {
   switch (level) {
     case 'avoid':
@@ -226,12 +282,7 @@ export function buildTravelerProfile(
     discoveryMix: answers.discoveryMix,
     crowdTolerance: answers.crowdTolerance,
     avoidTouristTraps: answers.avoidTouristTraps,
-    transport: {
-      willDrive: answers.willDrive,
-      comfortableMountainRoads: answers.comfortableMountainRoads,
-      comfortableGravelRoads: answers.comfortableGravelRoads,
-      maxDailyTravelMinutes: answers.maxDailyTravelMinutes,
-    },
+    transport: transportPreferencesFrom(answers),
     regionalExpansion: answers.regionalExpansion,
     detourToleranceMinutes: answers.detourToleranceMinutes,
     avoidances: answers.avoidances,
@@ -243,4 +294,26 @@ export function buildTravelerProfile(
   };
 
   return travelerProfileSchema.parse(profile);
+}
+
+/**
+ * Brings a stored profile up to the current version.
+ *
+ * Rather than hand-mapping v1's transport block onto v2's — which would be a
+ * second, subtly different copy of `transportPreferencesFrom` waiting to drift —
+ * this rebuilds the profile from the answers that produced it. The answers are
+ * the durable artefact; the profile is derived, and deriving it again is exactly
+ * what a migration should do.
+ *
+ * Returns null when the stored value is not a recognisable profile at all, so
+ * the caller can fail into a recoverable state instead of planning on a guess.
+ */
+export function migrateTravelerProfile(
+  answers: QuestionnaireAnswers | null,
+  context: QuestionnaireContext,
+): TravelerProfile | null {
+  if (!answers) return null;
+  const rebuilt = questionnaireAnswersSchema.safeParse(answers);
+  if (!rebuilt.success) return null;
+  return buildTravelerProfile(rebuilt.data, context);
 }

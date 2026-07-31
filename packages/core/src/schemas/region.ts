@@ -18,7 +18,18 @@ export const regionSchema = z.object({
   maxRadiusKm: z.number().min(1),
   /** Strings a user might type that resolve to this region. */
   aliases: z.array(z.string().min(1)).default([]),
+  /**
+   * Why getting around this region works the way it does.
+   *
+   * A region fact, kept on the region. The strategy builder used to assert that
+   * *any* destination "is a corridor with everything hanging off one highway",
+   * which happens to be true of the Eastern Sierra and false of Tokyo.
+   */
   transportSummary: z.string().min(1),
+  /** What a traveller loses here by not driving. Region-specific, so it lives here. */
+  noVehicleSummary: z.string().min(1),
+  /** Why roads here close, when they do. Absent where nothing closes seasonally. */
+  seasonalRoadSummary: z.string().min(1).optional(),
 });
 export type Region = z.infer<typeof regionSchema>;
 

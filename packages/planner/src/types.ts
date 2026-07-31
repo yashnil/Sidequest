@@ -1,4 +1,5 @@
 import type {
+  AccessDataset,
   DiscoveryCandidate,
   DiscoverySelection,
   Interest,
@@ -100,6 +101,12 @@ export interface PlannerInput {
   candidates: readonly DiscoveryCandidate[];
   selections: readonly DiscoverySelection[];
   matrix: TravelTimeMatrix;
+  /**
+   * Resolved and validated at the server boundary, exactly like the matrix. The
+   * planner never asks a provider anything; it is handed the facts and stays a
+   * pure function of them.
+   */
+  access: AccessDataset;
   /** Matrix id for the trip base. Days start and end here. */
   baseId: string;
   config?: Partial<PlannerConfig>;

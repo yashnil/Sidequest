@@ -4,8 +4,6 @@ export type SeasonStatus = 'open' | 'partially_open' | 'closed';
 
 export interface SeasonAssessment {
   status: SeasonStatus;
-  /** True when a mandatory shuttle replaces private vehicles during the trip. */
-  shuttleRequired: boolean;
   /** Months of the trip the place is reachable. */
   openTripMonths: number[];
   note?: string;
@@ -25,13 +23,8 @@ export function assessSeason(place: Place, months: number[]): SeasonAssessment {
         ? 'open'
         : 'partially_open';
 
-  const shuttleRequired = openTripMonths.some((month) =>
-    place.seasonalAccess.shuttleMonths.includes(month),
-  );
-
   return {
     status,
-    shuttleRequired,
     openTripMonths,
     ...(place.seasonalAccess.note ? { note: place.seasonalAccess.note } : {}),
   };

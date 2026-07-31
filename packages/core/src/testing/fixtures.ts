@@ -3,9 +3,31 @@ import type { QuestionnaireAnswers, TravelerProfile } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 import { buildTravelerProfile, defaultAnswers } from '../questionnaire/transform';
 import type { QuestionnaireContext } from '../questionnaire/definition';
+import { EASTERN_SIERRA_ACCESS } from '../data/access';
+import { EASTERN_SIERRA_PLACES } from '../data/places';
+import { EASTERN_SIERRA } from '../data/regions';
 
 export const AUGUST_MONTHS = [8];
 export const JANUARY_MONTHS = [1];
+
+/**
+ * Wednesday 12 August to Saturday 15 August 2026 — the canonical four-day trip.
+ * A fixed weekday span matters now that services have day-of-week calendars.
+ */
+export const AUGUST_DATES = ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15'];
+export const JANUARY_DATES = ['2027-01-12', '2027-01-13', '2027-01-14', '2027-01-15'];
+
+/** Everything a board needs beyond the profile, with the real access dataset. */
+export function boardContext(dates: string[] = AUGUST_DATES) {
+  return {
+    region: EASTERN_SIERRA,
+    places: EASTERN_SIERRA_PLACES,
+    access: EASTERN_SIERRA_ACCESS,
+    months: [...new Set(dates.map((date) => Number(date.slice(5, 7))))],
+    dates,
+    travelerNeeds: [] as TravelerNeed[],
+  };
+}
 
 export function context(overrides: Partial<QuestionnaireContext> = {}): QuestionnaireContext {
   return { travelerNeeds: [], tripDays: 4, ...overrides };

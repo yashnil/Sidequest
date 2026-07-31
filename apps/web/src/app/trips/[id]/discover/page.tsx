@@ -2,11 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
   autoSelect,
-  buildDiscoveryBoard,
   countTripDays,
-  EASTERN_SIERRA_PLACES,
-  REGIONS,
-  tripMonths,
   tripPersonality,
   type SelectionStatus,
 } from '@sidequest/core';
@@ -15,6 +11,7 @@ import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange, formatMinutes } from '@/lib/format';
 import { getProfile, getSelections, getTrip, hasItinerary } from '@/lib/db/repository';
+import { boardFor, resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,19 +23,12 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const profile = getProfile(id);
   if (!profile) redirect(`/trips/${id}/questionnaire`);
 
-  const region = REGIONS.find((item) => item.id === trip.basics.regionId);
-  if (!region) notFound();
+  const resolved = resolveTripRegion(trip);
+  if (!resolved.ok) notFound();
+  const { region } = resolved.context;
 
   const days = countTripDays(trip.basics.startDate, trip.basics.endDate);
-  const months = tripMonths(trip.basics.startDate, trip.basics.endDate);
-
-  const board = buildDiscoveryBoard({
-    region,
-    places: EASTERN_SIERRA_PLACES,
-    profile,
-    months,
-    travelerNeeds: trip.basics.travelerNeeds,
-  });
+  const board = boardFor(trip, profile, resolved.context);
   const suggestion = autoSelect({ candidates: board.candidates, profile, tripDays: days });
   const personality = tripPersonality(profile, days);
 
