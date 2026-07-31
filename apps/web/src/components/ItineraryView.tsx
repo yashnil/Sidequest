@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import {
+  BOOKING_KIND_LABELS,
   formatMinuteOfDay,
   ITINERARY_STATUS_COPY,
   TRANSPORT_MODE_LABELS,
+  type DailyWindow,
   type Itinerary,
   type ItineraryDay,
   type ItineraryItem,
@@ -409,6 +411,56 @@ function accessSequence(day: ItineraryDay): string[] {
   return steps;
 }
 
+/**
+ * What the day's opening hours did to its shape.
+ *
+ * Renders nothing at all on a day where nothing had a closing time, which is
+ * most of them here. When it does render, the anchor comes first: "be at this
+ * one by four, everything else can move" is the sentence a traveller can act on,
+ * and it beats four rows of times for them to reconcile themselves.
+ */
+function DayHours({ day }: { day: ItineraryDay }) {
+  const { availability } = day;
+  /**
+   * Only the two things the day as a whole can say that a single stop cannot:
+   * which stop fixes its shape, and what has to be arranged before it works.
+   *
+   * The cautions and the verification notes live on the stops themselves, a few
+   * centimetres below. Printing them here as well put the same sentence on the
+   * screen twice, which reads as a template rather than as advice — they are
+   * still persisted with the plan, for the day an export or a digest needs them
+   * without the timeline.
+   */
+  const hasSomething = availability.anchorNote !== undefined || availability.bookings.length > 0;
+  if (!hasSomething) return null;
+
+  return (
+    <section className="mt-3 border-t border-rule pt-3" aria-label={`Opening hours on day ${day.dayNumber}`}>
+      {availability.anchorNote ? (
+        <p className="text-sm leading-relaxed text-ink-muted">{availability.anchorNote}</p>
+      ) : null}
+
+      {availability.bookings.length > 0 ? (
+        <div className="mt-2 rounded-md border border-clay/40 p-2.5">
+          <p className="text-xs font-medium text-clay">
+            {availability.bookings.length === 1
+              ? 'One thing here needs arranging'
+              : `${availability.bookings.length} things here need arranging`}
+          </p>
+          <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
+            {availability.bookings.map((booking) => (
+              <li key={booking.placeId}>
+                <span className="font-medium text-ink">{booking.name}</span> —{' '}
+                {BOOKING_KIND_LABELS[booking.kind].toLowerCase()}. We have not made it for you.
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function DayCard({ day }: { day: ItineraryDay }) {
   const isEmpty = day.totals.activityMinutes === 0;
 
@@ -437,6 +489,7 @@ function DayCard({ day }: { day: ItineraryDay }) {
         </div>
 
         {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
+        <DayHours day={day} />
 
         {day.window.note ? (
           <p className="mt-3 text-sm text-ink-faint">{day.window.note}</p>
@@ -451,7 +504,7 @@ function DayCard({ day }: { day: ItineraryDay }) {
         <ol className="divide-y divide-rule">
           {day.items.map((item) => (
             <li key={item.id}>
-              <TimelineRow item={item} />
+              <TimelineRow item={item} window={day.window} />
             </li>
           ))}
         </ol>
@@ -468,8 +521,20 @@ function DayCard({ day }: { day: ItineraryDay }) {
   );
 }
 
-function TimelineRow({ item }: { item: ItineraryItem }) {
+function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindow }) {
   const style = KIND_STYLE[item.kind];
+  /**
+   * Hours are shown only when they bear on this day. A site posted 06:00 to
+   * 22:00 on a day that runs 07:30 to 19:00 has constrained nothing, and saying
+   * so on every stop is how a traveller learns to skip the line that matters.
+   */
+  const hours =
+    item.hours &&
+    (item.hours.openMinute > window.startMinute ||
+      item.hours.closeMinute < window.endMinute ||
+      item.hours.lastAdmissionMinute !== undefined)
+      ? item.hours
+      : undefined;
 
   return (
     <div className="flex gap-3 p-4 sm:gap-4 sm:p-5">
@@ -507,7 +572,20 @@ function TimelineRow({ item }: { item: ItineraryItem }) {
             <Badge>{item.physicalIntensity}</Badge>
           ) : null}
           {item.weatherSensitive ? <Badge tone="amber">Weather-dependent</Badge> : null}
+          {item.booking ? (
+            <Badge tone="amber">{BOOKING_KIND_LABELS[item.booking.kind]}</Badge>
+          ) : null}
         </div>
+
+        {hours ? (
+          <p className="mt-1 text-xs tabular-nums text-ink-faint">
+            Open {formatMinuteOfDay(hours.openMinute)}–{formatMinuteOfDay(hours.closeMinute)}
+            {hours.lastAdmissionMinute !== undefined
+              ? ` · arrive before ${formatMinuteOfDay(hours.lastAdmissionMinute)}`
+              : ''}
+            {hours.periodLabel ? ` · ${hours.periodLabel}` : ''}
+          </p>
+        ) : null}
 
         <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.reason}</p>
 
@@ -529,6 +607,61 @@ function TimelineRow({ item }: { item: ItineraryItem }) {
 
         {item.seasonalNote && item.seasonalNote !== item.accessWarning ? (
           <p className="mt-2 text-xs leading-relaxed text-ink-faint">{item.seasonalNote}</p>
+        ) : null}
+
+        {item.booking ? (
+          <p className="mt-2 rounded-md border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
+            <span className="font-medium text-clay">You have to arrange this yourself.</span>{' '}
+            {item.booking.note ?? 'We have not booked anything.'}
+            {item.booking.url ? (
+              <>
+                {' '}
+                <a
+                  className="underline underline-offset-2"
+                  href={item.booking.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Book with the operator
+                </a>
+                .
+              </>
+            ) : null}
+          </p>
+        ) : null}
+
+        {item.daylightOnly ? (
+          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+            Signed for daylight use only. We do not work out sunrise and sunset yet, so check how
+            much light your dates give you.
+          </p>
+        ) : null}
+
+        {item.verifyBeforeTravel ? (
+          <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            <span className="font-medium text-ink">Check its hours.</span>{' '}
+            {item.verifyBeforeTravel}
+          </p>
+        ) : null}
+
+        {hours ? (
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">
+            {hours.sourceKind === 'official' ? 'Hours from' : 'Hours written from'}{' '}
+            {hours.sourceUrl ? (
+              <a
+                className="underline underline-offset-2"
+                href={hours.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {hours.sourceName}
+              </a>
+            ) : (
+              hours.sourceName
+            )}
+            {hours.lastVerified ? `, read ${hours.lastVerified}` : ', not checked against a source'}
+            . We have not checked today.
+          </p>
         ) : null}
       </div>
     </div>

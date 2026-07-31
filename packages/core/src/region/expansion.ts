@@ -3,7 +3,9 @@ import {
   capabilityFromProfile,
   type PlaceAccessAssessment,
 } from '../access/feasibility';
+import { assessOperatingHours, type OperatingAssessment } from '../hours/availability';
 import type { AccessDataset } from '../schemas/access';
+import { findOperatingCalendar, type OperatingHoursDataset } from '../schemas/hours';
 import type { Place } from '../schemas/place';
 import type { TravelerProfile } from '../schemas/profile';
 import type { Region, WorthDetourLabel } from '../schemas/region';
@@ -21,6 +23,12 @@ export interface SatelliteAssessment {
   season: SeasonAssessment;
   /** Whether this traveller can legally reach it, date by date. */
   access: PlaceAccessAssessment;
+  /**
+   * Whether it will let anyone in when they arrive, date by date. Kept beside
+   * `access` rather than merged into it: reachable and open fail independently,
+   * and a card that says only "this will not work" has said nothing useful.
+   */
+  operating: OperatingAssessment;
 }
 
 export interface RegionExpansion {
@@ -45,6 +53,7 @@ export interface ExpansionInput {
    */
   dates: string[];
   access: AccessDataset;
+  hours: OperatingHoursDataset;
 }
 
 /**
@@ -55,7 +64,7 @@ export interface ExpansionInput {
  * stay separable.
  */
 export function expandRegion(input: ExpansionInput): RegionExpansion {
-  const { region, places, profile, months, dates, access } = input;
+  const { region, places, profile, months, dates, access, hours } = input;
   const radiusMinutes = profile.derived.effectiveDetourMinutes;
   const maxDaily = profile.transport.maxDailyDriveMinutes;
   const capability = capabilityFromProfile(profile);
@@ -83,6 +92,10 @@ export function expandRegion(input: ExpansionInput): RegionExpansion {
             : 0,
         season: assessSeason(place, months),
         access: placeAccess,
+        operating: assessOperatingHours({
+          calendar: findOperatingCalendar(hours, place.id) ?? unknownCalendarFor(place.id),
+          dates,
+        }),
       };
     })
     .sort((a, b) => a.driveMinutes - b.driveMinutes || a.place.id.localeCompare(b.place.id));
@@ -95,6 +108,34 @@ export function expandRegion(input: ExpansionInput): RegionExpansion {
       (item) => item.detourClass === 'in_tolerance' || item.detourClass === 'stretch',
     ),
     beyondRadius: assessed.filter((item) => item.detourClass === 'too_far'),
+  };
+}
+
+/**
+ * The provider boundary refuses a dataset that leaves a place out, so this is
+ * unreachable through the normal path. It exists because the safe way to be
+ * wrong is to say "we do not know", never to say "open whenever you like".
+ */
+function unknownCalendarFor(placeId: string) {
+  return {
+    kind: 'unknown' as const,
+    placeId,
+    admission: {
+      reservationRequired: false,
+      timedEntry: false,
+      permitRequired: false,
+      walkInAllowed: true,
+      capacityLimited: false,
+    },
+    daylightOnly: false,
+    note: 'We hold no opening-hours record for this place.',
+    provenance: {
+      kind: 'estimated' as const,
+      sourceName: 'No source',
+      confidence: 0,
+      volatility: 'dynamic' as const,
+      recheckNote: 'No opening-hours record exists for this place.',
+    },
   };
 }
 

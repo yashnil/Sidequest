@@ -74,7 +74,12 @@ const CORRIDOR: Record<string, CorridorNode> = {
   'wild-willys-hot-spring': { corridorMinutes: -15, spurMinutes: 15, spurGroup: 'crowley-road' },
   'little-lakes-valley': { corridorMinutes: -33, spurMinutes: 12, spurGroup: 'rock-creek-road' },
   'bishop-town': { corridorMinutes: -45, spurMinutes: 0, spurGroup: null },
+  // Both halves of Manzanar sit at the same node: one entrance, one car park,
+  // and the tour route starts at the visitor centre door. A place-to-place hop
+  // of zero is the honest number here — you park once — and it is what stops the
+  // layout inventing a second approach drive between them.
   'manzanar-historic-site': { corridorMinutes: -95, spurMinutes: 0, spurGroup: null },
+  'manzanar-visitor-center': { corridorMinutes: -95, spurMinutes: 0, spurGroup: null },
   'alabama-hills': { corridorMinutes: -132, spurMinutes: 3, spurGroup: 'movie-road' },
 
   'inyo-craters': { corridorMinutes: 12, spurMinutes: 13, spurGroup: 'inyo-craters-road' },

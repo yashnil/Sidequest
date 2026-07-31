@@ -22,13 +22,31 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  */
 
 /**
+ * Bump this whenever a stored plan could now be *wrong* rather than merely old.
+ *
+ * A plan is read back and rendered without re-running the validator — the issues
+ * it carries were computed when it was built. So the version is the only thing
+ * standing between a traveller and a screen that confidently states a fact which
+ * has since stopped being true. When in doubt, bump: a rebuild costs a click and
+ * keeps every selection.
+ *
+ * 4 — Manzanar became two places. The compound record's visitor-centre hours no
+ * longer belong to the site that kept its id, so a version-3 plan can quote a
+ * window against a place that has none. Any change to the shape of the place
+ * data that a stored item embeds belongs here.
+ *
+ * 3 — activities are scheduled inside verified operating hours. Each visit
+ * carries the window it was placed in, its last admission, its booking
+ * requirements and where those facts came from, and each day carries an
+ * availability summary. A version-2 plan was built without any of that and could
+ * legally contain a visit that starts after the gate shuts.
+ *
  * 2 — the timeline carries typed multimodal transportation. Travel segments name
  * a transport mode and a role rather than `car | foot | transit`, day totals
  * split driving from riding, walking and waiting, and every day carries a
- * transport summary. A version-1 row cannot be read as a version-2 plan, so the
- * repository surfaces it as a rebuild rather than parsing it into nonsense.
+ * transport summary.
  */
-export const ITINERARY_VERSION = 2 as const;
+export const ITINERARY_VERSION = 4 as const;
 
 /** What a block of time on a day actually is. */
 export const ITINERARY_ITEM_KINDS = [
@@ -65,6 +83,66 @@ export const travelSegmentSchema = z.object({
 });
 export type TravelSegment = z.infer<typeof travelSegmentSchema>;
 
+/**
+ * The operating evidence a scheduled visit was placed against.
+ *
+ * Persisted with the plan rather than recomputed on render, for two reasons.
+ * A stored itinerary has to be able to explain itself — "we put you here at
+ * 09:05 because it opens at 09:00 and stops admitting at 17:45, read off the
+ * park's own page on 30 July" — and a validator has to be able to catch a
+ * timeline that has drifted from the hours it claims to respect.
+ *
+ * Only present on activities the hours actually constrain. A roadside viewpoint
+ * with no gate carries nothing, because a badge reading "open 24 hours" on every
+ * natural attraction in a region teaches people to stop reading badges.
+ */
+export const scheduledHoursSchema = z
+  .object({
+    openMinute: minuteOfDaySchema,
+    closeMinute: minuteOfDaySchema,
+    /** Published last entry, when the operator publishes one. */
+    lastAdmissionMinute: minuteOfDaySchema.optional(),
+    /** Which recurring period this came from — "Summer", "Visitor centre". */
+    periodLabel: z.string().min(1).optional(),
+    /** How the source was obtained, so the UI can never call a guess official. */
+    sourceKind: z.enum(['official', 'authored', 'estimated']),
+    sourceName: z.string().min(1),
+    sourceUrl: z.string().url().optional(),
+    lastVerified: isoDateSchema.optional(),
+    confidence: z.number().min(0).max(1),
+  })
+  .refine((hours) => hours.closeMinute > hours.openMinute, {
+    message: 'A scheduled opening window must close after it opens',
+    path: ['closeMinute'],
+  });
+export type ScheduledHours = z.infer<typeof scheduledHoursSchema>;
+
+/**
+ * Something the traveller has to arrange themselves before the day will work.
+ *
+ * Sidequest books nothing. A required reservation is handed back with the
+ * official link attached; it is never resolved, and the plan never implies one
+ * exists.
+ */
+export const BOOKING_KINDS = ['reservation', 'timed_entry', 'permit'] as const;
+export const bookingKindSchema = z.enum(BOOKING_KINDS);
+export type BookingKind = z.infer<typeof bookingKindSchema>;
+
+export const BOOKING_KIND_LABELS: Record<BookingKind, string> = {
+  reservation: 'Booking needed',
+  timed_entry: 'Timed entry',
+  permit: 'Entry permit',
+};
+
+export const bookingRequirementSchema = z.object({
+  placeId: z.string().min(1),
+  name: z.string().min(1),
+  kind: bookingKindSchema,
+  note: z.string().min(1).optional(),
+  url: z.string().url().optional(),
+});
+export type BookingRequirement = z.infer<typeof bookingRequirementSchema>;
+
 export const itineraryItemSchema = z
   .object({
     id: z.string().min(1),
@@ -83,6 +161,27 @@ export const itineraryItemSchema = z
     seasonalNote: z.string().min(1).optional(),
     accessWarning: z.string().min(1).optional(),
     physicalIntensity: physicalIntensitySchema.optional(),
+    /** Set on activities whose opening hours constrained where they were placed. */
+    hours: scheduledHoursSchema.optional(),
+    /** Set when this visit needs booking or a permit the traveller must arrange. */
+    booking: bookingRequirementSchema.optional(),
+    /**
+     * Officially signed for daylight use only. Carried so the traveller is told
+     * and so the fact survives into a stored plan — *not* enforced: Sidequest
+     * has no sunrise or sunset times yet, and every surface that shows this says
+     * as much rather than implying the light was checked.
+     *
+     * Optional rather than defaulted: absent means "not daylight-limited", and
+     * every travel, meal and rest item on the timeline would otherwise have to
+     * carry a `false` that says nothing.
+     */
+    daylightOnly: z.boolean().optional(),
+    /**
+     * A fact about this stop that changes without notice and that Sidequest has
+     * not checked today. Never implies the opposite when absent — it means there
+     * is nothing volatile on record, not that conditions were confirmed.
+     */
+    verifyBeforeTravel: z.string().min(1).optional(),
   })
   .refine((item) => item.endMinute >= item.startMinute, {
     message: 'An item cannot end before it starts',
@@ -156,6 +255,30 @@ export const dayTransportSchema = z.object({
 });
 export type DayTransport = z.infer<typeof dayTransportSchema>;
 
+/**
+ * What the day's opening hours did to its shape.
+ *
+ * Derived from the timeline rather than declared alongside it, so it cannot
+ * drift. The anchor is the useful part: on a day containing one place that shuts
+ * at four and three that never shut, the plan is really "be at the one with a
+ * closing time by this hour, and fit the rest around it" — and saying so is more
+ * use than a list of times the traveller has to compare themselves.
+ */
+export const dayAvailabilitySchema = z.object({
+  /** The stop whose hours fixed the shape of the day, when one did. */
+  anchorPlaceId: z.string().min(1).optional(),
+  anchorNote: z.string().min(1).optional(),
+  /** Stops with no closing time, which can move if the day changes. */
+  flexiblePlaceIds: z.array(z.string().min(1)).default([]),
+  /** Hours facts worth reading before committing to the day. */
+  cautions: z.array(z.string().min(1)).default([]),
+  /** Hours that change without notice and have not been checked today. */
+  verifyBeforeTravel: z.array(z.string().min(1)).default([]),
+  /** Unresolved bookings and permits. Never resolved by Sidequest. */
+  bookings: z.array(bookingRequirementSchema).default([]),
+});
+export type DayAvailability = z.infer<typeof dayAvailabilitySchema>;
+
 export const itineraryDaySchema = z.object({
   dayNumber: z.number().int().min(1),
   date: isoDateSchema,
@@ -167,6 +290,7 @@ export const itineraryDaySchema = z.object({
   items: z.array(itineraryItemSchema),
   totals: dayTotalsSchema,
   transport: dayTransportSchema,
+  availability: dayAvailabilitySchema,
   intensity: z.enum(['light', 'moderate', 'intense']),
   warnings: z.array(z.string().min(1)).default([]),
 });
@@ -229,6 +353,10 @@ export const UNSCHEDULED_REASON_CODES = [
   /** It fits on paper but not before the last way out. */
   'missed_last_return',
   'transport_mode_unavailable',
+  /** Shut on every day of the trip — season, weekday or published closure. */
+  'closed_on_trip_dates',
+  /** Open on some day, but never for long enough, or never early enough. */
+  'hours_do_not_fit',
 ] as const;
 export const unscheduledReasonCodeSchema = z.enum(UNSCHEDULED_REASON_CODES);
 export type UnscheduledReasonCode = z.infer<typeof unscheduledReasonCodeSchema>;
@@ -281,6 +409,28 @@ export const VALIDATION_ISSUE_CODES = [
   'transport_leg_without_endpoint',
   'inconsistent_transport_totals',
   'strategy_mode_mismatch',
+  // --- Attraction operating hours ---------------------------------------
+  // Deliberately separate from the access codes above. A place can be
+  // reachable and shut, or open and unreachable, and a traveller told "this
+  // does not work" deserves to know which of the two it was.
+  /** Scheduled on a date it is not open at all. */
+  'attraction_closed_on_date',
+  /** Scheduled to begin before it opens. */
+  'arrives_before_opening',
+  /** Scheduled to begin after it stops admitting people. */
+  'arrives_after_last_admission',
+  /** Scheduled to run past closing time. */
+  'visit_ends_after_closing',
+  /** Its open hours and the way in never overlap on the scheduled day. */
+  'no_operating_window_in_access_window',
+  /** A booking or permit the traveller has to arrange and has not. */
+  'booking_unresolved',
+  /** Scheduled on hours nobody has confirmed. */
+  'operating_hours_unknown',
+  /** A scheduled place has no operating record at all. */
+  'missing_operating_data',
+  /** The stored hours evidence disagrees with the times on the timeline. */
+  'operating_evidence_inconsistent',
 ] as const;
 export const validationIssueCodeSchema = z.enum(VALIDATION_ISSUE_CODES);
 export type ValidationIssueCode = z.infer<typeof validationIssueCodeSchema>;
@@ -325,6 +475,8 @@ export const planDiagnosticsSchema = z.object({
   generatedAt: z.string().min(1),
   matrixProvenance: z.enum(['measured', 'modelled', 'estimated']),
   matrixNote: z.string().min(1),
+  /** Which generation of opening-hours data the plan was built against. */
+  operatingHoursVersion: z.number().int().min(1),
   revisionPasses: z.number().int().min(0),
   revisions: z.array(revisionActionSchema),
   capacity: z.object({
@@ -385,14 +537,15 @@ export type Itinerary = z.infer<typeof itinerarySchema>;
 
 /**
  * A stable structural fingerprint of the plan: what is scheduled, in what order,
- * at what times, on what day, and **by what means**.
+ * at what times, on what day, **by what means**, and **inside which opening
+ * window**.
  *
  * Its job is to make the §27 rule enforceable — when a narration layer is added,
  * a test asserts this string is byte-identical before and after narration, so the
- * LLM provably cannot move a stop, change a time, swap a mode, or quietly turn a
- * shuttle ride into a drive. Transport is inside the fingerprint precisely
- * because prose about transport is the most tempting thing for a model to
- * "improve".
+ * LLM provably cannot move a stop, change a time, swap a mode, quietly turn a
+ * shuttle ride into a drive, or relax the window a visit was placed inside.
+ * Transport and hours are both in here precisely because prose about them is the
+ * most tempting thing for a model to "improve".
  *
  * Deliberately excludes prose, totals and diagnostics: those are descriptions of
  * the structure, not the structure itself.
@@ -415,11 +568,16 @@ export function itineraryStructureFingerprint(itinerary: Itinerary): string {
             item.travel
               ? `${item.travel.mode}/${item.travel.role}/${item.travel.fromId}>${item.travel.toId}`
               : '-',
+            item.hours
+              ? `${item.hours.openMinute}-${item.hours.closeMinute}/${item.hours.lastAdmissionMinute ?? '-'}`
+              : '-',
+            item.booking ? item.booking.kind : '-',
           ].join(':'),
         )
         .join('|');
       const transport = [day.transport.primaryMode, ...day.transport.serviceIds].join('+');
-      return `${day.dayNumber}@${day.date}#${day.window.startMinute}-${day.window.endMinute}{${transport}}[${items}]`;
+      const anchor = day.availability.anchorPlaceId ?? '-';
+      return `${day.dayNumber}@${day.date}#${day.window.startMinute}-${day.window.endMinute}{${transport}}<${anchor}>[${items}]`;
     })
     .join('\n');
 

@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS itinerary_days (
   window_json    TEXT NOT NULL,
   totals_json    TEXT NOT NULL,
   transport_json TEXT NOT NULL DEFAULT '{}',
+  availability_json TEXT NOT NULL DEFAULT '{}',
   warnings_json  TEXT NOT NULL DEFAULT '[]',
   PRIMARY KEY (trip_id, day_number)
 );
@@ -135,4 +136,9 @@ export const COLUMN_MIGRATIONS: readonly {
     definition: "TEXT NOT NULL DEFAULT '{}'",
   },
   { table: 'itinerary_days', column: 'transport_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  {
+    table: 'itinerary_days',
+    column: 'availability_json',
+    definition: "TEXT NOT NULL DEFAULT '{}'",
+  },
 ];

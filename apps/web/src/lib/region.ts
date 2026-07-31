@@ -2,14 +2,17 @@ import {
   buildDiscoveryBoard,
   EASTERN_SIERRA_ACCESS,
   EASTERN_SIERRA_BASE_ID,
+  EASTERN_SIERRA_HOURS,
   EASTERN_SIERRA_PLACES,
   easternSierraTravelMatrix,
   REGIONS,
   tripDates,
   tripMonths,
   validateAccessDataset,
+  validateOperatingHoursDataset,
   type AccessDataset,
   type DiscoveryBoard,
+  type OperatingHoursDataset,
   type Place,
   type Region,
   type TravelerProfile,
@@ -31,6 +34,7 @@ export interface RegionContext {
   region: Region;
   places: Place[];
   access: AccessDataset;
+  hours: OperatingHoursDataset;
   matrix: TravelTimeMatrix;
   baseId: string;
   months: number[];
@@ -65,12 +69,28 @@ export function resolveTripRegion(trip: Trip): RegionResolution {
     };
   }
 
+  let hours: OperatingHoursDataset;
+  try {
+    hours = validateOperatingHoursDataset(EASTERN_SIERRA_HOURS, {
+      regionId: region.id,
+      placeIds: places.map((place) => place.id),
+    });
+  } catch (error) {
+    console.error('Opening-hours data for this region is unusable', error);
+    return {
+      ok: false,
+      error:
+        'The opening-hours data for this region is not usable, so we will not guess at when places are open.',
+    };
+  }
+
   return {
     ok: true,
     context: {
       region,
       places,
       access,
+      hours,
       matrix: easternSierraTravelMatrix(),
       baseId: EASTERN_SIERRA_BASE_ID,
       months: tripMonths(trip.basics.startDate, trip.basics.endDate),
@@ -92,6 +112,7 @@ export function boardFor(
     months: context.months,
     dates: context.dates,
     access: context.access,
+    hours: context.hours,
     travelerNeeds: trip.basics.travelerNeeds,
   });
 }

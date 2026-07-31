@@ -6,12 +6,14 @@ import {
   BOARD_GROUP_COPY,
   FIT_BAND_LABELS,
   FIT_BAND_METER,
+  OPERATING_BADGE_LABELS,
   PLACE_CATEGORY_LABELS,
   SELECTION_STATUS_LABELS,
   WORTH_DETOUR_COPY,
   type AccessBadge,
   type BoardGroup,
   type DiscoveryCandidate,
+  type OperatingBadge,
   type SelectionStatus,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type BadgeTone } from './ui';
@@ -207,6 +209,53 @@ const ACCESS_BADGE_TONE: Record<AccessBadge, BadgeTone> = {
   verify_conditions: 'amber',
 };
 
+/**
+ * Which opening-hours facts earn a badge.
+ *
+ * `always_open` earns nothing at all, which is the point. Nineteen of the
+ * twenty-two places in this region have no closing time, and stamping "Open 24
+ * hours" across the board would drown the three cards where the hours genuinely
+ * decide whether the day works.
+ */
+const OPERATING_BADGE_ORDER: readonly OperatingBadge[] = [
+  'closed_on_your_dates',
+  'closed_some_days',
+  'limited_hours',
+  'last_admission',
+  'timed_entry',
+  'reservation_required',
+  'admission_permit',
+  'hours_unknown',
+  'verify_hours',
+  'daylight_only',
+];
+
+const OPERATING_BADGE_TONE: Record<OperatingBadge, BadgeTone> = {
+  limited_hours: 'neutral',
+  closed_some_days: 'amber',
+  closed_on_your_dates: 'clay',
+  last_admission: 'amber',
+  reservation_required: 'amber',
+  timed_entry: 'amber',
+  admission_permit: 'amber',
+  hours_unknown: 'amber',
+  verify_hours: 'amber',
+  daylight_only: 'neutral',
+};
+
+/**
+ * Whether stating the hours would tell the traveller anything. A day-use site
+ * posted 06:00 to 22:00 cannot constrain a trip day, and printing its hours on
+ * the card is a line of text that only competes with the ones that matter.
+ */
+function bindsTheDay(operating: DiscoveryCandidate['operating']): boolean {
+  return (
+    operating.badges.includes('limited_hours') ||
+    operating.badges.includes('last_admission') ||
+    operating.badges.includes('closed_some_days')
+  );
+}
+
 const STATUS_STYLE: Record<SelectionStatus, string> = {
   included: 'border-pine bg-pine-soft text-pine',
   maybe: 'border-slate-blue bg-slate-blue-soft text-slate-blue',
@@ -222,7 +271,7 @@ function PlaceCard({
   status: SelectionStatus | undefined;
   onChoose: (placeId: string, status: SelectionStatus) => void;
 }) {
-  const { place, fit, season, access } = candidate;
+  const { place, fit, season, access, operating } = candidate;
   const blocked = fit.band === 'not_workable';
 
   return (
@@ -243,7 +292,21 @@ function PlaceCard({
 
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-display text-lg leading-snug text-ink">{place.name}</h3>
-        <p className="mt-0.5 text-xs text-ink-faint">{place.locality}</p>
+        <p className="mt-0.5 text-xs text-ink-faint">
+          {place.locality}
+          {/*
+            Two records that share one car park would otherwise read as two
+            unrelated stops that happen to have similar names. Saying which site
+            they belong to is what makes "the grounds" and "the visitor centre"
+            legible as halves of one visit rather than a duplicate.
+          */}
+          {place.accessGroup ? (
+            <>
+              {' · '}
+              <span title={place.accessGroup.note}>Part of {place.accessGroup.label}</span>
+            </>
+          ) : null}
+        </p>
 
         <div className="mt-3">
           <FitMeter band={fit.band} label={FIT_BAND_LABELS[fit.band]} meter={FIT_BAND_METER[fit.band]} />
@@ -276,6 +339,11 @@ function PlaceCard({
               {ACCESS_BADGE_LABELS[badge]}
             </Badge>
           ))}
+          {OPERATING_BADGE_ORDER.filter((badge) => operating.badges.includes(badge)).map((badge) => (
+            <Badge key={badge} tone={OPERATING_BADGE_TONE[badge]}>
+              {OPERATING_BADGE_LABELS[badge]}
+            </Badge>
+          ))}
           {place.worksInBadWeather ? <Badge tone="blue">Bad-weather option</Badge> : null}
         </div>
 
@@ -283,6 +351,40 @@ function PlaceCard({
           <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
             Reachable on {access.usableDates.length} of your{' '}
             {access.byDate.length} days — we will only put it on one of those.
+          </p>
+        ) : null}
+
+        {/*
+          Reaching it and being let in are separate questions, so they get
+          separate lines. Only the hours that bear on these dates appear; the
+          rest of the annual timetable is not the traveller's problem.
+        */}
+        {operating.status === 'closed_throughout' ? (
+          <p className="mt-3 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            Shut on every day of your trip.
+          </p>
+        ) : operating.status === 'open_some_days' ? (
+          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            Open on {operating.openDates.length} of your {operating.byDate.length} days
+            {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''} — we will only put it on
+            one of those.
+          </p>
+        ) : operating.hoursSummary && bindsTheDay(operating) ? (
+          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+            Open {operating.hoursSummary}
+            {operating.lastAdmissionSummary ? ` · ${operating.lastAdmissionSummary.toLowerCase()}` : ''}
+          </p>
+        ) : null}
+
+        {operating.requiresVerification && operating.verifyNote ? (
+          <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            {/*
+              Deliberately not "check before you go" — that is the access
+              badge's phrase, and a card wearing both said the same four words
+              twice about two different things.
+            */}
+            <span className="font-medium text-ink">Check its hours.</span>{' '}
+            {operating.verifyNote}
           </p>
         ) : null}
 

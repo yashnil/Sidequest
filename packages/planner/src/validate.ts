@@ -1,9 +1,13 @@
 import {
+  CLOSED_REASON_COPY,
+  findOperatingCalendar,
   formatMinuteOfDay,
+  operatingOn,
   serviceAvailabilityOn,
   type AccessDataset,
   type Itinerary,
   type ItineraryDay,
+  type OperatingHoursDataset,
   type TravelerProfile,
   type UnscheduledPlace,
   type ValidationIssue,
@@ -22,6 +26,7 @@ export interface ValidationInput {
   placesById: ReadonlyMap<string, Place>;
   baseId: string;
   access: AccessDataset;
+  hours: OperatingHoursDataset;
 }
 
 /**
@@ -153,6 +158,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
     }
 
     issues.push(...validateDayTransport(day, input));
+    issues.push(...validateDayHours(day, input));
 
     const strenuousAllowed = profile.derived.preferredPhysicalIntensity === 'strenuous' ? 2 : 1;
     if (day.totals.strenuousCount > strenuousAllowed) {
@@ -490,6 +496,200 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
   }
 
   return issues;
+}
+
+/**
+ * The opening-hours half of the check.
+ *
+ * The layout already refuses to build any of this, which is the right place to
+ * prevent it. This exists for the same reason its transport counterpart does:
+ * "the builder is careful" is an assumption, and the assumption here is that
+ * nobody is ever scheduled to arrive at a gate that shut an hour earlier.
+ *
+ * Everything is checked twice over — once against the evidence stored on the
+ * item, once against the calendar the plan was built from — because those two
+ * disagreeing is itself the defect worth catching. An itinerary that says
+ * "open until 18:00" over a visit ending at 18:40 is worse than one that says
+ * nothing, and it survives a refresh.
+ */
+function validateDayHours(day: ItineraryDay, input: ValidationInput): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const { hours, placesById } = input;
+
+  for (const item of day.items) {
+    if (item.kind !== 'activity' || !item.placeId) continue;
+    const place = placesById.get(item.placeId);
+    const name = place?.name ?? item.title;
+
+    const calendar = findOperatingCalendar(hours, item.placeId);
+    if (!calendar) {
+      issues.push({
+        code: 'missing_operating_data',
+        severity: 'error',
+        message: `We hold no opening hours for ${name}, and day ${day.dayNumber} schedules it anyway.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+      continue;
+    }
+
+    const onDate = operatingOn(calendar, day.date);
+
+    if (onDate.status === 'closed') {
+      issues.push({
+        code: 'attraction_closed_on_date',
+        severity: 'error',
+        message: `${name} is ${onDate.closedReason ? CLOSED_REASON_COPY[onDate.closedReason] : 'closed'} on ${day.date}, and day ${day.dayNumber} visits it.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+      continue;
+    }
+
+    if (onDate.status === 'unknown') {
+      issues.push({
+        code: 'operating_hours_unknown',
+        severity: 'warning',
+        message: `Nobody has confirmed opening hours for ${name}. Check them before you rely on day ${day.dayNumber}.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+    }
+
+    if (item.booking) {
+      issues.push({
+        code: 'booking_unresolved',
+        severity: 'warning',
+        message: `${name} needs ${item.booking.kind === 'permit' ? 'a permit' : 'a booking'} you have to arrange yourself. We have not made it.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+    }
+
+    /**
+     * Evidence for hours the place does not have.
+     *
+     * The reverse of the check below, and the one that catches a plan stored
+     * before a calendar changed shape — a visit to the Manzanar grounds carrying
+     * the visitor centre's 09:00–16:30, say, after the two were split apart. The
+     * timeline would render a window that is no longer anyone's, so the plan is
+     * surfaced as needing a rebuild rather than quietly lying.
+     */
+    if (onDate.status !== 'open') {
+      if (item.hours) {
+        issues.push({
+          code: 'operating_evidence_inconsistent',
+          severity: 'error',
+          message: `Day ${day.dayNumber} records opening hours against ${name}, which has none on ${day.date}. Rebuild this plan.`,
+          dayNumber: day.dayNumber,
+          placeId: item.placeId,
+        });
+      }
+      continue;
+    }
+
+    // The window the plan claims to have used must be one the calendar offers.
+    const evidence = item.hours;
+    if (!evidence) {
+      issues.push({
+        code: 'operating_evidence_inconsistent',
+        severity: 'error',
+        message: `${name} has opening hours on ${day.date}, but day ${day.dayNumber} records none against the visit.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+      continue;
+    }
+    const matching = onDate.windows.find(
+      (window) =>
+        window.openMinute === evidence.openMinute && window.closeMinute === evidence.closeMinute,
+    );
+    if (!matching) {
+      issues.push({
+        code: 'operating_evidence_inconsistent',
+        severity: 'error',
+        message: `Day ${day.dayNumber} says ${name} is open ${formatMinuteOfDay(evidence.openMinute)}–${formatMinuteOfDay(evidence.closeMinute)}, which is not one of its windows on ${day.date}.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+      continue;
+    }
+
+    if (item.startMinute < matching.openMinute) {
+      issues.push({
+        code: 'arrives_before_opening',
+        severity: 'error',
+        message: `Day ${day.dayNumber} starts ${name} at ${formatMinuteOfDay(item.startMinute)}, before it opens at ${formatMinuteOfDay(matching.openMinute)}.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+    }
+    if (matching.lastAdmissionMinute !== null && item.startMinute > matching.lastAdmissionMinute) {
+      issues.push({
+        code: 'arrives_after_last_admission',
+        severity: 'error',
+        message: `Day ${day.dayNumber} arrives at ${name} at ${formatMinuteOfDay(item.startMinute)}, after the last entry at ${formatMinuteOfDay(matching.lastAdmissionMinute)}.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+    }
+    if (item.endMinute > matching.closeMinute) {
+      issues.push({
+        code: 'visit_ends_after_closing',
+        severity: 'error',
+        message: `Day ${day.dayNumber} has you at ${name} until ${formatMinuteOfDay(item.endMinute)}, after it closes at ${formatMinuteOfDay(matching.closeMinute)}.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+    }
+
+    // A visit legal against the clock but impossible against the way out: the
+    // shuttle window and the opening window simply never overlap that day.
+    const lastReturn = lastReturnGoverning(day, item.id, input);
+    if (lastReturn !== null && matching.openMinute > lastReturn) {
+      issues.push({
+        code: 'no_operating_window_in_access_window',
+        severity: 'error',
+        message: `${name} does not open until ${formatMinuteOfDay(matching.openMinute)}, by which time the last way out of day ${day.dayNumber} has gone.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * The last departure that governs *this* stop, or null when none does.
+ *
+ * Scoped to the service the stop actually sits behind, found by walking the
+ * timeline for the ride in and the ride back out that bracket it. Taking the
+ * tightest last-return across the whole day instead would apply a trolley's
+ * 17:30 deadline to a place the traveller drives to afterwards, and the reviser
+ * would then drop that place for a constraint it has nothing to do with.
+ */
+function lastReturnGoverning(
+  day: ItineraryDay,
+  itemId: string,
+  input: ValidationInput,
+): number | null {
+  const index = day.items.findIndex((entry) => entry.id === itemId);
+  if (index < 0) return null;
+
+  const rideIn = [...day.items.slice(0, index)]
+    .reverse()
+    .find((entry) => entry.travel?.role === 'ride' && entry.travel.serviceId);
+  if (!rideIn?.travel?.serviceId) return null;
+
+  const serviceId = rideIn.travel.serviceId;
+  const ridesBackOut = day.items
+    .slice(index)
+    .some((entry) => entry.travel?.role === 'return' && entry.travel.serviceId === serviceId);
+  if (!ridesBackOut) return null;
+
+  const service = input.access.services.find((entry) => entry.id === serviceId);
+  return service ? service.window.lastReturnDeparture : null;
 }
 
 function lastTravelReturnsToBase(day: ItineraryDay, baseId: string): boolean {

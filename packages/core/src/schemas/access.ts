@@ -1,10 +1,33 @@
 import { z } from 'zod';
+import { dayOfWeekFor, dayOfWeekSchema, monthFor, monthNumberSchema } from './calendar';
 import {
-  isoDateSchema,
   MINUTES_PER_DAY,
   minuteOfDaySchema,
   parkingDifficultySchema,
 } from './common';
+import {
+  SOURCE_VOLATILITIES,
+  sourceProvenanceSchema,
+  sourceVolatilitySchema,
+  type SourceProvenance,
+  type SourceVolatility,
+} from './provenance';
+
+/**
+ * Calendar and provenance primitives are shared with `schemas/hours.ts` and live
+ * in their own files; they are re-exported here so every existing import path
+ * into this module keeps working unchanged.
+ */
+export {
+  DAY_OF_WEEK_LABELS,
+  assertCalendarDate,
+  dayOfWeekFor,
+  dayOfWeekSchema,
+  monthDayFor,
+  monthDaySchema,
+  monthFor,
+  monthNumberSchema,
+} from './calendar';
 
 /**
  * Transportation as a planning constraint rather than a label on a card.
@@ -91,36 +114,19 @@ export const TRANSPORT_PRIORITY_LABELS: Record<TransportPriority, string> = {
 };
 
 /**
- * How durable a fact is. This is the difference between something the planner may
- * encode as a rule and something it must only ever ask the traveller to check.
+ * How durable a fact is, and where it came from.
+ *
+ * Both now live in `schemas/provenance.ts`, because attraction opening hours ask
+ * the same question of their sources and answering it in two shapes is how a
+ * modelled guess ends up rendered as an official timetable. These aliases keep
+ * the access vocabulary reading naturally at its own call sites.
  */
-export const ACCESS_VOLATILITIES = ['stable', 'seasonal_recurring', 'dynamic'] as const;
-export const accessVolatilitySchema = z.enum(ACCESS_VOLATILITIES);
-export type AccessVolatility = z.infer<typeof accessVolatilitySchema>;
+export const ACCESS_VOLATILITIES = SOURCE_VOLATILITIES;
+export const accessVolatilitySchema = sourceVolatilitySchema;
+export type AccessVolatility = SourceVolatility;
 
-export const accessProvenanceSchema = z.object({
-  /**
-   * - `official`  — read off the managing agency's own page on `lastVerified`.
-   * - `authored`  — written from general knowledge, not checked against a source.
-   * - `estimated` — a modelled or inferred figure, never a published one.
-   */
-  kind: z.enum(['official', 'authored', 'estimated']),
-  sourceName: z.string().min(1),
-  sourceUrl: z.string().url().optional(),
-  /**
-   * When the source was last read. Absent for `authored` data, because a
-   * verification date on something nobody verified is worse than no date.
-   */
-  lastVerified: isoDateSchema.optional(),
-  confidence: z.number().min(0).max(1),
-  volatility: accessVolatilitySchema,
-  /** What the traveller must confirm themselves. Required when dynamic. */
-  recheckNote: z.string().min(1).optional(),
-}).refine((value) => value.kind !== 'official' || value.lastVerified !== undefined, {
-  message: 'Official data must record when it was verified',
-  path: ['lastVerified'],
-});
-export type AccessProvenance = z.infer<typeof accessProvenanceSchema>;
+export const accessProvenanceSchema = sourceProvenanceSchema;
+export type AccessProvenance = SourceProvenance;
 
 /**
  * A gateway: somewhere you park, board, or hand over from one mode to the next.
@@ -170,12 +176,6 @@ export const serviceWindowSchema = z
     path: ['lastReturnDeparture'],
   });
 export type ServiceWindow = z.infer<typeof serviceWindowSchema>;
-
-export const dayOfWeekSchema = z.number().int().min(0).max(6);
-/** 0 = Sunday, matching `Date.prototype.getUTCDay`. */
-export const DAY_OF_WEEK_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-
-export const monthNumberSchema = z.number().int().min(1).max(12);
 
 /**
  * A recurring scheduled service — a shuttle, a trolley, a bus route.
@@ -399,32 +399,6 @@ export type AccessDataset = z.infer<typeof accessDatasetSchema>;
 // ---------------------------------------------------------------------------
 // Calendar evaluation
 // ---------------------------------------------------------------------------
-
-/**
- * Weekday of a `YYYY-MM-DD` label.
- *
- * Parsed in UTC on purpose: the date is a label on a page of a calendar, not an
- * instant. Reading it in local time is how a Sunday-only service silently starts
- * running on Saturdays for anyone west of Greenwich.
- */
-export function dayOfWeekFor(date: string): number {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  // `Date.parse` accepts 2026-02-30 and rolls it to March 2. Left alone, the
-  // month check would read February and the weekday would be March's — the same
-  // input evaluated against two different days.
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
-    throw new Error(`"${date}" is not a calendar date.`);
-  }
-  return parsed.getUTCDay();
-}
-
-export function monthFor(date: string): number {
-  const month = Number(date.slice(5, 7));
-  if (!Number.isInteger(month) || month < 1 || month > 12) {
-    throw new Error(`"${date}" is not a calendar date.`);
-  }
-  return month;
-}
 
 export type ServiceAvailability =
   | { available: true }

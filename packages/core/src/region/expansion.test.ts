@@ -26,6 +26,7 @@ const expand = (
     months: shared.months,
     dates: shared.dates,
     access: shared.access,
+    hours: shared.hours,
   });
 };
 

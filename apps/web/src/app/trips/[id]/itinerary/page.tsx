@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { ItineraryView } from '@/components/ItineraryView';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange } from '@/lib/format';
-import { getItinerary, getTrip } from '@/lib/db/repository';
+import { getItinerary, getTrip, StaleItineraryError } from '@/lib/db/repository';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,12 +12,31 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
   const trip = getTrip(id);
   if (!trip) notFound();
 
-  // A stored plan that no longer parses is a real possibility across schema
-  // changes. Fail into a recoverable screen rather than a stack trace.
+  /**
+   * A stored plan that no longer parses is a real possibility across schema
+   * changes, and the two ways it happens deserve different sentences.
+   *
+   * A plan from an older version is not damaged — it was built against facts
+   * or checks that have since changed, so it may state something that is no
+   * longer true. Nothing re-validates a stored plan on the way out, so showing
+   * it would put that on screen with the confidence of a fresh one. Rebuilding
+   * is routine and keeps every selection. Anything else that fails to parse is
+   * genuine corruption, and saying so plainly is better than implying a version
+   * bump.
+   */
   let itinerary;
   try {
     itinerary = getItinerary(id);
   } catch (error) {
+    if (error instanceof StaleItineraryError) {
+      return (
+        <Recovery
+          tripId={id}
+          title="This plan is from an earlier version of Sidequest"
+          body="Some of what it was built on has changed since — which opening hours we check, or how a place is described — so parts of it could now be out of date, and we will not show you that as though it were current. Head back to the board and press Rebuild; every choice you made is still there."
+        />
+      );
+    }
     console.error('Stored itinerary failed validation', error);
     return (
       <Recovery

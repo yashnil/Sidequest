@@ -4,6 +4,7 @@ import {
   tripDates,
   type Itinerary,
   type ItineraryDay,
+  type MinuteInterval,
   type Place,
   type UnscheduledPlace,
 } from '@sidequest/core';
@@ -18,13 +19,18 @@ import {
 } from './access';
 import { assignToDays } from './assign';
 import { resolveCandidates } from './candidates';
+import {
+  couldVisitOnDate,
+  hoursKey,
+  resolveOperatingHours,
+  type PlaceDayHours,
+} from './hours';
 import { reviseDayPlans, type DayPlan } from './revise';
 import {
   buildDay,
   isOpenOnDate,
-  layoutDay,
+  layoutBestOrder,
   packDay,
-  scheduleUnits,
   type LayoutContext,
   type PackOptions,
 } from './schedule';
@@ -42,15 +48,22 @@ import {
 /**
  * The whole pipeline, in order:
  *
- *   1. validate the matrix                10. choose a legal way in for each group
- *   2. build real daily windows           11. order the groups, then their stops
- *   3. resolve selections and exclusions  12. insert access legs, meals, rest, slack
- *   4. drop infeasible places             13. time-block the day
- *   5. rank by planning priority          14. validate the finished plan
- *   6. resolve date-aware access          15. revise, bounded, deterministically
- *   7. drop what cannot be reached        16. derive the transport strategy
- *   8. group geographically and by access 17. return plan, diagnostics, conflicts
- *   9. assign groups to days
+ *    1. validate the matrix                 11. assign groups to days
+ *    2. build real daily windows            12. choose a legal way in for each group
+ *    3. resolve selections and exclusions   13. order the groups, then their stops
+ *    4. drop infeasible places              14. insert access legs, meals, rest, slack
+ *    5. rank by planning priority           15. time-block inside every open window
+ *    6. resolve date-aware access           16. validate the finished plan
+ *    7. drop what cannot be reached         17. revise, bounded, deterministically
+ *    8. resolve date-aware opening hours    18. derive the transport strategy
+ *    9. drop what is never open in reach    19. return plan, diagnostics, conflicts
+ *   10. group geographically and by access
+ *
+ * Steps 6 and 8 answer two different questions and both have to pass. Access
+ * asks whether the traveller can legally get there and back; hours ask whether
+ * anyone will let them in when they arrive. A place can be reachable and shut,
+ * or open and unreachable, and collapsing the two is how a plan drives eighty
+ * minutes to a locked gate.
  *
  * Pure: no I/O, no clock, no randomness. Same inputs in, byte-identical plan out.
  * Both the travel-time matrix and the access dataset arrive as data rather than
@@ -131,15 +144,95 @@ export function planTrip(input: PlannerInput): PlanResult {
     units.filter((unit) => (feasibleDates.get(unit.key)?.size ?? 0) > 0).map((unit) => unit.key),
   );
 
-  const plannable: PlanningCandidate[] = [];
+  const reachable: PlanningCandidate[] = [];
   for (const candidate of eligible) {
     const unit = unitByPlaceId.get(candidate.place.id);
     if (unit && reachableUnitKeys.has(unit.key)) {
-      plannable.push(candidate);
+      reachable.push(candidate);
       continue;
     }
     unscheduled.push(accessBlocked(candidate, unit, accessByUnitDate, dates));
   }
+
+  // --- Hours: which places are open, on which dates, within reach ----------
+  const hoursByPlaceDate = resolveOperatingHours({
+    placeIds: reachable.map((candidate) => candidate.place.id),
+    dates,
+    dataset: input.hours,
+  });
+  const dayByDate = new Map(days.map((day) => [day.date, day]));
+
+  /**
+   * The intersection that decides everything downstream: the day's usable
+   * hours, narrowed by the window the way in allows, then tested against the
+   * place's own opening hours and the time the visit takes.
+   *
+   * Computed once, here, for every place against every date — because day
+   * assignment has to know that Bodie is shut on a Wednesday *before* it hands
+   * the cluster containing Bodie to Wednesday. Discovering it later means the
+   * packer rejects it and it spills into an overflow pass by which time the days
+   * that would have worked are full.
+   */
+  const boundsFor = (candidate: PlanningCandidate, date: string): MinuteInterval | null => {
+    const day = dayByDate.get(date);
+    if (!day) return null;
+    const unit = unitByPlaceId.get(candidate.place.id);
+    const resolved = unit ? accessByUnitDate.get(accessKey(unit.key, date)) : undefined;
+    if (!resolved?.available) return null;
+    return {
+      startMinute: Math.max(
+        // You cannot be standing at a place before you have travelled to it.
+        // Without this the filter is optimistic enough to call a stop feasible
+        // that no day can actually reach in time, and the traveller then gets
+        // "there was no room" instead of "you cannot get there before it stops
+        // letting people in" — the second of which names something they can act on.
+        day.window.startMinute + candidate.driveMinutesFromBase,
+        resolved.option.earliestActivityStart ?? Number.NEGATIVE_INFINITY,
+      ),
+      endMinute: Math.min(
+        day.window.endMinute,
+        resolved.option.latestActivityEnd ?? Number.POSITIVE_INFINITY,
+      ),
+    };
+  };
+
+  const openDates = new Map<string, ReadonlySet<string>>(
+    reachable.map((candidate) => [
+      candidate.place.id,
+      new Set(
+        dates.filter((date) => {
+          const hours = hoursByPlaceDate.get(hoursKey(candidate.place.id, date));
+          const bounds = boundsFor(candidate, date);
+          if (!hours || !bounds) return false;
+          return couldVisitOnDate({
+            hours,
+            placeName: candidate.place.name,
+            durationMinutes: candidate.durationMinutes,
+            bounds,
+          });
+        }),
+      ),
+    ]),
+  );
+
+  const plannable: PlanningCandidate[] = [];
+  for (const candidate of reachable) {
+    if ((openDates.get(candidate.place.id)?.size ?? 0) > 0) {
+      plannable.push(candidate);
+      continue;
+    }
+    unscheduled.push(hoursBlocked(candidate, hoursByPlaceDate, dates));
+  }
+
+  /** Hours for one day, keyed by place — everything the layout needs. */
+  const hoursFor = (date: string): Map<string, PlaceDayHours> => {
+    const map = new Map<string, PlaceDayHours>();
+    for (const candidate of reachable) {
+      const hours = hoursByPlaceDate.get(hoursKey(candidate.place.id, date));
+      if (hours) map.set(candidate.place.id, hours);
+    }
+    return map;
+  };
 
   const contextFor = (day: DayPlan['day']): LayoutContext => ({
     day,
@@ -148,6 +241,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     matrix: input.matrix,
     config,
     profile: input.profile,
+    hours: hoursFor(day.date),
   });
 
   const maxStrenuousPerDay =
@@ -176,6 +270,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     input.baseId,
     unitByPlaceId,
     feasibleDates,
+    openDates,
   );
   let dayPlans: DayPlan[] = [];
   const overflow: PlanningCandidate[] = [];
@@ -217,6 +312,10 @@ export function planTrip(input: PlannerInput): PlanResult {
     );
     for (const plan of ordered) {
       if (!isOpenOnDate(candidate.place, plan.day.date)) continue;
+      // The deterministic reassignment the spill pass has always been: a stop
+      // that lost its first choice of day gets offered every other legal one,
+      // nearest-detour first. Hours narrow "legal" without changing the search.
+      if (!openDates.get(candidate.place.id)?.has(plan.day.date)) continue;
       const trial = packDay(
         contextFor(plan.day),
         [...plan.accepted, candidate],
@@ -237,21 +336,53 @@ export function planTrip(input: PlannerInput): PlanResult {
   }
 
   // --- Build, validate, revise -------------------------------------------
-  const buildAll = (plans: readonly DayPlan[]): ItineraryDay[] =>
-    plans.map((plan) => {
+  /**
+   * Builds every day, and records anything the layout could not actually place.
+   *
+   * The packer only ever offers a day it has proved legal, so in the ordinary
+   * case nothing is dropped here. The gap is the rebuild after a revision: the
+   * reviser removes a stop, which changes the route the remaining ones are
+   * ordered on, and the day is re-laid without being re-packed. A stop lost that
+   * way used to disappear from the timeline while still counting as accepted —
+   * neither scheduled nor reported. `dropped` closes that: `buildDay` is handed
+   * only what is really on the day, and the caller turns the rest into
+   * conflicts. Nothing the traveller chose can go missing without a reason.
+   */
+  const buildAll = (plans: readonly DayPlan[]) => {
+    const dropped = new Map<string, { candidate: PlanningCandidate; message: string }>();
+    const days = plans.map((plan) => {
       const context = contextFor(plan.day);
       const options = packOptionsFor(plan.day);
-      const scheduled = scheduleUnits(context, plan.accepted, options);
-      const layout = layoutDay(context, scheduled);
+      const { scheduled, layout } = layoutBestOrder(context, plan.accepted, options);
+
+      const placed = new Set(
+        layout.items
+          .filter((item) => item.kind === 'activity' && item.placeId)
+          .map((item) => item.placeId!),
+      );
+      for (const candidate of plan.accepted) {
+        if (placed.has(candidate.place.id)) continue;
+        const violation = layout.violations.find((entry) => entry.placeId === candidate.place.id);
+        dropped.set(candidate.place.id, {
+          candidate,
+          message:
+            violation?.message ??
+            `${candidate.place.name} could not be fitted into day ${plan.day.dayNumber} once the rest of it was laid out.`,
+        });
+      }
+
       return buildDay(
         context,
-        plan.accepted,
+        plan.accepted.filter((candidate) => placed.has(candidate.place.id)),
         layout,
         summariseDayTransport(scheduled, layout, input.access),
       );
     });
+    return { days, dropped };
+  };
 
-  let built = buildAll(dayPlans);
+  let build = buildAll(dayPlans);
+  let built = build.days;
   const validationInput = () => ({
     days: built,
     unscheduled,
@@ -261,6 +392,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     placesById,
     baseId: input.baseId,
     access: input.access,
+    hours: input.hours,
   });
   let issues = validateItinerary(validationInput());
 
@@ -284,10 +416,30 @@ export function planTrip(input: PlannerInput): PlanResult {
       });
     }
 
-    built = buildAll(dayPlans);
+    build = buildAll(dayPlans);
+    built = build.days;
     issues = validateItinerary(validationInput());
     passes += 1;
   }
+
+  /**
+   * The last thing that could quietly lose a stop.
+   *
+   * Everything the final layout could not place comes back with the reason the
+   * layout gave, whatever produced it. Appended after the revision loop so it
+   * describes the plan actually being returned rather than an intermediate one.
+   */
+  for (const { candidate, message } of build.dropped.values()) {
+    unscheduled.push({
+      placeId: candidate.place.id,
+      name: candidate.place.name,
+      wasManual: candidate.manual,
+      reasonCode: 'hours_do_not_fit',
+      reason: message,
+      suggestedRemedy: 'Drop something else from that day, or give the trip another day.',
+    });
+  }
+  if (build.dropped.size > 0) issues = validateItinerary(validationInput());
 
   const scheduledCount = built.reduce(
     (sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length,
@@ -333,6 +485,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       generatedAt,
       matrixProvenance: input.matrix.provenance.kind,
       matrixNote: input.matrix.provenance.note,
+      operatingHoursVersion: input.hours.version,
       revisionPasses: passes,
       revisions,
       capacity: {
@@ -390,6 +543,57 @@ function accessBlocked(
       first?.message ??
       'We have no record of a way to reach this on your dates, so we will not put it on a day.',
     suggestedRemedy: remedyForAccess(first?.code),
+  };
+}
+
+/**
+ * A place the traveller can reach on some day of this trip and that will not
+ * let them in on any of them.
+ *
+ * Two situations, and telling them apart is the whole value of the message.
+ * "Shut for the season" means change your dates or drop it; "open, but never
+ * long enough after you could get there" means change what else is on the day.
+ * A single "does not fit your logistics" would leave the traveller guessing at
+ * which of their own decisions to revisit.
+ */
+function hoursBlocked(
+  candidate: PlanningCandidate,
+  hoursByPlaceDate: ReadonlyMap<string, PlaceDayHours>,
+  dates: readonly string[],
+): UnscheduledPlace {
+  const resolved = dates
+    .map((date) => hoursByPlaceDate.get(hoursKey(candidate.place.id, date)))
+    .filter((entry): entry is PlaceDayHours => entry !== undefined);
+  const shutEveryDay = resolved.length > 0 && resolved.every((entry) => entry.status === 'closed');
+
+  if (shutEveryDay) {
+    // Any weekday closure is the more specific answer, and it can appear on a
+    // date other than the first when a trip straddles a season boundary.
+    const weekday = resolved.find((entry) => entry.closedReason === 'closed_weekday');
+    const what = weekday?.periodLabel
+      ? `its ${weekday.periodLabel.toLowerCase()}`
+      : candidate.place.name;
+    const reason = weekday
+      ? `${candidate.place.name} is shut on every day of the week your trip covers — ${what} does not open on any of them.`
+      : `${candidate.place.name} is closed for the season on your dates.`;
+    return {
+      placeId: candidate.place.id,
+      name: candidate.place.name,
+      wasManual: candidate.manual,
+      reasonCode: 'closed_on_trip_dates',
+      reason,
+      suggestedRemedy: 'Move your dates into a period it is open, or take it off the board.',
+    };
+  }
+
+  return {
+    placeId: candidate.place.id,
+    name: candidate.place.name,
+    wasManual: candidate.manual,
+    reasonCode: 'hours_do_not_fit',
+    reason: `${candidate.place.name} is open on your dates, but never for long enough after you could get there — a ${candidate.durationMinutes} min visit does not fit inside its hours on any day of this trip.`,
+    suggestedRemedy:
+      'Start the day earlier, or free up a day by dropping something else from the board.',
   };
 }
 

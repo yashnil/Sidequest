@@ -116,7 +116,15 @@ function actionCodeFor(issue: ValidationIssue): RevisionAction['code'] {
       return 'dropped_lowest_priority';
     case 'place_unavailable':
     case 'duplicate_place':
+    case 'attraction_closed_on_date':
       return 'moved_to_another_day';
+    case 'arrives_before_opening':
+    case 'arrives_after_last_admission':
+    case 'visit_ends_after_closing':
+    case 'no_operating_window_in_access_window':
+      // The layout already tried both stop orders before this issue could
+      // exist, so what is left to change is the day's contents, not its shape.
+      return 'dropped_lowest_priority';
     case 'missed_last_return':
     case 'access_window_too_short':
       return 'shortened_access_group';
@@ -137,6 +145,14 @@ function unscheduledCodeFor(issue: ValidationIssue): UnscheduledReasonCode {
       return 'exceeds_intensity';
     case 'place_unavailable':
       return 'seasonally_closed';
+    case 'attraction_closed_on_date':
+      return 'closed_on_trip_dates';
+    case 'arrives_before_opening':
+    case 'arrives_after_last_admission':
+    case 'visit_ends_after_closing':
+    case 'no_operating_window_in_access_window':
+    case 'operating_evidence_inconsistent':
+      return 'hours_do_not_fit';
     case 'required_mode_unavailable':
       return 'transport_mode_unavailable';
     case 'service_out_of_season':
@@ -170,6 +186,16 @@ function reasonForRemoval(issue: ValidationIssue): string {
       return 'an arrival or departure day does not have the hours for it.';
     case 'place_unavailable':
       return 'it is not open on that date.';
+    case 'attraction_closed_on_date':
+      return 'it is shut on that date.';
+    case 'arrives_before_opening':
+      return 'the day could not get there before it opens.';
+    case 'arrives_after_last_admission':
+      return 'the day could not get there before it stops letting people in.';
+    case 'visit_ends_after_closing':
+      return 'the visit would still have been going after it closed.';
+    case 'no_operating_window_in_access_window':
+      return 'its opening hours and the only way out of there never overlap.';
     case 'duplicate_place':
       return 'it was already scheduled on another day.';
     case 'items_overlap':

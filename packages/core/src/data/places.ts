@@ -39,6 +39,18 @@ const VERIFIED = {
 
 const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
+/**
+ * The two halves of Manzanar, bound by the mechanism that already exists for
+ * places sharing one road and one car park. Declared once rather than copied
+ * onto each record, which is the drift the Reds Meadow group has been living
+ * with since it was written.
+ */
+const MANZANAR_GROUP = {
+  id: 'manzanar',
+  label: 'Manzanar National Historic Site',
+  note: 'The tour route and the visitor centre share one entrance and one car park, so they cost one journey between them.',
+} as const;
+
 export const EASTERN_SIERRA_PLACES: Place[] = [
   {
     id: 'mammoth-lakes-basin',
@@ -458,7 +470,7 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     },
     travelFromBase: { distanceKm: 120, driveMinutes: 80, driveIsScenic: true },
     logisticsNote:
-      'Ten miles of pavement then three miles of unsurfaced road that can be rough, at 8,375 ft. Adult entry $8. Bring water and a full tank.',
+      'Ten miles of pavement then three miles of unsurfaced road that can be rough, at 8,375 ft. Bring water and a full tank.',
     source: { ...CURATED, name: 'California State Parks', url: 'https://www.parks.ca.gov/?page_id=509' },
   },
   {
@@ -784,23 +796,75 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
     source: { ...CURATED, name: 'Bishop Visitor Center', url: 'https://bishopvisitor.com' },
   },
   {
+    /**
+     * MANZANAR IS TWO EXPERIENCES, AND ONE RECORD COULD NOT HOLD BOTH.
+     *
+     * The grounds are open sunrise to sunset, every day, with no gate. The
+     * visitor centre keeps staffed hours and is currently shut three days a
+     * week. Modelling them as one place forced a choice between two wrong
+     * answers: inherit the centre's calendar and lose the whole site on a
+     * Wednesday, or ignore it and send someone ninety minutes to a locked door.
+     *
+     * They are now two records bound by `accessGroup`, which is the mechanism
+     * that already exists for exactly this — the same one that keeps Devils
+     * Postpile and Rainbow Falls on one day. Same road, same car park, one
+     * journey; each with the hours and the character it actually has.
+     *
+     * This record keeps the stable id, so a selection stored before the split
+     * still resolves — and resolves to the half that is always open, which is
+     * the safe direction for it to land.
+     */
     id: 'manzanar-historic-site',
     regionId: 'eastern-sierra',
     name: 'Manzanar National Historic Site',
     locality: 'Independence',
     shortDescription:
-      'The camp where the United States incarcerated more than 10,000 Japanese Americans during the Second World War, with a serious interpretive centre in the old auditorium.',
+      'The camp where the United States incarcerated more than 10,000 Japanese Americans. A three-mile auto tour route past the reconstructed barracks, the sentry posts and the cemetery monument, walkable and open every day.',
     relationship: 'satellite',
     coordinates: { lat: 36.7286, lng: -118.1544 },
+    category: 'historic_site',
+    interests: ['history_and_culture'],
+    tags: ['outdoor', 'free', 'year-round', 'self-guided'],
+    typicalDurationMinutes: 90,
+    costLevel: 0,
+    physicalIntensity: 'easy',
+    crowdLevel: 'quiet',
+    popularityScore: 0.45,
+    hiddenGemScore: 0.5,
+    weatherSensitivity: 'moderate',
+    worksInBadWeather: false,
+    bestTimeOfDay: 'any',
+    seasonalAccess: { openMonths: ALL_MONTHS, closureRisk: 'none' },
+    access: {
+      roadSurface: 'paved',
+      mountainRoad: false,
+      parkingDifficulty: 'easy',
+      remoteNoServices: false,
+    },
+    accessGroup: MANZANAR_GROUP,
+    travelFromBase: { distanceKm: 145, driveMinutes: 95, driveIsScenic: true },
+    logisticsNote:
+      'Ninety minutes each way down the 395. Little shade and no water on the tour route — the valley floor is brutal in July.',
+    source: { ...CURATED, name: 'National Park Service', url: 'https://www.nps.gov/manz/index.htm' },
+  },
+  {
+    id: 'manzanar-visitor-center',
+    regionId: 'eastern-sierra',
+    name: 'Manzanar Visitor Center',
+    locality: 'Independence',
+    shortDescription:
+      'The interpretive centre in the camp’s old high school auditorium: exhibits, oral histories and a film. Staffed, indoors, and shut for part of the week.',
+    relationship: 'satellite',
+    coordinates: { lat: 36.7281, lng: -118.1546 },
     category: 'museum',
     interests: ['history_and_culture'],
-    tags: ['indoor', 'free', 'year-round', 'rainy-day'],
-    typicalDurationMinutes: 150,
+    tags: ['indoor', 'free', 'rainy-day', 'staffed'],
+    typicalDurationMinutes: 75,
     costLevel: 0,
     physicalIntensity: 'none',
     crowdLevel: 'quiet',
     popularityScore: 0.45,
-    hiddenGemScore: 0.5,
+    hiddenGemScore: 0.4,
     weatherSensitivity: 'low',
     worksInBadWeather: true,
     bestTimeOfDay: 'any',
@@ -811,9 +875,15 @@ export const EASTERN_SIERRA_PLACES: Place[] = [
       parkingDifficulty: 'easy',
       remoteNoServices: false,
     },
+    accessGroup: MANZANAR_GROUP,
     travelFromBase: { distanceKm: 145, driveMinutes: 95, driveIsScenic: true },
-    logisticsNote: 'Ninety minutes each way down the 395. Worth a full half-day or nothing.',
-    source: { ...CURATED, name: 'National Park Service', url: 'https://www.nps.gov/manz/index.htm' },
+    logisticsNote:
+      'Shares the site entrance and car park with the tour route, so it costs no extra travel once you are there.',
+    source: {
+      ...VERIFIED,
+      name: 'National Park Service — Manzanar',
+      url: 'https://www.nps.gov/manz/planyourvisit/conditions.htm',
+    },
   },
   {
     id: 'alabama-hills',

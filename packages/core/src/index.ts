@@ -1,5 +1,10 @@
 export * from './schemas/common';
+export * from './schemas/provenance';
+// `schemas/calendar` is deliberately not re-exported here: `schemas/access`
+// already forwards every name in it, and two `export *` sources for one name
+// make it ambiguous and therefore invisible to consumers.
 export * from './schemas/access';
+export * from './schemas/hours';
 export * from './schemas/place';
 export * from './schemas/region';
 export * from './schemas/trip';
@@ -10,8 +15,13 @@ export * from './schemas/itinerary';
 export * from './questionnaire/definition';
 export * from './questionnaire/transform';
 
+export * from './time/interval';
+
 export * from './access/feasibility';
 export * from './access/provider';
+
+export * from './hours/availability';
+export * from './hours/provider';
 
 export * from './region/season';
 export * from './region/expansion';
