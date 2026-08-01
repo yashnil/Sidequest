@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { accessDatasetSchema, transportModeSchema } from './access';
 import { coordinatesSchema } from './common';
 import { foodDatasetSchema } from './food';
+import { regionEvidenceSchema } from './evidence';
 import { destinationEntityTypeSchema, scopeBreadthSchema } from './geography';
 import { operatingHoursDatasetSchema } from './hours';
 import { placeSchema } from './place';
@@ -179,10 +180,14 @@ export type TravelTimeMatrixData = z.infer<typeof travelTimeMatrixSchema>;
 export const COVERAGE_DIMENSIONS = [
   'geographic_resolution',
   'places',
+  'candidate_quality',
   'mainstream_attractions',
   'hidden_gems',
   'natural_features',
   'operating_hours',
+  'access_evidence',
+  'booking',
+  'cost',
   'transportation',
   'road_routing',
   'walking_routing',
@@ -190,9 +195,12 @@ export const COVERAGE_DIMENSIONS = [
   'ferry_or_rail',
   'weather',
   'food',
+  'dietary_evidence',
+  'safety',
   'temporary_access',
   'official_sources',
   'source_freshness',
+  'planner_readiness',
 ] as const;
 export const coverageDimensionSchema = z.enum(COVERAGE_DIMENSIONS);
 export type CoverageDimension = z.infer<typeof coverageDimensionSchema>;
@@ -200,10 +208,14 @@ export type CoverageDimension = z.infer<typeof coverageDimensionSchema>;
 export const COVERAGE_DIMENSION_LABELS: Record<CoverageDimension, string> = {
   geographic_resolution: 'Where this is',
   places: 'Places',
+  candidate_quality: 'How much we know about them',
   mainstream_attractions: 'The well-known ones',
   hidden_gems: 'The quiet ones',
   natural_features: 'Landscape',
   operating_hours: 'Opening hours',
+  access_evidence: 'Getting in',
+  booking: 'Booking and permits',
+  cost: 'Prices',
   transportation: 'Getting around',
   road_routing: 'Driving times',
   walking_routing: 'Walking times',
@@ -211,9 +223,12 @@ export const COVERAGE_DIMENSION_LABELS: Record<CoverageDimension, string> = {
   ferry_or_rail: 'Ferries and trains',
   weather: 'Weather',
   food: 'Food',
+  dietary_evidence: 'Dietary information',
+  safety: 'Cautions and preparation',
   temporary_access: 'Closures and permits',
   official_sources: 'Official sources',
   source_freshness: 'How recently we checked',
+  planner_readiness: 'Enough to build a plan',
 };
 
 /**
@@ -273,6 +288,53 @@ export const COVERAGE_REASON_COPY: Record<CoverageReason, string> = {
   not_relevant_to_region: 'Does not apply here.',
   fully_covered: 'Covered.',
 };
+
+/**
+ * The six words a coverage row is allowed to be described with.
+ *
+ * Derived rather than stored, because a level and a reason already carry it and
+ * a third field would be a third thing to keep in step. `conflicted` and `stale`
+ * outrank the level: a row that is 90% covered and disagrees with itself is not
+ * "good", and a row read eighteen months ago is not "sufficient" today.
+ */
+export const EVIDENCE_GRADES = [
+  'sufficient',
+  'partial',
+  'weak',
+  'conflicted',
+  'stale',
+  'none',
+] as const;
+export type EvidenceGrade = (typeof EVIDENCE_GRADES)[number];
+
+export const EVIDENCE_GRADE_LABELS: Record<EvidenceGrade, string> = {
+  sufficient: 'Verified',
+  partial: 'Partly verified',
+  weak: 'Weakly supported',
+  conflicted: 'Sources disagree',
+  stale: 'Checked a while ago',
+  none: 'Nothing found',
+};
+
+export function evidenceGrade(report: {
+  level: CoverageLevel;
+  reasons: readonly CoverageReason[];
+}): EvidenceGrade {
+  if (report.reasons.includes('sources_conflict')) return 'conflicted';
+  if (report.reasons.includes('evidence_stale')) return 'stale';
+  switch (report.level) {
+    case 'high':
+      return 'sufficient';
+    case 'usable_with_cautions':
+      return 'partial';
+    case 'weak':
+      return 'weak';
+    case 'unavailable':
+      return 'none';
+    default:
+      return 'sufficient';
+  }
+}
 
 export const coverageDimensionReportSchema = z.object({
   dimension: coverageDimensionSchema,
@@ -353,6 +415,17 @@ export const compiledRegionSchema = z.object({
   /** Absent and empty are different answers, and the planner reads them differently. */
   food: foodDatasetSchema.optional(),
   travelTimes: travelTimeMatrixSchema,
+
+  /**
+   * What official sources said, resolved into typed facts.
+   *
+   * Optional because every artifact compiled before this layer existed is still
+   * a valid artifact — it simply has nothing here, which is the honest reading
+   * of a compilation that never researched anything. Absent and empty are again
+   * different: absent means the stage did not run, empty means it ran and found
+   * nothing.
+   */
+  evidence: regionEvidenceSchema.optional(),
 
   sourceManifest: sourceManifestSchema,
   /**

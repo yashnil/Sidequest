@@ -5,6 +5,8 @@ import { renderInstant } from '@/lib/clock';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange } from '@/lib/format';
 import { getItinerary, getTrip, StaleItineraryError } from '@/lib/db/repository';
+import { buildPreparation, findOperatingCalendar, type PreparationItem } from '@sidequest/core';
+import { resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,9 +60,52 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
     );
   }
 
+  /**
+   * The preparation list, derived on the server from the plan that is on screen.
+   *
+   * Resolving the region again is cheap — it reads the stored artifact — and it
+   * is what ties a checklist to the exact evidence the plan was built from
+   * rather than to whatever the region looks like today. A region that will not
+   * resolve simply produces no checklist, which is the honest outcome and never
+   * a reason to withhold the itinerary.
+   */
+  let preparation: PreparationItem[] = [];
+  try {
+    const resolved = await resolveTripRegion(trip);
+    if (resolved.ok) {
+      const scheduled = new Set<string>();
+      const namesById = new Map<string, string>();
+      const unverifiedHours: string[] = [];
+
+      for (const place of resolved.context.places) namesById.set(place.id, place.name);
+      for (const venue of resolved.context.food?.venues ?? []) namesById.set(venue.id, venue.name);
+
+      for (const day of itinerary.days) {
+        for (const item of day.items) {
+          if (item.placeId) scheduled.add(item.placeId);
+          if (item.food?.venueId) scheduled.add(item.food.venueId);
+        }
+      }
+      for (const subjectId of scheduled) {
+        const calendar = findOperatingCalendar(resolved.context.hours, subjectId);
+        if (calendar?.kind === 'unknown') unverifiedHours.push(subjectId);
+      }
+
+      preparation = buildPreparation({
+        evidence: resolved.context.compiled.evidence,
+        scheduledSubjectIds: [...scheduled],
+        namesById,
+        unverifiedHoursSubjectIds: unverifiedHours,
+      });
+    }
+  } catch (error) {
+    console.error('Preparation list could not be derived', error);
+  }
+
   return (
     <ItineraryView
       itinerary={itinerary}
+      preparation={preparation}
       tripId={id}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same

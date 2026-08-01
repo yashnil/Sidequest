@@ -148,10 +148,21 @@ function fixtureMatch(query: string): (typeof FIXTURE_DESTINATIONS)[number] {
   );
 }
 
+/**
+ * What the fixture research funnel does.
+ *
+ * Chosen so the evidence surfaces are reachable in a browser test: a booking
+ * requirement makes the "book before you leave" path real, and partial official
+ * coverage means some cards carry citations and some honestly do not — which is
+ * the mix a live compilation actually produces and the one the UI has to read
+ * well under.
+ */
+const FIXTURE_RESEARCH = { bookingRequired: true, officialSourceCoverage: 0.6 } as const;
+
 function fixtureProviders(): CompilerProviders {
   // Every non-resolver provider comes from the first world a query names, so a
   // compilation in a browser test produces a real region with real coverage.
-  const base = withOpenLicences(fakeProviders(SYNTHETIC_WORLDS.transit_city!));
+  const base = withOpenLicences(fakeProviders(SYNTHETIC_WORLDS.transit_city!, FIXTURE_RESEARCH));
 
   return {
     ...base,
@@ -214,7 +225,10 @@ export function fixtureProvidersForCandidate(candidateId: string): CompilerProvi
   const world =
     Object.values(SYNTHETIC_WORLDS).find((spec) => spec.id === candidateId) ??
     SYNTHETIC_WORLDS.transit_city!;
-  return withOpenLicences({ ...fakeProviders(world), resolver: fixtureProviders().resolver });
+  return withOpenLicences({
+    ...fakeProviders(world, FIXTURE_RESEARCH),
+    resolver: fixtureProviders().resolver,
+  });
 }
 
 /**

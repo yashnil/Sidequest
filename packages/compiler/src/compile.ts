@@ -2,6 +2,7 @@ import {
   COMPILED_REGION_VERSION,
   FOOD_DATASET_VERSION,
   OPERATING_HOURS_DATASET_VERSION,
+  assessCandidateQuality,
   breadthRank,
   checkRegionIntegrity,
   requiredAttributions,
@@ -13,12 +14,17 @@ import {
   type CompilationStage,
   type CompiledRegion,
   type DataLicence,
+  type FactPath,
   type FoodDataset,
+  type FoodVenue,
   type GeographicScope,
+  type Interest,
   type OperatingCalendar,
   type OperatingHoursDataset,
   type Place,
   type Region,
+  type RegionEvidence,
+  type RetrievedPage,
   type SatelliteCandidate,
   type SourceFact,
   type StageRecord,
@@ -28,7 +34,19 @@ import {
 import { BudgetLedger, budgetFor, type CompilerBudget } from './budget';
 import { buildCoverageReport } from './coverage';
 import { dedupeCandidates } from './dedupe';
-import type { CompilerProviders, DiscoveryQuery, ProviderGap, RoutingMatrixResult } from './providers';
+import {
+  EXTRACTION_SCHEMA_VERSION,
+  buildEvidence,
+  claimsToFacts,
+  prioritiseSubjects,
+} from './enrich';
+import type {
+  CompilerProviders,
+  DiscoveryQuery,
+  ProviderGap,
+  ResearchSubject,
+  RoutingMatrixResult,
+} from './providers';
 
 export const COMPILER_VERSION = 'sidequest-compiler/1';
 
@@ -83,6 +101,9 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
   const timings: { stage: string; ms: number }[] = [];
   const gaps: ProviderGap[] = [];
   const facts: SourceFact[] = [];
+  /** Pages actually read, kept for audit. Bodies deliberately are not. */
+  const pages: RetrievedPage[] = [];
+  const promptVersions: Record<string, string> = {};
   /** Unioned from whatever the providers declared. Never assumed. */
   const licences = new Map<string, DataLicence>();
   const warnings: string[] = [];
@@ -165,12 +186,29 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
        * indistinguishable from "this region is empty", which is a claim about
        * the world rather than about a server that was busy.
        */
+      /**
+       * The gap that explains the emptiness, not the first one recorded.
+       *
+       * A live evaluation reported "0 candidates from 6 searches" with a note
+       * about way geometry, because a caveat pushed early outranked the
+       * classification failure pushed later. The note is the only thing a
+       * traveller reads about why a region came back empty; it has to be the
+       * reason rather than whatever happened to be first.
+       */
+      const EXPLANATORY: readonly ProviderGap['reason'][] = [
+        'provider_error',
+        'rate_limited',
+        'budget_exhausted',
+        'not_found',
+      ];
+      // Ordered by how much the reason explains, not by which was pushed first.
+      const explanatory = [...value.gaps]
+        .filter((gap) => EXPLANATORY.includes(gap.reason))
+        .sort((a, b) => EXPLANATORY.indexOf(a.reason) - EXPLANATORY.indexOf(b.reason))[0];
       const note =
         dropped > 0
           ? `${dropped} more were found than this trip's budget allows, and were not looked at.`
-          : value.gaps.length > 0
-            ? value.gaps[0]!.detail
-            : undefined;
+          : (explanatory ?? value.gaps[0])?.detail;
 
       return {
         value: kept,
@@ -191,15 +229,43 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     // ---- Stage: classify and shortlist ---------------------------------------
     const shortlisted = await runStage('classifying', async () => {
       /**
-       * Ranked by evidence, not by popularity.
+       * Ranked by evidence and fit, through the same assessor the board uses.
        *
-       * Corroboration first — a place two providers found and one has facts
-       * about is a place we can actually describe — then the discovery mix the
-       * traveller asked for. Ranking by popularity here would quietly make the
-       * hidden-gem preference unreachable, because the shortlist is where a
-       * quiet stop gets cut.
+       * The version this replaces added `hiddenGemScore` to a corroboration
+       * score — and `hiddenGemScore` is computed as the *inverse* of how richly
+       * a place is tagged, so the two terms cancelled and the shortlist was very
+       * nearly arbitrary. A live New York compilation shortlisted thirty-six of
+       * ninety-six candidates and thirty-three of those had nothing published
+       * about them at all, while described museums sat below the cut.
+       *
+       * Using the quality assessor here also means one definition of "worth
+       * looking at" rather than two that can drift apart.
        */
-      const ranked = [...deduped].sort((a, b) => score(b) - score(a));
+      const tolerance = detourTolerance(input.profile);
+      const ranked = [...deduped]
+        .map((candidate) => ({
+          candidate,
+          score: assessCandidateQuality({
+            place: candidate.place,
+            fitScore: roughFit(candidate.place, input.profile),
+            detourMinutes: candidate.place.travelFromBase.driveMinutes,
+            categoryCount: 0,
+            supersededByParent: false,
+            duplicate: false,
+            usableOnTripDates: true,
+            openingUncertain: true,
+            detourToleranceMinutes: tolerance,
+          }).score,
+        }))
+        // Corroboration is still a tiebreak: two providers finding the same
+        // place is real evidence, it is simply not the whole ranking.
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            b.candidate.providerRefs.length - a.candidate.providerRefs.length ||
+            a.candidate.place.id.localeCompare(b.candidate.place.id),
+        )
+        .map((entry) => entry.candidate);
       const allowed = ledger.take('maxShortlistedCandidates', ranked.length);
       const kept = ranked.slice(0, allowed);
       for (const candidate of kept) facts.push(...candidate.facts);
@@ -219,10 +285,89 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       };
     }
 
+    /**
+     * ---- Stage: drop the thin records ---------------------------------------
+     *
+     * Runs before a penny is spent on research, and that ordering is the whole
+     * economy of the funnel: a mapped object with a name and nothing else costs
+     * a search to confirm it is a mapped object with a name and nothing else.
+     *
+     * Quality here is judged on the *pre-research* evidence — description,
+     * feature scale, fit, detour — so it is a filter on obvious noise rather
+     * than a verdict. The real verdict comes after enrichment, when there is
+     * something to judge.
+     */
+    const qualityFiltered = await runStage('filtering_quality', async () => {
+      const categoryCounts = new Map<string, number>();
+      const kept: typeof shortlisted = [];
+      const dropped: { name: string; reason: string }[] = [];
+
+      for (const candidate of shortlisted) {
+        const category = candidate.place.category;
+        const seen = categoryCounts.get(category) ?? 0;
+        const assessment = assessCandidateQuality({
+          place: candidate.place,
+          fitScore: roughFit(candidate.place, input.profile),
+          detourMinutes: candidate.place.travelFromBase.driveMinutes,
+          categoryCount: seen,
+          supersededByParent: false,
+          duplicate: false,
+          usableOnTripDates: true,
+          openingUncertain: true,
+          detourToleranceMinutes: detourTolerance(input.profile),
+        });
+        /**
+         * Only the two outcomes that mean "there is nothing here" remove a
+         * candidate at this stage. A poor fit is the traveller's call and shows
+         * up on the board under "probably skip"; an empty record is ours.
+         */
+        if (assessment.outcome === 'insufficient_evidence') {
+          dropped.push({ name: candidate.place.name, reason: assessment.reason });
+          gaps.push({
+            subjectId: candidate.place.id,
+            reason: 'insufficient_evidence',
+            detail: assessment.reason,
+          });
+          continue;
+        }
+        categoryCounts.set(category, seen + 1);
+        kept.push(candidate);
+      }
+
+      return {
+        value: kept,
+        outcome: `${kept.length} kept, ${dropped.length} dropped as too thin`,
+        ...(dropped.length > 0
+          ? {
+              note: `Dropped because nothing is published about them beyond a name and a position — for example ${dropped
+                .slice(0, 2)
+                .map((entry) => entry.name)
+                .join(' and ')}.`,
+            }
+          : {}),
+      };
+    });
+
+    if (qualityFiltered.length === 0) {
+      return {
+        ok: false,
+        code: 'coverage_insufficient',
+        message: 'Everything we found here is a name on a map with nothing published about it.',
+      };
+    }
+
     // ---- Stage: research official constraints --------------------------------
     const research = await runStage('researching_official_constraints', async () => {
-      const subjects = shortlisted.map((candidate) => candidate.place);
-      const allowed = ledger.take('maxResearchSubjects', subjects.length);
+      const subjects = qualityFiltered.map((candidate) => candidate.place);
+      /**
+       * Bounded by the shortlist rather than by the research budget.
+       *
+       * This stage reads what the map data already carries — no search, no
+       * fetch, no model — so charging it to `maxResearchSubjects` spent the
+       * enrichment funnel's entire allowance before the funnel started, and left
+       * every compilation reporting "0 of 30 worth looking up".
+       */
+      const allowed = subjects.length;
       const value = await input.providers.constraints.research({
         scope: input.scope,
         places: subjects.slice(0, allowed),
@@ -247,15 +392,15 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * number leaving is reported rather than absorbed.
      */
     const covered = new Set(research.accessRules.flatMap((rule) => rule.placeIds));
-    const places: Place[] = shortlisted
+    const places: Place[] = qualityFiltered
       .map((candidate) => candidate.place)
       .filter((place) => covered.has(place.id));
-    const droppedForAccess = shortlisted.length - places.length;
+    const droppedForAccess = qualityFiltered.length - places.length;
     if (droppedForAccess > 0) {
       warnings.push(
         `${droppedForAccess} places were dropped because nobody publishes how to reach them, and we will not assume a road exists.`,
       );
-      for (const candidate of shortlisted) {
+      for (const candidate of qualityFiltered) {
         if (!covered.has(candidate.place.id)) {
           gaps.push({
             subjectId: candidate.place.id,
@@ -302,18 +447,340 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       };
     });
 
+    /**
+     * ---- The research funnel -------------------------------------------------
+     *
+     * Five stages rather than one "researching", because they fail
+     * independently and a traveller watching this screen is owed the difference
+     * between "nobody publishes this" and "we found the page and could not read
+     * it". Each spends against its own counter and each stops when that counter
+     * runs out, leaving the artifact partial rather than late.
+     */
+    const subjects = await runStage('enriching_priority_candidates', async () => {
+      const candidates: {
+        id: string;
+        name: string;
+        kind: string;
+        locality: string;
+        coordinates: { lat: number; lng: number };
+        knownOfficialUrl?: string;
+        fitScore: number;
+        gated: boolean;
+        hoursUnknown: boolean;
+        isFood?: boolean;
+      }[] = [
+        ...places.map((place) => ({
+          id: place.id,
+          name: place.name,
+          kind: place.category,
+          locality: place.locality,
+          coordinates: place.coordinates,
+          ...(officialUrlOf(place) ? { knownOfficialUrl: officialUrlOf(place)! } : {}),
+          fitScore: roughFit(place, input.profile),
+          gated: isPlausiblyGated(place),
+          hoursUnknown: !research.calendars.some((calendar) => calendar.placeId === place.id),
+        })),
+        ...food.map((venue) => ({
+          id: venue.id,
+          name: venue.name,
+          kind: venue.serviceType,
+          locality: venue.locality,
+          coordinates: venue.coordinates,
+          fitScore: 0.5,
+          gated: true,
+          hoursUnknown: venue.hours.kind === 'unknown',
+          isFood: true,
+        })),
+      ];
+
+      const allowed = ledger.take('maxResearchSubjects', candidates.length);
+      const chosen = new Set(
+        prioritiseSubjects({ candidates, maxSubjects: allowed }).map((entry) => entry.id),
+      );
+      const value: ResearchSubject[] = candidates
+        .filter((candidate) => chosen.has(candidate.id))
+        .map((candidate) => ({
+          id: candidate.id,
+          name: candidate.name,
+          kind: candidate.kind,
+          locality: candidate.locality,
+          coordinates: candidate.coordinates,
+          ...(candidate.knownOfficialUrl ? { knownOfficialUrl: candidate.knownOfficialUrl } : {}),
+          wantedPaths: wantedPathsFor(candidate.id, food),
+        }));
+
+      const skipped = candidates.length - value.length;
+      return {
+        value,
+        outcome: `${value.length} of ${candidates.length} worth looking up`,
+        ...(skipped > 0
+          ? { note: `${skipped} were left at what the map data says, to keep this trip's research inside its budget.` }
+          : {}),
+      };
+    });
+
+    const knownOfficialUrls = new Map<string, { url: string; authority: string; name: string }>();
+    for (const place of places) {
+      const url = officialUrlOf(place);
+      if (url) {
+        knownOfficialUrls.set(place.id, {
+          url,
+          authority: 'open_structured_database',
+          name: place.source.name,
+        });
+      }
+    }
+
+    const references = await runStage('discovering_sources', async () => {
+      if (subjects.length === 0) {
+        return { value: [], outcome: 'nothing to look up', skipped: true };
+      }
+      const budgetLeft = ledger.remaining('maxSourceSearches');
+      const result = await input.providers.sourceDiscovery.discover({
+        scope: input.scope,
+        subjects,
+        maxSearches: budgetLeft,
+        maxReferencesPerSubject: ledger.limits.maxPagesPerSubject,
+      });
+      ledger.take('maxSourceSearches', result.searches);
+      ledger.record('maxModelCalls', result.calls);
+      gaps.push(...result.gaps);
+      const fromStructured = result.references.filter(
+        (reference) => reference.discoveredVia !== 'search',
+      ).length;
+      return {
+        value: result.references,
+        outcome: `${result.references.length} pages worth reading, ${result.searches} searches`,
+        ...(fromStructured > 0
+          ? { note: `${fromStructured} came from the map data or an open database and cost nothing.` }
+          : {}),
+      };
+    });
+
+    const documents = await runStage('retrieving_pages', async () => {
+      if (references.length === 0) {
+        return { value: [], outcome: 'nothing to read', skipped: true };
+      }
+      const allowed = ledger.remaining('maxPagesFetched');
+      const result = await input.providers.retrieval.retrieve({
+        references: references.slice(0, allowed),
+        maxPages: allowed,
+        maxBytes: ledger.remaining('maxRetrievalBytes'),
+        /**
+         * Measured from when reading starts, not from when the compilation did.
+         *
+         * `startedAtMs` is the injected clock the artifact's diagnostics are
+         * stamped from, so two runs of one input produce identical bytes. Using
+         * it as a wall-clock deadline meant a destination whose discovery took
+         * two minutes had already spent the whole reading budget before the
+         * first page was requested — a live New York compile refused all
+         * thirty-three of its pages that way, and reported it as running out of
+         * time rather than as the off-by-a-stage it was.
+         */
+        deadlineMs: Date.now() + limits.maxEnrichmentMs,
+      });
+      ledger.take('maxPagesFetched', result.documents.length + result.rejected.length);
+      ledger.take('maxRetrievalBytes', result.bytes);
+      gaps.push(...result.gaps);
+      for (const rejection of result.rejected) {
+        pages.push({
+          url: rejection.url,
+          retrievedAt: new Date(startedAtMs + elapsed).toISOString(),
+          contentBytes: 0,
+          robotsAllowed: rejection.reason !== 'rejected_unsafe_source',
+        });
+      }
+      for (const document of result.documents) {
+        pages.push({
+          url: document.url,
+          ...(document.title ? { title: document.title } : {}),
+          retrievedAt: document.retrievedAt,
+          contentBytes: document.contentBytes,
+          contentHash: document.contentHash,
+          robotsAllowed: document.robotsAllowed,
+        });
+      }
+      return {
+        value: result.documents,
+        outcome: `${result.documents.length} read, ${result.rejected.length} refused`,
+        ...(result.rejected.length > 0
+          ? { note: result.rejected[0]!.detail }
+          : {}),
+      };
+    });
+
+    const extraction = await runStage('extracting_facts', async () => {
+      if (documents.length === 0) {
+        return {
+          value: { facts: [] as SourceFact[], payloads: new Map<string, unknown>(), discarded: 0 },
+          outcome: 'nothing to read facts out of',
+          skipped: true,
+        };
+      }
+      const allowedCalls = ledger.remaining('maxExtractionCalls');
+      const result = await input.providers.extraction.extract({
+        subjects,
+        documents,
+        dates: input.dates,
+        maxCalls: allowedCalls,
+      });
+      ledger.take('maxExtractionCalls', result.calls);
+      ledger.record('maxModelCalls', result.calls);
+      gaps.push(...result.gaps);
+      promptVersions.extractFacts = result.promptVersion;
+      promptVersions.extractionSchema = EXTRACTION_SCHEMA_VERSION;
+
+      const converted = claimsToFacts({
+        claims: result.claims,
+        documents,
+        promptVersion: result.promptVersion,
+        schemaVersion: result.schemaVersion,
+        ...(result.modelId ? { modelId: result.modelId } : {}),
+        now: input.now,
+      });
+      return {
+        value: converted,
+        outcome: `${converted.facts.length} facts from ${documents.length} pages`,
+        ...(converted.discarded > 0
+          ? {
+              note: `${converted.discarded} claims were thrown away for having no quotable basis or a shape we could not read.`,
+            }
+          : {}),
+      };
+    });
+
+    facts.push(...extraction.facts);
+
+    const reconciled = await runStage('reconciling_facts', async () => {
+      const value = buildEvidence({
+        subjects,
+        facts: extraction.facts,
+        payloads: extraction.payloads,
+        knownOfficialUrls,
+        now: input.now,
+      });
+      const conflicted = value.resolved.filter((entry) => entry.state === 'conflicted').length;
+      const known = value.resolved.filter(
+        (entry) => entry.state !== 'unknown' && entry.state !== 'unavailable',
+      ).length;
+      return {
+        value,
+        outcome: `${known} of ${value.resolved.length} questions answered`,
+        ...(conflicted > 0
+          ? { note: `${conflicted} answers came back with sources disagreeing. Both are kept and shown.` }
+          : {}),
+      };
+    });
+
+    const evidence: RegionEvidence = reconciled.evidence;
+    const blocked = new Set(reconciled.blockedSubjectIds);
+
+    const sourcedCalendars = await runStage('resolving_hours_and_access', async () => {
+      const value = reconciled.calendars;
+      return {
+        value,
+        outcome:
+          value.length > 0
+            ? `${value.length} published calendars`
+            : 'nothing published that we could turn into a calendar',
+        skipped: value.length === 0,
+      };
+    });
+
+    await runStage('resolving_costs', async () => {
+      const priced = evidence.places.filter((entry) => entry.costs.length > 0).length;
+      return {
+        value: null,
+        outcome: priced > 0 ? `${priced} with published prices` : 'no published prices',
+        skipped: priced === 0,
+      };
+    });
+
+    await runStage('resolving_safety', async () => {
+      const cautions = evidence.places.reduce((total, entry) => total + entry.safety.length, 0);
+      const closures = evidence.places.reduce((total, entry) => total + entry.closures.length, 0);
+      return {
+        value: null,
+        outcome:
+          cautions + closures > 0
+            ? `${closures} closures and ${cautions} cautions, each with a date and a source`
+            : 'nothing official flagged',
+        skipped: cautions + closures === 0,
+      };
+    });
+
+    /**
+     * Food, with whatever the research found folded back in.
+     *
+     * The food planner refuses to schedule a venue whose hours nobody confirmed,
+     * which is correct and which is why live regions produced no named meals at
+     * all. This is where that changes: a venue whose hours came back from its own
+     * page becomes schedulable, and one whose did not stays honestly unknown.
+     */
+    const enrichedFood = await runStage('enriching_food', async () => {
+      const byId = new Map(sourcedCalendars.map((calendar) => [calendar.placeId, calendar]));
+      let named = 0;
+      const value = food
+        .filter((venue) => !blocked.has(venue.id))
+        .map((venue) => {
+          const calendar = byId.get(venue.id);
+          if (!calendar || calendar.kind !== 'scheduled') return venue;
+          named += 1;
+          return {
+            ...venue,
+            hours: {
+              kind: 'scheduled' as const,
+              hoursConfidence: 'published' as const,
+              periods: calendar.periods,
+              closedAnnualDates: calendar.closedAnnualDates,
+              provenance: calendar.provenance,
+            },
+          } satisfies FoodVenue;
+        });
+      return {
+        value,
+        outcome:
+          named > 0
+            ? `${named} venues with hours we can actually plan around`
+            : 'no venue hours could be confirmed',
+        skipped: named === 0,
+      };
+    });
+
     // ---- Stage: travel times --------------------------------------------------
     const foodPoints = new Map<string, { id: string; lat: number; lng: number }>();
-    for (const venue of food) {
+    for (const venue of enrichedFood) {
       if (!foodPoints.has(venue.routingId)) {
         foodPoints.set(venue.routingId, { id: venue.routingId, ...venue.coordinates });
       }
     }
 
+    /**
+     * A subject an official source says is shut leaves before the matrix.
+     *
+     * Not demoted, not cautioned: removed. Measuring travel times to a closed
+     * gate would spend route elements on a leg nobody will drive, and leaving it
+     * schedulable would waste a day. This is the one place where evidence
+     * subtracts from the plan rather than annotating it.
+     */
+    const openPlaces = places.filter((place) => !blocked.has(place.id));
+    if (openPlaces.length < places.length) {
+      warnings.push(
+        `${places.length - openPlaces.length} places were left out because an official source says they are shut on your dates.`,
+      );
+    }
+    if (openPlaces.length === 0) {
+      return {
+        ok: false,
+        code: 'coverage_insufficient',
+        message: 'Everything we found here is closed on the dates you are travelling.',
+      };
+    }
+
     const matrix = await runStage('computing_travel_times', async () => {
       const points = [
         ...bases.map((base) => ({ id: base.routingId, ...base.coordinates })),
-        ...places.map((place) => ({ id: place.id, ...place.coordinates })),
+        ...openPlaces.map((place) => ({ id: place.id, ...place.coordinates })),
         ...foodPoints.values(),
       ];
       const maxElements = ledger.remaining('maxRouteElements');
@@ -339,7 +806,22 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * teleports somebody.
      */
     const routable = new Set(matrix.ids);
-    const plannable = places.filter((place) => routable.has(place.id));
+    const plannable = openPlaces.filter((place) => routable.has(place.id));
+
+    await runStage('validating_routes', async () => {
+      const measured = Math.max(0, matrix.ids.length * matrix.ids.length - matrix.ids.length);
+      const failed = matrix.failedPairs.length;
+      return {
+        value: null,
+        outcome: `${measured - failed} of ${measured} legs measured`,
+        ...(failed > 0
+          ? {
+              note: 'A routing engine that cannot answer for a pair is not a distance of zero, so the places behind those legs were dropped rather than guessed at.',
+            }
+          : {}),
+      };
+    });
+
     if (plannable.length === 0 || !bases.some((base) => routable.has(base.routingId))) {
       return {
         ok: false,
@@ -347,9 +829,9 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         message: 'We could not work out travel times across this region, so we will not guess at a plan.',
       };
     }
-    if (plannable.length < places.length) {
+    if (plannable.length < openPlaces.length) {
       warnings.push(
-        `${places.length - plannable.length} places have no measurable travel time and were left out.`,
+        `${openPlaces.length - plannable.length} places have no measurable travel time and were left out.`,
       );
     }
 
@@ -377,15 +859,24 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * same reason a place is: a detour priced against a leg that does not exist
      * is a number with nothing behind it.
      */
-    const routableFood = food.filter((venue) => routable.has(venue.routingId));
-    if (routableFood.length < food.length) {
+    const routableFood = enrichedFood.filter((venue) => routable.has(venue.routingId));
+    if (routableFood.length < enrichedFood.length) {
       warnings.push(
-        `${food.length - routableFood.length} food venues have no measurable travel time and were left out.`,
+        `${enrichedFood.length - routableFood.length} food venues have no measurable travel time and were left out.`,
       );
     }
 
     // ---- Stage: coverage --------------------------------------------------------
-    const hours = buildHours(input.scope, plannable, research.calendars);
+    /**
+     * Sourced calendars first, map-derived ones second, `unknown` last.
+     *
+     * The order is the precedence: a calendar an operator published beats one we
+     * parsed out of a mapper's tag, and both beat the honest blank.
+     */
+    const hours = buildHours(input.scope, plannable, [
+      ...sourcedCalendars,
+      ...research.calendars,
+    ]);
     const access: AccessDataset = {
       regionId: regionIdFor(input.scope),
       points: [],
@@ -401,6 +892,8 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         hours,
         weatherLocations,
         foodVenueCount: routableFood.length,
+        foodVenues: routableFood,
+        evidence,
         matrix,
         facts,
         gaps,
@@ -449,13 +942,38 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           km: matrix.km,
           provenance: matrix.provenance,
         }),
+        /**
+         * Evidence is kept for every subject we researched, including the ones
+         * that came back empty. A place with an all-`unknown` evidence record is
+         * a place we asked about and got nothing for, and the board says so —
+         * which is a different message from a place nobody looked at.
+         */
+        evidence,
         licences: [...licences.values()],
         sourceManifest: {
           facts,
-          pages: [],
+          pages,
           providers: [
             { name: input.providers.expansion.name, version: '1', calls: ledger.spent('maxModelCalls'), failures: 0 },
             { name: input.providers.routing.name, version: '1', calls: 1, failures: matrix.failedPairs.length },
+            {
+              name: input.providers.sourceDiscovery.name,
+              version: '1',
+              calls: ledger.spent('maxSourceSearches'),
+              failures: 0,
+            },
+            {
+              name: input.providers.retrieval.name,
+              version: '1',
+              calls: pages.length,
+              failures: pages.filter((page) => page.contentBytes === 0).length,
+            },
+            {
+              name: input.providers.extraction.name,
+              version: EXTRACTION_SCHEMA_VERSION,
+              calls: ledger.spent('maxExtractionCalls'),
+              failures: 0,
+            },
           ],
           attributions: requiredAttributions([...licences.values()]),
         },
@@ -467,7 +985,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           durationMs: elapsed,
           stageTimings: timings,
           budget: ledger.snapshot(),
-          promptVersions: {},
+          promptVersions,
           warnings,
         },
         createdAt: finishedAt,
@@ -507,14 +1025,101 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
 // Helpers
 // ---------------------------------------------------------------------------
 
-function score(candidate: { facts: readonly unknown[]; providerRefs: readonly unknown[]; place: Place }): number {
-  // Corroboration and evidence first; popularity is a tiebreak, never the sort.
+/**
+ * A first-pass fit, from interests alone.
+ *
+ * Deliberately not `scorePlace` — that needs an access assessment, an hours
+ * assessment and a weather assessment, none of which exist this early, and
+ * inventing them to get a number would make the number meaningless. What this
+ * answers is narrower and honestly so: does this look like the kind of thing
+ * they said they came for? That is enough to decide what to spend money
+ * researching, and the real scorer runs later on the board.
+ */
+function roughFit(place: Place, profile: TravelerProfile | undefined): number {
+  if (!profile) return 0.5;
+  const levels = profile.interests as Partial<Record<Interest, string>>;
+  let best = 0;
+  for (const interest of place.interests) {
+    const level = levels[interest];
+    const value =
+      level === 'core' ? 1 : level === 'frequent' ? 0.8 : level === 'occasional' ? 0.5 : level === 'rare' ? 0.25 : 0;
+    if (value > best) best = value;
+  }
+  // Nothing matching is not zero: an unmatched place can still be a good stop,
+  // and zeroing it here would make the funnel spend only on confirmations.
+  return Math.max(0.2, best);
+}
+
+function detourTolerance(profile: TravelerProfile | undefined): number {
+  return Math.max(20, profile?.detourToleranceMinutes ?? 90);
+}
+
+/** The operator's own domain, where the map data already carried one. */
+function officialUrlOf(place: Place): string | undefined {
+  const url = place.source.element?.url ?? place.source.url;
+  if (!url) return undefined;
+  // The element URL points back at the map database, not at the operator. Only
+  // a URL that is neither is worth calling official.
+  if (/openstreetmap\.org|wikidata\.org|wikipedia\.org/i.test(url)) return undefined;
+  return url;
+}
+
+/**
+ * Whether not knowing this one's hours would change a plan.
+ *
+ * A trailhead has no hours to find, and searching for them burns the most
+ * expensive counter in the compiler to learn nothing. A museum's hours decide
+ * whether the day works. The split is by category rather than by name, so it is
+ * the same judgement in every country.
+ */
+function isPlausiblyGated(place: Place): boolean {
   return (
-    candidate.providerRefs.length * 2 +
-    candidate.facts.length +
-    candidate.place.hiddenGemScore +
-    candidate.place.popularityScore * 0.5
+    place.category === 'museum' ||
+    place.category === 'historic_site' ||
+    place.category === 'gondola_or_tram' ||
+    place.category === 'national_monument' ||
+    place.category === 'hot_spring' ||
+    place.category === 'town_and_food' ||
+    place.category === 'wildlife_area'
   );
+}
+
+/**
+ * Which questions to ask about a subject.
+ *
+ * Asking every path about every subject would multiply the extraction prompt by
+ * twenty-one for no gain — a restaurant has no permit and a trailhead has no
+ * timed entry. Asking the wrong ones is worse than expensive: an extractor
+ * pressed for a fact a page does not contain is an extractor being invited to
+ * infer one.
+ */
+function wantedPathsFor(subjectId: string, food: readonly FoodVenue[]): FactPath[] {
+  /**
+   * `identity.officialSite` is deliberately absent from both lists.
+   *
+   * It is answered by a structured source — an OSM `website` tag or a Wikidata
+   * P856 claim — and never by extraction, because a model naming somebody's
+   * official domain is exactly the thing this architecture refuses. Asking for
+   * it here would add one guaranteed `unknown` per subject to the coverage
+   * count and describe a gap that is not one.
+   */
+  const isFood = food.some((venue) => venue.id === subjectId);
+  if (isFood) {
+    return ['food.hours', 'food.price', 'food.reservation', 'food.dietary'];
+  }
+  return [
+    'hours.weekly',
+    'hours.closure',
+    'booking.required',
+    'booking.timedEntry',
+    'booking.leadTime',
+    'access.permit',
+    'cost.admission',
+    'cost.parking',
+    'safety.caution',
+    'safety.requirement',
+    'duration.typical',
+  ];
 }
 
 /**
@@ -694,7 +1299,12 @@ function buildHours(
   places: readonly Place[],
   calendars: readonly OperatingCalendar[],
 ): OperatingHoursDataset {
-  const byPlace = new Map(calendars.map((calendar) => [calendar.placeId, calendar]));
+  // First wins, so the caller's ordering is the precedence. `new Map(...)` over
+  // the same list would have let the weakest source overwrite the strongest.
+  const byPlace = new Map<string, OperatingCalendar>();
+  for (const calendar of calendars) {
+    if (!byPlace.has(calendar.placeId)) byPlace.set(calendar.placeId, calendar);
+  }
   return {
     version: OPERATING_HOURS_DATASET_VERSION,
     regionId: regionIdFor(scope),

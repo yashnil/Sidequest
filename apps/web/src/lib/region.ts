@@ -257,6 +257,10 @@ export function boardFor(
     access: context.access,
     hours: context.hours,
     weather: context.weather,
+    // The artifact's own evidence, so the board is exactly as confident as the
+    // compilation was. A region compiled before this layer existed carries none,
+    // and every card then reads "we did not look" rather than "nothing to know".
+    ...(context.compiled.evidence ? { evidence: context.compiled.evidence } : {}),
     travelerNeeds: trip.basics.travelerNeeds,
   });
 }

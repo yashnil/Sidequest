@@ -1,4 +1,5 @@
 import 'server-only';
+import { providerUserAgent } from '../net/user-agent';
 import { z } from 'zod';
 
 /**
@@ -30,7 +31,7 @@ const MAX_RESPONSE_BYTES = 512_000;
 
 export const USER_AGENT =
   process.env.SIDEQUEST_FETCH_USER_AGENT?.trim() ||
-  'Sidequest/0.1 (open-world trip planner; +https://sidequest.example)';
+  providerUserAgent('open-world trip planner');
 
 export class GeocoderError extends Error {
   readonly code: 'not_configured' | 'rate_limited' | 'request_failed' | 'malformed_response';

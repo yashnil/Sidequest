@@ -243,6 +243,36 @@ CREATE TABLE IF NOT EXISTS provider_cache (
 );
 
 CREATE INDEX IF NOT EXISTS idx_provider_cache_expiry ON provider_cache(expires_at);
+
+-- Pages the research layer actually read.
+--
+-- Deliberately *not* a copy of the web. What is kept is the URL, the publisher,
+-- when we read it, how many bytes came back, and a hash of the extracted text —
+-- enough to notice a page has changed since a region was compiled, and not
+-- enough to be a redistribution of somebody's copyrighted page. The excerpts
+-- that justify individual facts live inside the compiled artifact, capped at 400
+-- characters each by the schema.
+--
+-- Like provider_cache, this is an audit and freshness aid rather than plan data:
+-- a compiled region carries its own copy of every fact it was built from, so
+-- this table can be emptied at any moment without changing a stored trip.
+CREATE TABLE IF NOT EXISTS source_documents (
+  url            TEXT NOT NULL,
+  compiled_region_id TEXT NOT NULL,
+  subject_id     TEXT NOT NULL,
+  publisher      TEXT NOT NULL,
+  authority      TEXT NOT NULL,
+  title          TEXT,
+  content_hash   TEXT NOT NULL,
+  content_bytes  INTEGER NOT NULL,
+  robots_allowed INTEGER NOT NULL,
+  retrieved_at   TEXT NOT NULL,
+  published_at   TEXT,
+  PRIMARY KEY (compiled_region_id, url, subject_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_documents_region ON source_documents(compiled_region_id);
+CREATE INDEX IF NOT EXISTS idx_source_documents_retrieved ON source_documents(retrieved_at);
 `;
 
 /**

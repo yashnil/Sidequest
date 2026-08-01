@@ -1,4 +1,5 @@
 import 'server-only';
+import { providerUserAgent } from './user-agent';
 import { BlockList, isIP } from 'node:net';
 import { lookup as dnsLookup } from 'node:dns';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
@@ -205,6 +206,25 @@ export function assertSafeUrl(raw: string, options: SafeFetchOptions = {}): URL 
 // The fetch
 // ---------------------------------------------------------------------------
 
+/**
+ * What a custom `lookup` must hand back, for each of the two shapes Node asks
+ * for. Extracted so the contract is testable without a socket — the version that
+ * only answered the single-address shape failed every real connection while
+ * every SSRF test still passed.
+ */
+export function lookupAnswer(
+  addresses: readonly string[],
+  wantsAll: boolean,
+): string | { address: string; family: 4 | 6 }[] {
+  if (wantsAll) {
+    return addresses.map((address) => ({
+      address,
+      family: (isIP(address) === 6 ? 6 : 4) as 4 | 6,
+    }));
+  }
+  return addresses[0] ?? '';
+}
+
 export interface SafeFetchResult {
   /** The URL actually read, after any redirects. */
   finalUrl: string;
@@ -299,7 +319,7 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
      * private, and hand back one we have checked. There is no window between the
      * check and the connection for a second DNS answer to slip through.
      */
-    const lookup: RequestOptions['lookup'] = (hostname, _opts, callback) => {
+    const lookup: RequestOptions['lookup'] = (hostname, opts, callback) => {
       resolve(hostname)
         .then((addresses) => {
           const safe = addresses.filter((address) => !isBlockedAddress(address));
@@ -318,7 +338,30 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
             return;
           }
           const chosen = safe[0]!;
-          callback(null, chosen, isIP(chosen) === 6 ? 6 : 4);
+          const family = isIP(chosen) === 6 ? 6 : 4;
+
+          /**
+           * Two callback shapes, and getting it wrong fails every real fetch.
+           *
+           * Node's socket layer calls a custom `lookup` with `{ all: true }` and
+           * then expects an **array** of `{ address, family }`. Answering with
+           * the three-argument single-address form hands it `undefined` where it
+           * expects a list, and it throws `Invalid IP address: undefined` from
+           * inside the connect path — surfacing here as a generic transport
+           * failure with no hint of the real cause.
+           *
+           * Every SSRF test in this file injects its own `resolve` and asserts a
+           * rejection, so none of them ever reached a successful connection, and
+           * this went unnoticed until a live compilation refused all thirty-one
+           * of its official pages. The check that matters — validating the
+           * address the socket will actually use — is unchanged.
+           */
+          const answer = lookupAnswer(safe, (opts as { all?: boolean } | undefined)?.all === true);
+          if (Array.isArray(answer)) {
+            callback(null, answer as unknown as string, family);
+            return;
+          }
+          callback(null, answer, family);
         })
         .catch((error: unknown) => {
           callback(error instanceof Error ? error : new Error('DNS lookup failed'), '', 4);
@@ -431,10 +474,22 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
     });
 
     req.on('error', (error: Error) => {
+      /**
+       * The underlying cause is kept, and it is not decoration.
+       *
+       * Every transport failure used to collapse into one sentence, which made a
+       * TLS handshake failure, a refused connection and a blocked address
+       * indistinguishable in a log — and a live evaluation spent an afternoon on
+       * "that page was not safe to read" when the real answer was a socket
+       * error. The traveller still sees the sentence; an operator can see why.
+       */
       fail(
         error instanceof UnsafeUrlError
           ? error
-          : new UnsafeUrlError('request_failed', 'We could not read that page.'),
+          : Object.assign(
+              new UnsafeUrlError('request_failed', 'We could not read that page.'),
+              { cause: error },
+            ),
       );
     });
 
@@ -442,8 +497,7 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
   });
 }
 
-export const DEFAULT_USER_AGENT =
-  'Sidequest/0.1 (travel planning research; +https://sidequest.example)';
+export const DEFAULT_USER_AGENT = providerUserAgent('reading an official page on a traveller\u2019s behalf');
 
 // ---------------------------------------------------------------------------
 // robots

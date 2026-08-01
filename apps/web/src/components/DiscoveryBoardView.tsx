@@ -4,8 +4,11 @@ import { useOptimistic, useState, useTransition } from 'react';
 import {
   ACCESS_BADGE_LABELS,
   BOARD_GROUP_COPY,
+  FACT_PATH_LABELS,
+  FACT_VERIFICATION_LABELS,
   FIT_BAND_LABELS,
   FIT_BAND_METER,
+  MONEY_UNIT_LABELS,
   OPERATING_BADGE_LABELS,
   PLACE_CATEGORY_LABELS,
   PLACE_WEATHER_BADGE_LABELS,
@@ -621,6 +624,8 @@ function PlaceCard({
           </details>
         ) : null}
 
+        <EvidencePanel candidate={candidate} />
+
         <div className="mt-auto pt-4">
           {/*
             A choice that has become impossible stays visible as a conflict.
@@ -685,6 +690,141 @@ function PlaceCard({
       </div>
     </Panel>
   );
+}
+
+/**
+ * WHY WE TRUST THIS — and, more often, why we do not.
+ *
+ * Two registers, kept apart on purpose. The chips above the fold are the facts
+ * that change what a traveller *does*: a booking they have to make, a price they
+ * have to budget for, a closure that removes the stop. The panel below the fold
+ * is the audit trail: which page said it, when we read it, and what nobody
+ * answered.
+ *
+ * It is collapsed by default and absent entirely where nothing was established,
+ * because an evidence panel that opens onto "unknown, unknown, unknown" teaches
+ * people to stop opening evidence panels. The unknowns are still listed *inside*
+ * it, where somebody who has decided to care can read them.
+ */
+function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
+  const evidence = candidate.evidence;
+  if (!evidence) return null;
+
+  const booking = evidence.booking;
+  const mustBook =
+    booking?.reservationRequired === 'yes' ||
+    booking?.timedEntry === 'yes' ||
+    booking?.permitRequired === 'yes';
+  const blocking = evidence.closures.filter((closure) => closure.severity === 'blocks');
+  const cautions = [
+    ...evidence.closures.filter((closure) => closure.severity !== 'blocks'),
+    ...evidence.safety.filter((entry) => entry.severity !== 'informs'),
+  ];
+  const admission = evidence.costs.find((cost) => cost.kind === 'admission');
+  const answered = evidence.resolved.filter(
+    (fact) => fact.state !== 'unknown' && fact.state !== 'unavailable',
+  );
+  const unanswered = evidence.resolved.filter((fact) => fact.state === 'unknown');
+  const conflicted = evidence.resolved.filter((fact) => fact.state === 'conflicted');
+
+  if (answered.length === 0 && !evidence.officialUrl && unanswered.length === 0) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      {/*
+        Only the facts that change a decision get a chip. A card that wears one
+        for every field it happens to have communicates less than one wearing two.
+      */}
+      {(mustBook || admission || blocking.length > 0) && (
+        <div className="flex flex-wrap gap-1.5">
+          {blocking.length > 0 ? <Badge tone="clay">Closed — official notice</Badge> : null}
+          {mustBook ? (
+            <Badge tone="amber">
+              {booking?.permitRequired === 'yes'
+                ? 'Permit needed'
+                : booking?.timedEntry === 'yes'
+                  ? 'Timed entry'
+                  : 'Book ahead'}
+            </Badge>
+          ) : null}
+          {admission ? (
+            <Badge tone="neutral">{describeCost(admission)}</Badge>
+          ) : null}
+        </div>
+      )}
+
+      {cautions.length > 0 ? (
+        <p className="rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">Worth knowing.</span> {cautions[0]!.statement}
+        </p>
+      ) : null}
+
+      <details className="text-xs">
+        <summary className="cursor-pointer text-ink-faint hover:text-ink">
+          Why we trust this ({answered.length} of {evidence.resolved.length} checked
+          {conflicted.length > 0 ? `, ${conflicted.length} disputed` : ''})
+        </summary>
+        <div className="mt-2 space-y-2">
+          {evidence.officialUrl ? (
+            <p className="leading-relaxed text-ink-muted">
+              Official page:{' '}
+              <a
+                href={evidence.officialUrl}
+                target="_blank"
+                rel="noreferrer nofollow"
+                className="underline underline-offset-2 hover:text-ink"
+              >
+                {hostOf(evidence.officialUrl)}
+              </a>
+            </p>
+          ) : null}
+
+          <ul className="space-y-1.5">
+            {answered.map((fact) => (
+              <li key={fact.factPath} className="leading-relaxed">
+                <span className="text-ink">{FACT_PATH_LABELS[fact.factPath]}</span>
+                {': '}
+                <span className="text-ink-muted">{fact.rationale}</span>{' '}
+                <span className="text-ink-faint">({FACT_VERIFICATION_LABELS[fact.state]})</span>
+              </li>
+            ))}
+          </ul>
+
+          {/*
+            The unknowns are the honest half. A traveller deciding whether to
+            drive an hour needs to know that nobody published the hours far more
+            than they need to know the two facts we did establish.
+          */}
+          {unanswered.length > 0 ? (
+            <p className="leading-relaxed text-ink-faint">
+              Nobody we could read publishes{' '}
+              {unanswered
+                .slice(0, 4)
+                .map((fact) => FACT_PATH_LABELS[fact.factPath].toLowerCase())
+                .join(', ')}
+              {unanswered.length > 4 ? ` and ${unanswered.length - 4} more` : ''}.
+            </p>
+          ) : null}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function describeCost(cost: NonNullable<DiscoveryCandidate['evidence']>['costs'][number]): string {
+  if (cost.free) return 'Free entry';
+  if (!cost.money) return 'There is a charge';
+  const { currency, amount, maxAmount, unit } = cost.money;
+  const range = maxAmount !== undefined ? `${amount}–${maxAmount}` : `${amount}`;
+  return `${range} ${currency} ${MONEY_UNIT_LABELS[unit]}`;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'the official page';
+  }
 }
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {

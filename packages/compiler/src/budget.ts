@@ -26,6 +26,19 @@ export interface CompilerBudget {
   maxResearchSubjects: number;
   /** Pages the retrieval layer may fetch across the whole compilation. */
   maxPagesFetched: number;
+  /** Pages any single candidate may consume. Stops one subject eating the lot. */
+  maxPagesPerSubject: number;
+  /** Bytes the retrieval layer may read in total, after decompression. */
+  maxRetrievalBytes: number;
+  /**
+   * Billable web searches. The most expensive counter here at $10/1000, and the
+   * one a broad destination would otherwise multiply by the candidate count.
+   */
+  maxSourceSearches: number;
+  /** Model calls spent turning pages into claims. */
+  maxExtractionCalls: number;
+  /** Wall clock for the whole research funnel, separate from the compilation. */
+  maxEnrichmentMs: number;
   /** Calls to a research model. */
   maxModelCalls: number;
   /** Matrix cells. The single largest cost driver, and it grows as N². */
@@ -53,6 +66,11 @@ export const DEFAULT_COMPILER_BUDGET: CompilerBudget = {
   maxShortlistedCandidates: 36,
   maxResearchSubjects: 24,
   maxPagesFetched: 40,
+  maxPagesPerSubject: 2,
+  maxRetrievalBytes: 24_000_000,
+  maxSourceSearches: 12,
+  maxExtractionCalls: 6,
+  maxEnrichmentMs: 120_000,
   maxModelCalls: 20,
   maxRouteElements: 900,
   maxFoodVenues: 18,
@@ -146,6 +164,18 @@ export function budgetFor(input: {
     maxShortlistedCandidates: scale(DEFAULT_COMPILER_BUDGET.maxShortlistedCandidates),
     maxResearchSubjects: scale(DEFAULT_COMPILER_BUDGET.maxResearchSubjects),
     maxFoodVenues: scale(DEFAULT_COMPILER_BUDGET.maxFoodVenues),
+    /**
+     * Searches scale with the trip, and are capped hard well below the candidate
+     * count.
+     *
+     * A ten-night country trip gets more looking than a weekend in one town, and
+     * neither gets one search per candidate — that pattern is what turns a
+     * broad destination into a bill. Structured sources close most of the gap
+     * for free; search is for the subjects they missed.
+     */
+    maxSourceSearches: Math.min(30, scale(DEFAULT_COMPILER_BUDGET.maxSourceSearches)),
+    maxPagesFetched: Math.min(90, scale(DEFAULT_COMPILER_BUDGET.maxPagesFetched)),
+    maxExtractionCalls: Math.min(14, scale(DEFAULT_COMPILER_BUDGET.maxExtractionCalls)),
     // Route elements grow as the square of the shortlist, so they are scaled
     // against the shortlist rather than linearly against the trip length.
     maxRouteElements: Math.min(

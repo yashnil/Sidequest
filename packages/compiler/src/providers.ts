@@ -3,10 +3,12 @@ import type {
   DataLicence,
   ConfidenceSignal,
   DestinationResolution,
+  FactPath,
   GeographicScope,
   OperatingCalendar,
   Place,
   ProviderRef,
+  SourceAuthorityKind,
   SourceFact,
   TravelerProfile,
   TransportMode,
@@ -181,6 +183,163 @@ export interface ConstraintResearchProvider {
   }): Promise<ConstraintResearchResult>;
 }
 
+/**
+ * ONE SUBJECT WORTH RESEARCHING, AND WHAT WE ALREADY KNOW ABOUT IT.
+ *
+ * Deliberately not a `Place`: food venues go through the same pipeline, and a
+ * venue is not a place. What the three research providers need is an identity, a
+ * name, somewhere to look and any official URL a structured source already gave
+ * us — nothing else.
+ */
+export interface ResearchSubject {
+  id: string;
+  name: string;
+  /** What kind of thing, in our vocabulary, for query wording only. */
+  kind: string;
+  locality: string;
+  coordinates: { lat: number; lng: number };
+  /**
+   * An official URL an *open structured source* already supplied.
+   *
+   * When this is present the source-discovery provider should not search at all:
+   * a `website` tag or a Wikidata P856 claim is a better answer than a search
+   * result, and it is free. This is the mechanism that keeps the most expensive
+   * counter in the compiler from being spent on subjects that did not need it.
+   */
+  knownOfficialUrl?: string;
+  /** Which facts we still want. A subject with nothing wanted is not researched. */
+  wantedPaths: readonly FactPath[];
+}
+
+/**
+ * A place we might read. **Never** a fact, and never something a model wrote.
+ *
+ * `url` comes from a provider's structured output — a `website` tag, a Wikidata
+ * claim, a search-result block — and goes through the SSRF-safe fetch layer
+ * before anything reads it.
+ */
+export interface SourceReference {
+  subjectId: string;
+  url: string;
+  title?: string;
+  /** What the discovery layer thinks this is, before anyone reads it. */
+  expectedAuthority: SourceAuthorityKind;
+  /** Where the reference itself came from: `osm_tag`, `wikidata`, `search`. */
+  discoveredVia: string;
+  /** Provider-reported freshness, verbatim. Not parsed into a date here. */
+  pageAge?: string;
+}
+
+export interface SourceDiscoveryResult {
+  references: SourceReference[];
+  gaps: ProviderGap[];
+  calls: number;
+  /** Billable searches actually issued. The most expensive counter we hold. */
+  searches: number;
+}
+
+/**
+ * Where to look. Not what is true.
+ *
+ * The separation is the security design: a provider that could return facts
+ * could return facts a hostile page told it to return. This one returns
+ * candidate URLs, and every one of them is fetched by us, from our process,
+ * under our limits.
+ */
+export interface SourceDiscoveryProvider {
+  readonly name: string;
+  discover(input: {
+    scope: GeographicScope;
+    subjects: readonly ResearchSubject[];
+    maxSearches: number;
+    maxReferencesPerSubject: number;
+  }): Promise<SourceDiscoveryResult>;
+}
+
+/** A page we actually read, reduced to the parts a fact can come out of. */
+export interface RetrievedDocument {
+  subjectId: string;
+  url: string;
+  title?: string;
+  /** Cleaned visible text, already capped. Never the whole page. */
+  text: string;
+  /** schema.org objects found in `application/ld+json`, depth- and size-limited. */
+  structuredData: unknown[];
+  /** SHA-256 of `text`, so a later run can notice the page changed. */
+  contentHash: string;
+  contentBytes: number;
+  retrievedAt: string;
+  /** The date the page states it was published or updated, where it states one. */
+  publishedAt?: string;
+  robotsAllowed: boolean;
+  authority: SourceAuthorityKind;
+  publisher: string;
+  domain: string;
+}
+
+export interface SourceRetrievalResult {
+  documents: RetrievedDocument[];
+  /** References we refused or could not read, with why. Never silent. */
+  rejected: { url: string; subjectId: string; reason: ProviderGapReason; detail: string }[];
+  gaps: ProviderGap[];
+  bytes: number;
+}
+
+export interface SourceRetrievalProvider {
+  readonly name: string;
+  retrieve(input: {
+    references: readonly SourceReference[];
+    maxPages: number;
+    maxBytes: number;
+    deadlineMs: number;
+  }): Promise<SourceRetrievalResult>;
+}
+
+/**
+ * A structured claim pulled out of a document.
+ *
+ * The extractor returns these; it does **not** return `SourceFact`s. Building a
+ * `SourceFact` means stamping authority, provenance, freshness and an id, and
+ * those are ours to decide — an extractor that could stamp its own authority
+ * could promote itself.
+ */
+export interface ExtractedClaim {
+  subjectId: string;
+  /** Index into the documents supplied. Never a URL. */
+  documentIndex: number;
+  factPath: FactPath;
+  statement: string;
+  evidenceExcerpt?: string;
+  /** Set when the claim came out of JSON-LD rather than prose. */
+  evidenceField?: string;
+  derivation: 'directly_stated' | 'inferred_from_source';
+  /** Typed payload for the paths that have one. Validated by the caller. */
+  payload?: unknown;
+}
+
+export interface FactExtractionResult {
+  claims: ExtractedClaim[];
+  /** Subjects the documents did not answer for. Never omitted. */
+  unanswered: { subjectId: string; factPath: FactPath; reason: string }[];
+  gaps: ProviderGap[];
+  calls: number;
+  /** The prompt and schema that produced this, for the manifest. */
+  promptVersion: string;
+  schemaVersion: string;
+  modelId?: string;
+}
+
+export interface FactExtractionProvider {
+  readonly name: string;
+  extract(input: {
+    subjects: readonly ResearchSubject[];
+    documents: readonly RetrievedDocument[];
+    /** The traveller's dates, so a dated closure can be judged relevant. */
+    dates: readonly string[];
+    maxCalls: number;
+  }): Promise<FactExtractionResult>;
+}
+
 export interface RoutingMatrixResult {
   /** The licence the durations and distances are stored under. */
   licences?: DataLicence[];
@@ -261,4 +420,16 @@ export interface CompilerProviders {
   routing: RoutingProvider;
   weatherLocations: WeatherLocationProvider;
   food: FoodDiscoveryProvider;
+  /**
+   * The research funnel, in three parts.
+   *
+   * Three interfaces rather than one because they fail independently and cost
+   * differently: search is billed per query, retrieval is billed in bytes and
+   * seconds, extraction is billed in tokens. A compiler that could only report
+   * "research failed" could not tell a traveller that we found the museum's site
+   * and could not read it — which is a different sentence, and a truer one.
+   */
+  sourceDiscovery: SourceDiscoveryProvider;
+  retrieval: SourceRetrievalProvider;
+  extraction: FactExtractionProvider;
 }
