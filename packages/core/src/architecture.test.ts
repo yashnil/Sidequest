@@ -166,6 +166,71 @@ describe('the generic engine stays generic', () => {
     }
   });
 
+  it('never lets a provider assert a verification state or a confidence number', () => {
+    /**
+     * The rule the whole evidence layer rests on: authority, corroboration and
+     * freshness are computed from observable properties by `evidence/resolve.ts`,
+     * and nothing else may write a `FactVerificationState`.
+     *
+     * A provider that could stamp `verified` on its own output would make the
+     * badge on a card mean "a model felt sure", which is the exact claim this
+     * product exists not to make. Checked structurally rather than agreed,
+     * because the convenient version of this mistake is one line long.
+     */
+    const offenders: string[] = [];
+    const allowed = [
+      /packages\/core\/src\/evidence\/resolve\.ts$/,
+      /packages\/core\/src\/schemas\//,
+      /\.test\.ts$/,
+    ];
+    for (const path of genericFiles()) {
+      const relativePath = relative(path);
+      if (allowed.some((pattern) => pattern.test(relativePath))) continue;
+      const code = stripComments(readFileSync(path, 'utf8'));
+      // Assigning a state literal outside the resolver, e.g. `state: 'verified'`.
+      if (/\bstate:\s*'(verified|corroborated)'/.test(code)) {
+        offenders.push(`${relativePath} assigns a verification state directly`);
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('never claims corroboration without counting independent sources', () => {
+    /**
+     * `multiple_providers_agree` was once emitted because a model agreed a string
+     * looked place-like, which pushed single-source results to high confidence
+     * and skipped the screen where a traveller would have caught them. The signal
+     * is legitimate; asserting it without a second source is not.
+     */
+    const offenders: string[] = [];
+    /**
+     * Test harnesses are exempt from the *structural* check and not from the
+     * rule: `testing/fakes.ts` emits the signal beside two real provider refs,
+     * which is what earns it. A regex cannot see that, and weakening the regex
+     * until it could would exempt the runtime code this exists to police.
+     */
+    const harness = /packages\/compiler\/src\/testing\//;
+    for (const path of genericFiles()) {
+      if (harness.test(relative(path))) continue;
+      const code = stripComments(readFileSync(path, 'utf8'));
+      if (!/multiple_providers_agree/.test(code)) continue;
+      // The only defensible emission is one guarded by a count of distinct sources.
+      if (!/(length|size)\s*(>=?\s*2|>\s*1)|independentSources/.test(code)) {
+        offenders.push(`${relative(path)} claims corroboration without counting sources`);
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('keeps the evidence layer free of I/O, so a compiled artifact is reproducible', () => {
+    for (const path of walk(join(ROOT, 'packages/core/src/evidence'))) {
+      if (/\.test\.ts$/.test(path)) continue;
+      const code = stripComments(readFileSync(path, 'utf8'));
+      expect(code, `${relative(path)} performs I/O`).not.toMatch(/\bfetch\s*\(/);
+      expect(code, `${relative(path)} reads a clock`).not.toMatch(/Date\.now\(\)|new Date\(\)/);
+    }
+  });
+
   it('never lets a URL field accept a javascript: or data: scheme', () => {
     /**
      * `z.string().url()` accepts `javascript:alert(1)`. Every URL in the product

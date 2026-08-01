@@ -20,6 +20,9 @@ import {
   type ItineraryItem,
   type ScheduledFood,
   type TransportStrategy,
+  PREPARATION_KIND_COPY,
+  groupPreparation,
+  type PreparationItem,
 } from '@sidequest/core';
 import { Badge, Panel, buttonClass, cx, type BadgeTone } from './ui';
 import { formatMinutes } from '@/lib/format';
@@ -76,11 +79,19 @@ const INTENSITY_TONE: Record<ItineraryDay['intensity'], BadgeTone> = {
 
 export function ItineraryView({
   itinerary,
+  preparation,
   tripId,
   dateLabel,
   renderedAt,
 }: {
   itinerary: Itinerary;
+  /**
+   * Derived on the server from this plan and the evidence it was built on.
+   *
+   * Empty is the common case and is not a failure: a region with no researched
+   * evidence has nothing to prepare for beyond what the days already say.
+   */
+  preparation: PreparationItem[];
   tripId: string;
   dateLabel: string;
   /**
@@ -122,6 +133,8 @@ export function ItineraryView({
           </Link>
         </div>
       </header>
+
+      <BeforeYouGo items={preparation} />
 
       {conflicts.length > 0 ? (
         <Panel className="mt-8 border-clay p-5">
@@ -1212,5 +1225,80 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
         ) : null}
       </div>
     </div>
+  );
+}
+
+
+/**
+ * BEFORE YOU GO.
+ *
+ * High on the page, above the days, because everything in it has a deadline that
+ * the days do not: a permit sold out, a ticket that has to be bought online, a
+ * phone call that is free today and impossible on the morning.
+ *
+ * Grouped by what the traveller has to *do* rather than by which place it came
+ * from — somebody packing a bag wants one list of things to bring, not four
+ * lists of one thing each. Every line carries how well established it is and,
+ * where it exists, the page to do it on. Nothing here is generated prose: each
+ * item is a sentence a source published or a statement that nobody published
+ * one.
+ */
+function BeforeYouGo({ items }: { items: readonly PreparationItem[] }) {
+  if (items.length === 0) return null;
+  const groups = groupPreparation(items);
+
+  return (
+    <section
+      aria-labelledby="before-you-go"
+      data-testid="before-you-go"
+      className="mt-8"
+    >
+      <Panel className="p-5">
+        <h2 id="before-you-go" className="font-display text-xl text-ink">
+          Before you go
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          {items.length} {items.length === 1 ? 'thing' : 'things'} worth doing while you still can,
+          taken from what the places themselves publish.
+        </p>
+
+        <div className="mt-5 space-y-6">
+          {groups.map((group) => (
+            <div key={group.kind}>
+              <h3 className="text-sm font-medium text-ink">
+                {PREPARATION_KIND_COPY[group.kind].title}
+              </h3>
+              <p className="mt-0.5 text-xs text-ink-faint">
+                {PREPARATION_KIND_COPY[group.kind].blurb}
+              </p>
+              <ul className="mt-2.5 space-y-2">
+                {group.items.map((item, index) => (
+                  <li key={`${item.subjectId}-${index}`} className="text-sm leading-relaxed">
+                    <span className="font-medium text-ink">{item.subjectName}</span>
+                    <span className="text-ink-muted"> — {item.text}</span>
+                    {item.url ? (
+                      <>
+                        {' '}
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer nofollow"
+                          className="underline underline-offset-2 hover:text-ink"
+                        >
+                          official page
+                        </a>
+                      </>
+                    ) : null}
+                    {item.confidence ? (
+                      <span className="ml-1 text-xs text-ink-faint">({item.confidence})</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </section>
   );
 }

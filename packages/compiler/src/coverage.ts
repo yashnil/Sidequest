@@ -7,8 +7,10 @@ import {
   type CoverageLevel,
   type CoverageReason,
   type CoverageReport,
+  type FoodVenue,
   type OperatingHoursDataset,
   type Place,
+  type RegionEvidence,
   type SourceFact,
   type WeatherLocation,
 } from '@sidequest/core';
@@ -34,6 +36,10 @@ export interface CoverageInput {
   hours: OperatingHoursDataset;
   weatherLocations: readonly WeatherLocation[];
   foodVenueCount: number;
+  /** The venues themselves, so dietary and hours evidence can be counted. */
+  foodVenues?: readonly FoodVenue[];
+  /** What the research funnel resolved. Absent when it never ran. */
+  evidence?: RegionEvidence;
   matrix: RoutingMatrixResult;
   facts: readonly SourceFact[];
   gaps: readonly ProviderGap[];
@@ -151,6 +157,133 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
     { expected: placeCount, covered: knownHours },
   );
 
+  /**
+   * The evidence dimensions, and the rule they all share.
+   *
+   * Every count below is over **resolved** facts, never over pages fetched or
+   * model calls made. A compilation that read forty pages and established
+   * nothing has to score zero here, because the traveller's question is what we
+   * know, not how hard we tried.
+   */
+  const evidencePlaces = input.evidence?.places ?? [];
+  const researched = evidencePlaces.length;
+  const stateCounts = (path: string): { answered: number; conflicted: number; stale: number } => {
+    let answered = 0;
+    let conflicted = 0;
+    let stale = 0;
+    for (const place of evidencePlaces) {
+      for (const fact of place.resolved) {
+        if (!fact.factPath.startsWith(path)) continue;
+        if (fact.state === 'conflicted') conflicted += 1;
+        else if (fact.state === 'stale') stale += 1;
+        else if (fact.state !== 'unknown' && fact.state !== 'unavailable') answered += 1;
+      }
+    }
+    return { answered, conflicted, stale };
+  };
+
+  const evidenceReasons = (
+    counts: { answered: number; conflicted: number; stale: number },
+    fallback: CoverageReason,
+  ): CoverageReason[] => {
+    const reasons: CoverageReason[] = [];
+    if (counts.conflicted > 0) reasons.push('sources_conflict');
+    if (counts.stale > 0) reasons.push('evidence_stale');
+    if (counts.answered > 0) reasons.push('partial_results_returned');
+    if (reasons.length === 0) reasons.push(fallback);
+    return reasons;
+  };
+
+  if (researched === 0) {
+    add(
+      'candidate_quality',
+      placeCount > 0 ? 'weak' : 'unavailable',
+      ['no_official_source_found'],
+      'Nothing here was researched against a published source, so every place is only as good as the map data behind it.',
+    );
+  } else {
+    const withOfficial = evidencePlaces.filter((place) => place.officialUrl !== undefined).length;
+    add(
+      'candidate_quality',
+      levelFromRatio(withOfficial, Math.max(1, researched)),
+      withOfficial > 0 ? ['partial_results_returned'] : ['no_official_source_found'],
+      `${withOfficial} of ${researched} researched places have an official page behind them.`,
+      { expected: researched, covered: withOfficial },
+    );
+  }
+
+  const accessCounts = stateCounts('access.');
+  add(
+    'access_evidence',
+    researched === 0
+      ? 'weak'
+      : levelFromRatio(accessCounts.answered, Math.max(1, researched)),
+    evidenceReasons(accessCounts, 'no_official_source_found'),
+    accessCounts.answered > 0
+      ? `${accessCounts.answered} sourced statements about getting in.`
+      : 'Nobody official publishes entry conditions for these that we could read.',
+  );
+
+  const bookingCounts = stateCounts('booking.');
+  const needBooking = evidencePlaces.filter(
+    (place) => place.booking?.reservationRequired === 'yes' || place.booking?.permitRequired === 'yes',
+  ).length;
+  add(
+    'booking',
+    researched === 0
+      ? 'weak'
+      : bookingCounts.answered > 0
+        ? 'usable_with_cautions'
+        : 'weak',
+    evidenceReasons(bookingCounts, 'no_official_source_found'),
+    bookingCounts.answered > 0
+      ? `${bookingCounts.answered} booking answers, ${needBooking} of them "yes, book ahead".`
+      : 'We could not establish whether anything here needs booking. Assume nothing.',
+  );
+
+  const costCounts = stateCounts('cost.');
+  const priced = evidencePlaces.filter((place) => place.costs.length > 0).length;
+  add(
+    'cost',
+    researched === 0 ? 'weak' : levelFromRatio(priced, Math.max(1, researched)),
+    evidenceReasons(costCounts, 'no_official_source_found'),
+    priced > 0
+      ? `${priced} places have a published price. A missing price is not a free one.`
+      : 'No prices were published anywhere we could read. A missing price is not a free one.',
+    { expected: researched, covered: priced },
+  );
+
+  const safetyCounts = stateCounts('safety.');
+  const closureCount = evidencePlaces.reduce((total, place) => total + place.closures.length, 0);
+  add(
+    'safety',
+    safetyCounts.answered + closureCount > 0 ? 'usable_with_cautions' : 'weak',
+    evidenceReasons(safetyCounts, 'no_official_source_found'),
+    safetyCounts.answered + closureCount > 0
+      ? `${closureCount} closures and ${safetyCounts.answered} cautions, each dated and sourced.`
+      : 'Nothing official flagged. That is not the same as nothing to know.',
+  );
+
+  const dietaryVenues = (input.foodVenues ?? []).filter((venue) => venue.dietary.length > 0);
+  add(
+    'dietary_evidence',
+    input.foodVenueCount === 0
+      ? 'not_applicable'
+      : dietaryVenues.length === 0
+        ? 'unavailable'
+        : levelFromRatio(dietaryVenues.length, Math.max(1, input.foodVenueCount)),
+    input.foodVenueCount === 0
+      ? ['not_relevant_to_region']
+      : dietaryVenues.length > 0
+        ? ['partial_results_returned']
+        : ['no_official_source_found'],
+    input.foodVenueCount === 0
+      ? 'No food data, so nothing to say about diets.'
+      : dietaryVenues.length > 0
+        ? `${dietaryVenues.length} of ${input.foodVenueCount} venues publish something about diets. Never treat this as an allergy guarantee.`
+        : 'No venue here publishes dietary information we could read. Call ahead if it matters.',
+  );
+
   const matrixSize = input.matrix.ids.length;
   const totalPairs = Math.max(1, matrixSize * matrixSize - matrixSize);
   const failed = input.matrix.failedPairs.length;
@@ -253,6 +386,30 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
     stale.length === 0
       ? 'Everything here was read within its own freshness window. Conditions change; we have not checked today.'
       : `${stale.length} facts are past their freshness window and want rechecking.`,
+  );
+
+  /**
+   * The one row that answers the question a traveller actually has.
+   *
+   * Everything above is a layer; this is whether the layers add up to a day that
+   * can be laid out — somewhere to go, a way to measure the legs, and enough
+   * known about opening times that the plan is not a coin toss.
+   */
+  const knownHoursRatio = placeCount === 0 ? 0 : knownHours / placeCount;
+  const plannerReady = placeCount >= 4 && input.matrix.ids.length > 1;
+  add(
+    'planner_readiness',
+    !plannerReady
+      ? 'unavailable'
+      : knownHoursRatio >= 0.5
+        ? 'high'
+        : knownHoursRatio > 0
+          ? 'usable_with_cautions'
+          : 'weak',
+    plannerReady ? ['fully_covered'] : ['no_results_returned'],
+    plannerReady
+      ? `Enough to lay out days: ${placeCount} places with measured travel between them, ${knownHours} of them with hours we can enforce.`
+      : 'Not enough here to lay out a day around.',
   );
 
   const blocking = computeBlocking(dimensions, { drivingPlanned: input.drivingPlanned });

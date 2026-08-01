@@ -17,6 +17,7 @@ import {
 import {
   completeJob,
   failJob,
+  pruneOrphanedSourceDocuments,
   findCompiledRegion,
   getActiveJob,
   getIntent,
@@ -99,6 +100,14 @@ export function startCompilation(trip: Trip, now = new Date()): StartOutcome {
    */
   const existing = findCompiledRegion(trip.id, fingerprint);
   if (existing) return { kind: 'already_compiled', compiledRegionId: existing.id };
+
+  /**
+   * Sweep audit rows whose region is gone, on the rare path rather than the hot
+   * one. `compiled_regions` cascades from `trips`; SQLite will not cascade into
+   * a table with no foreign key, and adding one would let the audit trail block
+   * a delete.
+   */
+  pruneOrphanedSourceDocuments();
 
   const result: StartJobResult = startJob({
     tripId: trip.id,
@@ -251,7 +260,12 @@ function withProviderCounters(region: CompiledRegion, live: LiveDiagnostics | nu
           routeCalls: live.routeCalls,
           routePairs: live.routePairs,
           routeCacheHits: live.routeCacheHits,
+          wikidataCalls: live.wikidataCalls,
+          sourceSearches: live.sourceSearches,
+          pagesFetched: live.pagesFetched,
+          pagesRejected: live.pagesRejected,
           modelCalls: live.model.calls,
+          modelWebSearches: live.model.webSearches,
           modelInputTokens: live.model.inputTokens,
           modelOutputTokens: live.model.outputTokens,
           modelCacheReadTokens: live.model.cacheReadTokens,

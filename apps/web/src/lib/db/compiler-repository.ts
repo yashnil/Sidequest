@@ -427,12 +427,64 @@ export function completeJob(input: {
       `UPDATE trip_intents SET selected_compiled_region_id = ?, updated_at = ? WHERE trip_id = ?`,
     ).run(region.id, stamp, input.tripId);
 
+    /**
+     * The pages behind the artifact, as an audit row each.
+     *
+     * Written inside the same transaction as the artifact so a region can never
+     * exist without the record of what was read to build it. The bodies are not
+     * here and never will be: what is stored is a URL, a publisher, a byte count
+     * and a hash of the extracted text — enough to notice a page changed, and
+     * not a copy of anybody's page.
+     */
+    const insertDocument = db.prepare(
+      `INSERT INTO source_documents
+         (url, compiled_region_id, subject_id, publisher, authority, title,
+          content_hash, content_bytes, robots_allowed, retrieved_at, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(compiled_region_id, url, subject_id) DO NOTHING`,
+    );
+    for (const page of region.sourceManifest.pages) {
+      const fact = region.sourceManifest.facts.find((entry) => entry.sourceUrl === page.url);
+      insertDocument.run(
+        page.url,
+        region.id,
+        fact?.subjectId ?? 'unattributed',
+        fact?.authorityName ?? 'unknown',
+        fact?.authorityKind ?? 'unverified_secondary',
+        page.title ?? null,
+        page.contentHash ?? '',
+        page.contentBytes,
+        page.robotsAllowed ? 1 : 0,
+        page.retrievedAt,
+        fact?.publishedAt ?? null,
+      );
+    }
+
     db.prepare(
       `UPDATE compilation_jobs
           SET state = ?, compiled_region_id = ?, finished_at = ?, updated_at = ?, heartbeat_at = ?
         WHERE id = ?`,
     ).run(input.state, region.id, stamp, stamp, stamp, input.jobId);
   })();
+}
+
+/**
+ * Audit rows for regions that no longer exist.
+ *
+ * Ownership is explicit: a `source_documents` row belongs to its compiled
+ * region, and a region that has been deleted leaves rows nothing can interpret.
+ * `compiled_regions` cascades from `trips`, but SQLite will not cascade into a
+ * table with no foreign key — and adding one would make the audit trail able to
+ * block a delete. So it is swept instead, deliberately and on demand.
+ */
+export function pruneOrphanedSourceDocuments(): number {
+  const result = getDb()
+    .prepare(
+      `DELETE FROM source_documents
+        WHERE compiled_region_id NOT IN (SELECT id FROM compiled_regions)`,
+    )
+    .run();
+  return result.changes;
 }
 
 export function failJob(input: {
@@ -525,13 +577,28 @@ export function findCompiledRegion(
  * would change the answer, including the provider's own name and version, so a
  * fixture run can never leave rows a live run will read.
  */
-export function readProviderCache<T>(key: string, now: Date): T | null {
+export function readProviderCache<T>(
+  key: string,
+  now: Date,
+  options: { allowExpired?: boolean } = {},
+): T | null {
   try {
     const row = getDb()
       .prepare('SELECT payload_json, expires_at FROM provider_cache WHERE cache_key = ?')
       .get(key) as { payload_json: string; expires_at: string } | undefined;
     if (!row) return null;
     if (Date.parse(row.expires_at) <= now.getTime()) {
+      /**
+       * An expired entry is not worthless — it is last week's answer.
+       *
+       * The normal read deletes it, because serving stale data as fresh is the
+       * failure this whole phase exists to prevent. But when a volunteer-run
+       * service is refusing every request, last week's map of a city is a far
+       * better answer than "this destination has no places in it", which is a
+       * claim about the world rather than about a busy server. The caller asks
+       * for this deliberately and labels what it renders.
+       */
+      if (options.allowExpired) return JSON.parse(row.payload_json) as T;
       getDb().prepare('DELETE FROM provider_cache WHERE cache_key = ?').run(key);
       return null;
     }

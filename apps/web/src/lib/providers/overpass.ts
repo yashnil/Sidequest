@@ -34,8 +34,10 @@ import { USER_AGENT } from './nominatim';
 const DEFAULT_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
 ];
-const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 25_000;
 const MAX_RESPONSE_BYTES = 8_000_000;
 /** Server-side query timeout, so a heavy query is refused rather than queued. */
 const QUERY_TIMEOUT_S = 25;
@@ -117,6 +119,19 @@ export const POI_SELECTORS: readonly { key: string; values: string[]; intent: st
   { key: 'amenity', values: ['place_of_worship', 'marketplace'], intent: 'culture' },
 ];
 
+/**
+ * Somewhere to eat, and the shops that let a traveller feed themselves.
+ *
+ * `grocery` and `bakery` are in here deliberately and are not an afterthought:
+ * an outdoor day needs a provisioning stop far more than it needs a restaurant,
+ * and a region whose only food records are dinner venues cannot plan one.
+ */
+export const FOOD_SELECTORS: readonly { key: string; values: string[]; intent: string }[] = [
+  { key: 'amenity', values: ['restaurant', 'cafe', 'fast_food', 'food_court', 'pub', 'bar'], intent: 'meal' },
+  { key: 'shop', values: ['bakery', 'supermarket', 'convenience', 'greengrocer', 'deli', 'butcher'], intent: 'provisioning' },
+  { key: 'amenity', values: ['marketplace'], intent: 'market' },
+];
+
 /** A bbox big enough to matter is refused rather than silently truncated. */
 export const MAX_BBOX_DEGREES = 3;
 
@@ -174,10 +189,24 @@ export function buildQuery(
    * See `WAY_QUERY_AREA_LIMIT_DEG2`.
    */
   const elements = boxAreaDeg2(box) <= WAY_QUERY_AREA_LIMIT_DEG2 ? ['node', 'way'] : ['node'];
+  /**
+   * One clause per exact tag value, rather than one regex over all of them.
+   *
+   * A regular expression cannot use the tag index, so `["tourism"~"^(a|b|c)$"]`
+   * scans. Over a metro-sized bounding box that is the difference between a
+   * query that answers and one that does not: a live evaluation had
+   * `overpass-api.de` return **504 in ten seconds** for the regex form over New
+   * York's boundary and **200** for the identical exact-value union, and a
+   * single tile of the same box under the regex answered in two.
+   *
+   * More clauses, cheaper query. The union is evaluated once either way.
+   */
   const clauses = (only ?? POI_SELECTORS)
     .flatMap((selector) =>
-      elements.map(
-        (element) => `${element}["${selector.key}"~"^(${selector.values.join('|')})$"]["name"](${bbox});`,
+      elements.flatMap((element) =>
+        selector.values.map(
+          (value) => `${element}["${selector.key}"="${value}"]["name"](${bbox});`,
+        ),
       ),
     )
     .join('\n  ');
@@ -194,10 +223,19 @@ export interface OverpassResult {
   bytes: number;
   /** Selector groups the service refused. Some refused is a gap, not a failure. */
   failedGroups: string[];
+  /** True when this came from an expired cache because nothing would answer. */
+  stale?: boolean;
 }
 
 export interface OverpassOptions {
   limit?: number;
+  /**
+   * Last week's answer, when every endpoint refuses this week's question.
+   *
+   * Read separately from the fresh cache and only after everything else has
+   * failed, so a stale map is a labelled fallback rather than a silent one.
+   */
+  staleCache?: { read: (key: string) => OverpassResult | null };
   fetchImpl?: typeof fetch;
   /** Extra attempts per endpoint. Default 0 — two endpoints is already a retry. */
   retries?: number;
@@ -217,21 +255,62 @@ export interface OverpassOptions {
   };
 }
 
-export function overpassCacheKey(box: BoundingBox, limit: number): string {
+export function overpassCacheKey(box: BoundingBox, limit: number, kind = 'poi'): string {
   const bbox = [box.south, box.west, box.north, box.east].map((value) => value.toFixed(3)).join(',');
-  return ['overpass', 'v1', overpassEndpoint(), bbox, String(limit)].join('|');
+  return ['overpass', 'v1', kind, overpassEndpoint(), bbox, String(limit)].join('|');
 }
 
 export async function fetchPois(
   box: BoundingBox,
   options: OverpassOptions = {},
 ): Promise<OverpassResult> {
+  return fetchTagged(box, POI_SELECTORS, 'poi', options);
+}
+
+/**
+ * The same machinery, pointed at somewhere to eat.
+ *
+ * A separate call rather than six more selector groups on the attraction sweep,
+ * for the reason the attraction sweep is already split: each request has to be
+ * small enough for a public service to accept, and a region's restaurants are an
+ * order of magnitude more numerous than its viewpoints. Bundling them would make
+ * the one query that matters most likely to be refused.
+ */
+export async function fetchFoodPois(
+  box: BoundingBox,
+  options: OverpassOptions = {},
+): Promise<OverpassResult> {
+  return fetchTagged(box, FOOD_SELECTORS, 'food', options);
+}
+
+async function fetchTagged(
+  box: BoundingBox,
+  selectors: readonly (typeof POI_SELECTORS)[number][],
+  kind: string,
+  options: OverpassOptions = {},
+): Promise<OverpassResult> {
   const limit = Math.min(400, Math.max(1, options.limit ?? 200));
   const bounded = clampBoundingBox(box);
-  const key = overpassCacheKey(bounded, limit);
+  const key = overpassCacheKey(bounded, limit, kind);
 
   const cached = options.cache?.read(key);
   if (cached) return { ...cached, calls: 0, cacheHit: true };
+
+  /**
+   * How many times each endpoint has refused, this call.
+   *
+   * A breaker, because six selector groups times four endpoints times a
+   * twenty-five-second timeout is several minutes of a traveller watching a
+   * spinner to learn what the first group already established.
+   *
+   * **Two strikes, not one.** The first version barred an endpoint after a
+   * single failure, and the groups are not equally expensive: a `tourism` sweep
+   * over a national park's bounding box is far heavier than the `natural` sweep
+   * that would actually have found its peaks. One 504 on the expensive query
+   * therefore barred every endpoint before the cheap one ran, and a live Denali
+   * compilation reported the park as having nothing in it.
+   */
+  const failures = new Map<string, number>();
 
   /**
    * One request per selector group, not one union of all of them.
@@ -249,7 +328,7 @@ export async function fetchPois(
    * region with a gap, which the coverage report can describe — rather than a
    * region with nothing in it, which reads as "there is nothing here".
    */
-  const perGroup = Math.max(20, Math.ceil(limit / POI_SELECTORS.length));
+  const perGroup = Math.max(20, Math.ceil(limit / selectors.length));
   const elements: OverpassElement[] = [];
   const seen = new Set<string>();
   let dataTimestamp: string | null = null;
@@ -257,16 +336,52 @@ export async function fetchPois(
   let bytes = 0;
   const failedGroups: string[] = [];
 
-  for (const selector of POI_SELECTORS) {
+  for (const selector of selectors) {
     if (elements.length >= limit) break;
     if (options.deadlineMs !== undefined && Date.now() > options.deadlineMs) {
       failedGroups.push(selector.key);
       continue;
     }
     try {
-      const group = await fetchGroup(bounded, perGroup, selector, options);
+      let group = await fetchGroup(bounded, perGroup, selector, options, failures);
       calls += group.calls;
       bytes += group.bytes;
+
+      /**
+       * A group that came back empty is split once and retried.
+       *
+       * One heavy tag value silently zeroes an entire union. A live Denali
+       * compilation found it exactly: `natural=peak` over the park's bounding
+       * box returns twenty summits, and the same query unioned with
+       * `natural=beach` returns **nothing at all** — the server gives up on the
+       * expensive clause and the cheap ones go down with it. Six groups behaved
+       * that way and the park was reported as having nothing in it.
+       *
+       * Splitting is bounded to one extra level and only happens on an empty
+       * result, so the cost is at most two more requests for a group that
+       * produced nothing anyway — and one poisoned value can now take down half
+       * a group rather than all of it.
+       */
+      if (group.elements.length === 0 && selector.values.length > 1) {
+        const midpoint = Math.ceil(selector.values.length / 2);
+        for (const half of [selector.values.slice(0, midpoint), selector.values.slice(midpoint)]) {
+          try {
+            const part = await fetchGroup(
+              bounded,
+              perGroup,
+              { ...selector, values: half },
+              options,
+              failures,
+            );
+            calls += part.calls;
+            bytes += part.bytes;
+            group = { ...part, elements: [...group.elements, ...part.elements] };
+          } catch {
+            // Half a group is still better than none; the other half may answer.
+          }
+        }
+      }
+
       dataTimestamp ??= group.dataTimestamp;
       for (const element of group.elements) {
         const id = `${element.type}/${element.id}`;
@@ -279,9 +394,20 @@ export async function fetchPois(
     }
   }
 
-  // Everything refused is a provider failure; some refused is a gap the caller
-  // reports. The distinction is what stops a busy server reading as an empty map.
-  if (failedGroups.length === POI_SELECTORS.length) {
+  /**
+   * Everything refused. Before calling this an empty region, look for last
+   * week's answer.
+   *
+   * A stale extract is labelled `stale: true` and the compiler reports it, so a
+   * traveller is told the map data is not today's rather than being told the
+   * city is empty. Only when there is no stale copy either does this become a
+   * failure.
+   */
+  if (failedGroups.length === selectors.length) {
+    const stale = options.staleCache?.read(key);
+    if (stale && stale.elements.length > 0) {
+      return { ...stale, calls, cacheHit: true, stale: true, failedGroups };
+    }
     throw new OverpassError('rate_limited', 'The map data service is busy.');
   }
 
@@ -293,7 +419,22 @@ export async function fetchPois(
     bytes,
     failedGroups,
   };
-  options.cache?.write(key, result);
+  /**
+   * Only a complete, non-empty answer is cached.
+   *
+   * "No attractions in this metro area" is almost never a fact about the world;
+   * it is what a busy service looks like from here. Caching it for a week made
+   * one bad afternoon permanent — a live New York evaluation failed identically
+   * on four consecutive runs, long after the underlying problem was fixed,
+   * because the first failure had been written to the cache as an answer.
+   *
+   * A partial answer is not cached either: it would freeze a region at whatever
+   * subset happened to come back, and the caller has no way to tell that the
+   * cache hit it got was six groups or one.
+   */
+  if (result.elements.length > 0 && failedGroups.length === 0) {
+    options.cache?.write(key, result);
+  }
   return result;
 }
 
@@ -302,9 +443,16 @@ async function fetchGroup(
   limit: number,
   selector: (typeof POI_SELECTORS)[number],
   options: OverpassOptions,
+  failures: Map<string, number> = new Map(),
 ): Promise<OverpassResult> {
   const query = buildQuery(box, limit, [selector]);
-  const endpoints = overpassEndpoints();
+  const MAX_FAILURES = 2;
+  const endpoints = overpassEndpoints().filter(
+    (endpoint) => (failures.get(endpoint) ?? 0) < MAX_FAILURES,
+  );
+  if (endpoints.length === 0) {
+    throw new OverpassError('rate_limited', 'Every map data endpoint has already refused twice.');
+  }
   const maxAttempts = Math.max(1, (options.retries ?? 0) + 1) * endpoints.length;
   const doFetch = options.fetchImpl ?? fetch;
 
@@ -334,11 +482,13 @@ async function fetchGroup(
        */
       if ([406, 429, 502, 503, 504].includes(response.status)) {
         lastError = new OverpassError('rate_limited', 'The map data service is busy.');
+        failures.set(endpoint, (failures.get(endpoint) ?? 0) + 1);
         await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
         continue;
       }
       if (!response.ok) {
         lastError = new OverpassError('request_failed', 'The map data service did not answer.');
+        failures.set(endpoint, (failures.get(endpoint) ?? 0) + 1);
         continue;
       }
 
@@ -370,6 +520,7 @@ async function fetchGroup(
         continue;
       }
       lastError = new OverpassError('request_failed', 'The map data service did not answer.');
+      failures.set(endpoint, (failures.get(endpoint) ?? 0) + 1);
     }
   }
 
@@ -420,7 +571,23 @@ const PLANNING_TAG_KEYS = [
   'access',
   'wheelchair',
   'website',
+  /**
+   * The two tags that make research cheap.
+   *
+   * `contact:website` is the operator's own domain without a search, and
+   * `wikidata` is a free, CC0 route to the same thing plus an identity. Both were
+   * being discarded, which is why every official-source lookup had to start from
+   * a billable web search.
+   */
+  'contact:website',
+  'wikidata',
   'operator',
+  'cuisine',
+  'diet:vegetarian',
+  'diet:vegan',
+  'diet:gluten_free',
+  'diet:halal',
+  'takeaway',
   'ele',
   'seasonal',
 ] as const;
@@ -431,7 +598,7 @@ export function normalizeElement(element: OverpassElement): NormalizedOsmPlace |
   const name = tags.name;
   if (!coordinates || !name) return null;
 
-  const selector = POI_SELECTORS.find((entry) => {
+  const selector = [...POI_SELECTORS, ...FOOD_SELECTORS].find((entry) => {
     const value = tags[entry.key];
     return value !== undefined && entry.values.includes(value);
   });

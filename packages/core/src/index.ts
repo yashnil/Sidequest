@@ -17,6 +17,7 @@ export * from './schemas/resolution';
 export * from './schemas/clarification';
 export * from './schemas/scope';
 export * from './schemas/source-fact';
+export * from './schemas/evidence';
 export * from './schemas/compiled-region';
 export * from './schemas/compilation';
 // `schemas/calendar` is deliberately not re-exported here: `schemas/access`
@@ -44,6 +45,7 @@ export * from './access/feasibility';
 export * from './access/provider';
 
 export * from './hours/availability';
+export * from './hours/osm';
 export * from './hours/provider';
 
 export * from './food/availability';
@@ -59,6 +61,11 @@ export * from './weather/solar';
 export * from './region/season';
 export * from './region/expansion';
 export * from './region/source';
+
+export * from './evidence/resolve';
+export * from './evidence/preparation';
+
+export * from './quality/candidate';
 
 export * from './scoring/fit';
 

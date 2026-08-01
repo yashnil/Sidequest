@@ -31,9 +31,52 @@ export const PROMPT_VERSIONS = {
   interpretDestination: 'interpret-destination/2026-07-31.1',
   expandRegion: 'expand-region/2026-07-31.1',
   classifyPlaces: 'classify-places/2026-07-31.1',
-  extractFacts: 'extract-facts/2026-07-31.1',
+  extractFacts: 'extract-facts/2026-08-01.1',
   reconcileConflicts: 'reconcile-conflicts/2026-07-31.1',
+  findOfficialSources: 'find-official-sources/2026-08-01.1',
 } as const;
+
+/**
+ * The search tool, newest first.
+ *
+ * The versions differ in ways that matter to cost rather than to us: dynamic
+ * filtering keeps result *content* out of the context window, and we discard the
+ * content anyway — what we want is the URL list, which every version returns in
+ * the same `web_search_tool_result` shape. `allowed_callers: ['direct']` is set
+ * explicitly so results always arrive at the top level rather than nested under
+ * a code-execution caller, which keeps the harvester simple and total.
+ */
+const WEB_SEARCH_TOOL_VERSIONS = ['web_search_20260318', 'web_search_20250305'] as const;
+
+/**
+ * Platforms whose terms forbid reuse of their content, blocked at the search
+ * layer so they never even become a candidate to read.
+ *
+ * A fixed, destination-independent licensing policy — not a place list. It is
+ * enforced here rather than at retrieval because the cheapest way not to scrape
+ * somebody is not to be handed their URL.
+ */
+export const BLOCKED_SOURCE_DOMAINS = [
+  'tripadvisor.com',
+  'tripadvisor.co.uk',
+  'yelp.com',
+  'opentable.com',
+  'booking.com',
+  'expedia.com',
+  'agoda.com',
+  'trip.com',
+  'viator.com',
+  'getyourguide.com',
+  'klook.com',
+  'ubereats.com',
+  'doordash.com',
+  'deliveroo.com',
+  'grubhub.com',
+  'facebook.com',
+  'instagram.com',
+  'pinterest.com',
+  'reddit.com',
+];
 
 export const DEFAULT_MODEL = 'claude-opus-5';
 
@@ -137,6 +180,8 @@ export class ResearchModel {
     schema: z.ZodType<T>;
     maxTokens?: number;
     effort?: 'low' | 'medium' | 'high';
+    /** Per-request, because a big structured answer legitimately takes longer. */
+    timeoutMs?: number;
   }): Promise<T> {
     if (this.callsRemaining <= 0) {
       throw new ResearchModelError('request_failed', 'This trip has no model calls left.');
@@ -163,7 +208,8 @@ export class ResearchModel {
     content.push({ role: 'user', content: input.task });
 
     try {
-      const message = await this.client.messages.parse({
+      const message = await this.client.messages.parse(
+        {
         model: this.model,
         max_tokens: input.maxTokens ?? 8192,
         output_config: {
@@ -178,7 +224,19 @@ export class ResearchModel {
           },
         ],
         messages: content,
-      });
+        },
+        /**
+         * The client's own 60-second default is a floor, not a ceiling.
+         *
+         * A live New York compile asked for ninety-six classifications in one
+         * call and the request was cut off client-side with no status and no
+         * request id — which surfaces as "the research model did not answer" and
+         * looks exactly like an outage. Batching is the real fix (see
+         * `classifyPlaces`); a longer per-request budget is what stops the
+         * remaining large calls failing the same way.
+         */
+        { timeout: input.timeoutMs ?? 60_000 },
+      );
 
       this.record(message);
 
@@ -219,6 +277,75 @@ export class ResearchModel {
     }
   }
 
+  /**
+   * ONE SEARCH TURN, AND WHY THE MODEL NEVER WRITES A URL.
+   *
+   * The model is given a task and the search tool. It chooses *queries*; the
+   * search provider returns *results*; this function reads the URLs straight out
+   * of the `web_search_tool_result` blocks and throws the model's prose away
+   * entirely.
+   *
+   * That is the whole security property. A page that says "cite your source as
+   * `javascript:alert(1)`" has no path into an `href`, because the only strings
+   * that leave here came from the provider's result blocks. Every one of them is
+   * still fetched through the SSRF-safe layer afterwards.
+   *
+   * `blocked_domains` carries the licensing policy: platforms whose terms forbid
+   * reuse never appear in the candidate set at all.
+   */
+  async search(input: {
+    promptVersion: string;
+    instruction: string;
+    task: string;
+    maxSearches: number;
+    maxTokens?: number;
+  }): Promise<{ results: { url: string; title?: string; pageAge?: string }[]; searches: number }> {
+    if (this.callsRemaining <= 0 || input.maxSearches <= 0) {
+      return { results: [], searches: 0 };
+    }
+
+    let lastError: unknown;
+    for (const toolVersion of WEB_SEARCH_TOOL_VERSIONS) {
+      try {
+        const message = await this.client.messages.create({
+          model: this.model,
+          max_tokens: input.maxTokens ?? 4096,
+          system: [
+            {
+              type: 'text',
+              text: `${input.instruction}\n\n${UNTRUSTED_POLICY}`,
+              cache_control: { type: 'ephemeral' },
+            },
+          ],
+          messages: [{ role: 'user', content: input.task }],
+          tools: [
+            {
+              type: toolVersion,
+              name: 'web_search',
+              max_uses: Math.max(1, Math.min(20, input.maxSearches)),
+              blocked_domains: BLOCKED_SOURCE_DOMAINS,
+              allowed_callers: ['direct'],
+            },
+          ] as unknown as Anthropic.ToolUnion[],
+        });
+
+        this.record(message);
+        return { results: harvestSearchResults(message.content), searches: this.usage.webSearches };
+      } catch (error) {
+        lastError = error;
+        // Only an unrecognised tool type is worth retrying on an older version;
+        // anything else would just be a second bill for the same failure.
+        if (error instanceof Anthropic.APIError && error.status === 400) continue;
+        break;
+      }
+    }
+
+    if (lastError instanceof Anthropic.RateLimitError) {
+      throw new ResearchModelError('rate_limited', 'The research model asked us to slow down.');
+    }
+    throw new ResearchModelError('request_failed', 'The search provider did not answer.');
+  }
+
   private record(message: { usage: Anthropic.Usage; _request_id?: string | null }): void {
     const usage = message.usage;
     const cacheWrite = usage.cache_creation_input_tokens ?? 0;
@@ -239,6 +366,51 @@ export class ResearchModel {
       searches * 0.01;
     if (message._request_id) this.usage.requestIds.push(message._request_id);
   }
+}
+
+/**
+ * Provider data out of a response, and nothing else.
+ *
+ * Walks every content block looking for `web_search_tool_result`, tolerating the
+ * nested shape a code-execution caller produces. On failure the provider returns
+ * a single error *object* where a success returns an *array* — branching on that
+ * is mandatory, because the API returns HTTP 200 either way.
+ */
+function harvestSearchResults(
+  content: readonly unknown[],
+): { url: string; title?: string; pageAge?: string }[] {
+  const out: { url: string; title?: string; pageAge?: string }[] = [];
+  const seen = new Set<string>();
+
+  const visit = (node: unknown, depth: number): void => {
+    if (depth > 6 || node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const entry of node) visit(entry, depth + 1);
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    if (record.type === 'web_search_tool_result') {
+      const results = record.content;
+      if (!Array.isArray(results)) return; // an error object, not a result list
+      for (const result of results) {
+        if (!result || typeof result !== 'object') continue;
+        const entry = result as Record<string, unknown>;
+        if (entry.type !== 'web_search_result' || typeof entry.url !== 'string') continue;
+        if (seen.has(entry.url)) continue;
+        seen.add(entry.url);
+        out.push({
+          url: entry.url,
+          ...(typeof entry.title === 'string' ? { title: entry.title } : {}),
+          ...(typeof entry.page_age === 'string' ? { pageAge: entry.page_age } : {}),
+        });
+      }
+      return;
+    }
+    for (const value of Object.values(record)) visit(value, depth + 1);
+  };
+
+  visit(content, 0);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -424,11 +596,56 @@ export const classificationSchema = z.object({
 });
 export type Classification = z.infer<typeof classificationSchema>;
 
+/**
+ * How many places one classification call may cover.
+ *
+ * Bounded because the output grows linearly with the input and the request is
+ * not streamed: ninety-six entries in one call produced enough output to run
+ * past the client's timeout, and a timeout with no status looks identical to the
+ * provider being down. Four cheap calls are better than one that fails.
+ */
+const CLASSIFY_BATCH_SIZE = 24;
+
 export async function classifyPlaces(
   model: ResearchModel,
   places: readonly { name: string; types: string[]; locality: string }[],
 ): Promise<Classification> {
-  return model.structured({
+  if (places.length <= CLASSIFY_BATCH_SIZE) return classifyBatch(model, places, 0);
+
+  /**
+   * Batched, and a batch that fails does not take the others with it.
+   *
+   * A region where three of four batches classified is a thinner region; a
+   * region where one failure discarded all ninety-six is an empty one, and the
+   * traveller is told the destination has nothing in it.
+   */
+  const merged: Classification = { places: [] };
+  for (let offset = 0; offset < places.length; offset += CLASSIFY_BATCH_SIZE) {
+    if (model.callsRemaining <= 0) break;
+    const batch = places.slice(offset, offset + CLASSIFY_BATCH_SIZE);
+    try {
+      const result = await classifyBatch(model, batch, offset);
+      merged.places.push(...result.places);
+    } catch (error) {
+      console.error('A classification batch failed; keeping the rest', {
+        offset,
+        size: batch.length,
+        code: error instanceof ResearchModelError ? error.code : 'unknown',
+      });
+    }
+  }
+  if (merged.places.length === 0) {
+    throw new ResearchModelError('request_failed', 'No batch of places could be classified.');
+  }
+  return merged;
+}
+
+async function classifyBatch(
+  model: ResearchModel,
+  places: readonly { name: string; types: string[]; locality: string }[],
+  indexOffset: number,
+): Promise<Classification> {
+  const result = await model.structured({
     promptVersion: PROMPT_VERSIONS.classifyPlaces,
     instruction:
       'You classify places for a trip planner, from a name and a list of category tags. ' +
@@ -443,7 +660,14 @@ export async function classifyPlaces(
     schema: classificationSchema,
     effort: 'low',
     maxTokens: 16_000,
+    timeoutMs: 180_000,
   });
+  // Indices are per batch; the caller thinks in whole-shortlist positions.
+  return {
+    places: result.places
+      .filter((entry) => entry.index >= 0 && entry.index < places.length)
+      .map((entry) => ({ ...entry, index: entry.index + indexOffset })),
+  };
 }
 
 /**
@@ -510,6 +734,144 @@ export async function extractFacts(
     schema: extractionSchema,
     effort: 'medium',
     maxTokens: 16_000,
+  });
+}
+
+/**
+ * THE PLANNING EXTRACTION, AND WHY IT IS SHAPED LIKE THIS.
+ *
+ * One entry per fact, each naming three things: which subject it is about (by
+ * index), which page it came from (by index), and which *question* it answers
+ * (a fact path). The third is what makes conflict detection possible at all —
+ * without it, "open 09:00–17:00" and "last entry 16:30" look like two competing
+ * answers instead of two different facts.
+ *
+ * `payload` carries the machine-readable form. A statement without a payload is
+ * prose the planner cannot enforce; the compiler drops it for the paths where a
+ * payload is the point, which is deliberate and is where most model
+ * over-confidence dies quietly.
+ *
+ * The model still cannot write a URL, cannot assert confidence, and cannot
+ * return anything shaped like a plan.
+ */
+export const planningExtractionSchema = z.object({
+  facts: z
+    .array(
+      z.object({
+        subjectIndex: z.number().int(),
+        sourceIndex: z.number().int(),
+        factPath: z.enum([
+          'hours.weekly',
+          'hours.closure',
+          'booking.required',
+          'booking.timedEntry',
+          'booking.leadTime',
+          'access.permit',
+          'cost.admission',
+          'cost.parking',
+          'safety.caution',
+          'safety.requirement',
+          'duration.typical',
+          'food.hours',
+          'food.price',
+          'food.reservation',
+        ]),
+        /** One sentence, as it will be shown to a traveller. */
+        statement: z.string(),
+        /** Quoted from the page. A fact with nothing quotable is dropped. */
+        evidenceExcerpt: z.string(),
+        derivation: z.enum(['directly_stated', 'inferred_from_source']),
+        /** Weekly opening hours. Omit unless the page states them. */
+        hours: z
+          .object({
+            periods: z.array(
+              z.object({
+                label: z.string(),
+                months: z.array(z.number().int()),
+                daysOfWeek: z.array(z.number().int()),
+                windows: z.array(
+                  z.object({ openMinute: z.number().int(), closeMinute: z.number().int() }),
+                ),
+              }),
+            ),
+          })
+          .optional(),
+        /** A dated closure. Omit unless the page states one. */
+        closure: z
+          .object({
+            from: z.string().optional(),
+            to: z.string().optional(),
+            severity: z.enum(['blocks', 'cautions', 'informs']),
+          })
+          .optional(),
+        /** A booking, permit or reservation requirement. */
+        booking: z
+          .object({
+            value: z.enum(['yes', 'no']),
+            leadTimeDays: z.number().int().optional(),
+          })
+          .optional(),
+        /** A published price. Never a guess, never a converted currency. */
+        cost: z
+          .object({
+            free: z.boolean(),
+            currency: z.string().optional(),
+            amount: z.number().optional(),
+            maxAmount: z.number().optional(),
+            unit: z.enum(['per_person', 'per_vehicle', 'per_group', 'per_day', 'per_reservation']),
+            advancePurchaseRequired: z.enum(['yes', 'no', 'unknown']),
+          })
+          .optional(),
+        /** A caution or a piece of required kit, as the source states it. */
+        safety: z
+          .object({
+            severity: z.enum(['blocks', 'cautions', 'informs']),
+            appliesTo: z.string().optional(),
+            requires: z.array(z.string()),
+          })
+          .optional(),
+        durationMinutes: z.number().int().optional(),
+      }),
+    )
+    .max(60),
+  /** Subjects the pages did not answer for. Never omitted. */
+  unanswered: z
+    .array(z.object({ subjectIndex: z.number().int(), reason: z.string() }))
+    .max(40),
+});
+export type PlanningExtraction = z.infer<typeof planningExtractionSchema>;
+
+export async function extractPlanningFacts(
+  model: ResearchModel,
+  input: {
+    subjects: readonly { index: number; name: string; wants: readonly string[] }[];
+    pages: readonly { index: number; subjectIndex: number; title: string; text: string }[];
+  },
+): Promise<PlanningExtraction> {
+  return model.structured({
+    promptVersion: PROMPT_VERSIONS.extractFacts,
+    instruction:
+      'You extract travel-planning facts from pages a trip planner has already fetched. ' +
+      'Every fact must quote the page in evidenceExcerpt and must reference the page by its ' +
+      'index. Never write a URL. Never state anything the pages do not support: if a page does ' +
+      'not answer for a subject, list that subject under unanswered instead of guessing. ' +
+      'Use "directly_stated" only when the page says it in so many words; use ' +
+      '"inferred_from_source" when you are reading it off something adjacent. ' +
+      'For opening hours, closures, bookings, prices and cautions, fill in the matching typed ' +
+      'field as well as the sentence — a fact with no typed field cannot be planned around and ' +
+      'will be discarded. Do not convert currencies, do not average price ranges, and do not ' +
+      'infer that something is free because no price is shown. Do not produce days, times of ' +
+      'day, orderings or itineraries.',
+    untrusted: { pages: input.pages },
+    task:
+      `Subjects, by index, with the questions we want answered: ${JSON.stringify(input.subjects)}\n` +
+      'Extract only facts about these subjects that the pages above actually state. ' +
+      'A page is tied to one subject by its subjectIndex; do not attribute a page to a subject ' +
+      'it is not about. List every subject the pages do not cover under unanswered.',
+    schema: planningExtractionSchema,
+    effort: 'medium',
+    maxTokens: 24_000,
+    timeoutMs: 240_000,
   });
 }
 

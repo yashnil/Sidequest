@@ -48,6 +48,15 @@ export const BOARD_GROUPS = [
   'nearby_side_quests',
   'scenic_detours',
   'low_effort_backups',
+  /**
+   * Somewhere the traveller could not act on without checking first.
+   *
+   * Its own section rather than a badge, because the decision it asks for is
+   * different from every other section's. Everywhere else the question is "do
+   * you want this?"; here it is "would you make a phone call for this?", and
+   * mixing the two teaches people to ignore the flag.
+   */
+  'needs_verification',
   'weak_fit',
 ] as const;
 export const boardGroupSchema = z.enum(BOARD_GROUPS);
@@ -73,6 +82,11 @@ export const BOARD_GROUP_COPY: Record<BoardGroup, { title: string; blurb: string
   low_effort_backups: {
     title: 'Low-effort & bad-weather backups',
     blurb: 'What to do when the weather turns or the legs are done.',
+  },
+  needs_verification: {
+    title: 'Worth checking first',
+    blurb:
+      'These look good and we could not confirm when they are open or what they need. Here is what we could not establish.',
   },
   weak_fit: {
     title: 'Probably skip',

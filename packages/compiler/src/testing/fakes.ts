@@ -17,11 +17,17 @@ import type {
   CompilerProviders,
   ConstraintResearchProvider,
   DestinationResolver,
+  ExtractedClaim,
+  FactExtractionProvider,
   FoodDiscoveryProvider,
   PlaceDiscoveryProvider,
   ProviderGap,
   RegionExpansionProvider,
+  RetrievedDocument,
   RoutingProvider,
+  SourceDiscoveryProvider,
+  SourceReference,
+  SourceRetrievalProvider,
   WeatherLocationProvider,
 } from '../providers';
 
@@ -354,10 +360,17 @@ function syntheticCalendar(spec: SyntheticWorldSpec, place: Place, index: number
     ],
     closedAnnualDates: [],
     provenance: {
-      kind: 'official',
-      sourceName: 'Synthetic operator',
+      /**
+       * `authored`, not `official`.
+       *
+       * These stand in for hours a mapper transcribed, which is what the live
+       * map-data path produces — a volunteer's reading of an operator's sign.
+       * Calling them official would make "did the research funnel actually
+       * establish this?" unanswerable in every test below.
+       */
+      kind: 'authored',
+      sourceName: 'Synthetic map data',
       sourceUrl: `https://example.invalid/${spec.id}/hours/${index}`,
-      lastVerified: VERIFIED,
       confidence: 0.9,
       volatility: 'seasonal_recurring',
     },
@@ -489,7 +502,10 @@ export function buildSyntheticWorld(spec: SyntheticWorldSpec): {
  * They honour the two rules the real ones must: they report gaps explicitly
  * rather than omitting, and they never assert a confidence level — only signals.
  */
-export function fakeProviders(spec: SyntheticWorldSpec): CompilerProviders {
+export function fakeProviders(
+  spec: SyntheticWorldSpec,
+  options: FakeResearchOptions = {},
+): CompilerProviders {
   const world = buildSyntheticWorld(spec);
 
   const resolver: DestinationResolver = {
@@ -551,7 +567,18 @@ export function fakeProviders(spec: SyntheticWorldSpec): CompilerProviders {
       return {
         candidates: world.places.map((place, index) => ({
           place,
-          providerRefs: [{ provider: 'fake-places', externalId: place.id }],
+          /**
+           * Two refs where the signal claims two providers, one where it does
+           * not. A fixture that asserts corroboration it did not produce is a
+           * fixture that will let the real thing do the same.
+           */
+          providerRefs:
+            index % 3 === 0
+              ? [
+                  { provider: 'fake-places', externalId: place.id },
+                  { provider: 'fake-second-provider', externalId: place.id },
+                ]
+              : [{ provider: 'fake-places', externalId: place.id }],
           facts: [],
           confidenceSignals:
             index % 3 === 0
@@ -586,7 +613,9 @@ export function fakeProviders(spec: SyntheticWorldSpec): CompilerProviders {
         facts: world.facts.filter((fact) => allowed.includes(fact.subjectId)),
         gaps,
         calls: 1,
-        pagesFetched: allowed.length,
+        // This provider reads a synthetic world in memory; reporting pages it
+        // never fetched would spend the retrieval budget before retrieval ran.
+        pagesFetched: 0,
       };
     },
   };
@@ -673,7 +702,292 @@ export function fakeProviders(spec: SyntheticWorldSpec): CompilerProviders {
     },
   };
 
-  return { resolver, expansion, places, constraints, routing, weatherLocations, food };
+  const research = fakeResearchProviders(spec, options);
+
+  return {
+    resolver,
+    expansion,
+    places,
+    constraints,
+    routing,
+    weatherLocations,
+    food,
+    ...research,
+  };
+}
+
+/**
+ * HOW THE FAKE RESEARCH FUNNEL BEHAVES.
+ *
+ * Every field is a failure mode the real one has to survive, expressed as data
+ * rather than as a bespoke mock. That matters because these are the cases that
+ * are hard to reach with a live provider and easy to get wrong in a refactor:
+ * two sources disagreeing, a page that 404s, a model that returns prose with no
+ * excerpt, a budget that runs out halfway.
+ */
+export interface FakeResearchOptions {
+  /** Share of subjects an official page can be found for. */
+  officialSourceCoverage?: number;
+  /** Emit a second, contradicting hours fact from an independent domain. */
+  conflictingHours?: boolean;
+  /** Emit a dated closure that covers the trip. */
+  temporaryClosure?: boolean;
+  /** Emit facts retrieved long ago, so freshness has something to bite on. */
+  staleSources?: boolean;
+  /** Emit a booking requirement with a ticket page. */
+  bookingRequired?: boolean;
+  /** Emit an hours claim with no excerpt, which must be discarded. */
+  uncitedClaims?: boolean;
+  /** The whole discovery layer is down. */
+  sourceDiscoveryFails?: boolean;
+  /** Every fetch fails. */
+  retrievalFails?: boolean;
+  /** The extractor returns malformed output. */
+  extractionFails?: boolean;
+  /** A weak dietary hint on food venues, which must stay cautious. */
+  weakDietaryEvidence?: boolean;
+}
+
+export function fakeResearchProviders(
+  spec: SyntheticWorldSpec,
+  options: FakeResearchOptions = {},
+): Pick<CompilerProviders, 'sourceDiscovery' | 'retrieval' | 'extraction'> {
+  const coverage = options.officialSourceCoverage ?? 0.6;
+
+  const sourceDiscovery: SourceDiscoveryProvider = {
+    name: 'fake-source-discovery',
+    async discover({ subjects, maxSearches, maxReferencesPerSubject }) {
+      if (options.sourceDiscoveryFails) {
+        return {
+          references: [],
+          gaps: [
+            {
+              subjectId: spec.id,
+              reason: 'provider_error',
+              detail: 'The search provider did not answer, so nothing official was found.',
+            },
+          ],
+          calls: 1,
+          searches: 0,
+        };
+      }
+
+      const references: SourceReference[] = [];
+      let searches = 0;
+      for (const [index, subject] of subjects.entries()) {
+        if (subject.knownOfficialUrl) {
+          references.push({
+            subjectId: subject.id,
+            url: subject.knownOfficialUrl,
+            title: `${subject.name} — official`,
+            expectedAuthority: 'operator',
+            discoveredVia: 'osm_tag',
+          });
+          continue;
+        }
+        if (index / Math.max(1, subjects.length) >= coverage) continue;
+        if (searches >= maxSearches) break;
+        searches += 1;
+        references.push({
+          subjectId: subject.id,
+          url: `https://operator-${index}.invalid/visit`,
+          title: `${subject.name} — visitor information`,
+          expectedAuthority: index % 3 === 0 ? 'managing_authority' : 'operator',
+          discoveredVia: 'search',
+          pageAge: 'March 12, 2026',
+        });
+        if (options.conflictingHours && maxReferencesPerSubject > 1) {
+          references.push({
+            subjectId: subject.id,
+            url: `https://guide-${index}.invalid/hours`,
+            title: `${subject.name} — a guide`,
+            expectedAuthority: 'authoritative_secondary',
+            discoveredVia: 'search',
+          });
+        }
+      }
+      return { references, gaps: [], calls: 1, searches };
+    },
+  };
+
+  const retrieval: SourceRetrievalProvider = {
+    name: 'fake-retrieval',
+    async retrieve({ references, maxPages }) {
+      if (options.retrievalFails) {
+        return {
+          documents: [],
+          rejected: references.map((reference) => ({
+            url: reference.url,
+            subjectId: reference.subjectId,
+            reason: 'provider_error' as const,
+            detail: 'Every page we tried to read timed out.',
+          })),
+          gaps: [],
+          bytes: 0,
+        };
+      }
+      const allowed = references.slice(0, maxPages);
+      const documents: RetrievedDocument[] = allowed.map((reference, index) => ({
+        subjectId: reference.subjectId,
+        url: reference.url,
+        ...(reference.title ? { title: reference.title } : {}),
+        text: `Opening hours: Monday to Friday 09:00 to 17:00. Admission 12 EUR per adult.`,
+        structuredData: [],
+        contentHash: `hash-${reference.subjectId}-${index}`,
+        contentBytes: 4096,
+        /**
+         * Five days before the worlds' `NOW`, not three weeks.
+         *
+         * `hours.closure` ages out in twenty-one days by policy — which is
+         * correct and is exactly what a three-week-old "closed for
+         * refurbishment" notice deserves — so a fixture dated three weeks back
+         * silently made every closure stale and untestable.
+         */
+        retrievedAt: options.staleSources
+          ? '2024-01-01T00:00:00.000Z'
+          : '2026-08-05T00:00:00.000Z',
+        publishedAt: options.staleSources ? '2023-11-02' : '2026-08-01',
+        robotsAllowed: true,
+        authority: reference.expectedAuthority,
+        publisher: hostOf(reference.url),
+        domain: hostOf(reference.url),
+      }));
+      return { documents, rejected: [], gaps: [], bytes: documents.length * 4096 };
+    },
+  };
+
+  const extraction: FactExtractionProvider = {
+    name: 'fake-extraction',
+    async extract({ documents, subjects }) {
+      if (options.extractionFails) {
+        return {
+          claims: [],
+          unanswered: [],
+          gaps: [
+            {
+              subjectId: spec.id,
+              reason: 'provider_error',
+              detail: 'The extractor returned something we could not read, so nothing was kept.',
+            },
+          ],
+          calls: 1,
+          promptVersion: 'fake-extract/1',
+          schemaVersion: 'fake/1',
+        };
+      }
+
+      const foodIds = new Set(buildSyntheticWorld(spec).venues.map((venue) => venue.id));
+      const claims: ExtractedClaim[] = [];
+      for (const [index, document] of documents.entries()) {
+        const isFood = foodIds.has(document.subjectId);
+        const secondary = document.authority === 'authoritative_secondary';
+
+        claims.push({
+          subjectId: document.subjectId,
+          documentIndex: index,
+          factPath: isFood ? 'food.hours' : 'hours.weekly',
+          statement: secondary
+            ? 'Open Monday to Friday, 10:00 to 16:00.'
+            : 'Open Monday to Friday, 09:00 to 17:00.',
+          ...(options.uncitedClaims && !secondary
+            ? {}
+            : { evidenceExcerpt: 'Opening hours: Monday to Friday 09:00 to 17:00.' }),
+          derivation: 'directly_stated',
+          payload: {
+            periods: [
+              {
+                label: 'Year-round, weekdays',
+                months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                daysOfWeek: [1, 2, 3, 4, 5],
+                windows: [
+                  secondary
+                    ? { openMinute: 600, closeMinute: 960 }
+                    : { openMinute: 540, closeMinute: 1020 },
+                ],
+              },
+            ],
+            closedAnnualDates: [],
+          },
+        });
+
+        if (!isFood && !secondary) {
+          claims.push({
+            subjectId: document.subjectId,
+            documentIndex: index,
+            factPath: 'cost.admission',
+            statement: 'Admission is 12 EUR per adult.',
+            evidenceExcerpt: 'Admission 12 EUR per adult.',
+            derivation: 'directly_stated',
+            payload: { free: false, currency: 'EUR', amount: 12, unit: 'per_person' },
+          });
+        }
+
+        // Every researched place, not just the first: the first document to be
+        // read is whichever candidate the funnel prioritised, which is often a
+        // food venue — and a booking requirement on somewhere nothing schedules
+        // is a fixture that cannot exercise the preparation list.
+        if (options.bookingRequired && !isFood && !secondary) {
+          claims.push({
+            subjectId: document.subjectId,
+            documentIndex: index,
+            factPath: 'booking.required',
+            statement: 'Tickets must be booked online in advance.',
+            evidenceExcerpt: 'Tickets must be booked online in advance.',
+            derivation: 'directly_stated',
+            payload: { value: 'yes', bookingUrl: `${document.url}/tickets` },
+          });
+        }
+
+        if (options.temporaryClosure && index === 0) {
+          claims.push({
+            subjectId: document.subjectId,
+            documentIndex: index,
+            factPath: 'hours.closure',
+            statement: 'Closed for refurbishment for the whole of this period.',
+            evidenceExcerpt: 'Closed for refurbishment.',
+            derivation: 'directly_stated',
+            payload: { from: '2026-01-01', to: '2027-01-01', severity: 'blocks' },
+          });
+        }
+
+        if (options.weakDietaryEvidence && isFood) {
+          claims.push({
+            subjectId: document.subjectId,
+            documentIndex: index,
+            factPath: 'food.dietary',
+            statement: 'The menu mentions some vegetarian dishes.',
+            evidenceExcerpt: 'vegetarian options available',
+            derivation: 'inferred_from_source',
+          });
+        }
+      }
+
+      return {
+        claims,
+        unanswered: subjects
+          .filter((subject) => !documents.some((document) => document.subjectId === subject.id))
+          .map((subject) => ({
+            subjectId: subject.id,
+            factPath: 'hours.weekly' as const,
+            reason: 'No page was found for this subject.',
+          })),
+        gaps: [],
+        calls: 1,
+        promptVersion: 'fake-extract/1',
+        schemaVersion: 'fake/1',
+      };
+    },
+  };
+
+  return { sourceDiscovery, retrieval, extraction };
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return 'unknown.invalid';
+  }
 }
 
 export function syntheticCandidate(spec: SyntheticWorldSpec): DestinationCandidate {
@@ -687,8 +1001,15 @@ export function syntheticCandidate(spec: SyntheticWorldSpec): DestinationCandida
     countryCode: spec.countryCode,
     administrativeAreas: [spec.qualifiedName],
     timeZones: spec.timeZones ?? [spec.timeZone],
-    providerRefs: [{ provider: 'fake-resolver', externalId: spec.id }],
-    confidence: assessConfidence(['exact_name_match', 'administrative_hierarchy_match', 'multiple_providers_agree']),
+    providerRefs: [
+      { provider: 'fake-resolver', externalId: spec.id },
+      { provider: 'fake-second-resolver', externalId: spec.id },
+    ],
+    confidence: assessConfidence([
+      'exact_name_match',
+      'administrative_hierarchy_match',
+      'multiple_providers_agree',
+    ]),
   };
 }
 

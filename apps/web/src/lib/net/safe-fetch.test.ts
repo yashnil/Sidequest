@@ -6,6 +6,7 @@ import {
   isBlockedAddress,
   safeFetch,
   UnsafeUrlError,
+  lookupAnswer,
 } from './safe-fetch';
 
 /**
@@ -217,5 +218,35 @@ describe('turning a page into evidence', () => {
   it('never emits a tag, so nothing downstream can render it as markup', () => {
     const text = extractReadableText('<p onclick="alert(1)">Hello <b>there</b></p>');
     expect(text).not.toMatch(/[<>]/);
+  });
+});
+
+describe('the DNS lookup contract', () => {
+  /**
+   * Node's socket layer calls a custom `lookup` with `{ all: true }` and expects
+   * an array of `{ address, family }` back. Answering with the single-address
+   * form hands it `undefined` where it wants a list, and it throws
+   * `Invalid IP address: undefined` from inside connect — which surfaces as a
+   * generic transport failure.
+   *
+   * Every other test in this file injects its own resolver and asserts a
+   * *rejection*, so none of them reach a successful connection and none of them
+   * caught this. A live compilation refused all thirty-one of its official pages
+   * before it was found. This is the missing case.
+   */
+  it('answers the all:true shape with a list of typed addresses', () => {
+    expect(lookupAnswer(['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946'], true)).toEqual([
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:2800:220:1:248:1893:25c8:1946', family: 6 },
+    ]);
+  });
+
+  it('answers the single-address shape with a bare string', () => {
+    expect(lookupAnswer(['93.184.216.34'], false)).toBe('93.184.216.34');
+  });
+
+  it('never invents an address when there is none to give', () => {
+    expect(lookupAnswer([], false)).toBe('');
+    expect(lookupAnswer([], true)).toEqual([]);
   });
 });
