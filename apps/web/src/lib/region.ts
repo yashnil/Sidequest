@@ -1,42 +1,46 @@
 import 'server-only';
 import {
   buildDiscoveryBoard,
-  EASTERN_SIERRA_ACCESS,
-  EASTERN_SIERRA_BASE_ID,
-  EASTERN_SIERRA_FOOD,
-  EASTERN_SIERRA_HOURS,
-  EASTERN_SIERRA_PLACES,
-  EASTERN_SIERRA_WEATHER_LOCATIONS,
-  easternSierraTravelMatrix,
-  REGIONS,
+  checkRegionIntegrity,
   tripDates,
   tripMonths,
-  validateAccessDataset,
-  validateFoodDataset,
-  validateOperatingHoursDataset,
   validateWeatherDataset,
   type AccessDataset,
+  type CompiledRegion,
   type DiscoveryBoard,
   type FoodDataset,
   type OperatingHoursDataset,
   type Place,
   type Region,
+  type RegionRequest,
+  type RegionSource,
   type TravelerProfile,
   type Trip,
   type WeatherDataset,
 } from '@sidequest/core';
+import { easternSierraRegionSource } from '@sidequest/core/data';
 import type { TravelTimeMatrix } from '@sidequest/geo';
+import { getCompiledRegion, getIntent } from './db/compiler-repository';
 import { resolveTripWeather, weatherProviderFor } from './weather';
+
+/**
+ * The region id a dynamically compiled trip carries.
+ *
+ * A sentinel rather than a real region, because at trip-creation time there is
+ * no region yet — there is a string somebody typed. Everything that resolves a
+ * region checks the compiled artifact first, and `trips.region_id` only records
+ * which door the trip came through.
+ */
+export const DYNAMIC_REGION_ID = 'dynamic';
 
 /**
  * Everything a region contributes to planning, resolved in one place.
  *
- * Four routes used to import the Eastern Sierra seed data, the access dataset,
- * the base id and the matrix individually and assemble them by hand — four
- * chances to pass a matrix without the matching access data, and four files to
- * touch when a second region lands. This is the seam where a live provider will
- * be awaited instead of a constant being read; nothing above it needs to know
- * which of those is happening.
+ * The shape has not changed. What changed is underneath it: the datasets no
+ * longer come from eight imported constants but from a `RegionSource`, which is
+ * the same door the dynamic compiler comes through. Nothing above this line can
+ * tell an authored region from a compiled one, which is exactly the property
+ * that makes a second destination a configuration change rather than a rewrite.
  */
 export interface RegionContext {
   region: Region;
@@ -44,130 +48,163 @@ export interface RegionContext {
   access: AccessDataset;
   hours: OperatingHoursDataset;
   /**
-   * The forecast, the seasonal pattern, or an honest record of neither. Unlike
-   * the two above this is genuinely fetched, which is why resolving a region
-   * became asynchronous — and why every failure path below has to end in a
-   * dataset rather than an exception.
+   * The forecast, the seasonal pattern, or an honest record of neither.
+   *
+   * The one dataset that is genuinely fetched, and the reason resolving a region
+   * is asynchronous. Deliberately *not* part of the compiled region: a compiled
+   * artifact is cached and reused, and a forecast baked into one is how a
+   * September traveller is shown August's weather. The artifact says where to
+   * ask; this asks.
    */
   weather: WeatherDataset;
   /**
-   * Where the traveller could eat. Curated like access and hours rather than
-   * fetched like weather, and validated on every request for the same reason
-   * they are: the check costs nothing and it is the boundary a live places
-   * provider will have to cross.
-   *
-   * Null when the data will not validate. Unlike a road or a closing time, food
-   * is not something a trip depends on — so the honest failure is to plan
-   * without it and say so on every meal, not to refuse to plan at all.
+   * Where the traveller could eat. Null when the data will not validate —
+   * unlike a road or a closing time, food is not something a trip depends on, so
+   * the honest failure is to plan without it and say so on every meal.
    */
   food: FoodDataset | null;
   matrix: TravelTimeMatrix;
   baseId: string;
   months: number[];
   dates: string[];
+  /** The artifact this context was built from, for provenance and coverage. */
+  compiled: CompiledRegion;
 }
 
 export type RegionResolution =
   | { ok: true; context: RegionContext }
   | { ok: false; error: string };
 
+/**
+ * Every region source, in the order they are asked.
+ *
+ * The authored fixture answers for the one region it holds. Everything else
+ * comes from the database — the compiler writes an artifact, and this reads it.
+ *
+ * There is deliberately **no source here that calls a provider**. Rendering a
+ * page must never compile: that is the rule that stops a refresh spending money
+ * and stops a plan changing underneath somebody who only pressed reload.
+ */
+const REGION_SOURCES: readonly RegionSource[] = [easternSierraRegionSource];
+
+function sourceFor(request: RegionRequest): RegionSource | undefined {
+  return REGION_SOURCES.find((source) => source.supports(request));
+}
+
+/** The artifact this trip has adopted, if it has one. */
+export function compiledRegionFor(tripId: string): CompiledRegion | null {
+  const intent = getIntent(tripId);
+  if (!intent?.selectedCompiledRegionId) return null;
+  try {
+    return getCompiledRegion(intent.selectedCompiledRegionId);
+  } catch (error) {
+    // A stored artifact that will not parse is the itinerary case, not the cache
+    // case: the caller offers a rebuild rather than silently compiling again.
+    console.error('Stored compiled region will not parse', error);
+    return null;
+  }
+}
+
 export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
-  const region = REGIONS.find((item) => item.id === trip.basics.regionId);
-  if (!region) return { ok: false, error: 'We do not have that region mapped.' };
-
-  const places = EASTERN_SIERRA_PLACES.filter((place) => place.regionId === region.id);
-
-  // Validated even though it is a local constant. The check costs nothing and it
-  // is the same boundary a live transit provider will have to cross, so it is
-  // better exercised on every request than written once and never run.
-  let access: AccessDataset;
-  try {
-    access = validateAccessDataset(EASTERN_SIERRA_ACCESS, {
-      regionId: region.id,
-      placeIds: places.map((place) => place.id),
-    });
-  } catch (error) {
-    console.error('Access data for this region is unusable', error);
-    return {
-      ok: false,
-      error:
-        'The transport data for this region is not usable, so we will not guess at how you would get around.',
-    };
-  }
-
-  let hours: OperatingHoursDataset;
-  try {
-    hours = validateOperatingHoursDataset(EASTERN_SIERRA_HOURS, {
-      regionId: region.id,
-      placeIds: places.map((place) => place.id),
-    });
-  } catch (error) {
-    console.error('Opening-hours data for this region is unusable', error);
-    return {
-      ok: false,
-      error:
-        'The opening-hours data for this region is not usable, so we will not guess at when places are open.',
-    };
-  }
-
   const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
+  const months = tripMonths(trip.basics.startDate, trip.basics.endDate);
+  const request: RegionRequest = { regionId: trip.basics.regionId, dates, months };
 
-  /**
-   * Food, and the second place in this function where a failure does not stop
-   * the trip.
-   *
-   * Access and hours are matters of record: guessing at them puts somebody at a
-   * locked gate, so a dataset that will not validate refuses to plan. Food is a
-   * preference layer. A region with no usable food data still gets a plan, with
-   * every meal saying plainly that it is time held rather than somewhere named,
-   * and `SIDEQUEST_FOOD_PROVIDER=off` is how that path is exercised without
-   * breaking anything.
-   */
-  let food: FoodDataset | null = null;
-  if (process.env.SIDEQUEST_FOOD_PROVIDER !== 'off') {
+  let compiled: CompiledRegion;
+
+  const stored = compiledRegionFor(trip.id);
+  if (stored) {
+    compiled = stored;
+  } else {
+    const source = sourceFor(request);
+    if (!source) {
+      return {
+        ok: false,
+        error:
+          trip.basics.regionId === DYNAMIC_REGION_ID
+            ? 'This trip has not been built yet.'
+            : 'We have not built that region yet.',
+      };
+    }
     try {
-      food = validateFoodDataset(EASTERN_SIERRA_FOOD, { regionId: region.id });
+      const result = await source.getCompiledRegion(request);
+      if (!result.ok) return { ok: false, error: result.message };
+      compiled = result.region;
     } catch (error) {
-      console.error('Food data for this region is unusable', error);
-      food = null;
+      console.error('Region source failed', error);
+      return {
+        ok: false,
+        error: 'We could not assemble that region just now. Nothing was lost — try again.',
+      };
     }
   }
 
   /**
-   * Weather, and the one place in this function where a failure does not stop
-   * the trip.
+   * The integrity gate, and the reason it is here rather than in a test.
    *
-   * Access and hours are matters of record: if they will not validate, the
-   * honest thing is to refuse to plan, because guessing at them puts somebody at
-   * a locked gate. Weather is a forecast — useful, and not something a trip
-   * depends on. So a provider that is down produces a dataset of `unavailable`
-   * days, the plan is built without weather reasoning, and every surface says
-   * so. `resolveTripWeather` never throws; it degrades in a fixed order and the
-   * bottom of that order is "we do not know", never "it is fine".
+   * Five of these checks used to be unit tests over the seed data, which is the
+   * right place for them while a person writes the data. A compiler writes it at
+   * request time. The sharpest of them is the matrix: a place with no row throws
+   * at the moment a day is laid out, and in the previous version of this file
+   * `easternSierraTravelMatrix()` was called outside every `try` — so that throw
+   * went straight to a 500 rather than to a sentence.
+   */
+  const issues = checkRegionIntegrity(compiled);
+  if (issues.length > 0) {
+    console.error(
+      'Compiled region failed its integrity checks',
+      issues.map((issue) => `${issue.code}: ${issue.subjectIds.join(', ')}`),
+    );
+    return {
+      ok: false,
+      error:
+        'The data we hold for this region does not hang together, so we will not plan against it.',
+    };
+  }
+
+  /**
+   * Food, and the first of two places where a failure does not stop the trip.
+   *
+   * `SIDEQUEST_FOOD_PROVIDER=off` is how the no-food path is exercised without
+   * breaking anything. A region with no usable food data still gets a plan, with
+   * every meal saying plainly that it is time held rather than somewhere named.
+   */
+  const food = process.env.SIDEQUEST_FOOD_PROVIDER === 'off' ? null : (compiled.food ?? null);
+
+  /**
+   * Weather, and the second.
+   *
+   * Access and hours are matters of record: guessing at them puts somebody at a
+   * locked gate, so data that will not validate refuses to plan. Weather is a
+   * forecast. A provider that is down produces a dataset of `unavailable` days,
+   * the plan is built without weather reasoning, and every surface says so.
+   *
+   * The locations come off the compiled region. They used to come off a default
+   * argument inside the weather module, which meant a second region would have
+   * silently been given the Eastern Sierra's forecast points — the single most
+   * likely silent-wrong-answer in this whole migration.
    */
   const expectedWeather = {
-    regionId: region.id,
+    regionId: compiled.region.id,
     dates,
-    placeIds: places.map((place) => place.id),
+    placeIds: compiled.places.map((place) => place.id),
   };
   let weather: WeatherDataset;
   try {
     weather = validateWeatherDataset(
-      await resolveTripWeather({ regionId: region.id, dates }),
+      await resolveTripWeather({
+        regionId: compiled.region.id,
+        dates,
+        locations: compiled.weatherLocations,
+      }),
       expectedWeather,
     );
   } catch (error) {
-    // The validator throws, and here that must not reach the page. Every other
-    // dataset in this function refuses to plan when it will not validate,
-    // because guessing at a road or a closing time puts somebody at a locked
-    // gate. Weather is not like that: a trip without it is a slightly less
-    // clever trip, and taking the discovery board down because a forecast came
-    // back short would be the tail wagging the dog.
     console.error('Weather data for this trip is unusable', error);
     weather = validateWeatherDataset(
       await weatherProviderFor('off').getWeather({
-        regionId: region.id,
-        locations: EASTERN_SIERRA_WEATHER_LOCATIONS,
+        regionId: compiled.region.id,
+        locations: compiled.weatherLocations,
         dates,
         now: new Date(),
       }),
@@ -175,19 +212,32 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
     );
   }
 
+  /**
+   * Non-null by the integrity gate above, which fails a region whose primary
+   * base is not one of its bases. Read out here rather than inline so that a
+   * future change to that gate breaks loudly instead of handing the planner an
+   * empty routing id — which reads as a missing matrix row two stages later.
+   */
+  const primaryBase = compiled.bases.find((base) => base.id === compiled.primaryBaseId);
+  if (!primaryBase) {
+    console.error('Compiled region has no primary base', compiled.primaryBaseId);
+    return { ok: false, error: 'We could not work out where this trip would be based.' };
+  }
+
   return {
     ok: true,
     context: {
-      region,
-      places,
-      access,
-      hours,
+      region: compiled.region,
+      places: compiled.places,
+      access: compiled.access,
+      hours: compiled.operatingHours,
       weather,
       food,
-      matrix: easternSierraTravelMatrix(),
-      baseId: EASTERN_SIERRA_BASE_ID,
-      months: tripMonths(trip.basics.startDate, trip.basics.endDate),
+      matrix: compiled.travelTimes,
+      baseId: primaryBase.routingId,
+      months,
       dates,
+      compiled,
     },
   };
 }

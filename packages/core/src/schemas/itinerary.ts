@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { transportModeSchema } from './access';
 import {
   isoDateSchema,
+  httpUrlSchema,
   minuteOfDaySchema,
   physicalIntensitySchema,
 } from './common';
@@ -126,7 +127,7 @@ export const scheduledHoursSchema = z
     /** How the source was obtained, so the UI can never call a guess official. */
     sourceKind: z.enum(['official', 'authored', 'estimated']),
     sourceName: z.string().min(1),
-    sourceUrl: z.string().url().optional(),
+    sourceUrl: httpUrlSchema.optional(),
     lastVerified: isoDateSchema.optional(),
     confidence: z.number().min(0).max(1),
   })
@@ -158,7 +159,7 @@ export const bookingRequirementSchema = z.object({
   name: z.string().min(1),
   kind: bookingKindSchema,
   note: z.string().min(1).optional(),
-  url: z.string().url().optional(),
+  url: httpUrlSchema.optional(),
 });
 export type BookingRequirement = z.infer<typeof bookingRequirementSchema>;
 

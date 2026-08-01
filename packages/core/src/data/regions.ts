@@ -23,6 +23,30 @@ export const EASTERN_SIERRA: Region = {
     'Adding a vehicle would open the whole Highway 395 corridor — Convict Lake, Hot Creek, Mono Lake and everything north of town.',
   seasonalRoadSummary:
     'Several approach roads here are on the Caltrans District 9 winter closure list and reopen on the snowpack, not on a date.',
+  /**
+   * Every sentence the questionnaire used to hard-code, now owned by the region
+   * that is actually about. The rendered wording is unchanged.
+   */
+  questionnaireCopy: {
+    proseName: 'the Eastern Sierra',
+    destinationOnlyLabel: 'Town and the Lakes Basin',
+    expansionExamples: {
+      destination_only: 'Keep it tight',
+      nearby_30: 'Convict Lake, Hot Creek, Minaret Vista',
+      nearby_60: 'Adds June Lake Loop and Mono Lake',
+      nearby_120: 'Adds Bodie, Bishop, Rock Creek',
+      best_regional: 'Go wherever it is worth it',
+    },
+    /**
+     * Without a vehicle this region really is the town and the free summer
+     * trolley up to the Lakes Basin. That was the hard-coded rule; here it is a
+     * fact about the Eastern Sierra instead.
+     */
+    carFreeExpansions: ['destination_only', 'nearby_30'],
+    regionStepIntro: 'The best of this region is spread along Highway 395.',
+    discoveryIntro: 'The Eastern Sierra has both. The mix is up to you.',
+    transportIntro: 'Out here this decides which places are even reachable.',
+  },
 };
 
 export const REGIONS: Region[] = [EASTERN_SIERRA];

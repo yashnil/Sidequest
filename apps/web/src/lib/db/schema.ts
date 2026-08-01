@@ -143,6 +143,106 @@ CREATE INDEX IF NOT EXISTS idx_weather_cache_stored ON weather_cache(stored_at);
 
 CREATE INDEX IF NOT EXISTS idx_itinerary_days_trip ON itinerary_days(trip_id);
 CREATE INDEX IF NOT EXISTS idx_itinerary_items_trip_day ON itinerary_items(trip_id, day_number);
+
+-- What the traveller asked for, before a region exists.
+--
+-- One row per trip, carrying the free-form destination text, what our sources
+-- made of it, the clarification answers, and the scope they confirmed. Written
+-- at every step for the same reason answers_json is: a refresh — or a closed
+-- laptop — must not throw away work, and this work is several screens long.
+--
+-- 'scope_json' is the contract the compiler is held to. 'scope_revision' is
+-- bumped whenever the traveller edits anything on the confirmation screen, and
+-- it travels into the fingerprint, so a compiled artifact can never be
+-- attributed to a scope it was not built from.
+CREATE TABLE IF NOT EXISTS trip_intents (
+  trip_id                    TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  mode                       TEXT NOT NULL,
+  destination_query          TEXT NOT NULL DEFAULT '',
+  resolution_json            TEXT,
+  selected_candidate_id      TEXT,
+  clarifications_json        TEXT NOT NULL DEFAULT '{}',
+  scope_json                 TEXT,
+  scope_revision             INTEGER NOT NULL DEFAULT 0,
+  selected_compiled_region_id TEXT,
+  discovery_prefs_json       TEXT,
+  shortlist_json             TEXT,
+  created_at                 TEXT NOT NULL,
+  updated_at                 TEXT NOT NULL
+);
+
+-- A compilation, as a row rather than a promise in a request.
+--
+-- Building a region takes minutes and spends money. Everything else in this
+-- product is an awaited server action, which a browser refresh simply loses;
+-- that is fine for two seconds of planning and unacceptable here. So the job is
+-- durable, its stages are written as they complete, and the browser reads it.
+--
+-- 'heartbeat_at' is what makes a killed process recoverable: a 'running' job
+-- that has gone quiet can be reclaimed, where without it one crash would leave a
+-- trip permanently unable to compile.
+CREATE TABLE IF NOT EXISTS compilation_jobs (
+  id                 TEXT PRIMARY KEY,
+  trip_id            TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  scope_fingerprint  TEXT NOT NULL,
+  state              TEXT NOT NULL,
+  stage              TEXT NOT NULL,
+  stages_json        TEXT NOT NULL DEFAULT '[]',
+  started_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL,
+  finished_at        TEXT,
+  heartbeat_at       TEXT NOT NULL,
+  cancel_requested   INTEGER NOT NULL DEFAULT 0,
+  error_code         TEXT,
+  error_detail       TEXT,
+  compiled_region_id TEXT,
+  correlation_id     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_compilation_jobs_trip ON compilation_jobs(trip_id);
+
+-- Duplicate-click protection, enforced by the database rather than by a disabled
+-- button. The button is client-side: two tabs, a refresh mid-run, or a direct
+-- POST all go straight past it. At most one live job per trip, full stop.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_compilation_jobs_active
+  ON compilation_jobs(trip_id) WHERE state IN ('queued', 'running');
+
+-- Compiled regions, immutable.
+--
+-- Never updated, only inserted. A recompile writes a new row with a new id, so
+-- an itinerary built against one artifact keeps pointing at exactly the evidence
+-- it was built from — and a traveller who deliberately refreshes can be shown
+-- what changed rather than having the old answer overwritten underneath them.
+CREATE TABLE IF NOT EXISTS compiled_regions (
+  id                TEXT PRIMARY KEY,
+  trip_id           TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  scope_fingerprint TEXT NOT NULL,
+  schema_version    INTEGER NOT NULL,
+  compiler_version  TEXT NOT NULL,
+  payload_json      TEXT NOT NULL,
+  created_at        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_compiled_regions_lookup
+  ON compiled_regions(trip_id, scope_fingerprint, created_at);
+
+-- Provider responses, cached so that a retry or a second trip to the same city
+-- does not mean paying twice.
+--
+-- Not itinerary data and never load-bearing: a compiled region carries its own
+-- copy of everything it was built from, so this table can be emptied at any
+-- moment without changing a single stored trip. 'expires_at' is per-entry
+-- because the things cached here age at wildly different rates — a geocode is
+-- stable for years, a route matrix for weeks, an opening time for days.
+CREATE TABLE IF NOT EXISTS provider_cache (
+  cache_key    TEXT PRIMARY KEY,
+  provider     TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  stored_at    TEXT NOT NULL,
+  expires_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_cache_expiry ON provider_cache(expires_at);
 `;
 
 /**

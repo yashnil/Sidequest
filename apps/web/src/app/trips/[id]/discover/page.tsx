@@ -19,7 +19,7 @@ import {
   hasItinerary,
 } from '@/lib/db/repository';
 import { boardWeatherBackups, foodBoardFor } from '@sidequest/core';
-import { boardFor, resolveTripRegion } from '@/lib/region';
+import { boardFor, compiledRegionFor, resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +37,8 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
 
   const days = countTripDays(trip.basics.startDate, trip.basics.endDate);
   const board = boardFor(trip, profile, resolved.context);
+  const compiled = compiledRegionFor(id);
+  const attributions = compiled?.sourceManifest.attributions ?? [];
   const suggestion = autoSelect({ candidates: board.candidates, profile, tripDays: days });
   const personality = tripPersonality(profile, days);
 
@@ -164,6 +166,23 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : null}
         </aside>
       </div>
+
+      {attributions.length > 0 ? (
+        /**
+         * ODbL attribution, rendered from the artifact's own licence records.
+         *
+         * The string comes from `DataLicence.attribution` rather than being
+         * written here, because the obligation is to show *that* text — a
+         * component that paraphrases it has quietly stopped complying.
+         */
+        <p
+          data-testid="board-attribution"
+          className="mt-10 border-t border-rule pt-6 text-[11px] leading-relaxed text-ink-faint"
+        >
+          {attributions.join(' · ')}. Place data is normalised from these sources; descriptions and
+          scoring are ours.
+        </p>
+      ) : null}
     </div>
   );
 }

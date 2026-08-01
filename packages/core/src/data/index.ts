@@ -11,6 +11,7 @@ export * from './access';
 export * from './hours';
 export * from './weather';
 export * from './food';
+export * from './travel-times';
 export { EASTERN_SIERRA, EASTERN_SIERRA_PLACES, REGIONS, resolveRegion };
 
 export function placeById(id: string): Place | undefined {
@@ -84,3 +85,5 @@ export function weatherZonesClaimingUnknownPlaces(): string[] {
     location.placeIds.filter((placeId) => !known.has(placeId)),
   ).sort();
 }
+
+export * from './region-source';

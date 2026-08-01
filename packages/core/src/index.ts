@@ -1,5 +1,24 @@
+/**
+ * The engine's public surface.
+ *
+ * One thing is deliberately **not** here: the Eastern Sierra seed data. It used
+ * to be, and that single line was the reason a marketing page could reach into
+ * the fixture and a "generic" package could ship one region as part of its API.
+ * It now lives behind the `@sidequest/core/data` subpath, where importing it is
+ * a decision somebody made rather than something that happened to be in scope.
+ * `architecture.test.ts` keeps it that way.
+ */
 export * from './schemas/common';
 export * from './schemas/provenance';
+export * from './schemas/geography';
+export * from './schemas/licence';
+export * from './schemas/intent';
+export * from './schemas/resolution';
+export * from './schemas/clarification';
+export * from './schemas/scope';
+export * from './schemas/source-fact';
+export * from './schemas/compiled-region';
+export * from './schemas/compilation';
 // `schemas/calendar` is deliberately not re-exported here: `schemas/access`
 // already forwards every name in it, and two `export *` sources for one name
 // make it ambiguous and therefore invisible to consumers.
@@ -19,6 +38,7 @@ export * from './questionnaire/definition';
 export * from './questionnaire/transform';
 
 export * from './time/interval';
+export * from './time/zone';
 
 export * from './access/feasibility';
 export * from './access/provider';
@@ -38,6 +58,7 @@ export * from './weather/solar';
 
 export * from './region/season';
 export * from './region/expansion';
+export * from './region/source';
 
 export * from './scoring/fit';
 
@@ -46,5 +67,5 @@ export * from './discovery/autoselect';
 
 export * from './profile/personality';
 
-export * from './data/index';
-export * from './data/travel-times';
+// Seed data is reachable at `@sidequest/core/data`, never from here. See the
+// note at the top of this file.

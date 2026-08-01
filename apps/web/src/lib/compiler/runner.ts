@@ -1,0 +1,281 @@
+import 'server-only';
+import {
+  compileRegion,
+  type CompilerProviders,
+  type CompileResult,
+} from '@sidequest/compiler';
+import {
+  scopeFingerprint,
+  tripDates,
+  tripMonths,
+  type CompilationErrorCode,
+  type CompiledRegion,
+  type GeographicScope,
+  type StageRecord,
+  type Trip,
+} from '@sidequest/core';
+import {
+  completeJob,
+  failJob,
+  findCompiledRegion,
+  getActiveJob,
+  getIntent,
+  isCancelRequested,
+  markJobRunning,
+  recordStage,
+  startJob,
+  type StartJobResult,
+} from '../db/compiler-repository';
+import { getProfile } from '../db/repository';
+import { compilerProviders, providerReadiness } from './providers';
+import type { LiveDiagnostics } from '../providers/live';
+
+/**
+ * THE RUNNER.
+ *
+ * Everything durable about a compilation is a row. The job's state, the stage it
+ * reached, what each stage produced and the artifact it ended with are all in
+ * SQLite before the traveller's browser hears about any of it — which is what
+ * makes a refresh show the compilation that is already happening rather than
+ * starting a second one.
+ *
+ * ## The in-process limitation, stated plainly
+ *
+ * This runs the compilation inside the web process, after the response, using
+ * Next's `after()`. That is genuinely enough for development and genuinely not
+ * production-durable:
+ *
+ * - a deploy or a crash mid-compilation kills the work in flight;
+ * - a serverless platform may freeze the process once the response is sent;
+ * - two web instances would each be able to start work, which the unique index
+ *   prevents from becoming two *jobs* but not from becoming two attempts.
+ *
+ * The isolation that makes replacing it cheap is deliberate: everything below
+ * reads and writes through the repository and nothing else, so a durable worker
+ * is a different caller of `runCompilation`, not a rewrite. What must not happen
+ * is pretending this is production-grade — hence `isAbandoned`, the heartbeat,
+ * and the reclaim path, which exist precisely because this process can die.
+ */
+
+export type StartOutcome =
+  | { kind: 'started'; jobId: string }
+  | { kind: 'already_running'; jobId: string }
+  | { kind: 'already_compiled'; compiledRegionId: string }
+  | { kind: 'blocked'; code: CompilationErrorCode; message: string };
+
+/**
+ * Start a compilation, or hand back the one already happening.
+ *
+ * Four outcomes rather than two, because "you already have this" and "somebody
+ * is already doing this" are different things to tell a traveller, and neither
+ * is an error. Duplicate protection is the database's unique partial index, not
+ * the disabled button — two tabs and a direct POST both go past the button.
+ */
+export function startCompilation(trip: Trip, now = new Date()): StartOutcome {
+  const intent = getIntent(trip.id);
+  const scope = intent?.scope;
+
+  if (!scope || !scope.confirmedByUser) {
+    return {
+      kind: 'blocked',
+      code: 'scope_not_confirmed',
+      message: 'Nothing has been built yet — the region is still yours to confirm.',
+    };
+  }
+
+  const readiness = providerReadiness();
+  if (!readiness.ready) {
+    return { kind: 'blocked', code: 'provider_credentials_missing', message: readiness.message };
+  }
+
+  const fingerprint = scopeFingerprint(scope);
+
+  /**
+   * An artifact for exactly this scope already exists, so nothing is recompiled.
+   *
+   * This is the rule that stops a refresh costing money: rendering reads the
+   * database, and only a deliberate rebuild — which bumps the scope revision and
+   * therefore the fingerprint — asks a provider anything.
+   */
+  const existing = findCompiledRegion(trip.id, fingerprint);
+  if (existing) return { kind: 'already_compiled', compiledRegionId: existing.id };
+
+  const result: StartJobResult = startJob({
+    tripId: trip.id,
+    scopeFingerprint: fingerprint,
+    now,
+  });
+  if (result.kind === 'already_running') {
+    return { kind: 'already_running', jobId: result.job.id };
+  }
+  return { kind: 'started', jobId: result.job.id };
+}
+
+/**
+ * Do the work, writing progress as it goes.
+ *
+ * Deliberately not transactional as a whole: stage rows are written *during* the
+ * compilation so a refresh sees real progress, while the artifact and the flip
+ * to ready are one transaction at the end. A crash halfway therefore leaves a
+ * `running` job with honest stage history and no artifact — which is a state the
+ * UI can explain and a retry can clear, rather than a half-written region
+ * claiming to be ready.
+ */
+export async function runCompilation(input: {
+  trip: Trip;
+  jobId: string;
+  providers?: CompilerProviders;
+  now?: Date;
+}): Promise<CompileResult | null> {
+  const now = input.now ?? new Date();
+  const intent = getIntent(input.trip.id);
+  const scope = intent?.scope;
+  if (!scope) {
+    failJob({
+      jobId: input.jobId,
+      code: 'scope_not_confirmed',
+      detail: 'The scope disappeared between starting and running.',
+      now,
+    });
+    return null;
+  }
+
+  markJobRunning(input.jobId, now);
+
+  const dates = tripDates(input.trip.basics.startDate, input.trip.basics.endDate);
+  const months = tripMonths(input.trip.basics.startDate, input.trip.basics.endDate);
+  const profile = getProfile(input.trip.id);
+
+  let providers: CompilerProviders;
+  let live: LiveDiagnostics | null = null;
+  try {
+    if (input.providers) {
+      providers = input.providers;
+    } else {
+      const resolved = compilerProviders(scope.destinationCandidateId);
+      providers = resolved.providers;
+      live = resolved.live;
+    }
+  } catch (error) {
+    failJob({
+      jobId: input.jobId,
+      code: 'provider_credentials_missing',
+      detail: error instanceof Error ? error.message : undefined,
+      now,
+    });
+    return null;
+  }
+
+  let result: CompileResult;
+  try {
+    result = await compileRegion({
+      compilationId: `region-${input.jobId}`,
+      scope,
+      ...(profile ? { profile } : {}),
+      dates,
+      months,
+      providers,
+      now,
+      onStage: (record: StageRecord) => {
+        // Written as it happens. A stage that has finished is a fact, and a
+        // traveller watching this screen should see it the moment it is one.
+        recordStage(input.jobId, record, new Date());
+      },
+    });
+  } catch (error) {
+    console.error('Compilation threw', { jobId: input.jobId });
+    failJob({
+      jobId: input.jobId,
+      code: 'internal_error',
+      detail: error instanceof Error ? error.message.slice(0, 300) : undefined,
+      now: new Date(),
+    });
+    return null;
+  }
+
+  // Cancellation is checked at the end rather than mid-flight: the providers
+  // have already been paid for by then, and throwing the artifact away would
+  // waste that without saving anything. What it does prevent is a cancelled job
+  // silently becoming the trip's region.
+  if (isCancelRequested(input.jobId)) {
+    failJob({
+      jobId: input.jobId,
+      code: 'cancelled_by_user',
+      detail: 'Stopped before the result was adopted.',
+      now: new Date(),
+      cancelled: true,
+    });
+    return result;
+  }
+
+  if (!result.ok) {
+    failJob({ jobId: input.jobId, code: result.code, detail: result.message, now: new Date() });
+    return result;
+  }
+
+  completeJob({
+    jobId: input.jobId,
+    tripId: input.trip.id,
+    region: withProviderCounters(result.region, live),
+    state: result.partial ? 'partial' : 'ready',
+    now: new Date(),
+  });
+  return result;
+}
+
+/**
+ * Fold what the providers actually cost into the artifact.
+ *
+ * Recorded on the region rather than in a log because it is evidence about the
+ * region: how many map queries it took, how many route pairs were measured, how
+ * many the router refused, and which model wrote the classifications. A stored
+ * artifact that cannot say what it cost is one nobody can audit later.
+ *
+ * No credential and no request URL goes in here — only counts and versions.
+ */
+function withProviderCounters(region: CompiledRegion, live: LiveDiagnostics | null): CompiledRegion {
+  if (!live) return region;
+  return {
+    ...region,
+    diagnostics: {
+      ...region.diagnostics,
+      budget: {
+        ...region.diagnostics.budget,
+        consumed: {
+          ...region.diagnostics.budget.consumed,
+          geocoderCalls: live.geocoderCalls,
+          geocoderCacheHits: live.geocoderCacheHits,
+          poiCalls: live.poiCalls,
+          poiCacheHits: live.poiCacheHits,
+          poiElements: live.poiElements,
+          routeCalls: live.routeCalls,
+          routePairs: live.routePairs,
+          routeCacheHits: live.routeCacheHits,
+          modelCalls: live.model.calls,
+          modelInputTokens: live.model.inputTokens,
+          modelOutputTokens: live.model.outputTokens,
+          modelCacheReadTokens: live.model.cacheReadTokens,
+          modelCostMicroUsd: Math.round(live.model.estimatedCostUsd * 1_000_000),
+        },
+      },
+      promptVersions: {
+        ...region.diagnostics.promptVersions,
+        ...(live.timeZone ? { resolvedTimeZone: live.timeZone } : {}),
+      },
+    },
+  };
+}
+
+/**
+ * Whether a trip already has an artifact for its current scope.
+ *
+ * Used by every page that renders a compiled region, so that navigating around
+ * the product never triggers a provider call.
+ */
+export function compiledRegionForScope(tripId: string, scope: GeographicScope) {
+  return findCompiledRegion(tripId, scopeFingerprint(scope));
+}
+
+export function activeJobFor(tripId: string) {
+  return getActiveJob(tripId);
+}

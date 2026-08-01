@@ -1,5 +1,8 @@
 import Link from 'next/link';
-import { EASTERN_SIERRA_PLACES } from '@sidequest/core';
+// The landing page shows the one region we hold in full. Imported from the
+// explicit seed subpath rather than from the engine's public surface, so that a
+// marketing surface reaching into fixture data is a visible decision.
+import { EASTERN_SIERRA_PLACES } from '@sidequest/core/data';
 import { buttonClass, Panel, PlacePlate } from '@/components/ui';
 import { listTrips } from '@/lib/db/repository';
 

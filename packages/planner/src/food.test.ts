@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EASTERN_SIERRA_FOOD,
   foodDatasetSchema,
   itineraryStructureFingerprint,
   type FoodDataset,
@@ -12,6 +11,9 @@ import {
 import { planTrip } from './plan';
 import { MAX_FOOD_DETOUR_MINUTES } from './food';
 import { buildScenario, type ScenarioOptions } from './testing/scenario';
+import {
+  EASTERN_SIERRA_FOOD,
+} from '@sidequest/core/data';
 
 /**
  * FOOD AS A PLANNING LAYER.

@@ -133,3 +133,13 @@ export function missingWeatherKeys(
   }
   return missing.sort();
 }
+
+/**
+ * How long a daily forecast stays presentable before the UI must call it stale.
+ *
+ * Six hours. Providers refresh global models roughly four times a day, so
+ * anything older than that is at best one run behind, and a traveller reading a
+ * precipitation figure deserves to know it predates the most recent update.
+ * Central so the live adapter and the fixture cannot drift apart.
+ */
+export const FORECAST_STALE_AFTER_MINUTES = 6 * 60;

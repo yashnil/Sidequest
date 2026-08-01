@@ -5,14 +5,6 @@ import {
   type ItineraryDay,
   type TravelerProfile,
 } from '@sidequest/core';
-import {
-  easternSierraTravelMatrix,
-  EASTERN_SIERRA_ACCESS,
-  EASTERN_SIERRA_FOOD,
-  EASTERN_SIERRA_HOURS,
-  EASTERN_SIERRA_BASE_ID,
-  placeById,
-} from '@sidequest/core';
 import { planTrip } from './plan';
 import { buildDailyWindows, eachDate } from './windows';
 import { resolveCandidates } from './candidates';
@@ -22,6 +14,14 @@ import { isOpenOnDate } from './schedule';
 import { buildFoodPlan } from './food-plan';
 import { DEFAULT_PLANNER_CONFIG, resolveConfig, type PlannerInput } from './types';
 import { buildScenario, type ScenarioOptions } from './testing/scenario';
+import {
+  EASTERN_SIERRA_ACCESS,
+  EASTERN_SIERRA_BASE_ID,
+  EASTERN_SIERRA_FOOD,
+  EASTERN_SIERRA_HOURS,
+  easternSierraTravelMatrix,
+  placeById,
+} from '@sidequest/core/data';
 
 function plan(options: ScenarioOptions = {}): Itinerary {
   const result = planTrip(buildScenario(options));
