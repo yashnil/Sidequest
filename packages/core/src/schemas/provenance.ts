@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDateSchema } from './common';
+import { httpUrlSchema, isoDateSchema } from './common';
 
 /**
  * Where a fact came from, how sure we are of it, and how long it stays true.
@@ -27,7 +27,7 @@ export const sourceProvenanceSchema = z
      */
     kind: z.enum(['official', 'authored', 'estimated']),
     sourceName: z.string().min(1),
-    sourceUrl: z.string().url().optional(),
+    sourceUrl: httpUrlSchema.optional(),
     /**
      * When the source was last read. Absent for `authored` data, because a
      * verification date on something nobody verified is worse than no date.

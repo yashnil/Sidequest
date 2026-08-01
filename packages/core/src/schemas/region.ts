@@ -1,5 +1,38 @@
 import { z } from 'zod';
-import { coordinatesSchema } from './common';
+import { coordinatesSchema, regionalExpansionSchema } from './common';
+
+/**
+ * The sentences only this region can write.
+ *
+ * Copy naming a highway, a lake or a town used to live in the questionnaire's
+ * step definitions — inside a package that is meant to work anywhere. That made
+ * "How far from Mammoth Lakes?" a property of the engine rather than of the
+ * Eastern Sierra, and a second region would have inherited it.
+ *
+ * It lives here instead, and it is optional: a compiled region nobody has
+ * written prose for gets generic wording rather than a placeholder that names
+ * the wrong valley.
+ */
+export const regionQuestionnaireCopySchema = z.object({
+  /** How the region is named mid-sentence: "the Eastern Sierra". */
+  proseName: z.string().min(1),
+  /** Label for keeping to the destination itself. */
+  destinationOnlyLabel: z.string().min(1),
+  /** What each extra radius actually opens up here. */
+  expansionExamples: z.partialRecord(regionalExpansionSchema, z.string().min(1)).default({}),
+  /**
+   * Radii that are reachable without a car **here**.
+   *
+   * A rule, not a preference. It used to be hard-coded — a non-driver was capped
+   * at thirty minutes everywhere — which is true of a valley served by one
+   * trolley and false of anywhere with a rail network.
+   */
+  carFreeExpansions: z.array(regionalExpansionSchema).min(1),
+  regionStepIntro: z.string().min(1),
+  discoveryIntro: z.string().min(1),
+  transportIntro: z.string().min(1),
+});
+export type RegionQuestionnaireCopy = z.infer<typeof regionQuestionnaireCopySchema>;
 
 /**
  * A region is the unit Sidequest actually plans against. "Mammoth Lakes" is a
@@ -30,6 +63,8 @@ export const regionSchema = z.object({
   noVehicleSummary: z.string().min(1),
   /** Why roads here close, when they do. Absent where nothing closes seasonally. */
   seasonalRoadSummary: z.string().min(1).optional(),
+  /** Region-owned wording for the questionnaire. Absent falls back to generic. */
+  questionnaireCopy: regionQuestionnaireCopySchema.optional(),
 });
 export type Region = z.infer<typeof regionSchema>;
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { coordinatesSchema, isoDateSchema } from './common';
+import { coordinatesSchema, httpUrlSchema, isoDateSchema } from './common';
+import { sourceElementSchema } from './licence';
 
 /**
  * The fields every point of interest has, whatever kind of thing it is.
@@ -24,10 +25,20 @@ import { coordinatesSchema, isoDateSchema } from './common';
 export const placeSourceSchema = z.object({
   name: z.string().min(1),
   kind: z.enum(['curated', 'osm', 'google_places', 'opentripmap', 'wikivoyage', 'official']),
-  url: z.string().url().optional(),
+  url: httpUrlSchema.optional(),
   /** 0-1. Curated-and-checked rows sit high; scraped rows will sit lower. */
   confidence: z.number().min(0).max(1),
   lastVerified: isoDateSchema,
+  /**
+   * The element this was normalized from, where it came from a database rather
+   * than from a person.
+   *
+   * Optional because the authored fixture has no upstream element. Present on
+   * everything compiled, because attribution nobody can follow back is not
+   * attribution, and a normalized record that cannot be traced to its source is
+   * one nobody can correct upstream.
+   */
+  element: sourceElementSchema.optional(),
 });
 export type PlaceSource = z.infer<typeof placeSourceSchema>;
 

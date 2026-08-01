@@ -4,7 +4,7 @@ import {
   monthDaySchema,
   monthNumberSchema,
 } from './calendar';
-import { MINUTES_PER_DAY, minuteOfDaySchema } from './common';
+import { httpUrlSchema, MINUTES_PER_DAY, minuteOfDaySchema } from './common';
 import { sourceProvenanceSchema } from './provenance';
 
 /**
@@ -129,7 +129,7 @@ export const admissionRequirementSchema = z
     walkInAllowed: z.boolean().default(true),
     /** Entry is capped, so arriving does not guarantee getting in. */
     capacityLimited: z.boolean().default(false),
-    bookingUrl: z.string().url().optional(),
+    bookingUrl: httpUrlSchema.optional(),
     note: z.string().min(1).optional(),
   })
   .refine((value) => !value.timedEntry || value.reservationRequired, {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { monthDaySchema } from './calendar';
-import { minuteOfDaySchema } from './common';
+import { httpUrlSchema, minuteOfDaySchema } from './common';
 import { operatingPeriodSchema } from './hours';
 import { POI_BASE_FIELDS } from './poi';
 import { sourceProvenanceSchema } from './provenance';
@@ -176,7 +176,7 @@ export const foodReservationSchema = z
     requirement: reservationRequirementSchema,
     /** The venue's own words, or ours describing what they publish. */
     note: z.string().min(1).optional(),
-    bookingUrl: z.string().url().optional(),
+    bookingUrl: httpUrlSchema.optional(),
   })
   .refine(
     (value) =>
@@ -254,7 +254,7 @@ export const dietaryClaimSchema = z
     evidence: dietaryEvidenceSchema,
     /** What the source actually said. Quoted or closely paraphrased. */
     note: z.string().min(1),
-    sourceUrl: z.string().url().optional(),
+    sourceUrl: httpUrlSchema.optional(),
   })
   .refine((claim) => claim.evidence !== 'venue_states_support' || claim.sourceUrl !== undefined, {
     // The strongest claim in the vocabulary is the one that steers a traveller
@@ -414,7 +414,7 @@ export const foodVenueSchema = z
       .object({
         label: z.string().min(1),
         note: z.string().min(1),
-        sourceUrl: z.string().url().optional(),
+        sourceUrl: httpUrlSchema.optional(),
       })
       .optional(),
     hours: foodOpeningCalendarSchema,
@@ -582,7 +582,7 @@ export const scheduledFoodHoursSchema = z
     confidence: foodHoursConfidenceSchema,
     sourceKind: z.enum(['official', 'authored', 'estimated']),
     sourceName: z.string().min(1),
-    sourceUrl: z.string().url().optional(),
+    sourceUrl: httpUrlSchema.optional(),
     lastVerified: z.string().min(1).optional(),
   })
   .refine((hours) => hours.closeMinute > hours.openMinute, {
@@ -668,7 +668,7 @@ export const dayFoodSummarySchema = z.object({
         venueName: z.string().min(1),
         requirement: reservationRequirementSchema,
         note: z.string().min(1).optional(),
-        bookingUrl: z.string().url().optional(),
+        bookingUrl: httpUrlSchema.optional(),
       }),
     )
     .default([]),

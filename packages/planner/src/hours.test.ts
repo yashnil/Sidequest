@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
-  EASTERN_SIERRA_HOURS,
   itineraryStructureFingerprint,
   operatingHoursDatasetSchema,
   type operatingCalendarSchema,
@@ -16,6 +15,9 @@ import { buildScenario, type ScenarioOptions } from './testing/scenario';
 import { DEFAULT_PLANNER_CONFIG } from './types';
 import { resolveConfig } from './types';
 import { validateItinerary } from './validate';
+import {
+  EASTERN_SIERRA_HOURS,
+} from '@sidequest/core/data';
 
 /**
  * Opening hours, end to end.

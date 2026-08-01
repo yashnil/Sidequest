@@ -84,7 +84,7 @@ export function normalizeAnswers(
     next.willUseShuttles = true;
   }
 
-  const allowedExpansions = availableRegionalExpansions(next.willDrive);
+  const allowedExpansions = availableRegionalExpansions(next.willDrive, context);
   if (!allowedExpansions.includes(next.regionalExpansion)) {
     next.regionalExpansion = allowedExpansions[allowedExpansions.length - 1] as RegionalExpansion;
   }

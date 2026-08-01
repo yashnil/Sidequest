@@ -49,6 +49,39 @@ export const coordinatesSchema = z.object({
 });
 export type Coordinates = z.infer<typeof coordinatesSchema>;
 
+/**
+ * A link that is safe to put in an `href`.
+ *
+ * `z.string().url()` does not check the scheme. Verified against the Zod this
+ * repository pins: `javascript:alert(1)`, `data:text/html,…`, `file:///etc/passwd`
+ * and `http://user:pass@169.254.169.254/` all pass it. Every source link in the
+ * product is currently a constant written by hand in `data/`, so that has never
+ * mattered — but the moment a compiled region can author a `sourceUrl` from a
+ * page somebody else wrote, every one of those fields is an `href` an attacker
+ * controls, stored in the database and rendered back.
+ *
+ * So the check belongs at the schema boundary, where the four `validateXDataset`
+ * gates already live, rather than at each of the render sites that would
+ * otherwise have to remember. Credentials are rejected too: `http://legit@10.0.0.1/`
+ * reads as a link to `legit` and resolves to a private address.
+ */
+export const httpUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (value) => {
+      let parsed: URL;
+      try {
+        parsed = new URL(value);
+      } catch {
+        return false;
+      }
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+      return parsed.username === '' && parsed.password === '';
+    },
+    'Only http(s) links without an embedded username or password are allowed',
+  );
+
 /** What a traveller can care about. Seed place tags are drawn from this same list. */
 export const INTERESTS = [
   'hiking',
@@ -173,12 +206,21 @@ export const REGIONAL_EXPANSIONS = [
 export const regionalExpansionSchema = z.enum(REGIONAL_EXPANSIONS);
 export type RegionalExpansion = z.infer<typeof regionalExpansionSchema>;
 
+/**
+ * Radius labels with no place names in them.
+ *
+ * These used to read "Stay in Mammoth Lakes itself" and "Build the best Eastern
+ * Sierra trip" — one authored region's names, in the shared schema module every
+ * other region would inherit them from. A region that has better wording supplies
+ * it through `Region.questionnaireCopy`; this is what everywhere else gets, and
+ * it is correct rather than merely neutral.
+ */
 export const REGIONAL_EXPANSION_LABELS: Record<RegionalExpansion, string> = {
-  destination_only: 'Stay in Mammoth Lakes itself',
+  destination_only: 'Stay in the destination itself',
   nearby_30: 'Anything within about 30 minutes',
   nearby_60: 'Anything within about an hour',
   nearby_120: 'Up to two hours if it is worth it',
-  best_regional: 'Build the best Eastern Sierra trip, wherever that leads',
+  best_regional: 'Build the best regional trip, wherever that leads',
 };
 
 /** 0 free, 1 cheap, 2 moderate, 3 expensive. A union so the type carries the range. */

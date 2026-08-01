@@ -3,21 +3,25 @@ import { formatMinuteOfDay } from '../schemas/common';
 import { solarEventsFor } from './solar';
 import {
   assessPlaceWeather,
+  evaluateWeather,
+  isMeaningfullyBetter,
+  placeWeatherProfileSchema,
+  validateWeatherDataset,
+  WeatherDataError,
+  WEATHER_THRESHOLDS,
+} from '../index';
+// The seed region, imported explicitly. It is no longer part of the engine's
+// public surface, so a test that wants the Eastern Sierra has to say so.
+import {
   buildFixtureWeather,
   EASTERN_SIERRA,
   EASTERN_SIERRA_PLACES,
   EASTERN_SIERRA_WEATHER_LOCATIONS,
-  evaluateWeather,
-  isMeaningfullyBetter,
   placeById,
-  placeWeatherProfileSchema,
   placesInMoreThanOneWeatherZone,
   placesWithoutWeatherZone,
-  validateWeatherDataset,
-  WeatherDataError,
   weatherZonesClaimingUnknownPlaces,
-  WEATHER_THRESHOLDS,
-} from '../index';
+} from '../data/index';
 
 /**
  * The solar algorithm is checked against numbers Sidequest did not produce.

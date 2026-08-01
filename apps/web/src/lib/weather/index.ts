@@ -1,8 +1,6 @@
 import 'server-only';
 import {
-  buildFixtureWeather,
   buildSolarDays,
-  EASTERN_SIERRA_WEATHER_LOCATIONS,
   isInsideForecastHorizon,
   utcOffsetMinutesOn,
   weatherDatasetSchema,
@@ -10,6 +8,7 @@ import {
   type WeatherLocation,
   type WeatherProvider,
 } from '@sidequest/core';
+import { buildFixtureWeather } from '@sidequest/core/data';
 import { getDb } from '../db/client';
 import { openMeteoWeatherProvider } from './openmeteo';
 
@@ -216,7 +215,17 @@ export interface ResolveWeatherOptions {
   regionId: string;
   dates: readonly string[];
   now?: Date;
-  locations?: readonly WeatherLocation[];
+  /**
+   * Where to read the weather. Required, and it did not used to be.
+   *
+   * It defaulted to the Eastern Sierra's seven points, which was invisible and
+   * correct for exactly as long as there was one region. A second region that
+   * forgot to pass this would have been given Mammoth's forecast — at Mammoth's
+   * elevations, in Mammoth's timezone — and nothing anywhere would have
+   * complained. Making it required turns that from a silent wrong answer into a
+   * compile error.
+   */
+  locations: readonly WeatherLocation[];
 }
 
 /**
@@ -239,7 +248,7 @@ export async function resolveTripWeather(
   options: ResolveWeatherOptions,
 ): Promise<WeatherDataset> {
   const now = options.now ?? new Date();
-  const locations = options.locations ?? EASTERN_SIERRA_WEATHER_LOCATIONS;
+  const locations = options.locations;
   const zone = locations[0]?.timeZone ?? 'UTC';
 
   /**

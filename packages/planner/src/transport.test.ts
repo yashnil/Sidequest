@@ -4,8 +4,6 @@ import {
   assessPlaceAccess,
   capabilityFromProfile,
   dayOfWeekFor,
-  EASTERN_SIERRA_ACCESS,
-  easternSierraAccessProvider,
   evaluateRule,
   itineraryStructureFingerprint,
   serviceAvailabilityOn,
@@ -19,6 +17,10 @@ import { planTrip } from './plan';
 import { buildScenario, type ScenarioOptions } from './testing/scenario';
 import { buildTransportStrategy } from './strategy';
 import { validateStrategy } from './validate';
+import {
+  EASTERN_SIERRA_ACCESS,
+  easternSierraAccessProvider,
+} from '@sidequest/core/data';
 
 /**
  * The transportation slice, scenario by scenario.

@@ -2,8 +2,11 @@
 
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { resolveRegion, tripBasicsSchema, TRAVELER_NEEDS } from '@sidequest/core';
+import { tripBasicsSchema, TRAVELER_NEEDS } from '@sidequest/core';
+import { resolveRegion } from '@sidequest/core/data';
 import { createTrip } from '@/lib/db/repository';
+import { saveDestinationQuery } from '@/lib/db/compiler-repository';
+import { DYNAMIC_REGION_ID } from '@/lib/region';
 
 export interface NewTripState {
   error?: string;
@@ -41,24 +44,20 @@ export async function createTripAction(
     return { fieldErrors: fieldErrorsFrom(parsedForm.error), values };
   }
 
-  // Only one region is seeded, and pretending otherwise would send the traveller
-  // into an empty board.
+  /**
+   * Two doors, and which one a destination goes through is decided here.
+   *
+   * A string that names a region we already hold in full keeps the journey it has
+   * always had: straight to the questionnaire, against authored data. Anything
+   * else goes to the compiler, which reads it, asks what it needs to, and builds
+   * a region. The traveller sees a different next screen; nothing else differs.
+   */
   const region = resolveRegion(parsedForm.data.destinationInput);
-  if (!region) {
-    return {
-      fieldErrors: {
-        destinationInput:
-          'We only have the Eastern Sierra mapped so far. Try “Mammoth Lakes”, “June Lake” or “Eastern Sierra”.',
-      },
-      values,
-    };
-  }
-
   const travelerNeeds = TRAVELER_NEEDS.filter((need) => formData.get(`need-${need}`) === 'on');
 
   const parsedBasics = tripBasicsSchema.safeParse({
     mode: 'known_destination',
-    regionId: region.id,
+    regionId: region?.id ?? DYNAMIC_REGION_ID,
     travelerNeeds,
     ...parsedForm.data,
   });
@@ -69,6 +68,11 @@ export async function createTripAction(
   let tripId: string;
   try {
     tripId = createTrip(parsedBasics.data).id;
+    if (!region) {
+      // The typed string is the durable artifact from here on: the compiler
+      // reads it, and a refresh on the next screen resumes from it.
+      saveDestinationQuery(tripId, 'known_destination', parsedForm.data.destinationInput);
+    }
   } catch (error) {
     console.error('Failed to create trip', error);
     return {
@@ -77,7 +81,7 @@ export async function createTripAction(
     };
   }
 
-  redirect(`/trips/${tripId}/questionnaire`);
+  redirect(region ? `/trips/${tripId}/questionnaire` : `/trips/${tripId}/plan`);
 }
 
 function fieldErrorsFrom(error: z.ZodError): Record<string, string> {

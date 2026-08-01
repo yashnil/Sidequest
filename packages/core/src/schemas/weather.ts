@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { coordinatesSchema, isoDateSchema, minuteOfDaySchema } from './common';
+import { coordinatesSchema, httpUrlSchema, isoDateSchema, minuteOfDaySchema } from './common';
 import { sourceProvenanceSchema } from './provenance';
 
 /**
@@ -132,7 +132,7 @@ export const weatherAttributionSchema = z.object({
   provider: z.string().min(1),
   /** The licence line that must appear wherever the data does. */
   notice: z.string().min(1),
-  url: z.string().url(),
+  url: httpUrlSchema,
   /** The model or dataset behind it, when the provider names one. */
   dataset: z.string().min(1).optional(),
 });

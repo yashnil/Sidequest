@@ -16,9 +16,9 @@ import {
   INTEREST_LABELS,
   INTEREST_LEVELS,
   PACE_OPTIONS,
-  REGIONAL_EXPANSION_OPTIONS,
+  regionalExpansionOptions,
   TRANSPORT_PRIORITY_OPTIONS,
-  STEP_DEFINITIONS,
+  stepDefinitions,
   availableRegionalExpansions,
   buildTravelerProfile,
   isQuestionVisible,
@@ -61,8 +61,9 @@ export function QuestionnaireWizard({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const step = STEP_DEFINITIONS[stepIndex]!;
-  const isLast = stepIndex === STEP_DEFINITIONS.length - 1;
+  const steps = stepDefinitions(context);
+  const step = steps[stepIndex]!;
+  const isLast = stepIndex === steps.length - 1;
   const visible = (id: Parameters<typeof isQuestionVisible>[0]) =>
     isQuestionVisible(id, { answers, context });
 
@@ -117,7 +118,7 @@ export function QuestionnaireWizard({
         return;
       }
       setError(null);
-      setStepIndex((index) => Math.min(index + 1, STEP_DEFINITIONS.length - 1));
+      setStepIndex((index) => Math.min(index + 1, steps.length - 1));
     });
   }
 
@@ -136,7 +137,7 @@ export function QuestionnaireWizard({
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
-      <Progress current={stepIndex} total={STEP_DEFINITIONS.length} />
+      <Progress current={stepIndex} total={steps.length} />
 
       <h1 className="mt-6 font-display text-3xl leading-tight text-ink sm:text-4xl">
         {step.title}
@@ -391,8 +392,8 @@ export function QuestionnaireWizard({
           <>
             <ChoiceGroup
               legend="How far out should we look?"
-              options={REGIONAL_EXPANSION_OPTIONS.filter((option) =>
-                availableRegionalExpansions(answers.willDrive).includes(option.value),
+              options={regionalExpansionOptions(context).filter((option) =>
+                availableRegionalExpansions(answers.willDrive, context).includes(option.value),
               )}
               value={answers.regionalExpansion}
               onChange={(regionalExpansion) => update({ regionalExpansion })}

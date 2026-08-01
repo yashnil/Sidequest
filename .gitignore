@@ -7,9 +7,16 @@ coverage/
 *.tsbuildinfo
 next-env.d.ts
 
+# Every env file except the committed example. Listed exhaustively rather than
+# as `.env*` so that `.env.example` stays tracked, and rather than as the three
+# Next.js happens to document — `.env.production` was missing, which is the one
+# a real key is most likely to end up in.
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+.env.test
 
 # local SQLite development databases, wherever a workspace puts them
 **/data/*.db

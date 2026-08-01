@@ -2,22 +2,16 @@ import {
   autoSelect,
   buildDiscoveryBoard,
   countTripDays,
-  EASTERN_SIERRA,
-  EASTERN_SIERRA_BASE_ID,
-  EASTERN_SIERRA_ACCESS,
-  EASTERN_SIERRA_FOOD,
-  EASTERN_SIERRA_HOURS,
-  EASTERN_SIERRA_PLACES,
-  EASTERN_SIERRA_WEATHER_LOCATIONS,
-  buildFixtureWeather,
-  easternSierraTravelMatrix,
   tripDates,
   tripMonths,
   type DiscoverySelection,
   type QuestionnaireAnswers,
   type TripBasics,
 } from '@sidequest/core';
-import { buildTravelerProfile, defaultAnswers } from '@sidequest/core';
+import {
+  buildTravelerProfile,
+  defaultAnswers,
+} from '@sidequest/core';
 import type {
   AccessDataset,
   FoodDataset,
@@ -29,6 +23,17 @@ import type {
   WeatherDataset,
 } from '@sidequest/core';
 import type { PlannerInput } from '../types';
+import {
+  EASTERN_SIERRA,
+  EASTERN_SIERRA_ACCESS,
+  EASTERN_SIERRA_BASE_ID,
+  EASTERN_SIERRA_FOOD,
+  EASTERN_SIERRA_HOURS,
+  EASTERN_SIERRA_PLACES,
+  EASTERN_SIERRA_WEATHER_LOCATIONS,
+  buildFixtureWeather,
+  easternSierraTravelMatrix,
+} from '@sidequest/core/data';
 
 /**
  * Builds a complete, realistic planner input the same way the web app does:

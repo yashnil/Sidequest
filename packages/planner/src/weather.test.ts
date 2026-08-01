@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSolarDays,
-  EASTERN_SIERRA,
-  EASTERN_SIERRA_PLACES,
-  EASTERN_SIERRA_WEATHER_LOCATIONS,
-  buildFixtureWeather,
   itineraryStructureFingerprint,
   utcOffsetMinutesOn,
   WEATHER_DATASET_VERSION,
@@ -18,6 +14,12 @@ import {
 } from '@sidequest/core';
 import { planTrip } from './plan';
 import { buildScenario, FIXED_NOW, type ScenarioOptions } from './testing/scenario';
+import {
+  EASTERN_SIERRA,
+  EASTERN_SIERRA_PLACES,
+  EASTERN_SIERRA_WEATHER_LOCATIONS,
+  buildFixtureWeather,
+} from '@sidequest/core/data';
 
 /**
  * WEATHER AS A PLANNING CONSTRAINT.

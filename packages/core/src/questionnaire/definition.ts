@@ -21,6 +21,7 @@ import {
   type SpecialMealAppetite,
 } from '../schemas/food';
 import type { QuestionnaireAnswers } from '../schemas/profile';
+import type { RegionQuestionnaireCopy } from '../schemas/region';
 import type { TravelerNeed } from '../schemas/trip';
 
 export const QUESTIONNAIRE_STEPS = [
@@ -40,12 +41,33 @@ export interface QuestionnaireContext {
   /** Facts captured on the trip basics screen, before the questionnaire starts. */
   travelerNeeds: TravelerNeed[];
   tripDays: number;
+  /**
+   * Where the trip is, so the questions can say so.
+   *
+   * The step titles used to name Mammoth Lakes and Highway 395 directly, in a
+   * package that is supposed to work anywhere. They now read from the region,
+   * and a region with no authored wording gets the generic form rather than
+   * another region's landmarks.
+   */
+  region?: {
+    baseName: string;
+    copy?: RegionQuestionnaireCopy;
+  };
 }
 
 export interface StepDefinition {
   id: QuestionnaireStepId;
   title: string;
   intro: string;
+}
+
+/** Where the trip is, in a sentence. Falls back to a phrase that names nowhere. */
+function proseName(context?: QuestionnaireContext): string {
+  return context?.region?.copy?.proseName ?? 'this region';
+}
+
+function baseName(context?: QuestionnaireContext): string {
+  return context?.region?.baseName ?? 'your base';
 }
 
 export const STEP_DEFINITIONS: readonly StepDefinition[] = [
@@ -74,17 +96,18 @@ export const STEP_DEFINITIONS: readonly StepDefinition[] = [
   {
     id: 'discovery',
     title: 'Famous or off the track?',
-    intro: 'The Eastern Sierra has both. The mix is up to you.',
+    intro: 'Both exist here. The mix is up to you.',
   },
   {
     id: 'transport',
     title: 'How are you getting around?',
-    intro: 'Out here this decides which places are even reachable.',
+    intro: 'This decides which places are even reachable.',
   },
   {
     id: 'region',
-    title: 'How far from Mammoth Lakes?',
-    intro: 'The best of this region is spread along Highway 395.',
+    title: 'How far from your base?',
+    intro: 'The best of a region is rarely all in one place.',
+    /* Both are rewritten by `stepDefinitions` when the region has said better. */
   },
   {
     id: 'constraints',
@@ -154,11 +177,26 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
 }
 
 /**
- * Without a car, the Eastern Sierra beyond the town trolley is not reachable, so
- * offering a two-hour radius would be a promise the planner cannot keep.
+ * Which radii are actually on offer, given whether the traveller is driving.
+ *
+ * This used to be a constant: a non-driver was capped at thirty minutes,
+ * everywhere. That is true of a valley served by one seasonal trolley and
+ * plainly false of anywhere with a rail network — offering a Tokyo traveller
+ * nothing beyond half an hour because they will not hire a car is the sort of
+ * hard-coded local truth this whole pass exists to remove.
+ *
+ * So the region says. A region that has not said gets the conservative answer,
+ * because promising reach the planner cannot deliver is the worse failure.
  */
-export function availableRegionalExpansions(willDrive: boolean): RegionalExpansion[] {
+export function availableRegionalExpansions(
+  willDrive: boolean,
+  context?: QuestionnaireContext,
+): RegionalExpansion[] {
   if (willDrive) return [...REGIONAL_EXPANSIONS];
+  const carFree = context?.region?.copy?.carFreeExpansions;
+  if (carFree && carFree.length > 0) {
+    return REGIONAL_EXPANSIONS.filter((value) => carFree.includes(value));
+  }
   return ['destination_only', 'nearby_30'];
 }
 
@@ -206,13 +244,75 @@ export const CROWD_TOLERANCE_OPTIONS: readonly Option<CrowdTolerance>[] = [
   { value: 'dont_mind', label: 'Does not bother me', detail: 'Popular is popular for a reason' },
 ];
 
-export const REGIONAL_EXPANSION_OPTIONS: readonly Option<RegionalExpansion>[] = [
-  { value: 'destination_only', label: 'Town and the Lakes Basin', detail: 'Keep it tight' },
-  { value: 'nearby_30', label: 'Within ~30 minutes', detail: 'Convict Lake, Hot Creek, Minaret Vista' },
-  { value: 'nearby_60', label: 'Within ~1 hour', detail: 'Adds June Lake Loop and Mono Lake' },
-  { value: 'nearby_120', label: 'Up to ~2 hours', detail: 'Adds Bodie, Bishop, Rock Creek' },
-  { value: 'best_regional', label: 'Best of the Eastern Sierra', detail: 'Go wherever it is worth it' },
-];
+/**
+ * Radius options, with the region's own examples where it has written any.
+ *
+ * The examples used to be hard-coded landmark lists. They are the single most
+ * useful thing on this screen — "adds June Lake Loop and Mono Lake" tells a
+ * traveller more than "within an hour" ever will — which is exactly why they
+ * have to come from the region rather than from the engine.
+ */
+export function regionalExpansionOptions(
+  context?: QuestionnaireContext,
+): readonly Option<RegionalExpansion>[] {
+  const copy = context?.region?.copy;
+  const example = (value: RegionalExpansion, fallback: string): string =>
+    copy?.expansionExamples?.[value] ?? fallback;
+
+  return [
+    {
+      value: 'destination_only',
+      label: copy?.destinationOnlyLabel ?? `${baseName(context)} itself`,
+      detail: example('destination_only', 'Keep it tight'),
+    },
+    {
+      value: 'nearby_30',
+      label: 'Within ~30 minutes',
+      detail: example('nearby_30', 'Whatever is on the doorstep'),
+    },
+    {
+      value: 'nearby_60',
+      label: 'Within ~1 hour',
+      detail: example('nearby_60', 'A comfortable day trip'),
+    },
+    {
+      value: 'nearby_120',
+      label: 'Up to ~2 hours',
+      detail: example('nearby_120', 'A long day, for something worth it'),
+    },
+    {
+      value: 'best_regional',
+      label: `Best of ${proseName(context)}`,
+      detail: example('best_regional', 'Go wherever it is worth it'),
+    },
+  ];
+}
+
+/**
+ * The steps, with the region's own wording where it has any.
+ *
+ * `STEP_DEFINITIONS` stays exported and stays generic — it is what a region with
+ * no authored copy gets, and what the tests that do not care about wording use.
+ */
+export function stepDefinitions(context?: QuestionnaireContext): readonly StepDefinition[] {
+  const copy = context?.region?.copy;
+  return STEP_DEFINITIONS.map((step) => {
+    if (step.id === 'region') {
+      return {
+        ...step,
+        title: `How far from ${baseName(context)}?`,
+        ...(copy?.regionStepIntro ? { intro: copy.regionStepIntro } : {}),
+      };
+    }
+    if (step.id === 'discovery' && copy?.discoveryIntro) {
+      return { ...step, intro: copy.discoveryIntro };
+    }
+    if (step.id === 'transport' && copy?.transportIntro) {
+      return { ...step, intro: copy.transportIntro };
+    }
+    return { ...step };
+  });
+}
 
 /**
  * How to choose between two legal ways in. A soft preference: it orders the

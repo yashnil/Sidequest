@@ -1,4 +1,6 @@
 import { assertCalendarDate } from '../schemas/calendar';
+import { isInsideForecastHorizon, utcOffsetMinutesOn } from '../time/zone';
+import { FORECAST_STALE_AFTER_MINUTES } from '../weather/provider';
 import {
   WEATHER_DATASET_VERSION,
   weatherDatasetSchema,
@@ -278,73 +280,6 @@ function forecastFor(
     staleAfterMinutes: FORECAST_STALE_AFTER_MINUTES,
     attribution: FIXTURE_ATTRIBUTION,
   };
-}
-
-/**
- * How long a daily forecast stays presentable before the UI must call it stale.
- *
- * Six hours. Providers refresh global models roughly four times a day, so
- * anything older than that is at best one run behind, and a traveller reading a
- * precipitation figure deserves to know it predates the most recent update.
- * Central so the live adapter and the fixture cannot drift apart.
- */
-export const FORECAST_STALE_AFTER_MINUTES = 6 * 60;
-
-/**
- * How far ahead a date-specific prediction is honest.
- *
- * Sixteen days is what Open-Meteo serves, verified against the live endpoint on
- * 30 July 2026 (`forecast_days=16` returned 2026-07-30 through 2026-08-14 —
- * today plus fifteen). Beyond it the honest answer is a historical pattern, and
- * a "forecast" for day seventeen would be a fabrication however plausible it
- * looked. The live adapter re-derives this from the response rather than
- * trusting the constant; the constant is what the fixture and the tests share.
- */
-export const FORECAST_HORIZON_DAYS = 16;
-
-export function isInsideForecastHorizon(date: string, now: Date, timeZone: string): boolean {
-  const today = localDateIn(now, timeZone);
-  const days = Math.round(
-    (assertCalendarDate(date).getTime() - assertCalendarDate(today).getTime()) / 86_400_000,
-  );
-  return days >= 0 && days < FORECAST_HORIZON_DAYS;
-}
-
-/**
- * The calendar date it is *right now* in a given zone.
- *
- * The domain's whole time model is wall-clock-where-you-are-standing, and the
- * forecast horizon is measured from the traveller's today, not the server's. A
- * server in Frankfurt deciding at 00:30 that a Mammoth trip starting "tomorrow"
- * is out of horizon would push a perfectly good forecast into historical
- * patterns for nine hours a day.
- */
-export function localDateIn(instant: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(instant);
-  return parts;
-}
-
-/** The offset from UTC in force in `timeZone` on `date`, in minutes. */
-export function utcOffsetMinutesOn(date: string, timeZone: string): number {
-  // Noon local-ish, so the answer is never taken from the ambiguous hour a
-  // daylight-saving transition creates at either end of the day.
-  const probe = new Date(`${date}T12:00:00Z`);
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    timeZoneName: 'longOffset',
-  });
-  const part = formatter
-    .formatToParts(probe)
-    .find((entry) => entry.type === 'timeZoneName')?.value;
-  const match = /GMT([+-])(\d{2}):(\d{2})/.exec(part ?? '');
-  if (!match) return 0;
-  const sign = match[1] === '-' ? -1 : 1;
-  return sign * (Number(match[2]) * 60 + Number(match[3]));
 }
 
 export interface FixtureWeatherOptions {

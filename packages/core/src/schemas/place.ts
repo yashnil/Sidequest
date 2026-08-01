@@ -6,6 +6,7 @@ import {
   interestSchema,
   parkingDifficultySchema,
   physicalIntensitySchema,
+  httpUrlSchema,
   placeCategorySchema,
   roadSurfaceSchema,
   timeOfDaySchema,
@@ -112,7 +113,7 @@ export const placeSchema = z.object({
   travelFromBase: travelFromBaseSchema,
   /** Practical caveat shown verbatim on the card when present. */
   logisticsNote: z.string().min(1).optional(),
-  imageUrl: z.string().url().optional(),
+  imageUrl: httpUrlSchema.optional(),
 });
 export type Place = z.infer<typeof placeSchema>;
 
