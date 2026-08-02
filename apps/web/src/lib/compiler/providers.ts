@@ -1,5 +1,5 @@
 import 'server-only';
-import type { CompilerProviders } from '@sidequest/compiler';
+import type { CompilerProviders, SharedEvidenceLayer } from '@sidequest/compiler';
 import { packBackedProviders, SYNTHETIC_WORLDS, syntheticCandidate } from '@sidequest/compiler/testing';
 import {
   assessConfidence,
@@ -15,6 +15,7 @@ import {
   openProvidersEnabled,
   type LiveDiagnostics,
 } from '../providers/live';
+import { withEvidenceStore } from './evidence';
 
 /**
  * WHICH PROVIDER SET RUNS.
@@ -96,6 +97,14 @@ function maxModelCalls(): number {
 export interface ResolvedProviders {
   providers: CompilerProviders;
   live: LiveDiagnostics | null;
+  /**
+   * The shared evidence layer wrapped around the research funnel.
+   *
+   * Null only when sharing is explicitly switched off. Like `live`, it is read
+   * *after* the compilation, because what it holds is a ledger of what the run
+   * avoided rather than an input to any decision it made.
+   */
+  evidence: SharedEvidenceLayer | null;
 }
 
 export function compilerProviders(candidateId?: string): ResolvedProviders {
@@ -103,14 +112,18 @@ export function compilerProviders(candidateId?: string): ResolvedProviders {
   if (choice === 'fixture') {
     // Keyed off the interpretation the traveller picked, so the ambiguous
     // journey compiles the world they actually chose rather than the first one.
-    return {
-      providers: candidateId ? fixtureProvidersForCandidate(candidateId) : fixtureProviders(),
-      live: null,
-    };
+    const base = candidateId ? fixtureProvidersForCandidate(candidateId) : fixtureProviders();
+    const wrapped = withEvidenceStore(base);
+    return { providers: wrapped.providers, live: null, evidence: wrapped.evidence };
   }
   if (choice === 'open') {
     const resolved = createOpenProviders({ maxModelCalls: maxModelCalls() });
-    return { providers: resolved.providers, live: resolved.diagnostics };
+    const wrapped = withEvidenceStore(resolved.providers);
+    return {
+      providers: wrapped.providers,
+      live: resolved.diagnostics,
+      evidence: wrapped.evidence,
+    };
   }
   throw new Error('No compiler providers are configured.');
 }

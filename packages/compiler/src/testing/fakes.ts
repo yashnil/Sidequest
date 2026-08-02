@@ -12,6 +12,7 @@ import {
   type SourceFact,
   type TransportMode,
   type WeatherLocation,
+  stableHash,
 } from '@sidequest/core';
 import type {
   CompilerProviders,
@@ -839,6 +840,7 @@ export function fakeResearchProviders(
 
   const sourceDiscovery: SourceDiscoveryProvider = {
     name: 'fake-source-discovery',
+    version: 'fake/1',
     async discover({ subjects, maxSearches, maxReferencesPerSubject }) {
       if (options.sourceDiscoveryFails) {
         return {
@@ -873,7 +875,16 @@ export function fakeResearchProviders(
         searches += 1;
         references.push({
           subjectId: subject.id,
-          url: `https://operator-${index}.invalid/visit`,
+          /**
+           * Keyed on the subject, not on its position in the batch.
+           *
+           * A museum's official page does not change because somebody asked
+           * about fewer places this time. Deriving it from the index meant a
+           * warm compilation — which legitimately researches a subset —
+           * "discovered" a different URL for the same museum and minted a whole
+           * second set of claims for it.
+           */
+          url: `https://operator-${stableHash(subject.id)}.invalid/visit`,
           title: `${subject.name} — visitor information`,
           expectedAuthority: index % 3 === 0 ? 'managing_authority' : 'operator',
           discoveredVia: 'search',
@@ -882,7 +893,7 @@ export function fakeResearchProviders(
         if (options.conflictingHours && maxReferencesPerSubject > 1) {
           references.push({
             subjectId: subject.id,
-            url: `https://guide-${index}.invalid/hours`,
+            url: `https://guide-${stableHash(subject.id)}.invalid/hours`,
             title: `${subject.name} — a guide`,
             expectedAuthority: 'authoritative_secondary',
             discoveredVia: 'search',
@@ -910,13 +921,21 @@ export function fakeResearchProviders(
         };
       }
       const allowed = references.slice(0, maxPages);
-      const documents: RetrievedDocument[] = allowed.map((reference, index) => ({
+      const documents: RetrievedDocument[] = allowed.map((reference) => ({
         subjectId: reference.subjectId,
         url: reference.url,
         ...(reference.title ? { title: reference.title } : {}),
         text: `Opening hours: Monday to Friday 09:00 to 17:00. Admission 12 EUR per adult.`,
         structuredData: [],
-        contentHash: `hash-${reference.subjectId}-${index}`,
+        /**
+         * A real-shaped digest, not a label.
+         *
+         * The evidence store refuses a digest whose algorithm or form it cannot
+         * verify, so a fixture hash like `hash-place-0` would silently opt every
+         * synthetic world out of the caching layer — and the browser journeys
+         * that exist to prove reuse would prove nothing.
+         */
+        contentHash: syntheticDigest(reference.url),
         contentBytes: 4096,
         /**
          * Five days before the worlds' `NOW`, not three weeks.
@@ -935,12 +954,14 @@ export function fakeResearchProviders(
         publisher: hostOf(reference.url),
         domain: hostOf(reference.url),
       }));
-      return { documents, rejected: [], gaps: [], bytes: documents.length * 4096 };
+      return { documents, unchanged: [], rejected: [], gaps: [], bytes: documents.length * 4096 };
     },
   };
 
   const extraction: FactExtractionProvider = {
     name: 'fake-extraction',
+    promptVersion: 'fake-extract/1',
+    schemaVersion: 'fake-extraction/1',
     async extract({ documents, subjects }) {
       if (options.extractionFails) {
         return {
@@ -1063,6 +1084,20 @@ export function fakeResearchProviders(
   };
 
   return { sourceDiscovery, retrieval, extraction };
+}
+
+/**
+ * A synthetic content digest with the shape of a real one.
+ *
+ * Derived from the URL alone, because that is what a real page's bytes behave
+ * like: the same page read twice hashes the same however many other pages were
+ * requested alongside it. Seeding it with the request *index* made the digest
+ * depend on how many subjects happened to be in the batch, so a warm
+ * compilation — which legitimately researches fewer of them — minted a fresh
+ * claim for every page it re-read.
+ */
+function syntheticDigest(seed: string): string {
+  return [0, 1, 2, 3].map((salt) => stableHash(`${salt}:${seed}`)).join('');
 }
 
 function hostOf(url: string): string {

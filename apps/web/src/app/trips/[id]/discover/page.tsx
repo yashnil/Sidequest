@@ -7,6 +7,7 @@ import {
   type SelectionStatus,
 } from '@sidequest/core';
 import { DiscoveryBoardView } from '@/components/DiscoveryBoardView';
+
 import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
 import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
@@ -17,6 +18,7 @@ import {
   getSelections,
   getTrip,
   hasItinerary,
+  getReadiness,
 } from '@/lib/db/repository';
 import { boardWeatherBackups, foodBoardFor } from '@sidequest/core';
 import { boardFor, compiledRegionFor, resolveTripRegion } from '@/lib/region';
@@ -129,6 +131,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               targetCount={suggestion.targetCount}
               hasItinerary={planned}
               weatherBackups={boardWeatherBackups(board.candidates)}
+              storedReadiness={getReadiness(id)}
             />
           )}
 

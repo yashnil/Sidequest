@@ -6,7 +6,13 @@ import {
   breadthRank,
   checkRegionIntegrity,
   requiredAttributions,
+  EVIDENCE_STORE_VERSION,
+  extractionContract,
+  factSetKeyFor,
+  resolutionKey,
+  shelfLifeFor,
   scopeFingerprint,
+  subjectKeyFor,
   travelTimeMatrixSchema,
   type AccessDataset,
   type BaseCandidate,
@@ -26,11 +32,14 @@ import {
   type RegionEvidence,
   type RegionPack,
   type RetrievedPage,
+  type EvidenceClaimRecord,
+  type ResolvedFact,
   type SatelliteCandidate,
   type SourceFact,
   type StageRecord,
   type Subregion,
   type TravelerProfile,
+  type WorkPlanEntry,
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, type CompilerBudget } from './budget';
 import { buildCoverageReport } from './coverage';
@@ -38,9 +47,9 @@ import { dedupeCandidates } from './dedupe';
 import {
   EXTRACTION_SCHEMA_VERSION,
   buildEvidence,
-  claimsToFacts,
   prioritiseSubjects,
 } from './enrich';
+import { claimCoverage, factsFromClaims, shareableResolution, toClaimRecords } from './claims';
 import type { RegionPackOutcome } from './backbone/pack';
 import { partitionScope, scopeBounds } from './backbone/partition';
 import type {
@@ -64,6 +73,16 @@ export interface CompileInput {
   /** Injected, so a compiled artifact is reproducible from its inputs. */
   now: Date;
   onStage?: (record: StageRecord) => void;
+  /**
+   * Where this build records work it decided *not* to do.
+   *
+   * The shared evidence layer reports its own reuse, but it can only report on
+   * calls it received. When durable claims answer a subject outright, discovery,
+   * retrieval and extraction are never called at all — so the stage that saved
+   * the most money would be the one stage the traveller could not see. These
+   * notes come from the compiler because the compiler is what took the decision.
+   */
+  onWorkPlanNote?: (entry: WorkPlanEntry) => void;
 }
 
 export type CompileResult =
@@ -91,7 +110,50 @@ export type CompileResult =
  * would have to invent a road to keep a place — and the whole point is that it
  * does not. Dropped candidates become a coverage number, not a silent absence.
  */
+/**
+ * The claim layer's own counters, folded into the ledger.
+ *
+ * Counts of operations, never a claim about quality. Reuse is allowed to make a
+ * run cheap and is not allowed to make anything more certain, so none of these
+ * reaches a verification state, a coverage level or a card.
+ */
+function withSharedEvidenceCounters(
+  snapshot: { consumed: Record<string, number>; limits: Record<string, number>; exhausted: string[] },
+  counters: Record<string, number>,
+): typeof snapshot {
+  return { ...snapshot, consumed: { ...snapshot.consumed, ...counters } };
+}
+
+/**
+ * A claim past its own shelf life does not count as coverage.
+ *
+ * Judged from the **content** clock: a claim read six months ago is six months
+ * old however many times the page has been revalidated since. That asymmetry is
+ * the rule the whole phase turns on, and it is why coverage is decided here
+ * rather than by asking whether we happen to hold a row.
+ */
+function claimIsFresh(claim: EvidenceClaimRecord, now: Date): boolean {
+  const observed = Date.parse(claim.contentObservedAt);
+  if (Number.isNaN(observed)) return false;
+  const ageDays = (now.getTime() - observed) / 86_400_000;
+  return ageDays <= shelfLifeFor(claim.factPath);
+}
+
+/**
+ * One claim id is one claim, however many places it arrived from.
+ *
+ * A held claim and a freshly-observed one can be byte-identical — that is the
+ * point of a deterministic id — and counting it twice would look like
+ * corroboration to anything counting rows.
+ */
+function dedupeClaims(claims: readonly EvidenceClaimRecord[]): EvidenceClaimRecord[] {
+  const byId = new Map<string, EvidenceClaimRecord>();
+  for (const claim of claims) byId.set(claim.id, claim);
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export async function compileRegion(input: CompileInput): Promise<CompileResult> {
+  let sharedResolutionsReused = 0;
   const startedAtMs = input.now.getTime();
   const limits = budgetFor({
     nights: input.scope.nights,
@@ -117,6 +179,11 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
    * two runs of the same inputs produce byte-identical diagnostics — a compiled
    * artifact whose timings wobble is one whose checksum wobbles.
    */
+  /** Records a decision this build took to skip work it would otherwise buy. */
+  const noteWork = (entry: WorkPlanEntry): void => {
+    input.onWorkPlanNote?.(entry);
+  };
+
   const runStage = async <T,>(
     stage: CompilationStage,
     work: () => Promise<{ value: T; outcome: string; note?: string; skipped?: boolean }>,
@@ -668,14 +735,117 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       }
     }
 
+    /**
+     * WHAT WE ALREADY KNOW, BEFORE ANYTHING IS BOUGHT.
+     *
+     * Durable claims are facts about places, so a second trip past the same
+     * museum reads the first trip's research instead of paying for it again. A
+     * subject whose every question is answered by a claim still inside its own
+     * shelf life is removed from the funnel entirely — no search, no fetch, no
+     * model call.
+     *
+     * Freshness is the claim's own, judged from the **content** clock. A claim
+     * read six months ago is six months old however many times the page has been
+     * revalidated since, which is the rule the whole phase turns on.
+     */
+    const subjectKeys = new Map<string, string>(
+      subjects.map((subject) => [
+        subject.id,
+        subjectKeyFor({ name: subject.name, coordinates: subject.coordinates }),
+      ]),
+    );
+    const subjectIdsByKey = new Map<string, string>(
+      [...subjectKeys.entries()].map(([id, key]) => [key, id]),
+    );
+
+    /**
+     * The contract a research attempt is remembered under.
+     *
+     * Changing the prompt, the schema, the model or the parser means the answer
+     * could genuinely differ, so a remembered attempt under the old contract does
+     * not excuse asking again. Read from the provider rather than guessed, so the
+     * key is the same on the way in as on the way out.
+     */
+    const researchContract = extractionContract({
+      promptVersion: input.providers.extraction.promptVersion,
+      schemaVersion: input.providers.extraction.schemaVersion,
+      modelId: input.providers.extraction.modelId ?? 'none',
+      parserVersion: EXTRACTION_SCHEMA_VERSION,
+    });
+
+    let heldClaims: EvidenceClaimRecord[] = [];
+    const outstanding = await runStage('reusing_shared_claims', async () => {
+      const store = input.providers.claims;
+      if (!store || subjects.length === 0) {
+        return {
+          value: subjects,
+          outcome: 'nothing held yet',
+          skipped: true,
+          ...(store ? {} : { note: 'This build has nowhere to keep durable evidence.' }),
+        };
+      }
+
+      const byKey = store.load([...subjectKeys.values()]);
+      heldClaims = [...byKey.values()].flat();
+
+      const coverage = claimCoverage({
+        subjects,
+        subjectKeys,
+        claimsBySubjectKey: byKey,
+        isFresh: (claim) => claimIsFresh(claim, input.now),
+        attempts: store.loadAttempts([...subjectKeys.values()]),
+        contract: researchContract,
+        now: input.now,
+      });
+
+      if (coverage.covered.length > 0) {
+        noteWork({
+          step: 'reusing_shared_claims',
+          decision: 'reusable',
+          reason:
+            `${coverage.covered.length} of ${subjects.length} were already researched, so ` +
+            `${coverage.pathsCovered} facts came from evidence this trip did not pay for.`,
+          items: coverage.covered.length,
+        });
+      }
+
+      return {
+        value: coverage.outstanding,
+        outcome: `${coverage.covered.length} of ${subjects.length} already answered, ${coverage.pathsCovered} facts reused`,
+        ...(coverage.outstanding.length > 0
+          ? { note: `${coverage.outstanding.length} still need looking up.` }
+          : {}),
+      };
+    });
+
     const references = await runStage('discovering_sources', async () => {
-      if (subjects.length === 0) {
-        return { value: [], outcome: 'nothing to look up', skipped: true };
+      if (outstanding.length === 0) {
+        noteWork(
+          subjects.length > 0
+            ? {
+                step: 'discovering_sources',
+                decision: 'reusable',
+                reason: 'Every subject was already answered, so no searches were bought.',
+                items: subjects.length,
+              }
+            : {
+                step: 'discovering_sources',
+                decision: 'unavailable',
+                reason: 'Nothing on this trip needed a publisher looking up.',
+                items: 0,
+              },
+        );
+        return {
+          value: [],
+          outcome:
+            subjects.length > 0 ? 'every subject was already answered' : 'nothing to look up',
+          skipped: true,
+        };
       }
       const budgetLeft = ledger.remaining('maxSourceSearches');
       const result = await input.providers.sourceDiscovery.discover({
         scope: input.scope,
-        subjects,
+        subjects: outstanding,
         maxSearches: budgetLeft,
         maxReferencesPerSubject: ledger.limits.maxPagesPerSubject,
       });
@@ -696,6 +866,15 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
 
     const documents = await runStage('retrieving_pages', async () => {
       if (references.length === 0) {
+        noteWork({
+          step: 'retrieving_pages',
+          decision: outstanding.length === 0 ? 'reusable' : 'unavailable',
+          reason:
+            outstanding.length === 0
+              ? 'No page needed reading: the facts were already held from an earlier read.'
+              : 'There was no official page to read for what was still missing.',
+          items: 0,
+        });
         return { value: [], outcome: 'nothing to read', skipped: true };
       }
       const allowed = ledger.remaining('maxPagesFetched');
@@ -716,7 +895,19 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          */
         deadlineMs: Date.now() + limits.maxEnrichmentMs,
       });
-      ledger.take('maxPagesFetched', result.documents.length + result.rejected.length);
+      /**
+       * Charged for what was actually asked for, not for what came back.
+       *
+       * Once evidence is shared, a warm build returns pages it already held and
+       * requested from nobody. Charging those to the page budget would report a
+       * cost that was never paid — and, on a long shortlist, would exhaust a
+       * counter on reuse and then refuse to read the pages that genuinely needed
+       * reading.
+       */
+      ledger.take(
+        'maxPagesFetched',
+        (result.requested ?? result.documents.length) + result.rejected.length,
+      );
       ledger.take('maxRetrievalBytes', result.bytes);
       gaps.push(...result.gaps);
       for (const rejection of result.rejected) {
@@ -748,15 +939,29 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
 
     const extraction = await runStage('extracting_facts', async () => {
       if (documents.length === 0) {
+        noteWork({
+          step: 'extracting_facts',
+          decision: outstanding.length === 0 ? 'reusable' : 'unavailable',
+          reason:
+            outstanding.length === 0
+              ? 'Nothing was read into facts again: the same pages had already been read under this contract.'
+              : 'There was nothing to read facts out of.',
+          items: 0,
+        });
         return {
-          value: { facts: [] as SourceFact[], payloads: new Map<string, unknown>(), discarded: 0 },
-          outcome: 'nothing to read facts out of',
+          value: {
+            records: [] as EvidenceClaimRecord[],
+            supersededIds: [] as string[],
+            discarded: 0,
+          },
+          outcome:
+            outstanding.length === 0 ? 'everything was already known' : 'nothing to read facts out of',
           skipped: true,
         };
       }
       const allowedCalls = ledger.remaining('maxExtractionCalls');
       const result = await input.providers.extraction.extract({
-        subjects,
+        subjects: outstanding,
         documents,
         dates: input.dates,
         maxCalls: allowedCalls,
@@ -767,17 +972,60 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       promptVersions.extractFacts = result.promptVersion;
       promptVersions.extractionSchema = EXTRACTION_SCHEMA_VERSION;
 
-      const converted = claimsToFacts({
+      /**
+       * Extraction produces **claims**, not facts.
+       *
+       * A claim is durable and traveller-independent; a fact is this
+       * compilation's reading of it. Building the claim first is what lets the
+       * next trip past this museum skip everything above.
+       */
+      const converted = toClaimRecords({
         claims: result.claims,
         documents,
+        subjectKeys,
         promptVersion: result.promptVersion,
         schemaVersion: result.schemaVersion,
-        ...(result.modelId ? { modelId: result.modelId } : {}),
+        modelId: result.modelId ?? 'none',
+        parserVersion: EXTRACTION_SCHEMA_VERSION,
+        existing: heldClaims,
         now: input.now,
       });
+
+      input.providers.claims?.save({
+        records: converted.records,
+        supersededIds: converted.supersededIds,
+        now: input.now,
+      });
+
+      /**
+       * That we asked, recorded whatever came back.
+       *
+       * Including — especially — the subjects that yielded nothing. A silence
+       * remembered is a search not bought again next week, and a silence
+       * forgotten is the single largest avoidable cost in this pipeline.
+       */
+      input.providers.claims?.saveAttempts({
+        now: input.now,
+        attempts: outstanding.flatMap((subject) => {
+          const subjectKey = subjectKeys.get(subject.id);
+          if (!subjectKey) return [];
+          return [
+            {
+              schemaVersion: EVIDENCE_STORE_VERSION,
+              subjectKey,
+              contract: researchContract,
+              wantedPaths: [...subject.wantedPaths].sort(),
+              attemptedAt: input.now.toISOString(),
+              claimsFound: converted.records.filter((record) => record.subjectKey === subjectKey)
+                .length,
+            },
+          ];
+        }),
+      });
+
       return {
         value: converted,
-        outcome: `${converted.facts.length} facts from ${documents.length} pages`,
+        outcome: `${converted.records.length} facts from ${documents.length} pages`,
         ...(converted.discarded > 0
           ? {
               note: `${converted.discarded} claims were thrown away for having no quotable basis or a shape we could not read.`,
@@ -786,16 +1034,90 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       };
     });
 
-    facts.push(...extraction.facts);
+    /**
+     * Everything durable we hold about these subjects, old and new together.
+     *
+     * The held claims and the ones just observed are the same kind of thing and
+     * are resolved as one body of evidence — which is what makes a warm
+     * compilation produce the *same* answers as a cold one rather than a thinner
+     * set. Superseded claims are dropped here; the store keeps them so an older
+     * artifact stays explicable.
+     */
+    const supersededNow = new Set(extraction.supersededIds);
+    const allClaims = [
+      ...heldClaims.filter((claim) => !claim.superseded && !supersededNow.has(claim.id)),
+      ...extraction.records,
+    ];
+    const projected = factsFromClaims({ claims: dedupeClaims(allClaims), subjectIds: subjectIdsByKey });
+    facts.push(...projected.facts);
 
     const reconciled = await runStage('reconciling_facts', async () => {
+      /**
+       * Shared answers, for the questions whose answer is the same for
+       * everybody.
+       *
+       * Where a museum's official site is, what it charges, whether it needs
+       * booking — one answer, resolved once, keyed on the exact claim set behind
+       * it. Whether it is *open on the fourteenth* is not in here and never will
+       * be: `shareableResolution` is the gate, and a shared cache that answered a
+       * dated question would be the most dangerous thing this store could hold.
+       */
+      const store = input.providers.claims;
+      const wantedPairs = subjects.flatMap((subject) =>
+        subject.wantedPaths.map((factPath) => ({ subject, factPath })),
+      );
+      const claimsByPair = new Map<string, string[]>();
+      for (const fact of projected.facts) {
+        if (!fact.factPath) continue;
+        const key = resolutionKey(fact.subjectId, fact.factPath);
+        claimsByPair.set(key, [...(claimsByPair.get(key) ?? []), fact.id]);
+      }
+
+      const setKeys = new Map<string, string>();
+      for (const { subject, factPath } of wantedPairs) {
+        if (!shareableResolution(factPath)) continue;
+        const key = resolutionKey(subject.id, factPath);
+        const subjectKey = subjectKeys.get(subject.id);
+        if (!subjectKey) continue;
+        setKeys.set(
+          key,
+          factSetKeyFor({
+            subjectKey,
+            factPath,
+            claimIds: claimsByPair.get(key) ?? [],
+            resolverVersion: store?.resolverVersion ?? 'none',
+          }),
+        );
+      }
+
+      const held = store ? store.loadFactSets([...setKeys.values()]) : new Map<string, ResolvedFact>();
+      const preresolved = new Map<string, ResolvedFact>();
+      for (const [key, setKey] of setKeys) {
+        const entry = held.get(setKey);
+        if (entry) preresolved.set(key, entry);
+      }
+
       const value = buildEvidence({
         subjects,
-        facts: extraction.facts,
-        payloads: extraction.payloads,
+        facts: projected.facts,
+        payloads: projected.payloads,
         knownOfficialUrls,
+        dates: input.dates,
+        preresolved,
         now: input.now,
       });
+
+      if (store) {
+        const entries: { key: string; subjectKey: string; resolved: ResolvedFact }[] = [];
+        for (const [key, setKey] of setKeys) {
+          if (held.has(setKey)) continue;
+          const resolved = value.byKey.get(key);
+          const subjectKey = subjectKeys.get(resolved?.subjectId ?? '');
+          if (resolved && subjectKey) entries.push({ key: setKey, subjectKey, resolved });
+        }
+        if (entries.length > 0) store.saveFactSets({ entries, now: input.now });
+        sharedResolutionsReused = value.reusedResolutions;
+      }
       const conflicted = value.resolved.filter((entry) => entry.state === 'conflicted').length;
       const known = value.resolved.filter(
         (entry) => entry.state !== 'unknown' && entry.state !== 'unavailable',
@@ -1241,7 +1563,13 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           finishedAt,
           durationMs: elapsed,
           stageTimings: timings,
-          budget: ledger.snapshot(),
+          budget: withSharedEvidenceCounters(ledger.snapshot(), {
+            claimsHeld: heldClaims.length,
+            claimsObserved: extraction.records.length,
+            claimsSuperseded: extraction.supersededIds.length,
+            subjectsAnsweredFromClaims: subjects.length - outstanding.length,
+            sharedResolutionsReused,
+          }),
           promptVersions,
           warnings,
         },

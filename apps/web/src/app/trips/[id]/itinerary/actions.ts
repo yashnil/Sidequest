@@ -9,8 +9,10 @@ import {
   getSelections,
   getTrip,
   saveItinerary,
+  saveReadiness,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
+
 import type { PlannerReadiness } from '@sidequest/core';
 
 export interface BuildResult {
@@ -89,7 +91,13 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
        * `saveItinerary` is below this branch and stays below it: the itinerary
        * page reads the database, so persisting an empty plan is what would put
        * five blank days in front of a traveller.
+       *
+       * The *readiness* is saved, though, and that is the point of persisting it
+       * separately: the explanation for a refusal has to survive the refresh that
+       * loses this action's return value, or a traveller who reloads is left
+       * with a board and no idea why the button did nothing.
        */
+      if (result.readiness) saveReadiness(tripId, result.readiness, new Date());
       return {
         ok: false,
         error: planFailureCopy(result.code, result.message),
@@ -98,6 +106,7 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
     }
 
     saveItinerary(result.itinerary);
+    saveReadiness(tripId, result.readiness, new Date());
   } catch (error) {
     console.error('Failed to build itinerary', error);
     return {

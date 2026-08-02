@@ -2,6 +2,8 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import {
   clarificationSetSchema,
+  compilationWorkPlanSchema,
+  type CompilationWorkPlan,
   compilationJobSchema,
   compiledRegionSchema,
   COMPILATION_JOB_VERSION,
@@ -460,12 +462,43 @@ export function completeJob(input: {
       );
     }
 
+    /**
+     * Which durable claims this artifact quotes.
+     *
+     * Written inside the same transaction, so a region can never exist without
+     * the record of what it rests on. A fact id derived from a claim carries the
+     * claim id in it — that is why the id is derived rather than sequential —
+     * and this index is what lets the retention sweep protect exactly those
+     * claims instead of guessing from age.
+     */
+    const linkClaim = db.prepare(
+      `INSERT INTO compiled_region_claims (compiled_region_id, claim_id)
+       VALUES (?, ?) ON CONFLICT DO NOTHING`,
+    );
+    for (const claimId of claimIdsQuotedBy(region)) linkClaim.run(region.id, claimId);
+
     db.prepare(
       `UPDATE compilation_jobs
           SET state = ?, compiled_region_id = ?, finished_at = ?, updated_at = ?, heartbeat_at = ?
         WHERE id = ?`,
     ).run(input.state, region.id, stamp, stamp, stamp, input.jobId);
   })();
+}
+
+/**
+ * The claims an artifact's facts came from.
+ *
+ * A fact built from a durable claim is called `fact-<claim id>`, so the link is
+ * derivable rather than stored twice. Facts from any other path — an authored
+ * fixture, a provider that supplied its own — simply do not match, and are not
+ * claims to protect.
+ */
+export function claimIdsQuotedBy(region: CompiledRegion): string[] {
+  const ids = new Set<string>();
+  for (const fact of region.sourceManifest.facts) {
+    if (fact.id.startsWith('fact-clm-')) ids.add(fact.id.slice('fact-'.length));
+  }
+  return [...ids].sort();
 }
 
 /**
@@ -478,13 +511,20 @@ export function completeJob(input: {
  * block a delete. So it is swept instead, deliberately and on demand.
  */
 export function pruneOrphanedSourceDocuments(): number {
-  const result = getDb()
+  const db = getDb();
+  const documents = db
     .prepare(
       `DELETE FROM source_documents
         WHERE compiled_region_id NOT IN (SELECT id FROM compiled_regions)`,
     )
-    .run();
-  return result.changes;
+    .run().changes;
+  const claims = db
+    .prepare(
+      `DELETE FROM compiled_region_claims
+        WHERE compiled_region_id NOT IN (SELECT id FROM compiled_regions)`,
+    )
+    .run().changes;
+  return documents + claims;
 }
 
 export function failJob(input: {
@@ -646,5 +686,55 @@ export function writeProviderCache(
       .run();
   } catch (error) {
     console.error('Could not cache a provider response', error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Compilation work plans
+// ---------------------------------------------------------------------------
+
+/**
+ * What a compilation decided to reuse, before it ran.
+ *
+ * Trip-scoped, and therefore here rather than beside the shared evidence
+ * tables: two builds of one destination produce the same evidence and wildly
+ * different work plans, so a plan is a fact about a run. Persisted separately
+ * from the artifact for the same reason — folding it in would make an
+ * artifact's checksum depend on how warm the cache happened to be.
+ */
+export function saveWorkPlan(input: {
+  jobId: string;
+  tripId: string;
+  plan: CompilationWorkPlan;
+}): void {
+  const parsed = compilationWorkPlanSchema.parse(input.plan);
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO compilation_work_plans (job_id, trip_id, payload_json, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(job_id) DO UPDATE SET payload_json = excluded.payload_json`,
+      )
+      .run(input.jobId, input.tripId, JSON.stringify(parsed), parsed.computedAt);
+  } catch (error) {
+    console.error('Could not store a compilation work plan', error);
+  }
+}
+
+/** The newest work plan for a trip. Absent is normal — sharing can be off. */
+export function getLatestWorkPlan(tripId: string): CompilationWorkPlan | null {
+  try {
+    const row = getDb()
+      .prepare(
+        `SELECT payload_json FROM compilation_work_plans
+          WHERE trip_id = ? ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(tripId) as { payload_json: string } | undefined;
+    if (!row) return null;
+    return compilationWorkPlanSchema.parse(JSON.parse(row.payload_json));
+  } catch {
+    // A diagnostic that will not parse is a diagnostic nobody sees, never an
+    // error a traveller has to read.
+    return null;
   }
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import {
+  PLANNER_READINESS_LEVEL_LABELS,
   PLANNER_REMEDY_LABELS,
   ruledOutRemedies,
   suggestedRemedies,
@@ -19,13 +20,25 @@ export function BuildTripButton({
   tripId,
   hasItinerary,
   includedCount,
+  storedReadiness,
 }: {
   tripId: string;
   hasItinerary: boolean;
   includedCount: number;
+  /**
+   * Why the last attempt refused, read from the database by the page.
+   *
+   * Without this the explanation lives only in a server action's return value,
+   * which a refresh throws away — leaving somebody looking at a board and a
+   * button that appears to do nothing. A refusal is a finding, and a finding
+   * that does not survive a reload is not much of one.
+   */
+  storedReadiness?: PlannerReadiness | null;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [readiness, setReadiness] = useState<PlannerReadiness | null>(null);
+  const [readiness, setReadiness] = useState<PlannerReadiness | null>(
+    storedReadiness && storedReadiness.funnel.scheduled === 0 ? storedReadiness : null,
+  );
   const [pending, startTransition] = useTransition();
 
   function build() {
@@ -84,14 +97,38 @@ function PlannerReadinessPanel({ readiness }: { readiness: PlannerReadiness }) {
     <div data-testid="planner-readiness">
       <Panel className="mt-4 border-amber bg-amber-soft p-4 sm:p-5">
       <h3 className="font-display text-lg text-ink">We did not build a plan</h3>
+      <p className="text-xs uppercase tracking-[0.12em] text-ink-faint" data-testid="readiness-level">
+        {PLANNER_READINESS_LEVEL_LABELS[readiness.level]}
+      </p>
       <p className="mt-2 text-sm leading-relaxed text-ink">{readiness.summary}</p>
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
-        <Count label="On the board" value={readiness.consideredCount} />
-        <Count label="You picked" value={readiness.selectedCount} />
-        <Count label="Reachable & open" value={readiness.feasibleCount} />
-        <Count label="Scheduled" value={readiness.scheduledCount} />
+      {/*
+        The funnel, gate by gate. The *shape* of the loss is the diagnosis:
+        "nine picked, nine reachable, none scheduled" and "nine picked, none
+        with a travel time" are different problems with opposite answers, and a
+        single sentence cannot tell them apart.
+      */}
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+        <Count label="On the board" value={readiness.funnel.considered} />
+        <Count label="You picked" value={readiness.funnel.selected} />
+        <Count label="Measurable" value={readiness.funnel.eligible} />
+        <Count label="Way in" value={readiness.funnel.accessFeasible} />
+        <Count label="Open" value={readiness.funnel.hoursFeasible} />
+        <Count label="Scheduled" value={readiness.funnel.scheduled} />
       </dl>
+
+      {unresolvedNotes(readiness).length > 0 ? (
+        <div className="mt-4">
+          <p className="text-xs uppercase tracking-[0.12em] text-ink-faint">
+            What we could not establish
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-ink-muted">
+            {unresolvedNotes(readiness).map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {readiness.dominantBlockers.length > 0 ? (
         <div className="mt-4">
@@ -140,6 +177,35 @@ function PlannerReadinessPanel({ readiness }: { readiness: PlannerReadiness }) {
       </Panel>
     </div>
   );
+}
+
+/**
+ * What could not be established, as distinct from what was established as "no".
+ *
+ * Kept apart from the blockers because they are different kinds of answer: a
+ * closure is a fact about the world, and a missing travel time is a fact about
+ * us. Only the second is something a rebuild might fix, and running them
+ * together would make both look equally final.
+ */
+function unresolvedNotes(readiness: PlannerReadiness): string[] {
+  const notes: string[] = [];
+  const { unresolved } = readiness;
+  if (unresolved.routePairs > 0) {
+    notes.push(`${unresolved.routePairs} with no measured travel time.`);
+  }
+  if (unresolved.criticalHours > 0) {
+    notes.push(`${unresolved.criticalHours} where nobody publishes opening hours.`);
+  }
+  if (unresolved.accessRequirements > 0) {
+    notes.push(`${unresolved.accessRequirements} with no established way in.`);
+  }
+  if (unresolved.blockingClosures > 0) {
+    notes.push(`${unresolved.blockingClosures} shut across your dates by a published closure.`);
+  }
+  for (const counter of unresolved.exhaustedBudgets) {
+    notes.push(`This trip ran out of ${counter} before finishing.`);
+  }
+  return notes;
 }
 
 function Count({ label, value }: { label: string; value: number }) {

@@ -14,6 +14,7 @@ import {
   type WeatherEvidenceKind,
 } from '@sidequest/core';
 import { MatrixError, tryLeg, validateMatrix } from '@sidequest/geo';
+import type { PlannerReadiness } from '@sidequest/core';
 import {
   accessKey,
   buildAccessUnits,
@@ -955,23 +956,56 @@ export function planTrip(input: PlannerInput): PlanResult {
    * and which changes would move it. That is strictly more than the itinerary
    * could ever have said, because an itinerary has nowhere to put it.
    */
+  /**
+   * The funnel, measured at every gate rather than derived from the ends.
+   *
+   * Each number answers a different question, and the whole value of the
+   * breakdown is that "nothing has a travel time" and "everything is shut" both
+   * end at zero and want completely different responses from the traveller.
+   */
+  const readinessFor = (scheduled: number): PlannerReadiness =>
+    buildPlannerReadiness({
+      funnel: {
+        considered: input.candidates.length,
+        selected: input.selections.filter((selection) => selection.status !== 'excluded').length,
+        eligible: eligible.length,
+        accessFeasible: reachable.length,
+        hoursFeasible: plannable.length,
+        feasible: plannable.length,
+        scheduled,
+      },
+      unscheduled: dedupeUnscheduled(unscheduled),
+      dayCount: days.length,
+      daysWithFullMeals: built.filter(
+        (day) => day.food.slots.length > 0 && day.food.reservations.length > 0,
+      ).length,
+      unresolved: {
+        /**
+         * Every count here is "we could not establish this", never "the answer
+         * is no". The two look alike in a total and want opposite responses: a
+         * missing travel time is something a rebuild might fix, and a closure is
+         * not.
+         */
+        routePairs: unscheduled.filter((entry) => entry.reasonCode === 'missing_travel_data')
+          .length,
+        criticalHours: eligible.filter(
+          (candidate) =>
+            hoursByPlaceDate.get(hoursKey(candidate.place.id, dates[0]!))?.status === 'unknown',
+        ).length,
+        accessRequirements: eligible.length - reachable.length,
+        blockingClosures: unscheduled.filter(
+          (entry) => entry.reasonCode === 'closed_on_trip_dates',
+        ).length,
+      },
+    });
+
   if (scheduledCount === 0) {
-    const deduped = dedupeUnscheduled(unscheduled);
     return {
       ok: false,
       code: 'planner_coverage_insufficient',
       message:
         'We could not put a single stop into a day, so there is no plan to show you. What blocked it is below.',
-      readiness: buildPlannerReadiness({
-        consideredCount: input.candidates.length,
-        selectedCount: input.selections.filter((selection) => selection.status !== 'excluded')
-          .length,
-        eligibleCount: eligible.length,
-        feasibleCount: plannable.length,
-        scheduledCount,
-        unscheduled: deduped,
-        dayCount: days.length,
-      }),
+      readiness: readinessFor(0),
     };
   }
   const totals = built.reduce(
@@ -1052,7 +1086,19 @@ export function planTrip(input: PlannerInput): PlanResult {
   };
 
   try {
-    return { ok: true, itinerary: itinerarySchema.parse(itinerary) };
+    /**
+     * Readiness on the success path too.
+     *
+     * A plan that holds four of the nine things somebody picked is a real plan
+     * and an incomplete one, and saying so is better than letting them count the
+     * cards. A readiness record that only existed on failure could also never be
+     * compared across two builds of the same trip.
+     */
+    return {
+      ok: true,
+      itinerary: itinerarySchema.parse(itinerary),
+      readiness: readinessFor(scheduledCount),
+    };
   } catch (error) {
     return {
       ok: false,

@@ -132,6 +132,23 @@ export class UnsafeUrlError extends Error {
   }
 }
 
+/**
+ * Validators a previous read left behind, for a conditional request.
+ *
+ * Sent as `If-None-Match` and `If-Modified-Since`. RFC 9110 evaluates the ETag
+ * first and falls back to the date only if it does not match, so sending both is
+ * correct rather than redundant.
+ *
+ * What comes back — a `304` — proves the publisher says the *representation* has
+ * not changed. It proves nothing about whether anything the page says is still
+ * true, which is why the store advances a "last checked" clock on a 304 and never
+ * a "content observed" one.
+ */
+export interface ConditionalValidators {
+  etag?: string;
+  lastModified?: string;
+}
+
 export interface SafeFetchOptions {
   /**
    * HTTP is off by default. A page worth quoting as evidence publishes over
@@ -145,6 +162,43 @@ export interface SafeFetchOptions {
   userAgent?: string;
   /** Injected so tests can drive resolution without a network. */
   resolve?: (hostname: string) => Promise<string[]>;
+  /**
+   * Ask the server whether anything changed, instead of asking for the body.
+   *
+   * When these are supplied a `304` is a legitimate, successful outcome and the
+   * caller must handle it — `status` is 304, `body` is empty, and `notModified`
+   * is true.
+   */
+  validators?: ConditionalValidators;
+}
+
+/**
+ * Headers we send on every request, and therefore the only ones a `Vary` may
+ * name if a stored response is to be reusable.
+ *
+ * Exported so the reuse decision and the request are built from one list. A
+ * response that varies on anything else was negotiated on something we cannot
+ * reproduce, and reusing it would risk serving one language's page as another's.
+ */
+export const PINNED_REQUEST_HEADERS = ['accept', 'accept-encoding', 'user-agent'] as const;
+
+/**
+ * The longest validator we will echo back.
+ *
+ * An ETag is attacker-controlled text that we put into a request header. Node
+ * rejects CR/LF in header values outright, which closes injection; the cap and
+ * the control-character strip close the rest — an absurdly long or invisible
+ * validator is a denial-of-service and a log-poisoning vector rather than a
+ * cache hint.
+ */
+const MAX_VALIDATOR_CHARS = 256;
+
+export function sanitiseValidator(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (cleaned.length === 0 || cleaned.length > MAX_VALIDATOR_CHARS) return undefined;
+  return cleaned;
 }
 
 export const DEFAULT_MAX_BYTES = 2_000_000;
@@ -225,6 +279,15 @@ export function lookupAnswer(
   return addresses[0] ?? '';
 }
 
+/** What the response said about caching and change detection. */
+export interface ResponseMetadata {
+  etag?: string;
+  weakEtag: boolean;
+  lastModified?: string;
+  cacheControl?: string;
+  vary?: string;
+}
+
 export interface SafeFetchResult {
   /** The URL actually read, after any redirects. */
   finalUrl: string;
@@ -238,6 +301,14 @@ export interface SafeFetchResult {
   /** SHA-256 of `body`, so a later run can notice the page changed. */
   contentHash: string;
   redirects: string[];
+  /**
+   * True when the server answered a conditional request with `304`.
+   *
+   * `body` is empty and carries no meaning; the caller must reuse the stored
+   * representation rather than treating this as an empty page.
+   */
+  notModified: boolean;
+  metadata: ResponseMetadata;
 }
 
 async function defaultResolve(hostname: string): Promise<string[]> {
@@ -291,6 +362,8 @@ export async function safeFetch(
       truncated: response.truncated,
       contentHash: createHash('sha256').update(response.body).digest('hex'),
       redirects,
+      notModified: response.status === 304,
+      metadata: response.metadata,
     };
   }
 
@@ -304,6 +377,7 @@ interface RawResponse {
   body: string;
   bytesRead: number;
   truncated: boolean;
+  metadata: ResponseMetadata;
 }
 
 function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> {
@@ -368,6 +442,21 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
         });
     };
 
+    /**
+     * The conditional headers, sanitised.
+     *
+     * A validator is text somebody else wrote and we are putting it back into a
+     * request header, so it goes through `sanitiseValidator` first. A validator
+     * that does not survive that is dropped rather than sent — the cost is one
+     * unconditional fetch, and the alternative is trusting a hostile string with
+     * our request line.
+     */
+    const conditional: Record<string, string> = {};
+    const etag = sanitiseValidator(options.validators?.etag);
+    const lastModified = sanitiseValidator(options.validators?.lastModified);
+    if (etag) conditional['if-none-match'] = etag;
+    if (lastModified) conditional['if-modified-since'] = lastModified;
+
     const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
     const req = send(
       {
@@ -382,16 +471,40 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
           'user-agent': options.userAgent ?? DEFAULT_USER_AGENT,
           accept: ALLOWED_CONTENT_TYPES.join(', '),
           'accept-encoding': 'gzip, deflate, br',
+          ...conditional,
         },
       },
       (res) => {
         const status = res.statusCode ?? 0;
         const location = res.headers.location;
         const contentType = String(res.headers['content-type'] ?? '').split(';')[0]?.trim() ?? '';
+        const metadata = readMetadata(res.headers);
 
         if (status >= 300 && status < 400 && typeof location === 'string') {
           res.resume(); // Drain, so the socket is released.
-          settle({ status, contentType, location, body: '', bytesRead: 0, truncated: false });
+          settle({
+            status,
+            contentType,
+            location,
+            body: '',
+            bytesRead: 0,
+            truncated: false,
+            metadata,
+          });
+          return;
+        }
+
+        /**
+         * Not Modified: the whole point of sending validators.
+         *
+         * RFC 9110 forbids a body here and requires the representation metadata
+         * a 200 would carry, so this drains the socket and returns the refreshed
+         * validators. It is a *success*, and the caller reuses what it already
+         * holds rather than treating an empty body as an empty page.
+         */
+        if (status === 304) {
+          res.resume();
+          settle({ status, contentType, body: '', bytesRead: 0, truncated: false, metadata });
           return;
         }
 
@@ -446,6 +559,7 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
               body: Buffer.concat(chunks).toString('utf8'),
               bytesRead: maxBytes,
               truncated,
+              metadata,
             });
             return;
           }
@@ -459,6 +573,7 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
             body: Buffer.concat(chunks).toString('utf8'),
             bytesRead,
             truncated,
+            metadata,
           });
         });
 
@@ -495,6 +610,30 @@ function requestOnce(url: URL, options: SafeFetchOptions): Promise<RawResponse> 
 
     req.end();
   });
+}
+
+/**
+ * The caching metadata a response carried.
+ *
+ * Every value is sanitised on the way in, because all of it is attacker-supplied
+ * text that will be stored, echoed back on a later request, and shown in a
+ * diagnostic panel. A weak ETag is recorded as weak rather than normalised away:
+ * `W/"x"` means *semantically equivalent*, so a 304 against one may not be read
+ * as "the bytes are identical".
+ */
+function readMetadata(headers: Record<string, string | string[] | undefined>): ResponseMetadata {
+  const first = (name: string): string | undefined => {
+    const value = headers[name];
+    return sanitiseValidator(Array.isArray(value) ? value[0] : value);
+  };
+  const rawEtag = first('etag');
+  return {
+    ...(rawEtag ? { etag: rawEtag } : {}),
+    weakEtag: rawEtag?.startsWith('W/') === true,
+    ...(first('last-modified') ? { lastModified: first('last-modified')! } : {}),
+    ...(first('cache-control') ? { cacheControl: first('cache-control')! } : {}),
+    ...(first('vary') ? { vary: first('vary')! } : {}),
+  };
 }
 
 export const DEFAULT_USER_AGENT = providerUserAgent('reading an official page on a traveller\u2019s behalf');
@@ -583,6 +722,15 @@ export async function fetchIfAllowed(
     const robots = await safeFetch(`${url.origin}/robots.txt`, {
       ...options,
       maxBytes: 256_000,
+      /**
+       * The page's validators belong to the page, not to robots.txt.
+       *
+       * Forwarding them would send one resource's ETag as a condition on
+       * another, which a strict server answers with a 304 — and we would read an
+       * empty robots.txt as permissive. Two different resources, two different
+       * conditions, so this one asks unconditionally.
+       */
+      validators: undefined,
     });
     if (robots.status >= 200 && robots.status < 300) {
       robotsAllowed = isAllowedByRobots(robots.body, `${url.pathname}${url.search}`);

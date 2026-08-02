@@ -199,7 +199,18 @@ export type PlanFailureCode =
   | 'internal_error';
 
 export type PlanResult =
-  | { ok: true; itinerary: Itinerary }
+  | {
+      ok: true;
+      itinerary: Itinerary;
+      /**
+       * How much of what the traveller picked actually made it.
+       *
+       * Present on success as well as failure, because "this plan holds four of
+       * the nine things you chose" is worth saying, and because a record that
+       * only exists on failure cannot be compared across two builds.
+       */
+      readiness: PlannerReadiness;
+    }
   | {
       ok: false;
       code: PlanFailureCode;
