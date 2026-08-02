@@ -427,6 +427,33 @@ export const compiledRegionSchema = z.object({
    */
   evidence: regionEvidenceSchema.optional(),
 
+  /**
+   * Which region pack, from which data release, this artifact was built on.
+   *
+   * A summary rather than the pack itself: the pack is megabytes of source
+   * records and lives in its own row, while what an artifact has to be able to
+   * answer for is *which* pack and *which* release — so a plan compiled in July
+   * can still say what it was built from after the catalogue has moved on twice.
+   *
+   * Optional, because artifacts compiled before the backbone existed are still
+   * valid artifacts and did not come from a pack.
+   */
+  regionPack: z
+    .object({
+      packId: z.string().min(1),
+      scopeHash: z.string().min(1),
+      contentHash: z.string().min(1),
+      state: z.string().min(1),
+      catalog: z.string().min(1),
+      releaseId: z.string().min(1),
+      /** Records the pack held, not records that reached the plan. */
+      recordCount: z.number().int().min(0),
+      builtAt: z.string().min(1),
+      /** True when the pack was reused rather than built for this compilation. */
+      reused: z.boolean(),
+    })
+    .optional(),
+
   sourceManifest: sourceManifestSchema,
   /**
    * Every licence the contents came under.

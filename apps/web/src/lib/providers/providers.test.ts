@@ -18,7 +18,7 @@ import {
   overpassCacheKey,
   type OverpassElement,
 } from './overpass';
-import { computeMatrix, costingFor, isPlausibleLeg, matrixCacheKey } from './valhalla';
+import { computeMatrix, costingFor, densify, isPlausibleLeg, matrixCacheKey } from './valhalla';
 
 /**
  * Contract tests for the open-licensed provider stack.
@@ -284,6 +284,42 @@ describe('valhalla', () => {
     });
     expect(outcome.failedPairs.length).toBeGreaterThan(0);
     expect(outcome.pairs).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps the largest routable core instead of dropping everything', () => {
+    /**
+     * A live Denali build came back with a matrix of zero points out of
+     * forty-one. Nothing had failed at the router: one summit nobody can drive
+     * to had an unroutable leg to every other point, so under the old
+     * all-or-nothing rule every other point failed too and the whole region was
+     * reported as having no usable travel times.
+     */
+    const ids = ['a', 'b', 'c', 'unreachable'];
+    const n = ids.length;
+    const minutes = ids.map((_, from) =>
+      ids.map((__, to) => {
+        if (from === to) return 0;
+        // The last point can neither be reached nor left.
+        if (from === n - 1 || to === n - 1) return Number.NaN;
+        return 10;
+      }),
+    );
+    const km = minutes.map((row) => row.map((value) => (Number.isFinite(value) ? 9 : Number.NaN)));
+
+    const dense = densify({ ids, minutes, km, failedPairs: [], calls: 1, pairs: 16, cacheHits: 0 });
+    expect(dense.ids).toEqual(['a', 'b', 'c']);
+    expect(dense.dropped).toEqual(['unreachable']);
+    // And the surviving submatrix is complete, which is what the planner needs.
+    for (const row of dense.minutes) for (const value of row) expect(Number.isFinite(value)).toBe(true);
+  });
+
+  it('returns nothing rather than a matrix of one, when nothing connects', () => {
+    const ids = ['a', 'b', 'c'];
+    const minutes = ids.map((_, from) => ids.map((__, to) => (from === to ? 0 : Number.NaN)));
+    const km = minutes.map((row) => row.map(() => Number.NaN));
+    const dense = densify({ ids, minutes, km, failedPairs: [], calls: 1, pairs: 9, cacheHits: 0 });
+    expect(dense.ids).toEqual([]);
+    expect(dense.dropped.sort()).toEqual(['a', 'b', 'c']);
   });
 
   it('keys the cache on the endpoint, costing and both point sets', () => {

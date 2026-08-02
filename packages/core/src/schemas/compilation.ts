@@ -42,6 +42,19 @@ export const COMPILATION_STAGES = [
   'resolving_destination',
   'awaiting_clarification',
   'confirming_scope',
+  /**
+   * The place backbone, before anything is expanded or researched.
+   *
+   * Four stages rather than one because they fail for entirely different
+   * reasons and a traveller watching this screen is owed the difference: a
+   * catalogue that will not say which release is current, a region too big for
+   * one read, a data layer that would not answer, and records that could not be
+   * matched to each other are four sentences, not one spinner.
+   */
+  'resolving_source_release',
+  'partitioning_scope',
+  'building_region_pack',
+  'linking_sources',
   'expanding_region',
   'discovering_candidates',
   'deduplicating',
@@ -71,6 +84,10 @@ export const COMPILATION_STAGE_LABELS: Record<CompilationStage, string> = {
   resolving_destination: 'Working out where you mean',
   awaiting_clarification: 'Waiting on your answers',
   confirming_scope: 'Settling the region',
+  resolving_source_release: 'Checking which map release to build from',
+  partitioning_scope: 'Dividing the region into readable areas',
+  building_region_pack: 'Preparing regional place data',
+  linking_sources: 'Matching records across sources',
   expanding_region: 'Expanding it into a travel region',
   discovering_candidates: 'Looking for places',
   deduplicating: 'Merging duplicates',

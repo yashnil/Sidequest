@@ -11,10 +11,20 @@ import {
   saveItinerary,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
+import type { PlannerReadiness } from '@sidequest/core';
 
 export interface BuildResult {
   ok: boolean;
   error?: string;
+  /**
+   * Why nothing could be planned, as data rather than a sentence.
+   *
+   * Present only when the planner ran in full and placed nothing. Crossing the
+   * server-action boundary as a typed object rather than a string is what makes
+   * it machine-readable: the board renders counts, blockers and remedies from
+   * it, and a test can assert on the numbers instead of on copy.
+   */
+  readiness?: PlannerReadiness;
 }
 
 /**
@@ -73,7 +83,18 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
     });
 
     if (!result.ok) {
-      return { ok: false, error: planFailureCopy(result.code, result.message) };
+      /**
+       * A plan with nothing in it is never saved.
+       *
+       * `saveItinerary` is below this branch and stays below it: the itinerary
+       * page reads the database, so persisting an empty plan is what would put
+       * five blank days in front of a traveller.
+       */
+      return {
+        ok: false,
+        error: planFailureCopy(result.code, result.message),
+        ...(result.readiness ? { readiness: result.readiness } : {}),
+      };
     }
 
     saveItinerary(result.itinerary);
@@ -97,6 +118,8 @@ function planFailureCopy(code: string, message: string): string {
       return `We do not have usable travel times for this region, so we will not guess at a plan. ${message}`;
     case 'no_usable_days':
       return 'Those dates do not contain a usable day. Check your arrival and departure times.';
+    case 'planner_coverage_insufficient':
+      return message;
     default:
       return message;
   }

@@ -70,6 +70,26 @@ export interface SyntheticWorldSpec {
   /** Legs the routing provider cannot answer for. Never silently zero. */
   failedLegs: number;
   hasFerry: boolean;
+  /**
+   * Minutes per step of separation in the travel-time matrix.
+   *
+   * Present so a world can be genuinely too spread out to plan, which is a state
+   * the product has to handle and which no amount of clicking can reach: a live
+   * compilation produced a region where every round trip from the base exceeded
+   * the traveller's own daily driving limit, and the planner was returning five
+   * empty days as a finished itinerary. Default keeps every existing world
+   * byte-identical.
+   */
+  legMinutes?: number;
+  /**
+   * Minutes each place takes, overriding the derived duration.
+   *
+   * The other half of the same need. `legMinutes` makes a region too far to
+   * reach, which the *board* now catches; this makes each stop too long to fit
+   * in a day, which the board does not check and the planner does — so it is how
+   * a browser test reaches the planner's own refusal rather than the board's.
+   */
+  placeDurationMinutes?: number;
 }
 
 /**
@@ -186,6 +206,68 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
     routingKind: 'measured',
     failedLegs: 0,
     hasFerry: false,
+  },
+  /**
+   * (g) A region whose every stop is further out than a day can reach.
+   *
+   * Not a broken world — the geography is fine, the places are open, the matrix
+   * is complete. It is simply too spread out for the traveller's own limits,
+   * which is the one shape that used to produce a plan with nothing in it.
+   */
+  unreachable_region: {
+    id: 'unreachable-region',
+    name: 'Faraway Reaches',
+    qualifiedName: 'Faraway Reaches, Testland',
+    countryCode: 'TL',
+    timeZone: 'America/Denver',
+    center: { lat: 39.5, lng: -106.0 },
+    entityType: 'subregion',
+    breadth: 'region',
+    placeCount: 8,
+    baseCount: 1,
+    subregionCount: 0,
+    primaryMode: 'drive',
+    hoursCoverage: 1,
+    accessCoverage: 1,
+    foodVenues: 2,
+    weatherPoints: 1,
+    routingKind: 'measured',
+    failedLegs: 0,
+    hasFerry: false,
+    // Three and a half hours to the nearest stop, seven hours there and back —
+    // past the furthest the questionnaire will let anybody go.
+    legMinutes: 200,
+  },
+  /**
+   * (h) A region of stops that no single day is long enough to hold.
+   *
+   * Every place is reachable and open and passes the board. None of them fits
+   * inside a day once the drive is counted, which is the planner's own refusal
+   * rather than the board's.
+   */
+  unplannable_region: {
+    id: 'unplannable-region',
+    name: 'Longday Basin',
+    qualifiedName: 'Longday Basin, Testland',
+    countryCode: 'TL',
+    timeZone: 'America/Denver',
+    center: { lat: 38.9, lng: -107.4 },
+    entityType: 'subregion',
+    breadth: 'subregion',
+    placeCount: 4,
+    baseCount: 1,
+    subregionCount: 0,
+    primaryMode: 'drive',
+    hoursCoverage: 1,
+    accessCoverage: 1,
+    foodVenues: 2,
+    weatherPoints: 1,
+    routingKind: 'measured',
+    failedLegs: 0,
+    hasFerry: false,
+    legMinutes: 12,
+    // Ten hours at the stop, before any driving. No day is that long.
+    placeDurationMinutes: 600,
   },
   weak_data: {
     id: 'weak-data',
@@ -631,8 +713,9 @@ export function fakeProviders(
       const capacity = Math.max(2, Math.floor(Math.sqrt(Math.max(1, maxElements))));
       const used = points.slice(0, Math.min(points.length, capacity));
       const ids = used.map((point) => point.id);
+      const step = spec.legMinutes ?? 7;
       const minutes = used.map((from, i) =>
-        used.map((to, j) => (i === j ? 0 : 6 + Math.abs(i - j) * 7)),
+        used.map((to, j) => (i === j ? 0 : 6 + Math.abs(i - j) * step)),
       );
       const km = minutes.map((row) => row.map((value) => value * 0.9));
       const failedPairs = Array.from({ length: Math.min(spec.failedLegs, ids.length - 1) }, (_, index) => ({

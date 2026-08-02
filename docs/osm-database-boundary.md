@@ -87,6 +87,18 @@ The obligation becomes real at any of these, and this list is the review trigger
    distribution of a derivative database in a way a rendered page arguably is not.
 4. **Sharing an itinerary by link**, if the shared artifact carries the underlying place records
    rather than a rendered view.
+5. **Any endpoint, export or API returning records derived from both the permissive place catalogue
+   and an ODbL layer in one normalised structure.** This is new with the place backbone, and it is
+   the subtlest of the five: the Overture *places* theme carries no share-alike obligation at all
+   (CDLA Permissive 2.0, Apache 2.0, CC0), while the *base* and *divisions* themes are
+   OpenStreetMap-derived and do. Blending them into one table produces a database whose licence
+   nobody chose.
+
+   The code is built so this stays avoidable rather than hoping it does not arise. A `RegionPack`
+   holds `layers[]`, each with its own `licenceId`, its own attribution and its own records;
+   cross-source relationships are *links between records*, never merges. Filtering a pack to the
+   primary place layer therefore produces a CDLA-only extract, and that is the intended escape
+   hatch. Nothing may be added that flattens the layers into one table.
 
 Two distinctions that will matter and that this project has not yet resolved:
 
@@ -97,6 +109,15 @@ Two distinctions that will matter and that this project has not yet resolved:
 - **"Substantial" has no bright line.** ODbL's threshold for a substantial extraction is not
   numerically defined. A region of forty places is not obviously substantial; a corpus built up over
   thousands of compilations plausibly is.
+
+A third distinction, added with the place backbone:
+
+- **Two licence families in one artifact.** `CompiledRegion.licences` now routinely carries
+  `CDLA-Permissive-2.0`, `Apache-2.0`, `CC0-1.0` and `ODbL-1.0` together, because a region's
+  museums come from one catalogue and its peaks from another. `requiredAttributions()` orders
+  share-alike first and the UI renders every line. What that does *not* settle is whether the
+  combined artifact is one derivative database or several co-located extracts — which is exactly
+  trigger 5 above.
 
 **Action required before any public deployment or export feature:** get this reviewed by somebody
 qualified, and record the outcome here. `hasShareAlikeObligation()` already reports whether an
@@ -115,7 +136,14 @@ replaced:
 | Provider | Variable | Production path |
 | --- | --- | --- |
 | Nominatim | `SIDEQUEST_GEOCODER_URL` | Hosted geocoder or self-managed Nominatim |
-| Overpass | `SIDEQUEST_POI_URL` | Hosted Overpass, regional extracts, or self-hosted |
+| Overpass | `SIDEQUEST_POI_URL` | **No longer on the default path** — a bounded fallback only |
 | Valhalla | `SIDEQUEST_ROUTES_URL` | Hosted or self-managed Valhalla |
+| Place backbone | `SIDEQUEST_PLACE_CATALOG_URL` | A mirror of the release catalogue, or a self-managed extraction service |
+
+Overpass has moved from *required* to *fallback*. Place discovery now reads bounded slices of
+Overture's published cloud files, which is not a volunteer-run query service and does not have that
+service's abuse profile — a live evaluation had two of four destinations fail outright because a
+shared endpoint refused their queries. The `SIDEQUEST_POI_PROVIDER` switch remains for development
+diagnostics and for narrow missing-feature queries, and defaults to off.
 
 Self-hosting changes nothing about the licence. ODbL attaches to the data, not to who runs the server.

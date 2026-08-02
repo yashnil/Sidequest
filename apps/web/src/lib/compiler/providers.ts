@@ -1,6 +1,6 @@
 import 'server-only';
 import type { CompilerProviders } from '@sidequest/compiler';
-import { fakeProviders, SYNTHETIC_WORLDS, syntheticCandidate } from '@sidequest/compiler/testing';
+import { packBackedProviders, SYNTHETIC_WORLDS, syntheticCandidate } from '@sidequest/compiler/testing';
 import {
   assessConfidence,
   DESTINATION_RESOLUTION_VERSION,
@@ -24,9 +24,13 @@ import {
  * whatever a volunteer-run service was doing that morning, and an outage must be
  * reachable without waiting for one.
  *
- *   open     the live open-licensed stack — Nominatim, Overpass, Valhalla,
- *            Anthropic. Requires all four switches on.
- *   fixture  deterministic synthetic worlds. What the end-to-end suite runs on.
+ *   open     the live open-licensed stack — Nominatim for the name, the Overture
+ *            place backbone for what is there, Valhalla for travel times,
+ *            Anthropic for research. Public Overpass is a fallback rather than a
+ *            requirement.
+ *   fixture  deterministic synthetic worlds, built through the *same* backbone:
+ *            a synthetic region pack goes through the real partitioner, linker,
+ *            taxonomy table and inventory. What the end-to-end suite runs on.
  *   off      no compilation at all, which is the honest default.
  *
  * Unlike the weather switch, an unrecognised value falls through to **off**.
@@ -135,6 +139,17 @@ const FIXTURE_DESTINATIONS: readonly {
   { match: 'harbour', worlds: ['transit_city'], isPlace: true },
   { match: 'outer', worlds: ['ferry_island', 'remote_road'], isPlace: true },
   { match: 'somewhere', worlds: [], isPlace: false },
+  /**
+   * A region that compiles cleanly and cannot be planned, because everything in
+   * it is further out than a day can reach. The one state that used to come back
+   * as a finished itinerary with nothing in it.
+   */
+  { match: 'faraway', worlds: ['unreachable_region'], isPlace: true },
+  /**
+   * A region whose stops all pass the board and none of which fits in a day.
+   * The planner's own refusal, as opposed to the board's.
+   */
+  { match: 'longday', worlds: ['unplannable_region'], isPlace: true },
 ];
 
 function fixtureMatch(query: string): (typeof FIXTURE_DESTINATIONS)[number] {
@@ -162,7 +177,7 @@ const FIXTURE_RESEARCH = { bookingRequired: true, officialSourceCoverage: 0.6 } 
 function fixtureProviders(): CompilerProviders {
   // Every non-resolver provider comes from the first world a query names, so a
   // compilation in a browser test produces a real region with real coverage.
-  const base = withOpenLicences(fakeProviders(SYNTHETIC_WORLDS.transit_city!, FIXTURE_RESEARCH));
+  const base = withOpenLicences(packBackedProviders(SYNTHETIC_WORLDS.transit_city!, FIXTURE_RESEARCH));
 
   return {
     ...base,
@@ -226,20 +241,23 @@ export function fixtureProvidersForCandidate(candidateId: string): CompilerProvi
     Object.values(SYNTHETIC_WORLDS).find((spec) => spec.id === candidateId) ??
     SYNTHETIC_WORLDS.transit_city!;
   return withOpenLicences({
-    ...fakeProviders(world, FIXTURE_RESEARCH),
+    ...packBackedProviders(world, FIXTURE_RESEARCH),
     resolver: fixtureProviders().resolver,
   });
 }
 
 /**
- * Declare the licences an OSM-derived source would.
+ * Add the licences a routing engine and our own prose would carry.
  *
  * Without this the fixture journey renders no attribution, and a browser test
- * asserting attribution would be asserting nothing. The fixture stands in for
- * Overpass and Valhalla, so it carries what they carry.
+ * asserting attribution would be asserting nothing.
+ *
+ * The place licences are **unioned rather than replaced**, because the pack the
+ * fixture is built on already declares its own — a permissive primary layer and
+ * a share-alike geographic one, which is the shape a live build produces and
+ * therefore the shape the attribution surfaces have to read well under.
  */
 function withOpenLicences(providers: CompilerProviders): CompilerProviders {
-  const places = licence('ODbL-1.0', ['places', 'geography']);
   const routing = licence('ODbL-1.0', ['routing']);
   const authored = licence('sidequest-authored', ['descriptions', 'classification', 'scoring']);
 
@@ -249,7 +267,13 @@ function withOpenLicences(providers: CompilerProviders): CompilerProviders {
       name: providers.places.name,
       async discover(input) {
         const result = await providers.places.discover(input);
-        return { ...result, licences: [places, authored] };
+        const declared = result.licences ?? [];
+        const merged = new Map(declared.map((entry) => [entry.id, entry]));
+        if (!merged.has('sidequest-authored')) merged.set('sidequest-authored', authored);
+        if (!merged.has('ODbL-1.0')) {
+          merged.set('ODbL-1.0', licence('ODbL-1.0', ['places', 'geography']));
+        }
+        return { ...result, licences: [...merged.values()] };
       },
     },
     routing: {

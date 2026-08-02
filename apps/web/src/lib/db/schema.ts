@@ -273,6 +273,49 @@ CREATE TABLE IF NOT EXISTS source_documents (
 
 CREATE INDEX IF NOT EXISTS idx_source_documents_region ON source_documents(compiled_region_id);
 CREATE INDEX IF NOT EXISTS idx_source_documents_retrieved ON source_documents(retrieved_at);
+
+-- Region packs: bounded, release-versioned source data for one piece of ground.
+--
+-- Immutable, like compiled_regions, and for a stronger reason: a compiled region
+-- names the pack it was built from, so mutating a pack would silently change
+-- what an existing plan claims to rest on. A rebuild inserts a new row.
+--
+-- Deliberately *not* keyed to a trip. A pack is traveller-independent geography,
+-- so two people going to the same city share one — which is most of why a second
+-- compilation of the same ground is cheap. It follows that deleting a trip must
+-- not delete its pack, hence no foreign key, and hence the retention sweep in
+-- the repository rather than a cascade.
+--
+-- 'state' is written last: a build that dies mid-way leaves a non-ready row that
+-- the lookup ignores and the sweep removes.
+CREATE TABLE IF NOT EXISTS region_packs (
+  id             TEXT PRIMARY KEY,
+  scope_hash     TEXT NOT NULL,
+  catalog        TEXT NOT NULL,
+  release_id     TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  state          TEXT NOT NULL,
+  content_hash   TEXT NOT NULL,
+  record_count   INTEGER NOT NULL,
+  payload_json   TEXT NOT NULL,
+  created_at     TEXT NOT NULL,
+  expires_at     TEXT
+);
+
+-- The lookup: this ground, this release, newest usable first.
+CREATE INDEX IF NOT EXISTS idx_region_packs_lookup
+  ON region_packs(scope_hash, catalog, release_id, created_at);
+
+-- The stale-fallback lookup: this ground, any release.
+CREATE INDEX IF NOT EXISTS idx_region_packs_scope ON region_packs(scope_hash, created_at);
+
+-- At most one usable pack per (ground, release). A second build for the same
+-- inputs is waste, not a variant, and two rows would make "which pack was this
+-- plan built from" ambiguous. Enforced by the database because two tabs and two
+-- web instances both go straight past any check in application code.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_region_packs_unique_ready
+  ON region_packs(scope_hash, catalog, release_id)
+  WHERE state IN ('ready', 'partial');
 `;
 
 /**

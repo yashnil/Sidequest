@@ -115,6 +115,27 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             }
           : null
       }
+      /**
+       * The data snapshot this plan is frozen to.
+       *
+       * Rendered from the artifact rather than looked up, so this screen still
+       * answers "what was this built on" with every provider switched off — and
+       * so the answer cannot drift when the catalogue publishes a new release.
+       */
+      regionData={
+        compiled?.regionPack
+          ? {
+              releaseId: compiled.regionPack.releaseId,
+              catalog: compiled.regionPack.catalog,
+              state: compiled.regionPack.state,
+              recordCount: compiled.regionPack.recordCount,
+              builtAt: compiled.regionPack.builtAt,
+              reused: compiled.regionPack.reused,
+              packId: compiled.regionPack.packId,
+              contentHash: compiled.regionPack.contentHash,
+            }
+          : null
+      }
       providerMessage={readiness.message}
       providerReady={readiness.ready}
     />

@@ -249,4 +249,70 @@ describe('the generic engine stays generic', () => {
     }
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
+
+  it('keeps the place backbone free of network and clock, so a pack is reproducible', () => {
+    /**
+     * The backbone decides what a region contains. If it could fetch, two runs of
+     * one input would disagree; if it could read a clock, a pack's content hash
+     * would wobble and nothing could be reused. Both belong in the adapter, on
+     * the other side of the provider boundary.
+     */
+    for (const path of walk(join(ROOT, 'packages/compiler/src/backbone'))) {
+      if (/\.test\.ts$/.test(path)) continue;
+      const code = stripComments(readFileSync(path, 'utf8'));
+      expect(code, `${relative(path)} performs I/O`).not.toMatch(/\bfetch\s*\(/);
+      expect(code, `${relative(path)} reads a clock`).not.toMatch(/Date\.now\(\)|new Date\(\)/);
+      expect(code, `${relative(path)} uses randomness`).not.toMatch(/Math\.random\(\)/);
+    }
+  });
+
+  it('does not require a shared query service on the default discovery path', () => {
+    /**
+     * The defect this exists to prevent, stated as a rule.
+     *
+     * Public Overpass is a volunteer-run, best-effort service, and depending on
+     * it turned two of four live destinations into "this place is empty". It
+     * remains available as a *fallback* — the live provider names it in that
+     * branch — but nothing in the engine packages may reach for it, and the
+     * switch that used to be required must stay optional.
+     */
+    for (const root of GENERIC_ROOTS) {
+      for (const path of walk(join(ROOT, root))) {
+        if (/\.test\.ts$/.test(path)) continue;
+        const code = stripComments(readFileSync(path, 'utf8'));
+        expect(code, `${relative(path)} reaches a shared query service`).not.toMatch(
+          /overpass/i,
+        );
+      }
+    }
+
+    const live = readFileSync(join(ROOT, 'apps/web/src/lib/providers/live.ts'), 'utf8');
+    // Present, so the fallback exists; and never on its own, so it is not required.
+    expect(live).toMatch(/isPoiProviderEnabled/);
+    expect(live).toMatch(/isPlaceBackboneEnabled\(\)\s*\|\|\s*isPoiProviderEnabled\(\)/);
+  });
+
+  it('never turns a source existence confidence into a Sidequest signal', () => {
+    /**
+     * A place catalogue publishes a number saying an entity probably exists. It
+     * is not traveller fit, travel importance, corroboration, verification,
+     * safety confidence or a ranking score, and the difference between those is
+     * the whole product. So the field travels as provenance and is read nowhere
+     * else.
+     */
+    const offenders: string[] = [];
+    for (const root of ['packages/compiler/src/backbone', 'packages/core/src/quality']) {
+      for (const path of walk(join(ROOT, root))) {
+        if (/\.test\.ts$/.test(path)) continue;
+        const code = stripComments(readFileSync(path, 'utf8'));
+        // Reading it anywhere other than to write it onto a provenance row.
+        const reads = code.match(/existenceConfidence/g) ?? [];
+        const writes = code.match(/existenceConfidence:/g) ?? [];
+        if (reads.length > writes.length) {
+          offenders.push(`${relative(path)} reads a source existence confidence`);
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
 });

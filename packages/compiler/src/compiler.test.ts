@@ -243,6 +243,67 @@ describe('scope derivation', () => {
     expect(radiusOf(driving.shape)).toBeGreaterThan(radiusOf(walking.shape));
   });
 
+  it('clips a published boundary to what the trip can actually cross', () => {
+    /**
+     * A live New York evaluation took the city's full fifty-kilometre
+     * administrative boundary for a four-night walking trip. The router then
+     * refused two hundred and seventy-two of three hundred and eighty walking
+     * legs across the harbour, and the plan came back as whichever borough the
+     * base landed in. A boundary is a fact about governance; what a traveller
+     * covers is a fact about their transport.
+     */
+    const wide = {
+      ...syntheticCandidate(SYNTHETIC_WORLDS.transit_city!),
+      // Roughly the span of a large metropolitan boundary.
+      bounds: {
+        southWest: { lat: 38.5, lng: -9.4 },
+        northEast: { lat: 38.95, lng: -8.85 },
+      },
+      center: { lat: 38.72, lng: -9.14 },
+    };
+    const scope = deriveScope({
+      candidate: wide,
+      clarifications: {
+        schemaVersion: CLARIFICATION_SET_VERSION,
+        questions: [],
+        answers: [{ questionId: QUESTION_IDS.carAvailable, values: ['no'], answeredAt: 'x' }],
+      },
+      nights: 4,
+      revision: 1,
+    });
+
+    expect(scope.shape.kind).toBe('bounds');
+    if (scope.shape.kind !== 'bounds') return;
+    const latSpanKm = (scope.shape.bounds.northEast.lat - scope.shape.bounds.southWest.lat) * 111;
+    // Four walking nights reach about twelve kilometres, not fifty.
+    expect(latSpanKm).toBeLessThan(30);
+    // And the scope's own bounds agree with its shape, because everything
+    // downstream reads one of the two and they must not disagree.
+    expect(scope.bounds).toEqual(scope.shape.bounds);
+  });
+
+  it('leaves a boundary alone when the trip can genuinely cross it', () => {
+    const small = {
+      ...syntheticCandidate(SYNTHETIC_WORLDS.transit_city!),
+      bounds: {
+        southWest: { lat: 38.70, lng: -9.17 },
+        northEast: { lat: 38.74, lng: -9.11 },
+      },
+      center: { lat: 38.72, lng: -9.14 },
+    };
+    const scope = deriveScope({
+      candidate: small,
+      clarifications: {
+        schemaVersion: CLARIFICATION_SET_VERSION,
+        questions: [],
+        answers: [{ questionId: QUESTION_IDS.carAvailable, values: ['yes'], answeredAt: 'x' }],
+      },
+      nights: 4,
+      revision: 1,
+    });
+    expect(scope.shape).toEqual({ kind: 'bounds', bounds: small.bounds });
+  });
+
   it('refuses a whole country from a single base rather than quietly shrinking it', () => {
     const scope = scopeFor('broad_country');
     const verdict = scopeFitsTrip({ ...scope, breadth: 'country', maxBaseChanges: 0 });

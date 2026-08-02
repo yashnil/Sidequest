@@ -59,9 +59,48 @@ function deriveShape(
   narrowed: boolean,
 ): ScopeShape {
   if (candidate.bounds && !narrowed) {
-    return { kind: 'bounds', bounds: candidate.bounds };
+    /**
+     * A published boundary, clipped to what the trip can actually reach.
+     *
+     * The boundary alone was the shape, and a live New York evaluation showed
+     * what that costs: a four-night walking trip took the city's full
+     * fifty-kilometre administrative boundary, the router refused two hundred
+     * and seventy-two of three hundred and eighty walking legs across the
+     * harbour, and the plan came out as whichever borough the base landed in.
+     *
+     * A city boundary is a fact about governance. What a traveller covers is a
+     * fact about their transport and their nights. Where the two disagree by a
+     * lot, the smaller one is the honest scope — and the intersection is still a
+     * real boundary rather than a circle drawn over one.
+     */
+     const clipped = clipToReach(candidate.bounds, candidate.center, radiusKm);
+     return { kind: 'bounds', bounds: clipped };
   }
   return { kind: 'radius', center: candidate.center, radiusKm };
+}
+
+/** Latitude degrees per kilometre. Longitude is scaled by the cosine. */
+const KM_PER_DEGREE_LAT = 111;
+
+function clipToReach(
+  bounds: NonNullable<DestinationCandidate['bounds']>,
+  center: { lat: number; lng: number },
+  radiusKm: number,
+): NonNullable<DestinationCandidate['bounds']> {
+  const latDelta = radiusKm / KM_PER_DEGREE_LAT;
+  const lngDelta =
+    radiusKm / (KM_PER_DEGREE_LAT * Math.max(0.1, Math.cos((center.lat * Math.PI) / 180)));
+
+  return {
+    southWest: {
+      lat: Math.max(bounds.southWest.lat, center.lat - latDelta),
+      lng: Math.max(bounds.southWest.lng, center.lng - lngDelta),
+    },
+    northEast: {
+      lat: Math.min(bounds.northEast.lat, center.lat + latDelta),
+      lng: Math.min(bounds.northEast.lng, center.lng + lngDelta),
+    },
+  };
 }
 
 function primaryModeFor(
@@ -132,6 +171,8 @@ export function deriveScope(input: ScopeInput): GeographicScope {
   const signals: ConfidenceSignal[] = [...candidate.confidence.signals];
   if (!signals.includes('user_confirmed')) signals.push('user_confirmed');
 
+  const shape = deriveShape(candidate, radiusKm, narrowed);
+
   return {
     schemaVersion: GEOGRAPHIC_SCOPE_VERSION,
     revision,
@@ -142,7 +183,15 @@ export function deriveScope(input: ScopeInput): GeographicScope {
       ? 'subregion'
       : candidate.breadth,
     center: candidate.center,
-    ...(candidate.bounds && !narrowed ? { bounds: candidate.bounds } : {}),
+    /**
+     * The scope's own bounds, never the geocoder's unclipped ones.
+     *
+     * These two disagreed, and everything downstream that reads `scope.bounds`
+     * — the partitioner, the extractor, the discovery box — read the wider
+     * answer while the shape said something narrower. One of them has to be the
+     * scope, and it is the shape.
+     */
+    ...(shape.kind === 'bounds' ? { bounds: shape.bounds } : {}),
     ...(candidate.countryCode ? { countryCode: candidate.countryCode } : {}),
     /**
      * Every zone the interpretation spans, never collapsed to one. A region
@@ -150,7 +199,7 @@ export function deriveScope(input: ScopeInput): GeographicScope {
      * timetable moves by an hour.
      */
     timeZones: candidate.timeZones.length > 0 ? [...candidate.timeZones] : ['UTC'],
-    shape: deriveShape(candidate, radiusKm, narrowed),
+    shape,
     includedAreas: [],
     excludedAreas: [],
     gateways: [],

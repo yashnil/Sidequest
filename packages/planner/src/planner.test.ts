@@ -783,7 +783,15 @@ describe('planner failure modes', () => {
     if (!result.ok) expect(result.code).toBe('no_candidates');
   });
 
-  it('still plans when every selection is impossible, and says so', () => {
+  it('refuses rather than returning dated days with nothing in them', () => {
+    /**
+     * This used to return `ok`, with four dated days, a transport strategy, a
+     * food plan and not one stop — and the sentence explaining it was a warning
+     * among warnings. A live compilation produced five such days and would have
+     * shown them to a traveller as their trip.
+     *
+     * A plan with no stops is not a plan.
+     */
     const result = planTrip(
       buildScenario({
         basics: { startDate: '2027-01-12', endDate: '2027-01-15' },
@@ -792,11 +800,37 @@ describe('planner failure modes', () => {
         ],
       }),
     );
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.itinerary.unscheduled).toHaveLength(1);
-      expect(result.itinerary.status).toBe('needs_decision');
-      expect(result.itinerary.days).toHaveLength(4);
-    }
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('planner_coverage_insufficient');
+
+    const readiness = result.readiness;
+    expect(readiness).toBeDefined();
+    if (!readiness) return;
+    expect(readiness.selectedCount).toBe(1);
+    expect(readiness.scheduledCount).toBe(0);
+    // Every rejection is accounted for, and the dominant one names the blocker.
+    expect(readiness.rejections.reduce((sum, entry) => sum + entry.count, 0)).toBe(1);
+    expect(readiness.dominantBlockers).toHaveLength(1);
+    expect(readiness.summary).toMatch(/\S/);
+    // Something is offered, and something is explicitly ruled out — the second
+    // is what stops a traveller changing the wrong thing.
+    expect(readiness.remedies.length).toBeGreaterThan(0);
+  });
+
+  it('never says more days would help when no single day could hold anything', () => {
+    const result = planTrip(
+      buildScenario({
+        basics: { startDate: '2027-01-12', endDate: '2027-01-15' },
+        selections: [
+          { placeId: 'devils-postpile', status: 'included', source: 'user', updatedAt: '2026-07-30T00:00:00.000Z' },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok || !result.readiness) return;
+    const moreDays = result.readiness.remedies.find((entry) => entry.remedy === 'more_days');
+    expect(moreDays?.likelyToHelp).toBe(false);
+    expect(moreDays?.detail).toMatch(/would not help/i);
   });
 });

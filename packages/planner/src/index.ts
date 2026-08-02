@@ -6,5 +6,6 @@ export * from './assign';
 export * from './schedule';
 export * from './strategy';
 export * from './revise';
+export * from './readiness';
 export { planTrip } from './plan';
 export { validateItinerary, validateStrategy, statusFor } from './validate';

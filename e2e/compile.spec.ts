@@ -205,6 +205,33 @@ test('the compiled result reports coverage and exact OSM attribution', async ({ 
   );
   await expect(page.getByText('Open Database License 1.0')).toBeVisible();
   await expect(page.getByText(/share-alike/)).toBeVisible();
+
+  /**
+   * Both licence families, from one artifact.
+   *
+   * The place backbone reads a permissive place catalogue and a share-alike
+   * geographic one, and the difference has legal consequences — so the screen
+   * has to name both rather than showing whichever came first.
+   */
+  await expect(page.getByText(/Community Data License Agreement/)).toBeVisible();
+});
+
+test('the plan says which snapshot of the world it is frozen to', async ({ page }) => {
+  await createTrip(page, 'Harbour City');
+  await compile(page);
+
+  const panel = page.getByTestId('region-data');
+  const summary = panel.getByText(/Regional place data/);
+  await expect(summary).toBeVisible();
+
+  // Collapsed by default: a normal user page is not a database console.
+  await expect(panel.getByText(/frozen to a snapshot/i)).toBeHidden();
+
+  await summary.click();
+  await expect(panel.getByText(/frozen to a snapshot/i)).toBeVisible();
+  await expect(panel.getByText(/^Records$/)).toBeVisible();
+  // The release is named, so a traveller can say what their plan rests on.
+  await expect(summary).toContainText('2026-07-22.0');
 });
 
 test('the board and a deterministic itinerary come out of the compiled region', async ({
@@ -257,7 +284,7 @@ test('the board and a deterministic itinerary come out of the compiled region', 
   // And it is persisted: a reload loads the stored plan rather than rebuilding.
   await page.goto(`/trips/${id}/itinerary`);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByText(/Not built yet/i)).toHaveCount(0);
+  await expect(page.getByText(/No trip built yet/i)).toHaveCount(0);
 });
 
 test('the journey stays free of console errors and horizontal overflow', async ({ page }) => {
@@ -275,4 +302,114 @@ test('the journey stays free of console errors and horizontal overflow', async (
   );
   expect(overflow, `the plan flow scrolls horizontally by ${overflow}px`).toBeLessThanOrEqual(1);
   expect(problems, `Runtime problems:\n${problems.join('\n')}`).toEqual([]);
+});
+
+test('a plan with nothing in it is refused, with the funnel that explains why', async ({
+  page,
+}) => {
+  /**
+   * The regression this exists for.
+   *
+   * A live compilation returned five dated days, a transport strategy, a food
+   * plan, a status of `ready_with_cautions` and **zero stops** — every candidate
+   * reachable and open, and every one of them further to reach and return than
+   * the traveller had said they would travel in a day. It would have been shown
+   * to them as their trip.
+   *
+   * Reproduced against a synthetic world rather than a destination: "Longday
+   * Basin" compiles cleanly — open places, a complete matrix, full coverage —
+   * and every one of its stops takes ten hours, which no day of the trip is long
+   * enough to hold. Same shape of failure, no destination in it.
+   */
+  const id = await createTrip(page, 'Longday Basin');
+  await compile(page);
+
+  await page.getByRole('link', { name: 'Tell us how you travel' }).click();
+  await page.waitForURL(/questionnaire/);
+  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
+  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
+  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
+
+  for (let step = 0; step < 14; step += 1) {
+    const build = page.getByRole('button', { name: 'Build my discovery board' });
+    if (await build.isVisible().catch(() => false)) {
+      await build.click();
+      break;
+    }
+    const next = page.getByRole('button', { name: 'Continue' });
+    if (!(await next.isVisible().catch(() => false))) break;
+    await next.click();
+    await page.waitForTimeout(150);
+  }
+  await page.waitForURL(/discover/, { timeout: 30_000 });
+
+  const build = page.getByRole('button', { name: /Build my trip|Rebuild my trip/ });
+  await expect(build).toBeEnabled({ timeout: 15_000 });
+  await build.click();
+
+  // It must not become an itinerary.
+  const panel = page.getByTestId('planner-readiness');
+  await expect(panel).toBeVisible({ timeout: 60_000 });
+  expect(page.url()).not.toMatch(/itinerary/);
+
+  // The funnel, as numbers rather than as an apology.
+  await expect(panel.getByText('On the board')).toBeVisible();
+  await expect(panel.getByText('Reachable & open')).toBeVisible();
+  await expect(panel.getByText('Scheduled')).toBeVisible();
+  await expect(panel.getByText('What blocked them')).toBeVisible();
+
+  // And what to do about it, including what not to bother with.
+  const ruledOut = panel.getByText('What would not help');
+  await expect(ruledOut).toBeVisible();
+  await ruledOut.click();
+  await expect(panel.getByText(/would not help|not what stopped these/i).first()).toBeVisible();
+
+  // Nothing was persisted: the itinerary page still says there is no plan.
+  await page.goto(`/trips/${id}/itinerary`);
+  await expect(page.getByText(/No trip built yet/i).first()).toBeVisible();
+});
+
+test('a region nothing can be planned from says so on the board, before the build', async ({
+  page,
+}) => {
+  /**
+   * The other half of the same defect, caught one screen earlier.
+   *
+   * Compiled places used to carry no travel time at all — the matrix knew, and
+   * the field the board reads was left at zero — so a board could offer nine
+   * stops as zero-minute hops and the planner would then refuse every one of
+   * them for exceeding a daily driving limit. With the drive written onto the
+   * place, the board reaches the same verdict the planner would, and says it
+   * where the traveller can still change something.
+   */
+  const id = await createTrip(page, 'Faraway Reaches');
+  await compile(page);
+
+  await page.getByRole('link', { name: 'Tell us how you travel' }).click();
+  await page.waitForURL(/questionnaire/);
+  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
+  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
+  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
+  for (let step = 0; step < 14; step += 1) {
+    const build = page.getByRole('button', { name: 'Build my discovery board' });
+    if (await build.isVisible().catch(() => false)) {
+      await build.click();
+      break;
+    }
+    const next = page.getByRole('button', { name: 'Continue' });
+    if (!(await next.isVisible().catch(() => false))) break;
+    await next.click();
+    await page.waitForTimeout(150);
+  }
+  await page.waitForURL(/discover/, { timeout: 30_000 });
+
+  await expect(
+    page.getByRole('heading', { name: /Nothing in this region works on these dates/i }),
+  ).toBeVisible();
+  // No build button at all: there is nothing to build from.
+  await expect(page.getByRole('button', { name: /Build my trip|Rebuild my trip/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Revisit my answers' })).toBeVisible();
+
+  await page.goto(`/trips/${id}/itinerary`);
+  await expect(page.getByText(/No trip built yet/i).first()).toBeVisible();
 });
