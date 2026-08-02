@@ -315,4 +315,163 @@ describe('the generic engine stays generic', () => {
     }
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
+  /**
+   * THE OWNERSHIP BOUNDARY OF THE SHARED EVIDENCE STORE.
+   *
+   * A fact about a museum is universal; a fact about a trip is not. If a
+   * traveller field ever reaches a shared cache key or a shared cached value,
+   * one person's preferences become another person's evidence — which is the
+   * worst bug this product could have, and the one nothing about the code's
+   * shape would make obvious.
+   *
+   * This is a lint rather than a proof, and it is honest about that. What it
+   * does catch is the exact regression: somebody adding `profile` or `tripId` to
+   * a key input because it was convenient.
+   */
+  it('keeps travellers out of universal evidence', () => {
+    const TRAVELLER_TOKENS = [
+      'tripId',
+      'travelerProfile',
+      'travellerProfile',
+      'fitScore',
+      'selection',
+      'itinerary',
+      'budgetLevel',
+      'pace',
+      'interests',
+      'travelDates',
+    ];
+
+    /**
+     * The three files that define what a shared row *is*. A traveller field in
+     * any of them would be shared by construction, whatever the callers do.
+     */
+    const universal = [
+      'packages/core/src/schemas/evidence-store.ts',
+      'packages/core/src/evidence/identity.ts',
+      'apps/web/src/lib/db/evidence-repository.ts',
+    ];
+
+    const offenders: string[] = [];
+    for (const file of universal) {
+      const code = stripComments(readFileSync(join(ROOT, file), 'utf8'));
+      for (const token of TRAVELLER_TOKENS) {
+        if (new RegExp(`\\b${token}\\b`).test(code)) {
+          offenders.push(`${file} names a traveller field: ${token}`);
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('never keys shared evidence on a trip', () => {
+    /**
+     * The database half of the same rule. Every other table in the schema is
+     * trip-scoped and cascades from `trips`; the evidence tables must not be,
+     * because a pack outliving its trip is the entire economic argument for
+     * having them.
+     */
+    const schema = readFileSync(join(ROOT, 'apps/web/src/lib/db/schema.ts'), 'utf8');
+    const evidenceTables = schema
+      .split(/CREATE TABLE IF NOT EXISTS /)
+      .filter((block) => block.startsWith('evidence_'));
+    expect(evidenceTables.length).toBeGreaterThanOrEqual(6);
+    for (const block of evidenceTables) {
+      const name = block.slice(0, block.indexOf(' '));
+      const body = block.slice(0, block.indexOf(');'));
+      expect(body, `${name} is keyed on a trip`).not.toMatch(/trip_id/);
+      expect(body, `${name} cascades from a trip`).not.toMatch(/REFERENCES trips/);
+    }
+  });
+
+  it('never lets a cache decide what a fact is worth', () => {
+    /**
+     * Reuse may make a run cheap. It may not make anything more certain.
+     *
+     * So the layer that decides what to reuse is forbidden from naming the
+     * vocabulary that decides what a fact is worth — verification states,
+     * coverage levels, confidence. A cache that could write one of those could
+     * quietly upgrade a stale single source into a verified fact by the act of
+     * remembering it.
+     */
+    const code = stripComments(
+      readFileSync(join(ROOT, 'packages/compiler/src/evidence-store.ts'), 'utf8'),
+    );
+    for (const forbidden of [
+      'corroborated',
+      'verified',
+      'assessConfidence',
+      'coverageLevel',
+      'single_source',
+    ]) {
+      expect(code, `the evidence layer writes ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+  it('keeps travellers out of durable claims and shared answers', () => {
+    /**
+     * The same rule as the evidence store above, applied to the layer that now
+     * carries the *facts* rather than the pages. A claim that quietly learned a
+     * traveller's preferences, or a shared answer keyed by their dates, would
+     * serve one person's trip as another person's evidence — and nothing about
+     * the code's shape would make it obvious.
+     */
+    const TRAVELLER_TOKENS = [
+      'tripId',
+      'travelerProfile',
+      'travellerProfile',
+      'fitScore',
+      'selection',
+      'itinerary',
+      'budgetLevel',
+      'pace',
+      'travelDates',
+      'boardRank',
+      'detour',
+    ];
+
+    const shared = ['packages/core/src/evidence/claims.ts', 'packages/compiler/src/claims.ts'];
+    const offenders: string[] = [];
+    for (const file of shared) {
+      const code = stripComments(readFileSync(join(ROOT, file), 'utf8'));
+      for (const token of TRAVELLER_TOKENS) {
+        if (new RegExp(`\\b${token}\\b`).test(code)) {
+          offenders.push(`${file} names a traveller field: ${token}`);
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('gives a shared resolved answer no way to depend on a date', () => {
+    /**
+     * A structural guarantee rather than a promise. `factSetKeyFor` has no
+     * parameter a date could go in, so "the shared answer was for different
+     * dates" is not a bug that can be written — and the allow-list of paths that
+     * may be shared is closed, so a new dated path is excluded by default rather
+     * than by somebody remembering.
+     */
+    const code = stripComments(
+      readFileSync(join(ROOT, 'packages/core/src/evidence/claims.ts'), 'utf8'),
+    );
+    const signature = /export interface FactSetKeyInput \{([\s\S]*?)\}/.exec(code)?.[1] ?? '';
+    expect(signature).not.toMatch(/date|now|month|season|when/i);
+
+    // The dated paths, named, so adding one to the allow-list breaks this test.
+    for (const dated of ['hours.weekly', 'hours.closure', 'hours.seasonal', 'safety.caution', 'food.hours']) {
+      expect(
+        code.includes(`'${dated}'`),
+        `${dated} must not be shareable across dates`,
+      ).toBe(false);
+    }
+  });
+
+  it('never lets the claim tables be keyed on a trip', () => {
+    const schema = readFileSync(join(ROOT, 'apps/web/src/lib/db/schema.ts'), 'utf8');
+    for (const table of ['evidence_claims', 'evidence_fact_sets']) {
+      const block = schema.split(`CREATE TABLE IF NOT EXISTS ${table} (`)[1] ?? '';
+      const body = block.slice(0, block.indexOf(');'));
+      expect(body, `${table} is keyed on a trip`).not.toMatch(/trip_id/);
+      expect(body, `${table} cascades from a trip`).not.toMatch(/REFERENCES trips/);
+    }
+  });
 });

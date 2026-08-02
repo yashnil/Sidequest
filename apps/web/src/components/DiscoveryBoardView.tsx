@@ -21,6 +21,9 @@ import {
   type OperatingBadge,
   type PlaceWeatherBadge,
   type SelectionStatus,
+  type PlannerReadiness,
+  type ClosureEvidence,
+  type SafetyEvidence,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type BadgeTone } from './ui';
 import { BuildTripButton } from './BuildTripButton';
@@ -36,6 +39,7 @@ type SelectionMap = Record<string, SelectionStatus | undefined>;
 
 export function DiscoveryBoardView({
   tripId,
+  storedReadiness,
   groups,
   initialSelections,
   autoPickNotes,
@@ -44,6 +48,8 @@ export function DiscoveryBoardView({
   weatherBackups,
 }: {
   tripId: string;
+  /** The last refusal, from the database, so it survives a refresh. */
+  storedReadiness?: PlannerReadiness | null;
   groups: SerializedGroup[];
   /**
    * Derived from this trip's weather, not from what any place fundamentally is.
@@ -139,6 +145,7 @@ export function DiscoveryBoardView({
             tripId={tripId}
             hasItinerary={hasItinerary}
             includedCount={includedCount}
+            storedReadiness={storedReadiness ?? null}
           />
         </div>
       </Panel>
@@ -756,6 +763,16 @@ function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
       {cautions.length > 0 ? (
         <p className="rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
           <span className="font-medium text-ink">Worth knowing.</span> {cautions[0]!.statement}
+          {/*
+            Why it is being shown rather than acted on, where it is not acted on.
+            A closure that ended before the traveller arrives, begins after they
+            leave, or is old enough to have been lifted is still worth reading
+            and must not remove a place — and a warning with no explanation of
+            why nothing changed reads as an inconsistency rather than as care.
+          */}
+          {noteOf(cautions[0]!) ? (
+            <span className="text-ink-faint"> {noteOf(cautions[0]!)}</span>
+          ) : null}
         </p>
       ) : null}
 
@@ -809,6 +826,11 @@ function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
       </details>
     </div>
   );
+}
+
+/** A closure carries a note when it is shown but not enforced. Safety does not. */
+function noteOf(entry: ClosureEvidence | SafetyEvidence): string | undefined {
+  return 'note' in entry ? entry.note : undefined;
 }
 
 function describeCost(cost: NonNullable<DiscoveryCandidate['evidence']>['costs'][number]): string {

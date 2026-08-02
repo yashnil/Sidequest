@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { unscheduledReasonCodeSchema } from './itinerary';
 
 /**
- * WHY NOTHING COULD BE PLANNED, IN A SHAPE SOMETHING CAN ACT ON.
+ * WHETHER A PLAN COULD BE BUILT, AND WHY NOT, IN A SHAPE SOMETHING CAN ACT ON.
  *
  * A plan with no stops is not a plan. It was being returned as one — five dated
  * days, a transport strategy, a food plan, `ready_with_cautions`, and a single
@@ -10,23 +10,61 @@ import { unscheduledReasonCodeSchema } from './itinerary';
  * selections". A live Bali compilation produced exactly that, and the traveller
  * would have been shown an itinerary consisting of five empty days.
  *
- * So a zero-stop outcome is now a *refusal*, and a refusal owes an explanation
- * that is better than prose. This is that explanation: the funnel as counts, the
+ * So a zero-stop outcome is a *refusal*, and a refusal owes an explanation that
+ * is better than prose. This is that explanation: the funnel as counts, the
  * rejections grouped by their own reason codes, which of them dominated, and —
  * the part a traveller can actually use — which changes would plausibly help and
  * which would not.
  *
- * Two rules keep it honest.
+ * It is now produced on **every** attempt rather than only on a refusal, because
+ * "this plan holds four of the nine things you picked" is worth saying out loud,
+ * and because a readiness record that only exists on failure cannot be compared
+ * across builds.
  *
- * **Every count is measured, never inferred.** `feasible` is the number that
- * survived access, hours and daylight, not a number derived from the others.
+ * Three rules keep it honest.
+ *
+ * **Every count is measured, never inferred.** `feasibleCount` is the number
+ * that survived access, hours and daylight, not a number derived from the
+ * others. Where a count could not be measured it is absent, not zero — the two
+ * mean opposite things and a zero would read as a finding.
  *
  * **A remedy is only offered when the blockers support it.** Telling somebody to
  * widen their dates when the problem is a two-hour drive to everything sends
  * them to change the wrong thing, which is worse than saying nothing.
+ *
+ * **The level is a rule, not a score.** There is no percentage anywhere in this
+ * file, because a percentage invites optimising a number instead of reading the
+ * blocker underneath it.
  */
 
-export const PLANNER_READINESS_VERSION = 1 as const;
+export const PLANNER_READINESS_VERSION = 2 as const;
+
+/**
+ * What the planner is entitled to do, given what survived.
+ *
+ * Four states, and the fourth is separate for a reason a traveller can feel: an
+ * evidence gap and a provider outage want different words and different buttons.
+ * "We looked and the answer is no" is not the same as "we could not look".
+ */
+export const PLANNER_READINESS_LEVELS = [
+  /** Enough was placed that the plan stands on its own. */
+  'ready',
+  /** Something was placed, and less than was asked for. Usable, and honest. */
+  'partial',
+  /** Nothing could be placed. The itinerary is withheld. */
+  'insufficient',
+  /** Nothing could be measured, because something upstream did not answer. */
+  'infrastructure_failure',
+] as const;
+export const plannerReadinessLevelSchema = z.enum(PLANNER_READINESS_LEVELS);
+export type PlannerReadinessLevel = z.infer<typeof plannerReadinessLevelSchema>;
+
+export const PLANNER_READINESS_LEVEL_LABELS: Record<PlannerReadinessLevel, string> = {
+  ready: 'Enough to plan on',
+  partial: 'Partly plannable',
+  insufficient: 'Not enough to plan on',
+  infrastructure_failure: 'We could not check',
+};
 
 /**
  * The changes that can move a blocked plan, as a closed set.
@@ -83,18 +121,73 @@ export const plannerRemedyAssessmentSchema = z.object({
 });
 export type PlannerRemedyAssessment = z.infer<typeof plannerRemedyAssessmentSchema>;
 
+/**
+ * What the region supplied, before the traveller touched it.
+ *
+ * Optional as a block, because the planner is handed candidates and does not
+ * always know how many the compiler started with. Absent means "not measured
+ * here"; a zero would read as "nothing was found", which is a different and much
+ * more alarming claim.
+ */
+export const plannerSupplySchema = z.object({
+  /** Everything the inventory produced, before quality filtering. */
+  discovered: z.number().int().min(0).optional(),
+  /** What survived quality filtering and reached the board. */
+  retained: z.number().int().min(0).optional(),
+  /** How many had their official sources looked up. */
+  researched: z.number().int().min(0).optional(),
+});
+export type PlannerSupply = z.infer<typeof plannerSupplySchema>;
+
+/**
+ * Where the funnel lost things, as measured counts at each gate.
+ *
+ * Each one is a different question, and collapsing them would lose the answer
+ * that matters: "nothing has a travel time" and "everything is shut" both end at
+ * zero and want completely different responses.
+ */
+export const plannerFunnelSchema = z.object({
+  /** Everything on the board, before the traveller's selections were applied. */
+  considered: z.number().int().min(0),
+  /** Marked include or maybe. What the planner was actually asked to place. */
+  selected: z.number().int().min(0),
+  /** Selected, and with a travel-time row. Below this nothing can be measured. */
+  eligible: z.number().int().min(0),
+  /** Eligible, and with a legal way in on at least one day. */
+  accessFeasible: z.number().int().min(0),
+  /** Access-feasible, and open long enough on at least one day. */
+  hoursFeasible: z.number().int().min(0),
+  /** Everything that survived every gate, including weather and daylight. */
+  feasible: z.number().int().min(0),
+  /** Actually placed on a day. Zero is what makes this a refusal. */
+  scheduled: z.number().int().min(0),
+});
+export type PlannerFunnel = z.infer<typeof plannerFunnelSchema>;
+
+/** What could not be established, as opposed to what was established as "no". */
+export const plannerUnresolvedSchema = z.object({
+  /** Pairs the router refused. Above zero, some legs are guesses we will not make. */
+  routePairs: z.number().int().min(0).default(0),
+  /** Selected places whose opening hours nobody publishes. */
+  criticalHours: z.number().int().min(0).default(0),
+  /** Selected places with no established way in. */
+  accessRequirements: z.number().int().min(0).default(0),
+  /** Closures that overlap the trip and remove a place outright. */
+  blockingClosures: z.number().int().min(0).default(0),
+  /** Counters the compilation ran out of. Names a cost ceiling, not a gap. */
+  exhaustedBudgets: z.array(z.string().min(1)).max(8).default([]),
+});
+export type PlannerUnresolved = z.infer<typeof plannerUnresolvedSchema>;
+
 export const plannerReadinessSchema = z.object({
   schemaVersion: z.literal(PLANNER_READINESS_VERSION),
-  /** Everything on the board, before the traveller's selections were applied. */
-  consideredCount: z.number().int().min(0),
-  /** Marked include or maybe. What the planner was actually asked to place. */
-  selectedCount: z.number().int().min(0),
-  /** Selected, and with a travel-time row. Below this nothing can be measured. */
-  eligibleCount: z.number().int().min(0),
-  /** Eligible, and reachable and open on at least one day of the trip. */
-  feasibleCount: z.number().int().min(0),
-  /** Actually placed on a day. Zero is what makes this a refusal. */
-  scheduledCount: z.number().int().min(0),
+  level: plannerReadinessLevelSchema,
+  funnel: plannerFunnelSchema,
+  supply: plannerSupplySchema.prefault({}),
+  unresolved: plannerUnresolvedSchema.prefault({}),
+  daysRequested: z.number().int().min(0),
+  /** Days that ended up with every meal the traveller asked for named. */
+  daysWithFullMeals: z.number().int().min(0).default(0),
   /** Every rejection, grouped by its own reason code, largest first. */
   rejections: z.array(plannerRejectionSchema).default([]),
   /**
@@ -118,4 +211,15 @@ export function suggestedRemedies(readiness: PlannerReadiness): PlannerRemedyAss
 /** The ones explicitly ruled out, so a traveller stops trying them. */
 export function ruledOutRemedies(readiness: PlannerReadiness): PlannerRemedyAssessment[] {
   return readiness.remedies.filter((entry) => !entry.likelyToHelp);
+}
+
+/**
+ * Whether an itinerary may be shown at all.
+ *
+ * The one rule that must never be softened for convenience: a plan with nothing
+ * in it is withheld. It is a function rather than a comparison at each call site
+ * so there is exactly one place the rule lives, and so a test can name it.
+ */
+export function mayShowItinerary(readiness: PlannerReadiness): boolean {
+  return readiness.funnel.scheduled > 0;
 }

@@ -316,6 +316,294 @@ CREATE INDEX IF NOT EXISTS idx_region_packs_scope ON region_packs(scope_hash, cr
 CREATE UNIQUE INDEX IF NOT EXISTS idx_region_packs_unique_ready
   ON region_packs(scope_hash, catalog, release_id)
   WHERE state IN ('ready', 'partial');
+
+-- ===========================================================================
+-- THE SHARED EVIDENCE STORE
+-- ===========================================================================
+--
+-- Six tables rather than one, and the split is the whole design. A single
+-- opaque cache row cannot express "the page is unchanged but the extraction
+-- schema moved on", which is exactly the invalidation that has to be surgical:
+-- changing a prompt must not throw away a fetch, and changing a fetch must not
+-- throw away a search.
+--
+-- Everything here is **traveller-independent**. There is no trip_id anywhere in
+-- this section and there must never be one: a fact about a museum is a fact
+-- about a museum, and a fact about a trip belongs on the trip's own tables. An
+-- architecture test fails the build if a traveller field reaches a cache key.
+--
+-- None of it is load-bearing for a stored plan. A compiled region carries its
+-- own copy of every fact it was built from, so every table below can be emptied
+-- and no persisted trip changes.
+
+-- Who published a page, as an identity rather than as a URL string.
+--
+-- Keyed on the canonical URL, so two orderings of one query, a tracking
+-- parameter and a "www." prefix all land on one row. Deliberately *not* keyed on
+-- content: two mirrors of the same bytes are two publishers, and collapsing them
+-- would let a syndicated copy corroborate itself.
+CREATE TABLE IF NOT EXISTS evidence_sources (
+  id             TEXT PRIMARY KEY,
+  canonical_url  TEXT NOT NULL,
+  host           TEXT NOT NULL,
+  origin         TEXT NOT NULL,
+  publisher      TEXT NOT NULL,
+  authority      TEXT NOT NULL,
+  payload_json   TEXT NOT NULL,
+  first_seen_at  TEXT NOT NULL,
+  last_seen_at   TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_sources_url ON evidence_sources(canonical_url);
+CREATE INDEX IF NOT EXISTS idx_evidence_sources_host ON evidence_sources(host);
+
+-- One version of one document, addressed by the hash of what we retained.
+--
+-- Immutable: changed content is a new row, never an update, so an artifact
+-- compiled last month can still be explained by the bytes it was actually built
+-- from. "content_observed_at" and "last_checked_at" are two different clocks and
+-- keeping them apart is the point of the whole phase — a 304 moves the second
+-- and never the first, so revalidating a page every morning cannot make a
+-- year-old closure notice current.
+CREATE TABLE IF NOT EXISTS evidence_documents (
+  id                 TEXT PRIMARY KEY,
+  source_id          TEXT NOT NULL,
+  content_digest     TEXT NOT NULL,
+  status             INTEGER NOT NULL,
+  content_bytes      INTEGER NOT NULL,
+  truncated          INTEGER NOT NULL DEFAULT 0,
+  etag               TEXT,
+  last_modified      TEXT,
+  vary               TEXT,
+  cache_control      TEXT,
+  content_observed_at TEXT NOT NULL,
+  last_checked_at    TEXT NOT NULL,
+  published_at       TEXT,
+  retrieval_version  TEXT NOT NULL,
+  payload_json       TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_documents_identity
+  ON evidence_documents(source_id, content_digest);
+CREATE INDEX IF NOT EXISTS idx_evidence_documents_source
+  ON evidence_documents(source_id, content_observed_at);
+
+-- Every attempt to read a source, including the ones that returned nothing.
+--
+-- A 304 is an observation against an existing version rather than a new version,
+-- which is what makes "bytes avoided" a measured number instead of an estimate.
+CREATE TABLE IF NOT EXISTS evidence_retrievals (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id           TEXT NOT NULL,
+  document_version_id TEXT,
+  kind                TEXT NOT NULL,
+  status              INTEGER NOT NULL,
+  observed_at         TEXT NOT NULL,
+  bytes               INTEGER NOT NULL DEFAULT 0,
+  bytes_avoided       INTEGER NOT NULL DEFAULT 0,
+  detail              TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_retrievals_source
+  ON evidence_retrievals(source_id, observed_at);
+
+-- What the deterministic parsers got out of a document version.
+--
+-- Its own table rather than a column on the document, because a parser version
+-- bump must invalidate parses without invalidating the fetch behind them. Free
+-- to recompute, so it is a convenience rather than a necessity — but a free
+-- answer that avoids a paid one is worth a row.
+CREATE TABLE IF NOT EXISTS evidence_parses (
+  document_version_id TEXT NOT NULL,
+  parser_version      TEXT NOT NULL,
+  payload_json        TEXT NOT NULL,
+  parsed_at           TEXT NOT NULL,
+  PRIMARY KEY (document_version_id, parser_version)
+);
+
+-- One model extraction, keyed on everything that could change its answer.
+--
+-- Failures are stored too, and that is deliberate: an extraction that came back
+-- malformed is worth remembering so a retry storm is visible and bounded. It is
+-- never served as an answer, and a later success supersedes it — failing closed
+-- must not mean failing forever.
+CREATE TABLE IF NOT EXISTS evidence_extractions (
+  key            TEXT PRIMARY KEY,
+  operation      TEXT NOT NULL,
+  status         TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  model_id       TEXT NOT NULL,
+  parser_version TEXT NOT NULL,
+  input_tokens   INTEGER NOT NULL DEFAULT 0,
+  output_tokens  INTEGER NOT NULL DEFAULT 0,
+  payload_json   TEXT NOT NULL,
+  created_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_extractions_created
+  ON evidence_extractions(created_at);
+
+-- Claims: one source saying one thing about one subject, kept.
+--
+-- Subject identity is geographic and name-based rather than a trip-local place
+-- id, which is what lets a second trip to the same museum read the first trip's
+-- research. Superseding is by reference so history stays reconstructible.
+CREATE TABLE IF NOT EXISTS evidence_claims (
+  id                  TEXT PRIMARY KEY,
+  subject_key         TEXT NOT NULL,
+  fact_path           TEXT NOT NULL,
+  source_id           TEXT NOT NULL,
+  document_version_id TEXT NOT NULL,
+  content_digest      TEXT NOT NULL,
+  extraction_key      TEXT,
+  origin              TEXT NOT NULL,
+  payload_json        TEXT NOT NULL,
+  first_seen_at       TEXT NOT NULL,
+  last_seen_at        TEXT NOT NULL,
+  supersedes_claim_id TEXT,
+  -- Marked, never deleted: an artifact compiled last month quotes a fact id, and
+  -- that fact has to stay explicable after a newer observation replaces it.
+  superseded          INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_claims_subject
+  ON evidence_claims(subject_key, fact_path, last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_evidence_claims_document
+  ON evidence_claims(document_version_id);
+
+-- Which durable claims a stored artifact actually quotes.
+--
+-- An index rather than a scan. A compiled region already carries its own copy of
+-- every fact it was built from, so deleting a claim cannot break a plan — what it
+-- breaks is the ability to trace a fact on somebody's itinerary *back* to the
+-- claim, the document and the page behind it. This table is what makes the
+-- retention rule exact instead of a guess about age.
+--
+-- Swept rather than cascaded, for the same reason "source_documents" is: adding
+-- a foreign key would let an audit trail block a delete.
+CREATE TABLE IF NOT EXISTS compiled_region_claims (
+  compiled_region_id TEXT NOT NULL,
+  claim_id           TEXT NOT NULL,
+  PRIMARY KEY (compiled_region_id, claim_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_compiled_region_claims_claim
+  ON compiled_region_claims(claim_id);
+
+-- That we asked, and what asking yielded.
+--
+-- The row without which shared claims save nothing. "Every question answered" is
+-- almost never true — most museums never publish a typical visit length — so
+-- coverage measured that way would re-buy the same fruitless search on every
+-- compilation forever. What is true, and useful, is that we looked at this
+-- subject, for these questions, under this contract, on this date.
+--
+-- A record of an action, never of a fact. Nothing downstream reads it as
+-- evidence, and it cannot make anything more certain.
+CREATE TABLE IF NOT EXISTS evidence_research_attempts (
+  key           TEXT PRIMARY KEY,
+  subject_key   TEXT NOT NULL,
+  contract      TEXT NOT NULL,
+  payload_json  TEXT NOT NULL,
+  attempted_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_attempts_subject
+  ON evidence_research_attempts(subject_key);
+
+-- Answers resolved once, for the questions whose answer is the same for
+-- everybody.
+--
+-- Keyed on the exact set of claims behind the answer rather than on a
+-- timestamp, so a new claim about the same question mints a new key
+-- automatically and a stale answer can never be served for a set that has since
+-- grown.
+--
+-- Only context-independent paths reach this table. Whether a place is open on
+-- the fourteenth is not one of them and never will be: a shared cache that
+-- answered a dated question would be the most dangerous thing this store could
+-- hold, so the allow-list lives in code and is a closed one.
+CREATE TABLE IF NOT EXISTS evidence_fact_sets (
+  key          TEXT PRIMARY KEY,
+  subject_key  TEXT NOT NULL,
+  fact_path    TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_fact_sets_subject
+  ON evidence_fact_sets(subject_key, fact_path);
+
+-- Where to look, cached by subject rather than by destination.
+--
+-- A museum and the ticket office on its domain are different subjects and get
+-- different searches; two trips to one museum share one. A negative result is
+-- stored with a reason, because "nobody publishes this" deserves a long memory
+-- and "the provider was down" deserves a short one.
+CREATE TABLE IF NOT EXISTS evidence_discovery (
+  key          TEXT PRIMARY KEY,
+  outcome      TEXT NOT NULL,
+  provider     TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  discovered_at TEXT NOT NULL,
+  expires_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_evidence_discovery_expiry ON evidence_discovery(expires_at);
+
+-- Work somebody else is already doing.
+--
+-- Two compilations of the same city start within seconds of each other and would
+-- otherwise fetch the same page twice and pay for the same extraction twice. The
+-- unique partial index is the coalescing mechanism — the same idiom
+-- "compilation_jobs" and "region_packs" already use, so there is one concurrency
+-- story in this codebase rather than three.
+--
+-- A heartbeat rather than a lease timestamp, for the same reason as
+-- "compilation_jobs": a process killed mid-fetch must not wedge a URL forever.
+CREATE TABLE IF NOT EXISTS evidence_operations (
+  operation_key TEXT NOT NULL,
+  id            TEXT PRIMARY KEY,
+  state         TEXT NOT NULL,
+  owner         TEXT NOT NULL,
+  started_at    TEXT NOT NULL,
+  heartbeat_at  TEXT NOT NULL,
+  finished_at   TEXT,
+  result_ref    TEXT,
+  detail        TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evidence_operations_active
+  ON evidence_operations(operation_key) WHERE state = 'running';
+CREATE INDEX IF NOT EXISTS idx_evidence_operations_key
+  ON evidence_operations(operation_key, started_at);
+
+-- What a compilation decided to reuse, before it ran.
+--
+-- Persisted so "why was this run cheap" has a record rather than a
+-- reconstruction, and so the technical panel can show it without recomputing
+-- anything at render time.
+CREATE TABLE IF NOT EXISTS compilation_work_plans (
+  job_id       TEXT PRIMARY KEY,
+  trip_id      TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_compilation_work_plans_trip ON compilation_work_plans(trip_id);
+
+-- Why a plan could not be built, kept so the answer survives a refresh.
+--
+-- One row per trip, replaced on each attempt. Trip-scoped by nature: readiness is
+-- a statement about *this* traveller's selections on *these* dates, which is
+-- exactly the kind of thing the evidence store above must never hold.
+CREATE TABLE IF NOT EXISTS planner_readiness (
+  trip_id      TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  level        TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
 `;
 
 /**
@@ -350,4 +638,13 @@ export const COLUMN_MIGRATIONS: readonly {
   { table: 'itinerary_days', column: 'weather_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: 'itineraries', column: 'food_plan_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: 'itinerary_days', column: 'food_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  /**
+   * Added when claims gained supersession.
+   *
+   * A database written by the first half of Phase 10 has `evidence_claims`
+   * without it, and `CREATE TABLE IF NOT EXISTS` would not add it — the first
+   * write would fail with a message about SQL syntax rather than about what
+   * actually happened.
+   */
+  { table: 'evidence_claims', column: 'superseded', definition: 'INTEGER NOT NULL DEFAULT 0' },
 ];

@@ -1,4 +1,7 @@
 import type {
+  EvidenceClaimRecord,
+  ResearchAttempt,
+  ResolvedFact,
   AccessRule,
   DataLicence,
   ConfidenceSignal,
@@ -50,6 +53,15 @@ export const PROVIDER_GAP_REASONS = [
   'budget_exhausted',
   'insufficient_evidence',
   'rejected_unsafe_source',
+  /**
+   * The site asks us not to read this.
+   *
+   * Its own reason rather than folded into "unsafe": a page we are declining to
+   * fetch out of respect is a different thing from one we are declining to fetch
+   * because it is dangerous, and a traveller reading a coverage report is owed
+   * the difference.
+   */
+  'blocked_by_robots',
 ] as const;
 export type ProviderGapReason = (typeof PROVIDER_GAP_REASONS)[number];
 
@@ -240,6 +252,26 @@ export interface SourceReference {
   discoveredVia: string;
   /** Provider-reported freshness, verbatim. Not parsed into a date here. */
   pageAge?: string;
+  /**
+   * What we want out of this page, carried so retrieval can judge freshness.
+   *
+   * A page nobody wants a closure from is worth rechecking far less often than
+   * one we do, and the retrieval layer cannot ask the subject list. Carrying the
+   * paths on the reference keeps that decision measured rather than guessed —
+   * and guessing here means either re-reading everything or trusting a stale
+   * safety notice.
+   */
+  wantedPaths?: readonly FactPath[];
+  /**
+   * Validators a previous read of this exact URL left behind.
+   *
+   * Present only when something upstream already holds a version of this page.
+   * The provider sends them as `If-None-Match` / `If-Modified-Since`; a `304`
+   * comes back on `unchanged` rather than as a document, and the caller reuses
+   * what it already has. This is the whole mechanism by which a warm
+   * compilation transfers no bytes.
+   */
+  conditional?: { etag?: string; lastModified?: string };
 }
 
 export interface SourceDiscoveryResult {
@@ -260,6 +292,14 @@ export interface SourceDiscoveryResult {
  */
 export interface SourceDiscoveryProvider {
   readonly name: string;
+  /**
+   * What this provider *is*, as a version string.
+   *
+   * Part of the discovery cache key: changing the query wording changes which
+   * pages come back, so a remembered "nobody publishes this" from the old
+   * wording must not survive the new one.
+   */
+  readonly version: string;
   discover(input: {
     scope: GeographicScope;
     subjects: readonly ResearchSubject[];
@@ -287,14 +327,59 @@ export interface RetrievedDocument {
   authority: SourceAuthorityKind;
   publisher: string;
   domain: string;
+  /**
+   * What the response said about change detection, so a later run can ask
+   * rather than re-read. Absent when the provider does not track it.
+   */
+  validators?: {
+    etag?: string;
+    /** `W/"…"` means semantically equivalent, not byte-identical. */
+    weakEtag?: boolean;
+    lastModified?: string;
+    cacheControl?: string;
+    vary?: string;
+  };
+  /** True when a ceiling stopped the read. Not the same evidence as the page. */
+  truncated?: boolean;
+  /** Where the request actually went, hop by hop. */
+  redirects?: string[];
+}
+
+/** A page the server said had not changed. Never a document — a confirmation. */
+export interface UnchangedSource {
+  url: string;
+  subjectId: string;
+  /** A 304 must carry representation metadata; this is the refreshed copy. */
+  validators?: RetrievedDocument['validators'];
+  /** Bytes a conditional request avoided, as measured rather than estimated. */
+  bytesAvoided: number;
 }
 
 export interface SourceRetrievalResult {
   documents: RetrievedDocument[];
+  /**
+   * References the server answered with `304 Not Modified`.
+   *
+   * Separate from `documents` on purpose. A 304 is evidence that the publisher
+   * says the representation is unchanged, and evidence about *nothing else* —
+   * returning it as a document with an empty body would let an empty page look
+   * like a page that says nothing.
+   */
+  unchanged?: UnchangedSource[];
   /** References we refused or could not read, with why. Never silent. */
   rejected: { url: string; subjectId: string; reason: ProviderGapReason; detail: string }[];
   gaps: ProviderGap[];
   bytes: number;
+  /**
+   * Pages actually requested from a server.
+   *
+   * Distinct from `documents.length` once evidence is shared: a warm build
+   * returns documents it already held and asked nobody for, and charging those
+   * to the page budget would report a cost that was never paid. Absent means
+   * "the provider does not distinguish", and the caller falls back to counting
+   * documents.
+   */
+  requested?: number;
 }
 
 export interface SourceRetrievalProvider {
@@ -339,10 +424,23 @@ export interface FactExtractionResult {
   promptVersion: string;
   schemaVersion: string;
   modelId?: string;
+  /** What the call actually cost, where the provider measures it. */
+  tokens?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
 export interface FactExtractionProvider {
   readonly name: string;
+  /**
+   * The contract this extractor works under, knowable *before* it is called.
+   *
+   * A cache that only learns the prompt version from the answer can never look
+   * anything up — it would build its key from a placeholder and store under the
+   * real one, and miss every time. These are declared up front so the key is the
+   * same on the way in and on the way out.
+   */
+  readonly promptVersion: string;
+  readonly schemaVersion: string;
+  readonly modelId?: string;
   extract(input: {
     subjects: readonly ResearchSubject[];
     documents: readonly RetrievedDocument[];
@@ -426,8 +524,58 @@ export interface FoodDiscoveryProvider {
  * `unavailable` coverage row and a plan that says so, rather than an undefined
  * check scattered through the pipeline.
  */
+/**
+ * DURABLE EVIDENCE ABOUT PLACES, SHARED BY EVERY TRIP.
+ *
+ * The seam that turns "the pages were free" into "the facts were free". A claim
+ * is a fact about a museum; a compilation is a fact about a traveller. This
+ * interface only ever carries the first kind — there is no trip id, no profile
+ * and no date on any of its signatures, and an architecture test fails the build
+ * if one appears.
+ *
+ * Optional, because a provider set can legitimately have nowhere to put claims:
+ * the synthetic worlds run without one, and a compilation with no store simply
+ * researches everything as it always did. That is a visible state in the work
+ * plan rather than a silent branch.
+ */
+export interface SharedClaimStore {
+  /** Changing this invalidates every shared resolution. Never a fact's content. */
+  readonly resolverVersion: string;
+  /** Everything durable we hold about these subjects, keyed by subject key. */
+  load(subjectKeys: readonly string[]): Map<string, EvidenceClaimRecord[]>;
+  /**
+   * Record what was observed, and mark what it replaced.
+   *
+   * Superseding marks rather than deletes: an artifact compiled last month
+   * quotes a fact id, and that fact has to stay explicable afterwards.
+   */
+  save(input: {
+    records: readonly EvidenceClaimRecord[];
+    supersededIds: readonly string[];
+    now: Date;
+  }): void;
+  /**
+   * That we already asked, and what asking yielded.
+   *
+   * The piece without which shared claims save nothing: sources genuinely do not
+   * publish everything, so "every question answered" is almost never true and a
+   * warm run would re-buy the same fruitless search forever. What is true is
+   * that we looked, recently, under this contract.
+   */
+  loadAttempts(subjectKeys: readonly string[]): Map<string, ResearchAttempt>;
+  saveAttempts(input: { attempts: readonly ResearchAttempt[]; now: Date }): void;
+  /** Shared answers for context-independent paths, keyed by their claim set. */
+  loadFactSets(keys: readonly string[]): Map<string, ResolvedFact>;
+  saveFactSets(input: {
+    entries: readonly { key: string; subjectKey: string; resolved: ResolvedFact }[];
+    now: Date;
+  }): void;
+}
+
 export interface CompilerProviders {
   resolver: DestinationResolver;
+  /** Durable claims, where this build has somewhere to keep them. */
+  claims?: SharedClaimStore;
   /**
    * The place backbone, where this build has one.
    *

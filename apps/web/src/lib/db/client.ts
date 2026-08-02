@@ -36,6 +36,15 @@ export function getDb(): Database.Database {
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  /**
+   * Wait for a write lock rather than failing on contact with one.
+   *
+   * WAL gives one writer and many readers; a second writer gets `SQLITE_BUSY`
+   * *immediately* without this. Two compilations racing for the same evidence row
+   * is the normal case now that evidence is shared, and "the second one threw"
+   * would be a caching layer that gets worse under the load it exists for.
+   */
+  db.pragma('busy_timeout = 5000');
   db.exec(SCHEMA_SQL);
   applyColumnMigrations(db);
 

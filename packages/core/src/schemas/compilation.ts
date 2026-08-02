@@ -61,6 +61,15 @@ export const COMPILATION_STAGES = [
   'classifying',
   'filtering_quality',
   'enriching_priority_candidates',
+  /**
+   * What we already hold about these places, before anything is bought.
+   *
+   * Its own stage because it is the one that decides how much of the funnel
+   * below it runs at all — and because "we already knew this" is a different
+   * sentence from "we looked it up", and a traveller watching the screen is owed
+   * the difference.
+   */
+  'reusing_shared_claims',
   'discovering_sources',
   'retrieving_pages',
   'extracting_facts',
@@ -94,6 +103,7 @@ export const COMPILATION_STAGE_LABELS: Record<CompilationStage, string> = {
   classifying: 'Sorting what we found',
   filtering_quality: 'Dropping the thin records',
   enriching_priority_candidates: 'Choosing what is worth researching',
+  reusing_shared_claims: 'Reading what we already know',
   discovering_sources: 'Finding who publishes this',
   retrieving_pages: 'Reading the official pages',
   extracting_facts: 'Pulling out the facts',

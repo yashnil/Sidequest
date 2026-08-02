@@ -9,7 +9,7 @@ import {
 import { scopeFitsTrip } from '@sidequest/compiler';
 import { PlanFlow, type PlanStep } from '@/components/PlanFlow';
 import { providerReadiness } from '@/lib/compiler/providers';
-import { getIntent, getLatestJob } from '@/lib/db/compiler-repository';
+import { getIntent, getLatestJob, getLatestWorkPlan } from '@/lib/db/compiler-repository';
 import { getTrip } from '@/lib/db/repository';
 import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
 import type { CompilationSnapshot } from './actions';
@@ -40,6 +40,14 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
 
   const compiled = compiledRegionFor(id);
   const job = getLatestJob(id);
+  /**
+   * What the last build reused, read from its own row.
+   *
+   * A stored record rather than a live measurement, so this page still answers
+   * "why was that fast" with every provider switched off — and so it cannot
+   * quietly change under a traveller who reloads.
+   */
+  const workPlan = getLatestWorkPlan(id);
   const readiness = providerReadiness();
 
   const snapshot: CompilationSnapshot = job
@@ -136,6 +144,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             }
           : null
       }
+      workPlan={workPlan ? workPlan.entries.map((entry) => ({ ...entry })) : null}
       providerMessage={readiness.message}
       providerReady={readiness.ready}
     />

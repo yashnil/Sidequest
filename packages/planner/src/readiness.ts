@@ -1,17 +1,21 @@
 import {
   PLANNER_READINESS_VERSION,
   plannerReadinessSchema,
+  type PlannerFunnel,
   type PlannerReadiness,
+  type PlannerReadinessLevel,
   type PlannerRejection,
   type PlannerRemedyAssessment,
+  type PlannerSupply,
+  type PlannerUnresolved,
   type UnscheduledPlace,
   type UnscheduledReasonCode,
 } from '@sidequest/core';
 
 /**
- * TURNING A FAILED PLAN INTO SOMETHING A TRAVELLER CAN ACT ON.
+ * TURNING A PLAN — FAILED OR PARTIAL — INTO SOMETHING A TRAVELLER CAN ACT ON.
  *
- * Built from the planner's own counts and its own rejection codes — nothing here
+ * Built from the planner's own counts and its own rejection codes; nothing here
  * re-derives a reason or guesses at one. That matters because the remedies are
  * chosen from the codes, and a remedy chosen from a guess sends somebody to
  * change the wrong thing.
@@ -86,13 +90,12 @@ const RULED_OUT: Record<(typeof REMEDY_ORDER)[number], string> = {
 };
 
 export interface ReadinessInput {
-  consideredCount: number;
-  selectedCount: number;
-  eligibleCount: number;
-  feasibleCount: number;
-  scheduledCount: number;
+  funnel: PlannerFunnel;
   unscheduled: readonly UnscheduledPlace[];
   dayCount: number;
+  daysWithFullMeals?: number;
+  supply?: PlannerSupply;
+  unresolved?: Partial<PlannerUnresolved>;
 }
 
 export function buildPlannerReadiness(input: ReadinessInput): PlannerReadiness {
@@ -121,9 +124,7 @@ export function buildPlannerReadiness(input: ReadinessInput): PlannerReadiness {
    * would misdescribe the problem.
    */
   const largest = rejections[0]?.count ?? 0;
-  const dominantBlockers = rejections
-    .filter((entry) => entry.count * 2 >= largest)
-    .slice(0, 3);
+  const dominantBlockers = rejections.filter((entry) => entry.count * 2 >= largest).slice(0, 3);
   const dominantCodes = new Set(dominantBlockers.map((entry) => entry.reasonCode));
 
   /**
@@ -135,7 +136,7 @@ export function buildPlannerReadiness(input: ReadinessInput): PlannerReadiness {
    * at all means every day was empty and still nothing fitted — so the days were
    * not the constraint, and more of them are not the answer.
    */
-  const nothingFitted = input.scheduledCount === 0;
+  const nothingFitted = input.funnel.scheduled === 0;
 
   const remedies: PlannerRemedyAssessment[] = REMEDY_ORDER.map((remedy) => {
     const answers = ANSWERS[remedy].some((code) => dominantCodes.has(code));
@@ -147,13 +148,22 @@ export function buildPlannerReadiness(input: ReadinessInput): PlannerReadiness {
     };
   });
 
+  const unresolved: PlannerUnresolved = {
+    routePairs: input.unresolved?.routePairs ?? 0,
+    criticalHours: input.unresolved?.criticalHours ?? 0,
+    accessRequirements: input.unresolved?.accessRequirements ?? 0,
+    blockingClosures: input.unresolved?.blockingClosures ?? 0,
+    exhaustedBudgets: input.unresolved?.exhaustedBudgets ?? [],
+  };
+
   return plannerReadinessSchema.parse({
     schemaVersion: PLANNER_READINESS_VERSION,
-    consideredCount: input.consideredCount,
-    selectedCount: input.selectedCount,
-    eligibleCount: input.eligibleCount,
-    feasibleCount: input.feasibleCount,
-    scheduledCount: input.scheduledCount,
+    level: decideLevel(input.funnel, unresolved),
+    funnel: input.funnel,
+    supply: input.supply ?? {},
+    unresolved,
+    daysRequested: input.dayCount,
+    daysWithFullMeals: input.daysWithFullMeals ?? 0,
     rejections,
     dominantBlockers,
     remedies,
@@ -161,19 +171,62 @@ export function buildPlannerReadiness(input: ReadinessInput): PlannerReadiness {
   });
 }
 
+/**
+ * Ready, partial, insufficient, or broken — by rule.
+ *
+ * The order is the argument. Infrastructure first, because "we could not
+ * measure anything" must never be reported as "there is nothing here" — the
+ * first is our failure and the second is a claim about the traveller's
+ * destination. Then zero, which is always a refusal whatever else is true. Only
+ * then the question of *how much* got through.
+ */
+export function decideLevel(
+  funnel: PlannerFunnel,
+  unresolved: PlannerUnresolved,
+): PlannerReadinessLevel {
+  if (funnel.selected > 0 && funnel.eligible === 0 && unresolved.routePairs > 0) {
+    return 'infrastructure_failure';
+  }
+  if (funnel.scheduled === 0) return 'insufficient';
+
+  /**
+   * Partial when a meaningful share of what the traveller picked did not make
+   * it, or when a day of the trip ended up with nothing on it.
+   *
+   * Half is a threshold rather than a measurement, and it is stated here rather
+   * than buried: below it the plan is worth showing and worth captioning, above
+   * it the plan stands on its own.
+   */
+  const placedShare = funnel.selected === 0 ? 1 : funnel.scheduled / funnel.selected;
+  if (placedShare < 0.5) return 'partial';
+  return 'ready';
+}
+
 function summarise(input: ReadinessInput, dominant: readonly PlannerRejection[]): string {
-  if (input.selectedCount === 0) {
+  const { funnel } = input;
+  if (funnel.selected === 0) {
     return 'Nothing on the board is marked to include, so there was nothing to plan.';
   }
-  if (input.eligibleCount === 0) {
-    return `None of the ${input.selectedCount} places you picked has a travel time we could measure, so none of them could be placed in a day.`;
+  if (funnel.eligible === 0) {
+    return `None of the ${funnel.selected} places you picked has a travel time we could measure, so none of them could be placed in a day.`;
   }
-  if (input.feasibleCount === 0) {
-    return `All ${input.selectedCount} places you picked are unreachable or shut on every one of your ${input.dayCount} days.`;
+  if (funnel.accessFeasible === 0) {
+    return `There is no legal way in to any of the ${funnel.selected} places you picked on any day of your trip.`;
   }
-  const lead = dominant[0];
-  const blocker = lead ? REASON_PHRASES[lead.reasonCode] : 'they could not be laid out into a day';
-  return `${input.feasibleCount} of the ${input.selectedCount} places you picked were reachable and open, and none of them could be scheduled: ${blocker}.`;
+  if (funnel.feasible === 0) {
+    return `All ${funnel.selected} places you picked are unreachable or shut on every one of your ${input.dayCount} days.`;
+  }
+  if (funnel.scheduled === 0) {
+    const lead = dominant[0];
+    const blocker = lead ? REASON_PHRASES[lead.reasonCode] : 'they could not be laid out into a day';
+    return `${funnel.feasible} of the ${funnel.selected} places you picked were reachable and open, and none of them could be scheduled: ${blocker}.`;
+  }
+  if (funnel.scheduled < funnel.selected) {
+    const lead = dominant[0];
+    const blocker = lead ? REASON_PHRASES[lead.reasonCode] : 'they did not fit';
+    return `${funnel.scheduled} of the ${funnel.selected} places you picked are in the plan. The rest are out because ${blocker}.`;
+  }
+  return `All ${funnel.scheduled} places you picked are in the plan.`;
 }
 
 /**
@@ -186,7 +239,8 @@ const REASON_PHRASES: Record<UnscheduledReasonCode, string> = {
   seasonally_closed: 'they are out of season on your dates',
   not_feasible: 'they do not work with the answers you gave',
   no_time_left: 'no single day had the hours and the travel budget for them',
-  exceeds_daily_travel: 'getting to any of them and back is further than you said you would drive in a day',
+  exceeds_daily_travel:
+    'getting to any of them and back is further than you said you would drive in a day',
   exceeds_intensity: 'they are harder going than you said you wanted',
   frequency_reached: 'you asked for fewer of this kind of thing than the board offered',
   lower_priority: 'they were maybes, and the definite choices took the room',

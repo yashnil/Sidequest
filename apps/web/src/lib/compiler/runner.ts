@@ -1,8 +1,10 @@
 import 'server-only';
 import {
   compileRegion,
+  orderWorkPlan,
   type CompilerProviders,
   type CompileResult,
+  type SharedEvidenceLayer,
 } from '@sidequest/compiler';
 import {
   scopeFingerprint,
@@ -13,6 +15,9 @@ import {
   type GeographicScope,
   type StageRecord,
   type Trip,
+  type WorkPlanEntry,
+  EVIDENCE_STORE_VERSION,
+  reuseShare,
 } from '@sidequest/core';
 import {
   completeJob,
@@ -24,10 +29,12 @@ import {
   isCancelRequested,
   markJobRunning,
   recordStage,
+  saveWorkPlan,
   startJob,
   type StartJobResult,
 } from '../db/compiler-repository';
 import { getProfile } from '../db/repository';
+import { evidenceStoreNeedsSweep, sweepEvidenceStore } from '../db/evidence-repository';
 import { compilerProviders, providerReadiness } from './providers';
 import type { LiveDiagnostics } from '../providers/live';
 
@@ -157,6 +164,7 @@ export async function runCompilation(input: {
 
   let providers: CompilerProviders;
   let live: LiveDiagnostics | null = null;
+  let evidence: SharedEvidenceLayer | null = null;
   try {
     if (input.providers) {
       providers = input.providers;
@@ -164,6 +172,7 @@ export async function runCompilation(input: {
       const resolved = compilerProviders(scope.destinationCandidateId);
       providers = resolved.providers;
       live = resolved.live;
+      evidence = resolved.evidence;
     }
   } catch (error) {
     failJob({
@@ -174,6 +183,14 @@ export async function runCompilation(input: {
     });
     return null;
   }
+
+  /**
+   * Decisions the compiler took to skip work, kept alongside the ones the shared
+   * evidence layer reports. The two are disjoint by construction: the layer can
+   * only speak for calls it received, and these are exactly the calls that were
+   * never made.
+   */
+  const compilerNotes: WorkPlanEntry[] = [];
 
   let result: CompileResult;
   try {
@@ -189,6 +206,9 @@ export async function runCompilation(input: {
         // Written as it happens. A stage that has finished is a fact, and a
         // traveller watching this screen should see it the moment it is one.
         recordStage(input.jobId, record, new Date());
+      },
+      onWorkPlanNote: (entry) => {
+        compilerNotes.push(entry);
       },
     });
   } catch (error) {
@@ -222,13 +242,48 @@ export async function runCompilation(input: {
     return result;
   }
 
+  /**
+   * What this compilation reused, written where a person can find it later.
+   *
+   * Persisted separately from the artifact because it is a fact about *this run*
+   * rather than about the region: two builds of one destination produce the same
+   * evidence and wildly different work plans, and conflating them would make an
+   * artifact's checksum depend on how warm the cache happened to be.
+   */
+  const workPlanEntries = orderWorkPlan([...compilerNotes, ...(evidence?.workPlan() ?? [])]);
+  if (workPlanEntries.length > 0) {
+    saveWorkPlan({
+      jobId: input.jobId,
+      tripId: input.trip.id,
+      plan: {
+        schemaVersion: EVIDENCE_STORE_VERSION,
+        entries: workPlanEntries,
+        computedAt: new Date().toISOString(),
+      },
+    });
+  }
+
   completeJob({
     jobId: input.jobId,
     tripId: input.trip.id,
-    region: withProviderCounters(result.region, live),
+    region: withEvidenceCounters(withProviderCounters(result.region, live), evidence),
     state: result.partial ? 'partial' : 'ready',
     now: new Date(),
   });
+
+  /**
+   * Sweep on the rare path, never the hot one — and only when there is
+   * something to sweep.
+   *
+   * A compilation is the only thing that grows this store, so it is the right
+   * moment to shrink it, and doing it after the artifact is committed means a
+   * failed sweep can never cost a finished region. But the driver is
+   * synchronous: a sweep runs on the event loop and every request behind it
+   * waits, so an unconditional sweep after every build spends that stall on a
+   * store that has barely grown.
+   */
+  if (evidenceStoreNeedsSweep()) sweepEvidenceStore({ dryRun: false, now: new Date() });
+
   return result;
 }
 
@@ -275,6 +330,45 @@ function withProviderCounters(region: CompiledRegion, live: LiveDiagnostics | nu
       promptVersions: {
         ...region.diagnostics.promptVersions,
         ...(live.timeZone ? { resolvedTimeZone: live.timeZone } : {}),
+      },
+    },
+  };
+}
+
+/**
+ * Fold what the evidence store saved into the artifact's ledger.
+ *
+ * Counts and one ratio, never a claim about quality. Reuse is allowed to make a
+ * run cheap and is not allowed to make anything more certain — so none of these
+ * numbers reaches a verification state, a coverage level or a card, and the only
+ * place they surface is a diagnostics panel.
+ */
+function withEvidenceCounters(
+  region: CompiledRegion,
+  evidence: SharedEvidenceLayer | null,
+): CompiledRegion {
+  if (!evidence) return region;
+  const share = reuseShare(evidence.metrics);
+  return {
+    ...region,
+    diagnostics: {
+      ...region.diagnostics,
+      budget: {
+        ...region.diagnostics.budget,
+        consumed: {
+          ...region.diagnostics.budget.consumed,
+          evidenceDiscoveryHits: evidence.metrics.discoveryHits,
+          evidenceDiscoveryMisses: evidence.metrics.discoveryMisses,
+          evidenceDocumentsReused: evidence.metrics.documentsReused,
+          evidenceDocumentsRevalidated: evidence.metrics.documentsRevalidated,
+          evidenceDocumentsFetched: evidence.metrics.documentsFetched,
+          evidenceBytesTransferred: evidence.metrics.bytesTransferred,
+          evidenceBytesAvoided: evidence.metrics.bytesAvoided,
+          evidenceExtractionsReused: evidence.metrics.extractionsReused,
+          evidenceExtractionsPerformed: evidence.metrics.extractionsPerformed,
+          evidenceModelCallsAvoided: evidence.metrics.modelCallsAvoided,
+          ...(share === null ? {} : { evidenceReusePercent: Math.round(share * 100) }),
+        },
       },
     },
   };

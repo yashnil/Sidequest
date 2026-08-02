@@ -1,6 +1,7 @@
 import {
   MAX_EVIDENCE_EXCERPT_CHARS,
   REGION_EVIDENCE_VERSION,
+  assessFreshness,
   operatingCalendarSchema,
   resolveFacts,
   resolutionKey,
@@ -162,6 +163,43 @@ export interface ToFactsResult {
  * gate 2, which is the gate that matters: an unquotable fact is one nobody can
  * check, and this system's entire claim is that its facts can be checked.
  */
+/**
+ * The three gates, in one place, because two callers apply them.
+ *
+ * `claimsToFacts` builds trip-local facts and `toClaimRecords` builds durable
+ * shared claims, and both must drop exactly the same things — a claim that is
+ * good enough to store and not good enough to act on, or the reverse, would be
+ * a store and a planner disagreeing about what evidence is.
+ */
+export type ClaimGate =
+  | { ok: false }
+  | { ok: true; payload: unknown; excerpt: string | undefined; structured: boolean };
+
+export function gateClaim(claim: ExtractedClaim, document: RetrievedDocument | undefined): ClaimGate {
+  // 1. It must point at a document we actually fetched, for its own subject.
+  if (!document || document.subjectId !== claim.subjectId) return { ok: false };
+
+  // 2. A directly-stated claim must quote the page or name a structured field.
+  //    An unquotable fact is one nobody can check, and this system's entire
+  //    claim is that its facts can be checked.
+  const excerpt = claim.evidenceExcerpt?.trim().slice(0, MAX_EVIDENCE_EXCERPT_CHARS);
+  const structured = claim.evidenceField !== undefined;
+  if (claim.derivation === 'directly_stated' && !structured && !excerpt) return { ok: false };
+
+  // 3. The payload for its path must parse. Dropped rather than coerced.
+  const payload = parsePayload(claim.factPath, claim.payload);
+  if (payload === undefined && requiresPayload(claim.factPath)) return { ok: false };
+
+  return { ok: true, payload, excerpt, structured };
+}
+
+/** How volatile a path is, and how long a fact on it stays worth believing. */
+export function volatilityOf(path: FactPath): SourceVolatility {
+  return VOLATILITY[path] ?? 'stable';
+}
+
+export { factKindFor };
+
 export function claimsToFacts(input: ToFactsInput): ToFactsResult {
   const facts: SourceFact[] = [];
   const payloads = new Map<string, unknown>();
@@ -170,23 +208,12 @@ export function claimsToFacts(input: ToFactsInput): ToFactsResult {
 
   for (const claim of input.claims) {
     const document = input.documents[claim.documentIndex];
-    if (!document || document.subjectId !== claim.subjectId) {
+    const gate = gateClaim(claim, document);
+    if (!gate.ok || !document) {
       discarded += 1;
       continue;
     }
-
-    const excerpt = claim.evidenceExcerpt?.trim().slice(0, MAX_EVIDENCE_EXCERPT_CHARS);
-    const structured = claim.evidenceField !== undefined;
-    if (claim.derivation === 'directly_stated' && !structured && !excerpt) {
-      discarded += 1;
-      continue;
-    }
-
-    const payload = parsePayload(claim.factPath, claim.payload);
-    if (payload === undefined && requiresPayload(claim.factPath)) {
-      discarded += 1;
-      continue;
-    }
+    const { payload, excerpt, structured } = gate;
 
     const id = `fact-${document.subjectId}-${claim.factPath}-${sequence}`;
     sequence += 1;
@@ -302,12 +329,33 @@ export interface BuildEvidenceInput {
   payloads: Map<string, unknown>;
   /** Official URLs supplied by an open structured source, before any search. */
   knownOfficialUrls: Map<string, { url: string; authority: string; name: string }>;
+  /**
+   * The traveller's dates, so a dated fact can be judged against the trip rather
+   * than against today.
+   *
+   * Without them, a closure that ended last month still removes a place, and one
+   * that begins the week after somebody leaves does too. Both were happening: a
+   * closure blocked on severity alone, with its own dates read only for display.
+   */
+  dates: readonly string[];
+  /**
+   * Answers already resolved for exactly this evidence.
+   *
+   * Only ever supplied for paths whose answer does not depend on the traveller's
+   * calendar, and only used when the claim set behind it is identical. The
+   * resolver checks that itself — this is a hand-off, not a licence.
+   */
+  preresolved?: ReadonlyMap<string, ResolvedFact>;
   now: Date;
 }
 
 export interface BuildEvidenceResult {
   evidence: RegionEvidence;
   resolved: ResolvedFact[];
+  /** Indexed, so a caller can persist the answer for one cell. */
+  byKey: Map<string, ResolvedFact>;
+  /** How many answers were handed in rather than computed. */
+  reusedResolutions: number;
   /** Calendars we are entitled to assert, for the subjects that earned one. */
   calendars: OperatingCalendar[];
   /** Subjects a source says are shut, and should not be scheduled at all. */
@@ -318,7 +366,12 @@ export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
   const wanted = input.subjects.flatMap((subject) =>
     subject.wantedPaths.map((factPath) => ({ subjectId: subject.id, factPath })),
   );
-  const { resolved, byKey } = resolveFacts({ facts: input.facts, wanted, now: input.now });
+  const { resolved, byKey, reusedResolutions } = resolveFacts({
+    facts: input.facts,
+    wanted,
+    ...(input.preresolved ? { preresolved: input.preresolved } : {}),
+    now: input.now,
+  });
 
   const factsById = new Map(input.facts.map((fact) => [fact.id, fact]));
   const places: PlaceEvidence[] = [];
@@ -350,7 +403,10 @@ export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
 
     const booking = buildBooking(claimFor, acceptedPayload, officialUrl);
     const costs = buildCosts(claimFor, acceptedPayload);
-    const closures = buildClosures(subject.id, byKey, factsById, input.payloads);
+    const closures = buildClosures(subject.id, byKey, factsById, input.payloads, {
+      dates: input.dates,
+      now: input.now,
+    });
     const safety = buildSafety(subject.id, byKey, factsById, input.payloads);
 
     const durationPayload = acceptedPayload('duration.typical') as
@@ -389,6 +445,8 @@ export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
   return {
     evidence: { version: REGION_EVIDENCE_VERSION, places, regionSafety: [] },
     resolved,
+    byKey,
+    reusedResolutions,
     calendars,
     blockedSubjectIds: [...blocked].sort(),
   };
@@ -505,6 +563,7 @@ function buildClosures(
   byKey: Map<string, ResolvedFact>,
   factsById: Map<string, SourceFact>,
   payloads: Map<string, unknown>,
+  when: { dates: readonly string[]; now: Date },
 ): ClosureEvidence[] {
   const entry = byKey.get(resolutionKey(subjectId, 'hours.closure'));
   if (!entry) return [];
@@ -527,15 +586,42 @@ function buildClosures(
      * Removing a place because one of two disagreeing sources says it is shut
      * would let the less reliable source win by being the more alarming one.
      */
+    /**
+     * A closure is judged against the *trip*, not against today.
+     *
+     * `assessFreshness` answers three questions at once that were previously
+     * being answered by severity alone: has this window already ended before the
+     * traveller arrives, does it begin after they leave, and is the notice old
+     * enough that it may have been lifted without anybody updating the page. A
+     * closure failing any of them is shown and never enforced — because removing
+     * a place on the strength of a notice that no longer applies is the same
+     * class of error as scheduling one that is shut.
+     */
+    const freshness = assessFreshness({
+      factPath: 'hours.closure',
+      contentObservedAt: fact.retrievedAt,
+      ...(fact.publishedAt ? { publishedAt: fact.publishedAt } : {}),
+      ...(payload.from ? { appliesFrom: payload.from } : {}),
+      ...(payload.to ? { appliesTo: payload.to } : {}),
+      travelDates: when.dates,
+      now: when.now,
+      ...(fact.shelfLifeDays !== undefined ? { shelfLifeDays: fact.shelfLifeDays } : {}),
+    });
+
     const severity: AdvisorySeverity =
       entry.state === 'conflicted' || entry.state === 'stale' || entry.state === 'inferred'
         ? 'cautions'
-        : payload.severity;
+        : freshness.enforceable
+          ? payload.severity
+          : 'informs';
     closures.push({
       statement: fact.statement.slice(0, 300),
       ...(payload.from ? { from: payload.from } : {}),
       ...(payload.to ? { to: payload.to } : {}),
       severity,
+      ...(freshness.enforceable
+        ? {}
+        : { note: freshness.rationale }),
       claim: { factId: fact.id, state: entry.state, factPath: 'hours.closure' },
     });
   }

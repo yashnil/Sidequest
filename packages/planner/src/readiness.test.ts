@@ -25,11 +25,15 @@ function rejection(reasonCode: UnscheduledPlace['reasonCode'], name: string): Un
 describe('planner readiness', () => {
   it('is schema-valid and counts every rejection exactly once', () => {
     const readiness = buildPlannerReadiness({
-      consideredCount: 37,
-      selectedCount: 9,
-      eligibleCount: 9,
-      feasibleCount: 9,
-      scheduledCount: 0,
+      funnel: {
+        considered: 37,
+        selected: 9,
+        eligible: 9,
+        accessFeasible: 9,
+        hoursFeasible: 9,
+        feasible: 9,
+        scheduled: 0,
+      },
       dayCount: 5,
       unscheduled: [
         rejection('exceeds_daily_travel', 'A'),
@@ -48,11 +52,15 @@ describe('planner readiness', () => {
 
   it('reproduces the live Bali shape: everything reachable, nothing schedulable', () => {
     const readiness = buildPlannerReadiness({
-      consideredCount: 37,
-      selectedCount: 9,
-      eligibleCount: 9,
-      feasibleCount: 9,
-      scheduledCount: 0,
+      funnel: {
+        considered: 37,
+        selected: 9,
+        eligible: 9,
+        accessFeasible: 9,
+        hoursFeasible: 9,
+        feasible: 9,
+        scheduled: 0,
+      },
       dayCount: 5,
       unscheduled: Array.from({ length: 9 }, (_, index) =>
         rejection('exceeds_daily_travel', `Place ${index}`),
@@ -76,17 +84,30 @@ describe('planner readiness', () => {
 
   it('names the right remedy when nothing could be measured at all', () => {
     const readiness = buildPlannerReadiness({
-      consideredCount: 12,
-      selectedCount: 5,
-      eligibleCount: 0,
-      feasibleCount: 0,
-      scheduledCount: 0,
+      funnel: {
+        considered: 12,
+        selected: 5,
+        eligible: 0,
+        accessFeasible: 0,
+        hoursFeasible: 0,
+        feasible: 0,
+        scheduled: 0,
+      },
       dayCount: 4,
       unscheduled: Array.from({ length: 5 }, (_, index) =>
         rejection('missing_travel_data', `Place ${index}`),
       ),
+      unresolved: { routePairs: 5 },
     });
     expect(readiness.summary).toContain('travel time we could measure');
+    /**
+     * Our failure, not the destination's.
+     *
+     * "We could not measure anything" must never be reported as "there is
+     * nothing here" — the first is an outage on our side and the second is a
+     * claim about somebody's trip.
+     */
+    expect(readiness.level).toBe('infrastructure_failure');
     const helps = new Map(readiness.remedies.map((entry) => [entry.remedy, entry.likelyToHelp]));
     expect(helps.get('retry')).toBe(true);
     expect(helps.get('adjust_transport')).toBe(false);
@@ -94,11 +115,15 @@ describe('planner readiness', () => {
 
   it('names the right remedy when everything is shut', () => {
     const readiness = buildPlannerReadiness({
-      consideredCount: 20,
-      selectedCount: 6,
-      eligibleCount: 6,
-      feasibleCount: 0,
-      scheduledCount: 0,
+      funnel: {
+        considered: 20,
+        selected: 6,
+        eligible: 6,
+        accessFeasible: 6,
+        hoursFeasible: 0,
+        feasible: 0,
+        scheduled: 0,
+      },
       dayCount: 3,
       unscheduled: Array.from({ length: 6 }, (_, index) =>
         rejection('closed_on_trip_dates', `Place ${index}`),
@@ -112,11 +137,15 @@ describe('planner readiness', () => {
 
   it('keeps two tied blockers rather than picking one of them', () => {
     const readiness = buildPlannerReadiness({
-      consideredCount: 10,
-      selectedCount: 4,
-      eligibleCount: 4,
-      feasibleCount: 4,
-      scheduledCount: 0,
+      funnel: {
+        considered: 10,
+        selected: 4,
+        eligible: 4,
+        accessFeasible: 4,
+        hoursFeasible: 4,
+        feasible: 4,
+        scheduled: 0,
+      },
       dayCount: 3,
       unscheduled: [
         rejection('exceeds_daily_travel', 'A'),
@@ -130,11 +159,15 @@ describe('planner readiness', () => {
 
   it('produces the same result twice for the same input', () => {
     const input = {
-      consideredCount: 9,
-      selectedCount: 9,
-      eligibleCount: 9,
-      feasibleCount: 9,
-      scheduledCount: 0,
+      funnel: {
+        considered: 9,
+        selected: 9,
+        eligible: 9,
+        accessFeasible: 9,
+        hoursFeasible: 9,
+        feasible: 9,
+        scheduled: 0,
+      },
       dayCount: 5,
       unscheduled: [
         rejection('hours_do_not_fit', 'B'),
@@ -178,8 +211,9 @@ describe('a plan that would have had no stops', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.code).toBe('planner_coverage_insufficient');
-    expect(result.readiness?.scheduledCount).toBe(0);
-    expect(result.readiness?.selectedCount).toBeGreaterThan(0);
+    expect(result.readiness?.funnel.scheduled).toBe(0);
+    expect(result.readiness?.funnel.selected).toBeGreaterThan(0);
+    expect(result.readiness?.level).toBe('insufficient');
   });
 
   it('says the round trip is the problem, with the real number in it', () => {

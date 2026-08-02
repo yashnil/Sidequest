@@ -16,6 +16,7 @@ import {
   type OperatingCalendar,
   type Place,
   type WeatherLocation,
+  type FactPath,
 } from '@sidequest/core';
 import { buildInventory, foodVenueFromRecord, type InventoryResult } from '@sidequest/compiler';
 import type { SourceRecord } from '@sidequest/core';
@@ -125,6 +126,8 @@ export interface LiveDiagnostics {
   poiCalls: number;
   poiCacheHits: number;
   poiElements: number;
+  /** Conditional requests the server answered with "nothing changed". */
+  pagesRevalidated: number;
   routeCalls: number;
   routePairs: number;
   routeCacheHits: number;
@@ -361,6 +364,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     poiCalls: 0,
     poiCacheHits: 0,
     poiElements: 0,
+    pagesRevalidated: 0,
     routeCalls: 0,
     routePairs: 0,
     routeCacheHits: 0,
@@ -1198,6 +1202,14 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
    */
   const sourceDiscovery: SourceDiscoveryProvider = {
     name: 'wikidata+search',
+    /**
+     * Bumped whenever the query wording or the tier order changes.
+     *
+     * It is part of the shared discovery cache key, so a remembered "nobody
+     * publishes this" from an older phrasing cannot outlive the phrasing that
+     * produced it.
+     */
+    version: PROMPT_VERSIONS.findOfficialSources,
     async discover({ subjects, maxSearches, maxReferencesPerSubject }) {
       const gaps: ProviderGap[] = [];
       const references: SourceReference[] = [];
@@ -1327,6 +1339,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     name: 'safe-fetch',
     async retrieve({ references, maxPages, maxBytes, deadlineMs }) {
       const documents: RetrievedDocument[] = [];
+      const unchanged: NonNullable<SourceRetrievalResult['unchanged']> = [];
       const rejected: SourceRetrievalResult['rejected'] = [];
       let bytes = 0;
 
@@ -1345,7 +1358,38 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             maxBytes: 1_500_000,
             timeoutMs: 8_000,
             maxRedirects: 3,
+            ...(reference.conditional ? { validators: reference.conditional } : {}),
           });
+
+          /**
+           * The server says nothing changed.
+           *
+           * Reported separately from a document, because a 304 has no body and
+           * an empty body is not an empty page. The caller holds the content
+           * already; what it gains here is a refreshed set of validators and the
+           * knowledge that it did not have to transfer anything.
+           */
+          if (result.notModified) {
+            diagnostics.pagesRevalidated += 1;
+            unchanged.push({
+              url: reference.url,
+              subjectId: reference.subjectId,
+              validators: {
+                ...(result.metadata.etag ? { etag: result.metadata.etag } : {}),
+                weakEtag: result.metadata.weakEtag,
+                ...(result.metadata.lastModified
+                  ? { lastModified: result.metadata.lastModified }
+                  : {}),
+                ...(result.metadata.cacheControl
+                  ? { cacheControl: result.metadata.cacheControl }
+                  : {}),
+                ...(result.metadata.vary ? { vary: result.metadata.vary } : {}),
+              },
+              bytesAvoided: 0,
+            });
+            continue;
+          }
+
           bytes += result.body.length;
           diagnostics.pagesFetched += 1;
 
@@ -1377,22 +1421,45 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             authority: classified.authority,
             publisher: classified.publisher,
             domain: classified.domain,
+            validators: {
+              ...(result.metadata.etag ? { etag: result.metadata.etag } : {}),
+              weakEtag: result.metadata.weakEtag,
+              ...(result.metadata.lastModified
+                ? { lastModified: result.metadata.lastModified }
+                : {}),
+              ...(result.metadata.cacheControl
+                ? { cacheControl: result.metadata.cacheControl }
+                : {}),
+              ...(result.metadata.vary ? { vary: result.metadata.vary } : {}),
+            },
+            truncated: result.truncated,
+            redirects: result.redirects,
           });
         } catch (error) {
           diagnostics.pagesRejected += 1;
           const unsafe = error instanceof UnsafeUrlError;
+          /**
+           * "The site asks us not to" is its own answer.
+           *
+           * Folding it into "unsafe" told a traveller their museum's page was
+           * dangerous when the truth was that we were being polite, and left the
+           * store unable to remember not to ask again.
+           */
+          const robots = unsafe && (error as UnsafeUrlError).code === 'robots_disallowed';
           rejected.push({
             url: reference.url,
             subjectId: reference.subjectId,
-            reason: unsafe ? 'rejected_unsafe_source' : 'provider_error',
-            detail: unsafe
-              ? 'That page was not safe to read, so we did not.'
-              : 'That page did not answer in time.',
+            reason: robots ? 'blocked_by_robots' : unsafe ? 'rejected_unsafe_source' : 'provider_error',
+            detail: robots
+              ? 'That site asks us not to read that page, so we did not.'
+              : unsafe
+                ? 'That page was not safe to read, so we did not.'
+                : 'That page did not answer in time.',
           });
         }
       }
 
-      return { documents, rejected, gaps: [], bytes };
+      return { documents, unchanged, rejected, gaps: [], bytes };
     },
   };
 
@@ -1407,13 +1474,36 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
    */
   const extraction: FactExtractionProvider = {
     name: 'jsonld+anthropic',
+    promptVersion: PROMPT_VERSIONS.extractFacts,
+    schemaVersion: 'planning-extraction/1',
+    modelId: process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL,
     async extract({ subjects, documents, maxCalls }) {
+      const before = { ...model.usage };
       const claims: ExtractedClaim[] = [];
       const gaps: ProviderGap[] = [];
       const subjectIndex = new Map(subjects.map((subject, index) => [subject.id, index]));
 
+      /**
+       * DETERMINISTIC FIRST, AND THE MODEL ONLY FOR WHAT IS LEFT.
+       *
+       * A `schema.org/openingHoursSpecification` block is the operator stating
+       * their hours in machine-readable form: free to read, impossible to
+       * misread, and it arrives with a field pointer rather than a quotation.
+       *
+       * What changed here is the *second* half of that argument. The parser ran
+       * first and the model was then asked anyway, on every page over two
+       * hundred characters — so a page whose structured data already answered
+       * every question we had still cost a model call. Now a document is only
+       * sent to the model when something we wanted is still unresolved, and the
+       * fact paths that caused the call are recorded.
+       */
+      const wantedBySubject = new Map<string, ReadonlySet<FactPath>>(
+        subjects.map((subject) => [subject.id, new Set(subject.wantedPaths)]),
+      );
+
       const needsModel: { index: number; document: RetrievedDocument }[] = [];
       for (const [index, document] of documents.entries()) {
+        const resolved = new Set<FactPath>();
         const hours = hoursFromJsonLd(document.structuredData);
         if (hours) {
           claims.push({
@@ -1425,7 +1515,12 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             derivation: 'directly_stated',
             payload: hours,
           });
+          resolved.add('hours.weekly');
         }
+
+        const wanted = wantedBySubject.get(document.subjectId) ?? new Set<FactPath>();
+        const unresolved = [...wanted].filter((path) => !resolved.has(path));
+        if (unresolved.length === 0) continue;
         if (document.text.length > 200) needsModel.push({ index, document });
       }
 
@@ -1478,6 +1573,17 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         promptVersion: PROMPT_VERSIONS.extractFacts,
         schemaVersion: 'planning-extraction/1',
         modelId: process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL,
+        /**
+         * What this call actually cost, measured as a delta rather than read
+         * from a running total, so the evidence store can apportion it across
+         * the pages the batch covered.
+         */
+        tokens: {
+          input: model.usage.inputTokens - before.inputTokens,
+          output: model.usage.outputTokens - before.outputTokens,
+          cacheRead: model.usage.cacheReadTokens - before.cacheReadTokens,
+          cacheWrite: model.usage.cacheWriteTokens - before.cacheWriteTokens,
+        },
       };
     },
   };

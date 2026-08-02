@@ -135,6 +135,15 @@ export const closureEvidenceSchema = z
     from: isoDateSchema.optional(),
     to: isoDateSchema.optional(),
     severity: advisorySeveritySchema,
+    /**
+     * Why this is being shown rather than enforced, where it is not enforced.
+     *
+     * A closure that ended before the traveller arrives, begins after they
+     * leave, or is old enough to have been lifted without anybody updating the
+     * page is still worth showing and must not remove a place. The note is what
+     * stops "shown but not acted on" reading as an inconsistency.
+     */
+    note: z.string().min(1).max(200).optional(),
     claim: evidenceClaimSchema,
   })
   .refine((value) => value.from === undefined || value.to === undefined || value.to >= value.from, {

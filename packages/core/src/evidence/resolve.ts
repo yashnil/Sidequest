@@ -98,6 +98,17 @@ export interface ResolveInput {
   facts: readonly SourceFact[];
   /** Every subject and path we wanted an answer for, so silence is reported. */
   wanted?: readonly { subjectId: string; factPath: FactPath }[];
+  /**
+   * Answers already resolved for exactly this evidence, keyed by
+   * `resolutionKey`.
+   *
+   * Used only when the entry's fact-id set is **identical** to the group being
+   * resolved — a shared answer for a different set of claims is a different
+   * answer, and serving it would be the cache deciding what the evidence says.
+   * Reserved for paths whose answer does not depend on the traveller's dates;
+   * `isContextIndependent` is the gate that keeps the dated ones out.
+   */
+  preresolved?: ReadonlyMap<string, ResolvedFact>;
   now: Date;
 }
 
@@ -105,6 +116,8 @@ export interface ResolveResult {
   resolved: ResolvedFact[];
   /** Indexed for the callers that ask about one cell. */
   byKey: Map<string, ResolvedFact>;
+  /** How many answers came from a shared resolution rather than being computed. */
+  reusedResolutions: number;
 }
 
 export function resolutionKey(subjectId: string, path: FactPath): string {
@@ -127,15 +140,30 @@ export function resolveFacts(input: ResolveInput): ResolveResult {
   }
 
   const resolved: ResolvedFact[] = [];
+  let reusedResolutions = 0;
   for (const [key, facts] of [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const [subjectId = '', path = ''] = key.split('::');
+    const held = input.preresolved?.get(key);
+    if (held && sameFactSet(held.factIds, facts)) {
+      resolved.push(held);
+      reusedResolutions += 1;
+      continue;
+    }
     resolved.push(resolveOne(subjectId, path as FactPath, facts, input.now));
   }
 
   const byKey = new Map(
     resolved.map((entry) => [resolutionKey(entry.subjectId, entry.factPath), entry]),
   );
-  return { resolved, byKey };
+  return { resolved, byKey, reusedResolutions };
+}
+
+/** Identical evidence, or it is not the same answer. Order does not matter. */
+function sameFactSet(held: readonly string[], facts: readonly SourceFact[]): boolean {
+  if (held.length !== facts.length) return false;
+  const ours = facts.map((fact) => fact.id).sort();
+  const theirs = [...held].sort();
+  return ours.every((id, index) => id === theirs[index]);
 }
 
 function resolveOne(

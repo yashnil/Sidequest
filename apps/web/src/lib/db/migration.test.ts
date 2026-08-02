@@ -27,7 +27,7 @@ import { COLUMN_MIGRATIONS, SCHEMA_SQL } from './schema';
  * a Phase-8 artifact with evidence and no pack, and an authored-region trip that
  * predates the compiler entirely.
  */
-const PRE_PHASE_9_SCHEMA = `
+const PRE_PHASE_10_SCHEMA = `
 CREATE TABLE trips (
   id TEXT PRIMARY KEY, mode TEXT NOT NULL, destination_input TEXT NOT NULL,
   region_id TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
@@ -114,6 +114,15 @@ CREATE TABLE source_documents (
   robots_allowed INTEGER NOT NULL, retrieved_at TEXT NOT NULL, published_at TEXT,
   PRIMARY KEY (compiled_region_id, url, subject_id)
 );
+CREATE TABLE region_packs (
+  id TEXT PRIMARY KEY, scope_hash TEXT NOT NULL, catalog TEXT NOT NULL,
+  release_id TEXT NOT NULL, schema_version INTEGER NOT NULL, state TEXT NOT NULL,
+  content_hash TEXT NOT NULL, record_count INTEGER NOT NULL,
+  payload_json TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT
+);
+CREATE UNIQUE INDEX idx_region_packs_unique_ready
+  ON region_packs(scope_hash, catalog, release_id)
+  WHERE state IN ('ready', 'partial');
 `;
 
 let directory: string;
@@ -154,7 +163,7 @@ beforeEach(() => {
   path = join(directory, 'legacy.db');
   const db = new Database(path);
   db.pragma('foreign_keys = ON');
-  db.exec(PRE_PHASE_9_SCHEMA);
+  db.exec(PRE_PHASE_10_SCHEMA);
 
   const now = '2026-07-30T10:00:00.000Z';
 
@@ -234,6 +243,33 @@ beforeEach(() => {
     null, null, 'region-2', 'corr-2',
   );
 
+  // (6) A Phase-9 trip: an artifact that names the pack it was built from, and
+  //     the pack itself, shared and not owned by the trip.
+  db.prepare(`INSERT INTO trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    'trip-packed', 'known', 'Packed Place', 'compiled-pack',
+    '2026-11-01', '2026-11-05', '12:00', '09:00', 2, 0, '[]', 'planned', now, now,
+  );
+  db.prepare(`INSERT INTO compiled_regions VALUES (?,?,?,?,?,?,?)`).run(
+    'region-3', 'trip-packed', 'fingerprint-3', 1, 'sidequest-compiler/1',
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'region-3',
+      places: [],
+      evidence: { places: [], region: [] },
+      regionPack: {
+        packId: 'pack-9',
+        releaseId: '2026-07-22.0',
+        catalog: 'overture',
+        reused: false,
+      },
+    }),
+    now,
+  );
+  db.prepare(`INSERT INTO region_packs VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+    'pack-9', 'scope-hash-9', 'overture', '2026-07-22.0', 1, 'ready',
+    'content-hash-9', 3805, '{"schemaVersion":1}', now, null,
+  );
+
   db.prepare(`INSERT INTO provider_cache VALUES (?,?,?,?,?)`).run(
     'geocode|x', 'nominatim', '[]', now, '2027-01-01T00:00:00.000Z',
   );
@@ -244,7 +280,7 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-describe('a pre-Phase-9 database survives the upgrade', () => {
+describe('a pre-Phase-10 database survives the upgrade', () => {
   it('gains the new tables without touching a single stored row', () => {
     const before = new Database(path);
     const counts = {
@@ -265,15 +301,15 @@ describe('a pre-Phase-9 database survives the upgrade', () => {
     expect((after.prepare('SELECT COUNT(*) AS n FROM compilation_jobs').get() as { n: number }).n).toBe(counts.jobs);
     expect((after.prepare('SELECT COUNT(*) AS n FROM compiled_regions').get() as { n: number }).n).toBe(counts.regions);
 
-    // The new table exists and starts empty; the one that already existed keeps
-    // what was in it.
+    // Tables that already existed keep exactly what was in them: the pack a
+    // Phase-9 plan names is still there, and still shared rather than owned.
     const packs = after
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='region_packs'")
       .all();
     expect(packs).toHaveLength(1);
     expect(
       (after.prepare('SELECT COUNT(*) AS n FROM region_packs').get() as { n: number }).n,
-    ).toBe(0);
+    ).toBe(1);
     expect(
       (after.prepare('SELECT COUNT(*) AS n FROM source_documents').get() as { n: number }).n,
     ).toBe(1);
@@ -369,6 +405,136 @@ describe('a pre-Phase-9 database survives the upgrade', () => {
     after.close();
     expect(job.state).toBe('partial');
     expect(job.compiled_region_id).toBe('region-2');
+  });
+
+  it('gains every evidence table, empty, without disturbing what was already held', () => {
+    const before = new Database(path);
+    const packs = (before.prepare('SELECT COUNT(*) AS n FROM region_packs').get() as { n: number })
+      .n;
+    before.close();
+
+    migrate(path);
+
+    const after = new Database(path);
+    const tables = (
+      after
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'evidence_%'")
+        .all() as { name: string }[]
+    ).map((row) => row.name);
+    expect(tables.sort()).toEqual([
+      'evidence_claims',
+      'evidence_discovery',
+      'evidence_documents',
+      'evidence_extractions',
+      'evidence_fact_sets',
+      'evidence_operations',
+      'evidence_parses',
+      'evidence_research_attempts',
+      'evidence_retrievals',
+      'evidence_sources',
+    ]);
+    for (const table of tables) {
+      expect(
+        (after.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n,
+        `${table} should start empty`,
+      ).toBe(0);
+    }
+    // The pack a Phase-9 plan was built from is still there and still shared.
+    expect(
+      (after.prepare('SELECT COUNT(*) AS n FROM region_packs').get() as { n: number }).n,
+    ).toBe(packs);
+    after.close();
+  });
+
+  it('leaves a Phase-9 artifact byte-identical, pack reference and all', () => {
+    const before = new Database(path);
+    const original = (
+      before.prepare('SELECT payload_json FROM compiled_regions WHERE id = ?').get('region-3') as {
+        payload_json: string;
+      }
+    ).payload_json;
+    before.close();
+
+    migrate(path);
+
+    const after = new Database(path);
+    const migrated = (
+      after.prepare('SELECT payload_json FROM compiled_regions WHERE id = ?').get('region-3') as {
+        payload_json: string;
+      }
+    ).payload_json;
+    after.close();
+
+    expect(migrated).toBe(original);
+    // Evidence gathered before the shared store existed is not relabelled with
+    // the new verification semantics, and does not acquire a document version it
+    // never had.
+    const parsed = JSON.parse(migrated) as { regionPack?: { packId?: string } };
+    expect(parsed.regionPack?.packId).toBe('pack-9');
+  });
+
+  it('lets at most one build hold an evidence operation at a time', () => {
+    migrate(path);
+    const db = new Database(path);
+    const insert = db.prepare(
+      `INSERT INTO evidence_operations
+         (operation_key, id, state, owner, started_at, heartbeat_at)
+       VALUES (?,?,?,?,?,?)`,
+    );
+    insert.run('retrieve:abc', 'op-1', 'running', '1', 'now', 'now');
+    // Two compilations racing for one page must coalesce rather than both pay.
+    expect(() => insert.run('retrieve:abc', 'op-2', 'running', '2', 'now', 'now')).toThrow();
+    // A finished one sits outside the index, so it never blocks the next.
+    expect(() => insert.run('retrieve:abc', 'op-3', 'done', '3', 'now', 'now')).not.toThrow();
+    db.close();
+  });
+
+  it('stores one document version per source and content hash, never two', () => {
+    migrate(path);
+    const db = new Database(path);
+    const insert = db.prepare(
+      `INSERT INTO evidence_documents
+         (id, source_id, content_digest, status, content_bytes, truncated,
+          content_observed_at, last_checked_at, retrieval_version, payload_json)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    );
+    const args = (id: string) =>
+      [id, 'src-1', 'sha256:aa', 200, 100, 0, 'now', 'now', 'v1', '{}'] as const;
+    insert.run(...args('doc-1'));
+    // The same bytes read twice is the same version. A second row would make
+    // "which one did this fact come from" ambiguous.
+    expect(() => insert.run(...args('doc-2'))).toThrow();
+    db.close();
+  });
+
+  it('does not let one corrupted evidence row reach any other', () => {
+    migrate(path);
+    const db = new Database(path);
+    db.prepare(
+      `INSERT INTO evidence_discovery (key, outcome, provider, payload_json, discovered_at, expires_at)
+       VALUES (?,?,?,?,?,?)`,
+    ).run('good', 'found', 'p', '{"ok":true}', 'now', '2030-01-01T00:00:00.000Z');
+    db.prepare(
+      `INSERT INTO evidence_discovery (key, outcome, provider, payload_json, discovered_at, expires_at)
+       VALUES (?,?,?,?,?,?)`,
+    ).run('bad', 'found', 'p', 'not json at all', 'now', '2030-01-01T00:00:00.000Z');
+
+    // Nothing reads across rows, so a row that will not parse is one row.
+    const rows = db
+      .prepare('SELECT key, payload_json FROM evidence_discovery ORDER BY key')
+      .all() as { key: string; payload_json: string }[];
+    const parsed = rows.map((row) => {
+      try {
+        return { key: row.key, ok: Boolean(JSON.parse(row.payload_json)) };
+      } catch {
+        return { key: row.key, ok: false };
+      }
+    });
+    expect(parsed).toEqual([
+      { key: 'bad', ok: false },
+      { key: 'good', ok: true },
+    ]);
+    db.close();
   });
 
   it('allows at most one usable pack per piece of ground and release', () => {

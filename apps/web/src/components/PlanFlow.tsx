@@ -14,6 +14,7 @@ import {
   type DestinationCandidate,
   type GeographicScope,
   type StageRecord,
+  WORK_PLAN_DECISION_LABELS,
 } from '@sidequest/core';
 import { Badge, buttonClass, ErrorNote, Fieldset, FOCUS_RING, OVERLAY_INPUT, Panel, cx } from './ui';
 import {
@@ -86,6 +87,15 @@ export interface PlanFlowProps {
     packId: string;
     contentHash: string;
   } | null;
+  /**
+   * What this build reused instead of buying again.
+   *
+   * Null when evidence sharing is off, and that distinction is deliberate: an
+   * empty panel would read as "nothing was reused", where the truth is "nothing
+   * was shared". Every entry is a decision the compilation made *before* it ran,
+   * so this is a record rather than a reconstruction.
+   */
+  workPlan: { step: string; decision: string; reason: string; items?: number }[] | null;
   providerMessage: string;
   providerReady: boolean;
 }
@@ -658,6 +668,58 @@ function RegionDataPanel({ data }: { data: NonNullable<PlanFlowProps['regionData
   );
 }
 
+/**
+ * WHAT THIS BUILD DID NOT HAVE TO DO.
+ *
+ * Collapsed and last, because it is an operator's question rather than a
+ * traveller's. It is here at all because "why was this one fast" needs an answer
+ * that is a record rather than a guess — and because a reuse figure sitting
+ * beside the coverage report is the only place somebody would notice if the two
+ * ever disagreed.
+ *
+ * Deliberately shows *operations*, never a confidence. Reuse makes a run cheap
+ * and is not allowed to make anything more certain, so nothing in this panel
+ * touches a verification state or a coverage level.
+ */
+function WorkPlanPanel({ entries }: { entries: NonNullable<PlanFlowProps['workPlan']> }) {
+  if (entries.length === 0) return null;
+  return (
+    <details className="mt-4" data-testid="work-plan">
+      <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+        What this build reused
+      </summary>
+      <Panel className="mt-3 p-4">
+        <ul className="space-y-2 text-sm">
+          {entries.map((entry) => (
+            <li key={entry.step}>
+              <span className="text-ink">{stepLabel(entry.step)}</span>
+              <span className="text-ink-faint"> — {WORK_PLAN_DECISION_LABELS[
+                entry.decision as keyof typeof WORK_PLAN_DECISION_LABELS
+              ] ?? entry.decision}</span>
+              <p className="text-ink-muted">{entry.reason}</p>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+    </details>
+  );
+}
+
+/**
+ * The traveller-facing name for a work-plan step.
+ *
+ * Read from the one stage vocabulary rather than a second copy of it: a local
+ * map drifts silently, and the way it fails is that a newly-added stage appears
+ * to a traveller as a raw identifier — which is exactly how `reusing_shared_claims`
+ * first reached this panel.
+ */
+function stepLabel(step: string): string {
+  return (
+    COMPILATION_STAGE_LABELS[step as keyof typeof COMPILATION_STAGE_LABELS] ??
+    step.replaceAll('_', ' ')
+  );
+}
+
 function ReadyStep({
   tripId,
   coverage,
@@ -666,6 +728,7 @@ function ReadyStep({
   compiledSummary,
   snapshot,
   regionData,
+  workPlan,
 }: PlanFlowProps) {
   if (!coverage || !compiledSummary) return null;
   const weak = coverage.dimensions.filter(
@@ -792,6 +855,7 @@ function ReadyStep({
         </p>
 
         {regionData ? <RegionDataPanel data={regionData} /> : null}
+        {workPlan ? <WorkPlanPanel entries={workPlan} /> : null}
       </section>
 
       <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-rule pt-6">

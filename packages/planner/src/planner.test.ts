@@ -807,8 +807,8 @@ describe('planner failure modes', () => {
     const readiness = result.readiness;
     expect(readiness).toBeDefined();
     if (!readiness) return;
-    expect(readiness.selectedCount).toBe(1);
-    expect(readiness.scheduledCount).toBe(0);
+    expect(readiness.funnel.selected).toBe(1);
+    expect(readiness.funnel.scheduled).toBe(0);
     // Every rejection is accounted for, and the dominant one names the blocker.
     expect(readiness.rejections.reduce((sum, entry) => sum + entry.count, 0)).toBe(1);
     expect(readiness.dominantBlockers).toHaveLength(1);

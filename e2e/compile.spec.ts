@@ -352,11 +352,15 @@ test('a plan with nothing in it is refused, with the funnel that explains why', 
   await expect(panel).toBeVisible({ timeout: 60_000 });
   expect(page.url()).not.toMatch(/itinerary/);
 
-  // The funnel, as numbers rather than as an apology.
+  // The funnel, gate by gate, as numbers rather than as an apology.
   await expect(panel.getByText('On the board')).toBeVisible();
-  await expect(panel.getByText('Reachable & open')).toBeVisible();
+  await expect(panel.getByText('Measurable')).toBeVisible();
+  await expect(panel.getByText('Way in')).toBeVisible();
+  await expect(panel.getByText('Open', { exact: true })).toBeVisible();
   await expect(panel.getByText('Scheduled')).toBeVisible();
   await expect(panel.getByText('What blocked them')).toBeVisible();
+  // The level, as a rule rather than a score.
+  await expect(page.getByTestId('readiness-level')).toHaveText('Not enough to plan on');
 
   // And what to do about it, including what not to bother with.
   const ruledOut = panel.getByText('What would not help');
@@ -367,6 +371,19 @@ test('a plan with nothing in it is refused, with the funnel that explains why', 
   // Nothing was persisted: the itinerary page still says there is no plan.
   await page.goto(`/trips/${id}/itinerary`);
   await expect(page.getByText(/No trip built yet/i).first()).toBeVisible();
+
+  /**
+   * And the explanation survives the reload that loses the action's answer.
+   *
+   * Before this was persisted, a traveller who refreshed was left with a board
+   * and a button that appeared to do nothing — the refusal existed only in a
+   * server action's return value. A finding that does not survive a reload is
+   * not much of a finding.
+   */
+  await page.goto(`/trips/${id}/discover`);
+  const afterReload = page.getByTestId('planner-readiness');
+  await expect(afterReload).toBeVisible({ timeout: 30_000 });
+  await expect(afterReload.getByText('Scheduled')).toBeVisible();
 });
 
 test('a region nothing can be planned from says so on the board, before the build', async ({
@@ -412,4 +429,83 @@ test('a region nothing can be planned from says so on the board, before the buil
 
   await page.goto(`/trips/${id}/itinerary`);
   await expect(page.getByText(/No trip built yet/i).first()).toBeVisible();
+});
+
+test('a second build of the same ground reuses the evidence rather than buying it again', async ({
+  page,
+}, testInfo) => {
+  /**
+   * Desktop only, and deliberately.
+   *
+   * What this asserts happens on the server — which pages were re-read and which
+   * facts were re-extracted — and is identical at every viewport. Running it in
+   * all three projects would triple the most compilation-heavy test in the suite
+   * for no additional signal, and this suite runs one worker.
+   */
+  test.skip(testInfo.project.name !== 'desktop', 'Reuse is server-side, not a layout concern');
+
+  /**
+   * The phase's whole economic argument, asserted through the browser.
+   *
+   * Two trips to the same synthetic world. The first pays for source discovery,
+   * page reads and extraction; the second must find all three already held —
+   * because a museum's opening hours are a fact about the museum, not about
+   * whoever happens to be planning a trip past it.
+   *
+   * The work plan is read from the *stored row* rather than from a live counter,
+   * so this also proves the record survives the request that produced it.
+   */
+  await createTrip(page, 'Harbour City');
+  await compile(page);
+  await expect(page.getByTestId('work-plan')).toBeVisible();
+
+  const second = await createTrip(page, 'Harbour City');
+  await compile(page);
+
+  const plan = page.getByTestId('work-plan');
+  await expect(plan).toBeVisible();
+  await plan.click();
+
+  /**
+   * Every stage of the research funnel accounts for itself — including the ones
+   * that were never called.
+   *
+   * The claims stage is the one that saves the most and the only one no provider
+   * can report, because when a durable claim answers a subject outright nothing
+   * downstream is invoked. A panel that went quiet exactly when reuse was total
+   * would be worse than no panel.
+   */
+  await expect(plan.getByText('Reading what we already know')).toBeVisible();
+  await expect(plan.getByText(/already researched/)).toBeVisible();
+  await expect(plan.getByText('Reading the official pages')).toBeVisible();
+  await expect(plan.getByText('Pulling out the facts')).toBeVisible();
+
+  // And every step is named in words, never as an internal identifier.
+  await expect(plan.getByText(/_/)).toHaveCount(0);
+
+  // And it is a stored record: a reload shows the same account.
+  await page.goto(`/trips/${second}/plan`);
+  const reloaded = page.getByTestId('work-plan');
+  await expect(reloaded).toBeVisible();
+  await reloaded.click();
+  await expect(reloaded.getByText('Finding who publishes this')).toBeVisible();
+});
+
+test('a compiled region still renders with every provider switched off', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'Offline rendering is asserted once, not thrice');
+  /**
+   * The offline promise, restated against the evidence store.
+   *
+   * A compiled artifact carries its own copy of everything it was built from, so
+   * emptying every cache table must change nothing a traveller can see. This is
+   * the property that makes the whole store safe to sweep.
+   */
+  const id = await createTrip(page, 'Harbour City');
+  await compile(page);
+
+  await page.goto(`/trips/${id}/plan`);
+  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  await expect(page.getByTestId('region-data')).toBeVisible();
 });

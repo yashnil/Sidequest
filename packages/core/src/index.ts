@@ -19,6 +19,7 @@ export * from './schemas/scope';
 export * from './schemas/region-pack';
 export * from './schemas/source-fact';
 export * from './schemas/evidence';
+export * from './schemas/evidence-store';
 export * from './schemas/compiled-region';
 export * from './schemas/compilation';
 // `schemas/calendar` is deliberately not re-exported here: `schemas/access`
@@ -66,6 +67,9 @@ export * from './region/source';
 
 export * from './evidence/resolve';
 export * from './evidence/preparation';
+export * from './evidence/identity';
+export * from './evidence/claims';
+export * from './evidence/freshness';
 
 export * from './quality/candidate';
 

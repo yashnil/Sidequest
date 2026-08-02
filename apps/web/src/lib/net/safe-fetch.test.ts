@@ -7,6 +7,8 @@ import {
   safeFetch,
   UnsafeUrlError,
   lookupAnswer,
+  sanitiseValidator,
+  PINNED_REQUEST_HEADERS,
 } from './safe-fetch';
 
 /**
@@ -248,5 +250,36 @@ describe('the DNS lookup contract', () => {
   it('never invents an address when there is none to give', () => {
     expect(lookupAnswer([], false)).toBe('');
     expect(lookupAnswer([], true)).toEqual([]);
+  });
+});
+
+/**
+ * Validators are attacker-controlled text that we put back into a request
+ * header. Node refuses CR/LF in a header value outright, which closes injection;
+ * these are the cases that remain.
+ */
+describe('validator sanitising', () => {
+  it('keeps an ordinary strong or weak ETag', () => {
+    expect(sanitiseValidator('"abc123"')).toBe('"abc123"');
+    expect(sanitiseValidator('W/"abc123"')).toBe('W/"abc123"');
+  });
+
+  it('strips control characters rather than forwarding them', () => {
+    expect(sanitiseValidator('"a\r\nX-Injected: 1"')).toBe('"aX-Injected: 1"');
+    expect(sanitiseValidator('"a\u0000b"')).toBe('"ab"');
+  });
+
+  it('refuses an absurdly long validator instead of echoing it', () => {
+    expect(sanitiseValidator(`"${'a'.repeat(400)}"`)).toBeUndefined();
+  });
+
+  it('refuses an empty or whitespace-only validator', () => {
+    expect(sanitiseValidator('   ')).toBeUndefined();
+    expect(sanitiseValidator('')).toBeUndefined();
+    expect(sanitiseValidator(undefined)).toBeUndefined();
+  });
+
+  it('pins exactly the headers a reuse decision is allowed to assume', () => {
+    expect([...PINNED_REQUEST_HEADERS]).toEqual(['accept', 'accept-encoding', 'user-agent']);
   });
 });

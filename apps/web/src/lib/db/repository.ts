@@ -21,6 +21,8 @@ import {
   type Trip,
   type TripBasics,
   type TripStatus,
+  plannerReadinessSchema,
+  type PlannerReadiness,
 } from '@sidequest/core';
 import { getDb } from './client';
 
@@ -577,4 +579,53 @@ export function hasItinerary(tripId: string): boolean {
     .prepare('SELECT 1 AS present FROM itineraries WHERE trip_id = ?')
     .get(tripId) as { present: number } | undefined;
   return Boolean(row);
+}
+
+// ---------------------------------------------------------------------------
+// Planner readiness
+// ---------------------------------------------------------------------------
+
+/**
+ * Why the last build produced what it did, kept so the answer survives a
+ * refresh.
+ *
+ * Trip-scoped by nature: readiness is a statement about *this* traveller's
+ * selections on *these* dates, which is exactly the kind of thing the shared
+ * evidence store must never hold. One row per trip, replaced on each attempt —
+ * the current answer is the only one worth keeping, and a history of refusals is
+ * not something anybody would read.
+ */
+export function saveReadiness(tripId: string, readiness: PlannerReadiness, now: Date): void {
+  const parsed = plannerReadinessSchema.parse(readiness);
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO planner_readiness (trip_id, level, payload_json, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(trip_id) DO UPDATE SET
+           level = excluded.level,
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`,
+      )
+      .run(tripId, parsed.level, JSON.stringify(parsed), now.toISOString());
+  } catch (error) {
+    console.error('Could not store planner readiness', error);
+  }
+}
+
+export function getReadiness(tripId: string): PlannerReadiness | null {
+  try {
+    const row = getDb()
+      .prepare('SELECT payload_json FROM planner_readiness WHERE trip_id = ?')
+      .get(tripId) as { payload_json: string } | undefined;
+    if (!row) return null;
+    return plannerReadinessSchema.parse(JSON.parse(row.payload_json));
+  } catch {
+    /**
+     * A readiness row that will not parse — a schema version that has moved on,
+     * most likely — is treated as absent. The next build writes a current one,
+     * and in the meantime the board simply does not show a stale explanation.
+     */
+    return null;
+  }
 }
