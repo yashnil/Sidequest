@@ -24,6 +24,7 @@ import {
   type Place,
   type Region,
   type RegionEvidence,
+  type RegionPack,
   type RetrievedPage,
   type SatelliteCandidate,
   type SourceFact,
@@ -40,6 +41,8 @@ import {
   claimsToFacts,
   prioritiseSubjects,
 } from './enrich';
+import type { RegionPackOutcome } from './backbone/pack';
+import { partitionScope, scopeBounds } from './backbone/partition';
 import type {
   CompilerProviders,
   DiscoveryQuery,
@@ -138,6 +141,130 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
   };
 
   try {
+    /**
+     * ---- The place backbone ---------------------------------------------------
+     *
+     * Four stages that run before anything is expanded, researched or bought.
+     * The pack they produce is traveller-independent geography, so two trips to
+     * the same ground share it — which is most of why a warm compilation is
+     * cheap, and all of why a destination no longer fails because one shared
+     * query service was busy.
+     *
+     * A build with no backbone provider records all four as skipped and carries
+     * on through the discovery provider's own queries. That is a visible state
+     * on the progress screen rather than a silent branch.
+     */
+    let pack: RegionPack | undefined;
+    let packNote: string | undefined;
+    let packReused = false;
+
+    if (input.providers.regionPack) {
+      const provider = input.providers.regionPack;
+
+      /**
+       * The partition is computed here as well as inside the provider, and that
+       * is deliberate rather than duplicated work: `partitionScope` is pure and
+       * costs microseconds, and running it in the compiler is what lets this
+       * stage report a real number *before* the expensive stage starts rather
+       * than a sentence about what is about to happen.
+       */
+      const plan = partitionScope(input.scope);
+      await runStage('partitioning_scope', async () => ({
+        value: null,
+        outcome: `${plan.cells.length} ${plan.cells.length === 1 ? 'area' : 'areas'} to read`,
+        ...(plan.droppedCells > 0
+          ? {
+              note: `${plan.droppedCells} outlying areas are beyond what one build reads, and were left out.`,
+            }
+          : {}),
+      }));
+
+      const outcome = await runStage<RegionPackOutcome>('building_region_pack', async () => {
+        const result = await provider.getPack({ scope: input.scope, now: input.now });
+        if (result.kind === 'unavailable') {
+          return {
+            value: result,
+            outcome: 'no regional place data',
+            note: result.message,
+            skipped: true,
+          };
+        }
+        const built = result.pack;
+        const releaseId = built.releases[0]?.releaseId ?? 'unknown';
+        const retained = built.diagnostics.featuresRetained;
+        const source = result.kind === 'ready' ? result.source : result.kind;
+        return {
+          value: result,
+          outcome: `${retained} records from release ${releaseId}${source === 'cache' ? ', already held' : ''}`,
+          ...(result.kind === 'stale' || result.kind === 'partial' ? { note: result.reason } : {}),
+        };
+      });
+
+      if (outcome.kind === 'unavailable') {
+        packNote = outcome.message;
+        gaps.push({
+          subjectId: input.scope.destinationCandidateId,
+          reason: 'provider_error',
+          detail: outcome.message,
+        });
+      } else {
+        pack = outcome.pack;
+        packReused = outcome.kind === 'ready' && outcome.source === 'cache';
+        for (const entry of pack.licences) licences.set(entry.id, entry);
+        if (outcome.kind === 'stale') {
+          warnings.push(
+            `The regional place data for this trip is from an older release than the current one. ${outcome.reason}`,
+          );
+        }
+        if (outcome.kind === 'partial') {
+          warnings.push(`Some regional place data could not be read. ${outcome.reason}`);
+        }
+      }
+
+      /**
+       * Recorded after the build, because before it there is nothing true to
+       * say: the release is resolved *inside* the provider, and a stage claiming
+       * to have "read the catalogue" before anything read it is the kind of
+       * progress theatre this product does not do. The progress screen orders
+       * stages by the canonical list, so it still reads in the right order.
+       */
+      await runStage('resolving_source_release', async () => {
+        const release = pack?.releases[0];
+        if (!release) {
+          return {
+            value: null,
+            outcome: 'no release could be pinned',
+            skipped: true,
+            ...(packNote ? { note: packNote } : {}),
+          };
+        }
+        return {
+          value: null,
+          outcome: `${release.catalog} release ${release.releaseId}`,
+          ...(release.schemaVersion ? { note: `Schema ${release.schemaVersion}.` } : {}),
+        };
+      });
+
+      await runStage('linking_sources', async () => {
+        if (!pack) return { value: null, outcome: 'nothing to match', skipped: true };
+        const merged = pack.links.filter(
+          (link) => link.kind === 'same_entity' || link.kind === 'probable_same_entity',
+        ).length;
+        const unresolved = pack.links.filter(
+          (link) => link.kind === 'possible_duplicate' || link.kind === 'unresolved',
+        ).length;
+        return {
+          value: null,
+          outcome: `${merged} records matched across sources`,
+          ...(unresolved > 0
+            ? {
+                note: `${unresolved} pairs look alike and could not be confirmed as the same place, so both were kept.`,
+              }
+            : {}),
+        };
+      });
+    }
+
     // ---- Stage: expand the region into bases and subregions -----------------
     const expansion = await runStage('expanding_region', async () => {
       const value = await input.providers.expansion.expand({
@@ -172,6 +299,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         scope: input.scope,
         queries,
         ...(input.profile ? { profile: input.profile } : {}),
+        ...(pack ? { pack } : {}),
       });
       ledger.record('maxModelCalls', value.calls);
       const allowed = ledger.take('maxCoarseCandidates', value.candidates.length);
@@ -208,7 +336,11 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       const note =
         dropped > 0
           ? `${dropped} more were found than this trip's budget allows, and were not looked at.`
-          : (explanatory ?? value.gaps[0])?.detail;
+          : ((explanatory ?? value.gaps[0])?.detail ??
+            // When the backbone could not be built, that is the reason the
+            // discovery stage is thin — and it is a truer sentence than
+            // anything the fallback provider can say about itself.
+            (kept.length === 0 ? packNote : undefined));
 
       return {
         value: kept,
@@ -437,6 +569,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         places,
         bases: bases.map((base) => ({ id: base.id, coordinates: base.coordinates })),
         maxVenues: ledger.remaining('maxFoodVenues'),
+        ...(pack ? { pack } : {}),
       });
       ledger.take('maxFoodVenues', value.venues.length);
       gaps.push(...value.gaps);
@@ -506,7 +639,11 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           locality: candidate.locality,
           coordinates: candidate.coordinates,
           ...(candidate.knownOfficialUrl ? { knownOfficialUrl: candidate.knownOfficialUrl } : {}),
-          wantedPaths: wantedPathsFor(candidate.id, food),
+          wantedPaths: wantedPathsFor(
+            candidate.id,
+            food,
+            places.find((place) => place.id === candidate.id),
+          ),
         }));
 
       const skipped = candidates.length - value.length;
@@ -748,13 +885,6 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     });
 
     // ---- Stage: travel times --------------------------------------------------
-    const foodPoints = new Map<string, { id: string; lat: number; lng: number }>();
-    for (const venue of enrichedFood) {
-      if (!foodPoints.has(venue.routingId)) {
-        foodPoints.set(venue.routingId, { id: venue.routingId, ...venue.coordinates });
-      }
-    }
-
     /**
      * A subject an official source says is shut leaves before the matrix.
      *
@@ -777,6 +907,31 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       };
     }
 
+    /**
+     * Routing nodes for food, minus the ones already in the matrix.
+     *
+     * Several venues share one node — a corridor model cannot tell one end of a
+     * main street from the other — and a venue may legitimately share a node
+     * with the base or the place it sits beside. What must not happen is that
+     * node being *added twice*: the matrix schema refuses duplicate ids, and a
+     * live compilation ended with "we do not have usable travel times for this
+     * region" for exactly that reason. Same physical point, one row.
+     */
+    const existingRoutingIds = new Set([
+      ...bases.map((base) => base.routingId),
+      ...openPlaces.map((place) => place.id),
+    ]);
+    const foodPoints = new Map<string, { id: string; lat: number; lng: number }>();
+    for (const venue of enrichedFood) {
+      if (existingRoutingIds.has(venue.routingId)) continue;
+      if (!foodPoints.has(venue.routingId)) {
+        foodPoints.set(venue.routingId, { id: venue.routingId, ...venue.coordinates });
+      }
+    }
+
+    const primaryMode = matrixModeFor(input.scope);
+    /** The mode the matrix was actually measured in. Recorded on the artifact. */
+    let measuredMode = primaryMode;
     const matrix = await runStage('computing_travel_times', async () => {
       const points = [
         ...bases.map((base) => ({ id: base.routingId, ...base.coordinates })),
@@ -784,11 +939,42 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         ...foodPoints.values(),
       ];
       const maxElements = ledger.remaining('maxRouteElements');
-      const value = await input.providers.routing.matrix({
+      let value = await input.providers.routing.matrix({
         points,
-        mode: input.scope.transport.primaryMode === 'drive' ? 'car' : 'foot',
+        mode: primaryMode,
         maxElements,
       });
+
+      /**
+       * One retry on the road network when the footpath network has nothing.
+       *
+       * A live Denali build and a live Bali build both ended with "we could not
+       * work out travel times across this region" — not because the router was
+       * down, but because there is no continuous pedestrian graph across a
+       * national park or an island, and the scope's primary mode was `walk`.
+       *
+       * Every non-driving mode a scope allows — bus, rail, shuttle, rideshare,
+       * ferry — travels on roads. So when the walking matrix comes back with
+       * nothing usable, the road matrix is the closest honest measurement
+       * available. It is recorded as what it is: `mode` travels on the artifact,
+       * the transport layer still says what the traveller can actually take, and
+       * nothing here claims they will drive it.
+       */
+      if (primaryMode !== 'car' && value.ids.length < 2) {
+        const fallback = await input.providers.routing.matrix({
+          points,
+          mode: 'car',
+          maxElements,
+        });
+        if (fallback.ids.length > value.ids.length) {
+          value = fallback;
+          measuredMode = 'car';
+          warnings.push(
+            'Travel times here are measured along roads, because there is no continuous walking network across this region. How you actually travel each leg is in the transport notes.',
+          );
+        }
+      }
+
       ledger.record('maxRouteElements', value.elements);
       for (const entry of value.licences ?? []) licences.set(entry.id, entry);
       return {
@@ -806,7 +992,48 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * teleports somebody.
      */
     const routable = new Set(matrix.ids);
-    const plannable = openPlaces.filter((place) => routable.has(place.id));
+    /**
+     * Every surviving place, with the drive from base written onto it.
+     *
+     * `travelFromBase` was left at zero on every compiled place, and the matrix
+     * was the only thing that knew better. That is not a cosmetic gap: the
+     * candidate-quality assessor scores route feasibility from this field, the
+     * regional-expansion helper reads it to decide what is a day trip, and the
+     * board renders it. With it at zero, every place in a compiled region looked
+     * like a stop with no drive at all.
+     *
+     * A live Bali build is what it costs. The board offered nine places as
+     * zero-minute hops, auto-pick took all nine, and the planner then refused
+     * every one of them because the round trip was a hundred and sixty minutes
+     * against a hundred-and-fifty-minute daily limit. The board and the planner
+     * were reading different worlds, and only one of them had the travel times.
+     */
+    const legBetween = (fromId: string, toId: string): { minutes: number; km: number } | null => {
+      const from = matrix.ids.indexOf(fromId);
+      const to = matrix.ids.indexOf(toId);
+      if (from < 0 || to < 0) return null;
+      const minutes = matrix.minutes[from]?.[to];
+      const km = matrix.km[from]?.[to];
+      if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return null;
+      return { minutes, km: typeof km === 'number' && Number.isFinite(km) ? km : 0 };
+    };
+    const legFromBase = (placeId: string): { minutes: number; km: number } | null =>
+      legBetween(bases[0]?.routingId ?? '', placeId);
+
+    const plannable = openPlaces
+      .filter((place) => routable.has(place.id))
+      .map((place) => {
+        const leg = legFromBase(place.id);
+        if (!leg) return place;
+        return {
+          ...place,
+          travelFromBase: {
+            ...place.travelFromBase,
+            distanceKm: Math.round(leg.km * 10) / 10,
+            driveMinutes: Math.round(leg.minutes),
+          },
+        } satisfies Place;
+      });
 
     await runStage('validating_routes', async () => {
       const measured = Math.max(0, matrix.ids.length * matrix.ids.length - matrix.ids.length);
@@ -917,6 +1144,21 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       if (!primary) throw new Error('No base survived compilation.');
       const finishedAt = new Date(startedAtMs + elapsed).toISOString();
 
+      /**
+       * The bases, with their reach corrected to what the matrix actually
+       * measured.
+       *
+       * `buildBases` runs before the matrix exists, so its first answer is
+       * necessarily every place the compiler was holding at the time. By here
+       * the unroutable ones have gone, and the claim can be true.
+       */
+      const routedBases = bases.map((base) => ({
+        ...base,
+        placesWithinReach: plannable
+          .filter((place) => legBetween(base.routingId, place.id) !== null)
+          .map((place) => place.id),
+      }));
+
       const candidate: CompiledRegion = {
         schemaVersion: COMPILED_REGION_VERSION,
         id: input.compilationId,
@@ -924,7 +1166,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         region: buildRegion(input.scope, primary, plannable),
         scope: input.scope,
         scopeFingerprint: scopeFingerprint(input.scope),
-        bases,
+        bases: routedBases,
         primaryBaseId: primary.id,
         subregions: buildSubregions(expansion.subregions, bases, plannable),
         satellites: buildSatellites(plannable, primary, matrix),
@@ -936,7 +1178,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           ? { food: { version: FOOD_DATASET_VERSION, regionId: access.regionId, venues: routableFood, gaps: [] } as FoodDataset }
           : {}),
         travelTimes: travelTimeMatrixSchema.parse({
-          mode: input.scope.transport.primaryMode === 'drive' ? 'car' : 'foot',
+          mode: measuredMode,
           ids: matrix.ids,
           minutes: matrix.minutes,
           km: matrix.km,
@@ -949,6 +1191,21 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          * which is a different message from a place nobody looked at.
          */
         evidence,
+        ...(pack
+          ? {
+              regionPack: {
+                packId: pack.id,
+                scopeHash: pack.scopeHash,
+                contentHash: pack.contentHash,
+                state: pack.state,
+                catalog: pack.releases[0]?.catalog ?? 'unknown',
+                releaseId: pack.releases[0]?.releaseId ?? 'unknown',
+                recordCount: pack.diagnostics.featuresRetained,
+                builtAt: pack.createdAt,
+                reused: packReused,
+              },
+            }
+          : {}),
         licences: [...licences.values()],
         sourceManifest: {
           facts,
@@ -1093,7 +1350,11 @@ function isPlausiblyGated(place: Place): boolean {
  * pressed for a fact a page does not contain is an extractor being invited to
  * infer one.
  */
-function wantedPathsFor(subjectId: string, food: readonly FoodVenue[]): FactPath[] {
+function wantedPathsFor(
+  subjectId: string,
+  food: readonly FoodVenue[],
+  place?: Place,
+): FactPath[] {
   /**
    * `identity.officialSite` is deliberately absent from both lists.
    *
@@ -1107,19 +1368,64 @@ function wantedPathsFor(subjectId: string, food: readonly FoodVenue[]): FactPath
   if (isFood) {
     return ['food.hours', 'food.price', 'food.reservation', 'food.dietary'];
   }
-  return [
-    'hours.weekly',
+
+  /**
+   * Everything, but only for the kinds of place that gate.
+   *
+   * A live New York build asked eleven questions of twenty-four subjects and got
+   * ten answers out of two hundred and nine — because most of the subjects were
+   * public parks, and a public park has no timed entry, no permit and no
+   * admission price to find. Those were not gaps: they were questions with no
+   * answer, and asking a model for one is precisely the invitation to infer that
+   * this architecture refuses.
+   *
+   * Split on the *category*, so it is the same judgement in every country.
+   */
+  const shared: FactPath[] = [
     'hours.closure',
+    'safety.caution',
+    'safety.requirement',
+    'duration.typical',
+  ];
+  if (place && !isPlausiblyGated(place)) {
+    return [...shared, 'hours.weekly', 'cost.parking'];
+  }
+  return [
+    ...shared,
+    'hours.weekly',
     'booking.required',
     'booking.timedEntry',
     'booking.leadTime',
     'access.permit',
     'cost.admission',
     'cost.parking',
-    'safety.caution',
-    'safety.requirement',
-    'duration.typical',
   ];
+}
+
+/**
+ * Which network the travel-time matrix is measured on.
+ *
+ * `foot` only when the traveller is walking **and** the ground is walkable. Every
+ * other mode a scope allows — a bus, a train, a shuttle, a rideshare, a ferry
+ * approach — moves along roads, so a road matrix is the closest honest
+ * measurement of how long a leg takes. A walking matrix over a national park is
+ * not a conservative answer; it is no answer, and a live evaluation had two
+ * destinations fail outright on exactly that.
+ *
+ * The threshold is the same reach the scope derivation uses for a walking trip,
+ * so the two cannot disagree about what "walkable" means.
+ */
+const WALKABLE_SPAN_KM = 12;
+
+export function matrixModeFor(scope: GeographicScope): 'car' | 'foot' {
+  if (scope.transport.primaryMode === 'drive') return 'car';
+  const bounds = scopeBounds(scope);
+  const latKm = (bounds.northEast.lat - bounds.southWest.lat) * 111;
+  const lngKm =
+    (bounds.northEast.lng - bounds.southWest.lng) *
+    111 *
+    Math.max(0.1, Math.cos((scope.center.lat * Math.PI) / 180));
+  return Math.max(latKm, lngKm) <= WALKABLE_SPAN_KM ? 'foot' : 'car';
 }
 
 /**
@@ -1213,6 +1519,15 @@ function buildBases(
   scope: GeographicScope,
   places: readonly Place[],
 ): BaseCandidate[] {
+  /**
+   * `placesWithinReach` is a claim, and it has to be one that survives checking.
+   *
+   * It was every place the compiler happened to be holding when the bases were
+   * built — which is *before* the matrix drops the unroutable ones, so a live
+   * artifact claimed forty-three places within reach of a base that ended up
+   * with thirty-seven in the region at all, none of them actually within the
+   * traveller's daily drive.
+   */
   return candidates.slice(0, Math.max(1, scope.maxBaseChanges + 1)).map((base, index) => ({
     id: base.id,
     name: base.name,

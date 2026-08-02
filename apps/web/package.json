@@ -13,6 +13,7 @@
     "@sidequest/compiler": "*",
     "@sidequest/core": "*",
     "better-sqlite3": "^13.0.2",
+    "hyparquet": "^1.27.1",
     "next": "^16.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

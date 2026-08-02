@@ -292,9 +292,18 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
   }
 
   if (!scheduledAnything) {
+    /**
+     * An error, not a warning, and the difference is the whole point.
+     *
+     * As a warning this produced `ready_with_cautions` — so five dated days with
+     * nothing on them came back as a finished plan with a note. A live
+     * compilation did exactly that. `planTrip` now refuses before returning such
+     * a plan at all, and this is the second line of defence: were one ever to
+     * reach here, it would be `needs_decision` rather than ready.
+     */
     issues.push({
       code: 'empty_itinerary',
-      severity: 'warning',
+      severity: 'error',
       message: 'Nothing could be scheduled from your selections.',
     });
   }

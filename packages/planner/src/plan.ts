@@ -48,6 +48,7 @@ import {
   type PackOptions,
 } from './schedule';
 import { buildTransportStrategy } from './strategy';
+import { buildPlannerReadiness } from './readiness';
 import { statusFor, validateItinerary, validateStrategy } from './validate';
 import {
   narrowByDaylight,
@@ -514,8 +515,25 @@ export function planTrip(input: PlannerInput): PlanResult {
     if (!landed) stillHomeless.push(candidate);
   }
 
+  /**
+   * The unavoidable driving for one stop: base out, and base back.
+   *
+   * `null` when either leg is unmeasured, which is a different failure with its
+   * own code and must not be reported as a distance.
+   */
+  const roundTripFromBase = (placeId: string): number | null => {
+    const out = tryLeg(input.matrix, input.baseId, placeId)?.minutes;
+    const back = tryLeg(input.matrix, placeId, input.baseId)?.minutes;
+    return out === undefined || back === undefined ? null : out + back;
+  };
+
   for (const candidate of stillHomeless) {
-    unscheduled.push(unscheduledFor(candidate, days.length, accessByUnitDate, unitByPlaceId, dates));
+    unscheduled.push(
+      unscheduledFor(candidate, days.length, accessByUnitDate, unitByPlaceId, dates, {
+        minutes: roundTripFromBase(candidate.place.id),
+        capMinutes: input.profile.transport.maxDailyDriveMinutes,
+      }),
+    );
   }
 
   /**
@@ -922,6 +940,40 @@ export function planTrip(input: PlannerInput): PlanResult {
     (sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length,
     0,
   );
+
+  /**
+   * A plan with no stops is not a plan, and must never be returned as one.
+   *
+   * It used to be. `empty_itinerary` was a *warning*, so five dated days with a
+   * transport strategy, a food plan and nothing to do came back as
+   * `ready_with_cautions` — and a live Bali compilation produced exactly that,
+   * with the one sentence explaining it buried among seven food warnings. A
+   * traveller would have been shown, and could have downloaded, five empty days.
+   *
+   * So it is a refusal, and the refusal carries the funnel: how many were
+   * considered, chosen, measurable, reachable and placed, what blocked the rest,
+   * and which changes would move it. That is strictly more than the itinerary
+   * could ever have said, because an itinerary has nowhere to put it.
+   */
+  if (scheduledCount === 0) {
+    const deduped = dedupeUnscheduled(unscheduled);
+    return {
+      ok: false,
+      code: 'planner_coverage_insufficient',
+      message:
+        'We could not put a single stop into a day, so there is no plan to show you. What blocked it is below.',
+      readiness: buildPlannerReadiness({
+        consideredCount: input.candidates.length,
+        selectedCount: input.selections.filter((selection) => selection.status !== 'excluded')
+          .length,
+        eligibleCount: eligible.length,
+        feasibleCount: plannable.length,
+        scheduledCount,
+        unscheduled: deduped,
+        dayCount: days.length,
+      }),
+    };
+  }
   const totals = built.reduce(
     (acc, day) => ({
       usable: acc.usable + day.window.usableMinutes,
@@ -1164,11 +1216,35 @@ function unscheduledFor(
   resolved: ReadonlyMap<string, { available: boolean }>,
   unitByPlaceId: ReadonlyMap<string, AccessUnit>,
   dates: readonly string[],
+  roundTrip: { minutes: number | null; capMinutes: number },
 ): UnscheduledPlace {
   const unit = unitByPlaceId.get(candidate.place.id);
   const reachableDays = unit
     ? dates.filter((date) => resolved.get(accessKey(unit.key, date))?.available).length
     : dates.length;
+
+  /**
+   * Getting there and back, on its own, is further than they will drive in a day.
+   *
+   * Checked before "there was no room", because the two send a traveller to
+   * change completely different things and the generic one was hiding the
+   * specific one. A live Bali compilation reported nine places as
+   * `no_time_left` — "no day with the hours and the travel budget left for it" —
+   * when the truth was that the nearest of them was a 157-minute round trip
+   * against a 150-minute daily limit, on an empty day. No amount of freeing up
+   * room would ever have helped.
+   */
+  if (roundTrip.minutes !== null && roundTrip.minutes > roundTrip.capMinutes) {
+    return {
+      placeId: candidate.place.id,
+      name: candidate.place.name,
+      wasManual: candidate.manual,
+      reasonCode: 'exceeds_daily_travel',
+      reason: `Getting there and back is about ${Math.round(roundTrip.minutes)} minutes of driving, and you said ${roundTrip.capMinutes} was your limit for a day.`,
+      suggestedRemedy:
+        'Raise your daily driving limit, or base the trip somewhere nearer to it.',
+    };
+  }
 
   // Distinguishing "there was no room" from "there was room, but not on the days
   // it runs" is the difference between a useful remedy and a shrug.

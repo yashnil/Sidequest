@@ -17,6 +17,8 @@ import {
   type Place,
   type WeatherLocation,
 } from '@sidequest/core';
+import { buildInventory, foodVenueFromRecord, type InventoryResult } from '@sidequest/compiler';
+import type { SourceRecord } from '@sidequest/core';
 import type {
   CompilerProviders,
   ConstraintResearchProvider,
@@ -50,6 +52,8 @@ import {
   stripBoilerplate,
 } from '../net/structured';
 import { fetchWikidataFacts } from './wikidata';
+import { isPlaceBackboneEnabled } from './overture/catalog';
+import { createCachedPackProvider } from './overture/cached';
 import {
   boundsOf,
   classifyNominatim,
@@ -264,6 +268,34 @@ function toCandidate(
   };
 }
 
+/**
+ * The routing node a venue is priced against.
+ *
+ * A food venue shares a node with whatever is nearest that the matrix already
+ * has — which is what stops a meal detour being a straight-line guess dressed up
+ * as a road time, and what keeps the matrix from growing by one row per
+ * restaurant. Nearest rather than first: a two-base trip would otherwise price
+ * every restaurant against the first base, including the ones across a fjord
+ * from it.
+ */
+function nearestAnchor(
+  anchors: readonly { id: string; coordinates: { lat: number; lng: number } }[],
+  point: { lat: number; lng: number },
+): { id: string } | undefined {
+  let best: { id: string } | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const anchor of anchors) {
+    const dLat = anchor.coordinates.lat - point.lat;
+    const dLng = (anchor.coordinates.lng - point.lng) * Math.cos((point.lat * Math.PI) / 180);
+    const distance = dLat * dLat + dLng * dLng;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = anchor;
+    }
+  }
+  return best;
+}
+
 /** Roughly 5 km at the equator: small enough that `way` geometry is affordable. */
 const FOOD_BOX_DEGREES = 0.045;
 const FOOD_STAGE_BUDGET_MS = 45_000;
@@ -293,9 +325,26 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
   const osmByPlaceId = new Map<string, NormalizedOsmPlace>();
   const osmByVenueId = new Map<string, NormalizedOsmPlace>();
 
+  /**
+   * The inventory the discovery stage built, held so the food stage reads the
+   * same one rather than recomputing it from the same pack a stage later.
+   */
+  let packInventory: InventoryResult | null = null;
+  /** The pack's records by id, for the research funnel's website candidates. */
+  const packRecords = new Map<string, SourceRecord>();
+
   const websiteTagFor = (subjectId: string): string | undefined => {
+    /**
+     * The pack first, then the fallback path's own tags.
+     *
+     * This is the counter the whole research funnel is judged on: a website the
+     * source already published is a search we do not buy. The pack carries far
+     * more of them than the fallback did, because the geographic layers publish
+     * a selected tag subset and the place catalogue publishes a websites array.
+     */
+    const fromPack = packRecords.get(subjectId)?.websiteCandidates[0];
     const tags = (osmByPlaceId.get(subjectId) ?? osmByVenueId.get(subjectId))?.planningTags;
-    const raw = tags?.website ?? tags?.['contact:website'];
+    const raw = fromPack ?? tags?.website ?? tags?.['contact:website'];
     if (!raw) return undefined;
     try {
       const url = new URL(raw);
@@ -491,8 +540,74 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
   };
 
   const places: PlaceDiscoveryProvider = {
-    name: 'overpass',
-    async discover({ scope, queries }) {
+    name: 'region-pack',
+    async discover({ scope, queries, pack }) {
+      /**
+       * A pack is the answer, and asking anything else would be worse.
+       *
+       * The inventory is already bounded, release-pinned, normalised, linked and
+       * classified from the source's own taxonomy — so there is no query to
+       * issue, no model call to make and no shared query service to be refused
+       * by. This is the branch that removes public Overpass from the default
+       * path, and it is also where a compilation stopped paying a model to name
+       * the kind of thing every record already declares.
+       */
+      if (pack) {
+        /**
+         * The traveller is deliberately not consulted here.
+         *
+         * A pack and the inventory over it are traveller-independent geography,
+         * which is exactly what lets two people going to the same city share
+         * one. Fit is applied downstream, where the board scores every candidate
+         * against this traveller — narrowing the inventory by profile first
+         * would bake one person's preferences into a cache everybody reads.
+         */
+        const inventory = buildInventory({ pack, scope });
+        packInventory = inventory;
+        for (const layer of pack.layers) {
+          for (const record of layer.records) packRecords.set(record.id, record);
+        }
+        const gaps: ProviderGap[] = [];
+        for (const layer of pack.layers) {
+          if (layer.records.length === 0 && layer.note) {
+            gaps.push({
+              subjectId: layer.id,
+              reason: 'not_found',
+              detail: `${layer.id}: ${layer.note}`,
+            });
+          }
+        }
+        if (inventory.diagnostics.heldBackByCategoryCap > 0) {
+          gaps.push({
+            subjectId: scope.destinationCandidateId,
+            reason: 'budget_exhausted',
+            detail: `${inventory.diagnostics.heldBackByCategoryCap} more records of kinds this trip already has enough of were left out.`,
+          });
+        }
+        return {
+          candidates: inventory.candidates,
+          gaps,
+          calls: 0,
+          licences: [...inventory.licences, AUTHORED_LICENCE],
+        };
+      }
+
+      if (!isPoiProviderEnabled()) {
+        return {
+          candidates: [],
+          gaps: [
+            {
+              subjectId: scope.destinationCandidateId,
+              reason: 'provider_error',
+              detail:
+                'No regional place data could be prepared for this area, and no fallback map service is switched on.',
+            },
+          ],
+          calls: 0,
+          licences: [OSM_LICENCE_PLACES],
+        };
+      }
+
       const gaps: ProviderGap[] = [];
       const radiusKm = scope.shape.kind === 'radius' ? scope.shape.radiusKm : 40;
 
@@ -944,8 +1059,68 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
    * funnel something to research; what turns a name into a meal is the page.
    */
   const food: FoodDiscoveryProvider = {
-    name: 'overpass-food',
-    async discover({ scope, bases, maxVenues }) {
+    name: 'region-pack-food',
+    async discover({ scope, bases, maxVenues, pack, places: knownPlaces }) {
+      /**
+       * Food out of the same pack the attractions came from.
+       *
+       * One read rather than two, and the venues arrive with the same
+       * provenance, the same release pin and the same licence rows. Hours still
+       * start unknown and the food planner still refuses to schedule an
+       * unconfirmed kitchen — the backbone changed where venues come from, not
+       * what we are willing to claim about them.
+       */
+      if (pack) {
+        const inventory = packInventory ?? buildInventory({ pack, scope });
+        const venues: FoodVenue[] = [];
+        const gaps: ProviderGap[] = [];
+        /**
+         * A venue is priced at the nearest thing already in the matrix.
+         *
+         * Bases *and* places, not just bases: a café beside a trailhead is a
+         * lunch stop on the way up, and pricing it against a hotel eleven
+         * kilometres away turns a two-minute detour into a day's worth of
+         * driving. Reusing an existing node also keeps the matrix the same size,
+         * which is the expensive part.
+         */
+        const anchors = [
+          ...bases.map((base) => ({ id: base.id, coordinates: base.coordinates })),
+          ...knownPlaces.map((place) => ({ id: place.id, coordinates: place.coordinates })),
+        ];
+        for (const record of inventory.foodRecords) {
+          if (venues.length >= maxVenues) break;
+          const nearest = nearestAnchor(anchors, record.coordinates);
+          const venue = foodVenueFromRecord({
+            record,
+            scope,
+            routingId: nearest?.id ?? bases[0]?.id ?? scope.destinationCandidateId,
+          });
+          if (venue) venues.push(venue);
+        }
+        if (venues.length === 0) {
+          gaps.push({
+            subjectId: 'food',
+            reason: 'not_found',
+            detail: 'The place data has nothing to eat recorded inside this region.',
+          });
+        }
+        return { venues, gaps, calls: 0 };
+      }
+
+      if (!isPoiProviderEnabled()) {
+        return {
+          venues: [],
+          gaps: [
+            {
+              subjectId: 'food',
+              reason: 'provider_error',
+              detail: 'No regional place data was prepared, so no food venues could be found.',
+            },
+          ],
+          calls: 0,
+        };
+      }
+
       if (maxVenues <= 0) {
         return {
           venues: [],
@@ -1310,6 +1485,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
   return {
     providers: {
       resolver,
+      ...(isPlaceBackboneEnabled() ? { regionPack: createCachedPackProvider() } : {}),
       expansion,
       places,
       constraints,
@@ -1350,12 +1526,17 @@ function toFoodVenue(
   const serviceType = FOOD_SERVICE_BY_TAG[`${key}=${value}`];
   if (!serviceType) return null;
 
-  const provisioning =
-    serviceType === 'grocery' || serviceType === 'market'
-      ? ('packed_meals' as const)
-      : serviceType === 'bakery'
-        ? ('snacks' as const)
-        : ('none' as const);
+  /**
+   * A shop nobody has confirmed the hours of is not a provisioning stop.
+   *
+   * The food schema refuses a provisioning venue without confirmed hours *and*
+   * refuses a groceries meal period without provisioning, so an unconfirmed
+   * grocery is unrepresentable — which is the schema being right: a packed lunch
+   * nobody could buy strands the whole of the next day. This branch used to
+   * build one anyway and hand the compiler a food dataset its own integrity gate
+   * rejected.
+   */
+  if (serviceType === 'grocery' || serviceType === 'market') return null;
 
   const dietary: FoodVenue['dietary'] = [];
   for (const [tag, need] of DIET_TAGS) {
@@ -1434,7 +1615,6 @@ function toFoodVenue(
     },
     routingId,
     walkMinutesFromRouting: 0,
-    ...(provisioning === 'none' ? {} : {}),
   };
 }
 
@@ -1536,7 +1716,16 @@ function matchesSubject(url: string, title: string | undefined, name: string): b
 export function openProvidersEnabled(): boolean {
   return (
     isGeocoderEnabled() &&
-    isPoiProviderEnabled() &&
+    /**
+     * The place backbone, or the fallback map service. Not neither.
+     *
+     * `SIDEQUEST_POI_PROVIDER` used to be required. It is now the *fallback*:
+     * a shared, best-effort query service that two of four live destinations
+     * could not be served by. A build with the backbone on and Overpass off is
+     * the intended production shape, and a build with neither cannot discover
+     * anything, so it is refused up front rather than three stages in.
+     */
+    (isPlaceBackboneEnabled() || isPoiProviderEnabled()) &&
     isRoutesProviderEnabled() &&
     isResearchModelConfigured() &&
     process.env.SIDEQUEST_RESEARCH_PROVIDER?.trim().toLowerCase() === 'anthropic'
@@ -1546,7 +1735,9 @@ export function openProvidersEnabled(): boolean {
 export function missingProviderSwitches(): string[] {
   const missing: string[] = [];
   if (!isGeocoderEnabled()) missing.push('SIDEQUEST_GEOCODER_PROVIDER=nominatim');
-  if (!isPoiProviderEnabled()) missing.push('SIDEQUEST_POI_PROVIDER=overpass');
+  if (!isPlaceBackboneEnabled() && !isPoiProviderEnabled()) {
+    missing.push('SIDEQUEST_PLACE_BACKBONE=overture');
+  }
   if (!isRoutesProviderEnabled()) missing.push('SIDEQUEST_ROUTES_PROVIDER=valhalla');
   if (process.env.SIDEQUEST_RESEARCH_PROVIDER?.trim().toLowerCase() !== 'anthropic') {
     missing.push('SIDEQUEST_RESEARCH_PROVIDER=anthropic');

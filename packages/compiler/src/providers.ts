@@ -8,6 +8,7 @@ import type {
   OperatingCalendar,
   Place,
   ProviderRef,
+  RegionPack,
   SourceAuthorityKind,
   SourceFact,
   TravelerProfile,
@@ -17,6 +18,7 @@ import type {
   FoodVenue,
 } from '@sidequest/core';
 import type { TravelMode } from '@sidequest/geo';
+import type { RegionPackProvider } from './backbone/pack';
 
 /**
  * The seams the dynamic compiler talks to, and the only ones.
@@ -151,6 +153,16 @@ export interface PlaceDiscoveryProvider {
     scope: GeographicScope;
     queries: readonly DiscoveryQuery[];
     profile?: TravelerProfile;
+    /**
+     * The region pack, when the backbone produced one.
+     *
+     * A provider that receives a pack should read it rather than issue queries:
+     * the pack is a bounded, release-pinned, already-normalised inventory and
+     * asking a live search service the same question again would be slower,
+     * less complete and less reproducible. `queries` remains for the fallback
+     * path, where no pack could be built.
+     */
+    pack?: RegionPack;
   }): Promise<DiscoveryResult>;
 }
 
@@ -401,6 +413,8 @@ export interface FoodDiscoveryProvider {
     places: readonly Place[];
     bases: readonly { id: string; coordinates: { lat: number; lng: number } }[];
     maxVenues: number;
+    /** The same pack the places came from, so food is one read rather than two. */
+    pack?: RegionPack;
   }): Promise<FoodDiscoveryResult>;
 }
 
@@ -414,6 +428,17 @@ export interface FoodDiscoveryProvider {
  */
 export interface CompilerProviders {
   resolver: DestinationResolver;
+  /**
+   * The place backbone, where this build has one.
+   *
+   * Optional because a provider set can legitimately supply candidates
+   * directly — the synthetic worlds do, and so would a hosted extraction
+   * service that returned finished candidates. When it is present the pipeline
+   * builds a pack first and every later stage reads from it; when it is absent
+   * the pack stages are recorded as skipped, which is a visible state rather
+   * than a silent branch.
+   */
+  regionPack?: RegionPackProvider;
   expansion: RegionExpansionProvider;
   places: PlaceDiscoveryProvider;
   constraints: ConstraintResearchProvider;

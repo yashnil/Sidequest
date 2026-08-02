@@ -19,10 +19,15 @@ import { COLUMN_MIGRATIONS, SCHEMA_SQL } from './schema';
  */
 
 /**
- * The schema as it stood before source-backed enrichment: no `source_documents`,
- * and compiled artifacts with no `evidence` key.
+ * The schema as it stood before the place backbone: `source_documents` exists,
+ * `region_packs` does not, and compiled artifacts carry no `regionPack` key.
+ *
+ * The fixture written into it deliberately spans three generations, because all
+ * three exist in a real database: a Phase-7 artifact with no `evidence` at all,
+ * a Phase-8 artifact with evidence and no pack, and an authored-region trip that
+ * predates the compiler entirely.
  */
-const PRE_PHASE_8_SCHEMA = `
+const PRE_PHASE_9_SCHEMA = `
 CREATE TABLE trips (
   id TEXT PRIMARY KEY, mode TEXT NOT NULL, destination_input TEXT NOT NULL,
   region_id TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
@@ -102,6 +107,13 @@ CREATE TABLE provider_cache (
   cache_key TEXT PRIMARY KEY, provider TEXT NOT NULL, payload_json TEXT NOT NULL,
   stored_at TEXT NOT NULL, expires_at TEXT NOT NULL
 );
+CREATE TABLE source_documents (
+  url TEXT NOT NULL, compiled_region_id TEXT NOT NULL, subject_id TEXT NOT NULL,
+  publisher TEXT NOT NULL, authority TEXT NOT NULL, title TEXT,
+  content_hash TEXT NOT NULL, content_bytes INTEGER NOT NULL,
+  robots_allowed INTEGER NOT NULL, retrieved_at TEXT NOT NULL, published_at TEXT,
+  PRIMARY KEY (compiled_region_id, url, subject_id)
+);
 `;
 
 let directory: string;
@@ -142,7 +154,7 @@ beforeEach(() => {
   path = join(directory, 'legacy.db');
   const db = new Database(path);
   db.pragma('foreign_keys = ON');
-  db.exec(PRE_PHASE_8_SCHEMA);
+  db.exec(PRE_PHASE_9_SCHEMA);
 
   const now = '2026-07-30T10:00:00.000Z';
 
@@ -195,6 +207,33 @@ beforeEach(() => {
     'provider_unavailable', 'The map service did not answer.', null, 'corr-1',
   );
 
+  // (4) A Phase-8 trip whose artifact carries evidence but no region pack.
+  db.prepare(`INSERT INTO trips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    'trip-enriched', 'known', 'Another Place', 'compiled-abc',
+    '2026-10-01', '2026-10-04', '12:00', '09:00', 2, 0, '[]', 'planned', now, now,
+  );
+  db.prepare(`INSERT INTO compiled_regions VALUES (?,?,?,?,?,?,?)`).run(
+    'region-2', 'trip-enriched', 'fingerprint-2', 1, 'sidequest-compiler/1',
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'region-2',
+      places: [],
+      evidence: { places: [], region: [] },
+    }),
+    now,
+  );
+  db.prepare(`INSERT INTO source_documents VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+    'https://example.org/hours', 'region-2', 'subject-1', 'example.org',
+    'government', 'Opening hours', 'hash-1', 4096, 1, now, null,
+  );
+
+  // (5) A compilation that finished short of complete, which is a normal state.
+  db.prepare(`INSERT INTO compilation_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    'job-partial', 'trip-enriched', 'fingerprint-2', 'partial', 'compiling',
+    '[{"stage":"compiling","status":"done"}]', now, now, now, now, 0,
+    null, null, 'region-2', 'corr-2',
+  );
+
   db.prepare(`INSERT INTO provider_cache VALUES (?,?,?,?,?)`).run(
     'geocode|x', 'nominatim', '[]', now, '2027-01-01T00:00:00.000Z',
   );
@@ -205,7 +244,7 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-describe('a pre-Phase-8 database survives the upgrade', () => {
+describe('a pre-Phase-9 database survives the upgrade', () => {
   it('gains the new tables without touching a single stored row', () => {
     const before = new Database(path);
     const counts = {
@@ -226,14 +265,18 @@ describe('a pre-Phase-8 database survives the upgrade', () => {
     expect((after.prepare('SELECT COUNT(*) AS n FROM compilation_jobs').get() as { n: number }).n).toBe(counts.jobs);
     expect((after.prepare('SELECT COUNT(*) AS n FROM compiled_regions').get() as { n: number }).n).toBe(counts.regions);
 
-    // The new table exists and starts empty.
-    const documents = after
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='source_documents'")
+    // The new table exists and starts empty; the one that already existed keeps
+    // what was in it.
+    const packs = after
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='region_packs'")
       .all();
-    expect(documents).toHaveLength(1);
+    expect(packs).toHaveLength(1);
+    expect(
+      (after.prepare('SELECT COUNT(*) AS n FROM region_packs').get() as { n: number }).n,
+    ).toBe(0);
     expect(
       (after.prepare('SELECT COUNT(*) AS n FROM source_documents').get() as { n: number }).n,
-    ).toBe(0);
+    ).toBe(1);
     after.close();
   });
 
@@ -288,6 +331,61 @@ describe('a pre-Phase-8 database survives the upgrade', () => {
     second.close();
 
     expect(schemaB).toEqual(schemaA);
+  });
+
+  it('leaves a Phase-8 artifact byte-identical and still without a pack', () => {
+    const before = new Database(path);
+    const original = (
+      before.prepare('SELECT payload_json FROM compiled_regions WHERE id = ?').get('region-2') as {
+        payload_json: string;
+      }
+    ).payload_json;
+    before.close();
+
+    migrate(path);
+
+    const after = new Database(path);
+    const migrated = (
+      after.prepare('SELECT payload_json FROM compiled_regions WHERE id = ?').get('region-2') as {
+        payload_json: string;
+      }
+    ).payload_json;
+    after.close();
+
+    expect(migrated).toBe(original);
+    const parsed = JSON.parse(migrated) as { evidence?: unknown; regionPack?: unknown };
+    // Evidence gathered before the backbone existed is not relabelled as having
+    // come from one, and an old artifact does not acquire a release it never saw.
+    expect(parsed.evidence).toBeDefined();
+    expect(parsed.regionPack).toBeUndefined();
+  });
+
+  it('keeps a partial compilation partial rather than promoting or failing it', () => {
+    migrate(path);
+    const after = new Database(path);
+    const job = after
+      .prepare('SELECT state, compiled_region_id FROM compilation_jobs WHERE id = ?')
+      .get('job-partial') as { state: string; compiled_region_id: string };
+    after.close();
+    expect(job.state).toBe('partial');
+    expect(job.compiled_region_id).toBe('region-2');
+  });
+
+  it('allows at most one usable pack per piece of ground and release', () => {
+    migrate(path);
+    const db = new Database(path);
+    const insert = db.prepare(`INSERT INTO region_packs VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    const args = (id: string, state: string) =>
+      [
+        id, 'scope-hash-1', 'overture', '2026-07-22.0', 1, state, 'hash', 10, '{}',
+        '2026-08-01T00:00:00.000Z', null,
+      ] as const;
+    insert.run(...args('pack-1', 'ready'));
+    // Two builds racing for the same ground are waste, not variants.
+    expect(() => insert.run(...args('pack-2', 'partial'))).toThrow();
+    // A failed build sits outside the index, so it can never block a real one.
+    expect(() => insert.run(...args('pack-3', 'failed'))).not.toThrow();
+    db.close();
   });
 
   it('keeps the duplicate-compilation guard after migrating', () => {

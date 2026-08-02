@@ -305,17 +305,56 @@ export function densify(outcome: MatrixOutcome): {
   km: number[][];
   dropped: string[];
 } {
-  const keep: number[] = [];
+  /**
+   * The largest mutually routable core, not "every point that reached everything".
+   *
+   * The first version kept a point only if all of its legs were measured, and
+   * that is an all-or-nothing rule with a cascade in it: one summit nobody can
+   * drive to has an unroutable leg to *every* other point, so every other point
+   * also fails the test, and a live Denali build came back with a matrix of
+   * **zero** points out of forty-one. The region was reported as having no usable
+   * travel times when in fact most of it was perfectly routable.
+   *
+   * So instead: peel off the worst-connected point, repeatedly, until what is
+   * left is complete. Each round removes the single point responsible for the
+   * most missing legs, which is the cheapest way to the largest complete
+   * submatrix — and every peeled point is still reported, so it becomes a
+   * coverage number rather than a silent absence.
+   */
+  const size = outcome.ids.length;
+  const alive = new Set<number>(Array.from({ length: size }, (_, index) => index));
   const dropped: string[] = [];
 
-  for (let index = 0; index < outcome.ids.length; index += 1) {
-    const row = outcome.minutes[index] ?? [];
-    const outbound = row.every((value, other) => other === index || Number.isFinite(value));
-    const inbound = outcome.minutes.every(
-      (otherRow, other) => other === index || Number.isFinite(otherRow[index]),
-    );
-    if (outbound && inbound) keep.push(index);
-    else dropped.push(outcome.ids[index]!);
+  const missingFor = (index: number): number => {
+    let count = 0;
+    for (const other of alive) {
+      if (other === index) continue;
+      if (!Number.isFinite(outcome.minutes[index]?.[other])) count += 1;
+      if (!Number.isFinite(outcome.minutes[other]?.[index])) count += 1;
+    }
+    return count;
+  };
+
+  while (alive.size > 1) {
+    let worst = -1;
+    let worstCount = 0;
+    for (const index of alive) {
+      const count = missingFor(index);
+      // Ties break on the lower index, so two runs peel identically.
+      if (count > worstCount) {
+        worstCount = count;
+        worst = index;
+      }
+    }
+    if (worstCount === 0 || worst < 0) break;
+    alive.delete(worst);
+    dropped.push(outcome.ids[worst]!);
+  }
+
+  /** A single surviving point cannot be a matrix; it is a point. */
+  const keep = alive.size >= 2 ? [...alive].sort((a, b) => a - b) : [];
+  if (keep.length === 0) {
+    for (const index of alive) dropped.push(outcome.ids[index]!);
   }
 
   return {

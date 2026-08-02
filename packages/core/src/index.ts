@@ -16,6 +16,7 @@ export * from './schemas/intent';
 export * from './schemas/resolution';
 export * from './schemas/clarification';
 export * from './schemas/scope';
+export * from './schemas/region-pack';
 export * from './schemas/source-fact';
 export * from './schemas/evidence';
 export * from './schemas/compiled-region';
@@ -33,6 +34,7 @@ export * from './schemas/trip';
 export * from './schemas/profile';
 export * from './schemas/discovery';
 export * from './schemas/itinerary';
+export * from './schemas/planner-readiness';
 export * from './schemas/weather';
 
 export * from './questionnaire/definition';

@@ -9,6 +9,7 @@ import type {
   Itinerary,
   OperatingHoursDataset,
   Place,
+  PlannerReadiness,
   Region,
   SelectionStatus,
   TravelerProfile,
@@ -187,11 +188,25 @@ export type PlanFailureCode =
   | 'no_candidates'
   | 'no_usable_days'
   | 'matrix_unusable'
+  /**
+   * Everything was measurable and nothing could be placed.
+   *
+   * Distinct from the three above, which are all "we could not start". This one
+   * means the planner ran in full and produced nothing, which is the only
+   * failure that owes the traveller a breakdown rather than a sentence.
+   */
+  | 'planner_coverage_insufficient'
   | 'internal_error';
 
 export type PlanResult =
   | { ok: true; itinerary: Itinerary }
-  | { ok: false; code: PlanFailureCode; message: string };
+  | {
+      ok: false;
+      code: PlanFailureCode;
+      message: string;
+      /** Present on `planner_coverage_insufficient`, and only there. */
+      readiness?: PlannerReadiness;
+    };
 
 export function resolveConfig(overrides?: Partial<PlannerConfig>): PlannerConfig {
   return { ...DEFAULT_PLANNER_CONFIG, ...overrides };

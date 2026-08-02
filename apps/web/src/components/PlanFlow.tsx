@@ -69,6 +69,23 @@ export interface PlanFlowProps {
     satelliteCount: number;
     sourceTimestamps: { label: string; url?: string; at?: string }[];
   } | null;
+  /**
+   * Which snapshot of the world this plan is frozen to.
+   *
+   * Null for a region compiled before the backbone existed, and for the authored
+   * fixture — both of which are honest answers, and neither of which should
+   * render a release badge claiming otherwise.
+   */
+  regionData: {
+    releaseId: string;
+    catalog: string;
+    state: string;
+    recordCount: number;
+    builtAt: string;
+    reused: boolean;
+    packId: string;
+    contentHash: string;
+  } | null;
   providerMessage: string;
   providerReady: boolean;
 }
@@ -599,7 +616,57 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
   );
 }
 
-function ReadyStep({ tripId, coverage, licences, attributions, compiledSummary, snapshot }: PlanFlowProps) {
+/**
+ * Where the region's place data came from, and how old it is.
+ *
+ * Collapsed, because a normal user page is not a database console — and present,
+ * because a plan built on a snapshot that a traveller cannot name is a plan they
+ * cannot check. Everything in here is read from the stored artifact, so it is as
+ * available offline as the plan itself.
+ */
+function RegionDataPanel({ data }: { data: NonNullable<PlanFlowProps['regionData']> }) {
+  const built = data.builtAt.slice(0, 10);
+  return (
+    <details className="mt-6" data-testid="region-data">
+      <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+        Regional place data — {data.catalog} release {data.releaseId}
+      </summary>
+      <Panel className="mt-3 p-4">
+        <p className="text-sm leading-relaxed text-ink-muted">
+          This plan is frozen to a snapshot of the world taken on {built}. Newer data will not change
+          it; rebuilding the region is what picks up a newer release, and that produces a new plan
+          rather than editing this one.
+        </p>
+        <dl className="mt-4 space-y-3 text-sm">
+          <Row label="Release" value={`${data.catalog} ${data.releaseId}`} />
+          <Row label="Prepared" value={`${built}${data.reused ? ', already held' : ''}`} />
+          <Row label="Records" value={`${data.recordCount} in the regional data`} />
+          <Row
+            label="Completeness"
+            value={
+              data.state === 'partial'
+                ? 'Some areas could not be read when this was prepared'
+                : 'Every area we planned to read was read'
+            }
+          />
+        </dl>
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+          {data.packId} · {data.contentHash}
+        </p>
+      </Panel>
+    </details>
+  );
+}
+
+function ReadyStep({
+  tripId,
+  coverage,
+  licences,
+  attributions,
+  compiledSummary,
+  snapshot,
+  regionData,
+}: PlanFlowProps) {
   if (!coverage || !compiledSummary) return null;
   const weak = coverage.dimensions.filter(
     (entry) => entry.level === 'weak' || entry.level === 'unavailable',
@@ -723,6 +790,8 @@ function ReadyStep({ tripId, coverage, licences, attributions, compiledSummary, 
         <p className="mt-4 text-[11px] leading-relaxed text-ink-faint" data-testid="attribution-line">
           {attributions.join(' · ')}. Conditions change; we have not checked today.
         </p>
+
+        {regionData ? <RegionDataPanel data={regionData} /> : null}
       </section>
 
       <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-rule pt-6">

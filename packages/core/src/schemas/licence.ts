@@ -21,6 +21,17 @@ export const LICENCE_IDS = [
   'ODbL-1.0',
   /** Open-Meteo. Attribution only. */
   'CC-BY-4.0',
+  /**
+   * Overture's place records from most contributors. Share the licence text with
+   * shared data; §3.1 puts no obligation at all on results. **No share-alike.**
+   * Keeping this distinguishable from `ODbL-1.0` at the record level is the whole
+   * reason a region pack holds layers rather than one merged table.
+   */
+  'CDLA-Permissive-2.0',
+  /** Overture's Foursquare-sourced place records. NOTICE travels with the data. */
+  'Apache-2.0',
+  /** Overture's AllThePlaces-sourced records. No obligation; attributed anyway. */
+  'CC0-1.0',
   /** A public body's own published information, terms unread. Attribution, no reuse claim. */
   'official-source',
   /** Written by us from sources we read. Ours to keep. */
@@ -63,6 +74,32 @@ export const LICENCES: Record<LicenceId, Omit<DataLicence, 'appliesTo'>> = {
     name: 'Creative Commons Attribution 4.0',
     url: 'https://creativecommons.org/licenses/by/4.0/',
     attribution: 'Weather data by Open-Meteo.com',
+    shareAlike: false,
+  },
+  'CDLA-Permissive-2.0': {
+    id: 'CDLA-Permissive-2.0',
+    name: 'Community Data License Agreement — Permissive 2.0',
+    url: 'https://cdla.dev/permissive-2-0/',
+    /**
+     * CDLA-2.0 mandates carrying the licence text, not a credit line. Overture
+     * asks for this wording, and a product that shows where its data came from
+     * is a better product than one that has worked out it need not.
+     */
+    attribution: 'Place data © Overture Maps Foundation, overturemaps.org',
+    shareAlike: false,
+  },
+  'Apache-2.0': {
+    id: 'Apache-2.0',
+    name: 'Apache License 2.0',
+    url: 'https://www.apache.org/licenses/LICENSE-2.0',
+    attribution: 'Copyright 2024 Foursquare Labs, Inc., via Overture Maps Foundation',
+    shareAlike: false,
+  },
+  'CC0-1.0': {
+    id: 'CC0-1.0',
+    name: 'Creative Commons Zero 1.0',
+    url: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    attribution: 'Public-domain place records via Overture Maps Foundation',
     shareAlike: false,
   },
   'official-source': {
