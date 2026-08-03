@@ -3,19 +3,30 @@
 import { after } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import {
+  DESTINATION_RESOLUTION_VERSION,
+  FEATURE_TYPE_BREADTH,
+  FEATURE_TYPE_ENTITY,
+  assessConfidence,
   candidateById,
   COMPILATION_ERROR_COPY,
   countNights,
+  datesInWindow,
+  MAX_TRIP_NIGHTS,
+  normalizeDestinationQuery,
+  decideInterpretation,
   displayStages,
   isRetryable,
-  isUnambiguous,
   isTerminal,
   unansweredRequired,
   type ClarificationSet,
   type CompilationState,
+  type DestinationCandidate,
+  type DestinationResolution,
+  type SelectedDestination,
   type StageRecord,
+  type TripComposerAnswers,
 } from '@sidequest/core';
-import { deriveScope, rebuildClarificationSet, scopeFitsTrip } from '@sidequest/compiler';
+import { deriveScope, QUESTION_IDS, rebuildClarificationSet, scopeFitsTrip } from '@sidequest/compiler';
 import { compilerProviders, providerReadiness } from '@/lib/compiler/providers';
 import { runCompilation, startCompilation } from '@/lib/compiler/runner';
 import {
@@ -23,11 +34,15 @@ import {
   getLatestJob,
   requestCancel,
   saveClarifications,
+  saveComposerAnswers,
+  savePreflight,
   saveResolution,
   saveScope,
   saveSelectedCandidate,
+  saveSelectedDestination,
 } from '@/lib/db/compiler-repository';
-import { getProfile, getTrip } from '@/lib/db/repository';
+import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
+import { runPreflight } from '@/lib/destinations/preflight';
 
 /**
  * The actions behind the open-world journey.
@@ -66,28 +81,33 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
     saveResolution(tripId, resolution);
 
     /**
-     * One confident reading needs no screen.
+     * One credible reading needs no screen.
      *
-     * A list of one is a question with no alternatives, and the codebase's rule
-     * is that a section which is always present is a section nobody reads.
-     * `isUnambiguous` is deliberately strict — one candidate, high confidence,
-     * no recorded ambiguity — so this never quietly picks between two meanings.
+     * `decideInterpretation` rather than `isUnambiguous`, and that swap is the
+     * whole fix for the screenshot journey. `isUnambiguous` requires the
+     * ambiguity list to be *empty*, and a country always carries
+     * `administrative_area_needs_subset` — so every country was "ambiguous",
+     * every country got a which-one screen, and every one of those screens had
+     * exactly one card on it.
+     *
+     * Breadth is not a question about *which* place was meant. It is a question
+     * about how much of it, it has its own screen, and it comes later.
      */
-    if (isUnambiguous(resolution)) {
-      const only = resolution.candidates[0];
-      if (only) {
-        saveSelectedCandidate(tripId, only.id);
-        const profile = getProfile(tripId);
-        saveClarifications(
-          tripId,
-          rebuildClarificationSet({
-            resolution,
-            candidate: only,
-            nights: countNights(trip.basics.startDate, trip.basics.endDate),
-            ...(profile ? { profile } : {}),
-          }),
-        );
-      }
+    const decision = decideInterpretation(resolution);
+    if (decision.kind === 'single') {
+      saveSelectedCandidate(tripId, decision.candidate.id);
+      saveSelectedDestination(tripId, selectedDestinationFrom(decision.candidate));
+      const profile = getProfile(tripId);
+      saveClarifications(
+        tripId,
+        rebuildClarificationSet({
+          resolution,
+          candidate: decision.candidate,
+          nights: countNights(trip.basics.startDate, trip.basics.endDate),
+          ...(profile ? { profile } : {}),
+          known: knownFrom(intent?.composer ?? null),
+        }),
+      );
     }
   } catch (error) {
     console.error('Destination resolution failed', { tripId });
@@ -125,6 +145,7 @@ export async function selectInterpretationAction(
   if (!candidate) return { ok: false, error: 'That is not one of the readings we found.' };
 
   saveSelectedCandidate(tripId, candidateId);
+  saveSelectedDestination(tripId, selectedDestinationFrom(candidate));
 
   const profile = getProfile(tripId);
   const rebuilt = rebuildClarificationSet(
@@ -133,6 +154,7 @@ export async function selectInterpretationAction(
       candidate,
       nights: countNights(trip.basics.startDate, trip.basics.endDate),
       ...(profile ? { profile } : {}),
+      known: knownFrom(intent.composer),
     },
     intent.clarifications,
   );
@@ -180,11 +202,10 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
 
   const intent = getIntent(tripId);
-  if (!intent?.resolution || !intent.selectedCandidateId) {
-    return { ok: false, error: 'Pick which reading you meant first.' };
-  }
-  const candidate = candidateById(intent.resolution, intent.selectedCandidateId);
-  if (!candidate) return { ok: false, error: 'That reading is no longer available.' };
+  if (!intent) return { ok: false, error: 'We could not find that trip.' };
+
+  const candidate = activeCandidate(intent);
+  if (!candidate) return { ok: false, error: 'We do not know where you mean yet.' };
 
   if (unansweredRequired(intent.clarifications).length > 0) {
     return { ok: false, error: 'There are still a couple of questions to answer.' };
@@ -195,6 +216,8 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
     candidate,
     clarifications: intent.clarifications,
     ...(profile ? { profile } : {}),
+    ...(intent.composer?.transport ? { composerTransport: intent.composer.transport } : {}),
+    ...(intent.composer?.shape ? { composerShape: intent.composer.shape } : {}),
     nights: countNights(trip.basics.startDate, trip.basics.endDate),
     revision: intent.scopeRevision + 1,
   });
@@ -277,6 +300,8 @@ export interface CompilationSnapshot {
   errorMessage?: string;
   retryable: boolean;
   compiledRegionId?: string;
+  /** When the job began, so the progress clock survives a refresh. */
+  startedAt?: string;
 }
 
 /**
@@ -296,5 +321,428 @@ export async function compilationSnapshotAction(tripId: string): Promise<Compila
     ...(job.errorCode ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] } : {}),
     retryable: job.errorCode ? isRetryable(job.errorCode) : job.state === 'failed',
     ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
+    startedAt: job.startedAt,
   };
 }
+
+/**
+ * A resolver candidate, in the shape the composer and preflight speak.
+ *
+ * The two paths into the flow — picking an index row and typing free text —
+ * converge here, so everything downstream reads one type. Without this, half the
+ * new screens would have to branch on which door the traveller came through,
+ * and the free-text path would quietly get a worse product.
+ *
+ * `releaseId: 'resolver'` is a truthful marker rather than a fake pin: this
+ * identity came from a geocoder, not from a pinned catalogue release, and a
+ * release id copied from somewhere else would be a provenance claim we cannot
+ * support.
+ */
+function selectedDestinationFrom(candidate: DestinationCandidate): SelectedDestination {
+  return {
+    entryId: `resolver:${candidate.id}`,
+    catalog: 'nominatim',
+    sourceId: candidate.providerRefs[0]?.externalId ?? candidate.id,
+    releaseId: 'resolver',
+    displayName: candidate.displayName,
+    qualifiedName: candidate.qualifiedName,
+    featureType: FEATURE_TYPE_FROM_ENTITY[candidate.entityType] ?? 'other',
+    center: candidate.center,
+    ...(candidate.bounds ? { bounds: candidate.bounds } : {}),
+    ...(candidate.countryCode ? { countryCode: candidate.countryCode } : {}),
+    hierarchy: candidate.administrativeAreas,
+    selectedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * THE OTHER HALF OF THE BRIDGE.
+ *
+ * `selectedDestinationFrom` turns a resolver candidate into the shape the new
+ * screens speak; this turns an index selection back into the shape the *scope*
+ * layer speaks. Both directions are needed because the two entry paths — picking
+ * a suggestion, and typing free text — have to converge on one representation
+ * before `deriveScope` runs.
+ *
+ * A live evaluation is what found this: a destination picked from the index
+ * reached the preflight, chose a strategy, and then `proposeScopeAction` refused
+ * it with "pick which reading you meant first" — because there was no resolver
+ * candidate and nothing had noticed that there did not need to be one.
+ *
+ * The confidence is deliberately *not* invented. An index row is a record from a
+ * pinned catalogue release that the traveller pointed at, which is a stronger
+ * provenance than a geocoder guess, and `user_confirmed` says exactly that
+ * without claiming corroboration nobody performed.
+ */
+function candidateFromSelected(destination: SelectedDestination): DestinationCandidate {
+  const entityType = FEATURE_TYPE_ENTITY[destination.featureType];
+  return {
+    id: destination.entryId,
+    displayName: destination.displayName,
+    qualifiedName: destination.qualifiedName,
+    entityType,
+    breadth: FEATURE_TYPE_BREADTH[destination.featureType],
+    center: destination.center,
+    ...(destination.bounds ? { bounds: destination.bounds } : {}),
+    ...(destination.countryCode ? { countryCode: destination.countryCode } : {}),
+    administrativeAreas: [...destination.hierarchy],
+    timeZones: [],
+    providerRefs: [
+      {
+        provider: destination.catalog,
+        externalId: destination.sourceId,
+      },
+    ],
+    confidence: assessConfidence([
+      'user_confirmed',
+      'exact_name_match',
+      ...(destination.bounds ? (['boundary_available'] as const) : (['no_boundary_available'] as const)),
+    ]),
+    note: `Chosen from the ${destination.catalog} place index.`,
+  };
+}
+
+/**
+ * The candidate this trip is working from, whichever door it came through.
+ *
+ * The resolver's candidate wins when there is one, because it carries a time
+ * zone and a corroboration record the index does not.
+ */
+function activeCandidate(intent: {
+  resolution: DestinationResolution | null;
+  selectedCandidateId: string | null;
+  selectedDestination: SelectedDestination | null;
+}): DestinationCandidate | null {
+  if (intent.resolution && intent.selectedCandidateId) {
+    const found = candidateById(intent.resolution, intent.selectedCandidateId);
+    if (found) return found;
+  }
+  return intent.selectedDestination ? candidateFromSelected(intent.selectedDestination) : null;
+}
+
+const FEATURE_TYPE_FROM_ENTITY: Partial<Record<string, SelectedDestination['featureType']>> = {
+  country: 'country',
+  multi_country: 'country',
+  state_or_province: 'region',
+  subregion: 'county',
+  city: 'city',
+  metro_area: 'city',
+  neighbourhood: 'district',
+  island: 'island',
+  archipelago: 'island',
+  protected_area: 'national_park',
+  point_of_interest: 'landmark',
+};
+
+/**
+ * The cheap answer, computed once and stored.
+ *
+ * Called from the plan page's preflight step rather than during render: this
+ * makes one network request (climate, cached for a month) and a handful of local
+ * queries, and a page that did that on every render would be doing hidden I/O in
+ * a component — the thing the architecture tests exist to prevent.
+ *
+ * Idempotent by destination: a stored preflight for the same destination is
+ * returned rather than recomputed, so a refresh is free.
+ */
+export async function ensurePreflightAction(tripId: string): Promise<ActionResult> {
+  const intent = getIntent(tripId);
+  if (!intent) return { ok: false, error: 'We could not find that trip.' };
+
+  const destination = intent.selectedDestination;
+  if (!destination) return { ok: false, error: 'We do not know where you mean yet.' };
+
+  /*
+   * The clarification set is derived here, not only after a resolver run.
+   *
+   * Both entry paths reach this point, and the rules that decide which questions
+   * a destination needs are the same for both. Deriving them only on the
+   * resolver path is what left an index-selected country with an empty question
+   * set — so the strategy answer had nowhere to land and the scope layer had
+   * nothing to read.
+   */
+  const profile = getProfile(tripId);
+  const trip = getTrip(tripId);
+  if (trip && intent.clarifications.questions.length === 0) {
+    saveClarifications(
+      tripId,
+      rebuildClarificationSet(
+        {
+          resolution: intent.resolution ?? emptyResolution(destination),
+          candidate: candidateFromSelected(destination),
+          nights: countNights(trip.basics.startDate, trip.basics.endDate),
+          ...(profile ? { profile } : {}),
+          known: knownFrom(intent.composer),
+        },
+        intent.clarifications,
+      ),
+    );
+  }
+
+  if (intent.preflight && intent.preflight.destinationKey === destination.entryId) {
+    return { ok: true };
+  }
+
+  try {
+    const preflight = await runPreflight({
+      destination,
+      answers: intent.composer,
+      now: new Date(),
+    });
+    savePreflight(tripId, preflight);
+  } catch (error) {
+    console.error('Preflight failed', { tripId, error });
+    return { ok: false, error: 'We could not read that region just now. Try again.' };
+  }
+
+  revalidatePath(`/trips/${tripId}/plan`);
+  return { ok: true };
+}
+
+/**
+ * What the composer already settled, in the shape the clarification rules read.
+ *
+ * One function rather than an inline object at each call site, because the three
+ * places that rebuild a question set have to agree about this — and a fourth one
+ * that forgot would re-ask a question the traveller has already answered, which
+ * is the single thing this product promises not to do.
+ */
+function knownFrom(composer: TripComposerAnswers | null): {
+  transport?: string;
+  scopeStrategy?: boolean;
+} {
+  if (!composer) return {};
+  return {
+    ...(composer.transport ? { transport: composer.transport } : {}),
+    ...(composer.scopeStrategy ? { scopeStrategy: true } : {}),
+  };
+}
+
+/**
+ * A resolution-shaped record for a destination that never needed resolving.
+ *
+ * The clarification rules take a `DestinationResolution` because they read its
+ * ambiguity reasons. An index selection has none — that is the whole point of it
+ * — so this is an empty one rather than a fabricated one: no ambiguity, one
+ * candidate, and `providersConsulted` naming the index rather than a geocoder we
+ * did not call.
+ */
+function emptyResolution(destination: SelectedDestination): DestinationResolution {
+  const candidate = candidateFromSelected(destination);
+  return {
+    schemaVersion: DESTINATION_RESOLUTION_VERSION,
+    query: destination.displayName,
+    normalizedQuery: normalizeDestinationQuery(destination.displayName),
+    candidates: [candidate],
+    ambiguityReasons: [],
+    unambiguousCandidateId: candidate.id,
+    providersConsulted: [destination.catalog],
+    resolvedAt: destination.selectedAt,
+  };
+}
+
+/**
+ * Adopt a recommended date window, or a recommended trip length.
+ *
+ * The preflight showed both and let the traveller do nothing with either, which
+ * makes a recommendation into advice. This is what turns "August is strongest
+ * here" into a trip that happens in August.
+ *
+ * The dates it produces are the *middle* of the month, and the composer keeps
+ * `dates.mode` unchanged so nothing presents that midpoint as a decision the
+ * traveller made. The evidence is month-grained; picking a specific week would
+ * be precision the data does not carry, and the screen says so.
+ */
+export async function adoptDateWindowAction(
+  tripId: string,
+  month: number,
+  year: number,
+): Promise<ActionResult> {
+  const trip = getTrip(tripId);
+  const intent = getIntent(tripId);
+  if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    return { ok: false, error: 'That is not a month we offered.' };
+  }
+
+  const nights = countNights(trip.basics.startDate, trip.basics.endDate);
+  const { startDate, endDate } = datesInWindow({ month, year }, Math.max(1, nights));
+
+  updateTripDates(tripId, startDate, endDate);
+  if (intent.composer) {
+    saveComposerAnswers(tripId, {
+      ...intent.composer,
+      dates: { ...intent.composer.dates, startDate, endDate, year },
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  revalidatePath(`/trips/${tripId}/plan`);
+  return { ok: true };
+}
+
+export async function adoptTripLengthAction(
+  tripId: string,
+  nights: number,
+): Promise<ActionResult> {
+  const trip = getTrip(tripId);
+  const intent = getIntent(tripId);
+  if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
+  if (!Number.isInteger(nights) || nights < 1 || nights > MAX_TRIP_NIGHTS) {
+    return { ok: false, error: 'That is not a length we offered.' };
+  }
+
+  const start = Date.parse(`${trip.basics.startDate}T00:00:00Z`);
+  if (Number.isNaN(start)) return { ok: false, error: 'That trip has no usable start date.' };
+  const endDate = new Date(start + nights * 86_400_000).toISOString().slice(0, 10);
+
+  updateTripDates(tripId, trip.basics.startDate, endDate);
+  if (intent.composer) {
+    saveComposerAnswers(tripId, {
+      ...intent.composer,
+      dates: { ...intent.composer.dates, endDate },
+      duration: { ...intent.composer.duration, mode: 'fixed', nights },
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  /*
+   * The preflight is recomputed, because a different length is a different
+   * portfolio: the number of bases a trip can hold is the thing this screen's
+   * whole recommendation turns on. Clearing the stored one is what forces it.
+   */
+  if (intent.selectedDestination) {
+    savePreflight(tripId, {
+      ...(await runPreflight({
+        destination: intent.selectedDestination,
+        answers: getIntent(tripId)?.composer ?? null,
+        now: new Date(),
+      })),
+    });
+  }
+
+  revalidatePath(`/trips/${tripId}/plan`);
+  return { ok: true };
+}
+
+/**
+ * Adopt a scope strategy chosen on the preflight screen.
+ *
+ * Two writes, both of which matter:
+ *
+ * - **onto the composer**, because the scope is *derived* and a value written
+ *   only there would be lost the moment somebody pressed "rework it";
+ * - **onto the clarification answers**, so the breadth and base questions this
+ *   choice already answers are never asked a second time. Asking a traveller the
+ *   same thing twice is precisely what "one questionnaire" promises not to do.
+ *
+ * The clarification write is a single replacement of the whole answer list
+ * rather than one call per question. An earlier version wrote twice, each time
+ * re-reading the intent, and the second write silently reverted part of the
+ * first — the kind of defect that only shows up when both questions happen to be
+ * present, which is exactly the country case this screen exists for.
+ */
+export async function applyStrategyAction(tripId: string, strategyId: string): Promise<ActionResult> {
+  const intent = getIntent(tripId);
+  if (!intent) return { ok: false, error: 'We could not find that trip.' };
+
+  /*
+   * An empty strategy is a real answer, not a missing one.
+   *
+   * A region with a single cluster offers no strategies, so there is nothing to
+   * pick — and the traveller still has to be able to move on. Recording `none`
+   * is what stops them looping back to this screen forever.
+   */
+  const plan = strategyId === '' ? null : STRATEGY_CONSEQUENCES[strategyId];
+  if (strategyId !== '' && !plan) {
+    return { ok: false, error: 'That is not one of the options we offered.' };
+  }
+
+  if (intent.composer) {
+    saveComposerAnswers(tripId, {
+      ...intent.composer,
+      ...(plan ? { shape: plan.shape } : {}),
+      scopeStrategy: strategyId === '' ? 'none' : strategyId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  if (!plan) {
+    revalidatePath(`/trips/${tripId}/plan`);
+    return { ok: true };
+  }
+
+  const answeredAt = new Date().toISOString();
+  const implied = new Map<string, string>([
+    [QUESTION_IDS.breadthStrategy, plan.breadthAnswer],
+    [QUESTION_IDS.baseStrategy, plan.baseAnswer],
+  ]);
+
+  const kept = intent.clarifications.answers.filter((answer) => !implied.has(answer.questionId));
+  const added = [...implied.entries()].map(([questionId, value]) => ({
+    questionId,
+    values: [value],
+    answeredAt,
+  }));
+
+  /*
+   * Re-derive the question set now that the strategy is known.
+   *
+   * Without this the two questions the strategy just answered stay in the set
+   * and are presented on the very next screen — which a live run caught: choose
+   * "two bases", press continue, and be asked how many times you are willing to
+   * change hotel. The answers survive the rebuild; the questions do not.
+   */
+  const withStrategy = getIntent(tripId);
+  const trip = getTrip(tripId);
+  const candidate = withStrategy ? activeCandidate(withStrategy) : null;
+  if (withStrategy && trip && candidate) {
+    const profile = getProfile(tripId);
+    saveClarifications(
+      tripId,
+      rebuildClarificationSet(
+        {
+          resolution: withStrategy.resolution ?? emptyResolution(withStrategy.selectedDestination!),
+          candidate,
+          nights: countNights(trip.basics.startDate, trip.basics.endDate),
+          ...(profile ? { profile } : {}),
+          known: knownFrom(withStrategy.composer),
+        },
+        { ...withStrategy.clarifications, answers: [...kept, ...added] },
+      ),
+    );
+
+    /*
+     * When nothing *required* is left, go straight to the scope screen.
+     *
+     * A screen carrying one optional question is a screen nobody reads, and the
+     * codebase already applies that rule to the interpretation step. What
+     * remains optional — a fixed airport, say — does not change what gets built,
+     * and the scope screen shows the region anyway.
+     */
+    const settled = getIntent(tripId);
+    if (settled && unansweredRequired(settled.clarifications).length === 0) {
+      await proposeScopeAction(tripId);
+    }
+  }
+
+  revalidatePath(`/trips/${tripId}/plan`);
+  return { ok: true };
+}
+
+/**
+ * What each strategy means downstream, in one table.
+ *
+ * A table rather than three nested ternaries so that adding a strategy is one
+ * row and forgetting a consequence is a type error rather than a silent
+ * default.
+ */
+const STRATEGY_CONSEQUENCES: Record<
+  string,
+  { shape: NonNullable<TripComposerAnswers['shape']>; breadthAnswer: string; baseAnswer: string }
+> = {
+  one_area: { shape: 'one_base', breadthAnswer: 'one_area', baseAnswer: '0' },
+  name_it: { shape: 'one_base', breadthAnswer: 'name_it', baseAnswer: '0' },
+  two_bases: { shape: 'two_bases', breadthAnswer: 'circuit', baseAnswer: '1' },
+  circuit: { shape: 'circuit', breadthAnswer: 'circuit', baseAnswer: '2' },
+};

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { compileRegion } from './support/trip';
 
 /**
  * WHAT A TRAVELLER SEES OF THE EVIDENCE.
@@ -16,38 +17,16 @@ const DATES = { start: '2026-08-12', end: '2026-08-16' };
 
 async function createTrip(page: Page, destination: string): Promise<string> {
   await page.goto('/trips/new');
-  await page.getByLabel('Where are you going?').fill(destination);
+  await page.getByLabel('Destination').fill(destination);
   await page.getByLabel('Arrive').fill(DATES.start);
   await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /Start the questionnaire/i }).click();
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/);
   return /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1] ?? '';
 }
 
 async function compile(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Read this' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).not.toContainText('Reading', {
-    timeout: 15_000,
-  });
-  if (await page.getByRole('button', { name: 'Continue' }).isVisible().catch(() => false)) {
-    const radios = page.locator('input[type=radio]');
-    const groups = new Set<string>();
-    for (let index = 0; index < (await radios.count()); index += 1) {
-      const name = await radios.nth(index).getAttribute('name');
-      if (name && !groups.has(name)) {
-        groups.add(name);
-        await radios.nth(index).check();
-      }
-    }
-    await page.getByRole('button', { name: 'Continue' }).click();
-  }
-  await expect(page.getByRole('heading', { name: 'Here is what we are about to do' })).toBeVisible({
-    timeout: 15_000,
-  });
-  await page.getByRole('button', { name: 'Build the region' }).click();
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
-    timeout: 60_000,
-  });
+  await compileRegion(page);
 }
 
 /**

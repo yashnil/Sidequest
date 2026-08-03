@@ -167,6 +167,17 @@ CREATE TABLE IF NOT EXISTS trip_intents (
   selected_compiled_region_id TEXT,
   discovery_prefs_json       TEXT,
   shortlist_json             TEXT,
+  -- Everything the composer captured before a penny was spent. Written on every
+  -- keystroke-settled answer, so back-navigation and refresh cost nothing.
+  composer_json              TEXT,
+  -- The identity the traveller picked out of the destination index, if they did.
+  -- Its presence is what lets the flow skip resolution and interpretation
+  -- entirely: there is nothing to interpret about a row somebody pointed at.
+  selected_destination_json  TEXT,
+  -- The cheap preflight: region portfolio, date guidance, duration guidance and
+  -- the supply verdict. Persisted so a refusal survives the refresh that used to
+  -- throw it away, exactly as planner readiness now does.
+  preflight_json             TEXT,
   created_at                 TEXT NOT NULL,
   updated_at                 TEXT NOT NULL
 );
@@ -604,6 +615,61 @@ CREATE TABLE IF NOT EXISTS planner_readiness (
   payload_json TEXT NOT NULL,
   created_at   TEXT NOT NULL
 );
+
+-- ===========================================================================
+-- THE DESTINATION SEARCH INDEX
+-- ===========================================================================
+--
+-- Built from a place catalogue's own division records under a pinned release,
+-- and queried locally so that typing a destination costs nobody a request. The
+-- public geocoder's usage policy names autocomplete as unacceptable use, and
+-- "we ask you to press a button because somebody else asked us to" was the
+-- product's answer for a whole phase. This table is the answer instead.
+--
+-- Traveller-independent, like the evidence store and for the same reasons: the
+-- ranking is a pure function of the query and the row, so it can be shared, and
+-- nothing anybody types is stored here.
+--
+-- Not load-bearing. Emptying it costs suggestions, not trips: a trip persists
+-- the identity it selected, and the resolver remains the path for anything the
+-- index does not hold.
+CREATE TABLE IF NOT EXISTS destination_index (
+  id           TEXT PRIMARY KEY,
+  catalog      TEXT NOT NULL,
+  source_id    TEXT NOT NULL,
+  feature_type TEXT NOT NULL,
+  country_code TEXT,
+  rank         REAL NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_destination_index_country
+  ON destination_index(country_code, feature_type);
+
+-- The prefix index. One row per (folded term, entry), where a term is a whole
+-- folded name or one of its words — so "Issyk" finds "Issyk-Kul Region", which a
+-- whole-string index cannot do.
+--
+-- 'rank' is denormalised onto this row on purpose. A two-character prefix can
+-- match tens of thousands of entries, and ordering those by a column on another
+-- table means SQLite materialises and sorts all of them before the limit
+-- applies. With the composite index below, the query is a bounded range scan
+-- that stops as soon as it has enough.
+CREATE TABLE IF NOT EXISTS destination_index_terms (
+  term     TEXT NOT NULL,
+  rank     REAL NOT NULL,
+  entry_id TEXT NOT NULL,
+  PRIMARY KEY (term, rank, entry_id)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS idx_destination_terms_prefix
+  ON destination_index_terms(term, rank DESC);
+
+-- Which release the index was built from. One row, replaced wholesale.
+CREATE TABLE IF NOT EXISTS destination_index_release (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  payload_json TEXT NOT NULL
+);
 `;
 
 /**
@@ -647,4 +713,14 @@ export const COLUMN_MIGRATIONS: readonly {
    * actually happened.
    */
   { table: 'evidence_claims', column: 'superseded', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  /**
+   * Added by the trip composer.
+   *
+   * Nullable rather than defaulted: a trip created before the composer existed
+   * genuinely has no composer answers, and a `'{}'` default would be a record of
+   * somebody having answered nothing rather than of nobody having been asked.
+   */
+  { table: 'trip_intents', column: 'composer_json', definition: 'TEXT' },
+  { table: 'trip_intents', column: 'selected_destination_json', definition: 'TEXT' },
+  { table: 'trip_intents', column: 'preflight_json', definition: 'TEXT' },
 ];

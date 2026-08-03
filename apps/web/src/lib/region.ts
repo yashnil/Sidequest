@@ -65,6 +65,14 @@ export interface RegionContext {
   food: FoodDataset | null;
   matrix: TravelTimeMatrix;
   baseId: string;
+  /**
+   * The multi-base structure, when the artifact carries one.
+   *
+   * Read from the artifact rather than re-derived, which is what keeps a stored
+   * plan explicable: the bases and dates the planner used are the ones the
+   * region was routed against, frozen at compile time like everything else.
+   */
+  basePortfolio: CompiledRegion['basePortfolio'];
   months: number[];
   dates: string[];
   /** The artifact this context was built from, for provenance and coverage. */
@@ -235,6 +243,7 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
       food,
       matrix: compiled.travelTimes,
       baseId: primaryBase.routingId,
+      basePortfolio: compiled.basePortfolio,
       months,
       dates,
       compiled,

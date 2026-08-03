@@ -364,10 +364,60 @@ export function planTrip(input: PlannerInput): PlanResult {
    */
   let foodContext: FoodContext | null = null;
 
+  /**
+   * Which base a date belongs to.
+   *
+   * The whole multi-base story in one function. Without it every day starts and
+   * ends at `input.baseId` — so a traveller who moved to a second base on day
+   * six has days seven onwards routed back to the first, which is both a wrong
+   * plan and one that looks right because the numbers are internally consistent.
+   *
+   * Falls back to the single base whenever there is no portfolio, which is what
+   * every region compiled before hierarchical routing has.
+   */
+  const baseAt = (date: string): { id: string; name: string } => {
+    const assignment = input.basePortfolio?.bases.find(
+      (base) => date >= base.fromDate && date <= base.toDate,
+    );
+    return assignment
+      ? { id: assignment.baseId, name: assignment.baseName }
+      : { id: input.baseId, name: baseName };
+  };
+
+  /** Whether this date is the one spent moving between two bases. */
+  const isTransfer = (date: string): boolean =>
+    (input.basePortfolio?.bases ?? []).some((base) => base.order > 0 && base.fromDate === date);
+
+  /**
+   * The measured transfer this date carries, in minutes at the wheel.
+   *
+   * A transfer day is not an ordinary day and pretending otherwise fails in one
+   * of two ways: judged against the sightseeing limit, a four-hour move alone
+   * exceeds it and the day comes back empty; ignored, the traveller is handed a
+   * day with four hours of driving on top of a full itinerary.
+   *
+   * So the transfer gets its **own, separately disclosed allowance** — the
+   * measured leg, and nothing more. The sightseeing limit is untouched: what a
+   * transfer day may hold is the traveller's ordinary limit *plus the move they
+   * already committed to by choosing a multi-base trip*, never a quietly raised
+   * ceiling.
+   */
+  const transferMinutesOn = (date: string): number => {
+    const arriving = (input.basePortfolio?.bases ?? []).find(
+      (base) => base.order > 0 && base.fromDate === date,
+    );
+    return arriving?.transferMinutesFromPrevious ?? 0;
+  };
+
+  const driveCapOn = (date: string): number =>
+    input.profile.transport.maxDailyDriveMinutes + transferMinutesOn(date);
+  const travelCapOn = (date: string): number =>
+    input.profile.transport.maxDailyTransportMinutes + transferMinutesOn(date);
+
   const contextFor = (day: DayPlan['day']): LayoutContext => ({
     day,
-    baseId: input.baseId,
-    baseName,
+    baseId: baseAt(day.date).id,
+    baseName: baseAt(day.date).name,
     matrix: input.matrix,
     config,
     profile: input.profile,
@@ -417,7 +467,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     plannable,
     days,
     input.matrix,
-    input.baseId,
+    (date) => baseAt(date).id,
     unitByPlaceId,
     feasibleDates,
     openDates,
@@ -435,7 +485,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     plannable,
     days,
     input.matrix,
-    input.baseId,
+    (date) => baseAt(date).id,
     unitByPlaceId,
     feasibleDates,
     openDates,
@@ -600,7 +650,7 @@ export function planTrip(input: PlannerInput): PlanResult {
    * stop at a time. What food may not do is cost a stop, break a cap, or invent
    * a new violation.
    */
-  const foodFits = (plain: DayLayout, withFood: DayLayout): boolean => {
+  const foodFits = (plain: DayLayout, withFood: DayLayout, date: string): boolean => {
     if (withFood.violations.length > plain.violations.length) return false;
     /**
      * The same stops, in the same order.
@@ -618,8 +668,8 @@ export function planTrip(input: PlannerInput): PlanResult {
         .map((item) => item.placeId ?? '')
         .join('>');
     if (sequence(withFood) !== sequence(plain)) return false;
-    if (withFood.driveMinutes > input.profile.transport.maxDailyDriveMinutes) return false;
-    if (withFood.travelMinutes > input.profile.transport.maxDailyTransportMinutes) return false;
+    if (withFood.driveMinutes > driveCapOn(date)) return false;
+    if (withFood.travelMinutes > travelCapOn(date)) return false;
     /**
      * Every extra minute at the wheel has to be accounted for by a detour the
      * plan owns up to.
@@ -657,7 +707,7 @@ export function planTrip(input: PlannerInput): PlanResult {
         foodContext && !foodSuppressed.has(plan.day.dayNumber)
           ? layoutBestOrder(contextFor(plan.day), plan.accepted, options)
           : plain;
-      const keepFood = withFood !== plain && foodFits(plain.layout, withFood.layout);
+      const keepFood = withFood !== plain && foodFits(plain.layout, withFood.layout, plan.day.date);
       const context = keepFood ? contextFor(plan.day) : packingContextFor(plan.day);
       const { scheduled, layout } = keepFood ? withFood : plain;
       // A day whose food was suppressed by the validator is already reported,
@@ -694,13 +744,33 @@ export function planTrip(input: PlannerInput): PlanResult {
             entry.weather !== undefined,
         );
 
-      return buildDay(
+      const built = buildDay(
         context,
         plan.accepted.filter((candidate) => placed.has(candidate.place.id)),
         layout,
         summariseDayTransport(scheduled, layout, input.access),
         weatherForDay(plan, onDay, scheduledEverywhere(plans)),
       );
+
+      /*
+       * A transfer day says so, on the day itself.
+       *
+       * Otherwise a traveller reads a day with two stops and no explanation for
+       * why it is lighter than the others — and the two or three hours they will
+       * actually spend moving are invisible until they are sitting in the car.
+       * The theme is the one line every day already carries, so it is the honest
+       * place for it.
+       */
+      if (!isTransfer(plan.day.date)) return built;
+      const arriving = (input.basePortfolio?.bases ?? []).find(
+        (base) => base.order > 0 && base.fromDate === plan.day.date,
+      );
+      return {
+        ...built,
+        theme: arriving
+          ? `Moving to ${arriving.baseName} — about ${Math.round(arriving.transferMinutesFromPrevious)} minutes on the road`
+          : built.theme,
+      };
     });
     return { days, dropped };
   };

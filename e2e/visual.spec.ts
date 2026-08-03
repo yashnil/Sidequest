@@ -34,12 +34,18 @@ test('captures the journey and stays free of console errors and overflow', async
   await page.goto('/');
   await shot('01-landing');
 
-  await page.getByRole('link', { name: 'Plan a Mammoth Lakes trip' }).click();
+  /*
+   * The landing call to action no longer names a town, because the product no
+   * longer plans one. The destination is typed into the composer instead, which
+   * is also what makes this walkthrough work for any destination.
+   */
+  await page.getByRole('link', { name: 'Start a trip' }).click();
+  await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill('2026-08-12');
   await page.getByLabel('Leave').fill('2026-08-15');
-  await shot('02-basics');
+  await shot('02-composer');
 
-  await page.getByRole('button', { name: 'Start the questionnaire' }).click();
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
   await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
   await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
   await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();

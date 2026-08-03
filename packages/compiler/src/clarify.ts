@@ -39,6 +39,30 @@ export interface ClarificationInput {
   candidate?: DestinationCandidate;
   profile?: TravelerProfile;
   nights: number;
+  /**
+   * What the trip composer already established, before any of this ran.
+   *
+   * The second rule in this file's header — *nothing is asked that is already
+   * answered* — used to be enforced against the questionnaire profile alone,
+   * which is built *after* compilation. So in practice `!profile` was always
+   * true and the car question was effectively unconditional. The composer now
+   * asks it up front, and this is what stops it being asked twice.
+   */
+  known?: {
+    /** 'drive' | 'public_transport' | 'mixed' | 'undecided', or absent. */
+    transport?: string;
+    /**
+     * Whether a scope strategy has already been chosen on the preflight.
+     *
+     * Suppresses **both** the breadth question and the base question, because
+     * one strategy answers both. A live run showed the cost of guarding only the
+     * second: a traveller who had just chosen "two bases" on the preflight was
+     * immediately shown "Kyrgyzstan is bigger than one trip — how do you want to
+     * take it on?" and "how many times are you willing to change hotel?", which
+     * is the product asking a question it had already been given the answer to.
+     */
+    scopeStrategy?: boolean;
+  };
 }
 
 export const QUESTION_IDS = {
@@ -90,7 +114,7 @@ export function deriveClarificationQuestions(input: ClarificationInput): Clarifi
    * whole country at equal depth would spend most of the budget on ground
    * nobody will stand on.
    */
-  if (rank >= BROAD_BREADTH_RANK) {
+  if (!input.known?.scopeStrategy && rank >= BROAD_BREADTH_RANK) {
     questions.push({
       id: QUESTION_IDS.breadthStrategy,
       reason: 'scope_too_broad',
@@ -125,7 +149,11 @@ export function deriveClarificationQuestions(input: ClarificationInput): Clarifi
    * a short trip has no room to move, and a `local` destination has nowhere to
    * move to.
    */
-  if (nights >= MULTI_BASE_NIGHT_THRESHOLD && rank >= breadthRank('subregion')) {
+  if (
+    !input.known?.scopeStrategy &&
+    nights >= MULTI_BASE_NIGHT_THRESHOLD &&
+    rank >= breadthRank('subregion')
+  ) {
     questions.push({
       id: QUESTION_IDS.baseStrategy,
       reason: 'base_strategy_unknown',
@@ -149,7 +177,10 @@ export function deriveClarificationQuestions(input: ClarificationInput): Clarifi
    * properly, and asking a second time is the thing the product promises not to
    * do.
    */
-  if (!profile) {
+  const transportKnown =
+    profile !== undefined ||
+    (input.known?.transport !== undefined && input.known.transport !== 'undecided');
+  if (!transportKnown) {
     questions.push({
       id: QUESTION_IDS.carAvailable,
       reason: 'car_availability_unknown',
@@ -191,7 +222,7 @@ export function deriveClarificationQuestions(input: ClarificationInput): Clarifi
   }
 
   /** Rough roads, only where nobody has said and the region is big enough to have them. */
-  if (!profile && rank >= BROAD_BREADTH_RANK) {
+  if (!transportKnown && rank >= BROAD_BREADTH_RANK) {
     questions.push({
       id: QUESTION_IDS.remoteRoads,
       reason: 'remote_road_comfort_unknown',

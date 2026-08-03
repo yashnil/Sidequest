@@ -5,7 +5,12 @@ import { renderInstant } from '@/lib/clock';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange } from '@/lib/format';
 import { getItinerary, getTrip, StaleItineraryError } from '@/lib/db/repository';
-import { buildPreparation, findOperatingCalendar, type PreparationItem } from '@sidequest/core';
+import {
+  buildPreparation,
+  findOperatingCalendar,
+  type DisplayName,
+  type PreparationItem,
+} from '@sidequest/core';
 import { resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
@@ -70,9 +75,20 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * a reason to withhold the itinerary.
    */
   let preparation: PreparationItem[] = [];
+  /*
+   * The base's resolved name, read from the compiled region rather than stored
+   * on the itinerary. A stored plan is immutable; migrating one to change how a
+   * heading reads would be rewriting somebody's trip to fix a presentation bug.
+   * An old region with no resolved name leaves this undefined and the view falls
+   * back to the itinerary's own `baseName`, exactly as before.
+   */
+  let baseNames: DisplayName | undefined;
   try {
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
+      baseNames = resolved.context.compiled.bases.find(
+        (base) => base.id === itinerary.baseId,
+      )?.names;
       const scheduled = new Set<string>();
       const namesById = new Map<string, string>();
       const unverifiedHours: string[] = [];
@@ -107,6 +123,14 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       itinerary={itinerary}
       preparation={preparation}
       tripId={id}
+      /*
+       * The base's resolved name, read from the compiled region rather than
+       * stored on the itinerary. A stored plan is immutable; migrating one to
+       * change how a heading reads would be rewriting somebody's trip to fix a
+       * presentation bug. An old region with no resolved name falls back to the
+       * itinerary's own `baseName`, exactly as before.
+       */
+      {...(baseNames ? { baseNames } : {})}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a

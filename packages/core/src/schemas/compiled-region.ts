@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { accessDatasetSchema, transportModeSchema } from './access';
-import { coordinatesSchema } from './common';
+import { coordinatesSchema, isoDateSchema } from './common';
+import { displayNameSchema } from '../naming/display-name';
 import { foodDatasetSchema } from './food';
 import { regionEvidenceSchema } from './evidence';
 import { destinationEntityTypeSchema, scopeBreadthSchema } from './geography';
@@ -36,6 +37,63 @@ import { weatherLocationSchema } from './weather';
  * extracted facts with their own citations, open-licensed geodata with its
  * attribution, and provider *identifiers*. See `.claude-private/research`.
  */
+
+/**
+ * A base the traveller sleeps in, with the dates it covers.
+ *
+ * Dates rather than an index, because the planner's question is always "which
+ * base is this day" and an index answers it only if every consumer agrees about
+ * how nights map onto days — which is exactly the kind of shared assumption
+ * that drifts.
+ */
+export const baseAssignmentSchema = z.object({
+  clusterId: z.string().min(1),
+  baseId: z.string().min(1),
+  baseName: z.string().min(1),
+  order: z.number().int().nonnegative(),
+  nights: z.number().int().nonnegative(),
+  fromDate: isoDateSchema,
+  toDate: isoDateSchema,
+  /** Measured minutes from the previous base. Zero for the first. */
+  transferMinutesFromPrevious: z.number().nonnegative(),
+  transferIsWholeDay: z.boolean(),
+});
+export type StoredBaseAssignment = z.infer<typeof baseAssignmentSchema>;
+
+export const basePortfolioSchema = z.object({
+  bases: z.array(baseAssignmentSchema).default([]),
+  excluded: z
+    .array(
+      z.object({
+        clusterId: z.string().min(1),
+        name: z.string().min(1),
+        reason: z.string().min(1),
+        /** True when routing could not connect it, rather than it not fitting. */
+        unreachable: z.boolean(),
+      }),
+    )
+    .default([]),
+  transferDays: z.number().nonnegative(),
+  rationale: z.string().min(1),
+});
+export type StoredBasePortfolio = z.infer<typeof basePortfolioSchema>;
+
+export const routingDiagnosticsSchema = z.object({
+  /** Ordered pairs the plan intended to buy. */
+  plannedPairs: z.number().int().nonnegative(),
+  /** What one flat all-pairs matrix would have cost, for comparison. */
+  flatPairs: z.number().int().nonnegative(),
+  requestedPairs: z.number().int().nonnegative(),
+  /** Cross-area cells composed through the bases from measured legs. */
+  composedPairs: z.number().int().nonnegative(),
+  providerCalls: z.number().int().nonnegative(),
+  clusters: z.number().int().nonnegative(),
+  reductions: z.array(z.string().min(1)).default([]),
+  failedClusters: z
+    .array(z.object({ clusterId: z.string().min(1), name: z.string().min(1), reason: z.string().min(1) }))
+    .default([]),
+});
+export type RoutingDiagnostics = z.infer<typeof routingDiagnosticsSchema>;
 
 export const COMPILED_REGION_VERSION = 1 as const;
 
@@ -74,6 +132,16 @@ export const baseCandidateSchema = z.object({
   role: baseRoleSchema,
   /** Matrix id. Days start and end here. */
   routingId: z.string().min(1),
+  /**
+   * The resolved name, English-first, with the native form beside it.
+   *
+   * Optional, and that is the whole compatibility story: every artifact
+   * compiled before this existed has a bare `name` and renders through
+   * `displayNameOf`, which falls back to it. Nothing re-derives a name for an
+   * old artifact — changing how a stored plan reads is not a presentation fix,
+   * it is rewriting somebody's trip.
+   */
+  names: displayNameSchema.optional(),
   /** IANA zone for this base, not for the region. */
   timeZone: z.string().min(1),
   subregionId: z.string().min(1).optional(),
@@ -110,6 +178,8 @@ export type BaseCandidate = z.infer<typeof baseCandidateSchema>;
 export const subregionSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  /** Resolved name. Optional for the same compatibility reason as on a base. */
+  names: displayNameSchema.optional(),
   summary: z.string().min(1),
   center: coordinatesSchema,
   /** How far this subregion reaches from its centre. */
@@ -415,6 +485,31 @@ export const compiledRegionSchema = z.object({
   /** Absent and empty are different answers, and the planner reads them differently. */
   food: foodDatasetSchema.optional(),
   travelTimes: travelTimeMatrixSchema,
+
+  /**
+   * The multi-base structure this region was routed and planned as.
+   *
+   * Optional, and that is the migration story: every artifact compiled before
+   * hierarchical routing existed has no portfolio, which reads correctly as
+   * "one base, no transfers" — the shape those regions actually had. Nothing
+   * re-derives it, so an old plan is never reinterpreted.
+   *
+   * When present it is the *contract* the planner is held to rather than
+   * display metadata: it says which base each date belongs to, which dates are
+   * transfers, and which areas were left out with the reason. The previous
+   * slice's four proposed bases were a list on a screen nothing read.
+   */
+  basePortfolio: basePortfolioSchema.optional(),
+
+  /**
+   * What routing actually cost, so the saving is auditable rather than claimed.
+   *
+   * An operator's numbers, not a traveller's, and kept out of coverage on
+   * purpose: how many pairs were bought says nothing about how good the region
+   * is, and mixing the two is how a cheap build starts looking like a confident
+   * one.
+   */
+  routingDiagnostics: routingDiagnosticsSchema.optional(),
 
   /**
    * What official sources said, resolved into typed facts.

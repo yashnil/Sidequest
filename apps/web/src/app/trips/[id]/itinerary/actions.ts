@@ -82,6 +82,7 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
       // against and validated as fresh.
       now: new Date(),
       baseId: context.baseId,
+      ...(context.basePortfolio ? { basePortfolio: context.basePortfolio } : {}),
     });
 
     if (!result.ok) {

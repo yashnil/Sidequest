@@ -1,4 +1,5 @@
 import type {
+  DisplayName,
   EvidenceClaimRecord,
   ResearchAttempt,
   ResolvedFact,
@@ -136,6 +137,13 @@ export interface RegionExpansion {
   bases: {
     id: string;
     name: string;
+    /**
+     * The resolved, English-first name when the adapter could produce one.
+     *
+     * Optional: an adapter with no multilingual source still returns a base,
+     * and the compiler falls back to `name` exactly as it always did.
+     */
+    names?: DisplayName;
     coordinates: { lat: number; lng: number };
     timeZone: string;
     subregionId?: string;

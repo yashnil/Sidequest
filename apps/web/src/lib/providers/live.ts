@@ -1,4 +1,5 @@
 import 'server-only';
+import { candidatesFromNominatim, resolveEntityName } from './names';
 import {
   assessConfidence,
   DESTINATION_RESOLUTION_VERSION,
@@ -17,6 +18,7 @@ import {
   type Place,
   type WeatherLocation,
   type FactPath,
+  resolveDisplayName,
 } from '@sidequest/core';
 import { buildInventory, foodVenueFromRecord, type InventoryResult } from '@sidequest/compiler';
 import type { SourceRecord } from '@sidequest/core';
@@ -248,7 +250,18 @@ function toCandidate(
 
   return {
     id: elementId ?? `nominatim-${place.place_id ?? `${lat},${lng}`}`,
-    displayName: place.name ?? place.display_name.split(',')[0]?.trim() ?? place.display_name,
+    /*
+     * English-first, from names the record itself publishes.
+     *
+     * `place.name` is the *local* name by design, and taking it directly is why
+     * an interpretation card could be headed in a script the traveller had not
+     * typed in. `namedetails` gives `name:en` where OSM has one; where it does
+     * not, this resolves to exactly what it always did.
+     */
+    displayName: resolveDisplayName({
+      candidates: candidatesFromNominatim(place),
+      fallback: place.display_name.split(',')[0]?.trim() ?? place.display_name,
+    }).display,
     qualifiedName: place.display_name,
     entityType,
     breadth,
@@ -485,9 +498,27 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             });
             continue;
           }
+          /*
+           * The base's name, resolved English-first.
+           *
+           * `first.name` is the geocoder's *local* name by design, and taking
+           * it directly is what rendered a compiled trip's base as
+           * `Бишкек шаары` on every screen. The resolver prefers a
+           * source-published English name — `name:en` from the record, or the
+           * destination index's own English resolution for the same
+           * coordinate — and keeps the local form beside it.
+           */
+          const names = resolveEntityName({
+            fallback: first.name ?? candidate.name,
+            coordinates: { lat, lng },
+            ...(scope.countryCode ? { countryCode: scope.countryCode } : {}),
+            place: first,
+          });
+
           bases.push({
             id: osmElementId(first) ?? `base-${candidate.name}`,
-            name: first.name ?? candidate.name,
+            name: names.display,
+            names,
             coordinates: { lat, lng },
             timeZone: diagnostics.timeZone ?? scope.timeZones[0] ?? 'UTC',
             suggestedNights: {

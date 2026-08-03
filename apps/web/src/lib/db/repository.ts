@@ -116,6 +116,24 @@ export function createTrip(basics: TripBasics): Trip {
   return { id, basics: parsed, status: 'draft', createdAt: now, updatedAt: now };
 }
 
+/**
+ * Move a trip's dates, and nothing else.
+ *
+ * Narrow on purpose. This exists so a traveller can *adopt* a recommended date
+ * window — the recommendation was read-only otherwise, which made it advice
+ * rather than a feature. A general "update the trip" would let a caller change
+ * the destination out from under a compiled region.
+ *
+ * Compiled artifacts are untouched, as always: a scope fingerprint carries the
+ * dates, so changing them means the next build produces a *new* artifact rather
+ * than reinterpreting an old one.
+ */
+export function updateTripDates(id: string, startDate: string, endDate: string): void {
+  getDb()
+    .prepare('UPDATE trips SET start_date = ?, end_date = ?, updated_at = ? WHERE id = ?')
+    .run(startDate, endDate, new Date().toISOString(), id);
+}
+
 export function getTrip(id: string): Trip | null {
   const row = getDb().prepare('SELECT * FROM trips WHERE id = ?').get(id) as TripRow | undefined;
   return row ? rowToTrip(row) : null;

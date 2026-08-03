@@ -18,6 +18,12 @@ next-env.d.ts
 .env.production
 .env.test
 
+# Destination index scan output: a regenerable 44 MB build input, produced by
+# `apps/web/scripts/scan-divisions.mjs` and consumed once by the index refresh.
+# Not source, and far too large to be.
+**/data/*.ndjson
+**/data/*.ndjson.state.json
+
 # local SQLite development databases, wherever a workspace puts them
 **/data/*.db
 **/data/*.db-journal

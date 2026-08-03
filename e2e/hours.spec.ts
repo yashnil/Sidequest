@@ -26,10 +26,10 @@ const REGION_WIDE = 'Best of the Eastern Sierra Go wherever it is worth it';
 
 async function reachBoard(page: Page, dates = AUGUST) {
   await page.goto('/trips/new');
-  await page.getByLabel('Where are you going?').fill('Mammoth Lakes');
+  await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: 'Start the questionnaire' }).click();
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
 
   await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
   await page.getByRole('radio', { name: 'History & culture: A few times' }).check();

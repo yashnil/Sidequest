@@ -173,6 +173,29 @@ export interface PlannerInput {
   foodSelections?: readonly FoodSelection[];
   /** Matrix id for the trip base. Days start and end here. */
   baseId: string;
+  /**
+   * The multi-base structure, when the region was compiled with one.
+   *
+   * Absent means one base for the whole trip — the shape every region compiled
+   * before hierarchical routing actually had, so an old artifact keeps planning
+   * exactly as it did.
+   *
+   * When present it is authoritative about **which base a given date belongs
+   * to**. That is the defect it exists to remove: a day after the traveller has
+   * moved on must not start and end at the base they left, and without a
+   * date→base mapping the planner has no way to know they moved.
+   */
+  basePortfolio?: {
+    bases: readonly {
+      baseId: string;
+      baseName: string;
+      order: number;
+      fromDate: string;
+      toDate: string;
+      transferMinutesFromPrevious: number;
+      transferIsWholeDay: boolean;
+    }[];
+  };
   config?: Partial<PlannerConfig>;
   /** Injected so output is reproducible in tests. */
   generatedAt?: string;

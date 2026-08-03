@@ -7,6 +7,7 @@ export * from './backbone/inventory';
 export * from './backbone/assemble';
 export * from './budget';
 export * from './clarify';
+export * from './routing';
 export * from './scope';
 export * from './dedupe';
 export * from './coverage';

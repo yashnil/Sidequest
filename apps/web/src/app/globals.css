@@ -16,6 +16,7 @@
 
   --color-pine: #2f5d50;
   --color-pine-soft: #e3ede9;
+  --color-pine-strong: #234a3f;
   --color-amber: #a85c22;
   --color-amber-soft: #f7ead9;
   --color-slate-blue: #3c5a77;
@@ -23,11 +24,33 @@
   --color-clay: #9a3f36;
   --color-clay-soft: #f6e3e0;
 
+  /*
+   * Evidence states, as colour.
+   *
+   * These are not decoration and they are not a palette — each one names a
+   * distinct claim about how much we know, and the same four appear on a
+   * Discovery Board card, on a compilation phase and on a date window. Colour is
+   * always redundant with a word, because a status carried only by hue is a
+   * status a colour-blind traveller does not have.
+   */
+  --color-provisional: #7a6a4f;
+  --color-provisional-soft: #f4eee2;
+  --color-verifying: #3c5a77;
+  --color-verifying-soft: #e4ebf2;
+  --color-verified: #2f5d50;
+  --color-verified-soft: #e3ede9;
+  --color-conflicted: #9a3f36;
+  --color-conflicted-soft: #f6e3e0;
+
   --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
   --radius-card: 0.875rem;
+  --radius-panel: 1.125rem;
+
+  /* One elevation step, used sparingly: raised surfaces, never floating ones. */
+  --shadow-panel: 0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px -16px rgb(28 25 23 / 0.18);
 }
 
 /*
@@ -53,6 +76,18 @@
     --color-slate-blue-soft: #1d2831;
     --color-clay: #e29a90;
     --color-clay-soft: #38231f;
+    --color-pine-strong: #a8d4c2;
+
+    --color-provisional: #c4b394;
+    --color-provisional-soft: #2b2519;
+    --color-verifying: #9bbcd8;
+    --color-verifying-soft: #1d2831;
+    --color-verified: #8cc0ad;
+    --color-verified-soft: #1e332c;
+    --color-conflicted: #e29a90;
+    --color-conflicted-soft: #38231f;
+
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -16px rgb(0 0 0 / 0.6);
   }
 }
 
@@ -84,6 +119,41 @@
 @layer utilities {
   .font-display {
     font-family: var(--font-display);
+  }
+
+  /*
+   * The one-line eyebrow above a heading. A utility rather than a repeated
+   * class string because it appears on every screen and had drifted into three
+   * slightly different sizes.
+   */
+  .eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /*
+   * A live surface: something is happening and the screen should not look
+   * frozen. Deliberately slow and low-contrast — a progress screen that
+   * shimmers urgently for four minutes is worse than one that sits still.
+   */
+  .breathing {
+    animation: sq-breathe 2.8s ease-in-out infinite;
+  }
+
+  @keyframes sq-breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  /*
+   * Long-form measure. Prose that runs the full width of a 1440px viewport is
+   * unreadable, and the fix belongs next to the layout that widened it.
+   */
+  .measure {
+    max-width: 62ch;
   }
 
   /* Faint paper texture — enough to read as material, not enough to notice. */

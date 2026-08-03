@@ -12,6 +12,7 @@ import {
   resolutionKey,
   shelfLifeFor,
   scopeFingerprint,
+  selectBases,
   subjectKeyFor,
   travelTimeMatrixSchema,
   type AccessDataset,
@@ -20,6 +21,7 @@ import {
   type CompilationStage,
   type CompiledRegion,
   type DataLicence,
+  type DisplayName,
   type FactPath,
   type FoodDataset,
   type FoodVenue,
@@ -59,6 +61,11 @@ import type {
   ResearchSubject,
   RoutingMatrixResult,
 } from './providers';
+import {
+  assignToClusters,
+  routeHierarchically,
+  type HierarchicalRoutingResult,
+} from './routing';
 
 export const COMPILER_VERSION = 'sidequest-compiler/1';
 
@@ -1254,42 +1261,77 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     const primaryMode = matrixModeFor(input.scope);
     /** The mode the matrix was actually measured in. Recorded on the artifact. */
     let measuredMode = primaryMode;
+
+    /**
+     * ---- Stage: travel times, hierarchically ---------------------------------
+     *
+     * The flat all-pairs matrix that used to live here is what made a
+     * country-scale trip impossible. 126 points became 15,750 ordered pairs
+     * against a 2,500-pair budget; 85% of the matrix was marked failed without
+     * being requested, densification peeled it to 17 usable points, and the
+     * compile failed for want of travel times it had decided not to buy.
+     *
+     * Now: places are assigned to the base they will actually be visited from,
+     * one small matrix connects the bases, and one bounded matrix serves each
+     * cluster. `planRouting` computes the whole cost *before* a request is made,
+     * so exceeding a budget is a visible reduction rather than a silent collapse.
+     */
+    let routingDiagnostics: {
+      plannedPairs: number;
+      flatPairs: number;
+      requestedPairs: number;
+      composedPairs: number;
+      providerCalls: number;
+      clusters: number;
+      reductions: string[];
+      failedClusters: { clusterId: string; name: string; reason: string }[];
+    } | null = null;
+    /*
+     * A holder rather than a `let`.
+     *
+     * Both of these are written inside the stage closure and read after it.
+     * TypeScript's control-flow analysis cannot see across the callback, so a
+     * plain `let` narrows to `null` at every read site and the code stops
+     * compiling for a reason that has nothing to do with what it does.
+     */
+    const routed: { interCluster: RoutingMatrixResult | null } = { interCluster: null };
+
     const matrix = await runStage('computing_travel_times', async () => {
-      const points = [
-        ...bases.map((base) => ({ id: base.routingId, ...base.coordinates })),
-        ...openPlaces.map((place) => ({ id: place.id, ...place.coordinates })),
-        ...foodPoints.values(),
-      ];
-      const maxElements = ledger.remaining('maxRouteElements');
-      let value = await input.providers.routing.matrix({
-        points,
-        mode: primaryMode,
-        maxElements,
-      });
+      const foodForRouting = [...foodPoints.values()].map((point) => ({
+        routingId: point.id,
+        coordinates: { lat: point.lat, lng: point.lng },
+      }));
+      const clusters = assignToClusters({ bases, places: openPlaces, food: foodForRouting });
+
+      const run = async (mode: 'car' | 'foot'): Promise<HierarchicalRoutingResult> =>
+        routeHierarchically({
+          clusters,
+          places: openPlaces,
+          food: foodForRouting,
+          routing: input.providers.routing,
+          mode,
+          maxElements: ledger.remaining('maxRouteElements'),
+          fitOf: (placeId) => {
+            const place = openPlaces.find((entry) => entry.id === placeId);
+            return place ? roughFit(place, input.profile) : 0;
+          },
+        });
+
+      let outcome = await run(primaryMode);
 
       /**
        * One retry on the road network when the footpath network has nothing.
        *
-       * A live Denali build and a live Bali build both ended with "we could not
-       * work out travel times across this region" — not because the router was
-       * down, but because there is no continuous pedestrian graph across a
-       * national park or an island, and the scope's primary mode was `walk`.
-       *
        * Every non-driving mode a scope allows — bus, rail, shuttle, rideshare,
-       * ferry — travels on roads. So when the walking matrix comes back with
-       * nothing usable, the road matrix is the closest honest measurement
-       * available. It is recorded as what it is: `mode` travels on the artifact,
-       * the transport layer still says what the traveller can actually take, and
-       * nothing here claims they will drive it.
+       * ferry — travels on roads, and there is no continuous pedestrian graph
+       * across a national park or an island. The road matrix is then the closest
+       * honest measurement available. It is recorded as what it is: `mode`
+       * travels on the artifact, and nothing here claims the traveller drives.
        */
-      if (primaryMode !== 'car' && value.ids.length < 2) {
-        const fallback = await input.providers.routing.matrix({
-          points,
-          mode: 'car',
-          maxElements,
-        });
-        if (fallback.ids.length > value.ids.length) {
-          value = fallback;
+      if (primaryMode !== 'car' && outcome.matrix.ids.length < 2) {
+        const fallback = await run('car');
+        if (fallback.matrix.ids.length > outcome.matrix.ids.length) {
+          outcome = fallback;
           measuredMode = 'car';
           warnings.push(
             'Travel times here are measured along roads, because there is no continuous walking network across this region. How you actually travel each leg is in the transport notes.',
@@ -1297,14 +1339,36 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         }
       }
 
-      ledger.record('maxRouteElements', value.elements);
-      for (const entry of value.licences ?? []) licences.set(entry.id, entry);
+      ledger.record('maxRouteElements', outcome.requestedPairs);
+      for (const entry of outcome.matrix.licences ?? []) licences.set(entry.id, entry);
+      routed.interCluster = outcome.interCluster;
+      routingDiagnostics = {
+        plannedPairs: outcome.plan.totalPairs,
+        flatPairs: outcome.plan.flatPairs,
+        requestedPairs: outcome.requestedPairs,
+        composedPairs: outcome.composedPairs,
+        providerCalls: outcome.providerCalls,
+        clusters: clusters.length,
+        reductions: outcome.plan.reductions.map((entry) => entry.reason),
+        failedClusters: outcome.failedClusters,
+      };
+
+      for (const failure of outcome.failedClusters) {
+        gaps.push({ subjectId: failure.clusterId, reason: 'provider_error', detail: failure.reason });
+      }
+
+      const saved = outcome.plan.flatPairs - outcome.plan.totalPairs;
+      const note =
+        outcome.failedClusters.length > 0
+          ? `${outcome.failedClusters.map((entry) => entry.name).join(', ')} could not be connected, so ${outcome.failedClusters.length === 1 ? 'it was' : 'they were'} left out.`
+          : outcome.plan.reductions.length > 0
+            ? outcome.plan.reductions[0]!.reason
+            : undefined;
+
       return {
-        value,
-        outcome: `${value.ids.length} points, ${value.elements} legs${value.failedPairs.length > 0 ? `, ${value.failedPairs.length} unanswered` : ''}`,
-        ...(value.failedPairs.length > 0
-          ? { note: 'Some legs could not be measured; the places behind them were left out.' }
-          : {}),
+        value: outcome.matrix,
+        outcome: `${outcome.matrix.ids.length} points across ${clusters.length} ${clusters.length === 1 ? 'area' : 'areas'}, ${outcome.requestedPairs} legs measured${saved > 0 ? ` (${saved} skipped as unusable)` : ''}`,
+        ...(note ? { note } : {}),
       };
     });
 
@@ -1339,8 +1403,29 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return null;
       return { minutes, km: typeof km === 'number' && Number.isFinite(km) ? km : 0 };
     };
+    /**
+     * The drive from the base this place is actually visited from.
+     *
+     * It used to be `bases[0]` for every place in the region — which is right
+     * for a one-base trip and badly wrong for a multi-base one: a stop beside
+     * the third base was rendered, scored and filtered as though the traveller
+     * drove to it from the first, six hours away. Every consumer of
+     * `travelFromBase` read that number: the board, the quality assessor, the
+     * regional-expansion helper and the planner's reach filter.
+     *
+     * Now each place is measured from its own cluster's base, which is the
+     * journey that will actually appear on a day.
+     */
+    const baseOfPlace = new Map<string, string>();
+    for (const cluster of assignToClusters({
+      bases,
+      places: openPlaces,
+      food: [],
+    })) {
+      for (const placeId of cluster.placeIds) baseOfPlace.set(placeId, cluster.base.routingId);
+    }
     const legFromBase = (placeId: string): { minutes: number; km: number } | null =>
-      legBetween(bases[0]?.routingId ?? '', placeId);
+      legBetween(baseOfPlace.get(placeId) ?? bases[0]?.routingId ?? '', placeId);
 
     const plannable = openPlaces
       .filter((place) => routable.has(place.id))
@@ -1357,15 +1442,102 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         } satisfies Place;
       });
 
+    /**
+     * The base portfolio: which base, in what order, for how many nights.
+     *
+     * Derived from the *measured* inter-cluster matrix, never from straight
+     * lines and never from a model. When there is no inter-cluster matrix — one
+     * cluster, or a routing failure — this collapses to a single base, which is
+     * the honest shape of a trip whose regions could not be connected.
+     */
+    /*
+     * Only the bases the matrix can actually answer for.
+     *
+     * A base the routing layer lost is a base no day can start from, and
+     * `checkRegionIntegrity` rightly refuses an artifact containing one. Losing
+     * it here — where it becomes a smaller portfolio and a reported cluster —
+     * is the salvage story; carrying it forward is a compile that fails at the
+     * last gate having done all the work.
+     */
+    const matrixBases = bases.filter((base) => routable.has(base.routingId));
+    const usableBases = matrixBases.length > 0 ? matrixBases : bases.slice(0, 1);
+
+    const routedClusters = assignToClusters({
+      bases: usableBases,
+      places: plannable,
+      food: [...foodPoints.values()].map((point) => ({
+        routingId: point.id,
+        coordinates: { lat: point.lat, lng: point.lng },
+      })),
+    });
+    const portfolio = selectBases({
+      clusters: routedClusters.map((cluster) => ({
+        id: cluster.id,
+        name: cluster.name,
+        base: { id: cluster.base.routingId, coordinates: cluster.base.coordinates, role: 'base' as const },
+        representative: {
+          id: cluster.base.routingId,
+          coordinates: cluster.base.coordinates,
+          role: 'base' as const,
+        },
+        activities: [],
+        food: [],
+      })),
+      interCluster: routed.interCluster
+        ? {
+            mode: measuredMode,
+            ids: routed.interCluster.ids,
+            minutes: routed.interCluster.minutes,
+            km: routed.interCluster.km,
+            provenance: routed.interCluster.provenance,
+          }
+        : null,
+      nights: Math.max(1, input.dates.length - 1),
+      maxBaseChanges: input.scope.maxBaseChanges,
+      startDate: input.dates[0] ?? '',
+      /*
+       * Cluster value is the plannable supply inside it, so a shorter trip keeps
+       * the regions with the most to do rather than the ones that sorted first.
+       */
+      clusterValue: (clusterId) =>
+        routedClusters.find((cluster) => cluster.id === clusterId)?.placeIds.length ?? 0,
+    });
+
     await runStage('validating_routes', async () => {
-      const measured = Math.max(0, matrix.ids.length * matrix.ids.length - matrix.ids.length);
-      const failed = matrix.failedPairs.length;
+      /*
+       * Counted from the matrix itself, not from the request history.
+       *
+       * The version this replaces divided `failedPairs.length` — which
+       * accumulates across every batch the provider was asked, including points
+       * that were later dropped — by the pair count of the *final* id set. The
+       * two have different populations, and a live country-scale run put
+       * "-13116 of 272 legs measured" on a traveller's screen.
+       *
+       * A leg is measured when the matrix holds a finite number for it. That is
+       * directly observable, it is the thing the planner will actually read, and
+       * it cannot go negative.
+       */
+      let total = 0;
+      let measured = 0;
+      for (let from = 0; from < matrix.ids.length; from += 1) {
+        for (let to = 0; to < matrix.ids.length; to += 1) {
+          if (from === to) continue;
+          total += 1;
+          const minutes = matrix.minutes[from]?.[to];
+          if (typeof minutes === 'number' && Number.isFinite(minutes)) measured += 1;
+        }
+      }
+      const missing = total - measured;
+      const shape =
+        portfolio.bases.length > 1
+          ? `, ${portfolio.bases.length} bases and ${portfolio.transferDays} transfer ${portfolio.transferDays === 1 ? 'day' : 'days'}`
+          : '';
       return {
         value: null,
-        outcome: `${measured - failed} of ${measured} legs measured`,
-        ...(failed > 0
+        outcome: `${measured} of ${total} legs measured${shape}`,
+        ...(missing > 0
           ? {
-              note: 'A routing engine that cannot answer for a pair is not a distance of zero, so the places behind those legs were dropped rather than guessed at.',
+              note: `${missing} pair${missing === 1 ? '' : 's'} the routing engine could not answer for. A leg it cannot measure is not a distance of zero, so the places behind those legs were dropped rather than guessed at.`,
             }
           : {}),
       };
@@ -1462,7 +1634,16 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
 
     // ---- Stage: compile ----------------------------------------------------------
     const region = await runStage('compiling', async () => {
-      const primary = bases[0];
+      /*
+       * Only bases the matrix can answer for reach the artifact.
+       *
+       * `checkRegionIntegrity` refuses a region containing a base with no
+       * travel-time row, and it is right to — a base is where every day starts.
+       * A live country-scale build produced exactly that: routing succeeded, one
+       * region's local matrix came back too thin to keep, and the compile failed
+       * at the very last gate with all the work done.
+       */
+      const primary = usableBases[0] ?? bases[0];
       if (!primary) throw new Error('No base survived compilation.');
       const finishedAt = new Date(startedAtMs + elapsed).toISOString();
 
@@ -1474,7 +1655,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
        * necessarily every place the compiler was holding at the time. By here
        * the unroutable ones have gone, and the claim can be true.
        */
-      const routedBases = bases.map((base) => ({
+      const routedBases = usableBases.map((base) => ({
         ...base,
         placesWithinReach: plannable
           .filter((place) => legBetween(base.routingId, place.id) !== null)
@@ -1490,7 +1671,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         scopeFingerprint: scopeFingerprint(input.scope),
         bases: routedBases,
         primaryBaseId: primary.id,
-        subregions: buildSubregions(expansion.subregions, bases, plannable),
+        subregions: buildSubregions(expansion.subregions, usableBases, plannable),
         satellites: buildSatellites(plannable, primary, matrix),
         places: plannable,
         access,
@@ -1499,6 +1680,8 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         ...(routableFood.length > 0
           ? { food: { version: FOOD_DATASET_VERSION, regionId: access.regionId, venues: routableFood, gaps: [] } as FoodDataset }
           : {}),
+        ...(portfolio.bases.length > 0 ? { basePortfolio: portfolio } : {}),
+        ...(routingDiagnostics ? { routingDiagnostics } : {}),
         travelTimes: travelTimeMatrixSchema.parse({
           mode: measuredMode,
           ids: matrix.ids,
@@ -1836,6 +2019,8 @@ function buildBases(
   candidates: readonly {
     id: string;
     name: string;
+    /** Resolved English-first name, when the adapter produced one. */
+    names?: DisplayName;
     coordinates: { lat: number; lng: number };
     timeZone: string;
     subregionId?: string;
@@ -1858,6 +2043,13 @@ function buildBases(
    */
   return candidates.slice(0, Math.max(1, scope.maxBaseChanges + 1)).map((base, index) => ({
     id: base.id,
+    /*
+     * Carried through, never re-derived. The adapter resolved this against the
+     * sources it had; the compiler's job is to preserve it, and an artifact
+     * whose name changed between compilation and rendering would be a plan that
+     * disagrees with itself.
+     */
+    ...(base.names ? { names: base.names } : {}),
     name: base.name,
     coordinates: base.coordinates,
     role: index === 0 ? ('primary_base' as const) : ('secondary_base' as const),

@@ -53,10 +53,17 @@ export interface CompilerBudget {
  * Development defaults, chosen so a broad country is expensive rather than
  * unbounded.
  *
- * `maxRouteElements` is the one worth reading twice: 900 is a 30×30 matrix,
- * which is what `maxShortlistedCandidates` plus bases and food anchors comes to.
- * A provider asked for more than this must truncate and report the pairs it
- * dropped, because a silently short matrix is a plan with invented legs in it.
+ * `maxRouteElements` is the one worth reading twice. It used to be 900 — a 30×30
+ * flat matrix — and under the flat all-pairs design roughly seventy per cent of
+ * those pairs were cells no consumer could read: a stop in one region against a
+ * stop four hours away never shares a day with it.
+ *
+ * Routing is hierarchical now, so every pair inside this budget is one the board
+ * or the planner will actually read, and the same number buys about three times
+ * as much usable coverage. It is raised to match the routing layer's own
+ * ceiling rather than left at a figure sized for waste: a live country-scale
+ * build hit the old value and came back with twelve stops per region where the
+ * local matrices had room for twenty-four.
  */
 export const DEFAULT_COMPILER_BUDGET: CompilerBudget = {
   maxGeographicCandidates: 5,
@@ -72,7 +79,7 @@ export const DEFAULT_COMPILER_BUDGET: CompilerBudget = {
   maxExtractionCalls: 6,
   maxEnrichmentMs: 120_000,
   maxModelCalls: 20,
-  maxRouteElements: 900,
+  maxRouteElements: 3_600,
   maxFoodVenues: 18,
   maxWeatherLocations: 8,
   maxDurationMs: 180_000,
@@ -178,9 +185,15 @@ export function budgetFor(input: {
     maxExtractionCalls: Math.min(14, scale(DEFAULT_COMPILER_BUDGET.maxExtractionCalls)),
     // Route elements grow as the square of the shortlist, so they are scaled
     // against the shortlist rather than linearly against the trip length.
+    /*
+     * Scaled by trip length like everything else, but floored high enough that a
+     * multi-region trip still gets a usable local matrix per region. The square
+     * of the shortlist was the flat design's arithmetic; hierarchical routing
+     * needs *per-cluster* room, which is what the floor represents.
+     */
     maxRouteElements: Math.min(
-      2_500,
-      Math.max(100, Math.round(scale(DEFAULT_COMPILER_BUDGET.maxShortlistedCandidates) ** 2)),
+      4_800,
+      Math.max(900, Math.round(scale(DEFAULT_COMPILER_BUDGET.maxRouteElements))),
     ),
     ...input.base,
   };

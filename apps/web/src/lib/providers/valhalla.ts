@@ -118,15 +118,54 @@ export function matrixCacheKey(
   ].join('|');
 }
 
+/**
+ * How many consecutive failures close the circuit.
+ *
+ * A public demo endpoint is not a production service, and the honest posture is
+ * that it will sometimes stop answering. Without a breaker, a country-scale plan
+ * with forty blocks meets forty timeouts one after another and spends twenty
+ * minutes discovering what the third one already knew.
+ *
+ * Reset by any success, so a single blip does not disable routing for the rest
+ * of a build.
+ */
+const CIRCUIT_THRESHOLD = 4;
+
+/**
+ * Retries per block, and the backoff between them.
+ *
+ * Two, because the failures worth retrying are transient — a rate limit or a
+ * dropped connection — and a third attempt against a service that has said no
+ * twice is spending somebody's quota to learn nothing. Capped, so a retry storm
+ * cannot multiply spend without a ceiling.
+ */
+const MAX_ATTEMPTS = 3;
+const BACKOFF_MS = [0, 1_500, 4_000];
+
+/** Reset per matrix run rather than per process: a build should start hopeful. */
+export interface CircuitState {
+  consecutiveFailures: number;
+  open: boolean;
+}
+
+export function newCircuit(): CircuitState {
+  return { consecutiveFailures: 0, open: false };
+}
+
 async function requestBlock(
   sources: readonly RoutePoint[],
   targets: readonly RoutePoint[],
   costing: ValhallaCosting,
   options: MatrixOptions,
+  circuit?: CircuitState,
 ): Promise<{ minutes: number[][]; km: number[][]; cached: boolean }> {
   const key = matrixCacheKey(sources, targets, costing);
   const cached = options.cache?.read(key);
   if (cached) return { ...cached, cached: true };
+
+  if (circuit?.open) {
+    throw new RoutingError('request_failed', 'The routing service stopped answering.');
+  }
 
   const body = {
     sources: sources.map((point) => ({ lat: point.lat, lon: point.lng })),
@@ -136,35 +175,62 @@ async function requestBlock(
     id: 'sidequest-matrix',
   };
 
-  await nextSlot();
-
   const doFetch = options.fetchImpl ?? fetch;
-  let response: Response;
-  try {
-    response = await doFetch(`${routingEndpoint()}/sources_to_targets`, {
-      method: 'POST',
-      headers: {
-        'user-agent': USER_AGENT,
-        // Honoured by several hosted Valhalla deployments for attribution and
-        // fair-use accounting. Harmless where it is not.
-        'x-client-id': 'sidequest-dev',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    throw new RoutingError('request_failed', 'The routing service did not answer.');
+  let text = '';
+  let lastError: RoutingError | null = null;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleep(BACKOFF_MS[attempt] ?? 4_000);
+    await nextSlot();
+
+    let response: Response;
+    try {
+      response = await doFetch(`${routingEndpoint()}/sources_to_targets`, {
+        method: 'POST',
+        headers: {
+          'user-agent': USER_AGENT,
+          // Honoured by several hosted Valhalla deployments for attribution and
+          // fair-use accounting. Harmless where it is not.
+          'x-client-id': 'sidequest-dev',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      lastError = new RoutingError('request_failed', 'The routing service did not answer.');
+      continue;
+    }
+
+    if (response.status === 429) {
+      lastError = new RoutingError('rate_limited', 'The routing service asked us to slow down.');
+      continue;
+    }
+    if (!response.ok) {
+      /*
+       * A 4xx other than 429 is us, not them — a malformed request retried three
+       * times is three identical rejections. Only 5xx and transport failures are
+       * worth another attempt.
+       */
+      lastError = new RoutingError('request_failed', 'The routing service did not answer.');
+      if (response.status < 500) break;
+      continue;
+    }
+
+    text = await response.text();
+    lastError = null;
+    break;
   }
 
-  if (response.status === 429) {
-    throw new RoutingError('rate_limited', 'The routing service asked us to slow down.');
+  if (lastError) {
+    if (circuit) {
+      circuit.consecutiveFailures += 1;
+      if (circuit.consecutiveFailures >= CIRCUIT_THRESHOLD) circuit.open = true;
+    }
+    throw lastError;
   }
-  if (!response.ok) {
-    throw new RoutingError('request_failed', 'The routing service did not answer.');
-  }
+  if (circuit) circuit.consecutiveFailures = 0;
 
-  const text = await response.text();
   if (text.length > MAX_RESPONSE_BYTES) {
     throw new RoutingError('malformed_response', 'The routing service returned more than we will read.');
   }
@@ -199,6 +265,10 @@ async function requestBlock(
   return { ...result, cached: false };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * A full square matrix, batched to stay inside the pair budget.
  *
@@ -219,6 +289,7 @@ export async function computeMatrix(
   const failedPairs: { from: string; to: string }[] = [];
 
   const blockSize = Math.max(1, Math.floor(Math.sqrt(MAX_MATRIX_PAIRS_PER_REQUEST)));
+  const circuit = newCircuit();
   let calls = 0;
   let pairs = 0;
   let cacheHits = 0;
@@ -243,7 +314,7 @@ export async function computeMatrix(
       }
 
       try {
-        const block = await requestBlock(sources, targets, costing, options);
+        const block = await requestBlock(sources, targets, costing, options, circuit);
         if (block.cached) cacheHits += 1;
         else calls += 1;
         pairs += cells;

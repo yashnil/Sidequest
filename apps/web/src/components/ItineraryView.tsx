@@ -23,8 +23,9 @@ import {
   PREPARATION_KIND_COPY,
   groupPreparation,
   type PreparationItem,
+  type DisplayName,
 } from '@sidequest/core';
-import { Badge, Panel, buttonClass, cx, type BadgeTone } from './ui';
+import { Badge, Panel, buttonClass, cx, type BadgeTone, PlaceName } from './ui';
 import { formatMinutes } from '@/lib/format';
 
 const STATUS_TONE: Record<Itinerary['status'], BadgeTone> = {
@@ -83,6 +84,7 @@ export function ItineraryView({
   tripId,
   dateLabel,
   renderedAt,
+  baseNames,
 }: {
   itinerary: Itinerary;
   /**
@@ -95,6 +97,16 @@ export function ItineraryView({
   tripId: string;
   dateLabel: string;
   /**
+   * The base's resolved name, read from the compiled region at render time.
+   *
+   * Deliberately *not* stored on the itinerary. A stored plan is immutable, and
+   * migrating one to change how a heading reads would be rewriting somebody's
+   * trip to fix a presentation bug. The compiled region is the artifact that
+   * owns names; this reads it, and an old region without one falls back to the
+   * plain `baseName` exactly as before.
+   */
+  baseNames?: DisplayName;
+  /**
    * When the server rendered this page, as epoch milliseconds.
    *
    * Passed in rather than read here so every day on the page judges the same
@@ -104,6 +116,10 @@ export function ItineraryView({
    */
   renderedAt: number;
 }) {
+  const baseEntity = {
+    name: itinerary.baseName,
+    ...(baseNames ? { names: baseNames } : {}),
+  };
   const status = ITINERARY_STATUS_COPY[itinerary.status];
   const conflicts = itinerary.unscheduled.filter((entry) => entry.wasManual);
   const dropped = itinerary.unscheduled.filter((entry) => !entry.wasManual);
@@ -114,10 +130,11 @@ export function ItineraryView({
       <header className="border-b border-rule pb-8">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Your trip</p>
         <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-5xl">
-          {itinerary.baseName}
+          <PlaceName entity={baseEntity} />
         </h1>
         <p className="mt-3 text-ink-muted">
-          {dateLabel} · {itinerary.days.length} days · based in {itinerary.baseName}
+          {dateLabel} · {itinerary.days.length} days · based in{' '}
+          <PlaceName entity={baseEntity} showLocal={false} />
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">

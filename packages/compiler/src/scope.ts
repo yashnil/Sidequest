@@ -43,6 +43,31 @@ export interface ScopeInput {
   nights: number;
   /** Bumped by the caller whenever the traveller edits anything on this screen. */
   revision: number;
+  /**
+   * What the composer established before any of this ran.
+   *
+   * Read only where nothing stronger exists: a questionnaire profile always
+   * wins, and a clarification answer wins over the composer, because both are
+   * later and more specific. What this removes is the case where the traveller
+   * said "I will drive" on the first screen and the scope was still built on
+   * walking reach because nobody downstream had asked again.
+   */
+  composerTransport?: string;
+  /**
+   * The shape the traveller chose on the preflight screen.
+   *
+   * Read here rather than only through a clarification answer, because
+   * suppressing a question the composer has already answered also removes the
+   * answer — `rebuildClarificationSet` keeps answers only for questions that
+   * survive, by design, so an answer whose question is gone is gone with it.
+   *
+   * A live run found this the hard way: choosing "two bases" produced a scope
+   * with `maxBaseChanges: 0`, which then failed the country-from-one-base check
+   * and left "Build the region" disabled with no explanation the traveller could
+   * act on. The composer is the durable record; the clarification answer is a
+   * refinement of it.
+   */
+  composerShape?: 'one_base' | 'two_bases' | 'circuit' | 'undecided';
 }
 
 /**
@@ -106,6 +131,7 @@ function clipToReach(
 function primaryModeFor(
   profile: TravelerProfile | undefined,
   carAnswer: string | undefined,
+  composerTransport: string | undefined,
 ): { mode: TransportMode; carAvailable: boolean | null; basis: 'profile' | 'clarification' | 'default' } {
   if (profile) {
     return {
@@ -116,6 +142,12 @@ function primaryModeFor(
   }
   if (carAnswer === 'yes') return { mode: 'drive', carAvailable: true, basis: 'clarification' };
   if (carAnswer === 'no') return { mode: 'walk', carAvailable: false, basis: 'clarification' };
+  if (composerTransport === 'drive' || composerTransport === 'mixed') {
+    return { mode: 'drive', carAvailable: true, basis: 'clarification' };
+  }
+  if (composerTransport === 'public_transport') {
+    return { mode: 'walk', carAvailable: false, basis: 'clarification' };
+  }
   /**
    * Nobody has said, and that is a third state.
    *
@@ -132,18 +164,30 @@ export function deriveScope(input: ScopeInput): GeographicScope {
   const { candidate, clarifications, profile, nights, revision } = input;
 
   const carAnswer = singleAnswer(clarifications, QUESTION_IDS.carAvailable);
-  const { mode, carAvailable, basis } = primaryModeFor(profile, carAnswer);
+  const { mode, carAvailable, basis } = primaryModeFor(profile, carAnswer, input.composerTransport);
 
   const breadthAnswer = singleAnswer(clarifications, QUESTION_IDS.breadthStrategy);
-  const narrowed = breadthAnswer === 'one_area' || breadthAnswer === 'name_it';
+  const chosenShape = input.composerShape;
+  /*
+   * Narrowing to one area, from whichever source said so. The clarification
+   * answer wins when there is one, because it is the later and more specific
+   * statement; the composer's shape is the fallback rather than the exception.
+   */
+  const narrowed =
+    breadthAnswer === 'one_area' ||
+    breadthAnswer === 'name_it' ||
+    (breadthAnswer === undefined && chosenShape === 'one_base');
 
   const baseAnswer = singleAnswer(clarifications, QUESTION_IDS.baseStrategy);
-  const maxBaseChanges =
-    breadthAnswer === 'one_area'
-      ? 0
-      : baseAnswer !== undefined && /^\d+$/.test(baseAnswer)
-        ? Number(baseAnswer)
-        : 0;
+  const maxBaseChanges = narrowed
+    ? 0
+    : baseAnswer !== undefined && /^\d+$/.test(baseAnswer)
+      ? Number(baseAnswer)
+      : chosenShape === 'two_bases'
+        ? 1
+        : chosenShape === 'circuit'
+          ? 2
+          : 0;
 
   const waterAnswer = singleAnswer(clarifications, QUESTION_IDS.waterOrAir);
   const acceptsWaterOrAir =
