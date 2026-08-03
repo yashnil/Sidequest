@@ -11,10 +11,10 @@ const JANUARY_TRIP = { start: '2027-01-12', end: '2027-01-15' };
 
 async function createTrip(page: Page, dates: { start: string; end: string }) {
   await page.goto('/trips/new');
-  await page.getByLabel('Where are you going?').fill('Mammoth Lakes');
+  await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: 'Start the questionnaire' }).click();
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
   await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
 }
 

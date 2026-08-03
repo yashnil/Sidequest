@@ -51,7 +51,10 @@ export default defineConfig({
     // The fixture compiler provider, for the same reason and a sharper one: the
     // live stack reaches volunteer-run map services, and a test suite that hits
     // those on every run is precisely the abuse their policies complain about.
-    command: `SIDEQUEST_DB_PATH=./data/e2e.db SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture PORT=${PORT} npm run start --workspace @sidequest/web`,
+    // Climate off, for the third time and the same reason: the composer's date
+    // guidance reads a real archive service, and a browser suite that depended
+    // on it would fail whenever somebody else's server was slow.
+    command: `SIDEQUEST_DB_PATH=./data/e2e.db SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

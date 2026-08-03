@@ -14,6 +14,8 @@ export * from './schemas/geography';
 export * from './schemas/licence';
 export * from './schemas/intent';
 export * from './schemas/resolution';
+export * from './schemas/destination-index';
+export * from './schemas/composer';
 export * from './schemas/clarification';
 export * from './schemas/scope';
 export * from './schemas/region-pack';
@@ -22,6 +24,9 @@ export * from './schemas/evidence';
 export * from './schemas/evidence-store';
 export * from './schemas/compiled-region';
 export * from './schemas/compilation';
+export * from './schemas/progress';
+export * from './schemas/supply';
+export * from './schemas/preflight';
 // `schemas/calendar` is deliberately not re-exported here: `schemas/access`
 // already forwards every name in it, and two `export *` sources for one name
 // make it ambiguous and therefore invisible to consumers.
@@ -37,6 +42,7 @@ export * from './schemas/discovery';
 export * from './schemas/itinerary';
 export * from './schemas/planner-readiness';
 export * from './schemas/weather';
+export * from './schemas/climate';
 
 export * from './questionnaire/definition';
 export * from './questionnaire/transform';
@@ -70,6 +76,18 @@ export * from './evidence/preparation';
 export * from './evidence/identity';
 export * from './evidence/claims';
 export * from './evidence/freshness';
+
+export * from './dates/windows';
+export * from './dates/duration';
+export * from './scope/portfolio';
+export * from './routing/plan';
+export * from './routing/portfolio';
+
+export * from './naming/display-name';
+
+export * from './destinations/normalize';
+export * from './destinations/match';
+export * from './destinations/provider';
 
 export * from './quality/candidate';
 

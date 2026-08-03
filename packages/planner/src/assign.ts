@@ -1,5 +1,5 @@
 import { isMeaningfullyBetter } from '@sidequest/core';
-import { clusterByTravelTime, type TravelTimeMatrix } from '@sidequest/geo';
+import { clusterByTravelTime, type TravelTimeMatrix, tryLeg } from '@sidequest/geo';
 import type { AccessUnit } from './access';
 import type { PlannedDay } from './windows';
 import type { PlanningCandidate } from './types';
@@ -137,7 +137,15 @@ export function assignToDays(
   eligible: readonly PlanningCandidate[],
   days: readonly PlannedDay[],
   matrix: TravelTimeMatrix,
-  baseId: string,
+  /**
+   * The base a given date starts from.
+   *
+   * A function rather than a string, because on a multi-base trip the answer
+   * changes partway through — and a day clustered around the base the traveller
+   * has already left is a day of impossible drives that all look reasonable
+   * individually.
+   */
+  baseIdFor: (date: string) => string,
   unitByPlaceId: ReadonlyMap<string, AccessUnit>,
   /** Unit key → the dates a legal way in exists. Absent means unconstrained. */
   feasibleDates: ReadonlyMap<string, ReadonlySet<string>>,
@@ -157,10 +165,16 @@ export function assignToDays(
   }
 
   const units = buildUnits(eligible, unitByPlaceId);
+  /*
+   * Seeded on the first day's base. On a single-base trip that is the base; on
+   * a multi-base one it is where the traveller starts, which is the right end
+   * of the route to grow clusters outward from. Which day a cluster then lands
+   * on is decided below, and *that* is where the base actually binds.
+   */
   const clusters = clusterByTravelTime(
     matrix,
     units.map((unit) => unit.representativeId),
-    { k: usableDays.length, baseId },
+    { k: usableDays.length, baseId: baseIdFor(usableDays[0]!.date) },
   );
 
   const unitByRepresentative = new Map(units.map((unit) => [unit.representativeId, unit]));
@@ -218,13 +232,38 @@ export function assignToDays(
     return reachableUnits + openPlaces;
   };
 
+  /**
+   * Whether this day's base can actually reach this cluster.
+   *
+   * The gate that makes multi-base real. Without it the assigner is free to put
+   * a stop beside the second base on a day the traveller is still at the first,
+   * and every individual number stays consistent — the day just contains a
+   * six-hour round trip nobody would make.
+   *
+   * Measured, never assumed: a pair the matrix cannot answer for is *not*
+   * reachable. On a single-base trip every day has the same base and this is
+   * always true, so nothing changes for the regions that already worked.
+   */
+  const reachableFromDayBase = (cluster: (typeof clusterLoads)[number], date: string): boolean => {
+    const base = baseIdFor(date);
+    if (cluster.placeIds.length === 0) return true;
+    return cluster.placeIds.some((placeId) => tryLeg(matrix, base, placeId) !== null);
+  };
+
   // Fewest clusters so far wins, and `sort` is stable, so the capacity order
   // already baked into `orderedDays` breaks every tie. Fully deterministic.
   const clustersPerDay = new Map<number, number>();
 
   for (const cluster of orderedClusters) {
-    const best = Math.max(...orderedDays.map((day) => workableParts(cluster, day.date)));
-    const pool = orderedDays.filter((day) => workableParts(cluster, day.date) === best);
+    /*
+     * Days whose base cannot reach this cluster are removed *before* the
+     * best-fit comparison, not penalised inside it — a cluster the base cannot
+     * reach is not a worse choice, it is not a choice.
+     */
+    const candidateDays = orderedDays.filter((day) => reachableFromDayBase(cluster, day.date));
+    if (candidateDays.length === 0) continue;
+    const best = Math.max(...candidateDays.map((day) => workableParts(cluster, day.date)));
+    const pool = candidateDays.filter((day) => workableParts(cluster, day.date) === best);
     const balanced = [...pool].sort(
       (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
     )[0];

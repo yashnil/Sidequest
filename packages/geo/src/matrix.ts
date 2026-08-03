@@ -84,13 +84,26 @@ export function leg(matrix: TravelTimeMatrix, fromId: string, toId: string): Tra
   const minutes = matrix.minutes[from]?.[to];
   const km = matrix.km[from]?.[to];
 
-  if (typeof minutes !== 'number' || typeof km !== 'number') {
+  /*
+   * `Number.isFinite`, not `typeof === 'number'`.
+   *
+   * `typeof NaN` is `'number'`, so the previous check accepted a NaN cell as a
+   * measured leg — and a NaN travel time is the most dangerous value this
+   * function can return, because every comparison against it is false. A day
+   * carrying one passes every drive-time limit, every daylight check and every
+   * buffer rule silently, and arrives on screen as a plan with a hole in it.
+   *
+   * A sparse matrix now writes NaN for an unmeasured pair deliberately, which
+   * makes this the boundary that turns "we did not measure this" into a caller
+   * that has to decide what to do about it.
+   */
+  if (!Number.isFinite(minutes) || !Number.isFinite(km)) {
     throw new MatrixError(
       'matrix_missing_leg',
       `No travel time recorded from "${fromId}" to "${toId}".`,
     );
   }
-  return { minutes, km };
+  return { minutes: minutes as number, km: km as number };
 }
 
 export function tryLeg(matrix: TravelTimeMatrix, fromId: string, toId: string): TravelLeg | null {

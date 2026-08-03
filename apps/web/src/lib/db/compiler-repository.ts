@@ -9,6 +9,9 @@ import {
   COMPILATION_JOB_VERSION,
   destinationDiscoveryPreferencesSchema,
   destinationResolutionSchema,
+  selectedDestinationSchema,
+  tripComposerAnswersSchema,
+  tripPreflightSchema,
   geographicScopeSchema,
   isAbandoned,
   type ClarificationSet,
@@ -20,7 +23,10 @@ import {
   type DestinationDiscoveryPreferences,
   type DestinationResolution,
   type GeographicScope,
+  type SelectedDestination,
   type StageRecord,
+  type TripComposerAnswers,
+  type TripPreflight,
 } from '@sidequest/core';
 import { getDb } from './client';
 
@@ -49,6 +55,17 @@ export interface TripIntentRecord {
   scopeRevision: number;
   selectedCompiledRegionId: string | null;
   discoveryPreferences: DestinationDiscoveryPreferences | null;
+  /** What the composer captured. Null for a trip created before it existed. */
+  composer: TripComposerAnswers | null;
+  /**
+   * The index row the traveller pointed at.
+   *
+   * Its presence is the signal the whole flow turns on: a destination somebody
+   * selected needs no resolution, no interpretation screen and no confirmation
+   * click, because there is nothing about it left to guess.
+   */
+  selectedDestination: SelectedDestination | null;
+  preflight: TripPreflight | null;
 }
 
 interface IntentRow {
@@ -62,6 +79,9 @@ interface IntentRow {
   scope_revision: number;
   selected_compiled_region_id: string | null;
   discovery_prefs_json: string | null;
+  composer_json: string | null;
+  selected_destination_json: string | null;
+  preflight_json: string | null;
 }
 
 const EMPTY_CLARIFICATIONS: ClarificationSet = {
@@ -84,7 +104,7 @@ export function getIntent(tripId: string): TripIntentRecord | null {
     .prepare(
       `SELECT trip_id, mode, destination_query, resolution_json, selected_candidate_id,
               clarifications_json, scope_json, scope_revision, selected_compiled_region_id,
-              discovery_prefs_json
+              discovery_prefs_json, composer_json, selected_destination_json, preflight_json
          FROM trip_intents WHERE trip_id = ?`,
     )
     .get(tripId) as IntentRow | undefined;
@@ -106,11 +126,57 @@ export function getIntent(tripId: string): TripIntentRecord | null {
       discoveryPreferences: row.discovery_prefs_json
         ? destinationDiscoveryPreferencesSchema.parse(JSON.parse(row.discovery_prefs_json))
         : null,
+      /*
+       * The three composer columns are parsed *leniently*, unlike everything
+       * above them.
+       *
+       * A scope that will not parse means the compiler would build the wrong
+       * ground, so dropping the whole intent is right. A preflight that will not
+       * parse means one panel is missing and everything else still works — and
+       * throwing away a confirmed scope because a cached climate blob changed
+       * shape would be the cure being worse than the disease.
+       */
+      composer: parseLenient(row.composer_json, tripComposerAnswersSchema),
+      selectedDestination: parseLenient(row.selected_destination_json, selectedDestinationSchema),
+      preflight: parseLenient(row.preflight_json, tripPreflightSchema),
     };
   } catch (error) {
     console.error('Stored trip intent will not parse; starting that trip over', error);
     return null;
   }
+}
+
+/**
+ * Parse a nullable JSON column, treating a shape change as absence.
+ *
+ * Only for columns whose loss costs a panel rather than a plan. Never used for
+ * scope, resolution or clarifications.
+ */
+function parseLenient<T>(raw: string | null, schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }): T | null {
+  if (!raw) return null;
+  try {
+    const parsed = schema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveComposerAnswers(tripId: string, answers: TripComposerAnswers): void {
+  upsertIntent(tripId, { composer_json: JSON.stringify(answers) });
+}
+
+export function saveSelectedDestination(
+  tripId: string,
+  destination: SelectedDestination | null,
+): void {
+  upsertIntent(tripId, {
+    selected_destination_json: destination ? JSON.stringify(destination) : null,
+  });
+}
+
+export function savePreflight(tripId: string, preflight: TripPreflight): void {
+  upsertIntent(tripId, { preflight_json: JSON.stringify(preflight) });
 }
 
 function upsertIntent(tripId: string, patch: Partial<Record<string, unknown>>): void {

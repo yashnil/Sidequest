@@ -21,10 +21,10 @@ const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 async function startQuestionnaire(page: Page) {
   await page.goto('/trips/new');
-  await page.getByLabel('Where are you going?').fill('Mammoth Lakes');
+  await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: 'Start the questionnaire' }).click();
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
 
   await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
   await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();

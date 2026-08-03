@@ -11,6 +11,7 @@ import {
   unansweredRequired,
   type ClarificationSet,
   type DestinationResolution,
+  type StageRecord,
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, DEFAULT_COMPILER_BUDGET } from './budget';
 import { deriveClarificationQuestions, QUESTION_IDS, rebuildClarificationSet } from './clarify';
@@ -391,9 +392,21 @@ describe('budget', () => {
     expect(country.maxCoarseCandidates).toBeGreaterThan(town.maxCoarseCandidates);
   });
 
-  it('never lets the matrix budget run away with the shortlist', () => {
+  it('keeps the matrix budget bounded however broad the trip is', () => {
+    /*
+     * The ceiling moved from 2,500 to 4,800 when routing became hierarchical,
+     * and the reason is worth recording: under the flat all-pairs design roughly
+     * seventy per cent of a matrix was cells no consumer could read, so most of
+     * the old budget bought nothing. Every pair inside the new one is targeted,
+     * so the same money goes about three times as far — and the property that
+     * actually matters is unchanged: it is *bounded*, and it does not grow with
+     * the candidate count.
+     */
     const country = budgetFor({ nights: 21, breadthRank: breadthRank('multi_country') });
-    expect(country.maxRouteElements).toBeLessThanOrEqual(2_500);
+    expect(country.maxRouteElements).toBeLessThanOrEqual(4_800);
+
+    const longer = budgetFor({ nights: 30, breadthRank: breadthRank('multi_country') });
+    expect(longer.maxRouteElements).toBe(country.maxRouteElements);
   });
 });
 
@@ -430,6 +443,42 @@ describe('compileRegion', () => {
       expect(result.region.bases.length).toBeGreaterThan(0);
     });
   }
+
+  it('never reports a negative or impossible leg count', async () => {
+    /*
+     * A live country-scale run put **"-13116 of 272 legs measured"** on a
+     * traveller's screen. The numerator counted routing failures accumulated
+     * across every batch the provider was asked — including points later
+     * dropped — and the denominator counted pairs of the *final* id set. Two
+     * populations, one subtraction.
+     *
+     * Counted from the matrix now, so the property is structural: measured is a
+     * count of finite cells, and a count cannot exceed its own total or fall
+     * below zero.
+     */
+    for (const key of worldKeys) {
+      const stages: StageRecord[] = [];
+      await compileRegion({
+        compilationId: `legs-${key}`,
+        scope: scopeFor(key),
+        dates: DATES,
+        months: MONTHS,
+        providers: fakeProviders(SYNTHETIC_WORLDS[key]!),
+        now: NOW,
+        onStage: (record) => stages.push(record),
+      });
+
+      const routes = stages.find((record) => record.stage === 'validating_routes');
+      if (!routes?.outcome) continue;
+      const match = /^(-?\d+) of (-?\d+) legs measured$/.exec(routes.outcome);
+      expect(match, `unreadable outcome for ${key}: ${routes.outcome}`).toBeTruthy();
+      const measured = Number(match![1]);
+      const total = Number(match![2]);
+      expect(measured).toBeGreaterThanOrEqual(0);
+      expect(total).toBeGreaterThanOrEqual(0);
+      expect(measured).toBeLessThanOrEqual(total);
+    }
+  });
 
   it('never invents opening hours for a region nobody publishes them for', async () => {
     const spec = SYNTHETIC_WORLDS.weak_data!;

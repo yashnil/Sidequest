@@ -1,13 +1,17 @@
 import { notFound, redirect } from 'next/navigation';
 import {
   candidateById,
+  countNights,
+  decideInterpretation,
   displayStages,
+  identityAmbiguityReasons,
   unansweredRequired,
   visibleQuestions,
   type ClarificationQuestion,
 } from '@sidequest/core';
 import { scopeFitsTrip } from '@sidequest/compiler';
 import { PlanFlow, type PlanStep } from '@/components/PlanFlow';
+import { TripContextBar } from '@/components/TripContextBar';
 import { providerReadiness } from '@/lib/compiler/providers';
 import { getIntent, getLatestJob, getLatestWorkPlan } from '@/lib/db/compiler-repository';
 import { getTrip } from '@/lib/db/repository';
@@ -60,6 +64,13 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       }
     : { state: 'none', stages: [], retryable: false };
 
+  /*
+   * How the resolution should be read, decided once and shared by the step
+   * chooser and the props below. Breadth is deliberately *not* treated as
+   * identity ambiguity — a country is one place, however large.
+   */
+  const decision = intent.resolution ? decideInterpretation(intent.resolution) : null;
+
   const selectedCandidate =
     intent.resolution && intent.selectedCandidateId
       ? candidateById(intent.resolution, intent.selectedCandidateId)
@@ -69,24 +80,75 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
   const outstanding = unansweredRequired(intent.clarifications);
 
   const step = decideStep({
+    hasIdentity: intent.selectedDestination !== null,
     hasResolution: intent.resolution !== null,
-    notAPlace: intent.resolution?.ambiguityReasons.includes('query_is_not_a_place') ?? false,
-    candidateCount: intent.resolution?.candidates.length ?? 0,
+    notAPlace: decision?.kind === 'not_a_place' || decision?.kind === 'no_match',
+    needsChoice: decision?.kind === 'choose',
     hasSelection: selectedCandidate !== undefined,
+    hasPreflight: intent.preflight !== null,
+    /*
+     * A trip created before the composer existed has no composer answers, and
+     * has therefore never been offered a preflight. Sending it round a screen it
+     * cannot satisfy would strand every trip in the database from the previous
+     * phase.
+     */
+    preflightAccepted:
+      intent.composer === null || intent.composer.scopeStrategy !== undefined,
     outstanding: outstanding.length,
     hasScope: intent.scope !== null,
     scopeConfirmed: intent.scope?.confirmedByUser ?? false,
-    jobState: snapshot.state,
     hasCompiled: compiled !== null,
   });
 
+  /*
+   * Trip context, rendered by the page that knows about the trip.
+   *
+   * This is what replaced the fixed `EASTERN SIERRA` label in the global header.
+   * The difference that matters: that label was a claim about the product, and
+   * every field here is read from a persisted row — so it is absent when there
+   * is nothing to say rather than wrong.
+   */
+  const nights = countNights(trip.basics.startDate, trip.basics.endDate);
+  const dateMode = intent.composer?.dates.mode;
+
   return (
+    <>
+      <TripContextBar
+        context={{
+          tripId: id,
+          destination:
+            intent.selectedDestination?.qualifiedName ??
+            selectedCandidate?.qualifiedName ??
+            intent.destinationQuery,
+          when:
+            dateMode === 'month' || dateMode === 'season' || dateMode === 'undecided'
+              ? 'Dates not fixed'
+              : `${trip.basics.startDate} → ${trip.basics.endDate}`,
+          nights,
+          stage: step === 'ready' ? 'Board' : step === 'compiling' ? 'Building' : 'Planning',
+        }}
+      />
     <PlanFlow
       tripId={id}
       step={step}
       destinationQuery={intent.destinationQuery}
-      candidates={intent.resolution?.candidates ?? []}
-      ambiguityReasons={intent.resolution?.ambiguityReasons ?? []}
+      destinationName={
+        intent.selectedDestination?.displayName ??
+        selectedCandidate?.displayName ??
+        intent.destinationQuery
+      }
+      candidates={decision?.kind === 'choose' ? decision.candidates : (intent.resolution?.candidates ?? [])}
+      /*
+       * Only the reasons that mean "we are unsure which place you meant".
+       *
+       * Showing "This is a whole country — a trip needs a part of it" on a
+       * which-one screen is what made the old flow read as broken: it is true,
+       * it is important, and it is an answer to a different question.
+       */
+      ambiguityReasons={
+        intent.resolution ? identityAmbiguityReasons(intent.resolution) : []
+      }
+      preflight={intent.preflight}
       selectedCandidateId={intent.selectedCandidateId}
       questions={questions}
       answers={intent.clarifications.answers.map((answer) => ({
@@ -106,6 +168,13 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
               baseName:
                 compiled.bases.find((base) => base.id === compiled.primaryBaseId)?.name ??
                 compiled.region.baseName,
+              ...(compiled.bases.find((base) => base.id === compiled.primaryBaseId)?.names
+                ? {
+                    baseNames: compiled.bases.find(
+                      (base) => base.id === compiled.primaryBaseId,
+                    )!.names,
+                  }
+                : {}),
               subregionCount: compiled.subregions.length,
               satelliteCount: compiled.satellites.length,
               // Provenance a reader can follow back, which is what makes an
@@ -144,10 +213,19 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             }
           : null
       }
+      /**
+       * The multi-base structure, read from the artifact.
+       *
+       * Null for every region compiled before hierarchical routing, which reads
+       * correctly as a one-base trip — the shape those regions actually had.
+       */
+      basePortfolio={compiled?.basePortfolio ?? null}
+      routingDiagnostics={compiled?.routingDiagnostics ?? null}
       workPlan={workPlan ? workPlan.entries.map((entry) => ({ ...entry })) : null}
       providerMessage={readiness.message}
       providerReady={readiness.ready}
     />
+    </>
   );
 }
 
@@ -160,14 +238,16 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
  * earlier steps are history rather than work outstanding.
  */
 function decideStep(input: {
+  hasIdentity: boolean;
   hasResolution: boolean;
   notAPlace: boolean;
-  candidateCount: number;
+  needsChoice: boolean;
   hasSelection: boolean;
+  hasPreflight: boolean;
+  preflightAccepted: boolean;
   outstanding: number;
   hasScope: boolean;
   scopeConfirmed: boolean;
-  jobState: CompilationSnapshot['state'];
   hasCompiled: boolean;
 }): PlanStep {
   if (input.hasCompiled) return 'ready';
@@ -181,9 +261,30 @@ function decideStep(input: {
    * back here, and that derives a fresh, unconfirmed scope.
    */
   if (input.scopeConfirmed) return 'compiling';
-  if (!input.hasResolution) return 'destination';
-  if (input.notAPlace || input.candidateCount === 0) return 'not_a_place';
-  if (!input.hasSelection) return 'interpretation';
+
+  /*
+   * A destination picked from the index skips resolution entirely.
+   *
+   * There is nothing to look up about a row somebody pointed at, and the screen
+   * that used to sit here — "Reading Kyrgyzstan", with one button on it —
+   * carried no decision at all.
+   */
+  if (!input.hasIdentity) {
+    if (!input.hasResolution) return 'destination';
+    if (input.notAPlace) return 'not_a_place';
+    if (input.needsChoice && !input.hasSelection) return 'interpretation';
+    if (!input.hasSelection) return 'destination';
+  }
+
+  /*
+   * Preflight comes before the questions, not after.
+   *
+   * It is free and it is the screen that tells somebody whether we understood
+   * them. Asking three clarifying questions and *then* revealing that there is
+   * nothing in the region worth planning is the ordering this phase exists to
+   * invert.
+   */
+  if (!input.preflightAccepted) return 'preflight';
   if (input.outstanding > 0) return 'clarification';
   if (!input.hasScope) return 'clarification';
   return 'scope';

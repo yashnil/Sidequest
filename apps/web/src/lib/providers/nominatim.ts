@@ -76,6 +76,11 @@ const nominatimPlaceSchema = z.object({
   lon: z.string(),
   display_name: z.string(),
   name: z.string().optional(),
+  /**
+   * `name`, `name:en`, `int_name`, `official_name`, … exactly as the record has
+   * them. Values only — no key is trusted to be a language tag without checking.
+   */
+  namedetails: z.record(z.string(), z.string()).optional(),
   category: z.string().optional(),
   type: z.string().optional(),
   addresstype: z.string().optional(),
@@ -119,6 +124,17 @@ export async function geocode(query: string, options: GeocodeOptions = {}): Prom
   url.searchParams.set('format', 'jsonv2');
   url.searchParams.set('limit', String(limit));
   url.searchParams.set('addressdetails', '1');
+  /*
+   * The multilingual names, which is the whole point of asking.
+   *
+   * A geocoder's `name` field is the *local* name by design — which is how a
+   * compiled trip came to render its base as `Бишкек шаары` for somebody who
+   * typed "Kyrgyzstan" in English. `namedetails=1` returns `name:en` and every
+   * other tagged variant the record carries, so the display-name resolver has
+   * a source-published English name to prefer rather than a transliteration
+   * somebody invented.
+   */
+  url.searchParams.set('namedetails', '1');
   // Asking for the polygon would be the obvious thing and is the wrong thing:
   // a boundary is kilobytes we do not use, on somebody else's bandwidth.
   url.searchParams.set('polygon_geojson', '0');

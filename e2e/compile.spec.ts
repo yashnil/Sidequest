@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { answerEveryQuestion, reachScope, waitForLookup } from './support/trip';
 
 /**
  * The open-world journey, end to end, entirely offline.
@@ -16,39 +17,56 @@ const DATES = { start: '2026-08-12', end: '2026-08-16' };
 
 async function createTrip(page: Page, destination: string): Promise<string> {
   await page.goto('/trips/new');
-  await page.getByLabel('Where are you going?').fill(destination);
+  await page.getByLabel('Destination').fill(destination);
   await page.getByLabel('Arrive').fill(DATES.start);
   await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /Start the questionnaire/i }).click();
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/);
   const id = /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();
   return id!;
 }
 
-/** Answer every clarification the rules produced, whatever they are. */
-async function answerClarifications(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Read this' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).not.toContainText('Reading', {
-    timeout: 15_000,
-  });
+/**
+ * Get past the lookup and the preflight to the clarification questions.
+ *
+ * The same polling shape as `reachScope`, and for the same reason: every screen
+ * in this flow has a transient state — the lookup is running, the preflight is
+ * computing, a server action is in flight — and a helper that samples once will
+ * eventually sample during one of them. Two hand-written sequences both raced
+ * it; the loop does not, because "not there yet" is just another turn.
+ */
+async function reachClarification(page: Page): Promise<void> {
+  await waitForLookup(page);
 
-  if (await page.getByRole('button', { name: 'Continue' }).isVisible().catch(() => false)) {
-    const radios = page.locator('input[type=radio]');
-    const groups = new Set<string>();
-    for (let index = 0; index < (await radios.count()); index += 1) {
-      const name = await radios.nth(index).getAttribute('name');
-      if (name && !groups.has(name)) {
-        groups.add(name);
-        await radios.nth(index).check();
-      }
+  for (let step = 0; step < 12; step += 1) {
+    const heading = await page
+      .getByRole('heading', { level: 1 })
+      .innerText()
+      .catch(() => '');
+    if (/thing first/i.test(heading)) return;
+    if (/what we are about to do/i.test(heading)) {
+      throw new Error('the flow skipped the clarification step; this test needs it');
     }
-    await page.getByRole('button', { name: 'Continue' }).click();
+
+    const research = page.getByRole('button', { name: /Go and research this/i });
+    if (await research.isVisible().catch(() => false)) {
+      await answerEveryQuestion(page);
+      await research.click();
+      await expect(research).toHaveCount(0, { timeout: 20_000 });
+      continue;
+    }
+
+    await page.waitForTimeout(400);
   }
 
-  await expect(page.getByRole('heading', { name: 'Here is what we are about to do' })).toBeVisible({
-    timeout: 15_000,
-  });
+  const landed = await page.getByRole('heading', { level: 1 }).innerText();
+  throw new Error(`expected the clarification step, landed on "${landed}"`);
+}
+
+/** Answer every clarification the rules produced, whatever they are. */
+async function answerClarifications(page: Page): Promise<void> {
+  await reachScope(page);
 }
 
 /** Push through resolution, clarification and scope to a compiled region. */
@@ -62,37 +80,56 @@ async function compile(page: Page): Promise<void> {
 
 test('an unambiguous destination skips the interpretation screen', async ({ page }) => {
   await createTrip(page, 'Harbour City');
-  await page.getByRole('button', { name: 'Read this' }).click();
+  await waitForLookup(page);
 
-  // One confident reading is not a choice, so it is adopted and the traveller
-  // lands on the first thing that genuinely needs them.
-  await expect(page.getByRole('heading', { name: /thing first/i })).toBeVisible({
-    timeout: 15_000,
+  /*
+   * One credible reading is not a choice, so it is adopted without a screen and
+   * the traveller lands on the preflight — which is free, takes seconds, and is
+   * the first thing that tells them whether we understood them.
+   *
+   * The two negative assertions are the point of the phase: there is no
+   * "which one?" for a single reading, and no confirmation button under it.
+   */
+  await expect(page.getByRole('heading', { name: /as we read it/i })).toBeVisible({
+    timeout: 20_000,
   });
-  await expect(page.getByRole('heading', { name: /which one\?/i })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: /More than one place is called/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'That is the one' })).toHaveCount(0);
+});
+
+test('the flow never shows a bare unexplained confidence badge', async ({ page }) => {
+  await createTrip(page, 'Outer Isles');
+  await waitForLookup(page);
+  await expect(page.getByRole('heading', { name: /More than one place is called/i })).toBeVisible({
+    timeout: 20_000,
+  });
+  // "Not sure" told a traveller we were uncertain and gave them nothing to do
+  // about it. What replaced it is the reason.
+  await expect(page.getByText('Not sure', { exact: true })).toHaveCount(0);
 });
 
 test('an ambiguous destination asks which reading was meant', async ({ page }) => {
   await createTrip(page, 'Outer Isles');
-  await page.getByRole('button', { name: 'Read this' }).click();
+  await waitForLookup(page);
 
-  await expect(page.getByRole('heading', { name: /which one\?/i })).toBeVisible({
-    timeout: 15_000,
+  await expect(page.getByRole('heading', { name: /More than one place is called/i })).toBeVisible({
+    timeout: 20_000,
   });
   const options = page.locator('input[name="interpretation"]');
   expect(await options.count()).toBeGreaterThan(1);
   await expect(page.getByText('More than one place goes by this name.')).toBeVisible();
 
   await options.nth(1).check();
-  await page.getByRole('button', { name: 'That is the one' }).click();
-  await expect(page.getByRole('heading', { name: /which one\?/i })).toHaveCount(0, {
-    timeout: 15_000,
-  });
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: /More than one place is called/i })).toHaveCount(
+    0,
+    { timeout: 20_000 },
+  );
 });
 
 test('a query that is not a place is refused rather than guessed at', async ({ page }) => {
   await createTrip(page, 'somewhere scenic and cool');
-  await page.getByRole('button', { name: 'Read this' }).click();
+  await waitForLookup(page);
 
   await expect(page.getByRole('heading', { name: 'Where should we start looking?' })).toBeVisible({
     timeout: 15_000,
@@ -104,8 +141,7 @@ test('a query that is not a place is refused rather than guessed at', async ({ p
 
 test('clarification answers survive going back and returning', async ({ page }) => {
   const id = await createTrip(page, 'Harbour City');
-  await page.getByRole('button', { name: 'Read this' }).click();
-  await expect(page.getByRole('heading', { name: /thing first/i })).toBeVisible({ timeout: 15_000 });
+  await reachClarification(page);
 
   const first = page.locator('input[type=radio]').first();
   await first.check();

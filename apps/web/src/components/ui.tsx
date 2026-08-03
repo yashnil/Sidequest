@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react';
-import type { FitBand, PlaceCategory } from '@sidequest/core';
+import {
+  displayNameOf,
+  localNameOf,
+  type DisplayName,
+  type FitBand,
+  type PlaceCategory,
+} from '@sidequest/core';
 
 export function cx(...values: (string | false | null | undefined)[]): string {
   return values.filter(Boolean).join(' ');
@@ -45,6 +51,7 @@ export function Panel({
   className,
   as: Tag = 'div',
   labelledBy,
+  testId,
 }: {
   children: ReactNode;
   className?: string;
@@ -55,6 +62,15 @@ export function Panel({
    * not a landmark, and a screen reader announces it as an unlabelled region.
    */
   labelledBy?: string;
+  /**
+   * A test hook, named explicitly for the same reason `labelledBy` is.
+   *
+   * Not spread props. A caller passing `data-testid` to a component that does
+   * not forward it gets silence rather than an error — which cost this phase two
+   * green-looking tests that were asserting on an element nobody could select.
+   * An explicit prop makes the mistake a type error.
+   */
+  testId?: string;
 }) {
   return (
     <Tag
@@ -63,6 +79,7 @@ export function Panel({
         className,
       )}
       {...(labelledBy ? { 'aria-labelledby': labelledBy } : {})}
+      {...(testId ? { 'data-testid': testId } : {})}
     >
       {children}
     </Tag>
@@ -239,5 +256,210 @@ export function ErrorNote({ children, id }: { children: ReactNode; id?: string }
       <span aria-hidden="true">▲</span>
       <span>{children}</span>
     </p>
+  );
+}
+
+/**
+ * A labelled form control label, at one size.
+ *
+ * A component rather than a class string because the same three utilities had
+ * drifted into four variants across the flow, and a heading that is 11px on one
+ * screen and 14px on the next reads as two different products.
+ */
+export function FieldLabel({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="block text-sm font-medium text-ink">
+      {children}
+    </label>
+  );
+}
+
+/**
+ * A group of radios or checkboxes rendered as selectable cards.
+ *
+ * Native inputs throughout, overlaid rather than hidden, so keyboard traversal,
+ * grouping and screen-reader announcement are the browser's rather than ours.
+ * `columns` is a layout hint, not a breakpoint: two options should not be
+ * stretched across four columns on a wide screen.
+ */
+export function ChoiceGroup({
+  legend,
+  hint,
+  columns = 2,
+  className,
+  children,
+}: {
+  legend: string;
+  hint?: string;
+  columns?: 2 | 3 | 4;
+  className?: string;
+  children: ReactNode;
+}) {
+  const grid =
+    columns === 4
+      ? 'sm:grid-cols-4'
+      : columns === 3
+        ? 'sm:grid-cols-3'
+        : 'sm:grid-cols-2';
+  return (
+    <fieldset className={cx('min-w-0', className)}>
+      <legend className="text-sm font-medium text-ink">{legend}</legend>
+      {hint ? <p className="mt-1 max-w-prose text-sm leading-relaxed text-ink-muted">{hint}</p> : null}
+      <div className={cx('mt-3 grid gap-2', grid)}>{children}</div>
+    </fieldset>
+  );
+}
+
+export function Choice({
+  name,
+  value,
+  checked,
+  onChange,
+  label,
+  detail,
+  type = 'radio',
+  disabled,
+}: {
+  name: string;
+  value: string;
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  detail?: string;
+  type?: 'radio' | 'checkbox';
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={cx(
+        'relative flex min-w-0 flex-col rounded-lg border px-3.5 py-2.5 text-left transition-colors',
+        FOCUS_RING,
+        disabled
+          ? 'cursor-not-allowed border-dashed border-rule opacity-60'
+          : checked
+            ? 'cursor-pointer border-pine bg-pine-soft'
+            : 'cursor-pointer border-rule bg-paper-raised hover:border-ink-faint',
+      )}
+    >
+      <input
+        type={type}
+        name={name}
+        value={value}
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        className={cx(OVERLAY_INPUT, disabled && 'cursor-not-allowed')}
+      />
+      <span className={cx('text-sm', checked ? 'font-medium text-pine' : 'text-ink')}>{label}</span>
+      {detail ? <span className="mt-0.5 text-xs leading-relaxed text-ink-muted">{detail}</span> : null}
+    </label>
+  );
+}
+
+/**
+ * How certain we are about something, as a colour with a word attached.
+ *
+ * The four states are the same four everywhere they appear — a board card, a
+ * compilation phase, a date window — and the word is never dropped in favour of
+ * the colour, because a status carried only by hue is one a colour-blind
+ * traveller does not have.
+ */
+export type EvidenceState = 'provisional' | 'verifying' | 'verified' | 'conflicted' | 'unavailable';
+
+const EVIDENCE_STYLE: Record<EvidenceState, { className: string; label: string }> = {
+  provisional: { className: 'bg-provisional-soft text-provisional', label: 'Provisional' },
+  verifying: { className: 'bg-verifying-soft text-verifying', label: 'Checking' },
+  verified: { className: 'bg-verified-soft text-verified', label: 'Verified' },
+  conflicted: { className: 'bg-conflicted-soft text-conflicted', label: 'Sources disagree' },
+  unavailable: { className: 'border border-rule text-ink-faint', label: 'Not established' },
+};
+
+export function EvidenceBadge({ state, children }: { state: EvidenceState; children?: ReactNode }) {
+  const style = EVIDENCE_STYLE[state];
+  return (
+    <span
+      className={cx(
+        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-tight',
+        style.className,
+      )}
+    >
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+      {children ?? style.label}
+    </span>
+  );
+}
+
+/** A section heading with an eyebrow, used at the top of every flow screen. */
+export function PageHeading({
+  eyebrow,
+  title,
+  lede,
+  headingRef,
+  actions,
+}: {
+  eyebrow: string;
+  title: string;
+  lede?: string;
+  headingRef?: React.Ref<HTMLHeadingElement>;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <p className="eyebrow">{eyebrow}</p>
+        <h1
+          ref={headingRef}
+          tabIndex={-1}
+          className="mt-3 font-display text-3xl leading-tight text-ink outline-none sm:text-4xl"
+        >
+          {title}
+        </h1>
+        {lede ? <p className="measure mt-3 leading-relaxed text-ink-muted">{lede}</p> : null}
+      </div>
+      {actions ? <div className="flex shrink-0 gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * A place name, English-first, with the native form beside it.
+ *
+ * The single component every geographic entity renders through — a suggestion,
+ * an interpretation card, a base, a cluster, a board group, a transfer day, an
+ * itinerary heading, a line of preparation guidance.
+ *
+ * It exists because the alternative was each surface deciding for itself, and
+ * they did not agree: the destination index resolved English-first while the
+ * regional-expansion layer took whatever a geocoder returned — so a traveller
+ * who typed "Kyrgyzstan" and picked an English row got a base headed
+ * `Бишкек шаары` on every screen afterwards.
+ *
+ * The local name is rendered in a `<span lang>` when its language is known, so
+ * a screen reader switches voice rather than spelling a Cyrillic name out in
+ * English phonemes.
+ */
+export function PlaceName({
+  entity,
+  className,
+  showLocal = true,
+}: {
+  entity: { name: string; names?: DisplayName };
+  className?: string;
+  /** Off where space genuinely does not allow it — a dense table cell. */
+  showLocal?: boolean;
+}) {
+  const display = displayNameOf(entity);
+  const local = showLocal ? localNameOf(entity) : undefined;
+  const language = entity.names?.localLanguage;
+
+  return (
+    <span className={className}>
+      {display}
+      {local ? (
+        <span className="ml-1.5 text-ink-faint" {...(language ? { lang: language } : {})}>
+          {local}
+        </span>
+      ) : null}
+    </span>
   );
 }
