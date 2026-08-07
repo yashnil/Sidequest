@@ -22,6 +22,7 @@ import {
   type CompilationState,
   type DestinationCandidate,
   type DestinationResolution,
+  type RemainingEstimate,
   type SelectedDestination,
   type StageRecord,
   type TripComposerAnswers,
@@ -43,6 +44,8 @@ import {
 } from '@/lib/db/compiler-repository';
 import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
 import { runPreflight } from '@/lib/destinations/preflight';
+import { getProvisionalBoard } from '@/lib/db/provisional-repository';
+import { estimateRemainingForRun, runBucket } from '@/lib/db/timing-repository';
 
 /**
  * The actions behind the open-world journey.
@@ -302,6 +305,37 @@ export interface CompilationSnapshot {
   compiledRegionId?: string;
   /** When the job began, so the progress clock survives a refresh. */
   startedAt?: string;
+  /**
+   * The board emitted at the cut, if one has been.
+   *
+   * A board id rather than a state: a provisional board is an annotation on a
+   * running job, not a phase of it. Adding a `provisional` state would change
+   * `isTerminal`, the polling predicate and `decideStep`, for a thing that is
+   * neither terminal nor a step.
+   */
+  provisionalBoardId?: string;
+  /**
+   * What this build did not have to buy, in the words of the stage that reused it.
+   *
+   * Sourced from the `reusing_shared_claims` outcome rather than composed here,
+   * because the stage already counts it and a second count computed on the way
+   * to the screen is a second thing that can disagree with the first.
+   */
+  reusedSummary?: string;
+  /**
+   * How much longer, when there is enough comparable history to say — and null,
+   * which is the normal answer, when there is not.
+   *
+   * Null is rendered as silence, never as a zero and never as a percentage. See
+   * `estimateRemainingFrom` for the seven separate refusals behind it.
+   *
+   * Optional as well as nullable, and the two mean different things: `undefined`
+   * is the server-rendered first paint, which does not run the estimator because
+   * a page render must not query history; `null` is the poll having asked and
+   * been refused. Both render as silence, which is why the distinction costs
+   * nothing on screen and is worth keeping in the type.
+   */
+  estimate?: RemainingEstimate | null;
 }
 
 /**
@@ -315,13 +349,56 @@ export async function compilationSnapshotAction(tripId: string): Promise<Compila
   const job = getLatestJob(tripId);
   if (!job) return { state: 'none', stages: [], retryable: false };
 
+  const stages = displayStages(job);
+
+  /*
+   * The estimate, or nothing, and nothing is the normal answer.
+   *
+   * The bucket comes from the run's *own* observations rather than from the
+   * trip's scope, because warmth is a property of what the cache held when this
+   * build started and not of the destination. Re-deriving it here would ask for
+   * a warm bucket's history while watching a cold build — a confident number
+   * from the wrong population, which is the failure mode this whole subsystem
+   * was rebuilt to stop.
+   *
+   * Until the runner records a `StageObservation` per stage there is no bucket
+   * and therefore no estimate, and the screen shows elapsed time only. That is
+   * the honest degradation, not a gap.
+   */
+  const bucket = runBucket(job.id);
+  const estimate = bucket
+    ? estimateRemainingForRun({
+        remainingStages: stages
+          .filter((record) => record.status === 'waiting' || record.status === 'running')
+          .map((record) => record.stage),
+        ...bucket,
+      })
+    : null;
+
+  const reused = stages.find(
+    (record) => record.stage === 'reusing_shared_claims' && record.status === 'done',
+  );
+
+  /*
+   * One read, not two.
+   *
+   * This was `provisionalBoardIdFor(tripId) ? { … provisionalBoardIdFor(tripId)! }`,
+   * which parses the stored board twice on every poll — a JSON parse and a Zod
+   * validation of a forty-card document, 1.2 seconds apart from the next pair,
+   * for a value that cannot change between the two calls.
+   */
+  const provisionalBoardId = provisionalBoardIdFor(tripId);
+
   return {
     state: job.state,
-    stages: displayStages(job),
+    stages,
     ...(job.errorCode ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] } : {}),
     retryable: job.errorCode ? isRetryable(job.errorCode) : job.state === 'failed',
     ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
     startedAt: job.startedAt,
+    ...(provisionalBoardId ? { provisionalBoardId } : {}),
+    ...(reused?.outcome ? { reusedSummary: reused.outcome } : {}),
+    estimate,
   };
 }
 
@@ -350,6 +427,8 @@ function selectedDestinationFrom(candidate: DestinationCandidate): SelectedDesti
     center: candidate.center,
     ...(candidate.bounds ? { bounds: candidate.bounds } : {}),
     ...(candidate.countryCode ? { countryCode: candidate.countryCode } : {}),
+    ...(candidate.regionCode ? { regionCode: candidate.regionCode } : {}),
+    aliases: [...candidate.aliases],
     hierarchy: candidate.administrativeAreas,
     selectedAt: new Date().toISOString(),
   };
@@ -385,6 +464,8 @@ function candidateFromSelected(destination: SelectedDestination): DestinationCan
     center: destination.center,
     ...(destination.bounds ? { bounds: destination.bounds } : {}),
     ...(destination.countryCode ? { countryCode: destination.countryCode } : {}),
+    ...(destination.regionCode ? { regionCode: destination.regionCode } : {}),
+    aliases: [...destination.aliases],
     administrativeAreas: [...destination.hierarchy],
     timeZones: [],
     providerRefs: [
@@ -746,3 +827,8 @@ const STRATEGY_CONSEQUENCES: Record<
   two_bases: { shape: 'two_bases', breadthAnswer: 'circuit', baseAnswer: '1' },
   circuit: { shape: 'circuit', breadthAnswer: 'circuit', baseAnswer: '2' },
 };
+
+/** The stored board's id, when the cut has produced one for this trip. */
+function provisionalBoardIdFor(tripId: string): string | null {
+  return getProvisionalBoard(tripId)?.id ?? null;
+}

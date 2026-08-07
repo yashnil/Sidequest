@@ -2,7 +2,7 @@ import 'server-only';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { COLUMN_MIGRATIONS, SCHEMA_SQL } from './schema';
+import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, SCHEMA_SQL } from './schema';
 
 /**
  * Local persistence driver.
@@ -47,6 +47,7 @@ export function getDb(): Database.Database {
   db.pragma('busy_timeout = 5000');
   db.exec(SCHEMA_SQL);
   applyColumnMigrations(db);
+  applyIndexMigrations(db);
 
   globalForDb.sidequestDb = db;
   return db;
@@ -74,4 +75,26 @@ function applyColumnMigrations(db: Database.Database): void {
     }
   });
   apply();
+}
+
+/**
+ * Indexes over columns that arrive by migration.
+ *
+ * Runs after `applyColumnMigrations` because that is the only order in which it
+ * can work: `SCHEMA_SQL` executes first and an index naming a column an old
+ * database does not yet have would fail on precisely the databases the migration
+ * exists to repair.
+ *
+ * Each statement is applied on its own rather than in one transaction. An index
+ * is an optimisation, and a database that got three of four is faster than one
+ * that rolled all four back because a table it does not have was named.
+ */
+function applyIndexMigrations(db: Database.Database): void {
+  for (const statement of INDEX_MIGRATIONS) {
+    try {
+      db.exec(statement);
+    } catch (error) {
+      console.error('Could not apply an index migration', { statement, error });
+    }
+  }
 }

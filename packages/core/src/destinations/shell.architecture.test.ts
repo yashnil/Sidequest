@@ -158,6 +158,8 @@ describe('no destination-specific rule reached the new engine', () => {
     'packages/core/src/dates',
     'packages/core/src/scope',
     'packages/core/src/destinations',
+    'packages/core/src/recommend',
+    'packages/core/src/intent',
   ];
 
   /**
@@ -183,6 +185,82 @@ describe('no destination-specific rule reached the new engine', () => {
       const source = code(file);
       for (const name of TEMPTING) {
         expect(source.toLowerCase().includes(name), `${file} names ${name}`).toBe(false);
+      }
+    }
+  });
+});
+
+/**
+ * THE RANKING IS ARITHMETIC, AND A MODEL MAY NOT TOUCH IT.
+ *
+ * The rule the whole "where should I go" design rests on: a model may explain a
+ * finished record and may not add a destination, remove one, change a number or
+ * reorder a list. Stating that in a comment is worth something; making it
+ * impossible for the module to *reach* a model is worth more.
+ *
+ * The same argument the clarification layer already makes — rules decide, models
+ * phrase — enforced here by there being no provider on the path at all.
+ */
+describe('the destination ranking reaches no model', () => {
+  const RANKING = [
+    'packages/core/src/recommend/rank.ts',
+    'packages/core/src/recommend/shortlist.ts',
+    'packages/core/src/recommend/distance.ts',
+    'packages/core/src/schemas/shortlist.ts',
+  ];
+
+  const REACHES_A_MODEL = [
+    /\bfetch\s*\(/,
+    /anthropic/i,
+    /\bopenai\b/i,
+    /\bprompt\b/i,
+    /ResearchModel/,
+    /https?:\/\//,
+  ];
+
+  it.each(RANKING)('%s calls nothing and prompts nobody', (file) => {
+    const source = code(file);
+    for (const pattern of REACHES_A_MODEL) {
+      expect(pattern.test(source), `${file} matches ${pattern}`).toBe(false);
+    }
+  });
+
+  /**
+   * The classifier is the one place a traveller writes free prose, so it is the
+   * one place an injected instruction could reach a model. The deterministic
+   * pass has no instruction channel at all, and this is what keeps it that way.
+   */
+  it.each([
+    'packages/core/src/intent/classify.ts',
+    'packages/core/src/intent/phrases.ts',
+    'packages/core/src/intent/apply.ts',
+  ])('%s reads free text without reaching a model', (file) => {
+    const source = code(file);
+    for (const pattern of REACHES_A_MODEL) {
+      expect(pattern.test(source), `${file} matches ${pattern}`).toBe(false);
+    }
+  });
+
+  /**
+   * A confirmed preference is the most traveller-specific thing this product
+   * holds, and it must never reach a shared cache. The evidence store already
+   * has this guard; the tokens it watches for did not include the new ones.
+   */
+  it('keeps interpreted preferences out of every shared cache key', () => {
+    const TOKENS = ['interpretation', 'mustDo', 'chipTarget', 'InterpretedChip'];
+    for (const file of [
+      'packages/core/src/evidence/identity.ts',
+      'packages/core/src/schemas/evidence-store.ts',
+      'packages/core/src/schemas/destination-index.ts',
+      'packages/core/src/schemas/portfolio.ts',
+    ]) {
+      // Comments stripped: a note explaining that an index selection skips
+      // interpretation is the reasoning this repository wants written down, and
+      // banning the word from prose would delete it. What must not appear is the
+      // identifier.
+      const source = code(file);
+      for (const token of TOKENS) {
+        expect(source.includes(token), `${file} names ${token}`).toBe(false);
       }
     }
   });

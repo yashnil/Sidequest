@@ -25,11 +25,39 @@ const PRIORITY_BASE = {
 } as const;
 
 /**
+ * The reason code for a selection whose candidate is not in the pool.
+ *
+ * `not_feasible` is a placeholder and it is the wrong word. The right one —
+ * "this was on your board when you chose it and is not on the one we planned
+ * against" — needs a value in `UNSCHEDULED_REASON_CODES`, which lives in
+ * `packages/core/src/schemas/itinerary.ts` and is not this slice's to edit. The
+ * per-place `reason` string below carries the truth in the meantime, so nothing
+ * is silent; only the summary phrasing in `readiness.ts` is generic.
+ *
+ * Named as a constant rather than inlined so that swapping it for a dedicated
+ * code is a one-line change at one site.
+ */
+const CANDIDATE_WITHDRAWN_CODE: UnscheduledReasonCode = 'selection_not_on_board';
+
+/**
  * Turns board selections into a planning queue.
  *
  * The contract that matters: a place the traveller actively chose either gets
- * scheduled or comes back in `rejected` with a reason. There is no third
- * outcome where it quietly disappears.
+ * scheduled or comes back in `rejected` with a reason. There is no third outcome
+ * where it quietly disappears.
+ *
+ * That sentence has been in this file since the planner was written, and until
+ * now it was false. The loop iterated the *candidate pool* and looked each
+ * selection up inside it, so a selection whose candidate had left the pool was
+ * visited by neither branch: not eligible, not rejected, not mentioned anywhere
+ * on the finished plan. The traveller who pinned that place by hand was the one
+ * who paid for it.
+ *
+ * The pool changes for entirely ordinary reasons — the region was recompiled,
+ * deduplication merged two records into one, the evidence funnel dropped
+ * something that could not be supported — so this was a routine loss rather than
+ * an exotic one. The second pass below closes it: selections are iterated too,
+ * and every one of them lands in exactly one list.
  */
 export function resolveCandidates(
   candidates: readonly DiscoveryCandidate[],
@@ -37,6 +65,7 @@ export function resolveCandidates(
   matrix: TravelTimeMatrix,
 ): ResolvedCandidates {
   const byPlaceId = new Map(selections.map((selection) => [selection.placeId, selection]));
+  const candidateIds = new Set(candidates.map((candidate) => candidate.place.id));
   const eligible: PlanningCandidate[] = [];
   const rejected: UnscheduledPlace[] = [];
 
@@ -89,6 +118,37 @@ export function resolveCandidates(
       durationMinutes: candidate.place.typicalDurationMinutes,
       driveMinutesFromBase: candidate.driveMinutes,
       ...(candidate.fit.primaryInterest ? { primaryInterest: candidate.fit.primaryInterest } : {}),
+    });
+  }
+
+  /*
+   * THE SECOND PASS, AND THE WHOLE POINT OF IT.
+   *
+   * Everything above walks the candidate pool. This walks the selections, which
+   * is the only way a choice with no candidate behind it can be seen at all.
+   *
+   * An `excluded` selection is skipped here for the same reason it is skipped
+   * above — the traveller said no, and reporting their own decision back to them
+   * as an unscheduled place would be noise. Everything else gets a row.
+   *
+   * The place has no name to show, because the record that carried the name is
+   * exactly what went missing. The identity is used instead: ugly, and true.
+   * Inventing a plausible name for a record we cannot find would be the same
+   * class of mistake one layer down.
+   */
+  for (const selection of selections) {
+    if (selection.status === 'excluded') continue;
+    if (candidateIds.has(selection.placeId)) continue;
+
+    rejected.push({
+      placeId: selection.placeId,
+      name: selection.placeId,
+      wasManual: selection.source === 'user' && selection.status === 'included',
+      reasonCode: CANDIDATE_WITHDRAWN_CODE,
+      reason:
+        'You chose this, and it is not on the board we planned against — the region has been rebuilt since. We will not quietly leave it out, but we cannot place it either.',
+      suggestedRemedy:
+        'Open the board again and pick it back up if it is still there; if it is not, the reconciliation panel says what became of it.',
     });
   }
 

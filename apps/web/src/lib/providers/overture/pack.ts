@@ -19,7 +19,15 @@ import {
 } from '@sidequest/core';
 import { CatalogError, fileIntersects, latestRelease, themeFiles, type FetchOptions } from './catalog';
 import { LAYERS, type LayerDefinition, type NormalizeContext } from './normalize';
-import { ScanError, rowInBox, scanFile, type BoundingBox, type ScanBudget, type ScanCounters } from './scan';
+import {
+  ScanError,
+  pointOf,
+  rowPointInBox,
+  scanFile,
+  type BoundingBox,
+  type ScanBudget,
+  type ScanCounters,
+} from './scan';
 
 /**
  * BUILDING A REGION PACK.
@@ -45,6 +53,16 @@ import { ScanError, rowInBox, scanFile, type BoundingBox, type ScanBudget, type 
  * failed layer is `partial`, is labelled, and is still usable — which is the
  * whole difference between this and the previous discovery path, where one
  * refusal produced a region that read as though the destination were empty.
+ *
+ * **Membership.** The box a scan is paid for over is not the destination. It is
+ * the union of partition cells drawn around whatever shape the scope has, and
+ * for every city, town, county and district in the index that shape is a reach
+ * circle rather than a boundary. So a record that comes back is asked, once, on
+ * the evidence it now carries, whether it belongs — and one that does not is
+ * left out here rather than being handed on as though somebody had checked.
+ * Administrative geography is exempt, because it is the evidence the question is
+ * answered *from*: a division from the next area along is how a record near the
+ * edge gets a locality at all.
  */
 
 export interface PackProviderOptions {
@@ -128,6 +146,21 @@ export function createOverturePackProvider(
       let filesInspected = 0;
       const containment = new ContainmentIndex();
 
+      /*
+       * THE DESTINATION'S OWN IDENTITY IS NOT RESOLVED HERE ANY MORE.
+       *
+       * It used to be, mid-build, from the divisions layer, on a small share of
+       * the extraction budget — and that made a *membership* answer depend on a
+       * *budget*. Starve the divisions share and the destination's identity was
+       * unresolvable, every candidate fell to the conservative rung, and the
+       * consumer's escape hatch admitted the lot. One budget-starved build
+       * reproduced the whole defect.
+       *
+       * The divisions the extraction *does* keep are stored in the pack like any
+       * other layer, and the trip-scope overlay resolves both sides of the
+       * comparison against them, per trip, with whatever coverage there is — and
+       * reports the coverage rather than degrading into a promotion.
+       */
       for (const definition of LAYERS) {
         if (input.signal?.aborted) {
           budgetsExhausted.add('cancelled');
@@ -153,7 +186,15 @@ export function createOverturePackProvider(
         layers.push(result.layer);
         layerTimings.push({ layerId: definition.id, ms: Date.now() - layerStart });
 
-        if (definition.id === 'divisions') containment.load(result.layer.records);
+        if (definition.id === 'divisions') {
+          /*
+           * Loaded so the *labels* on later layers' records are real: a place
+           * inside a published neighbourhood box gets that neighbourhood's name
+           * as evidence. That is a fact about the ground and belongs in a pack.
+           * What does not belong is a verdict about a traveller's destination.
+           */
+          containment.load(result.layer.records);
+        }
       }
 
       const totalRecords = layers.reduce((sum, layer) => sum + layer.records.length, 0);
@@ -308,7 +349,16 @@ async function extractLayer(input: {
         counters,
         ...(input.signal ? { signal: input.signal } : {}),
         accept: (row) => {
-          if (!rowInBox(row, box)) return null;
+          /**
+           * The record's own position, not its bounding box's overlap.
+           *
+           * An administrative record covering a whole first-level division
+           * overlaps a metropolitan box by one corner while sitting hundreds of
+           * kilometres from it. On overlap it was admitted and then filed under
+           * whichever cell its south-west corner landed in — two compounding
+           * approximations, neither of which anybody had asked for.
+           */
+          if (!rowPointInBox(row, box)) return null;
           featuresRead += 1;
           const cell = cellFor(cells, row);
           if (!cell) return null;
@@ -321,6 +371,23 @@ async function extractLayer(input: {
           const record = definition.normalize(row, context);
           if (!record) return null;
           if (seen.has(record.id)) return null;
+          /*
+           * NOTHING IS REFUSED HERE FOR NOT BELONGING.
+           *
+           * This used to be the one place a record was dropped on a containment
+           * verdict, and the reasoning was that normalisation is the first moment
+           * the record's own address exists. True, and beside the point: a pack
+           * is traveller-independent ground, cached on the destination and the
+           * bounds and shared between everybody going there, while a verdict
+           * needs the traveller's scope, their regional expansion and their base
+           * strategy — none of which exist yet, and one of which
+           * (`includedAreas`) is in the pack's own cache key, so writing it here
+           * would give every traveller their own pack.
+           *
+           * Worse, a record dropped at pack build is a record nothing downstream
+           * can recover. The trip-scope overlay decides, per trip, after
+           * expansion, from the typed evidence the normaliser attached.
+           */
           seen.add(record.id);
           return record;
         },
@@ -435,17 +502,25 @@ function unionBox(cells: readonly PackCell[]): BoundingBox {
   return box;
 }
 
+/**
+ * Which cell a record is counted against, from the record's own position.
+ *
+ * The south-west corner of a bounding box was used here, and for a point feature
+ * that is exact and for anything with real extent it is not: a park spanning two
+ * cells was filed under the cell its lowest, westernmost corner fell in, which
+ * for a large feature is a different place from where it is. Retention is
+ * distributed per cell, so mis-filing skews the distribution that exists to stop
+ * one dense corner eating a region's allowance.
+ */
 function cellFor(cells: readonly PackCell[], row: Record<string, unknown>): PackCell | null {
-  const bbox = row.bbox as { xmin?: number; ymin?: number } | undefined;
-  const lat = bbox?.ymin;
-  const lng = bbox?.xmin;
-  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+  const point = pointOf(row);
+  if (!point) return null;
   for (const cell of cells) {
     if (
-      lat >= cell.bounds.southWest.lat &&
-      lat <= cell.bounds.northEast.lat &&
-      lng >= cell.bounds.southWest.lng &&
-      lng <= cell.bounds.northEast.lng
+      point.lat >= cell.bounds.southWest.lat &&
+      point.lat <= cell.bounds.northEast.lat &&
+      point.lng >= cell.bounds.southWest.lng &&
+      point.lng <= cell.bounds.northEast.lng
     ) {
       return cell;
     }
@@ -534,16 +609,23 @@ class ContainmentIndex {
         found.countryCode = entry.containment.countryCode;
       }
       /**
-       * The two innermost parents, and no more.
+       * The **whole** parent chain, and the truncation that used to be here was
+       * a real defect.
        *
-       * A full chain is six identifiers of about forty characters each, copied
-       * onto every record in the pack — nearly a megabyte of a dense city's
-       * pack, for a chain whose readable half is already carried as names. Two
-       * is enough to group satellites by their parent area, which is what
-       * anything downstream actually reads them for.
+       * It kept the two innermost identifiers, on a size argument — six ids of
+       * about forty characters on every record is nearly a megabyte for a dense
+       * city — and a claim that "two is enough to group satellites by their
+       * parent area, which is what anything downstream actually reads them for".
+       * That consumer no longer exists. This field is now the input to the
+       * strongest membership test there is: a candidate's chain against the
+       * identity of the division the destination *is*. A record inside a
+       * neighbourhood inside a borough inside the selected city carried
+       * `[borough, neighbourhood]`, the city's id was gone, and the rung
+       * silently returned false. For a region- or country-breadth destination it
+       * could essentially never fire.
        */
       if (found.divisionIds.length === 0 && entry.containment.divisionIds.length > 0) {
-        found.divisionIds = entry.containment.divisionIds.slice(-2);
+        found.divisionIds = [...entry.containment.divisionIds];
       }
       if (found.neighbourhoodName && found.localityName && found.countryCode) break;
     }

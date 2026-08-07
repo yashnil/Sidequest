@@ -104,6 +104,33 @@ export interface DiscoveryResult {
    * and the UI renders every attribution it ends up carrying.
    */
   licences?: DataLicence[];
+  /**
+   * WHAT THE SUPPLY LOOKED LIKE, ON ITS WAY TO A SCREEN.
+   *
+   * Six counts, and every one of them is a number a traveller can act on: how
+   * many practical stops were kept apart from the board, how many places nobody
+   * could confidently place, how many sat outside the chosen ground, how many
+   * are ways in and out, and how many the regional expansion put there.
+   *
+   * It travels here because this is the only layer that has both halves. The
+   * inventory knows what it separated; the containment overlay knows what it
+   * excluded and why; and by the time the artifact is written both have been
+   * collapsed into a candidate list. A board of six that can also say "and
+   * eighteen more were transport, shops and services" is a different product
+   * from a board of six, and the difference used to be lost exactly here.
+   *
+   * Optional, because a provider that has no inventory has nothing to report and
+   * must not report a zero — a counted zero and an uncounted one are different
+   * claims, and the reading layer renders only the first.
+   */
+  boardSupply?: {
+    supportKeptSeparately: number;
+    withheldUnplaceable: number;
+    removedOutOfScope: number;
+    gateways: number;
+    expansionMembers: number;
+    satellites: number;
+  };
 }
 
 /** What to go looking for. Categories rather than one "things to do" sweep. */
@@ -183,7 +210,48 @@ export interface PlaceDiscoveryProvider {
      * path, where no pack could be built.
      */
     pack?: RegionPack;
+    /**
+     * The areas the regional expansion asked for, once it has run.
+     *
+     * The plumbing CS-8 was missing. `optional_satellite` and
+     * `regional_expansion_member` are the only relationships that legitimately
+     * admit a record outside the destination's own boundary, and both require
+     * that *something asked for the area*. The thing that asks is the expansion
+     * — and `building_region_pack` runs before `expanding_region`, while
+     * `includedAreas` is part of `scopeFingerprint`, which keys the pack cache.
+     * So it cannot be on the scope at pack-build time without giving every
+     * traveller their own pack, and it cannot be inferred from adjacency without
+     * reintroducing the defect.
+     *
+     * It travels here instead: expansion runs first, discovery receives its
+     * result, and the trip-scope overlay is built knowing both.
+     */
+    includedAreas?: readonly TripIncludedArea[];
   }): Promise<DiscoveryResult>;
+}
+
+/**
+ * An area a trip deliberately includes, as the discovery seam sees it.
+ *
+ * Structurally identical to the compiler's `IncludedArea` and declared here so
+ * the provider interface does not have to import from the backbone. `status`
+ * carries the difference between "this is in the trip" and "this is offered":
+ * an included area produces `regional_expansion_member`, an optional one
+ * produces `optional_satellite`, and the second stays labelled and unplanned
+ * until something takes it up.
+ */
+export interface TripIncludedArea {
+  id: string;
+  name: string;
+  reason:
+    | 'regional_expansion_requested'
+    | 'expansion_base'
+    | 'expansion_subregion'
+    | 'traveller_requested_area';
+  status: 'included' | 'optional';
+  center?: { lat: number; lng: number };
+  radiusKm?: number;
+  divisionIds?: readonly string[];
 }
 
 /**

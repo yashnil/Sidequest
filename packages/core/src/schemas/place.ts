@@ -114,6 +114,23 @@ export const placeSchema = z.object({
   /** Practical caveat shown verbatim on the card when present. */
   logisticsNote: z.string().min(1).optional(),
   imageUrl: httpUrlSchema.optional(),
+  /**
+   * The open identifier the backbone already linked this record to.
+   *
+   * Carried so that imagery resolution can be an *identifier relationship*
+   * rather than a name search. Without it the only rung available to a compiled
+   * candidate is a bounded search over a name, whose confidence deliberately
+   * never clears the bar for display — so the board would render a fallback
+   * graphic for every card whose Wikidata id we already held two layers up.
+   *
+   * Optional, and its absence is meaningful rather than lazy: plenty of records
+   * genuinely have no open identifier, and inventing one from a name is exactly
+   * the ambiguous-same-name failure the imagery gate exists to refuse.
+   */
+  wikidataId: z
+    .string()
+    .regex(/^Q\d+$/)
+    .optional(),
 });
 export type Place = z.infer<typeof placeSchema>;
 

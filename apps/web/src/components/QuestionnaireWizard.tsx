@@ -316,7 +316,7 @@ export function QuestionnaireWizard({
           <>
             <Toggle
               label="You will have a car"
-              detail="Out here this is the difference between a region and a town. A free trolley covers Mammoth Lakes in summer; nothing else is reachable without a vehicle."
+              detail="This is the difference between a region and a town. Some destinations run local transport in season; beyond that, a lot of what we find is only reachable with a vehicle."
               checked={answers.willDrive}
               onChange={(willDrive) => update({ willDrive })}
             />
@@ -324,22 +324,22 @@ export function QuestionnaireWizard({
               <>
                 <Toggle
                   label="Steep mountain roads are fine"
-                  detail="Minaret Summit, Rock Creek and the Reds Meadow road all qualify."
+                  detail="Switchbacks, drop-offs and passes. In some regions this is most of what reaches the good stuff."
                   checked={answers.comfortableMountainRoads}
                   onChange={(comfortableMountainRoads) => update({ comfortableMountainRoads })}
                 />
                 <Toggle
                   label="Graded dirt roads are fine"
-                  detail="Opens up Obsidian Dome, Wild Willy's and the approach to Bodie."
+                  detail="Graded but unpaved. Often the last few miles to a trailhead, a spring or a ghost town."
                   checked={answers.comfortableGravelRoads}
                   onChange={(comfortableGravelRoads) => update({ comfortableGravelRoads })}
                 />
               </>
             ) : (
               <Note>
-                Without a car we will keep to town, the free summer trolley up to the Lakes Basin
-                and the bus down to Bishop. That is a real constraint here, not a preference — most
-                of this region has no scheduled service at all.
+                Without a car we will keep to what walks, and to whatever scheduled service the
+                destination actually runs. That is a real constraint rather than a preference —
+                plenty of the world has no timetable at all outside its towns.
               </Note>
             )}
             {visible('maxDailyTravelMinutes') ? (
@@ -400,8 +400,8 @@ export function QuestionnaireWizard({
             />
             {!answers.willDrive ? (
               <Note>
-                Wider radii are hidden because you are not driving — we will not offer you Mono Lake
-                and then have no way to get you there.
+                Wider radii are hidden because you are not driving — we will not offer you
+                somewhere an hour out and then have no way to get you there.
               </Note>
             ) : null}
             {visible('detourToleranceMinutes') ? (
@@ -413,7 +413,7 @@ export function QuestionnaireWizard({
                 step={15}
                 format={formatMinutes}
                 onChange={(detourToleranceMinutes) => update({ detourToleranceMinutes })}
-                hint="One way, from Mammoth Lakes. Something genuinely special may still be offered just past this, labelled as a stretch."
+                hint="One way, from where you are staying. Something genuinely special may still be offered just past this, labelled as a stretch."
               />
             ) : null}
           </>

@@ -1,12 +1,15 @@
-import { z } from 'zod';
 import {
-  COMPILATION_STAGE_LABELS,
-  type CompilationStage,
-  type StageRecord,
-} from './compilation';
+  COMPILATION_PHASES,
+  COMPILATION_PHASE_DETAIL,
+  COMPILATION_PHASE_LABELS,
+  STAGE_PHASE,
+  stageDefinition,
+  type CompilationPhase,
+} from './stages';
+import type { StageRecord } from './compilation';
 
 /**
- * TWENTY-SIX ROWS OF BUILD LOG, GROUPED INTO SOMETHING A TRAVELLER CAN READ.
+ * TWENTY-NINE ROWS OF BUILD LOG, GROUPED INTO SOMETHING A TRAVELLER CAN READ.
  *
  * The stage vocabulary is not the problem — every one of those stages fails for
  * a different reason and an operator needs to see which. The problem is that it
@@ -21,65 +24,34 @@ import {
  *
  * The mapping is total and checked by a test: a stage with no phase would vanish
  * from the grouped view, which is worse than the flat list it replaced.
+ *
+ * The phase vocabulary and the stage→phase map used to be declared here, by
+ * hand, beside a second hand-keyed label map in `compilation.ts`. Both now come
+ * from `STAGE_REGISTRY` — see `schemas/stages.ts` for the ordering defect that
+ * separation caused, in which `groupStages` sent a finished phase back to
+ * running because two stages executed one phase ahead of where they were mapped.
+ *
+ * ---
+ *
+ * WHAT THIS MODULE IS, BEYOND PROGRESS.
+ *
+ * It is the place a **derived display value** is computed and constrained. Not
+ * only progress: `observedDurationMs` and `MAX_PLAUSIBLE_STAGE_MS` are already
+ * here and neither is about a phase — both are rules about what a screen is
+ * allowed to claim it measured. The same rules kept escaping into components,
+ * and each escape cost a traveller something specific:
+ *
+ * - a duration read off the wrong clock rendered "roughly 0s–0s to go";
+ * - a build span with no ceiling rendered "312m in total, measured" for a job
+ *   that had been reclaimed hours after it stopped;
+ * - a 0–1 heuristic rendered as `83`, an integer with a precision nobody has;
+ * - a count derived from one board rendered beside a different board.
+ *
+ * All four are the same defect wearing different clothes: a number computed in a
+ * component, from whatever that component happened to be holding, with no stated
+ * rule about when it may not be shown. Every derivation below is pure, is tested
+ * in `progress.test.ts`, and refuses rather than guesses.
  */
-
-export const COMPILATION_PHASES = [
-  'understanding',
-  'shaping',
-  'finding',
-  'verifying',
-  'building',
-] as const;
-export const compilationPhaseSchema = z.enum(COMPILATION_PHASES);
-export type CompilationPhase = z.infer<typeof compilationPhaseSchema>;
-
-export const COMPILATION_PHASE_LABELS: Record<CompilationPhase, string> = {
-  understanding: 'Understanding your trip',
-  shaping: 'Shaping the region',
-  finding: 'Finding the strongest places',
-  verifying: 'Verifying what matters',
-  building: 'Building the plan',
-};
-
-export const COMPILATION_PHASE_DETAIL: Record<CompilationPhase, string> = {
-  understanding: 'Working out what you meant and how much ground it covers.',
-  shaping: 'Reading the map data for this region and dividing it into areas.',
-  finding: 'Looking for places, merging duplicates, and dropping the empty records.',
-  verifying: 'Reading official pages for hours, access, cost and cautions. This is the slow part.',
-  building: 'Travel times, weather points, and what we could and could not establish.',
-};
-
-export const STAGE_PHASE: Record<CompilationStage, CompilationPhase> = {
-  resolving_destination: 'understanding',
-  awaiting_clarification: 'understanding',
-  confirming_scope: 'understanding',
-  resolving_source_release: 'shaping',
-  partitioning_scope: 'shaping',
-  building_region_pack: 'shaping',
-  linking_sources: 'shaping',
-  expanding_region: 'shaping',
-  discovering_candidates: 'finding',
-  deduplicating: 'finding',
-  classifying: 'finding',
-  filtering_quality: 'finding',
-  enriching_priority_candidates: 'finding',
-  reusing_shared_claims: 'verifying',
-  discovering_sources: 'verifying',
-  retrieving_pages: 'verifying',
-  extracting_facts: 'verifying',
-  reconciling_facts: 'verifying',
-  researching_official_constraints: 'verifying',
-  resolving_hours_and_access: 'verifying',
-  resolving_costs: 'verifying',
-  resolving_safety: 'verifying',
-  discovering_food: 'verifying',
-  enriching_food: 'verifying',
-  computing_travel_times: 'building',
-  validating_routes: 'building',
-  resolving_weather_locations: 'building',
-  calculating_coverage: 'building',
-  compiling: 'building',
-};
 
 export type PhaseStatus = 'waiting' | 'running' | 'done' | 'partial' | 'failed';
 
@@ -92,12 +64,24 @@ export interface PhaseProgress {
   done: number;
   total: number;
   /**
-   * The most recent meaningful thing this phase produced.
+   * What the phase is doing right now, in the traveller's words.
    *
-   * A real outcome with a number in it, taken from the last finished stage that
-   * reported one — never a stage name dressed up as progress.
+   * Absent while a `technicalOnly` stage is running. "Finding who publishes
+   * this" and "Choosing what is worth researching" are true, useful to an
+   * operator, and not the sentence somebody waiting for a trip should be reading
+   * — so the phase falls back to its own detail line and the stage stays in the
+   * disclosure, where an operator can still see it.
    */
   currentWork?: string;
+  /**
+   * The most recent meaningful thing this phase produced.
+   *
+   * A real outcome with a number in it, taken from the last finished stage the
+   * registry marks `exposesResult` — never a stage name dressed up as progress,
+   * and never a plumbing count. `linking_sources` finishing with "412 records
+   * matched across sources" is not what the *shaping* card should say it
+   * achieved.
+   */
   latestOutcome?: string;
   /** Warnings from any stage in the phase. Surfaced, never buried. */
   notes: string[];
@@ -144,14 +128,47 @@ export function groupStages(stages: readonly StageRecord[], now: Date): PhasePro
               ? 'partial'
               : 'done';
 
-    const finished = records.filter((record) => record.outcome !== undefined);
+    /*
+     * The label of the running stage, unless it is plumbing.
+     *
+     * The registry decides. A `technicalOnly` stage is still listed, still
+     * labelled and still timed — it just does not get to be the sentence
+     * somebody reads while they wait.
+     */
+    const runningDefinition = running ? stageDefinition(running.stage) : null;
+    const runningLabel =
+      runningDefinition && !runningDefinition.technicalOnly ? runningDefinition.label : null;
+
+    /*
+     * Only stages the registry says may expose a result.
+     *
+     * Without the filter the phase card headlines whatever finished last, which
+     * for *shaping* is `linking_sources` — "412 records matched across sources".
+     * That is an operator's sentence. The traveller's sentence for that phase is
+     * what `expanding_region` produced, and it is one row further back.
+     */
+    const finished = records.filter(
+      (record) => record.outcome !== undefined && stageDefinition(record.stage)?.exposesResult,
+    );
     const latest = finished[finished.length - 1];
 
+    /*
+     * The observed clock where there is one, the injected one otherwise.
+     *
+     * `startedAt`/`finishedAt` come from the compiler's *injected* clock, which
+     * advances a fixed step per stage so that two runs of the same inputs
+     * produce byte-identical artifacts. That is worth keeping and it is not a
+     * duration: read as one it made every phase report zero seconds.
+     *
+     * A job row recorded since the split carries the real pair beside it. An
+     * older row carries only the injected one, and falls back to what it has —
+     * which reads as a very fast build rather than as a crash.
+     */
     const started = records
-      .map((record) => (record.startedAt ? Date.parse(record.startedAt) : Number.NaN))
+      .map((record) => Date.parse(record.observedStartedAt ?? record.startedAt ?? ''))
       .filter((value) => !Number.isNaN(value));
     const ended = records
-      .map((record) => (record.finishedAt ? Date.parse(record.finishedAt) : Number.NaN))
+      .map((record) => Date.parse(record.observedFinishedAt ?? record.finishedAt ?? ''))
       .filter((value) => !Number.isNaN(value));
 
     const elapsedSeconds =
@@ -173,7 +190,7 @@ export function groupStages(stages: readonly StageRecord[], now: Date): PhasePro
       status,
       done,
       total: records.length,
-      ...(running ? { currentWork: COMPILATION_STAGE_LABELS[running.stage] } : {}),
+      ...(runningLabel === null ? {} : { currentWork: runningLabel }),
       ...(latest?.outcome ? { latestOutcome: latest.outcome } : {}),
       notes: records
         .map((record) => record.note)
@@ -184,6 +201,40 @@ export function groupStages(stages: readonly StageRecord[], now: Date): PhasePro
   }
 
   return phases;
+}
+
+/**
+ * The longest a single stage is believed to be able to take.
+ *
+ * An hour. Anything above it is not a slow stage, it is a clock that moved —
+ * a suspended laptop, a resumed container — and treating it as a measurement
+ * would put a four-hour outlier into the history every later estimate is drawn
+ * from.
+ */
+export const MAX_PLAUSIBLE_STAGE_MS = 3_600_000;
+
+/**
+ * How long one stage really took, or nothing.
+ *
+ * Only ever from the *observed* pair. `startedAt`/`finishedAt` come from the
+ * compiler's injected clock — one step per stage — and reading them as a
+ * duration is precisely the defect that had every stage claiming a millisecond
+ * and the progress screen offering "roughly 0s–0s to go". A record with no
+ * observed pair returns null, and the screen renders nothing rather than a zero.
+ *
+ * Negative and absurd spans return null too. A clock that went backwards over a
+ * stage — an NTP correction mid-build, a container resumed on a different host —
+ * produces a duration nobody should see and no history should learn from, and
+ * `-4s` on a progress row is a more alarming bug than a missing figure.
+ */
+export function observedDurationMs(record: StageRecord): number | null {
+  if (!record.observedStartedAt || !record.observedFinishedAt) return null;
+  const started = Date.parse(record.observedStartedAt);
+  const finished = Date.parse(record.observedFinishedAt);
+  if (Number.isNaN(started) || Number.isNaN(finished)) return null;
+  const span = finished - started;
+  if (!Number.isFinite(span) || span < 0 || span > MAX_PLAUSIBLE_STAGE_MS) return null;
+  return span;
 }
 
 /**
@@ -202,36 +253,224 @@ export const AVAILABILITY_AFTER: Partial<Record<CompilationPhase, string>> = {
 };
 
 /**
- * How much longer, from what this build has actually done.
+ * HOW MUCH LONGER — AND USUALLY, HONESTLY, NO ANSWER.
  *
- * A *range*, from measured stage durations, and only once enough of them have
- * finished to have something to extrapolate from. Returns null otherwise —
- * which the UI renders as silence rather than as a made-up minute count. The
- * single most common lie a progress screen tells is a confident estimate built
- * from nothing.
+ * The version this replaces multiplied *this run's* median stage duration by the
+ * *count* of stages left. That is wrong twice over, and only one of the two was
+ * the fabricated clock.
+ *
+ * The second error survives any clock: it treats the twenty-six stages as
+ * exchangeable draws from one distribution. `partitioning_scope` is arithmetic
+ * on the order of a millisecond and `retrieving_pages` fetches up to ninety
+ * pages over somebody else's network. Estimating the verifying phase from four
+ * stages that did no I/O under-predicts by an order of magnitude — which is why
+ * this function now needs *history*, bucketed, and refuses without it.
+ *
+ * `estimateRemainingFrom` in `schemas/timing.ts` is that estimator. What remains
+ * here is the honest default: no history, no estimate, and the screen renders
+ * silence rather than a number nobody should act on.
  */
-export function estimateRemaining(
-  phases: readonly PhaseProgress[],
-  now: Date,
-): { lowSeconds: number; highSeconds: number } | null {
-  const finished = phases.flatMap((phase) => phase.stages).filter((record) => record.finishedAt && record.startedAt);
-  if (finished.length < 4) return null;
+export function estimateRemaining(): null {
+  return null;
+}
 
-  const durations = finished
-    .map((record) => Date.parse(record.finishedAt!) - Date.parse(record.startedAt!))
-    .filter((value) => Number.isFinite(value) && value >= 0);
-  if (durations.length === 0) return null;
+// ---------------------------------------------------------------------------
+// Version-keyed summaries
+// ---------------------------------------------------------------------------
 
-  const remaining = phases.reduce((total, phase) => total + (phase.total - phase.done), 0);
-  if (remaining === 0) return null;
+/**
+ * THE IDENTITY A DERIVED SUMMARY IS KEYED TO.
+ *
+ * The defect this exists for: a board is versioned and immutable, a traveller's
+ * marks are not, and every count on the screen was computed from whichever of
+ * the two the component happened to be holding. A rebuild replaced the cards and
+ * left the counts; a second tab moved the marks and left the first tab's total.
+ * Both render an account of one artifact beside a different artifact, and
+ * neither looks wrong — a number is a number.
+ *
+ * So every derived summary in this product carries the version of the thing it
+ * describes, computed here, from the same call that computed the number. The two
+ * cannot disagree because they are one value. A component renders the version
+ * beside the count (`data-board-version`) so that "these describe the same
+ * board" is checkable from outside rather than asserted in a comment.
+ *
+ * Length-prefixed before hashing, so `['ab', 'c']` and `['a', 'bc']` are
+ * different identities. A plain join by a separator is one identifier containing
+ * that separator away from two boards sharing a version.
+ */
+export function summaryVersion(parts: readonly (string | number | null | undefined)[]): string {
+  /*
+   * FNV-1a over the length-prefixed parts.
+   *
+   * A short, stable, purely-derived string. Stable matters more than it looks:
+   * the same board must produce the same version on a server render, on a client
+   * re-render and after a refresh, or "the count and the board agree" would be a
+   * property that only holds until somebody reloads.
+   */
+  let hash = 0x811c9dc5;
+  for (const part of parts) {
+    const text = part === null || part === undefined ? '' : String(part);
+    const chunk = `${text.length}:${text}`;
+    for (let index = 0; index < chunk.length; index += 1) {
+      hash ^= chunk.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+  }
+  return hash.toString(16).padStart(8, '0');
+}
 
-  const sorted = [...durations].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
-  const upper = sorted[Math.floor(sorted.length * 0.9)] ?? median;
+/**
+ * Counts of what a traveller has said, about the board actually on screen.
+ *
+ * `S` is the decision vocabulary of whichever board is asking — the provisional
+ * board's intents and the final board's selection statuses are different
+ * vocabularies over the same shape, and one function over both is what stops the
+ * two screens from disagreeing about how a count is arrived at.
+ */
+export interface SelectionSummary<S extends string> {
+  /** The board these counts describe. Rendered beside them, never separately. */
+  boardVersion: string;
+  /** Cards on the displayed board. */
+  onBoard: number;
+  /** How many *displayed* cards carry each status. Zero for an absent status. */
+  counts: Record<S, number>;
+  /** Displayed cards the traveller has said anything about. */
+  decided: number;
+  /**
+   * Marks about places that are **not** on the displayed board.
+   *
+   * Kept and reported rather than silently folded into the totals, because they
+   * are the exact quantity that made a stale count look plausible: a mark made
+   * on board v1 about a card that v2 dropped is still a real thing somebody
+   * said, and it is not a fact about the board they are looking at. A screen may
+   * show this in a labelled history view; it may not add it to "3 marked".
+   */
+  carriedOver: number;
+}
 
-  void now;
-  return {
-    lowSeconds: Math.round((remaining * median) / 1000),
-    highSeconds: Math.round((remaining * Math.max(upper, median)) / 1000),
-  };
+/**
+ * Summarise decisions **against one board version**.
+ *
+ * The rule in one line: a count describes the cards in front of the traveller,
+ * and nothing else. Everything the old components did wrong follows from having
+ * broken it — they counted the values of a selection map, which outlives the
+ * board it was made on, is shared across board versions by design, and grows
+ * every time somebody marks a card that a later build removes.
+ */
+export function summariseSelections<S extends string>(input: {
+  boardVersion: string;
+  /** The ids actually rendered, in the order they are rendered. */
+  cardIds: readonly string[];
+  /** The decision vocabulary, so an absent status reports `0` rather than nothing. */
+  statuses: readonly S[];
+  selections: Readonly<Record<string, S | undefined>>;
+}): SelectionSummary<S> {
+  const counts = Object.fromEntries(input.statuses.map((status) => [status, 0])) as Record<S, number>;
+  const onBoard = new Set(input.cardIds);
+
+  let decided = 0;
+  for (const id of onBoard) {
+    const status = input.selections[id];
+    if (status === undefined) continue;
+    if (!(status in counts)) continue;
+    counts[status] += 1;
+    decided += 1;
+  }
+
+  let carriedOver = 0;
+  for (const [id, status] of Object.entries(input.selections)) {
+    if (status === undefined) continue;
+    if (onBoard.has(id)) continue;
+    carriedOver += 1;
+  }
+
+  return { boardVersion: input.boardVersion, onBoard: onBoard.size, counts, decided, carriedOver };
+}
+
+// ---------------------------------------------------------------------------
+// A measured build span, or an honest refusal
+// ---------------------------------------------------------------------------
+
+/**
+ * The longest a whole build is believed to be able to take.
+ *
+ * Two hours, against a one-hour ceiling for any single stage. Above it the pair
+ * of timestamps is not a slow build — it is a job that was reclaimed, a process
+ * that was suspended, or a clock that moved between the start stamp and the
+ * finish stamp. "312m in total, measured" reached a screen from exactly that,
+ * and the word doing the damage is *measured*: it invites somebody to conclude
+ * the pipeline is five hours slow.
+ */
+export const MAX_PLAUSIBLE_BUILD_MS = 2 * MAX_PLAUSIBLE_STAGE_MS;
+
+/**
+ * Below this, a build is reported in words rather than in seconds.
+ *
+ * A synthetic world compiles in under a second, and `Math.round(ms / 1000)`
+ * turns that into `0s`. "0s in total, measured" is the same sentence family as
+ * "roughly 0s–0s to go": a figure that rounds to nothing, presented as a
+ * measurement, on a screen that just finished doing several seconds of work.
+ */
+export const MIN_REPORTABLE_BUILD_MS = 1_000;
+
+export type ObservedSpan =
+  /** A real span, inside both bounds. Render the figure. */
+  | { kind: 'measured'; ms: number }
+  /** Real, and shorter than the smallest figure worth printing. */
+  | { kind: 'under_a_second' }
+  /** Past the ceiling. Render the reason, never the number as a duration. */
+  | { kind: 'not_a_measurement'; ms: number }
+  /** No observed pair at all. Render nothing. */
+  | { kind: 'unmeasured' };
+
+/**
+ * What a build's observed start-to-finish span is allowed to be presented as.
+ *
+ * Four answers rather than a number-or-null, because the three non-numeric cases
+ * are different things to say. "We did not measure this" and "the clock says
+ * five hours, which is not a duration" are not the same admission, and folding
+ * them together is how the second one gets rendered as the first.
+ */
+export function classifyObservedSpan(ms: number | null | undefined): ObservedSpan {
+  if (ms === null || ms === undefined) return { kind: 'unmeasured' };
+  if (!Number.isFinite(ms) || ms < 0) return { kind: 'unmeasured' };
+  if (ms > MAX_PLAUSIBLE_BUILD_MS) return { kind: 'not_a_measurement', ms };
+  if (ms < MIN_REPORTABLE_BUILD_MS) return { kind: 'under_a_second' };
+  return { kind: 'measured', ms };
+}
+
+// ---------------------------------------------------------------------------
+// A weighted 0–1 heuristic, as a band
+// ---------------------------------------------------------------------------
+
+/**
+ * A NORMALISED HEURISTIC IS A BAND, NEVER AN INTEGER.
+ *
+ * `Math.round(value * 100)` reached the shortlist's own disclosure — the one
+ * whose component header says, in those words, that rendering "83" would be a
+ * precision the inputs do not have. Four bands, because four is roughly as many
+ * distinctions as a weighted sum of partly-unmeasured dimensions can carry, and
+ * because a reader can hold four words and cannot usefully compare 71 with 76.
+ *
+ * The basis clause still travels beside it. The band says how strongly the
+ * dimension argued; the basis says what it was computed from. Neither is a
+ * number somebody will subtract from another number.
+ */
+export const MEASURE_BANDS = ['strong', 'good', 'middling', 'weak'] as const;
+export type MeasureBand = (typeof MEASURE_BANDS)[number];
+
+export const MEASURE_BAND_LABELS: Record<MeasureBand, string> = {
+  strong: 'Strong',
+  good: 'Good',
+  middling: 'Middling',
+  weak: 'Weak',
+};
+
+export function measureBand(value: number): MeasureBand {
+  if (!Number.isFinite(value)) return 'weak';
+  const clamped = Math.min(1, Math.max(0, value));
+  if (clamped >= 0.75) return 'strong';
+  if (clamped >= 0.55) return 'good';
+  if (clamped >= 0.35) return 'middling';
+  return 'weak';
 }

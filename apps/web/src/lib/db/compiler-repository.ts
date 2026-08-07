@@ -4,9 +4,15 @@ import {
   clarificationSetSchema,
   compilationWorkPlanSchema,
   type CompilationWorkPlan,
-  compilationJobSchema,
   compiledRegionSchema,
+  compilationOperationalSchema,
+  isCompilationStage,
+  flattenOperationalCounters,
+  COMPILATION_ERROR_COPY,
+  decodeStoredJob,
+  terminateOpenStages,
   COMPILATION_JOB_VERSION,
+  COMPILATION_OPERATIONAL_VERSION,
   destinationDiscoveryPreferencesSchema,
   destinationResolutionSchema,
   selectedDestinationSchema,
@@ -14,6 +20,7 @@ import {
   tripPreflightSchema,
   geographicScopeSchema,
   isAbandoned,
+  scopeFingerprint,
   type ClarificationSet,
   type CompilationErrorCode,
   type CompilationJob,
@@ -23,8 +30,10 @@ import {
   type DestinationDiscoveryPreferences,
   type DestinationResolution,
   type GeographicScope,
+  type CompilationOperational,
   type SelectedDestination,
   type StageRecord,
+  type StoredJobRow,
   type TripComposerAnswers,
   type TripPreflight,
 } from '@sidequest/core';
@@ -257,43 +266,29 @@ export function saveSelectedCompiledRegion(tripId: string, compiledRegionId: str
 // Compilation jobs
 // ---------------------------------------------------------------------------
 
-interface JobRow {
-  id: string;
-  trip_id: string;
-  scope_fingerprint: string;
-  state: string;
-  stage: string;
-  stages_json: string;
-  started_at: string;
-  updated_at: string;
-  finished_at: string | null;
-  heartbeat_at: string;
-  cancel_requested: number;
-  error_code: string | null;
-  error_detail: string | null;
-  compiled_region_id: string | null;
-  correlation_id: string;
-}
+type JobRow = StoredJobRow;
 
-function rowToJob(row: JobRow): CompilationJob {
-  return compilationJobSchema.parse({
-    schemaVersion: COMPILATION_JOB_VERSION,
-    id: row.id,
-    tripId: row.trip_id,
-    scopeFingerprint: row.scope_fingerprint,
-    state: row.state,
-    stage: row.stage,
-    stages: JSON.parse(row.stages_json),
-    startedAt: row.started_at,
-    updatedAt: row.updated_at,
-    ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
-    heartbeatAt: row.heartbeat_at,
-    cancelRequested: row.cancel_requested === 1,
-    ...(row.error_code ? { errorCode: row.error_code } : {}),
-    ...(row.error_detail ? { errorDetail: row.error_detail } : {}),
-    ...(row.compiled_region_id ? { compiledRegionId: row.compiled_region_id } : {}),
-    correlationId: row.correlation_id,
-  });
+/**
+ * A stored job, or nothing.
+ *
+ * The decision is `decodeStoredJob`, in `schemas/compilation.ts`, so that the
+ * repository, a test and anything else reading this table apply one policy. Two
+ * things it fixes, both of which were here:
+ *
+ * - the row's own `schema_version` is read rather than the *current* constant
+ *   being stamped onto whatever was stored, which is a row asserting it was
+ *   written under rules it has never been read against;
+ * - `JSON.parse(row.stages_json)` was unguarded in a read path, so one
+ *   truncated write threw out of `getActiveJob` and made a trip permanently
+ *   un-openable. It degrades to a job with no stage history — the same policy
+ *   `findCompiledRegion` and `getCompiledRegion` already use.
+ */
+function rowToJob(row: JobRow): CompilationJob | null {
+  const job = decodeStoredJob(row);
+  if (!job) {
+    console.error('Stored compilation job will not parse; treating it as absent', { id: row.id });
+  }
+  return job;
 }
 
 export function getJob(jobId: string): CompilationJob | null {
@@ -499,10 +494,19 @@ export function completeJob(input: {
      * The pages behind the artifact, as an audit row each.
      *
      * Written inside the same transaction as the artifact so a region can never
-     * exist without the record of what was read to build it. The bodies are not
+     * exist without the record of what it was built from. The bodies are not
      * here and never will be: what is stored is a URL, a publisher, a byte count
      * and a hash of the extracted text — enough to notice a page changed, and
      * not a copy of anybody's page.
+     *
+     * `content_bytes` is `0` where the artifact does not know it. That is now
+     * the common case and it is an improvement rather than a loss: the manifest
+     * used to be the *retrieval log*, so a warm build — one answering most
+     * subjects from durable claims — wrote nine rows where a cold build of the
+     * same region wrote thirty-three, and the nine understated what the region
+     * rests on. The manifest is derived from the retained facts now, so the
+     * audit trail is complete either way; what nobody measured is the byte count
+     * of a page this particular run never downloaded.
      */
     const insertDocument = db.prepare(
       `INSERT INTO source_documents
@@ -521,7 +525,7 @@ export function completeJob(input: {
         fact?.authorityKind ?? 'unverified_secondary',
         page.title ?? null,
         page.contentHash ?? '',
-        page.contentBytes,
+        page.contentBytes ?? 0,
         page.robotsAllowed ? 1 : 0,
         page.retrievedAt,
         fact?.publishedAt ?? null,
@@ -593,6 +597,21 @@ export function pruneOrphanedSourceDocuments(): number {
   return documents + claims;
 }
 
+/**
+ * End a job, and end its stage history with it.
+ *
+ * The second half is not bookkeeping. `groupStages` computes a phase's elapsed
+ * time as `now − start` for as long as anything in that phase is `running`, and
+ * nothing ever terminated the in-flight stage record — so a build that died
+ * eleven minutes ago rendered "Verifying what matters — 11m" and kept counting,
+ * on a job whose own state said `failed`. The arithmetic was right; the claim
+ * that something was still happening was not.
+ *
+ * One transaction, because a job that says `failed` while its stages say
+ * `running` is exactly the inconsistency this is closing. A stage that already
+ * ended is left alone: a terminal write must not rewrite history that was
+ * already true.
+ */
 export function failJob(input: {
   jobId: string;
   code: CompilationErrorCode;
@@ -601,20 +620,45 @@ export function failJob(input: {
   cancelled?: boolean;
 }): void {
   const stamp = input.now.toISOString();
-  getDb()
-    .prepare(
+  const db = getDb();
+
+  db.transaction(() => {
+    const row = db
+      .prepare('SELECT stage, stages_json FROM compilation_jobs WHERE id = ?')
+      .get(input.jobId) as { stage: string; stages_json: string } | undefined;
+    if (!row) return;
+
+    let stages: StageRecord[] = [];
+    try {
+      const parsed: unknown = JSON.parse(row.stages_json);
+      if (Array.isArray(parsed)) stages = parsed as StageRecord[];
+    } catch {
+      // An unreadable progress log is a progress log nobody sees. It must not
+      // stop the job being marked finished.
+    }
+
+    const terminated = terminateOpenStages(stages, {
+      now: input.now,
+      outcome: input.cancelled ? 'cancelled' : 'failed',
+      note: input.detail ?? COMPILATION_ERROR_COPY[input.code],
+      ...(isCompilationStage(row.stage) ? { stage: row.stage } : {}),
+    });
+
+    db.prepare(
       `UPDATE compilation_jobs
-          SET state = ?, error_code = ?, error_detail = ?, finished_at = ?, updated_at = ?
+          SET state = ?, error_code = ?, error_detail = ?, finished_at = ?, updated_at = ?,
+              stages_json = ?
         WHERE id = ?`,
-    )
-    .run(
+    ).run(
       input.cancelled ? 'cancelled' : 'failed',
       input.code,
       input.detail ?? null,
       stamp,
       stamp,
+      JSON.stringify(terminated),
       input.jobId,
     );
+  })();
 }
 
 export function setJobStage(jobId: string, stage: CompilationStage, now: Date): void {
@@ -646,7 +690,74 @@ export function getCompiledRegion(id: string): CompiledRegion | null {
     .prepare('SELECT id, payload_json FROM compiled_regions WHERE id = ?')
     .get(id) as RegionRow | undefined;
   if (!row) return null;
-  return compiledRegionSchema.parse(JSON.parse(row.payload_json));
+  /*
+   * "Will not parse" reads as absent here, exactly as it does in
+   * `findCompiledRegion` below.
+   *
+   * This path used to `JSON.parse` and `.parse` unguarded, which is the one read
+   * of this table that could throw. It is also the path reached from a trip's
+   * stored `selected_compiled_region_id`, so one artifact the current schema
+   * cannot read — a version bump, a truncated write — made that trip
+   * permanently un-openable rather than offering a rebuild. The row is durable,
+   * so there was no self-healing either.
+   */
+  try {
+    const parsed = compiledRegionSchema.safeParse(JSON.parse(row.payload_json));
+    if (!parsed.success) return null;
+    return currentUnderTodaysContract(parsed.data) ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * WHETHER AN ARTIFACT IS STILL AN ANSWER TO THE QUESTION IT WAS BUILT FOR.
+ *
+ * `findCompiledRegion` looks a trip up by `(trip, fingerprint)`, so it can only
+ * ever return something current. This path — a trip's stored
+ * `selected_compiled_region_id` — is a **primary-key lookup**, and it never
+ * consulted the fingerprint at all. So the pack invalidation could be triple
+ * guarded and hold, and the *artifact* built from a bad pack, plus every
+ * itinerary built on that artifact, would keep rendering until somebody happened
+ * to press rebuild.
+ *
+ * The check needs nothing external: an artifact carries both the scope it was
+ * built from and the key that scope produced. If recomputing the key from the
+ * stored scope does not reproduce the stored key, then the derivation changed —
+ * a new segment, a new containment contract version — and the verdicts inside
+ * are not comparable to the ones a build would produce now.
+ *
+ * A stale artifact reads as **absent**, exactly as an unparseable one does, so
+ * the caller offers a rebuild. Nothing is deleted and nothing is recompiled
+ * silently: the row is durable, a historical itinerary that already resolved its
+ * places keeps them, and the traveller is asked rather than charged.
+ */
+function currentUnderTodaysContract(region: CompiledRegion): boolean {
+  return contractSegmentOf(scopeFingerprint(region.scope)) === contractSegmentOf(region.scopeFingerprint);
+}
+
+/**
+ * The containment contract segment of a fingerprint, or nothing.
+ *
+ * **Only** that segment, and the narrowing matters. Comparing whole
+ * fingerprints answers "was this built by today's derivation", which is a
+ * stronger question than the one this guard exists to ask and has a cost the
+ * guard should not impose: every segment change — a shape rounding, a new
+ * transport field — would orphan every stored artifact, and an orphaned artifact
+ * silently empties a finished itinerary's preparation checklist and drops it
+ * back to UTC, because `/itinerary` degrades a missing region rather than
+ * refusing to render.
+ *
+ * The question this guard actually has to answer is narrower: **is this artifact
+ * a set of verdicts under a contract we no longer hold?** A contaminated
+ * compiled region that keeps rendering after its pack was invalidated is the
+ * failure; an artifact keyed under an older shape rounding is not.
+ *
+ * Absent on both sides — an artifact from before the segment existed — compares
+ * equal, so nothing already stored is disturbed by the segment's introduction.
+ */
+function contractSegmentOf(fingerprint: string): string | undefined {
+  return fingerprint.split('/').find((segment) => segment.startsWith('contract:'));
 }
 
 /** The newest artifact compiled for exactly this scope, if there is one. */
@@ -801,6 +912,112 @@ export function getLatestWorkPlan(tripId: string): CompilationWorkPlan | null {
   } catch {
     // A diagnostic that will not parse is a diagnostic nobody sees, never an
     // error a traveller has to read.
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Operational diagnostics — what a run cost, kept off the artifact
+// ---------------------------------------------------------------------------
+
+/**
+ * WHAT THIS BUILD COST, RECORDED WHERE COSTS BELONG.
+ *
+ * Counts, versions and one ratio. No credential, no request URL, no page body —
+ * only how many times each provider was reached and what the model spent.
+ *
+ * These used to be folded into `CompiledRegion.diagnostics.budget.consumed`
+ * after the compiler returned. The reasoning was sound — a stored artifact that
+ * cannot say what it cost is one nobody can audit — and the consequence was not:
+ * the compiler is deterministic, so two runs of identical inputs produce
+ * identical bytes, and then the runner added the cache-hit counts and made the
+ * *persisted* artifact differ by exactly how warm the cache happened to be. An
+ * immutable record of a region should not change because somebody else compiled
+ * a nearby city first.
+ *
+ * So the audit trail stays, on the row that describes the run. Nothing renders
+ * it today; it exists so a live evaluation can be measured and so a cost
+ * question has an answer three weeks later.
+ */
+export interface StoredOperationalDiagnostics {
+  schemaVersion: typeof COMPILATION_OPERATIONAL_VERSION;
+  /** Provider and cache counters the runner measured. */
+  counters: Record<string, number>;
+  /** What the compiler itself spent, and which stages ran. */
+  compiler?: CompilationOperational;
+}
+
+export function saveOperationalDiagnostics(
+  jobId: string,
+  input: { counters: Record<string, number>; compiler?: CompilationOperational },
+): void {
+  try {
+    const payload: StoredOperationalDiagnostics = {
+      schemaVersion: COMPILATION_OPERATIONAL_VERSION,
+      counters: input.counters,
+      ...(input.compiler ? { compiler: input.compiler } : {}),
+    };
+    getDb()
+      .prepare(`UPDATE compilation_jobs SET operational_json = ? WHERE id = ?`)
+      .run(JSON.stringify(payload), jobId);
+  } catch (error) {
+    console.error('Could not store operational diagnostics', { jobId, error });
+  }
+}
+
+/**
+ * What a run cost, as one flat map of names to numbers.
+ *
+ * Flat because that is what a cost question wants three weeks later, and
+ * because the column already held exactly this shape before the compiler's own
+ * ledger moved onto it. A row written under the old flat shape is still read —
+ * a job that finished before the split genuinely recorded only the runner's
+ * counters, and refusing to read it would lose the audit trail the column was
+ * added for.
+ *
+ * Absent is normal for a job that predates the column entirely.
+ */
+export function getOperationalDiagnostics(jobId: string): Record<string, number> | null {
+  const stored = getStoredOperationalDiagnostics(jobId);
+  if (!stored) return null;
+  return {
+    ...stored.counters,
+    ...(stored.compiler ? flattenOperationalCounters(stored.compiler) : {}),
+  };
+}
+
+/** The structured record, for anything that needs the ceilings and the stage list. */
+export function getStoredOperationalDiagnostics(
+  jobId: string,
+): StoredOperationalDiagnostics | null {
+  try {
+    const row = getDb()
+      .prepare(`SELECT operational_json FROM compilation_jobs WHERE id = ?`)
+      .get(jobId) as { operational_json: string | null } | undefined;
+    if (!row?.operational_json) return null;
+    const parsed: unknown = JSON.parse(row.operational_json);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+
+    const record = parsed as Record<string, unknown>;
+    /*
+     * The pre-split shape: a bare map of names to numbers, with no version and
+     * no `counters` key. Read as what it is rather than dropped.
+     */
+    const rawCounters =
+      typeof record.counters === 'object' && record.counters !== null ? record.counters : record;
+    const counters: Record<string, number> = {};
+    for (const [key, value] of Object.entries(rawCounters as Record<string, unknown>)) {
+      if (typeof value === 'number' && Number.isFinite(value)) counters[key] = value;
+    }
+
+    const compiler = compilationOperationalSchema.safeParse(record.compiler);
+    return {
+      schemaVersion: COMPILATION_OPERATIONAL_VERSION,
+      counters,
+      ...(compiler.success ? { compiler: compiler.data } : {}),
+    };
+  } catch {
+    // A diagnostic that will not parse is a diagnostic nobody sees.
     return null;
   }
 }

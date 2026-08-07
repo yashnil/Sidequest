@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { GeographicEvidence, SourceRecord } from '@sidequest/core';
 import { CatalogError, fileIntersects, latestRelease, themeFiles } from './catalog';
 import { LAYERS, cleanText, layerById, mapLicence, readWebsites } from './normalize';
-import { boundsOf, overlappingRowGroups, pointOf, rowInBox } from './scan';
+import { boundsOf, overlappingRowGroups, pointOf, rowInBox, rowPointInBox } from './scan';
 import type { FileMetaData } from 'hyparquet';
 
 /**
@@ -271,9 +272,9 @@ describe('normalisation', () => {
   });
 
   it('strips control characters and bidirectional overrides from names', () => {
-    const hostile = cleanText('Museum  of‮ gnitniaP');
+    const hostile = cleanText('Museum\u0000 of‮ gnitniaP');
     expect(hostile).not.toContain('‮');
-    expect(hostile).not.toContain(' ');
+    expect(hostile).not.toContain('\u0000');
     expect(cleanText('   ')).toBeNull();
     expect(cleanText('x'.repeat(500))?.length).toBe(180);
   });
@@ -409,3 +410,195 @@ describe('normalisation', () => {
     expect(layer.normalize({ id: 'x', names: { primary: 'No position' } }, context)).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scope membership
+// ---------------------------------------------------------------------------
+
+/**
+ * THE ADAPTER'S HALF OF "DOES THIS BELONG HERE".
+ *
+ * The compiler owns the decision; this file owns the two places it has to be
+ * applied. The regression: a metropolitan build returned twenty-three places and
+ * every one of them was in a first-level division the destination is not in. The
+ * read was correct, the pruning was correct, the normalisation was correct, and
+ * no layer had ever been given the job of asking whether the thing belonged.
+ *
+ * The scope below carries no boundary, because no city in the index has one.
+ */
+function placeRow(input: {
+  id: string;
+  name: string;
+  lat: number;
+  region: string;
+  locality: string;
+  country?: string;
+  category?: string;
+}): Record<string, unknown> {
+  return {
+    id: input.id,
+    names: { primary: input.name },
+    taxonomy: {
+      primary: input.category ?? 'museum',
+      hierarchy: ['arts_and_entertainment', input.category ?? 'museum'],
+    },
+    operating_status: 'open',
+    addresses: [{ locality: input.locality, region: input.region, country: input.country ?? 'AA' }],
+    sources: [{ dataset: 'meta', license: 'CDLA-Permissive-2.0', record_id: input.id }],
+    bbox: { xmin: 20, xmax: 20, ymin: input.lat, ymax: input.lat },
+  };
+}
+
+describe('geographic evidence at the adapter boundary', () => {
+  /*
+   * WHAT THIS BOUNDARY IS RESPONSIBLE FOR, AFTER THE PACK/OVERLAY SPLIT.
+   *
+   * It used to decide membership here, and these tests asserted the verdicts. The
+   * verdicts were right; the *layer* was wrong. A pack is cached on the
+   * destination and the bounds and shared between every traveller going there,
+   * and a membership verdict needs the traveller's scope, their regional
+   * expansion and their base strategy — one of which (`includedAreas`) is in the
+   * pack's own cache key. So the adapter now produces **evidence**, which is
+   * traveller-independent and genuinely cacheable, and the trip-scope overlay
+   * produces verdicts.
+   *
+   * These tests were re-reasoned rather than renamed, per the migration record:
+   * each one keeps the invariant it actually protected — an address is read at
+   * its own level, an ISO code is not a name, and no record leaves without
+   * evidence — and drops the assertion that a *verdict* is attached, because that
+   * assertion pinned the layering the closure removes.
+   */
+
+  function normalisePlace(row: Record<string, unknown>) {
+    return layerById('places')!.normalize(row, {
+      layerId: 'places',
+      cellId: 'g-0-0',
+      defaultLicenceId: 'CDLA-Permissive-2.0',
+      containmentFor: () => ({ divisionIds: [] }),
+    });
+  }
+
+  it('filters on the record’s own position, not on a bounding box that merely overlaps', () => {
+    const box = { west: 19.9, south: 9.9, east: 20.1, north: 10.1 };
+    // A first-level division's own record: it clips the box by a corner and sits
+    // hundreds of kilometres away. Overlap admits it; position does not.
+    const sprawling = { bbox: { xmin: 15, xmax: 20, ymin: 5, ymax: 10 } };
+    expect(rowInBox(sprawling, box)).toBe(true);
+    expect(rowPointInBox(sprawling, box)).toBe(false);
+    // And a real record inside the box is still kept by both.
+    const inside = { bbox: { xmin: 20, xmax: 20, ymin: 10, ymax: 10 } };
+    expect(rowInBox(inside, box)).toBe(true);
+    expect(rowPointInBox(inside, box)).toBe(true);
+  });
+
+  it('attaches typed geographic evidence to every normalised record', () => {
+    const record = normalisePlace(
+      placeRow({
+        id: 'in-1',
+        name: 'Harbour Museum',
+        lat: 10.05,
+        region: 'Selected Region',
+        locality: 'Selected City',
+      }),
+    );
+    const evidence = geographyOf(record!);
+    expect(evidence).toBeDefined();
+    expect(evidence!.countryCode).toBe('AA');
+    expect(evidence!.regionNames).toEqual(['Selected Region']);
+    expect(evidence!.localityNames).toEqual(['Selected City']);
+    /* A printed subdivision name is a name, and is not put in the code field. */
+    expect(evidence!.regionCode).toBeUndefined();
+  });
+
+  it('routes an ISO 3166-2 subdivision code to the code field, not the name set', () => {
+    /*
+     * The bridge CS-11 turns on. The divisions layer publishes `AA-AR` into the
+     * same field the address path publishes `Adjacent Region` into, and comparing
+     * one against the other was reported as a border rather than as two
+     * vocabularies that do not meet.
+     */
+    const record = normalisePlace(
+      placeRow({
+        id: 'coded',
+        name: 'Coded Museum',
+        lat: 10.05,
+        region: 'AA-AR',
+        locality: 'Adjacent Township',
+      }),
+    );
+    const evidence = geographyOf(record!)!;
+    expect(evidence.regionCode).toBe('AA-AR');
+    expect(evidence.regionNames).toEqual([]);
+  });
+
+  it('keeps a record whose address files it somewhere else, and says where', () => {
+    /*
+     * The adapter no longer refuses anything for not belonging, and that is the
+     * correction: a record dropped at pack build is a record nothing downstream
+     * can recover, and the same ground is read again for the next traveller. What
+     * it does is record the address faithfully — which is what the overlay then
+     * excludes it on, per trip.
+     */
+    const record = normalisePlace(
+      placeRow({
+        id: 'out-1',
+        name: 'Township Auto Parts',
+        lat: 11.44,
+        region: 'Adjacent Region',
+        locality: 'Adjacent Township',
+        category: 'automotive_parts',
+      }),
+    );
+    expect(record).not.toBeNull();
+    expect(geographyOf(record!)!.regionNames).toEqual(['Adjacent Region']);
+  });
+
+  it('keeps an administrative record with its parent chain, because it is the evidence', () => {
+    const division = layerById('divisions')!.normalize(
+      {
+        id: 'div-adjacent',
+        names: { primary: 'Adjacent Region' },
+        subtype: 'region',
+        country: 'AA',
+        region: 'AA-AR',
+        sources: [{ dataset: 'OpenStreetMap', license: 'ODbL-1.0' }],
+        bbox: { xmin: 19.5, xmax: 20.5, ymin: 11, ymax: 12 },
+      },
+      {
+        layerId: 'divisions',
+        cellId: 'g-0-0',
+        defaultLicenceId: 'ODbL-1.0',
+        containmentFor: () => ({ divisionIds: [] }),
+      },
+    );
+    expect(division).not.toBeNull();
+    expect(division!.planningRole).toBe('administrative');
+    expect(geographyOf(division!)!.regionCode).toBe('AA-AR');
+  });
+
+  it('leaves evidence empty rather than inventing it when the source published none', () => {
+    const record = layerById('places')!.normalize(
+      {
+        id: 'bare',
+        names: { primary: 'Unplaced Viewpoint' },
+        taxonomy: { primary: 'viewpoint', hierarchy: ['geographic_entities', 'viewpoint'] },
+        sources: [{ dataset: 'meta', license: 'CDLA-Permissive-2.0', record_id: 'bare' }],
+        bbox: { xmin: 20, xmax: 20, ymin: 10.05, ymax: 10.05 },
+      },
+      {
+        layerId: 'places',
+        cellId: 'g-0-0',
+        defaultLicenceId: 'CDLA-Permissive-2.0',
+        containmentFor: () => ({ divisionIds: [] }),
+      },
+    );
+    const evidence = geographyOf(record!)!;
+    expect(evidence.countryCode).toBeUndefined();
+    expect(evidence.localityNames).toEqual([]);
+    expect(evidence.divisionIds).toEqual([]);
+  });
+});
+
+function geographyOf(record: SourceRecord): GeographicEvidence | undefined {
+  return (record as SourceRecord & { geography?: GeographicEvidence }).geography;
+}

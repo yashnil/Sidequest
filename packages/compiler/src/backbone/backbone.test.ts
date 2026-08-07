@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  admitToBoard,
   geographicScopeSchema,
+  inclusionReasonOfPlace,
+  isVisitableRole,
   packScopeHash,
+  planningRoleOfPlace,
   regionPackSchema,
+  SUPPORTING_ROLES,
   type GeographicScope,
   type SourceRecord,
 } from '@sidequest/core';
@@ -82,12 +87,79 @@ function record(overrides: Partial<SourceRecord> = {}): SourceRecord {
     sourceCategoryPath: ['arts_and_entertainment', 'museum'],
     planningRole: 'attraction',
     websiteCandidates: [],
-    containment: { divisionIds: [] },
+    /*
+     * An address that places it in the destination, which is what a real record
+     * carries: the measured probe over stored packs found a locality name on
+     * 83–98 % of candidates and a region name on under 6 %. A fixture record
+     * with an empty containment block models a population that does not exist,
+     * and under the corrected semantics it is honestly `membership_unknown` —
+     * admitted to a provisional board, kept off the final one. Tests about
+     * balancing, corroboration and role separation are not about that, so their
+     * records say where they are.
+     */
+    containment: { countryCode: 'AA', localityName: 'Testville', divisionIds: [] },
     attributes: {},
     sources: [{ dataset: 'primary', licenceId: 'CDLA-Permissive-2.0' }],
     cellId: 'g-0-0',
     ...overrides,
   };
+}
+
+/**
+ * The divisions a pack always has, and this fixture used not to.
+ *
+ * The destination is a locality, so the divisions layer publishes it: a country
+ * and the town, with a box wide enough to hold the scope and every record, and a
+ * chain running country → town. That chain is what `selectedDivisionIds`
+ * resolves the destination to, and what a candidate's own locality name is
+ * resolved *through*.
+ */
+function testDivisions(): SourceRecord[] {
+  const wide = {
+    southWest: { lat: 39.5, lng: -75 },
+    northEast: { lat: 41.9, lng: -72.9 },
+  };
+  return [
+    {
+      id: 'divisions:country',
+      layerId: 'divisions',
+      sourceId: 'country',
+      name: 'Testland',
+      alternateNames: [],
+      coordinates: { lat: 40.7, lng: -74 },
+      bounds: { southWest: { lat: 30, lng: -85 }, northEast: { lat: 50, lng: -65 } },
+      sourceCategory: 'country',
+      sourceCategoryPath: [],
+      planningRole: 'administrative',
+      websiteCandidates: [],
+      containment: { countryCode: 'AA', divisionIds: ['div-country'] },
+      attributes: { subtype: 'country' },
+      sources: [{ dataset: 'divisions', licenceId: 'CDLA-Permissive-2.0' }],
+      cellId: 'g-0-0',
+    },
+    {
+      id: 'divisions:testville',
+      layerId: 'divisions',
+      sourceId: 'testville',
+      name: 'Testville',
+      alternateNames: [],
+      coordinates: { lat: 40.7, lng: -74 },
+      bounds: wide,
+      sourceCategory: 'locality',
+      sourceCategoryPath: [],
+      planningRole: 'administrative',
+      websiteCandidates: [],
+      containment: {
+        countryCode: 'AA',
+        regionName: 'AA-1',
+        localityName: 'Testville',
+        divisionIds: ['div-country', 'div-testville'],
+      },
+      attributes: { subtype: 'locality' },
+      sources: [{ dataset: 'divisions', licenceId: 'CDLA-Permissive-2.0' }],
+      cellId: 'g-0-0',
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -490,7 +562,58 @@ describe('taxonomy classification', () => {
     expect(classifySourceCategory({ category: 'restaurant' }).role).toBe('food');
     expect(classifySourceCategory({ category: 'hotel', path: ['lodging'] }).role).toBe('lodging');
     expect(classifySourceCategory({ category: 'supermarket' }).role).toBe('support');
-    expect(classifySourceCategory({ category: 'ferry_terminal' }).role).toBe('support');
+  });
+
+  /**
+   * The split that stops a country being counted as its largest city.
+   *
+   * Every one of these used to resolve to `attraction`, because the archetype
+   * table only ever named a role for food, lodging, support and excluded and
+   * everything else fell through a `?? 'attraction'`. One bucket meant one
+   * ranking, and the only thing available to rank on before a traveller exists
+   * is how richly somebody catalogued the record — which is a measurement of
+   * commercial mapping density, and is dense in cities.
+   */
+  it('gives outdoor features, side quests, markets and gateways their own roles', () => {
+    expect(classifySourceCategory({ category: 'waterfall' }).role).toBe('outdoor');
+    expect(classifySourceCategory({ category: 'viewpoint' }).role).toBe('outdoor');
+    expect(classifySourceCategory({ category: 'hiking_trail' }).role).toBe('outdoor');
+    expect(classifySourceCategory({ category: 'beach' }).role).toBe('outdoor');
+
+    expect(classifySourceCategory({ category: 'museum' }).role).toBe('attraction');
+    expect(classifySourceCategory({ category: 'castle' }).role).toBe('attraction');
+
+    // Short, ungated, and nothing anybody sells a ticket for.
+    expect(classifySourceCategory({ category: 'memorial' }).role).toBe('side_quest');
+    expect(classifySourceCategory({ category: 'plaza' }).role).toBe('side_quest');
+
+    expect(classifySourceCategory({ category: 'market' }).role).toBe('market');
+    expect(classifySourceCategory({ category: 'farmers_market' }).role).toBe('market');
+
+    expect(classifySourceCategory({ category: 'ferry_terminal' }).role).toBe('gateway');
+    expect(classifySourceCategory({ category: 'airport' }).role).toBe('gateway');
+    expect(classifySourceCategory({ category: 'train_station' }).role).toBe('gateway');
+  });
+
+  /**
+   * Real built geography is kept and labelled rather than thrown away, while
+   * street furniture stays excluded. The two answer different questions, and
+   * collapsing them means paying to re-read the catalogue for the first.
+   */
+  it('tells built infrastructure apart from street furniture', () => {
+    expect(classifySourceCategory({ category: 'substation' }).role).toBe('infrastructure');
+    expect(classifySourceCategory({ category: 'pipeline' }).role).toBe('infrastructure');
+    expect(classifySourceCategory({ category: 'bench' }).role).toBe('excluded');
+    expect(classifySourceCategory({ category: 'atm' }).role).toBe('excluded');
+  });
+
+  /** An outdoor feature is weather-bound by construction, not by convention. */
+  it('never classifies an indoor thing as outdoor', () => {
+    for (const category of ['waterfall', 'viewpoint', 'beach', 'lake', 'hiking_trail', 'hot_spring']) {
+      const resolved = classifySourceCategory({ category });
+      expect(resolved.role, category).toBe('outdoor');
+      expect(resolved.exposure, category).not.toBe('indoor');
+    }
   });
 
   it('falls back through the branch, not to an attraction', () => {
@@ -624,6 +747,423 @@ describe('candidate inventory', () => {
     expect(firstTwenty.filter((category) => category === 'museum').length).toBeGreaterThan(3);
   });
 
+  /**
+   * The same regression, end to end through the inventory rather than through
+   * the pure balancer: a dense, richly-described area against several sparse,
+   * thinly-described ones, which is the shape every country has.
+   *
+   * Before the balancing pass this returned the capital and nothing else, and
+   * the reason was not the ranking being wrong — it is that `knownness` measures
+   * how thoroughly somebody catalogued a record, and cataloguing concentrates
+   * where commerce does.
+   */
+  it('keeps candidates outside the densest area', () => {
+    const capital = Array.from({ length: 100 }, (_, index) =>
+      record({
+        id: `places:cap${index}`,
+        sourceId: `cap${index}`,
+        name: `City museum ${index}`,
+        coordinates: { lat: 40.7, lng: -74 },
+        cellId: 'g-0-0',
+        // Richly catalogued, which is what won the old global rank order.
+        attributes: { operator: 'City', opening_hours: 'Mo-Su 10:00-18:00', fee: 'yes' },
+        websiteCandidates: [`https://museum.example/${index}`],
+        wikidataId: `Q${1000 + index}`,
+      }),
+    );
+    const regions = Array.from({ length: 6 }, (_, area) =>
+      Array.from({ length: 20 }, (_, index) =>
+        record({
+          id: `land:r${area}-${index}`,
+          layerId: 'land',
+          sourceId: `r${area}-${index}`,
+          name: `Falls ${area}-${index}`,
+          sourceCategory: 'waterfall',
+          sourceCategoryPath: ['natural_features', 'waterfall'],
+          coordinates: { lat: 41 + area * 0.5, lng: -73 - index * 0.01 },
+          cellId: `g-${area + 1}-0`,
+          // Bare records: a name and a position, which is all the outdoors
+          // usually has.
+          attributes: {},
+        }),
+      ),
+    ).flat();
+
+    const inventory = buildInventory({ pack: packWith([...capital, ...regions]), scope });
+    const kept = inventory.candidates.filter((entry) => entry.place.category !== 'town_and_food');
+    const fromCapital = kept.filter((entry) => entry.place.coordinates.lat === 40.7).length;
+
+    expect(kept.length).toBeGreaterThan(20);
+    expect(fromCapital / kept.length).toBeLessThan(0.7);
+    expect(inventory.diagnostics.byArea.length).toBeGreaterThan(1);
+    expect(inventory.diagnostics.concentration).toBeLessThan(0.7);
+  });
+
+  /**
+   * The counts a supply verdict and a destination profile are built from.
+   *
+   * One `attractions` number could not distinguish a city of museums from a
+   * coast of beaches, and both were being described with the same sentence.
+   */
+  it('reports what it kept by planning role', () => {
+    const inventory = buildInventory({
+      pack: packWith([
+        /*
+         * Named things, not kinds of thing. A record whose name is its own
+         * category is refused as having no identity — see the eligibility
+         * layer — so a fixture that used the bare category word would be
+         * testing that refusal rather than the role counts.
+         */
+        record({ id: 'places:m1', sourceId: 'm1', name: 'Harbour Museum' }),
+        record({
+          id: 'land:w1',
+          layerId: 'land',
+          sourceId: 'w1',
+          name: 'North Ridge Falls',
+          sourceCategory: 'waterfall',
+          sourceCategoryPath: ['natural_features', 'waterfall'],
+        }),
+        record({ id: 'places:k1', sourceId: 'k1', name: 'Bazaar', sourceCategory: 'market' }),
+        record({ id: 'places:f1', sourceId: 'f1', name: 'Corner Cafe', sourceCategory: 'cafe' }),
+        record({
+          id: 'places:g1',
+          sourceId: 'g1',
+          name: 'North Harbour Terminal',
+          sourceCategory: 'ferry_terminal',
+        }),
+      ]),
+      scope,
+    });
+
+    const roles = Object.fromEntries(
+      inventory.diagnostics.byRole.map((entry) => [entry.role, entry.kept]),
+    );
+    expect(roles.attraction).toBe(1);
+    expect(roles.outdoor).toBe(1);
+    expect(roles.market).toBe(1);
+    expect(roles.gateway).toBe(1);
+    // A market counts as somewhere to eat as well as something to do.
+    expect(inventory.foodRecords.length).toBe(2);
+  });
+
+  /**
+   * A pack written before the role split stored every candidate as
+   * `attraction`, because that was the only positive role there was.
+   * Classifying at read time is what lets those packs gain the split without
+   * being rebuilt — and packs are immutable, so rebuilding is not an option.
+   */
+  // -------------------------------------------------------------------------
+  // Portfolio integrity: the Bali shape
+  // -------------------------------------------------------------------------
+
+  /**
+   * THE SUPPLY SHAPE THAT PRODUCED THE DEFECT.
+   *
+   * A live compilation put an international airport, a driver-for-hire and two
+   * tour operators on a traveller's Discovery Board. Nothing was misclassified:
+   * the taxonomy called the airport a gateway and the driver a transport
+   * service, the pack stored those answers, and then `buildInventory` did
+   *
+   * ```ts
+   * const candidates = [...ordered, ...support, ...gateways].map(toCandidate);
+   * ```
+   *
+   * — one array, three kinds of thing, and nothing downstream able to tell them
+   * apart. The fixture below is that shape: six real attractions buried in
+   * twenty-odd practical records, which is what a densely-commercial,
+   * thinly-mapped destination actually returns.
+   */
+  function baliShapedPack() {
+    const attractions = [
+      { id: 'm1', name: 'Harbour Museum', category: 'museum', path: ['arts_and_entertainment', 'museum'] },
+      { id: 'm2', name: 'Textile Museum', category: 'museum', path: ['arts_and_entertainment', 'museum'] },
+      { id: 'h1', name: 'Old Water Palace', category: 'historic_site', path: ['cultural_and_historic', 'historic_site'] },
+      { id: 'w1', name: 'North Ridge Falls', category: 'waterfall', path: ['natural_features', 'waterfall'] },
+      { id: 'w2', name: 'Cliffside Falls', category: 'waterfall', path: ['natural_features', 'waterfall'] },
+      { id: 'v1', name: 'Terrace Lookout', category: 'viewpoint', path: ['geographic_entities', 'viewpoint'] },
+    ].map((entry, index) =>
+      record({
+        id: `places:${entry.id}`,
+        sourceId: entry.id,
+        name: entry.name,
+        sourceCategory: entry.category,
+        sourceCategoryPath: entry.path,
+        coordinates: { lat: 40.7 + index * 0.01, lng: -74 + index * 0.01 },
+        cellId: index % 2 === 0 ? 'g-0-0' : 'g-1-0',
+      }),
+    );
+
+    /*
+     * The supporting supply, and it outnumbers the attractions three to one.
+     * Every category here is a real leaf from a global business vocabulary and
+     * every one of them reached a board.
+     */
+    const supporting = [
+      { id: 'g1', name: 'Island International Airport', category: 'international_airport' },
+      { id: 'g2', name: 'North Harbour Ferry Terminal', category: 'ferry_terminal' },
+      { id: 'g3', name: 'Central Bus Station', category: 'bus_station' },
+      { id: 't1', name: 'Best Driver On The Island', category: 'chauffeur_service' },
+      { id: 't2', name: 'Sunrise Tours', category: 'tour_operator' },
+      { id: 't3', name: 'Island Day Trips', category: 'tour_operator' },
+      { id: 't4', name: 'Airport Transfer Service', category: 'taxi_service' },
+      { id: 's1', name: 'Beachside Pharmacy', category: 'pharmacy' },
+      { id: 's2', name: 'Hillside Pharmacy', category: 'pharmacy' },
+      { id: 's3', name: 'Coast Road Fuel', category: 'gas_station' },
+      { id: 's4', name: 'Valley Fuel Stop', category: 'gas_station' },
+      { id: 's5', name: 'Park Visitor Centre', category: 'visitor_center' },
+      { id: 'p1', name: 'Beach Car Park', category: 'parking' },
+      { id: 'p2', name: 'Trailhead Car Park', category: 'parking' },
+      { id: 'p3', name: 'Museum Car Park', category: 'parking' },
+      { id: 'f1', name: 'Central Supermarket', category: 'supermarket' },
+      { id: 'f2', name: 'Coast Road Grocery', category: 'grocery_store' },
+      { id: 'f3', name: 'Harbour Cafe', category: 'cafe' },
+      { id: 'f4', name: 'Terrace Restaurant', category: 'restaurant' },
+    ].map((entry, index) =>
+      record({
+        id: `places:${entry.id}`,
+        sourceId: entry.id,
+        name: entry.name,
+        sourceCategory: entry.category,
+        sourceCategoryPath: ['travel_and_transportation', entry.category],
+        coordinates: { lat: 40.71 + index * 0.003, lng: -73.98 - index * 0.003 },
+        cellId: index % 2 === 0 ? 'g-0-0' : 'g-1-0',
+        // Richly catalogued, which is exactly why they won the old ordering: an
+        // international airport carries a site, hours, an operator and an open
+        // identifier, and no museum in the region does.
+        attributes: { operator: 'Island Authority', opening_hours: 'Mo-Su 00:00-24:00' },
+        websiteCandidates: [`https://example.org/${entry.id}`],
+        wikidataId: `Q${9000 + index}`,
+      }),
+    );
+
+    return packWith([...attractions, ...supporting]);
+  }
+
+  it('is the regression: no utility record reaches the candidate list', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+
+    /*
+     * The board-facing array holds the six things there are to do, and nothing
+     * else. Before the split it held twenty-five, of which nineteen were
+     * transport, parking, fuel, pharmacies and meals.
+     */
+    expect(inventory.candidates).toHaveLength(6);
+    const names = inventory.candidates.map((entry) => entry.place.name).sort();
+    expect(names).toEqual([
+      'Cliffside Falls',
+      'Harbour Museum',
+      'North Ridge Falls',
+      'Old Water Palace',
+      'Terrace Lookout',
+      'Textile Museum',
+    ]);
+
+    // The named offenders from the live run, by name and by kind.
+    for (const forbidden of [
+      'Island International Airport',
+      'Best Driver On The Island',
+      'Sunrise Tours',
+      'Island Day Trips',
+    ]) {
+      expect(names, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('gives every candidate a visitable role, on the place itself', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+    for (const candidate of inventory.candidates) {
+      const role = planningRoleOfPlace(candidate.place);
+      expect(role, candidate.place.name).toBeDefined();
+      expect(isVisitableRole(role!), `${candidate.place.name} is ${role}`).toBe(true);
+      expect(admitToBoard(candidate.place).admitted, candidate.place.name).toBe(true);
+    }
+  });
+
+  it('displays every support candidate as support, and never as a card', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+    expect(inventory.supporting.length).toBeGreaterThan(0);
+    for (const candidate of inventory.supporting) {
+      const role = planningRoleOfPlace(candidate.place);
+      expect(role, candidate.place.name).toBeDefined();
+      expect(SUPPORTING_ROLES, candidate.place.name).toContain(role);
+      const admission = admitToBoard(candidate.place);
+      expect(admission.admitted, candidate.place.name).toBe(false);
+      expect(admission.refusal).toBe('utility_role');
+    }
+  });
+
+  it('carries a typed inclusion reason on every candidate it emits', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+    for (const candidate of [...inventory.candidates, ...inventory.supporting]) {
+      expect(inclusionReasonOfPlace(candidate.place), candidate.place.name).toBeDefined();
+    }
+  });
+
+  /**
+   * CS-4. Board size stopped meaning anything the moment the two counts were
+   * summed: twenty-five records reads as a rich destination, six things to do
+   * is what it actually was, and the difference is exactly what a traveller
+   * needs to know before booking.
+   */
+  it('reports the attraction shortage rather than filling the board with infrastructure', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+    const { supply } = inventory.portfolio;
+
+    expect(supply.supply.visitable).toBe(6);
+    expect(supply.maxHonestBoardSize).toBe(6);
+    expect(inventory.candidates.length).toBeLessThanOrEqual(supply.maxHonestBoardSize);
+    expect(supply.supportHeavy).toBe(true);
+    expect(supply.shortfalls).toContain('support_outnumbers_visitable');
+    // Four nights in the scope. Six anchors clears it; the honest number is
+    // still six rather than the twenty-five the old array reported.
+    expect(inventory.diagnostics.attractions).toBe(6);
+    expect(inventory.diagnostics.attractions + inventory.diagnostics.support).toBeGreaterThan(
+      inventory.diagnostics.attractions,
+    );
+  });
+
+  it('counts attractions, support, food and gateways as separate pools per area', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+    const slots = new Set(inventory.portfolio.pools.map((pool) => pool.slot));
+    expect(slots.has('anchor')).toBe(true);
+    expect(slots.has('support')).toBe(true);
+    expect(slots.has('gateway')).toBe(true);
+    expect(slots.has('food')).toBe(true);
+
+    for (const pool of inventory.portfolio.pools) {
+      // Every pool reports its own geography. A shortage of attractions in one
+      // area is not repaired by a surplus of car parks in another.
+      expect(pool.available, pool.slot).toBeGreaterThan(0);
+      for (const area of pool.byArea) {
+        expect(area.kept, `${pool.slot}/${area.areaId}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('routes a grocery to the food layer instead of to the board', () => {
+    const inventory = buildInventory({ pack: baliShapedPack(), scope });
+    const foodNames = inventory.foodRecords.map((entry) => entry.name);
+    expect(foodNames).toContain('Central Supermarket');
+    expect(foodNames).toContain('Harbour Cafe');
+    expect(inventory.candidates.map((entry) => entry.place.name)).not.toContain(
+      'Central Supermarket',
+    );
+  });
+
+  it('refuses a closed record, an outside-scope one and a nameless one, and says so', () => {
+    const pack = packWith([
+      record({ id: 'places:ok', sourceId: 'ok', name: 'Harbour Museum' }),
+      record({
+        id: 'places:shut',
+        sourceId: 'shut',
+        name: 'Old Gallery',
+        operatingStatus: 'closed',
+        coordinates: { lat: 40.72, lng: -74.02 },
+      }),
+      record({
+        id: 'places:noname',
+        sourceId: 'noname',
+        name: 'Museum',
+        coordinates: { lat: 40.73, lng: -74.03 },
+      }),
+      /*
+       * Out of scope on its **own published evidence**, and not on a field
+       * somebody stamped on it.
+       *
+       * This test used to attach `scopeRelationship: 'outside_scope'` to the
+       * record after the pack was assembled, with a comment explaining that the
+       * schema stripped it on parse. That is exactly the shape the closure
+       * removes: a source adapter must not be able to declare a verdict, because
+       * a verdict an adapter can write is a verdict an adapter can withhold. The
+       * record now carries a different country code, which is a statement the
+       * source made, and the gate reaches the same answer from it.
+       */
+      record({
+        id: 'places:elsewhere',
+        sourceId: 'elsewhere',
+        name: 'County Historical Society',
+        coordinates: { lat: 40.74, lng: -74.04 },
+        containment: { countryCode: 'ZZ', localityName: 'Far Township', divisionIds: [] },
+      }),
+    ]);
+
+    const inventory = buildInventory({ pack, scope });
+    expect(inventory.candidates.map((entry) => entry.place.name)).toEqual(['Harbour Museum']);
+
+    const reasons = Object.fromEntries(
+      inventory.portfolio.rejected.map((entry) => [entry.reason, entry.count]),
+    );
+    expect(reasons.permanently_closed).toBe(1);
+    expect(reasons.identity_too_thin).toBe(1);
+    expect(reasons.outside_scope).toBe(1);
+  });
+
+  it('ignores a relationship a source adapter tried to stamp on a record', () => {
+    /*
+     * The gate property, as an assertion. Whatever a provider writes onto a
+     * record, the trip-scope overlay decides — so a new adapter cannot grant
+     * board eligibility by asserting it, and an old cached pack carrying a
+     * verdict from a previous contract cannot resurrect it.
+     */
+    const pack = packWith([record({ id: 'places:ok', sourceId: 'ok', name: 'Harbour Museum' })]);
+    const forged = {
+      ...pack,
+      layers: pack.layers.map((layer) => ({
+        ...layer,
+        records: layer.records.map((entry) =>
+          entry.layerId === 'places'
+            ? ({ ...entry, scopeRelationship: 'outside_scope' } as SourceRecord)
+            : entry,
+        ),
+      })),
+    };
+    const inventory = buildInventory({ pack: forged, scope });
+    expect(inventory.candidates.map((entry) => entry.place.name)).toEqual(['Harbour Museum']);
+  });
+
+  /**
+   * The property that makes the fix structural rather than incidental.
+   *
+   * The redistribution pass exists so an unclaimed market quota is not lost, and
+   * it reads back into the pool to find the records to spend it on. If it read
+   * the raw records rather than the admitted ones, every gate above would be
+   * reachable from below — which is precisely how a shortage of attractions
+   * turns into a board of infrastructure.
+   */
+  it('never lets an unfilled quota rescue a record admission refused', () => {
+    const inventory = buildInventory({
+      pack: baliShapedPack(),
+      scope,
+      // A quota far larger than the visitable supply. Every unclaimed slot is
+      // an invitation to reach back into the pool.
+      limits: { maxAttractions: 140 },
+    });
+    expect(inventory.candidates).toHaveLength(6);
+    for (const candidate of inventory.candidates) {
+      expect(isVisitableRole(planningRoleOfPlace(candidate.place)!)).toBe(true);
+    }
+  });
+
+  it('reclassifies a pack stored under the old single-role vocabulary', () => {
+    const inventory = buildInventory({
+      pack: packWith([
+        record({
+          id: 'land:w1',
+          layerId: 'land',
+          sourceId: 'w1',
+          name: 'Falls',
+          sourceCategory: 'waterfall',
+          sourceCategoryPath: ['natural_features', 'waterfall'],
+          // What an old pack holds for everything.
+          planningRole: 'attraction',
+        }),
+      ]),
+      scope,
+    });
+
+    expect(inventory.diagnostics.byRole).toContainEqual({ role: 'outdoor', kept: 1 });
+  });
+
   it('unions the licences from the records rather than from the layer', () => {
     const pack = packWith([
       record({ id: 'places:a', sources: [{ dataset: 'meta', licenceId: 'CDLA-Permissive-2.0' }] }),
@@ -666,6 +1206,17 @@ function packWith(records: SourceRecord[]) {
     releases: [{ catalog: 'test', releaseId: '2026-01-01.0', resolvedAt: '2026-01-01T00:00:00Z' }],
     partition: partitionScope(scope),
     layers: [
+      {
+        id: 'divisions',
+        kind: 'administrative_divisions' as const,
+        catalog: 'test',
+        datasetPath: 'divisions/division',
+        licenceId: 'CDLA-Permissive-2.0' as const,
+        records: testDivisions(),
+        featuresRead: 2,
+        featuresRetained: 2,
+        failedCellIds: [],
+      },
       {
         id: 'places',
         kind: 'primary_places',
@@ -1034,6 +1585,20 @@ describe('compiling through the backbone', () => {
     });
     if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
     expect(result.region.regionPack).toBeUndefined();
-    expect(stages.some((entry) => entry.stage === 'building_region_pack')).toBe(false);
+    /*
+     * Recorded as `skipped`, not omitted — and this assertion used to say the
+     * opposite.
+     *
+     * A stage that is simply never reported leaves the progress screen holding
+     * it at "Working" for ever, because nothing ever arrives to close it. The
+     * comment beside the code always promised these were marked skipped; the
+     * `else` branch that would have done it did not exist, and this test pinned
+     * the absence in place.
+     */
+    const shaping = stages.filter((entry) => entry.stage === 'building_region_pack');
+    expect(shaping.length).toBeGreaterThan(0);
+    // What matters is that it *terminates*. A stage may be announced as running
+    // first; what it may not do is never arrive anywhere.
+    expect(shaping[shaping.length - 1]?.status).toBe('skipped');
   });
 });

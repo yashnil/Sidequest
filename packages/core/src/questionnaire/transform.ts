@@ -28,6 +28,12 @@ export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnsw
 
   return {
     interests,
+    /*
+     * Empty, and that is a statement rather than a placeholder: nothing has been
+     * interpreted for a traveller who has not written anything, which is a
+     * different thing from a traveller with no preferences.
+     */
+    preferenceSignals: [],
     pace: 'balanced',
     dayStart: 'normal',
     dailyIntensity: context.travelerNeeds.includes('mobility_limited') ? 'light' : 'moderate',
@@ -365,6 +371,13 @@ export function buildTravelerProfile(
     regionalExpansion: answers.regionalExpansion,
     detourToleranceMinutes: answers.detourToleranceMinutes,
     avoidances: answers.avoidances,
+    /*
+     * Copied, never re-derived. The taxonomy was applied once, at confirmation,
+     * against the traveller's own characters; deriving it a second time here
+     * from the flattened answers would lose exactly the resolution the vector
+     * exists to preserve.
+     */
+    preferenceSignals: answers.preferenceSignals ?? [],
     accessibility: {
       mobilityLimited: answers.mobilityLimited,
       ...(answers.accessibilityNotes ? { notes: answers.accessibilityNotes } : {}),

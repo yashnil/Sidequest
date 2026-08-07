@@ -6,7 +6,7 @@ export default function DiscoverLoading() {
         Reading the region…
       </p>
       <p className="mt-3 max-w-md text-ink-muted">
-        Expanding Mammoth Lakes into the Eastern Sierra, checking what is open on your dates, and
+        Expanding your destination into a travel region, checking what is open on your dates, and
         scoring every candidate against your answers.
       </p>
       <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">

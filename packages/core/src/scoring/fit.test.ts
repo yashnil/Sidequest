@@ -274,3 +274,105 @@ describe('explanations', () => {
     }
   });
 });
+
+/**
+ * A GRADED REFUSAL RANKS. A CONFIRMED ONE REMOVES. NOTHING ELSE DOES EITHER.
+ *
+ * The defect these hold shut: `applyInterpretation`'s avoidance branch ignored
+ * the chip's strength entirely, so "not massively into long walks" was recorded
+ * byte-identically to "no hiking" — a hard blocker, plus a ceiling on physical
+ * intensity, from a sentence that asked for neither. The clamp that exists to
+ * stop a model doing this was inert for every avoidance key, because the branch
+ * it was protecting never read the value it clamped.
+ *
+ * The correction separates polarity from magnitude, so these assert the two ends
+ * and the fact that they are the *same* number read two ways: `avoidances` holds
+ * only what cleared `canApplyAsExclusion`, and everything softer arrives on
+ * `preferenceSignals` and moves a place down the board without moving it off.
+ */
+describe('a preference that was not a refusal', () => {
+  const strenuousId = 'sherwin-lakes-trail';
+
+  function boardWithSignal(magnitude: number) {
+    return board({
+      ...MAMMOTH_HIKER_ANSWERS,
+      preferenceSignals: [
+        {
+          target: { kind: 'avoidance', value: 'strenuous_activity' },
+          key: 'avoidance:strenuous_activity',
+          polarity: 'refuses',
+          magnitude,
+          exclusionary: false,
+          source: 'deterministic',
+          quote: 'not massively into long walks',
+        },
+      ],
+    });
+  }
+
+  it('lowers the score of what it is about', () => {
+    const before = find(board().candidates, strenuousId);
+    const after = find(boardWithSignal(0.6).candidates, strenuousId);
+    expect(after.fit.score).toBeLessThan(before.fit.score);
+  });
+
+  it('does not remove it, and adds no blocker naming a refusal nobody made', () => {
+    const after = find(boardWithSignal(1).candidates, strenuousId);
+    expect(after.fit.band).not.toBe('not_workable');
+    expect(after.fit.blockers.map((blocker) => blocker.code)).not.toContain('too_strenuous');
+  });
+
+  it('scales: a stronger dislike costs more than a weaker one', () => {
+    const mild = find(boardWithSignal(0.25).candidates, strenuousId).fit.score;
+    const firm = find(boardWithSignal(0.9).candidates, strenuousId).fit.score;
+    expect(firm).toBeLessThan(mild);
+  });
+
+  /**
+   * The other end. A confirmed, deterministic, explicit refusal reaches
+   * `avoidances` and removes — which is the behaviour worth keeping, and the one
+   * the soft case was being mistaken for.
+   */
+  it('still removes when the traveller actually refused', () => {
+    const after = find(
+      board({ ...MAMMOTH_HIKER_ANSWERS, avoidances: ['strenuous_activity'] }).candidates,
+      strenuousId,
+    );
+    expect(after.fit.blockers.map((blocker) => blocker.code)).toContain('too_strenuous');
+  });
+
+  /** And a profile that interpreted nothing scores exactly as it always did. */
+  it('changes no score at all when nothing was interpreted', () => {
+    const plain = board().candidates.map((candidate) => candidate.fit.score);
+    const empty = board({ ...MAMMOTH_HIKER_ANSWERS, preferenceSignals: [] }).candidates.map(
+      (candidate) => candidate.fit.score,
+    );
+    expect(empty).toEqual(plain);
+  });
+
+  /**
+   * The consistency requirement, asserted rather than asserted-about: candidate
+   * quality reads the magnitude through `fitScore` and through nothing else, so
+   * the ranker and the quality gate cannot disagree about how strong a preference
+   * was.
+   */
+  it('reaches candidate quality through the same number, not a second one', () => {
+    const before = find(board().candidates, strenuousId);
+    const after = find(boardWithSignal(0.9).candidates, strenuousId);
+
+    /*
+     * Every quality signal is identical, and that is the assertion.
+     *
+     * The obvious design was a second `refusalMagnitude` parameter on
+     * `QualityInput`, subtracted again here. It would have charged one sentence
+     * twice — once through fit and once through quality — and given the two
+     * consumers separate opportunities to disagree about how strong a preference
+     * was. There is one derivation, in `scorePlace`, and quality reads its
+     * result. So the signals cannot move, and the score can only move by way of
+     * `fitScore`.
+     */
+    expect(after.quality.signals).toEqual(before.quality.signals);
+    expect(after.quality.score).toBeLessThanOrEqual(before.quality.score);
+    expect(after.fit.score).toBeLessThan(before.fit.score);
+  });
+});

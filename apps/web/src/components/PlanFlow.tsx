@@ -4,13 +4,15 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AMBIGUITY_REASON_COPY,
-  COMPILATION_STAGE_LABELS,
   COVERAGE_DIMENSION_LABELS,
   COVERAGE_LEVEL_LABELS,
   DESTINATION_ENTITY_TYPE_LABELS,
   SUPPLY_ACTION_LABELS,
   SUPPLY_LEVEL_LABELS,
+  classifyObservedSpan,
   confidenceExplanation,
+  stageLabel,
+  summaryVersion,
   type ClarificationQuestion,
   type CoverageReport,
   type DataLicence,
@@ -18,6 +20,7 @@ import {
   type GeographicScope,
   type DisplayName,
   type RoutingDiagnostics,
+  type StageRecord,
   type StoredBasePortfolio,
   type TripPreflight,
   WORK_PLAN_DECISION_LABELS,
@@ -31,12 +34,13 @@ import {
   Fieldset,
   FOCUS_RING,
   OVERLAY_INPUT,
+  EvidenceBadge,
   PageHeading,
   Panel,
   PlaceName,
   cx,
 } from './ui';
-import { CompilationProgress } from './CompilationProgress';
+import { CompilationProgress, StageDisclosure } from './CompilationProgress';
 import { ScopePreview } from './ScopePreview';
 import {
   adoptDateWindowAction,
@@ -76,6 +80,17 @@ import {
  * the areas, the dates and whether there is enough here — *before* anything is
  * bought. Interpretation appears only when there genuinely is a choice to make.
  */
+
+/**
+ * The smallest a control on this screen may be.
+ *
+ * WCAG 2.5.5's 44 px. The two inline "adopt this instead" controls — moving the
+ * dates, changing the length — were bare underlined text about sixteen pixels
+ * tall, sitting inside a card of other text. They are the only way to act on
+ * what those panels recommend, which makes them the least appropriate controls
+ * in the product to have been the smallest.
+ */
+const MIN_TARGET = 'min-h-11';
 
 export type PlanStep =
   | 'destination'
@@ -280,13 +295,18 @@ function InterpretationStep({ tripId, candidates, ambiguityReasons, pending, onR
         continent. Which did you mean?
       </p>
 
-      {ambiguityReasons.length > 0 ? (
+      {/*
+        Only the reasons we have a sentence for. An unmapped code rendered an
+        empty bullet, which reads as a claim somebody forgot to finish.
+      */}
+      {ambiguityReasons.some((reason) => ambiguityCopy(reason)) ? (
         <ul className="mt-4 space-y-1 text-sm text-ink-muted">
-          {ambiguityReasons.map((reason) => (
-            <li key={reason}>
-              {AMBIGUITY_REASON_COPY[reason as keyof typeof AMBIGUITY_REASON_COPY]}
-            </li>
-          ))}
+          {ambiguityReasons
+            .map((reason) => [reason, ambiguityCopy(reason)] as const)
+            .filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
+            .map(([reason, copy]) => (
+              <li key={reason}>{copy}</li>
+            ))}
         </ul>
       ) : null}
 
@@ -355,6 +375,11 @@ function InterpretationStep({ tripId, candidates, ambiguityReasons, pending, onR
       </div>
     </>
   );
+}
+
+/** The sentence for an ambiguity code, or nothing. Never the code. */
+function ambiguityCopy(reason: string): string | null {
+  return (AMBIGUITY_REASON_COPY as Record<string, string | undefined>)[reason] ?? null;
 }
 
 function NotAPlaceStep({ destinationQuery }: PlanFlowProps) {
@@ -503,7 +528,10 @@ function PreflightStep({ tripId, preflight, destinationName, pending, onRun }: S
                     {!option.recommended ? (
                       <button
                         type="button"
-                        className="mt-1 text-xs text-pine underline underline-offset-2 disabled:opacity-50"
+                        className={cx(
+                          'mt-1 inline-flex items-center text-xs text-pine underline underline-offset-2 disabled:opacity-50',
+                          MIN_TARGET,
+                        )}
                         disabled={pending}
                         onClick={() =>
                           onRun(
@@ -734,7 +762,10 @@ function DatesPanel({
               */}
               <button
                 type="button"
-                className="mt-3 text-xs text-pine underline underline-offset-2 disabled:opacity-50"
+                className={cx(
+                  'mt-2 inline-flex items-center text-xs text-pine underline underline-offset-2 disabled:opacity-50',
+                  MIN_TARGET,
+                )}
                 disabled={pending}
                 onClick={() =>
                   onRun(
@@ -942,7 +973,45 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
   const router = useRouter();
-  const [live, setLive] = useState<CompilationSnapshot>(snapshot);
+
+  /*
+   * THE POLLED SNAPSHOT CANNOT OUTLIVE THE SERVER'S.
+   *
+   * `useState(snapshot)` seeds once, so once the poll had written anything into
+   * `live` the props were ignored for the rest of the component's life. A
+   * `router.refresh()` — which this component triggers itself the moment a build
+   * lands — then re-rendered the whole screen around a progress summary
+   * describing the run before it, on a retry, and the stage list, the phase
+   * clock and the "ready to look at" link all came from the stale one.
+   *
+   * Keyed on the server snapshot's own identity: when the props describe a
+   * different job or a different state, they win. Between refreshes the poll is
+   * the fresher of the two and keeps the screen moving.
+   */
+  const serverKey = summaryVersion([
+    snapshot.state,
+    snapshot.startedAt,
+    snapshot.compiledRegionId,
+    snapshot.provisionalBoardId,
+    snapshot.stages.length,
+  ]);
+  const [adopted, setAdopted] = useState<{ key: string; value: CompilationSnapshot }>({
+    key: serverKey,
+    value: snapshot,
+  });
+  if (adopted.key !== serverKey) setAdopted({ key: serverKey, value: snapshot });
+  const live = adopted.key === serverKey ? adopted.value : snapshot;
+
+  /*
+   * A functional update, so a poll keeps whichever key is current when it lands
+   * rather than the one its interval closed over. A timer created before a
+   * refresh would otherwise stamp every later result with a key the render has
+   * already moved past, and each one would be discarded on arrival — a progress
+   * screen that silently stops progressing.
+   */
+  const setLive = (next: CompilationSnapshot) =>
+    setAdopted((current) => ({ key: current.key, value: next }));
+
   const [polls, setPolls] = useState(0);
 
   useEffect(() => {
@@ -974,7 +1043,47 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
         stages={live.stages}
         failed={failed}
         {...(live.startedAt ? { startedAt: live.startedAt } : {})}
+        estimate={live.estimate ?? null}
+        {...(live.reusedSummary ? { reusedSummary: live.reusedSummary } : {})}
       />
+
+      {/*
+        THE PROMISE, KEPT.
+
+        `AVAILABILITY_AFTER.finding` has said "a provisional board — nothing on
+        it is verified yet" since Phase 11, and there was nothing behind it. This
+        is the affordance.
+
+        Triggered on the stored board rather than on phase completion, and it
+        stays that way now that the phases are in order.
+
+        The reason it had to be that way: `researching_official_constraints` and
+        `discovering_food` were mapped to *verifying* while executing before
+        `enriching_priority_candidates`, which was mapped to *finding*, so phase
+        completion happened after the cut and out of order and keying the link
+        off it showed the link late. That is fixed in `STAGE_REGISTRY` — the
+        finding→verifying boundary is now exactly the cut. The board id is still
+        the better trigger, because the board is a thing that either exists in
+        the database or does not, and a phase boundary is an inference about it.
+      */}
+      {live.provisionalBoardId && !failed ? (
+        <Panel className="mt-6 border-provisional p-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <EvidenceBadge state="provisional">Ready to look at</EvidenceBadge>
+          </div>
+          <p className="measure mt-3 text-sm leading-relaxed text-ink">
+            We have found the places. Nothing is verified yet — no opening times, no
+            costs, and no travel times, because nothing has been routed. You can start
+            marking what interests you, and we will check those first.
+          </p>
+          <a
+            className={cx(buttonClass('primary'), 'mt-4')}
+            href={`/trips/${tripId}/provisional`}
+          >
+            See what we found
+          </a>
+        </Panel>
+      ) : null}
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         {notStarted ? (
@@ -1062,12 +1171,19 @@ function WorkPlanPanel({ entries }: { entries: NonNullable<PlanFlowProps['workPl
           {entries.map((entry) => (
             <li key={entry.step}>
               <span className="text-ink">{stepLabel(entry.step)}</span>
-              <span className="text-ink-faint">
-                {' '}
-                —{' '}
-                {WORK_PLAN_DECISION_LABELS[entry.decision as keyof typeof WORK_PLAN_DECISION_LABELS] ??
-                  entry.decision}
-              </span>
+              {/*
+                A phrase somebody wrote, or nothing — never the identifier.
+
+                The fallback here was `entry.decision`, which is a stored string
+                from whichever build wrote the row: an unmapped value rendered as
+                `reused_shared_pack`, underscores and all, inside a sentence.
+                That is the same mechanism `stageLabel` exists to refuse, one
+                line below, and it survived here because the map is keyed by hand
+                and the fallback looked defensive.
+              */}
+              {decisionLabel(entry.decision) ? (
+                <span className="text-ink-faint"> — {decisionLabel(entry.decision)}</span>
+              ) : null}
               <p className="text-ink-muted">{entry.reason}</p>
             </li>
           ))}
@@ -1209,11 +1325,32 @@ function RoutingPanel({ diagnostics }: { diagnostics: RoutingDiagnostics }) {
   );
 }
 
+/**
+ * A work-plan step's name, in the traveller's words or not at all.
+ *
+ * This was `COMPILATION_STAGE_LABELS[step] ?? step.replaceAll('_', ' ')`, and
+ * the fallback is the defect: a work-plan step is a free-form string, the label
+ * map was a second hand-keyed copy of the stage vocabulary, and anything the
+ * copy had missed was rendered as its own identifier with the underscores taken
+ * out. `reusing shared claims` reached a traveller that way — lowercase, no
+ * article, not a sentence anybody wrote.
+ *
+ * `stageLabel` answers from the one registry and answers `null` rather than
+ * guessing, so the fallback here is a phrase somebody chose on purpose.
+ */
 function stepLabel(step: string): string {
-  return (
-    COMPILATION_STAGE_LABELS[step as keyof typeof COMPILATION_STAGE_LABELS] ??
-    step.replaceAll('_', ' ')
-  );
+  return stageLabel(step) ?? 'Another step of this build';
+}
+
+/**
+ * What a work-plan decision is called, or nothing.
+ *
+ * `null` rather than the raw value, for the reason `stageLabel` returns null:
+ * a stored decision string that the label map has not got is an identifier, and
+ * an identifier rendered inside a sentence is the defect, not the fallback.
+ */
+function decisionLabel(decision: string): string | null {
+  return (WORK_PLAN_DECISION_LABELS as Record<string, string | undefined>)[decision] ?? null;
 }
 
 function ReadyStep({
@@ -1232,6 +1369,7 @@ function ReadyStep({
   const weak = coverage.dimensions.filter(
     (entry) => entry.level === 'weak' || entry.level === 'unavailable',
   );
+  const buildDuration = classifyObservedSpan(observedSpanMs(snapshot.stages));
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
@@ -1386,7 +1524,93 @@ function ReadyStep({
         {regionData ? <RegionDataPanel data={regionData} /> : null}
         {routingDiagnostics ? <RoutingPanel diagnostics={routingDiagnostics} /> : null}
         {workPlan ? <WorkPlanPanel entries={workPlan} /> : null}
+
+        {/*
+          WHAT THE BUILD ACTUALLY DID, AFTER IT IS OVER.
+
+          The progress screen carried this and then took it away with it. A
+          fixture build finishes in about a second and a real one in minutes, and
+          in both cases the question "why did that take as long as it did" is one
+          people ask *afterwards* — so a record that only exists while you are
+          waiting for it is not a record.
+
+          Real measured durations, from the job row's observed clock. Stages with
+          no observed pair show no figure rather than showing zero.
+        */}
+        {snapshot.stages.length > 0 ? (
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-ink">How this build went</h3>
+            {/*
+              THE WORD DOING THE DAMAGE WAS `MEASURED`.
+
+              Two figures reached this line that were not durations. A job
+              reclaimed hours after it stopped rendered "312m in total,
+              measured", which reads as a pipeline five hours slow; a synthetic
+              build that really took 800 ms rendered "0s in total, measured",
+              which is the same family of sentence as "roughly 0s–0s to go".
+              `classifyObservedSpan` states both bounds, and above the ceiling
+              this says what the timestamps are rather than pretending they are a
+              measurement.
+            */}
+            {buildDuration.kind === 'measured' ? (
+              <p className="mt-1 text-xs text-ink-faint" data-testid="build-duration">
+                {formatBuildDuration(buildDuration.ms)} in total, measured.
+              </p>
+            ) : buildDuration.kind === 'under_a_second' ? (
+              <p className="mt-1 text-xs text-ink-faint" data-testid="build-duration">
+                Under a second in total, measured.
+              </p>
+            ) : buildDuration.kind === 'not_a_measurement' ? (
+              <p className="mt-1 text-xs text-ink-faint" data-testid="build-span-implausible">
+                The first and last stamps on this build are further apart than a build runs
+                for, so they are a record of when it happened rather than of how long it took.
+                No total here.
+              </p>
+            ) : null}
+            <div className="mt-2">
+              <StageDisclosure stages={snapshot.stages} />
+            </div>
+          </div>
+        ) : null}
       </aside>
     </div>
   );
+}
+
+/**
+ * The whole build, end to end, from the observed clock.
+ *
+ * Earliest observed start to latest observed finish rather than a sum of stage
+ * durations: the sum omits everything between stages, and a figure that is
+ * reliably smaller than the wait somebody sat through is worse than no figure.
+ *
+ * Null when no stage carries an observed pair — a job row written before the
+ * two-clock split has only the injected clock, and reading that as a duration is
+ * the exact defect this replaced.
+ *
+ * Plausibility is **not** decided here. This returns the span; whether the span
+ * may be presented as a measurement is `classifyObservedSpan`'s answer, stated
+ * once in `schemas/progress.ts` where the ceiling and the floor are written
+ * down, rather than as a threshold buried in a component.
+ */
+function observedSpanMs(stages: StageRecord[]): number | null {
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const stage of stages) {
+    const started = stage.observedStartedAt ? Date.parse(stage.observedStartedAt) : Number.NaN;
+    const finished = stage.observedFinishedAt ? Date.parse(stage.observedFinishedAt) : Number.NaN;
+    if (!Number.isNaN(started)) starts.push(started);
+    if (!Number.isNaN(finished)) ends.push(finished);
+  }
+  if (starts.length === 0 || ends.length === 0) return null;
+  const span = Math.max(...ends) - Math.min(...starts);
+  return span >= 0 ? span : null;
+}
+
+function formatBuildDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`;
 }

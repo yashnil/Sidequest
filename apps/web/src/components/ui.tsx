@@ -20,9 +20,24 @@ const BUTTON_VARIANTS = {
   ghost: 'text-ink-muted hover:text-ink hover:bg-paper-sunk',
 } as const;
 
+/**
+ * Both sizes clear 44 px, which is what "small" is allowed to mean.
+ *
+ * `sm` was 28 px tall and `md` 40 px, so every secondary action in the product —
+ * "Change my answers", "Fetch it again", the acknowledgement on a removed place —
+ * was under WCAG 2.5.5's 44 px minimum target size. On a phone that is the
+ * difference between a control and a coin toss, and it is worse here than the
+ * numbers suggest, because the small size is used almost exclusively for the
+ * actions somebody takes *after* they have already read something and made up
+ * their mind.
+ *
+ * `min-h-11` rather than more padding: the visual weight of a small button is
+ * carried by its type size and horizontal padding, both of which are unchanged,
+ * so the control looks the same and is twice the target.
+ */
 const BUTTON_SIZES = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-4 py-2.5',
+  sm: 'min-h-11 px-3 py-1.5 text-xs',
+  md: 'min-h-11 px-4 py-2.5',
 } as const;
 
 export function buttonClass(

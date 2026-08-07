@@ -268,14 +268,14 @@ describe('an alias is untrusted input', () => {
   it('strips control characters from every field it emits', () => {
     const resolved = resolveDisplayName({
       candidates: [
-        candidate('Local Name', { primary: true, language: 'ky' }),
-        candidate('EnglishName', { language: 'en' }),
+        candidate('Local\u0000Name', { primary: true, language: 'ky' }),
+        candidate('English\u0007Name', { language: 'en' }),
       ],
       fallback: 'x',
     });
     for (const value of [resolved.display, resolved.local ?? '', resolved.canonical]) {
       // eslint-disable-next-line no-control-regex
-      expect(/[ -]/.test(value), value).toBe(false);
+      expect(/[\x00-\x1f]/.test(value), value).toBe(false);
     }
   });
 

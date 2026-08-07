@@ -68,7 +68,7 @@ test('the transport step asks the questions the planner actually needs', async (
   await page.getByText('You will have a car').click();
   await expect(page.getByText('Steep mountain roads are fine')).toHaveCount(0);
   await expect(page.getByText('Shuttles and buses are fine')).toHaveCount(0);
-  await expect(page.getByText(/free summer trolley/)).toBeVisible();
+  await expect(page.getByText(/whatever scheduled service the/)).toBeVisible();
 });
 
 test('the board shows transport feasibility before anything is built', async ({ page }) => {

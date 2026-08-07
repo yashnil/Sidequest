@@ -45,9 +45,8 @@ export function routingEndpoint(): string {
   return (process.env.SIDEQUEST_ROUTES_URL?.trim() || DEFAULT_ENDPOINT).replace(/\/+$/, '');
 }
 
-export function isRoutesProviderEnabled(): boolean {
-  return process.env.SIDEQUEST_ROUTES_PROVIDER?.trim().toLowerCase() === 'valhalla';
-}
+/** Re-exported from the import-free switch module. See `providers/switches.ts`. */
+export { isRoutesProviderEnabled } from './switches';
 
 export type ValhallaCosting = 'auto' | 'pedestrian' | 'bicycle' | 'bus' | 'motor_scooter';
 

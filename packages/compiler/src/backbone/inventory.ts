@@ -13,10 +13,35 @@ import {
   type ProviderRef,
   type RegionPack,
   type SourceRecord,
+  VISITABLE_ROLES,
+  placeInclusionTag,
+  placeRoleTag,
 } from '@sidequest/core';
 import type { DiscoveredCandidate } from '../providers';
+import { assessRecordEligibility, type CandidateEligibility } from './eligibility';
+import { withContainmentDecision } from './containment';
 import { supersededRecordIds } from './link';
+import { buildTripScopeOverlay, decisionFor, type TripScopeOverlay } from './overlay';
 import { classifySourceCategory } from './taxonomy';
+import {
+  admitByScope,
+  areaOfRecord,
+  assessVisitableSupply,
+  balanceAcrossAreas,
+  DEFAULT_BALANCE,
+  hasMinimumIdentity,
+  RejectionLedger,
+  ROLE_QUOTA_SHARE,
+  roleCanOccupy,
+  scopeRelationshipOf,
+  type BalanceDiagnostics,
+  type InclusionReason,
+  type PortfolioRejection,
+  type PortfolioSlot,
+  type RejectionCount,
+  type RoleEligibility,
+  type VisitableSupplyVerdict,
+} from './balance';
 
 /**
  * FROM A REGION PACK TO THINGS THE COMPILER CAN PLAN AROUND.
@@ -44,13 +69,23 @@ import { classifySourceCategory } from './taxonomy';
  */
 
 export interface InventoryLimits {
-  /** Hard ceiling on attractions handed to the compiler. */
+  /**
+   * Hard ceiling on the things a traveller chooses between.
+   *
+   * One number across `attraction`, `outdoor`, `side_quest` and `market` rather
+   * than four, because the split between them is a property of the region and
+   * not a target: a coastal region is mostly outdoor and a capital is mostly
+   * attractions, and four fixed ceilings would import a judgement about which
+   * kind of place a destination ought to be. `ROLE_QUOTA_SHARE` divides it.
+   */
   maxAttractions: number;
-  /** Hard ceiling on support stops — the grocery, the terminal, the trailhead. */
+  /** Hard ceiling on support stops — the grocery, the visitor centre. */
   maxSupport: number;
+  /** Hard ceiling on gateways: how you get in, and where a base can go. */
+  maxGateways: number;
   maxFoodVenues: number;
   /**
-   * How many attractions any one category may contribute before the rest are
+   * How many candidates any one category may contribute before the rest are
    * held back.
    *
    * Density control, not taste. A dense scope returns four hundred historic
@@ -59,107 +94,836 @@ export interface InventoryLimits {
    * discarded silently.
    */
   maxPerCategory: number;
+  /**
+   * The largest share of a role's quota one geographic area may hold.
+   *
+   * See `balance.ts`. This is the number that stops a country being planned as
+   * its largest city.
+   */
+  maxAreaShare: number;
 }
 
 export const DEFAULT_INVENTORY_LIMITS: InventoryLimits = {
   maxAttractions: 140,
   maxSupport: 25,
+  maxGateways: 12,
   maxFoodVenues: 60,
   maxPerCategory: 22,
+  maxAreaShare: DEFAULT_BALANCE.maxAreaShare,
 };
 
+/**
+ * What a pool of one kind holds, and where it holds it.
+ *
+ * Per slot rather than one merged number, because the whole point of the
+ * portfolio is that a shortage of attractions is not repaired by a surplus of
+ * car parks. `byArea` is per pool for the same reason: "attractions by region"
+ * and "support by region" are different measurements and a single spread figure
+ * over both would be dominated by whichever the source happens to catalogue
+ * densely.
+ */
+export interface PortfolioPool {
+  slot: PortfolioSlot;
+  role: PlanningRole;
+  /** How many records were eligible for this slot before any quota. */
+  available: number;
+  kept: number;
+  byArea: { areaId: string; kept: number; available: number }[];
+  concentration: number;
+  areaCapRelaxed: boolean;
+}
+
+/**
+ * Every candidate the pack yielded, separated by the part it can play.
+ *
+ * The separation is the fix. Before it, `buildInventory` returned one
+ * `candidates` array holding attractions, practical stops and airports
+ * concatenated, and every consumer down to the board treated the whole of it as
+ * things to do — which is how an international airport and two tour operators
+ * became discovery cards. A caller now has to *ask* for supporting records by
+ * name, and the type will not hand them over by accident.
+ */
+export interface CandidatePortfolio {
+  pools: PortfolioPool[];
+  /** Every refusal, by reason, so a thin board can explain itself. */
+  rejected: RejectionCount[];
+  /** Admitted records by why they were admitted. */
+  inclusion: { reason: InclusionReason; count: number }[];
+  /** How many admitted records nobody could establish membership for. */
+  membershipUnverified: number;
+  /** Counting attractions apart from infrastructure, and the shortfall. */
+  supply: VisitableSupplyVerdict;
+}
+
 export interface InventoryResult {
+  /**
+   * Things to do, and **only** things to do.
+   *
+   * Narrowed from "everything the pack yielded" deliberately, and the narrowing
+   * is the defect fix rather than a tidy-up: this array is what becomes
+   * `region.places`, the provisional board and the discovery board, and while it
+   * carried gateways and practical stops there was no layer whose job it was to
+   * take them out again.
+   */
   candidates: DiscoveredCandidate[];
+  /**
+   * Practical stops and gateways, kept and addressed by name.
+   *
+   * Kept because they are real, useful geography that a day plan and a base
+   * portfolio legitimately want, and separate because neither of those is a
+   * discovery board. Every entry carries its role as a tag, so a consumer that
+   * merges the two arrays still cannot present one as the other.
+   */
+  supporting: DiscoveredCandidate[];
   /** Records the food layer should turn into venues. Never `Place`s. */
   foodRecords: SourceRecord[];
   licences: DataLicence[];
+  portfolio: CandidatePortfolio;
   diagnostics: {
     recordsConsidered: number;
     superseded: number;
     excludedByRole: number;
     heldBackByCategoryCap: number;
+    /** Held back because their area had already taken its share. */
+    heldBackByAreaCap: number;
     attractions: number;
     support: number;
     food: number;
+    /**
+     * What was kept, by planning role.
+     *
+     * The counts a supply verdict and a destination profile are built from. One
+     * `attractions` number could not distinguish a city of museums from a coast
+     * of beaches, and both were being described with the same sentence.
+     */
+    byRole: { role: PlanningRole; kept: number }[];
+    /** How many candidates came from each area, so a concentration is visible. */
+    byArea: { areaId: string; kept: number; available: number }[];
+    /** Share of what was kept sitting in the single densest area. 0–1. */
+    concentration: number;
+    /** True when every other area ran dry, so the concentration is the region's. */
+    areaCapRelaxed: boolean;
     /** How many attractions came from each layer, so thinness can be located. */
     byLayer: { layerId: string; kept: number }[];
   };
 }
 
+/**
+ * A record's role, from **one** source of truth.
+ *
+ * The pack carries a `planningRole` written when it was built, and the taxonomy
+ * can compute one now. Reading both is how this file briefly lost twenty-two
+ * parks: a fixture whose stored role said `attraction` was bucketed as one and
+ * then ordered by a recomputed role that said `outdoor`, so the records fell
+ * between the two and out of the inventory entirely.
+ *
+ * Recomputing is also the migration story. A pack built before the role split
+ * has every candidate stored as `attraction`, because that was the only positive
+ * role there was. Classifying at read time means those packs gain the split
+ * without being rebuilt — the pack is immutable and its bytes do not change;
+ * what changes is what we now understand them to say.
+ *
+ * The pack's own verdict still wins where it is a **refusal**. The normaliser
+ * knows things the category table cannot: chiefly that the source marked a
+ * record permanently closed, which is a fact about the world rather than about
+ * its category.
+ */
+function roleOfRecord(record: SourceRecord): PlanningRole {
+  if (
+    record.planningRole === 'excluded' ||
+    record.planningRole === 'administrative' ||
+    record.planningRole === 'infrastructure'
+  ) {
+    return record.planningRole;
+  }
+  return classifySourceCategory({
+    category: record.sourceCategory,
+    path: record.sourceCategoryPath,
+  }).role;
+}
+
+/**
+ * The role decision, and where it came from.
+ *
+ * A seam, and an intentional one. `eligibility.ts` owns the decision — role,
+ * confidence, basis and per-portfolio permission, from the source's own
+ * vocabulary and the record's own status, before anything is ranked. This file
+ * must not hold a second opinion about any of it; what it does is translate
+ * those permissions into the pools it balances, and count what was refused.
+ *
+ * Injectable so a test can drive admission with a role the taxonomy would never
+ * produce, and so the two layers can be exercised apart.
+ */
+export type EligibilityResolver = (record: SourceRecord) => RoleEligibility;
+
+/**
+ * From the six functional permissions to the five pools this file balances.
+ *
+ * The two vocabularies answer different questions and are deliberately not
+ * merged: `attractionPortfolio` says *may this be counted as something to do*,
+ * and `anchor` versus `discovery` says *which list does it compete in*. The tier
+ * comes from the candidate role, which already carries it — a side quest is
+ * defined by not being able to hold a day, so it can never land in the anchor
+ * pool however well catalogued it is.
+ */
+function slotsFromPermissions(assessment: CandidateEligibility): PortfolioSlot[] {
+  const slots: PortfolioSlot[] = [];
+  if (assessment.eligibility.attractionPortfolio) {
+    slots.push(assessment.role === 'side_quest' ? 'discovery' : 'anchor');
+  }
+  if (assessment.eligibility.foodPortfolio) slots.push('food');
+  if (assessment.role === 'gateway') slots.push('gateway');
+  else if (assessment.eligibility.supportPortfolio && assessment.role !== 'food') {
+    /*
+     * A restaurant is support in the permission table — it is routed, and it is
+     * scheduled — and it is not a *practical stop*. Filing it here would put a
+     * hundred kitchens in a pool sized for the grocery and the visitor centre,
+     * and the food planner would then find them missing from its own.
+     */
+    slots.push('support');
+  }
+  return slots;
+}
+
+/** The classifier's refusals, mapped onto this file's reasons without inventing any. */
+function rejectionFor(role: string | undefined): PortfolioRejection {
+  switch (role) {
+    case 'duplicate':
+      return 'superseded_duplicate';
+    case 'permanently_closed':
+      return 'permanently_closed';
+    case 'insufficient_identity':
+      return 'identity_too_thin';
+    default:
+      return 'role_not_planned';
+  }
+}
+
+export const DEFAULT_ELIGIBILITY: EligibilityResolver = (record) => {
+  const assessment = assessRecordEligibility(record);
+  return {
+    role: assessment.planningRole,
+    confidence: assessment.roleConfidence,
+    basis: assessment.roleBasis.decidedBy,
+    eligibleFor: slotsFromPermissions(assessment),
+    /*
+     * The fine-grained role, carried through so the refusal reason is the one
+     * the deciding layer gave rather than one this file guessed from a coarser
+     * value. `permanently_closed` and `insufficient_identity` both collapse to
+     * `excluded` in the pack vocabulary, and reporting them as the same thing
+     * would lose the only part a traveller could act on.
+     */
+    candidateRole: assessment.role,
+  };
+};
+
 export function buildInventory(input: {
   pack: RegionPack;
   scope: GeographicScope;
   limits?: Partial<InventoryLimits>;
+  /** Defaults to the taxonomy table. See `EligibilityResolver`. */
+  eligibility?: EligibilityResolver;
+  /**
+   * The trip-scope overlay. Built here when a caller does not supply one.
+   *
+   * Passing it matters when the trip has a regional expansion: `includedAreas`
+   * is what makes `regional_expansion_member` and `optional_satellite`
+   * producible at all, and expansion runs after the pack build, so only a caller
+   * that has both can hand over an overlay that knows about them.
+   */
+  overlay?: TripScopeOverlay;
 }): InventoryResult {
   const limits = { ...DEFAULT_INVENTORY_LIMITS, ...input.limits };
-  const records = input.pack.layers.flatMap((layer) => layer.records);
+  const resolveEligibility = input.eligibility ?? DEFAULT_ELIGIBILITY;
+  const rawRecords = input.pack.layers.flatMap((layer) => layer.records);
+
+  /*
+   * THE GATE.
+   *
+   * Every record entering the inventory carries a containment decision made
+   * against *this* trip's scope, and it is made here rather than inherited from
+   * the pack. A pack is shared ground; a verdict is one traveller's. Building
+   * the overlay unconditionally — rather than reading a field a pack might carry
+   * — is what makes it impossible for a source adapter, a fallback branch or a
+   * warm cache row to hand a candidate downstream without a verdict.
+   *
+   * A record whose decision is missing is `membership_unknown`, which reaches a
+   * provisional board and reaches neither a final attraction slot nor the
+   * planner. Fail-closed, so a forgotten path is a thin board rather than a
+   * wrong one.
+   */
+  const overlay =
+    input.overlay ??
+    buildTripScopeOverlay({
+      scope: input.scope,
+      records: rawRecords,
+      roleEligible: (record) => resolveEligibility(record).eligibleFor.length > 0,
+    });
+  const records = rawRecords.map((record) =>
+    withContainmentDecision(record, decisionFor(overlay, record.id)),
+  );
+
   const superseded = supersededRecordIds(records, input.pack.links);
   const crossLayer = crossLayerCorroboration(records, input.pack.links);
 
-  const byRole = new Map<PlanningRole, SourceRecord[]>();
+  /*
+   * ADMISSION, IN A FIXED ORDER, BEFORE ANYTHING IS BALANCED.
+   *
+   * Each gate answers a different question and each refusal is counted with its
+   * own reason, because "we found six things" and "we found six things and
+   * refused four hundred that were outside the destination" are different
+   * sentences and only one of them is usable.
+   *
+   * Nothing below this loop may re-admit a record it rejected. That is the
+   * property the redistribution pass used to be able to violate: a quota that
+   * went unfilled reached back into the pool, and a pool that still held
+   * ineligible records would have handed them over.
+   */
+  const ledger = new RejectionLedger();
+  const bySlot = new Map<PortfolioSlot, Map<PlanningRole, SourceRecord[]>>();
+  const inclusionOf = new Map<string, InclusionReason>();
+  const roleOf = new Map<string, PlanningRole>();
+  const availableBySlot = new Map<PortfolioSlot, Map<PlanningRole, number>>();
+  const inclusionCounts = new Map<InclusionReason, number>();
   let excludedByRole = 0;
+  let membershipUnverified = 0;
+
   for (const record of records) {
-    if (superseded.has(record.id)) continue;
-    if (record.planningRole === 'excluded' || record.planningRole === 'administrative') {
-      excludedByRole += 1;
+    // 1. Duplicate resolution. A superseded record is not a second candidate.
+    if (superseded.has(record.id)) {
+      ledger.reject('superseded_duplicate', record.name);
       continue;
     }
-    const bucket = byRole.get(record.planningRole);
-    if (bucket) bucket.push(record);
-    else byRole.set(record.planningRole, [record]);
+
+    // 2. Scope membership, from the strongest evidence the record carries.
+    const admission = admitByScope(scopeRelationshipOf(record));
+    if (!admission.admitted) {
+      ledger.reject(admission.rejection, record.name);
+      continue;
+    }
+
+    /*
+     * 3–5. Closure, minimum identity and role eligibility, from one layer.
+     *
+     * All three in one call and deliberately: they are the same decision seen
+     * from three angles, and splitting them across two files is how a record can
+     * be refused by one and admitted by the other. `eligibility.ts` honours a
+     * stated closure, refuses a row whose name is its own category, and returns
+     * the permissions — this file only translates and counts.
+     *
+     * Closure being a *gate* rather than a rank penalty matters on its own.
+     * `knownness` docks a closed record fifty points, which keeps it off a
+     * crowded board and admits it to a sparse one — exactly backwards, because
+     * the sparse region is where a traveller can least afford to drive to a shut
+     * door.
+     */
+    const eligibility = resolveEligibility(record);
+    if (eligibility.eligibleFor.length === 0) {
+      const rejection = rejectionFor(eligibility.candidateRole);
+      if (rejection === 'role_not_planned') excludedByRole += 1;
+      ledger.reject(rejection, record.name);
+      continue;
+    }
+
+    /*
+     * One narrowing the deciding layer cannot make, and it only ever refuses.
+     *
+     * That layer compares a name against the source's *leaf* category, which is
+     * the right primary check. It does not see the category path, so a record
+     * named after a branch — `Nature Reserve` under
+     * `geographic_entities/nature_reserve` — survives it. A refinement that can
+     * only reject is safe to compose; one that could promote would not be, and
+     * this cannot: a record refused here is refused, never reclassified.
+     */
+    if (
+      !hasMinimumIdentity({
+        name: record.name,
+        sourceCategory: record.sourceCategory,
+        sourceCategoryPath: record.sourceCategoryPath,
+      })
+    ) {
+      ledger.reject('identity_too_thin', record.name);
+      continue;
+    }
+
+    /*
+     * 6. Planning-role separation, intersected with what the scope permits.
+     *
+     * The intersection is where an adjacent gateway stops being a candidate: it
+     * is eligible for the gateway slot by role and permitted only the gateway
+     * slot by scope, so it lands in one pool and cannot reach any other. A
+     * record whose role and scope permit nothing in common is refused with the
+     * reason that says so rather than disappearing.
+     */
+    const slots = eligibility.eligibleFor.filter((slot) => admission.permits.includes(slot));
+    if (slots.length === 0) {
+      ledger.reject('role_ineligible_for_slot', record.name);
+      continue;
+    }
+
+    inclusionOf.set(record.id, admission.reason);
+    roleOf.set(record.id, eligibility.role);
+    inclusionCounts.set(admission.reason, (inclusionCounts.get(admission.reason) ?? 0) + 1);
+    if (!admission.membershipVerified) membershipUnverified += 1;
+
+    for (const slot of slots) {
+      const roles = bySlot.get(slot) ?? new Map<PlanningRole, SourceRecord[]>();
+      const bucket = roles.get(eligibility.role);
+      if (bucket) bucket.push(record);
+      else roles.set(eligibility.role, [record]);
+      bySlot.set(slot, roles);
+
+      const counts = availableBySlot.get(slot) ?? new Map<PlanningRole, number>();
+      counts.set(eligibility.role, (counts.get(eligibility.role) ?? 0) + 1);
+      availableBySlot.set(slot, counts);
+    }
   }
 
-  const attractionPool = rank(byRole.get('attraction') ?? []);
-  const supportPool = rank(byRole.get('support') ?? []);
-  const foodPool = rank(byRole.get('food') ?? []);
+  /** Records admitted to a slot under one role. */
+  const admittedFor = (slot: PortfolioSlot, role: PlanningRole): SourceRecord[] =>
+    bySlot.get(slot)?.get(role) ?? [];
 
-  const categoryCounts = new Map<string, number>();
-  let heldBack = 0;
-  const attractions: SourceRecord[] = [];
-  for (const record of attractionPool) {
-    if (attractions.length >= limits.maxAttractions) break;
-    const category = classifySourceCategory({
+  /**
+   * Every record admitted to a slot, whatever role put it there.
+   *
+   * Food, support and gateways are pooled by slot rather than by role because
+   * the slot is the thing being sized: a grocery arrives as `support` and a
+   * market as `market`, and the food layer wants both. Visitable records stay
+   * keyed by role, because their quotas are per role.
+   */
+  const allAdmittedFor = (slot: PortfolioSlot): SourceRecord[] => {
+    const roles = bySlot.get(slot);
+    if (!roles) return [];
+    return [...roles.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .flatMap(([, records]) => records);
+  };
+
+  const categoryOf = (record: SourceRecord): string =>
+    classifySourceCategory({
       category: record.sourceCategory,
       path: record.sourceCategoryPath,
     }).category;
-    const seen = categoryCounts.get(category) ?? 0;
-    if (seen >= limits.maxPerCategory) {
-      heldBack += 1;
-      continue;
-    }
-    categoryCounts.set(category, seen + 1);
-    attractions.push(record);
+
+  /*
+   * Each visitable role balanced separately, against its own share of the quota.
+   *
+   * Separately rather than over one merged pool, because a merged round robin
+   * would let a dense area's attractions crowd out a sparse area's *outdoors* —
+   * the two are not substitutes, and the whole reason `outdoor` became its own
+   * role is that the geographic layers carry it and the place layer does not.
+   */
+  const balanced: {
+    slot: PortfolioSlot;
+    role: PlanningRole;
+    kept: SourceRecord[];
+    available: number;
+    diagnostics: BalanceDiagnostics;
+  }[] = [];
+  for (const role of VISITABLE_ROLES) {
+    /*
+     * Anchors compete with anchors and discoveries with discoveries: the slot a
+     * role occupies decides which pool it is ranked inside. A side quest that
+     * outranked a museum could never take its place, because they are never in
+     * the same list.
+     */
+    const slot: PortfolioSlot = roleCanOccupy(role, 'anchor') ? 'anchor' : 'discovery';
+    const pool = rank(admittedFor(slot, role));
+    if (pool.length === 0) continue;
+    const share = ROLE_QUOTA_SHARE[role] ?? 0;
+    const result = balanceAcrossAreas({
+      ranked: pool,
+      areaOf: areaOfRecord,
+      categoryOf,
+      limits: {
+        quota: Math.max(1, Math.round(limits.maxAttractions * share)),
+        maxPerCategory: limits.maxPerCategory,
+        maxAreaShare: limits.maxAreaShare,
+      },
+    });
+    balanced.push({
+      slot,
+      role,
+      kept: result.kept,
+      available: pool.length,
+      diagnostics: result.diagnostics,
+    });
   }
 
-  const support = supportPool.slice(0, limits.maxSupport);
+  /*
+   * Unclaimed quota is redistributed rather than lost.
+   *
+   * A region with no markets should not produce a board twelve per cent shorter
+   * than one that has them. The redistribution is deterministic — roles in their
+   * declared order, each offered the whole remainder — and is bounded by what
+   * each role actually holds, so it can only ever add records that already
+   * qualified.
+   */
+  const visitable = balanced.flatMap((entry) => entry.kept);
+  let slack = limits.maxAttractions - visitable.length;
+  if (slack > 0) {
+    const taken = new Set(visitable.map((record) => record.id));
+    const categoryCounts = new Map<string, number>();
+    for (const record of visitable) {
+      const category = categoryOf(record);
+      categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+    }
+    for (const role of VISITABLE_ROLES) {
+      if (slack <= 0) break;
+      /*
+       * The remainder is offered from the *admitted* pool and nowhere else.
+       *
+       * This is the line the invariant turns on. Reading the raw records here —
+       * or any pool that admission did not filter — would let an unfilled quota
+       * reach past every gate above and rescue exactly the records those gates
+       * refused, which is how a shortage of attractions becomes a board of
+       * infrastructure.
+       */
+      const slot: PortfolioSlot = roleCanOccupy(role, 'anchor') ? 'anchor' : 'discovery';
+      const pool = rank(admittedFor(slot, role));
+      const spare = pool.filter((record) => !taken.has(record.id));
+      if (spare.length === 0) continue;
+      const result = balanceAcrossAreas({
+        ranked: spare,
+        areaOf: areaOfRecord,
+        categoryOf,
+        limits: { quota: slack, maxPerCategory: limits.maxPerCategory, maxAreaShare: limits.maxAreaShare },
+      });
+      /*
+       * The category cap is global, so the redistribution has to respect what
+       * the first pass already spent. `balanceAcrossAreas` counts from zero, so
+       * the surviving records are filtered against the running totals here
+       * rather than trusting its own tally.
+       */
+      for (const record of result.kept) {
+        if (slack <= 0) break;
+        const category = categoryOf(record);
+        if ((categoryCounts.get(category) ?? 0) >= limits.maxPerCategory) continue;
+        categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+        taken.add(record.id);
+        visitable.push(record);
+        slack -= 1;
+      }
+    }
+  }
+
+  /*
+   * Support is balanced across areas, not taken off the top.
+   *
+   * "Support selected from route need" is what this approximates, and the
+   * approximation is stated rather than pretended: a route does not exist this
+   * early, so the closest honest proxy for "one near every part of the trip" is
+   * one per area rather than twenty-five in whichever cell the source
+   * catalogued most densely. A pharmacy beside the airport is not a stop on a
+   * mountain day.
+   */
+  const supportBalance = balanceAcrossAreas({
+    ranked: rank(allAdmittedFor('support')),
+    areaOf: areaOfRecord,
+    categoryOf,
+    limits: {
+      quota: limits.maxSupport,
+      maxPerCategory: limits.maxPerCategory,
+      maxAreaShare: limits.maxAreaShare,
+    },
+  });
+  const support = supportBalance.kept;
+
+  /*
+   * Gateways ranked by what the scope already says it needs.
+   *
+   * "Derived from base and transfer structure" — and the honest half of that is
+   * available here: the scope carries the gateways the traveller or the resolver
+   * already named, so a record matching one of those is the transfer structure
+   * rather than a guess about it. The base structure is not available this early
+   * and is not invented; what is left after the named ones is ranked and
+   * balanced like everything else.
+   */
+  const gatewayBalance = balanceAcrossAreas({
+    ranked: preferNamedGateways(rank(allAdmittedFor('gateway')), input.scope),
+    areaOf: areaOfRecord,
+    categoryOf,
+    limits: {
+      quota: limits.maxGateways,
+      maxPerCategory: limits.maxPerCategory,
+      maxAreaShare: limits.maxAreaShare,
+    },
+  });
+  const gateways = gatewayBalance.kept;
+
+  /*
+   * Food supply, and a grocery is part of it.
+   *
+   * `market` records hold two slots by design — somewhere to eat *and* a thing
+   * to do — and so does a grocery, which is where an outdoor day is provisioned.
+   * Before this, a supermarket classified `support` was never offered to the
+   * food layer and *was* emitted as a discovery card: the worst of the three
+   * available outcomes.
+   */
+  const foodPool = rank(allAdmittedFor('food'));
   const food = foodPool.slice(0, limits.maxFoodVenues);
 
-  const candidates = [...interleaveByCategory(attractions), ...support].map((record) =>
-    toCandidate(record, input.scope, crossLayer.has(record.id)),
+  /*
+   * Interleaved across roles as well as categories on the way out.
+   *
+   * Every budget below this point — the coarse-candidate cap, the shortlist, the
+   * board — cuts from the *top* of this list, so the order has to carry the
+   * breadth rather than only the list. Rank order within a role is untouched.
+   */
+  const ordered = interleaveByRole(
+    balanced.map((entry) => entry.role),
+    visitable,
+    (record) => roleOf.get(record.id) ?? roleOfRecord(record),
   );
 
+  const asCandidate = (record: SourceRecord): DiscoveredCandidate =>
+    toCandidate({
+      record,
+      scope: input.scope,
+      crossLayerCorroborated: crossLayer.has(record.id),
+      role: roleOf.get(record.id) ?? roleOfRecord(record),
+      inclusion: inclusionOf.get(record.id) ?? 'membership_unknown',
+    });
+
+  /*
+   * Two arrays, and the split is the fix.
+   *
+   * `candidates` is what a board may show. `supporting` is real, useful and
+   * addressed by name. Concatenating them was the whole defect: an
+   * international airport reached a traveller's board not because anything
+   * misclassified it but because one array was called `candidates` and nothing
+   * downstream had any way to tell its halves apart.
+   */
+  const candidates = ordered.map(asCandidate);
+  const supporting = [...support, ...gateways].map(asCandidate);
+
   const keptByLayer = new Map<string, number>();
-  for (const record of [...attractions, ...support]) {
+  for (const record of [...visitable, ...support, ...gateways]) {
     keptByLayer.set(record.layerId, (keptByLayer.get(record.layerId) ?? 0) + 1);
   }
 
+  const areaTotals = new Map<string, { kept: number; available: number }>();
+  for (const entry of balanced) {
+    for (const area of entry.diagnostics.byArea) {
+      const running = areaTotals.get(area.areaId) ?? { kept: 0, available: 0 };
+      running.kept += area.kept;
+      running.available += area.available;
+      areaTotals.set(area.areaId, running);
+    }
+  }
+  const byArea = [...areaTotals.entries()]
+    .map(([areaId, counts]) => ({ areaId, ...counts }))
+    .sort((a, b) => b.kept - a.kept || a.areaId.localeCompare(b.areaId));
+  const densest = byArea[0]?.kept ?? 0;
+
+  /*
+   * What the quotas cost, counted from what was admitted rather than from what
+   * was read. A record refused by a gate above was never in a quota's way.
+   */
+  for (const entry of balanced) {
+    for (let index = 0; index < entry.diagnostics.heldBackByCategory; index += 1) {
+      ledger.reject('over_category_cap');
+    }
+    for (let index = 0; index < entry.diagnostics.heldBackByAreaShare; index += 1) {
+      ledger.reject('over_area_share');
+    }
+    const overQuota = entry.available - entry.kept.length - entry.diagnostics.heldBackByAreaShare;
+    for (let index = 0; index < Math.max(0, overQuota); index += 1) ledger.reject('over_role_quota');
+  }
+
+  const pools: PortfolioPool[] = [
+    ...balanced.map((entry) => ({
+      slot: entry.slot,
+      role: entry.role,
+      available: entry.available,
+      kept: entry.kept.length,
+      byArea: entry.diagnostics.byArea,
+      concentration: entry.diagnostics.concentration,
+      areaCapRelaxed: entry.diagnostics.areaCapRelaxed,
+    })),
+    {
+      slot: 'food' as const,
+      role: 'food' as const,
+      available: foodPool.length,
+      kept: food.length,
+      byArea: areaBreakdown(food, foodPool),
+      concentration: concentrationOf(food),
+      areaCapRelaxed: false,
+    },
+    {
+      slot: 'support' as const,
+      role: 'support' as const,
+      available: allAdmittedFor('support').length,
+      kept: support.length,
+      byArea: supportBalance.diagnostics.byArea,
+      concentration: supportBalance.diagnostics.concentration,
+      areaCapRelaxed: supportBalance.diagnostics.areaCapRelaxed,
+    },
+    {
+      slot: 'gateway' as const,
+      role: 'gateway' as const,
+      available: allAdmittedFor('gateway').length,
+      kept: gateways.length,
+      byArea: gatewayBalance.diagnostics.byArea,
+      concentration: gatewayBalance.diagnostics.concentration,
+      areaCapRelaxed: gatewayBalance.diagnostics.areaCapRelaxed,
+    },
+  ].filter((pool) => pool.available > 0);
+
+  const anchors = balanced
+    .filter((entry) => entry.slot === 'anchor')
+    .reduce((total, entry) => total + entry.kept.length, 0);
+  const discoveries = balanced
+    .filter((entry) => entry.slot === 'discovery')
+    .reduce((total, entry) => total + entry.kept.length, 0);
+  const anchorAreas = new Set(
+    balanced.filter((entry) => entry.slot === 'anchor').flatMap((entry) => entry.kept.map(areaOfRecord)),
+  );
+
+  const supply = assessVisitableSupply({
+    supply: {
+      anchors,
+      discoveries,
+      visitable: visitable.length,
+      supporting: support.length + gateways.length + food.length,
+      categories: new Set(visitable.map(categoryOf)).size,
+      areasWithAnchors: anchorAreas.size,
+      concentration: visitable.length === 0 ? 0 : densest / visitable.length,
+    },
+    /*
+     * Nights, plus the day you arrive. The scope is the only trip shape this
+     * layer has, and a zero means "not established" rather than "no days" —
+     * which `assessVisitableSupply` reads as "do not judge against a length".
+     */
+    tripDays: input.scope.nights > 0 ? input.scope.nights + 1 : 0,
+  });
+
   return {
     candidates,
+    supporting,
     foodRecords: food,
     licences: packLicences(input.pack),
+    portfolio: {
+      pools,
+      rejected: ledger.entries(),
+      inclusion: [...inclusionCounts.entries()]
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)),
+      membershipUnverified,
+      supply,
+    },
     diagnostics: {
       recordsConsidered: records.length,
       superseded: superseded.size,
       excludedByRole,
-      heldBackByCategoryCap: heldBack,
-      attractions: attractions.length,
-      support: support.length,
+      heldBackByCategoryCap: balanced.reduce((total, e) => total + e.diagnostics.heldBackByCategory, 0),
+      heldBackByAreaCap: balanced.reduce((total, e) => total + e.diagnostics.heldBackByAreaShare, 0),
+      /**
+       * Things to do. Never support, never gateways.
+       *
+       * The number that made board size look like supply once the two were
+       * summed: a region with eleven attractions and thirty practical stops
+       * reported forty-one, and everything downstream read that as how much
+       * there was to do.
+       */
+      attractions: visitable.length,
+      support: support.length + gateways.length,
       food: food.length,
+      byRole: [
+        ...balanced.map((entry) => ({ role: entry.role, kept: entry.kept.length })),
+        { role: 'support' as const, kept: support.length },
+        { role: 'gateway' as const, kept: gateways.length },
+        { role: 'food' as const, kept: food.length },
+      ].filter((entry) => entry.kept > 0),
+      byArea,
+      concentration: visitable.length === 0 ? 0 : densest / visitable.length,
+      areaCapRelaxed: balanced.some((entry) => entry.diagnostics.areaCapRelaxed),
       byLayer: [...keptByLayer.entries()]
         .map(([layerId, kept]) => ({ layerId, kept }))
         .sort((a, b) => a.layerId.localeCompare(b.layerId)),
     },
   };
+}
+
+/**
+ * Records matching a gateway the scope already names, first.
+ *
+ * Name matching rather than geometry, because that is the evidence available:
+ * the scope's gateways carry names and sometimes coordinates, and a record
+ * whose name contains one of them is the same transfer point. Everything else
+ * keeps its rank order, so this promotes rather than filters.
+ */
+function preferNamedGateways(
+  ranked: readonly SourceRecord[],
+  scope: GeographicScope,
+): SourceRecord[] {
+  const named = scope.gateways.map((gateway) => gateway.name.trim().toLowerCase()).filter(Boolean);
+  if (named.length === 0) return [...ranked];
+  const matches = (record: SourceRecord): boolean => {
+    const haystack = [record.name, ...record.alternateNames].map((value) => value.toLowerCase());
+    return named.some((name) => haystack.some((value) => value.includes(name)));
+  };
+  return [...ranked.filter(matches), ...ranked.filter((record) => !matches(record))];
+}
+
+function areaBreakdown(
+  kept: readonly SourceRecord[],
+  available: readonly SourceRecord[],
+): { areaId: string; kept: number; available: number }[] {
+  const totals = new Map<string, { kept: number; available: number }>();
+  for (const record of available) {
+    const entry = totals.get(areaOfRecord(record)) ?? { kept: 0, available: 0 };
+    entry.available += 1;
+    totals.set(areaOfRecord(record), entry);
+  }
+  for (const record of kept) {
+    const entry = totals.get(areaOfRecord(record)) ?? { kept: 0, available: 0 };
+    entry.kept += 1;
+    totals.set(areaOfRecord(record), entry);
+  }
+  return [...totals.entries()]
+    .map(([areaId, counts]) => ({ areaId, ...counts }))
+    .filter((entry) => entry.kept > 0)
+    .sort((a, b) => b.kept - a.kept || a.areaId.localeCompare(b.areaId));
+}
+
+function concentrationOf(records: readonly SourceRecord[]): number {
+  if (records.length === 0) return 0;
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    counts.set(areaOfRecord(record), (counts.get(areaOfRecord(record)) ?? 0) + 1);
+  }
+  return Math.max(...counts.values()) / records.length;
+}
+
+/**
+ * Round-robin across roles, preserving each role's internal order.
+ *
+ * The counterpart to `interleaveByCategory`, one level up. Without it a
+ * downstream truncation at forty would take forty attractions and no outdoors,
+ * because the roles were concatenated — which is the same defect this file
+ * fixes geographically, in the other dimension.
+ */
+function interleaveByRole(
+  roles: readonly PlanningRole[],
+  records: readonly SourceRecord[],
+  roleOf: (record: SourceRecord) => PlanningRole,
+): SourceRecord[] {
+  const buckets = roles.map((role) =>
+    interleaveByCategory(records.filter((record) => roleOf(record) === role)),
+  );
+  const ordered: SourceRecord[] = [];
+  for (let round = 0; ordered.length < records.length; round += 1) {
+    let progressed = false;
+    for (const bucket of buckets) {
+      const next = bucket[round];
+      if (!next) continue;
+      ordered.push(next);
+      progressed = true;
+    }
+    if (!progressed) break;
+  }
+  return ordered;
 }
 
 /**
@@ -290,11 +1054,16 @@ function crossLayerCorroboration(
 // Record → Place
 // ---------------------------------------------------------------------------
 
-function toCandidate(
-  record: SourceRecord,
-  scope: GeographicScope,
-  crossLayerCorroborated: boolean,
-): DiscoveredCandidate {
+function toCandidate(input: {
+  record: SourceRecord;
+  scope: GeographicScope;
+  crossLayerCorroborated: boolean;
+  /** The role admission settled on. Stamped onto the place, never re-derived. */
+  role: PlanningRole;
+  /** Why this record is here at all. Required, so an external one must justify itself. */
+  inclusion: InclusionReason;
+}): DiscoveredCandidate {
+  const { record, scope, crossLayerCorroborated, role, inclusion } = input;
   const taxonomy = classifySourceCategory({
     category: record.sourceCategory,
     path: record.sourceCategoryPath,
@@ -330,10 +1099,30 @@ function toCandidate(
      */
     tags: [
       `${record.layerId}=${record.sourceCategory}`,
+      /*
+       * The two facts a card cannot reconstruct and must not assume.
+       *
+       * A `Place` records what kind of thing something is; it has never
+       * recorded what part it plays in a trip, and an airport and a market town
+       * are both `town_and_food`. So the role travels with the place, written
+       * once here and read wherever a card is built — and with it, the reason
+       * this record is inside the traveller's destination at all.
+       */
+      placeRoleTag(role),
+      placeInclusionTag(inclusion),
       ...Object.keys(record.attributes).map((key) => `attr:${key}`),
       ...(record.websiteCandidates.length > 0 ? ['attr:website'] : []),
       ...(record.wikidataId ? ['attr:wikidata'] : []),
     ],
+    /*
+     * Carried through rather than left on the source record.
+     *
+     * The backbone already linked this place to an open identifier — that is
+     * what `attr:wikidata` above is counting — and dropping the identifier while
+     * keeping a tag saying it existed meant imagery had to fall back to
+     * searching a name it already had a key for.
+     */
+    ...(record.wikidataId ? { wikidataId: record.wikidataId } : {}),
     source: {
       name: sourceNameOf(record),
       kind: 'osm',

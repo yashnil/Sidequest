@@ -62,6 +62,19 @@ export const destinationCandidateSchema = z.object({
   bounds: geoBoundsSchema.optional(),
   countryCode: z.string().length(2).optional(),
   countryName: z.string().min(1).optional(),
+  /**
+   * ISO 3166-2 for the first-level division this sits in, where a source
+   * published one.
+   *
+   * Typed and separate from `administrativeAreas` deliberately. That array is a
+   * flat list of names whose *levels* the two producers order differently — one
+   * emits coarse-to-fine, the other fine-to-coarse and flattens country, state,
+   * county and city into it — so it can corroborate and must never refuse. A
+   * code can refuse, and this is where a code lives.
+   */
+  regionCode: z.string().min(1).optional(),
+  /** Other published spellings of this same entity, in any script. */
+  aliases: z.array(z.string().min(1)).default([]),
   /** Coarse-to-fine: ["Indonesia", "Bali"]. Used to detect hierarchy agreement. */
   administrativeAreas: z.array(z.string().min(1)).default([]),
   /**

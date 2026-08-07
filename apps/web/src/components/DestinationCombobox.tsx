@@ -89,6 +89,8 @@ export function DestinationCombobox({
   const abort = useRef<AbortController | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapper = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const adopted = useRef(false);
 
   const search = useCallback(async (query: string) => {
     abort.current?.abort();
@@ -140,6 +142,34 @@ export function DestinationCombobox({
    * in the change handler where the edit happens. Doing them in an effect meant
    * a render, then a synchronous second render, on every keystroke.
    */
+  /**
+   * ADOPT ANYTHING TYPED BEFORE THE PAGE WAS INTERACTIVE.
+   *
+   * This input is server-rendered and controlled, so between first paint and
+   * hydration it is a plain text box accepting keystrokes that nothing is
+   * listening to. React does **not** read a pre-existing DOM value when it
+   * hydrates a controlled input — so without this, the component's state stays
+   * empty while the box visibly holds what somebody typed, and the composer's
+   * next section, which is gated on that state, never appears.
+   *
+   * The failure is silent and unrecoverable: no error, no retry, just a form
+   * that will not open on a page whose first field plainly contains the
+   * destination. It was found in the browser suite, where a slow start made it
+   * reproducible; a traveller on a slow connection who types quickly hits
+   * exactly the same thing.
+   *
+   * Latched, so an inline-arrow `onTextChange` changing identity on every render
+   * cannot make this run twice.
+   */
+  useEffect(() => {
+    if (adopted.current) return;
+    adopted.current = true;
+    const typed = input.current?.value ?? '';
+    if (typed.length === 0) return;
+    setText(typed);
+    onTextChange?.(typed);
+  }, [onTextChange]);
+
   useEffect(() => {
     const query = text.trim();
     if (query.length < MIN_CHARS) return;
@@ -222,6 +252,7 @@ export function DestinationCombobox({
 
       <div className="relative mt-2">
         <input
+          ref={input}
           id={inputId}
           role="combobox"
           aria-expanded={open}

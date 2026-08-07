@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isoDateSchema, isoTimeSchema } from './common';
 import { selectedDestinationSchema } from './destination-index';
 import { travelerNeedSchema, tripModeSchema } from './trip';
+import { interpretationSetSchema } from './interpretation';
 
 /**
  * WHAT THE TRAVELLER HAS TOLD US, BEFORE ANYTHING EXPENSIVE HAPPENS.
@@ -277,6 +278,18 @@ export const tripComposerAnswersSchema = z.object({
    */
   mustDo: z.string().max(600).optional(),
   avoid: z.string().max(600).optional(),
+
+  /**
+   * What we made of that text, and whether they accepted it.
+   *
+   * Added at `schemaVersion: 1` as an optional field, deliberately, rather than
+   * bumping the literal. `getIntent` parses this object *leniently* — a shape it
+   * cannot read becomes `null` and the trip reads as pre-composer — so a version
+   * bump would silently discard every stored composer answer in the database.
+   * An optional field costs nothing and an absent one reads correctly as
+   * "nobody has interpreted this yet".
+   */
+  interpretation: interpretationSetSchema.optional(),
 
   /** Which questions have been shown and dismissed, so they are not re-asked. */
   skipped: z.array(z.string().min(1)).default([]),

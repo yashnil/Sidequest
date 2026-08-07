@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { transportModeSchema } from './access';
 import { coordinatesSchema } from './common';
+import { TRIP_SCOPE_CONTRACT_VERSION } from './containment';
 import {
   confidenceAssessmentSchema,
   destinationEntityTypeSchema,
@@ -84,6 +85,78 @@ export const geographicScopeSchema = z.object({
   breadth: scopeBreadthSchema,
   center: coordinatesSchema,
   bounds: geoBoundsSchema.optional(),
+  /**
+   * WHETHER `shape` IS A BORDER OR A CIRCLE DRAWN AROUND A POINT.
+   *
+   * Measured, and load-bearing. Every city, town, county and district in the
+   * destination index publishes a centre and **no polygon** — 12,080 of 12,080
+   * cities, 53,542 of 53,542 towns — so `deriveShape` falls through to a radius
+   * for very nearly every trip anybody takes.
+   *
+   * A layer that reads that circle as a border admits whatever the circle
+   * happened to cover. That is exactly what happened to a five-night New York
+   * trip: a 168 km reach circle, a partition drawn around it, and a Pennsylvania
+   * county 166 km away accepted as New York. Saying which of the two this is
+   * lets a consumer refuse to use it as a boundary.
+   *
+   * Defaulted, so a stored scope written before this existed still parses — as
+   * `reach_circle`, which is the truthful reading of a scope whose provenance we
+   * cannot establish.
+   */
+  boundaryEvidence: z
+    .enum(['published_boundary', 'measured_extent', 'reach_circle'])
+    .default('reach_circle'),
+  /**
+   * The destination's own published extent, **unclipped**.
+   *
+   * `deriveShape` intersects a published boundary with the trip's reach, which
+   * is the right call for deciding what to compile and the wrong one for
+   * deciding what belongs: the clipped box is smaller than the boundary, so it
+   * can confirm membership and can never refute it. Kept alongside the clipped
+   * shape rather than instead of it.
+   */
+  administrativeBoundary: geoBoundsSchema.optional(),
+  /**
+   * What the destination *is*, administratively.
+   *
+   * Straight off the index entry, which has held it all along. Containment's
+   * strongest usable rung compares a record's own country and region against the
+   * destination's; without this it has to resolve the destination by looking its
+   * centre back up in a divisions layer — a round trip for a fact we already
+   * had, and one unavailable to any caller without that layer.
+   */
+  administrative: z
+    .object({
+      countryCode: z.string().length(2).optional(),
+      /** ISO 3166-2. A code, and the only region value that compares reliably. */
+      regionCode: z.string().min(1).optional(),
+      regionName: z.string().min(1).optional(),
+      localityName: z.string().min(1).optional(),
+      /** Other spellings of *this entity*. Compared only at its own level. */
+      aliases: z.array(z.string().min(1)).default([]),
+      /**
+       * The published hierarchy, flat and unlevelled.
+       *
+       * Kept, and deliberately never poured into a level: the two producers
+       * order it differently and one of them flattens country, state, county and
+       * city into it, so a country's name would land in the region accept-set.
+       * It corroborates; it cannot refuse. See `schemas/geographic-evidence.ts`.
+       */
+      hierarchy: z.array(z.string().min(1)).default([]),
+      divisionIds: z.array(z.string().min(1)).default([]),
+    })
+    .default({ hierarchy: [], divisionIds: [], aliases: [] }),
+  /**
+   * How far the trip can actually reach, kept as its own number.
+   *
+   * Deriving it back out of `shape` gives the wrong answer for a bounds-shaped
+   * scope, because that shape has already been clipped *to* reach — so the
+   * derived figure is the smaller of boundary and reach, and a legitimate
+   * gateway just beyond the boundary falls outside it. Reach bounds spending and
+   * gateway candidacy; membership is a different question with a different
+   * number.
+   */
+  reachRadiusKm: z.number().positive().optional(),
   countryCode: z.string().length(2).optional(),
   /**
    * Plural, and never collapsed to one. A scope spanning a zone boundary is
@@ -142,6 +215,23 @@ export function scopeFingerprint(scope: GeographicScope): string {
     scope.destinationCandidateId,
     scope.breadth,
     shape,
+    /*
+     * A scope that changed from a circle to a boundary compiles differently, so
+     * it must not reuse the circle's artifact. Without this, gaining real
+     * geometry for a destination would silently serve the old, wider result.
+     */
+    `edge:${scope.boundaryEvidence}`,
+    /*
+     * The containment contract this artifact was decided under.
+     *
+     * A scoped artifact is a set of *verdicts*, and a verdict means whatever the
+     * contract that produced it meant. Without this segment, changing what
+     * `membership_unknown` is allowed to do would leave every stored artifact
+     * claiming the new meaning while carrying the old one — which is exactly how
+     * a contaminated compiled region kept rendering after the pack that produced
+     * it had been invalidated three ways over.
+     */
+    `contract:${TRIP_SCOPE_CONTRACT_VERSION}`,
     `in:${[...scope.includedAreas.map((area) => area.id)].sort().join(',')}`,
     `ex:${[...scope.excludedAreas.map((area) => area.id)].sort().join(',')}`,
     `mode:${scope.transport.primaryMode}`,

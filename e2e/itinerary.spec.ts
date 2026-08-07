@@ -145,12 +145,12 @@ test('the build button refuses to run with nothing included', async ({ page }) =
   let guard = 0;
   while (remaining > 0 && guard < 30) {
     await included.first().click();
-    await expect(page.getByText(/^\d+ in/)).toBeVisible();
+    await expect(page.getByTestId('board-summary')).toBeVisible();
     remaining = await page.getByRole('button', { name: 'Include', pressed: true }).count();
     guard += 1;
   }
 
-  await expect(page.getByText(/^0 in/)).toBeVisible();
+  await expect(page.getByTestId('board-summary')).toContainText(/^0 in/);
   await expect(page.getByRole('button', { name: /Build my trip/ })).toBeDisabled();
   await expect(page.getByText('Include at least one place first')).toBeVisible();
 });

@@ -13,10 +13,12 @@ import {
   TRIP_SHAPES,
   TRIP_THEMES,
   qualifiedNameFor,
+  seasonMonths,
   tripBasicsSchema,
   type SelectedDestination,
   type TripComposerAnswers,
 } from '@sidequest/core';
+import { classifyPreferences } from '@sidequest/core';
 import { resolveRegion } from '@sidequest/core/data';
 import { createTrip } from '@/lib/db/repository';
 import {
@@ -24,7 +26,7 @@ import {
   saveDestinationQuery,
   saveSelectedDestination,
 } from '@/lib/db/compiler-repository';
-import { destinationEntryById } from '@/lib/db/destination-index-repository';
+import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
 
 /**
@@ -117,7 +119,16 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
         entryId: entry.id,
         catalog: entry.catalog,
         sourceId: entry.sourceId,
-        releaseId: 'pinned',
+        /*
+         * The release the row was actually read from.
+         *
+         * This was the literal `'pinned'`, which is a provenance claim we cannot
+         * support: it says an identity came from a specific catalogue release
+         * without naming one, so two trips created a release apart were
+         * indistinguishable. `'unknown'` when the index has no release row is the
+         * honest fallback — an index nobody built has no release to name.
+         */
+        releaseId: destinationIndexRelease()?.releaseId ?? 'unknown',
         displayName: entry.displayName,
         ...(entry.localName ? { localName: entry.localName } : {}),
         qualifiedName: qualifiedNameFor(entry),
@@ -125,6 +136,8 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
         center: entry.center,
         ...(entry.bounds ? { bounds: entry.bounds } : {}),
         ...(entry.countryCode ? { countryCode: entry.countryCode } : {}),
+        ...(entry.regionCode ? { regionCode: entry.regionCode } : {}),
+        aliases: [...entry.aliases],
         hierarchy: entry.hierarchy,
         selectedAt: now.toISOString(),
       };
@@ -132,7 +145,7 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
   }
 
   const nights = resolveNights(input);
-  const { startDate, endDate } = materialiseDates(input, nights, now);
+  const { startDate, endDate } = materialiseDates(input, nights, now, destination?.center.lat ?? null);
 
   const answers: TripComposerAnswers = {
     schemaVersion: TRIP_COMPOSER_VERSION,
@@ -172,6 +185,39 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
     ...(input.freeTime ? { freeTime: input.freeTime } : {}),
     ...(input.mustDo ? { mustDo: input.mustDo } : {}),
     ...(input.avoid ? { avoid: input.avoid } : {}),
+    /*
+     * What we made of that text, proposed and unconfirmed.
+     *
+     * Classified here rather than later because it is free, deterministic and
+     * offline — a table lookup over the traveller's own words, with no model and
+     * no network. `confirmedAt` is deliberately absent, so it changes nothing
+     * anywhere until somebody accepts it on the next screen.
+     *
+     * **The deterministic pass runs here and the bounded model fallback does
+     * not.** Creating a trip must stay free and instant, and the ordering the
+     * fallback depends on — parse first, then the leftovers only — is only
+     * possible because this runs to completion before anything else looks at the
+     * text. The one reading of whatever the table could not resolve is offered
+     * on the next screen, as a button somebody presses; see
+     * `readUnresolvedTextAction`. A trip created here has `modelPass` absent,
+     * which is exactly "nobody has asked".
+     *
+     * **The avoid box supplies a direction, not a refusal.** Somebody typing
+     * "early starts" under "anything you would rather not do" gets a `dislike`,
+     * which lowers what the board offers; only an explicit marker in their own
+     * characters — "no early starts" — reaches `hard_avoid`, which removes a
+     * category outright. The parser used to synthesise the word "no" onto every
+     * clause from this box and then read it back as an explicit refusal, so this
+     * one field turned every entry into a hard blocker.
+     */
+    ...(input.mustDo || input.avoid
+      ? {
+          interpretation: classifyPreferences({
+            ...(input.mustDo ? { mustDo: input.mustDo } : {}),
+            ...(input.avoid ? { avoid: input.avoid } : {}),
+          }),
+        }
+      : {}),
     skipped: [],
     updatedAt: now.toISOString(),
   };
@@ -251,6 +297,16 @@ function materialiseDates(
   input: z.infer<typeof inputSchema>,
   nights: number,
   now: Date,
+  /**
+   * The resolved destination's latitude, where one is known.
+   *
+   * A season is not a month until you know which half of the planet it is in.
+   * Without this the table below sent every "summer" trip to July — which is
+   * deep winter for a southern-hemisphere destination, so the board then
+   * reported half the region shut on the traveller's dates as though that were a
+   * property of the place rather than of our arithmetic.
+   */
+  latitude: number | null,
 ): { startDate: string; endDate: string } {
   if ((input.dateMode === 'exact' || input.dateMode === 'flexible') && input.startDate && input.endDate) {
     return { startDate: input.startDate, endDate: input.endDate };
@@ -261,7 +317,7 @@ function materialiseDates(
     input.dateMode === 'month'
       ? input.month
       : input.dateMode === 'season'
-        ? SEASON_MIDPOINT[input.season]
+        ? seasonMidpoint(input.season, latitude)
         : now.getUTCMonth() + 2;
 
   // Next year when the month has already gone: a trip cannot start in the past.
@@ -276,13 +332,41 @@ function materialiseDates(
   };
 }
 
-/** Northern-hemisphere midpoints; the climate layer is what actually reasons about seasons. */
-const SEASON_MIDPOINT: Record<'spring' | 'summer' | 'autumn' | 'winter', number> = {
+/**
+ * THE MIDDLE MONTH OF A SEASON, WHERE THAT SEASON ACTUALLY HAPPENS.
+ *
+ * `seasonMonths` in core is the one place that knows a season is a function of
+ * latitude: it flips the northern months for a southern destination and returns
+ * all twelve near the equator, where the word does not pick out a period at all.
+ * This reads the middle of what it returns.
+ *
+ * With no destination resolved yet — a typed query the geocoder has not answered
+ * — there is no hemisphere to reason with, and the northern reading is the
+ * assumption of last resort rather than a fact. Nothing downstream is stuck with
+ * it: the dates are editable and the preflight re-reads them.
+ */
+const NORTHERN_MIDPOINT: Record<'spring' | 'summer' | 'autumn' | 'winter', number> = {
   spring: 4,
   summer: 7,
   autumn: 10,
   winter: 1,
 };
+
+function seasonMidpoint(
+  season: 'spring' | 'summer' | 'autumn' | 'winter',
+  latitude: number | null,
+): number {
+  if (latitude === null) return NORTHERN_MIDPOINT[season];
+  const months = seasonMonths(season, latitude);
+  /*
+   * Twelve months back means the tropics, where "summer" does not name a period
+   * anybody plans around. Falling back to the northern midpoint there would be
+   * inventing a season; the middle of the year is an arbitrary choice openly
+   * made rather than a claim about the climate.
+   */
+  if (months.length === 0 || months.length === 12) return NORTHERN_MIDPOINT[season];
+  return months[Math.floor(months.length / 2)] ?? NORTHERN_MIDPOINT[season];
+}
 
 function planningTime(
   precision: (typeof ARRIVAL_PRECISIONS)[number],

@@ -243,7 +243,78 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
     cellId,
   });
 
+  /**
+   * THE DIVISIONS LAYER, WHICH THIS FIXTURE USED NOT TO HAVE.
+   *
+   * A real pack always carries one, and the containment layer is built on it:
+   * the divisions publish a name, a bounding box and a parent chain, and both
+   * the destination's own identity and every candidate's locality are resolved
+   * through them. A fixture pack without one modelled a population that does not
+   * exist, and every record in it came out `membership_unknown` — which is the
+   * honest verdict for a pack with no administrative geography and a wholly
+   * misleading one for a test suite standing in for real ground.
+   *
+   * Two divisions, which is the minimum a real chain has: the country, and the
+   * locality the world is. The locality's box is sized to contain every record
+   * *and* the scope's centre, because a fixture whose scope centre falls outside
+   * its own locality would be testing a coverage gap rather than a world.
+   */
+  const spread = [...primary, ...supplemental].map((record) => record.coordinates);
+  const localityBounds = boundsAround([...spread, scope.center, spec.center]);
+  const divisions: SourceRecord[] = [
+    {
+      id: `divisions:${spec.id}-country`,
+      layerId: 'divisions',
+      sourceId: `${spec.id}-country`,
+      name: `${spec.name} Country`,
+      alternateNames: [],
+      coordinates: spec.center,
+      bounds: grow(localityBounds, 20),
+      sourceCategory: 'country',
+      sourceCategoryPath: [],
+      planningRole: 'administrative',
+      websiteCandidates: [],
+      containment: { countryCode: spec.countryCode, divisionIds: [`div-${spec.id}-country`] },
+      attributes: { subtype: 'country' },
+      sources: [{ dataset: 'synthetic-divisions', licenceId: 'CDLA-Permissive-2.0' }],
+      cellId,
+    },
+    {
+      id: `divisions:${spec.id}`,
+      layerId: 'divisions',
+      sourceId: spec.id,
+      name: spec.name,
+      alternateNames: [],
+      coordinates: spec.center,
+      bounds: grow(localityBounds, 0.25),
+      sourceCategory: 'locality',
+      sourceCategoryPath: [],
+      planningRole: 'administrative',
+      websiteCandidates: [],
+      containment: {
+        countryCode: spec.countryCode,
+        regionName: `${spec.countryCode}-1`,
+        localityName: spec.name,
+        divisionIds: [`div-${spec.id}-country`, `div-${spec.id}`],
+      },
+      attributes: { subtype: 'locality' },
+      sources: [{ dataset: 'synthetic-divisions', licenceId: 'CDLA-Permissive-2.0' }],
+      cellId,
+    },
+  ];
+
   const layers: PackLayer[] = [
+    {
+      id: 'divisions',
+      kind: 'administrative_divisions',
+      catalog: 'synthetic',
+      datasetPath: 'divisions/division',
+      licenceId: 'CDLA-Permissive-2.0',
+      records: divisions,
+      featuresRead: divisions.length,
+      featuresRetained: divisions.length,
+      failedCellIds: [],
+    },
     {
       id: 'places',
       kind: 'primary_places',
@@ -289,12 +360,40 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
       durationMs: 1_000,
       budgetsExhausted: [],
       layerTimings: [
+        { layerId: 'divisions', ms: 120 },
         { layerId: 'places', ms: 600 },
         { layerId: 'land', ms: 400 },
       ],
     },
     now: new Date('2026-07-31T00:00:00.000Z'),
   });
+}
+
+/** The smallest box containing every point. */
+function boundsAround(points: readonly { lat: number; lng: number }[]) {
+  const lats = points.map((point) => point.lat);
+  const lngs = points.map((point) => point.lng);
+  return {
+    southWest: { lat: Math.min(...lats), lng: Math.min(...lngs) },
+    northEast: { lat: Math.max(...lats), lng: Math.max(...lngs) },
+  };
+}
+
+/** The same box with a margin in degrees, so a point on the edge is inside. */
+function grow(
+  bounds: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } },
+  degrees: number,
+) {
+  return {
+    southWest: {
+      lat: Math.max(-90, bounds.southWest.lat - degrees),
+      lng: Math.max(-180, bounds.southWest.lng - degrees),
+    },
+    northEast: {
+      lat: Math.min(90, bounds.northEast.lat + degrees),
+      lng: Math.min(180, bounds.northEast.lng + degrees),
+    },
+  };
 }
 
 function titleCase(value: string): string {

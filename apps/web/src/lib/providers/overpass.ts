@@ -67,9 +67,8 @@ export function overpassEndpoint(): string {
   return overpassEndpoints()[0] ?? DEFAULT_ENDPOINTS[0]!;
 }
 
-export function isPoiProviderEnabled(): boolean {
-  return process.env.SIDEQUEST_POI_PROVIDER?.trim().toLowerCase() === 'overpass';
-}
+/** Re-exported from the import-free switch module. See `providers/switches.ts`. */
+export { isPoiProviderEnabled } from './switches';
 
 let gate: Promise<void> = Promise.resolve();
 

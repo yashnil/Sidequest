@@ -11,22 +11,30 @@
 export * from './schemas/common';
 export * from './schemas/provenance';
 export * from './schemas/geography';
+export * from './schemas/geographic-evidence';
+export * from './schemas/containment';
 export * from './schemas/licence';
 export * from './schemas/intent';
 export * from './schemas/resolution';
 export * from './schemas/destination-index';
 export * from './schemas/composer';
+export * from './schemas/interpretation';
 export * from './schemas/clarification';
 export * from './schemas/scope';
 export * from './schemas/region-pack';
+export * from './schemas/portfolio';
 export * from './schemas/source-fact';
 export * from './schemas/evidence';
 export * from './schemas/evidence-store';
 export * from './schemas/compiled-region';
 export * from './schemas/compilation';
+export * from './schemas/stages';
 export * from './schemas/progress';
+export * from './schemas/timing';
+export * from './schemas/imagery';
 export * from './schemas/supply';
 export * from './schemas/preflight';
+export * from './schemas/shortlist';
 // `schemas/calendar` is deliberately not re-exported here: `schemas/access`
 // already forwards every name in it, and two `export *` sources for one name
 // make it ambiguous and therefore invisible to consumers.
@@ -39,10 +47,19 @@ export * from './schemas/region';
 export * from './schemas/trip';
 export * from './schemas/profile';
 export * from './schemas/discovery';
+export * from './schemas/provisional';
+export * from './schemas/reconciliation';
 export * from './schemas/itinerary';
 export * from './schemas/planner-readiness';
 export * from './schemas/weather';
 export * from './schemas/climate';
+
+export * from './intent/phrases';
+export * from './intent/classify';
+export * from './intent/fallback';
+export * from './intent/apply';
+
+export * from './imagery/gate';
 
 export * from './questionnaire/definition';
 export * from './questionnaire/transform';
@@ -65,6 +82,7 @@ export * from './weather/board';
 export * from './weather/board-backups';
 export * from './weather/conditions';
 export * from './weather/provider';
+export * from './weather/snapshot';
 export * from './weather/solar';
 
 export * from './region/season';
@@ -80,6 +98,8 @@ export * from './evidence/freshness';
 export * from './dates/windows';
 export * from './dates/duration';
 export * from './scope/portfolio';
+export * from './recommend/rank';
+export * from './recommend/shortlist';
 export * from './routing/plan';
 export * from './routing/portfolio';
 
@@ -95,6 +115,7 @@ export * from './scoring/fit';
 
 export * from './discovery/board';
 export * from './discovery/autoselect';
+export * from './discovery/reconcile';
 
 export * from './profile/personality';
 

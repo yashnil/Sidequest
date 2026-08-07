@@ -44,21 +44,34 @@ export default function HomePage() {
         <section>
           <p className="eyebrow">Plan anywhere</p>
           <h1 className="mt-4 font-display text-4xl leading-[1.08] text-ink sm:text-5xl lg:text-6xl">
-            You name a place. We work out the trip around it.
+            You name a place — or tell us when you are free.
           </h1>
           <p className="measure mt-6 text-lg leading-relaxed text-ink-muted">
             Answer one set of questions and Sidequest works out what is actually worth your time —
             the famous stops, the quiet ones an hour off the road, what is shut on your dates, and
             what to skip. Ranked by how you travel, not by how many people have reviewed it.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-4">
+          {/*
+            Two doors, side by side.
+
+            The second one has existed in the schema since Phase 7 and had no
+            code path behind it, so a traveller with two free weeks and no idea
+            had nowhere to start and nothing on screen said so. Presenting them
+            as equals is the honest description of the product now that both
+            work — and the copy names what each one needs from you, so nobody
+            picks the wrong one and finds out three screens later.
+          */}
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link href="/trips/new" className={buttonClass('primary')}>
-              Start a trip
+              I know where I am going
             </Link>
-            <span className="text-sm text-ink-faint">
-              Three minutes of questions. No account needed.
-            </span>
+            <Link href="/decide" className={buttonClass('secondary')}>
+              Help me decide
+            </Link>
           </div>
+          <p className="mt-3 text-sm text-ink-faint">
+            No account needed. Nothing is researched until you have seen what we made of it.
+          </p>
         </section>
 
         <section aria-labelledby="how-heading" className="lg:pt-14">

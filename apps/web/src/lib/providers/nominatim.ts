@@ -47,9 +47,12 @@ export function geocoderEndpoint(): string {
   return (process.env.SIDEQUEST_GEOCODER_URL?.trim() || DEFAULT_ENDPOINT).replace(/\/+$/, '');
 }
 
-export function isGeocoderEnabled(): boolean {
-  return process.env.SIDEQUEST_GEOCODER_PROVIDER?.trim().toLowerCase() === 'nominatim';
-}
+/**
+ * Re-exported rather than defined, so a caller that only wants to know whether
+ * the geocoder is switched on does not pull this client — and its rate limiter,
+ * its fetch and its parser — into its import graph. See `providers/switches.ts`.
+ */
+export { isGeocoderEnabled } from './switches';
 
 /**
  * One request per second, enforced by a promise chain rather than by a timer.

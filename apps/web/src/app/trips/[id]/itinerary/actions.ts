@@ -11,7 +11,8 @@ import {
   saveItinerary,
   saveReadiness,
 } from '@/lib/db/repository';
-import { boardFor, resolveTripRegion } from '@/lib/region';
+import { boardFor, resolveTripRegion, withRefreshedWeather } from '@/lib/region';
+import { ensureWeatherForPlanning } from '@/lib/weather/refresh';
 
 import type { PlannerReadiness } from '@sidequest/core';
 
@@ -45,9 +46,45 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
     return { ok: false, error: 'Finish the questionnaire first — we need your profile to plan around.' };
   }
 
+  /*
+   * The forecast, bought here, because building a plan is an explicit act.
+   *
+   * Taking the fetch off the *render* path was the point of the change that
+   * preceded this; letting *planning* inherit that absence would have been a
+   * quiet and expensive regression. The planner reads weather to place outdoor
+   * days, to hold back a daylight-only site and to choose a backup, so a
+   * traveller who pressed "build my trip" without first noticing a fetch button
+   * would have received a weather-blind itinerary with nothing on screen saying
+   * which of the two had happened.
+   *
+   * Before `resolveTripRegion`, so that the region it resolves reads the
+   * snapshot this just wrote. A failure is not fatal — the plan is built
+   * weather-blind and every surface says so, which is exactly what a provider
+   * outage already produced.
+   */
   const resolved = await resolveTripRegion(trip);
   if (!resolved.ok) return { ok: false, error: resolved.error };
-  const { context } = resolved;
+
+  await ensureWeatherForPlanning(
+    {
+      tripId,
+      compiled: resolved.context.compiled,
+      dates: resolved.context.dates,
+      scopeKey: resolved.context.weatherScopeKey,
+    },
+    new Date(),
+  );
+
+  /*
+   * One resolution, then one re-read of the row the fetch above wrote.
+   *
+   * This used to be two full calls to `resolveTripRegion` — the second only to
+   * pick up a weather snapshot that the first could not have seen. Everything
+   * else a resolved context holds comes off a frozen artifact and cannot have
+   * moved in between, so re-reading all of it was a whole second pass over the
+   * compiled region on the click that builds a plan.
+   */
+  const context = withRefreshedWeather(tripId, resolved.context);
 
   const selections = getSelections(tripId);
   if (selections.filter((entry) => entry.status !== 'excluded').length === 0) {

@@ -64,9 +64,8 @@ export function catalogUrl(): string {
   return configured;
 }
 
-export function isPlaceBackboneEnabled(): boolean {
-  return process.env.SIDEQUEST_PLACE_BACKBONE?.trim().toLowerCase() === 'overture';
-}
+/** Re-exported from the import-free switch module. See `providers/switches.ts`. */
+export { isPlaceBackboneEnabled } from '../switches';
 
 /**
  * A release the operator has pinned by hand.

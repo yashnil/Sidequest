@@ -189,6 +189,18 @@ export const selectedDestinationSchema = z.object({
   center: coordinatesSchema,
   bounds: geoBoundsSchema.optional(),
   countryCode: z.string().length(2).optional(),
+  /**
+   * ISO 3166-2, where the catalogue published one.
+   *
+   * The index has carried this all along and the scope layer discarded it. That
+   * single omission is most of CS-11: it is the one value on both sides of a
+   * region comparison that is a **code** rather than a label, so it is the only
+   * one that compares reliably across scripts, translations and two producers
+   * that disagree about which name to publish.
+   */
+  regionCode: z.string().min(1).optional(),
+  /** Other published spellings of this same entity. Never of its parents. */
+  aliases: z.array(z.string().min(1)).default([]),
   hierarchy: z.array(z.string().min(1)).default([]),
   selectedAt: z.string().min(1),
 });

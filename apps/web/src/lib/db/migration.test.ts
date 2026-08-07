@@ -558,8 +558,21 @@ describe('a pre-Phase-10 database survives the upgrade', () => {
     migrate(path);
     const db = new Database(path);
     db.pragma('foreign_keys = ON');
+    /*
+     * Columns named rather than positional.
+     *
+     * `INSERT INTO t VALUES (...)` binds by ordinal, so adding a column to the
+     * table breaks this test for a reason that has nothing to do with what it
+     * asserts — which is the duplicate-compilation guard. A migration test that
+     * fails whenever the schema grows is a test that gets edited rather than
+     * read.
+     */
     const insert = db.prepare(
-      `INSERT INTO compilation_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO compilation_jobs
+         (id, trip_id, scope_fingerprint, state, stage, stages_json,
+          started_at, updated_at, finished_at, heartbeat_at, cancel_requested,
+          error_code, error_detail, compiled_region_id, correlation_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
     const args = (id: string) =>
       [
