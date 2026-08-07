@@ -670,6 +670,354 @@ CREATE TABLE IF NOT EXISTS destination_index_release (
   id           INTEGER PRIMARY KEY CHECK (id = 1),
   payload_json TEXT NOT NULL
 );
+
+-- ===========================================================================
+-- DECIDING WHERE TO GO
+-- ===========================================================================
+--
+-- A traveller who has dates and preferences and no destination has nothing to
+-- attach their answers to: the trips table requires a destination_input, and inventing
+-- a placeholder one would put a fake destination on the dashboard and in every
+-- listing until they picked a real one.
+--
+-- So a decision is its own row, before a trip exists. It holds the same
+-- TripComposerAnswers the known-destination path uses — one preference
+-- vocabulary, not two — and the shortlist those answers produced. Choosing a
+-- destination creates a normal trip from these answers and marks the session
+-- resolved; nothing about the trip that results is different from one typed in
+-- directly, which is the point.
+--
+-- Traveller-scoped by nature, and deliberately not in the evidence store: what
+-- somebody is deciding between is the most traveller-specific thing this
+-- product holds.
+CREATE TABLE IF NOT EXISTS decision_sessions (
+  id             TEXT PRIMARY KEY,
+  schema_version INTEGER NOT NULL,
+  answers_json   TEXT NOT NULL,
+  -- Null until a shortlist has been built. Its own column rather than a flag on
+  -- the answers, because "they have answered" and "we have ranked" are separate
+  -- states and the screen renders differently for each.
+  shortlist_json TEXT,
+  -- The trip this became, once they chose. Set once, never cleared: it is what
+  -- makes "why was I shown this" answerable after the fact.
+  resolved_trip_id TEXT,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_decision_sessions_updated ON decision_sessions(updated_at);
+
+-- ===========================================================================
+-- THE PROVISIONAL BOARD
+-- ===========================================================================
+--
+-- A board projected at the one boundary where the pipeline holds real candidates
+-- and has not yet bought anything: after food discovery, before the research
+-- funnel. It exists so a traveller sees something real in seconds rather than
+-- after every model call has been made.
+--
+-- Its own table, and never compiled_regions. A provisional board has no measured
+-- travel time, no verified claim, no access dataset and no hours dataset — so it
+-- cannot satisfy PlannerInput, and putting it anywhere the region resolver looks
+-- would be inviting exactly the confusion the separate type exists to prevent.
+--
+-- Immutable, like compiled_regions and for the same reason: a board already
+-- shown to somebody must stay readable after a rebuild replaces it, or "why did
+-- that place disappear" has no answer. A rebuild inserts a new row with a higher
+-- version and names the one it supersedes.
+CREATE TABLE IF NOT EXISTS provisional_boards (
+  id                 TEXT PRIMARY KEY,
+  trip_id            TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  job_id             TEXT NOT NULL,
+  scope_fingerprint  TEXT NOT NULL,
+  schema_version     INTEGER NOT NULL,
+  version            INTEGER NOT NULL,
+  supersedes_board_id TEXT,
+  payload_json       TEXT NOT NULL,
+  created_at         TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_provisional_boards_trip
+  ON provisional_boards(trip_id, version);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provisional_boards_job
+  ON provisional_boards(job_id);
+
+-- What the traveller said about a provisional card.
+--
+-- Deliberately not discovery_selections. That table's status enum is read by the
+-- planner, its three values answer a different question ("do you want this?"
+-- versus "is this worth us finding out about?"), and a provisional pick is not a
+-- selection — it is a research priority signal that still has to survive
+-- evidence, access and routing.
+--
+-- Keyed on the trip rather than the board, so revising the board does not lose
+-- what somebody already said about a place that is still on it.
+-- The columns added later — board_id, board_version, action_version,
+-- reconciliation_state, reconciled_region_id, reconciled_at — are in
+-- COLUMN_MIGRATIONS rather than here, because a database written before them
+-- exists and CREATE TABLE IF NOT EXISTS would leave it short.
+CREATE TABLE IF NOT EXISTS provisional_selections (
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  place_id   TEXT NOT NULL,
+  intent     TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (trip_id, place_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_provisional_selections_trip
+  ON provisional_selections(trip_id);
+
+-- EVERY MARK ANYBODY EVER MADE, IN THE ORDER THEY MADE IT.
+--
+-- "provisional_selections" holds the *current* answer to "what do you think of
+-- this place". That is what a board renders, and it is not enough to answer the
+-- question a reconciliation panel actually gets asked a week later: I changed my
+-- mind twice and then the board was rebuilt — which of those did you act on?
+--
+-- So the current answer stays where it is and every transition is appended here,
+-- with the identity of the board it was made against. Append-only: a row is
+-- never rewritten except to record that it was reconciled, which is why
+-- reconciliation is idempotent rather than merely re-runnable.
+--
+-- The unique key is (trip, place, action_version). A retry that replays the same
+-- action version is a no-op at the database rather than a second row, which is
+-- what makes duplicate delivery safe without a distributed lock.
+CREATE TABLE IF NOT EXISTS provisional_actions (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id              TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  place_id             TEXT NOT NULL,
+  board_id             TEXT,
+  board_version        INTEGER,
+  action               TEXT NOT NULL,
+  action_version       INTEGER NOT NULL,
+  recorded_at          TEXT NOT NULL,
+  reconciliation_state TEXT NOT NULL DEFAULT 'pending',
+  reconciled_region_id TEXT,
+  reconciled_at        TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provisional_actions_identity
+  ON provisional_actions(trip_id, place_id, action_version);
+CREATE INDEX IF NOT EXISTS idx_provisional_actions_pending
+  ON provisional_actions(trip_id, reconciliation_state);
+
+-- What happened to those picks once verification finished.
+--
+-- One row per trip — the *current* account, which is what a page renders.
+-- Superseded accounts are not overwritten into nothing: they move to
+-- "board_reconciliation_history" first, so "what did you tell me last time"
+-- has an answer.
+--
+-- "reconciliation_version" is the compare-and-set token. A worker holding an
+-- older version cannot overwrite a newer account, which is the whole of the
+-- stale-writer defence and does not need a lock to hold.
+CREATE TABLE IF NOT EXISTS board_reconciliations (
+  trip_id            TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  provisional_board_id TEXT NOT NULL,
+  compiled_region_id TEXT NOT NULL,
+  schema_version     INTEGER NOT NULL,
+  payload_json       TEXT NOT NULL,
+  created_at         TEXT NOT NULL
+);
+
+-- Every account that was ever current, kept so a superseded one is inspectable
+-- rather than gone.
+--
+-- Unique on (trip, compiled region, reconciliation version): a re-run against
+-- the same artifact at the same version is the same event, so a retry writes
+-- nothing new. A *superseding* artifact reconciles again and lands beside it
+-- rather than on top of it.
+CREATE TABLE IF NOT EXISTS board_reconciliation_history (
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id                TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  provisional_board_id   TEXT NOT NULL,
+  provisional_board_version INTEGER NOT NULL,
+  compiled_region_id     TEXT NOT NULL,
+  reconciliation_version INTEGER NOT NULL,
+  schema_version         INTEGER NOT NULL,
+  payload_json           TEXT NOT NULL,
+  created_at             TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_board_reconciliation_history_identity
+  ON board_reconciliation_history(trip_id, compiled_region_id, reconciliation_version);
+CREATE INDEX IF NOT EXISTS idx_board_reconciliation_history_trip
+  ON board_reconciliation_history(trip_id, created_at);
+
+-- ===========================================================================
+-- PAID MODEL OPERATIONS — THE SINGLE-FLIGHT LEASE
+-- ===========================================================================
+--
+-- A ceiling of "one paid call per trip per sentence" that is implemented as a
+-- read followed by an await is not a ceiling. Two concurrent server actions each
+-- observe no prior call, each buy one, and the record afterwards says one.
+--
+-- The mechanism is the same unique partial index "evidence_operations",
+-- "compilation_jobs" and "region_packs" already use, so this codebase has one
+-- concurrency story rather than four. The winner is whoever's INSERT lands; the
+-- losers read the winner's row and wait for its result rather than calling.
+--
+-- "operation_key" covers everything that could change the answer — trip,
+-- normalised text, taxonomy, prompt, schema, model, locale — so a traveller who
+-- edits their sentence gets a *different* operation rather than a stale result.
+--
+-- A heartbeat rather than a lease expiry timestamp, for the same reason as
+-- "compilation_jobs": a process killed mid-call must not wedge a trip forever.
+CREATE TABLE IF NOT EXISTS model_operations (
+  id            TEXT PRIMARY KEY,
+  operation_key TEXT NOT NULL,
+  trip_id       TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL,
+  state         TEXT NOT NULL,
+  owner         TEXT NOT NULL,
+  attempt       INTEGER NOT NULL DEFAULT 1,
+  started_at    TEXT NOT NULL,
+  heartbeat_at  TEXT NOT NULL,
+  finished_at   TEXT,
+  result_json   TEXT,
+  failure_kind  TEXT,
+  detail        TEXT,
+  calls         INTEGER NOT NULL DEFAULT 0,
+  input_tokens  INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_micro_usd INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_operations_active
+  ON model_operations(operation_key) WHERE state IN ('pending','running');
+CREATE INDEX IF NOT EXISTS idx_model_operations_key
+  ON model_operations(operation_key, started_at);
+CREATE INDEX IF NOT EXISTS idx_model_operations_trip
+  ON model_operations(trip_id, started_at);
+
+-- ===========================================================================
+-- IMAGERY METADATA
+-- ===========================================================================
+--
+-- Metadata only, never bytes — the same discipline source_documents follows for
+-- pages. A URL, a licence, a creator, an attribution string and the dimensions
+-- are enough to render a compliant credit and to notice a file has changed, and
+-- are not a redistribution of somebody's photograph.
+--
+-- Traveller-independent: a photograph of a mountain is a photograph of a
+-- mountain. Keyed on the subject identity and the file, so two trips to the same
+-- place share one lookup and one licence check.
+--
+-- Rejections are stored too, with their reason. A file we refused for its
+-- licence is worth remembering: without it, every build re-fetches, re-checks
+-- and re-refuses the same file.
+CREATE TABLE IF NOT EXISTS destination_images (
+  subject_key    TEXT NOT NULL,
+  file_title     TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  provider       TEXT NOT NULL,
+  accepted       INTEGER NOT NULL,
+  rejected_reason TEXT,
+  licence_id     TEXT,
+  payload_json   TEXT NOT NULL,
+  retrieved_at   TEXT NOT NULL,
+  revalidate_after TEXT NOT NULL,
+  PRIMARY KEY (subject_key, file_title)
+);
+
+CREATE INDEX IF NOT EXISTS idx_destination_images_subject
+  ON destination_images(subject_key, accepted);
+CREATE INDEX IF NOT EXISTS idx_destination_images_revalidate
+  ON destination_images(revalidate_after);
+
+-- ===========================================================================
+-- STAGE TIMING OBSERVATIONS
+-- ===========================================================================
+--
+-- What builds have actually taken, so a remaining-time range can be a
+-- measurement rather than an invention. The compiler's own stage timestamps come
+-- from an injected clock advanced one step per stage — deliberately, so two runs
+-- of the same inputs produce byte-identical artifacts — and that made every
+-- stage claim a millisecond and the progress screen offer "roughly 0s-0s to go".
+--
+-- Bucketed rather than pooled: breadth separates a city build from a country
+-- build, warmth separates a run that bought its data from one that reused it,
+-- and outcome keeps a stage that failed after two seconds out of the evidence
+-- for how long that stage takes.
+--
+-- Not load-bearing. Emptying it costs an estimate, which the UI already knows
+-- how to render as silence.
+CREATE TABLE IF NOT EXISTS stage_observations (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  stage        TEXT NOT NULL,
+  outcome      TEXT NOT NULL,
+  breadth      TEXT NOT NULL,
+  warmth       TEXT NOT NULL,
+  duration_ms  INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  observed_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_stage_observations_bucket
+  ON stage_observations(breadth, warmth, outcome, stage);
+CREATE INDEX IF NOT EXISTS idx_stage_observations_observed
+  ON stage_observations(observed_at);
+
+-- ===========================================================================
+-- FREE-TEXT INTERPRETATION CACHE
+-- ===========================================================================
+--
+-- What a bounded model call made of text the deterministic phrase table could
+-- not resolve.
+--
+-- **Traveller-scoped by construction, and that is the whole design.** The shared
+-- evidence store holds facts about the world; this holds a reading of one
+-- person's sentence. Letting it into a global cache would mean one traveller's
+-- phrasing steering another traveller's ranking — so the row carries a trip id,
+-- cascades with the trip, and the architecture test forbids this table's key
+-- from appearing in any shared-cache derivation.
+--
+-- Keyed on normalised unresolved text *and* every version that could change the
+-- answer (taxonomy, prompt, schema, model, locale), so a contract bump
+-- re-derives rather than serving a reading produced under different rules.
+CREATE TABLE IF NOT EXISTS interpretation_cache (
+  cache_key    TEXT NOT NULL,
+  trip_id      TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  payload_json TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  PRIMARY KEY (trip_id, cache_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_interpretation_cache_expiry
+  ON interpretation_cache(expires_at);
+
+-- ===========================================================================
+-- WEATHER SNAPSHOTS
+-- ===========================================================================
+--
+-- Weather as a *persisted operation result*, never as something a page fetches
+-- while rendering.
+--
+-- The /discover route used to call the forecast provider inside resolveTripRegion
+-- during render, so every page load — every refresh, every back button — made an
+-- external request, and a provider having a bad afternoon turned into a slow
+-- page rather than into a stale badge. The snapshot is written by an explicit
+-- refresh operation and read by the render path, which means a page can say
+-- "fetched 40 minutes ago" or "never fetched" and offer a button, rather than
+-- quietly buying data nobody asked for.
+--
+-- One row per (trip, dates fingerprint). Replaced by a refresh; never mutated by
+-- a render. Deleting the table costs a badge, not a plan.
+CREATE TABLE IF NOT EXISTS weather_snapshots (
+  trip_id       TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  scope_key     TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  status        TEXT NOT NULL,
+  provider      TEXT NOT NULL,
+  fetched_at    TEXT NOT NULL,
+  valid_until   TEXT NOT NULL,
+  payload_json  TEXT NOT NULL,
+  PRIMARY KEY (trip_id, scope_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_snapshots_trip
+  ON weather_snapshots(trip_id, fetched_at);
 `;
 
 /**
@@ -723,4 +1071,165 @@ export const COLUMN_MIGRATIONS: readonly {
   { table: 'trip_intents', column: 'composer_json', definition: 'TEXT' },
   { table: 'trip_intents', column: 'selected_destination_json', definition: 'TEXT' },
   { table: 'trip_intents', column: 'preflight_json', definition: 'TEXT' },
+  /**
+   * Added by the provisional board.
+   *
+   * Nullable, for the same reason the composer columns are: a job that ran before
+   * the provisional cut existed genuinely produced no board, and an id pointing
+   * at nothing would be a record of a board nobody was shown.
+   */
+  { table: 'compilation_jobs', column: 'provisional_board_id', definition: 'TEXT' },
+  /**
+   * Added when pinned removals gained an acknowledgment.
+   *
+   * A pinned place that did not survive verification must not disappear
+   * silently, and "we told them" is a fact about this traveller rather than
+   * about the artifact — so it is a column on the reconciliation row rather than
+   * a rewrite of it. Nullable: a reconciliation written before this existed has
+   * nothing acknowledged, which is the correct reading, and an empty-object
+   * default would claim the panel had been shown.
+   */
+  { table: 'board_reconciliations', column: 'acknowledged_json', definition: 'TEXT' },
+  /**
+   * Added when operational counters were taken off the artifact.
+   *
+   * The runner used to fold live provider and cache counters into
+   * `CompiledRegion.diagnostics.budget.consumed` *after* the compiler returned.
+   * The compiler's own determinism was intact; what was persisted was not — two
+   * builds of identical inputs differed by exactly how warm the cache happened
+   * to be, which is the property `saveWorkPlan`'s own comment says it exists to
+   * avoid.
+   *
+   * They are facts about a run, so they live on the run. Nullable: a job that
+   * finished before this column existed genuinely recorded none, and a `'{}'`
+   * default would be a record of a build that cost nothing.
+   */
+  { table: 'compilation_jobs', column: 'operational_json', definition: 'TEXT' },
+  /**
+   * Added when a traveller's mark gained the identity of the board it was made
+   * on.
+   *
+   * Without these, "you unpinned it" and "the board you pinned it on no longer
+   * exists" are the same row, and a removal gets blamed on a board the traveller
+   * never saw. Nullable rather than defaulted: a mark made before the board
+   * identity was recorded genuinely has no board attached, and inventing version
+   * 1 would be asserting it was made on the first board when nobody knows.
+   */
+  { table: 'provisional_selections', column: 'board_id', definition: 'TEXT' },
+  { table: 'provisional_selections', column: 'board_version', definition: 'INTEGER' },
+  /**
+   * Monotonic per (trip, place). The compare-and-set token for a mark.
+   *
+   * A stale worker holding version 3 cannot overwrite version 4, and a duplicate
+   * delivery of version 3 is a no-op rather than a second event. Defaulted to 1
+   * because a row that predates the column has had exactly one recorded state.
+   */
+  {
+    table: 'provisional_selections',
+    column: 'action_version',
+    definition: 'INTEGER NOT NULL DEFAULT 1',
+  },
+  /**
+   * Every mark ends in an explicit state, and `pending` is one of them.
+   *
+   * The defect this closes is a mark recorded after reconciliation ran, which
+   * previously ended in *no* state at all — neither reconciled nor recorded as
+   * outstanding — while the panel counted it among "all N decisions you made".
+   * A row that predates the column is `pending`, which is true: nothing has told
+   * the traveller what became of it under the new model.
+   */
+  {
+    table: 'provisional_selections',
+    column: 'reconciliation_state',
+    definition: "TEXT NOT NULL DEFAULT 'pending'",
+  },
+  { table: 'provisional_selections', column: 'reconciled_region_id', definition: 'TEXT' },
+  { table: 'provisional_selections', column: 'reconciled_at', definition: 'TEXT' },
+  /**
+   * The board version the account was written against, and the compare-and-set
+   * token that stops an older worker overwriting a newer account.
+   *
+   * Defaulted rather than nullable: an account written before this existed was
+   * the first one, and 1 is the honest reading of that rather than a guess.
+   */
+  {
+    table: 'board_reconciliations',
+    column: 'provisional_board_version',
+    definition: 'INTEGER NOT NULL DEFAULT 1',
+  },
+  {
+    table: 'board_reconciliations',
+    column: 'reconciliation_version',
+    definition: 'INTEGER NOT NULL DEFAULT 1',
+  },
+  /**
+   * Added when the progress poll's bucket lookup stopped being a table scan.
+   *
+   * `runBucket` matched `payload_json LIKE '%"jobId":"…"%'` against up to fifty
+   * thousand rows on every poll of the progress screen. The job id was already
+   * inside the payload; it just was not anywhere an index could reach. Nullable:
+   * a row written before the column has its job id in the payload and is read
+   * from there, so backfilling would be rewriting history to no purpose.
+   */
+  { table: 'stage_observations', column: 'job_id', definition: 'TEXT' },
+  /**
+   * Added when `rowToJob` stopped stamping the current version onto whatever was
+   * stored.
+   *
+   * A row that claims to be the version this build happens to be on is a row
+   * asserting it was written under rules it has never been read against. With the
+   * column, a job that cannot be read degrades to absent and the caller offers a
+   * rebuild — the policy `getCompiledRegion` already follows. Defaulted to 1
+   * rather than nullable, because 1 is the only version ever written, and that is
+   * a fact rather than a guess.
+   */
+  { table: 'compilation_jobs', column: 'schema_version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+];
+
+/**
+ * Indexes that cannot live in `SCHEMA_SQL`.
+ *
+ * `SCHEMA_SQL` runs *before* `COLUMN_MIGRATIONS`, so an index over a column that
+ * arrives by migration would fail on exactly the databases the migration exists
+ * for — the old ones. These are applied afterwards instead, and are otherwise
+ * ordinary `IF NOT EXISTS` DDL.
+ */
+export const INDEX_MIGRATIONS: readonly string[] = [
+  `CREATE INDEX IF NOT EXISTS idx_stage_observations_job
+     ON stage_observations(job_id, id)`,
+  /**
+   * The bucket query constrains warmth and outcome and never breadth, so an
+   * index leading with breadth was never usable by it. This one leads with what
+   * the predicate actually holds.
+   */
+  `CREATE INDEX IF NOT EXISTS idx_stage_observations_lookup
+     ON stage_observations(warmth, outcome, observed_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_provisional_selections_pending
+     ON provisional_selections(trip_id, reconciliation_state)`,
+  /**
+   * The shortlist's per-country bucket read, in the order it asks for.
+   *
+   * Building a shortlist used to scan the whole destination index — `IS NOT NULL`
+   * on the leading index column plus a full window sort — on the click that
+   * produces it. The query is now a bounded per-(country, feature type) read, and
+   * this is the index that makes it *bounded to read* rather than merely bounded
+   * to return: `LIMIT n` only stops an index walk early when the index is already
+   * in the order the query asks for, so without `rank DESC` here SQLite reads
+   * every row of the range into a temporary b-tree and hands back three.
+   *
+   * Here rather than in `SCHEMA_SQL` because it is applied in the same pass as the
+   * other post-migration indexes, and keeping one place for them beats two.
+   */
+  `CREATE INDEX IF NOT EXISTS idx_destination_index_bucket
+     ON destination_index(country_code, feature_type, rank DESC, id)`,
+  /**
+   * The retention sweep's own predicate.
+   *
+   * `idx_weather_snapshots_trip` leads with `trip_id`, which the sweep never
+   * constrains — so of the four retention rules this was the only one that
+   * full-scanned, synchronously, on the rare path a compilation already stalls
+   * on.
+   */
+  `CREATE INDEX IF NOT EXISTS idx_weather_snapshots_expiry
+     ON weather_snapshots(valid_until)`,
 ];

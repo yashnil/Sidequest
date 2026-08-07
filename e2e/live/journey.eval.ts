@@ -1,5 +1,12 @@
 import { chromium, type Browser, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import {
+  measured,
+  notMeasured,
+  renderMeasurement,
+  serialise,
+  type Measured,
+} from '../support/live-journey.ts';
 
 /**
  * LIVE PRODUCT EVALUATION — NOT PART OF THE TEST SUITE.
@@ -25,9 +32,9 @@ interface Measurement {
   topSuggestions?: string[];
   identity?: string;
   preflightMs?: number;
-  clusters?: number;
-  bases?: number;
-  excluded?: number;
+  clusters?: Measured<number>;
+  bases?: Measured<number>;
+  excluded?: Measured<number>;
   strategies?: string[];
   dateWindows?: string[];
   durationOptions?: string[];
@@ -39,6 +46,21 @@ interface Measurement {
 
 async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+}
+
+/** A number the page stated, or an explained absence. Never a substituted zero. */
+function countFrom(body: string, pattern: RegExp): Measured<number> {
+  const found = pattern.exec(body)?.[1];
+  if (found === undefined) {
+    return notMeasured(
+      'markup_absent',
+      `the preflight copy did not match ${String(pattern)} — the figure was not on the page in a form this reads, which is not the same as the figure being zero`,
+    );
+  }
+  const parsed = Number(found);
+  return Number.isFinite(parsed)
+    ? measured(parsed)
+    : notMeasured('markup_absent', `matched "${found}", which is not a number`);
 }
 
 async function measureSuggestions(page: Page, query: string): Promise<{ ms: number; names: string[] }> {
@@ -113,9 +135,18 @@ async function runJourney(
 
     const body = await page.locator('#main').innerText();
     measurement.supply = /(?:Plenty|Enough|Thin|Not enough|Our sources)[^\n]*/.exec(body)?.[0];
-    measurement.clusters = Number(/(\d+) distinct areas? found/.exec(body)?.[1] ?? 0);
-    measurement.bases = Number(/this route uses (\d+)/.exec(body)?.[1] ?? 0);
-    measurement.excluded = Number(/(\d+) areas? left out/.exec(body)?.[1] ?? 0);
+    /*
+     * A SENTENCE THAT DID NOT MATCH IS NOT A COUNT OF ZERO.
+     *
+     * `?? 0` reported `clusters: 0, bases: 0, excluded: 0` for every preflight
+     * whose copy this regex did not happen to match — which is a destination
+     * with no distinct areas and no bases, a plainly impossible reading, and it
+     * is the same defect that reported an unwatched provisional board as
+     * `provisionalCards: 0`. Now the value is absent and the reason is beside it.
+     */
+    measurement.clusters = countFrom(body, /(\d+) distinct areas? found/);
+    measurement.bases = countFrom(body, /this route uses (\d+)/);
+    measurement.excluded = countFrom(body, /(\d+) areas? left out/);
     measurement.strategies = await page
       .locator('fieldset', { hasText: 'Pick a shape' })
       .locator('label')
@@ -144,6 +175,28 @@ async function runJourney(
   return measurement;
 }
 
+/** The step never ran, so there is nothing to render but the fact of that. */
+const MISSING: Measured<number> = notMeasured(
+  'precondition_failed',
+  'the journey never reached the preflight, so this figure was never read',
+);
+
+/** The measurement, minus the three fields rendered as sentences beside it. */
+function withoutMeasured(measurement: Measurement): Record<string, unknown> {
+  const { clusters: _clusters, bases: _bases, excluded: _excluded, ...rest } = measurement;
+  return rest;
+}
+
+/** On disk, each `Measured` goes through `serialise` so absences carry `reads`. */
+function serialisable(measurement: Measurement): Record<string, unknown> {
+  return {
+    ...withoutMeasured(measurement),
+    clusters: serialise(measurement.clusters ?? MISSING),
+    bases: serialise(measurement.bases ?? MISSING),
+    excluded: serialise(measurement.excluded ?? MISSING),
+  };
+}
+
 async function main(): Promise<void> {
   mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
@@ -166,11 +219,24 @@ async function main(): Promise<void> {
     process.stdout.write(`\n=== ${entry.destination} ===\n`);
     const measurement = await runJourney(browser, entry.destination, entry.dates, entry.slug);
     results.push(measurement);
-    process.stdout.write(`${JSON.stringify(measurement, null, 2)}\n`);
+    /*
+     * The three `Measured` fields are printed through `renderMeasurement` rather
+     * than dumped, so an absence reads as a sentence in the terminal instead of
+     * as a JSON object somebody skims past.
+     */
+    process.stdout.write(
+      [
+        JSON.stringify(withoutMeasured(measurement), null, 2),
+        renderMeasurement('clusters', measurement.clusters ?? MISSING),
+        renderMeasurement('bases', measurement.bases ?? MISSING),
+        renderMeasurement('excluded', measurement.excluded ?? MISSING),
+        '',
+      ].join('\n'),
+    );
   }
 
   await browser.close();
-  writeFileSync(`${OUT}/measurements.json`, JSON.stringify(results, null, 2));
+  writeFileSync(`${OUT}/measurements.json`, JSON.stringify(results.map(serialisable), null, 2));
   process.stdout.write(`\nWrote ${OUT}/measurements.json\n`);
 }
 

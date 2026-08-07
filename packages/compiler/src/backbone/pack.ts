@@ -19,6 +19,17 @@ import type {
  * range-read over cloud-hosted columnar files all satisfy the same shapes.
  */
 
+/**
+ * Scope membership travels with the seam, because it is part of the contract.
+ *
+ * A provider that reads a bounded box has to be told what belonging means, or it
+ * will hand back whatever the box contained — which is the defect this phase
+ * exists to remove. Re-exported here rather than added to the package barrel so
+ * that the barrel keeps one entry per module and adapters get containment from
+ * the same import they already take the provider interfaces from.
+ */
+export * from './containment';
+
 export interface ReleaseCatalogProvider {
   readonly name: string;
   /**

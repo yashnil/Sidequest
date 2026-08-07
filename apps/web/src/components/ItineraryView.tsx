@@ -85,6 +85,7 @@ export function ItineraryView({
   dateLabel,
   renderedAt,
   baseNames,
+  timeZone,
 }: {
   itinerary: Itinerary;
   /**
@@ -115,6 +116,19 @@ export function ItineraryView({
    * different answers for one plan.
    */
   renderedAt: number;
+  /**
+   * The IANA zone the trip's base sits in, read from the compiled region.
+   *
+   * Threaded rather than assumed. This used to be `America/Los_Angeles`, hard
+   * coded, on every itinerary in the world — a leftover from the phase when
+   * there was one region, and one that printed the wrong hour for every
+   * traveller outside California without anything on screen looking wrong.
+   *
+   * Absent is a real state: an artifact compiled before bases carried a zone has
+   * none, and the honest answer then is UTC with the offset named, rather than a
+   * local-looking time in somebody else's day.
+   */
+  timeZone?: string;
 }) {
   const baseEntity = {
     name: itinerary.baseName,
@@ -188,7 +202,7 @@ export function ItineraryView({
 
       <TransportPlan strategy={itinerary.transportStrategy} />
 
-      <WeatherPlan itinerary={itinerary} />
+      <WeatherPlan itinerary={itinerary} {...(timeZone ? { timeZone } : {})} />
 
       <FoodPlanPanel plan={itinerary.foodPlan} />
 
@@ -271,7 +285,7 @@ export function ItineraryView({
  * what Augusts here are like. Rendering them identically would make the second
  * one a lie.
  */
-function WeatherPlan({ itinerary }: { itinerary: Itinerary }) {
+function WeatherPlan({ itinerary, timeZone }: { itinerary: Itinerary; timeZone?: string }) {
   const days = itinerary.days;
   const kinds = [...new Set(days.map((day) => day.weather.evidence))];
   const attribution = days.find((day) => day.weather.attribution)?.weather.attribution;
@@ -322,9 +336,9 @@ function WeatherPlan({ itinerary }: { itinerary: Itinerary }) {
       {points.length > 0 && kinds.some((kind) => kind !== 'unavailable') ? (
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">
           Taken at {points.length === 1 ? 'one point' : `${points.length} separate points`}:{' '}
-          {points.join(', ')}. The valley floor runs about ten degrees warmer than town in
-          summer and the high country several degrees colder, so one number for the region
-          would be wrong at both ends.
+          {points.join(', ')}. Somewhere that spans a range of elevations or a coastline
+          can differ by several degrees across it, so one number for the whole region would
+          be wrong at both ends.
         </p>
       ) : null}
 
@@ -341,7 +355,7 @@ function WeatherPlan({ itinerary }: { itinerary: Itinerary }) {
 
       <p className="mt-5 text-[11px] leading-relaxed text-ink-faint">
         {attribution ?? 'No weather source was reached for this trip.'}
-        {fetchedAt ? ` Read ${formatReadAt(fetchedAt)}.` : ''} Conditions change; we
+        {fetchedAt ? ` Read ${formatReadAt(fetchedAt, timeZone)}.` : ''} Conditions change; we
         have not checked today.
       </p>
     </Panel>
@@ -349,15 +363,17 @@ function WeatherPlan({ itinerary }: { itinerary: Itinerary }) {
 }
 
 /**
- * When the forecast was read, in the traveller's own time.
+ * When the forecast was read, in the wall-clock time of the place it describes.
  *
  * `toUTCString()` printed "Thu, 30 Jul 2026 22:12:00 GMT" on a product whose
- * entire time model is wall-clock where you are standing. Nobody planning a trip
- * to Mammoth thinks in GMT.
+ * entire time model is wall-clock where you are standing — but the fix for that
+ * was a hard-coded Californian zone, which is the same defect pointed the other
+ * way. The zone comes from the trip's own base now, and a trip whose artifact
+ * predates that says UTC rather than pretending.
  */
-function formatReadAt(iso: string): string {
+function formatReadAt(iso: string, timeZone?: string): string {
   return new Date(iso).toLocaleString('en-GB', {
-    timeZone: 'America/Los_Angeles',
+    timeZone: timeZone ?? 'UTC',
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -389,13 +405,33 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
         </Badge>
       </div>
 
+      {/*
+        A METRIC ONLY WHERE THERE IS SOMETHING TO MEASURE.
+
+        These four used to render unconditionally, so a traveller who told us
+        they had no car opened their finished plan and read "At the wheel: 0 min"
+        and "Road distance: 0 km" — two confident measurements of a mode they
+        explicitly declined, in a row that reads as a dashboard. `formatMinutes(0)`
+        returns "0 min", which is a number, and a number is a claim.
+
+        The rule is the one the progress screen already follows: a figure nobody
+        measured is absent, not zero.
+      */}
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
-        <Metric label="At the wheel">{formatMinutes(totals.driveMinutes)}</Metric>
-        <Metric label="Riding & waiting">
-          {formatMinutes(totals.transitMinutes + totals.waitMinutes)}
-        </Metric>
-        <Metric label="On foot to reach things">{formatMinutes(totals.walkMinutes)}</Metric>
-        <Metric label="Road distance">{Math.round(totals.driveKm)} km</Metric>
+        {totals.driveMinutes > 0 ? (
+          <Metric label="At the wheel">{formatMinutes(totals.driveMinutes)}</Metric>
+        ) : null}
+        {totals.transitMinutes + totals.waitMinutes > 0 ? (
+          <Metric label="Riding & waiting">
+            {formatMinutes(totals.transitMinutes + totals.waitMinutes)}
+          </Metric>
+        ) : null}
+        {totals.walkMinutes > 0 ? (
+          <Metric label="On foot to reach things">{formatMinutes(totals.walkMinutes)}</Metric>
+        ) : null}
+        {totals.driveKm >= 0.5 ? (
+          <Metric label="Road distance">{Math.round(totals.driveKm)} km</Metric>
+        ) : null}
       </dl>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2">

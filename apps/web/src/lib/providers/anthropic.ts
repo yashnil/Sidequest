@@ -34,6 +34,15 @@ export const PROMPT_VERSIONS = {
   extractFacts: 'extract-facts/2026-08-01.1',
   reconcileConflicts: 'reconcile-conflicts/2026-07-31.1',
   findOfficialSources: 'find-official-sources/2026-08-01.1',
+  /**
+   * Reading the free text a traveller typed, for spans the deterministic phrase
+   * table could not resolve.
+   *
+   * Listed here with the rest so there is one place to answer "which prompts
+   * does this build run, and at what version" — a second registry is how a
+   * prompt comes to be changed without its version moving.
+   */
+  interpretPreferences: 'interpret-preferences/2026-08-03.1',
 } as const;
 
 /**
@@ -912,6 +921,5 @@ export async function reconcileConflicts(
   });
 }
 
-export function isResearchModelConfigured(): boolean {
-  return (process.env.ANTHROPIC_API_KEY?.trim().length ?? 0) > 0;
-}
+/** Re-exported from the import-free switch module. See `providers/switches.ts`. */
+export { isResearchModelConfigured } from './switches';

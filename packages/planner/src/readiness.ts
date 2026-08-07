@@ -252,4 +252,6 @@ const REASON_PHRASES: Record<UnscheduledReasonCode, string> = {
   closed_on_trip_dates: 'they are shut on every day of your trip',
   hours_do_not_fit: 'their opening hours never leave long enough for a visit',
   weather_incompatible: 'the weather rules them out on every day they could have gone on',
+  selection_not_on_board:
+    'they were on an earlier version of your board and are not on this one',
 };

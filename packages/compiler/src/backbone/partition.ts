@@ -23,6 +23,20 @@ import type { GeoBounds, GeographicScope, PackCell, PartitionPlan } from '@sideq
  *   cheaper than a missing waterfall.
  * - **Nothing names a destination.** A city, an island, a park and a rail
  *   corridor go through the same four rules.
+ *
+ * ## A cell is a spending plan. It is never containment.
+ *
+ * Worth stating at the top of the file that produces them, because the product
+ * spent a phase acting as though it were. A cell says *where we are willing to
+ * pay to read*; it says nothing whatsoever about whether what comes back belongs
+ * to the destination. A scope with no published boundary becomes a reach circle,
+ * the circle becomes a box, the box becomes cells, each cell is grown by an
+ * overlap margin, and a read that accepted anything intersecting one of them
+ * admitted an administrative region a hundred and sixty kilometres away with
+ * nothing wrong at any single step.
+ *
+ * Membership is decided in `containment.ts`, from evidence, and nothing in this
+ * file may be read as an answer to it.
  */
 
 /**
@@ -125,12 +139,34 @@ export function partitionScope(
 
   if (shape.kind === 'areas') {
     const cells = shape.areas.flatMap((area, index) =>
-      gridCells(circleBounds(area.center, area.radiusKm), target, `a${index}`),
+      clipToCircle(gridCells(circleBounds(area.center, area.radiusKm), target, `a${index}`), [
+        { centre: area.center, radiusKm: area.radiusKm },
+      ]),
     );
     return finalise('areas', cells, centre, maxCells, overlap);
   }
 
-  const cells = gridCells(bounds, target, 'g');
+  /**
+   * A grid over a circle's bounding box, minus the corners the circle never
+   * reaches.
+   *
+   * A square around a circle is about twenty-seven per cent ground the scope
+   * does not claim, and the corners are its farthest ground — so a budget spent
+   * on them is spent at the greatest possible distance from the traveller. They
+   * were also a leak: the record admitted from an adjacent first-level division
+   * came from precisely that geometry, outside the radius the scope stated and
+   * inside the box nobody had trimmed.
+   *
+   * Trimming is not containment and does not pretend to be — a cell that
+   * survives is still only a place we are willing to read. It is the same
+   * shape-driven rule the corridor and area strategies already apply, finally
+   * applied to the strategy that needed it most.
+   */
+  const raw = gridCells(bounds, target, 'g');
+  const cells =
+    shape.kind === 'radius'
+      ? clipToCircle(raw, [{ centre: shape.center, radiusKm: shape.radiusKm }])
+      : raw;
   return finalise(cells.length === 1 ? 'single' : 'grid', cells, centre, maxCells, overlap);
 }
 
@@ -199,6 +235,36 @@ function fallbackCell(centre: { lat: number; lng: number }, overlap: number): Pa
     bounds: grow(circleBounds(centre, 5), overlap),
     priority: 1,
   };
+}
+
+/**
+ * Cells that touch at least one of the scope's circles.
+ *
+ * Nearest-point distance rather than centre distance, so a cell whose corner
+ * clips the circle is kept — a feature on the edge is the one worth having, and
+ * a partition that dropped it would be trading a real place for arithmetic.
+ * Returns the input unchanged when it would otherwise return nothing, because
+ * "no cells" is not an honest answer to a degenerate scope; `finalise` has its
+ * own floor and this must not race it.
+ */
+function clipToCircle(
+  cells: readonly PackCell[],
+  circles: readonly { centre: { lat: number; lng: number }; radiusKm: number }[],
+): PackCell[] {
+  const kept = cells.filter((cell) =>
+    circles.some((circle) => nearestPointKm(cell.bounds, circle.centre) <= Math.max(0.5, circle.radiusKm)),
+  );
+  return kept.length > 0 ? kept : [...cells];
+}
+
+/** Kilometres from a point to the nearest point of a box. Zero when inside. */
+function nearestPointKm(bounds: GeoBounds, point: { lat: number; lng: number }): number {
+  const lat = Math.max(bounds.southWest.lat, Math.min(bounds.northEast.lat, point.lat));
+  const lng = Math.max(bounds.southWest.lng, Math.min(bounds.northEast.lng, point.lng));
+  const dLat = (lat - point.lat) * KM_PER_DEGREE_LAT;
+  const dLng =
+    (lng - point.lng) * KM_PER_DEGREE_LAT * Math.max(0.1, Math.cos((point.lat * Math.PI) / 180));
+  return Math.hypot(dLat, dLng);
 }
 
 function gridCells(bounds: GeoBounds, target: number, prefix: string): PackCell[] {

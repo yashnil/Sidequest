@@ -522,6 +522,17 @@ export const UNSCHEDULED_REASON_CODES = [
    * long enough. Never "it looked like rain".
    */
   'weather_incompatible',
+  /**
+   * Chosen on a board that has since been rebuilt, and no candidate exists to
+   * place.
+   *
+   * Its own code rather than `not_feasible`, because the two sentences are
+   * about entirely different things: `not_feasible` says the place will not
+   * work with this traveller's answers, and this says the place is not in front
+   * of us at all. Collapsing them told somebody their pick was a bad fit when
+   * what actually happened was that we rebuilt the board underneath them.
+   */
+  'selection_not_on_board',
 ] as const;
 export const unscheduledReasonCodeSchema = z.enum(UNSCHEDULED_REASON_CODES);
 export type UnscheduledReasonCode = z.infer<typeof unscheduledReasonCodeSchema>;

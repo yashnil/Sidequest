@@ -20,8 +20,19 @@ import {
   type FactPath,
   resolveDisplayName,
 } from '@sidequest/core';
-import { buildInventory, foodVenueFromRecord, type InventoryResult } from '@sidequest/compiler';
-import type { SourceRecord } from '@sidequest/core';
+import {
+  admitLateCandidate,
+  assessRecordEligibility,
+  buildInventory,
+  buildTripScopeOverlay,
+  decisionFor,
+  foodVenueFromRecord,
+  type IncludedArea,
+  type InventoryResult,
+  type TripScopeOverlay,
+  type TripIncludedArea,
+} from '@sidequest/compiler';
+import { placeInclusionTag, type SourceRecord } from '@sidequest/core';
 import type {
   CompilerProviders,
   ConstraintResearchProvider,
@@ -61,7 +72,6 @@ import {
   boundsOf,
   classifyNominatim,
   geocode,
-  isGeocoderEnabled,
   osmElementId,
   osmElementUrl,
   type NominatimPlace,
@@ -80,14 +90,12 @@ import {
   computeMatrix as valhallaMatrix,
   costingFor,
   densify,
-  isRoutesProviderEnabled,
 } from './valhalla';
 import {
   classifyPlaces,
   DEFAULT_MODEL,
   extractPlanningFacts,
   interpretDestination,
-  isResearchModelConfigured,
   PROMPT_VERSIONS,
   proposeExpansion,
   ResearchModel,
@@ -269,6 +277,19 @@ function toCandidate(
     ...(bounds ? { bounds } : {}),
     ...(countryCode && countryCode.length === 2 ? { countryCode } : {}),
     ...(country ? { countryName: country } : {}),
+    /*
+     * The ISO 3166-2 code, kept rather than filtered out.
+     *
+     * This line used to drop `ISO3166-2-lvl4` on the floor while keeping the
+     * printed subdivision *name* — so the geocoder path published a name, the
+     * catalogue path published a code, and comparing one against the other read
+     * as a border. The code is the one value that compares reliably across
+     * scripts and translations, and it was already here.
+     */
+    ...(place.address?.['ISO3166-2-lvl4']
+      ? { regionCode: place.address['ISO3166-2-lvl4']! }
+      : {}),
+    aliases: candidatesFromNominatim(place).map((entry) => entry.value),
     administrativeAreas: Object.entries(place.address ?? {})
       .filter(([key]) => ['country', 'state', 'region', 'county', 'city', 'town'].includes(key))
       .map(([, value]) => value),
@@ -346,6 +367,13 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
    * same one rather than recomputing it from the same pack a stage later.
    */
   let packInventory: InventoryResult | null = null;
+  /**
+   * The trip-scope overlay the places stage built, so the food stage judges
+   * against the same one. Two overlays in one compilation is two answers to
+   * "does this belong", and the food stage's would be the one that had never
+   * heard of the regional expansion.
+   */
+  let packOverlay: TripScopeOverlay | undefined;
   /** The pack's records by id, for the research funnel's website candidates. */
   const packRecords = new Map<string, SourceRecord>();
 
@@ -477,6 +505,23 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
        * also means each base gets a real OSM element id, which is what the
        * attribution obligation attaches to.
        */
+      /*
+       * THE GATE, ON THE EXPANSION PATH — the second half of CS-10.
+       *
+       * A proposed base is geocoded by name, and geocoding by name is exactly
+       * how a model's plausible-sounding town in the wrong country becomes a
+       * real coordinate with a real OSM element id. Every other property of this
+       * loop was already careful — an invented town does not resolve, so it
+       * never reaches the compiled region — and none of that checks whether the
+       * town that *did* resolve is anywhere near the destination.
+       *
+       * There is no pack here, so the directory is empty and the comparison
+       * rests on what the geocoder published about the place: its country, and
+       * its first-level division where it gave one. That is enough for the case
+       * that matters, and where it is not enough the base survives as
+       * `membership_unknown` rather than being deleted on a distance.
+       */
+      const baseOverlay = buildTripScopeOverlay({ scope, records: [], roleEligible });
       const bases: Awaited<ReturnType<RegionExpansionProvider['expand']>>['bases'] = [];
       for (const candidate of proposal.bases.slice(0, maxBases)) {
         try {
@@ -515,8 +560,26 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             place: first,
           });
 
+          const baseId = osmElementId(first) ?? `base-${candidate.name}`;
+          const decision = admitLateCandidate(baseOverlay, {
+            id: baseId,
+            coordinates: { lat, lng },
+            containment: containmentFromAddress(first),
+            planningRole: 'lodging',
+            name: names.display,
+          });
+          if (decision.relationship === 'outside_scope') {
+            gaps.push({
+              subjectId: candidate.name,
+              reason: 'not_found',
+              detail:
+                'A proposed base resolved to somewhere the sources place outside this trip, so it was dropped.',
+            });
+            continue;
+          }
+
           bases.push({
-            id: osmElementId(first) ?? `base-${candidate.name}`,
+            id: baseId,
             name: names.display,
             names,
             coordinates: { lat, lng },
@@ -576,7 +639,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
 
   const places: PlaceDiscoveryProvider = {
     name: 'region-pack',
-    async discover({ scope, queries, pack }) {
+    async discover({ scope, queries, pack, includedAreas }) {
       /**
        * A pack is the answer, and asking anything else would be worse.
        *
@@ -597,7 +660,24 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
          * against this traveller — narrowing the inventory by profile first
          * would bake one person's preferences into a cache everybody reads.
          */
-        const inventory = buildInventory({ pack, scope });
+        /*
+         * THE GATE, ON THE PACK PATH.
+         *
+         * The overlay is built here rather than inside `buildInventory` because
+         * this is the first place that has both the pack *and* the regional
+         * expansion's areas — and those areas are the only thing that can
+         * legitimately admit a record outside the destination's boundary.
+         * `buildInventory` builds one itself when a caller has nothing to add,
+         * so the gate cannot be skipped; passing one only makes it better
+         * informed.
+         */
+        const overlay = (packOverlay = buildTripScopeOverlay({
+          scope,
+          records: pack.layers.flatMap((layer) => layer.records),
+          roleEligible,
+          ...(includedAreas ? { includedAreas: includedAreas.map(toIncludedArea) } : {}),
+        }));
+        const inventory = buildInventory({ pack, scope, overlay });
         packInventory = inventory;
         for (const layer of pack.layers) {
           for (const record of layer.records) packRecords.set(record.id, record);
@@ -619,11 +699,45 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             detail: `${inventory.diagnostics.heldBackByCategoryCap} more records of kinds this trip already has enough of were left out.`,
           });
         }
+        /*
+         * THE SHORTAGE, SAID OUT LOUD.
+         *
+         * A board of six that can also say "eighteen more were transport, shops
+         * and services" is a different product from a board of six. Without
+         * this, an honest board is simply a shorter one and a traveller cannot
+         * tell a thin destination from a thin read of a rich one.
+         *
+         * It is a gap rather than a warning because that is what it is: the
+         * ground did not supply enough to plan around, and the coverage report
+         * is where this product already says so.
+         */
+        const supply = inventory.portfolio.supply;
+        if (supply.shortfalls.length > 0) {
+          gaps.push({
+            subjectId: scope.destinationCandidateId,
+            reason: 'not_found',
+            detail: supply.summary,
+          });
+        }
         return {
           candidates: inventory.candidates,
           gaps,
           calls: 0,
           licences: [...inventory.licences, AUTHORED_LICENCE],
+          /*
+           * The two halves of the account, joined here because this is the only
+           * layer that holds both. The inventory knows what it set aside; the
+           * containment overlay knows what it excluded and why. By the time the
+           * artifact is written, both have been collapsed into a list.
+           */
+          boardSupply: {
+            supportKeptSeparately: inventory.portfolio.supply.supply.supporting,
+            withheldUnplaceable: overlay.integrity.membershipUnknown,
+            removedOutOfScope: overlay.integrity.outOfScope,
+            gateways: overlay.integrity.gateways,
+            expansionMembers: overlay.integrity.expansionMembers,
+            satellites: overlay.integrity.satellites,
+          },
         };
       }
 
@@ -768,10 +882,39 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         };
       }
 
+      /*
+       * THE GATE, ON THE FALLBACK PATH — CS-10.
+       *
+       * This branch used to build candidates straight from a reach box and hand
+       * them to the board, so a source family that answered when the primary
+       * catalogue did not was the one family nothing checked. A live New York
+       * build reached a traveller's board with twenty-three records from another
+       * state, and the same shape was reachable here with no pack at all.
+       *
+       * The fallback carries no administrative geography of its own — the map
+       * service publishes tags, not addresses — so almost everything here is
+       * honestly `membership_unknown`: shown on a provisional board, labelled,
+       * and kept out of a final attraction slot and away from the planner. That
+       * is a thinner board than the old behaviour and it is the truthful one.
+       */
+      const fallbackOverlay = buildTripScopeOverlay({
+        scope,
+        records: shortlist.map(fallbackRecordFor),
+        roleEligible,
+        ...(includedAreas ? { includedAreas: includedAreas.map(toIncludedArea) } : {}),
+      });
+      let refusedByScope = 0;
+
       const candidates: DiscoveredCandidate[] = [];
       for (const entry of classified.places) {
         const osm = shortlist[entry.index];
         if (!osm) continue;
+
+        const decision = decisionFor(fallbackOverlay, `fallback:${osm.elementId}`);
+        if (!decision.eligibility.provisionalBoardEligible) {
+          refusedByScope += 1;
+          continue;
+        }
 
         /**
          * Popularity and hidden-gem, from what OSM actually carries.
@@ -805,7 +948,16 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
            * quality signal — while a table of somebody else's tag values would
            * be a redistribution of their database.
            */
-          tags: [osm.primaryTag, ...Object.keys(osm.planningTags).map((key) => `attr:${key}`)],
+          /*
+           * The containment relationship travels as a tag, which is the one
+           * channel that survives every artifact boundary a place crosses. A
+           * consumer reads why this is here rather than assuming it belongs.
+           */
+          tags: [
+            osm.primaryTag,
+            ...Object.keys(osm.planningTags).map((key) => `attr:${key}`),
+            placeInclusionTag(decision.relationship),
+          ],
           source: {
             name: 'OpenStreetMap',
             kind: 'osm',
@@ -872,6 +1024,14 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             Object.keys(osm.planningTags).length >= 2
               ? ['multiple_providers_agree']
               : ['single_provider_only'],
+        });
+      }
+
+      if (refusedByScope > 0) {
+        gaps.push({
+          subjectId: scope.destinationCandidateId,
+          reason: 'not_found',
+          detail: `${refusedByScope} ${refusedByScope === 1 ? 'place' : 'places'} the map data returned belong somewhere else, so they were left out.`,
         });
       }
 
@@ -1106,7 +1266,16 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
        * what we are willing to claim about them.
        */
       if (pack) {
-        const inventory = packInventory ?? buildInventory({ pack, scope });
+        /*
+         * The same overlay the places path used, or none at all.
+         *
+         * Falling back to `buildInventory({ pack, scope })` here judged food
+         * against a *second* overlay that knew nothing about the regional
+         * expansion, so one compilation could hold two different answers to
+         * "does this belong". Reusing the cached inventory is the only shape in
+         * which both halves of a trip are judged the same way.
+         */
+        const inventory = packInventory ?? buildInventory({ pack, scope, overlay: packOverlay });
         const venues: FoodVenue[] = [];
         const gaps: ProviderGap[] = [];
         /**
@@ -1169,6 +1338,23 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       const seen = new Set<string>();
       const perBase = Math.max(6, Math.ceil(maxVenues / Math.max(1, bases.length)));
 
+      /*
+       * THE GATE, ON THE FALLBACK FOOD PATH.
+       *
+       * A meal is scheduled at a named venue, so a venue is a candidate the
+       * planner consumes — and this branch fetched them from a box drawn around
+       * each base and turned them into venues with no containment verdict at
+       * all. A base that is itself only `membership_unknown` carried its whole
+       * food box with it.
+       *
+       * The fallback publishes tags rather than addresses, so most venues here
+       * are honestly unplaceable and are admitted as such; what the gate removes
+       * is the venue a source puts in a different country, which a box drawn
+       * near a border will otherwise return.
+       */
+      let refusedFood = 0;
+      const foodOverlay = buildTripScopeOverlay({ scope, records: [], roleEligible });
+
       for (const base of bases) {
         if (venues.length >= maxVenues) break;
         // A small box per base: dense enough for `way` geometry to be affordable,
@@ -1195,6 +1381,17 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             if (!normalized || seen.has(normalized.elementId)) continue;
             const venue = toFoodVenue(normalized, scope, base.id);
             if (!venue) continue;
+            const decision = admitLateCandidate(foodOverlay, {
+              id: `food:${normalized.elementId}`,
+              coordinates: normalized.coordinates,
+              containment: { divisionIds: [] },
+              planningRole: 'food',
+              name: normalized.name,
+            });
+            if (!decision.eligibility.plannerEligible && decision.relationship === 'outside_scope') {
+              refusedFood += 1;
+              continue;
+            }
             seen.add(normalized.elementId);
             osmByVenueId.set(venue.id, normalized);
             venues.push(venue);
@@ -1206,6 +1403,14 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             detail: 'The map data service did not answer for food near one of the bases.',
           });
         }
+      }
+
+      if (refusedFood > 0) {
+        gaps.push({
+          subjectId: 'food',
+          reason: 'not_found',
+          detail: `${refusedFood} ${refusedFood === 1 ? 'place' : 'places'} to eat that the map data returned belong somewhere else, so they were left out.`,
+        });
       }
 
       if (venues.length === 0 && gaps.length === 0) {
@@ -1843,41 +2048,121 @@ function matchesSubject(url: string, title: string | undefined, name: string): b
 }
 
 /**
- * Whether the open stack is switched on.
+ * Whether the open stack is switched on, and which switches are missing.
  *
- * All four must be, and each defaults to off. A partially configured stack is
- * refused rather than half-run: a compilation with no routing provider produces
- * a region the planner cannot use, and finding that out three stages in wastes
- * the model calls that came before it.
+ * Both re-exported from `providers/switches.ts` rather than defined here. They
+ * read environment variables and nothing else, but *this* module is the live
+ * stack — importing it to ask a yes/no question dragged Nominatim, Valhalla,
+ * Overture and the research model into the plan page's render graph. Nothing was
+ * ever called from there; "nothing is called today" is a fact about the current
+ * control flow rather than about the build, and it was one refactor from being
+ * false.
  */
-export function openProvidersEnabled(): boolean {
-  return (
-    isGeocoderEnabled() &&
-    /**
-     * The place backbone, or the fallback map service. Not neither.
-     *
-     * `SIDEQUEST_POI_PROVIDER` used to be required. It is now the *fallback*:
-     * a shared, best-effort query service that two of four live destinations
-     * could not be served by. A build with the backbone on and Overpass off is
-     * the intended production shape, and a build with neither cannot discover
-     * anything, so it is refused up front rather than three stages in.
-     */
-    (isPlaceBackboneEnabled() || isPoiProviderEnabled()) &&
-    isRoutesProviderEnabled() &&
-    isResearchModelConfigured() &&
-    process.env.SIDEQUEST_RESEARCH_PROVIDER?.trim().toLowerCase() === 'anthropic'
-  );
+export { openProvidersEnabled, missingProviderSwitches } from './switches';
+
+/**
+ * THE ROLE HALF OF THE CONJUNCTION, SUPPLIED AT EVERY PRODUCTION CALL SITE.
+ *
+ * `eligibilityFor(relationship, roleEligible)` is the authoritative rule and it
+ * is a **conjunction**: containment answers *where a record is*, the role layer
+ * answers *what it may be used for*, and neither may override the other. A
+ * caller that builds an overlay without this factor gets the containment half
+ * alone, and every decision comes back claiming `roleEligible: true`.
+ *
+ * That was the state of all three production call sites, and it was not
+ * harmless. `buildInventory` re-checks role eligibility itself, so the compiler
+ * was unaffected — but the fallback branch admits a record on
+ * `provisionalBoardEligible` alone, and a boolean no role has ever narrowed is
+ * not a permission. The fallback's own selectors are curated to attraction tags,
+ * yet `place_of_worship` is among them and the taxonomy calls it a support stop,
+ * so the storefront-congregation shape was reachable there with no role
+ * permission consulted.
+ *
+ * Deliberately the *coarse* predicate — "is this eligible for anything at all" —
+ * matching what `buildInventory` passes. A finer answer belongs to the layer
+ * that knows which slot is being filled.
+ */
+function roleEligible(record: SourceRecord): boolean {
+  return assessRecordEligibility(record).eligibility.provisionalBoard;
 }
 
-export function missingProviderSwitches(): string[] {
-  const missing: string[] = [];
-  if (!isGeocoderEnabled()) missing.push('SIDEQUEST_GEOCODER_PROVIDER=nominatim');
-  if (!isPlaceBackboneEnabled() && !isPoiProviderEnabled()) {
-    missing.push('SIDEQUEST_PLACE_BACKBONE=overture');
-  }
-  if (!isRoutesProviderEnabled()) missing.push('SIDEQUEST_ROUTES_PROVIDER=valhalla');
-  if (process.env.SIDEQUEST_RESEARCH_PROVIDER?.trim().toLowerCase() !== 'anthropic') {
-    missing.push('SIDEQUEST_RESEARCH_PROVIDER=anthropic');
-  }
-  return missing;
+/**
+ * What a geocoder published about where a resolved place is.
+ *
+ * Read from the address block it returns when `addressdetails` was asked for,
+ * which is the only administrative evidence this path has. Absent fields stay
+ * absent: an address a geocoder did not publish is not a disagreement, and
+ * treating it as one would delete a legitimate base for a coverage gap.
+ */
+function containmentFromAddress(place: NominatimPlace): {
+  countryCode?: string;
+  regionName?: string;
+  localityName?: string;
+  divisionIds: readonly string[];
+} {
+  const address = place.address ?? {};
+  const country = address.country_code;
+  /* The code first, because a code compares against a code. */
+  const region = address['ISO3166-2-lvl4'] ?? address.state ?? address.region ?? address.province;
+  const locality =
+    address.city ??
+    address.town ??
+    address.village ??
+    address.municipality ??
+    address.hamlet ??
+    address.city_district;
+  return {
+    ...(country ? { countryCode: country.toUpperCase().slice(0, 2) } : {}),
+    ...(region ? { regionName: region } : {}),
+    ...(locality ? { localityName: locality } : {}),
+    divisionIds: [],
+  };
+}
+
+/**
+ * The discovery seam's area shape, as the containment gate wants it.
+ *
+ * Two declarations of one idea, and deliberately: the provider interface must
+ * not import from the backbone, or every adapter would depend on the compiler's
+ * internals to satisfy a signature. The conversion is one function and it lives
+ * where the two meet.
+ */
+function toIncludedArea(area: TripIncludedArea): IncludedArea {
+  return {
+    id: area.id,
+    name: area.name,
+    reason: area.reason,
+    status: area.status,
+    ...(area.center ? { center: area.center } : {}),
+    ...(area.radiusKm !== undefined ? { radiusKm: area.radiusKm } : {}),
+    ...(area.divisionIds ? { divisionIds: area.divisionIds } : {}),
+  };
+}
+
+/**
+ * A fallback map element, as something the containment gate can judge.
+ *
+ * The map service publishes tags rather than addresses, so the record it
+ * produces genuinely has no administrative geography — and saying so is the
+ * point. An empty containment block is what makes the verdict
+ * `membership_unknown` rather than a promotion, and the alternative (skipping
+ * the gate because there is nothing to judge on) is the defect CS-10 names.
+ */
+function fallbackRecordFor(entry: NormalizedOsmPlace): SourceRecord {
+  return {
+    id: `fallback:${entry.elementId}`,
+    layerId: 'fallback_places',
+    sourceId: entry.elementId,
+    name: entry.name,
+    alternateNames: [],
+    coordinates: entry.coordinates,
+    sourceCategory: entry.primaryTag,
+    sourceCategoryPath: [],
+    planningRole: 'attraction',
+    websiteCandidates: [],
+    containment: { divisionIds: [] },
+    attributes: {},
+    sources: [{ dataset: 'OpenStreetMap', licenceId: 'ODbL-1.0', recordId: entry.elementId }],
+    cellId: 'fallback',
+  };
 }

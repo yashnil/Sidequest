@@ -534,15 +534,25 @@ describe('durable claims through the compiler', () => {
     expect(warm.result.region.sourceManifest.facts.length).toBe(
       cold.result.region.sourceManifest.facts.length,
     );
-    expect(warm.result.region.diagnostics.budget.consumed.claimsHeld).toBeGreaterThan(0);
+    /*
+     * Read off the *envelope*, not off the artifact.
+     *
+     * These five counters used to be folded into
+     * `region.diagnostics.budget.consumed` from inside the compiler, which made
+     * this exact scenario — one store, cold then warm — persist different bytes
+     * for the same region. They are facts about a run and they live on the run;
+     * `determinism.test.ts` is the test that holds the line.
+     */
+    expect(warm.result.operational.sharedEvidence.claimsHeld).toBeGreaterThan(0);
     /**
      * And the short-circuit actually engaged: subjects whose every question was
      * already answered never reached source discovery, retrieval or the model.
      */
-    expect(
-      warm.result.region.diagnostics.budget.consumed.subjectsAnsweredFromClaims,
-    ).toBeGreaterThan(0);
-    expect(cold.result.region.diagnostics.budget.consumed.subjectsAnsweredFromClaims).toBe(0);
+    expect(warm.result.operational.sharedEvidence.subjectsAnsweredFromClaims).toBeGreaterThan(0);
+    expect(cold.result.operational.sharedEvidence.subjectsAnsweredFromClaims).toBe(0);
+    // And the artifact carries none of it, on either build.
+    expect(cold.result.region.diagnostics.budget).toBeUndefined();
+    expect(warm.result.region.diagnostics.budget).toBeUndefined();
   });
 
   it('reports the reuse no provider could report, and claims none on a cold build', async () => {

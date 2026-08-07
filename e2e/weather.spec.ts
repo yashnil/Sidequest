@@ -20,7 +20,29 @@ import { expect, test, type Page } from '@playwright/test';
  *   claim one day is better than another.
  */
 
-const AUGUST = { start: '2026-08-03', end: '2026-08-06' };
+/**
+ * A near trip, computed rather than hardcoded — and the same lesson as
+ * `washout()` below, learned twice.
+ *
+ * These dates were `2026-08-03` … `2026-08-06`, and on 2026-08-06 the trip's
+ * first day was three days in the past. A forecast horizon does not reach
+ * backwards, so day one came back as a seasonal pattern and two assertions that
+ * were about *the horizon* started failing for a reason that had nothing to do
+ * with it. The comment on `washout()` already says a fixed pair of dates cannot
+ * keep its properties as time passes; this pair was left fixed anyway.
+ *
+ * Derived from tomorrow, and stopping well inside the sixteen-day horizon, so
+ * every day of it is genuinely a forecast today and next year.
+ */
+function nearTrip(): { start: string; end: string } {
+  const start = new Date();
+  start.setUTCDate(start.getUTCDate() + 2);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 3);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+const AUGUST = nearTrip();
 /**
  * A trip whose every day is wet, computed rather than hardcoded.
  *
@@ -57,8 +79,23 @@ function washout(): { start: string; end: string } {
 }
 
 const WASHOUT = washout();
-/** Well beyond any forecast horizon: historical patterns, and nothing else. */
-const FAR = { start: '2027-09-14', end: '2027-09-17' };
+/**
+ * Well beyond any forecast horizon: historical patterns, and nothing else.
+ *
+ * Derived for the same reason `AUGUST` now is — a fixed year eventually stops
+ * being in the future, and the day it does this test starts asserting the
+ * opposite of what it means.
+ */
+function farTrip(): { start: string; end: string } {
+  const start = new Date();
+  start.setUTCFullYear(start.getUTCFullYear() + 1);
+  start.setUTCDate(start.getUTCDate() + 40);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 3);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+const FAR = farTrip();
 
 async function reachBoard(page: Page, dates = AUGUST) {
   await page.goto('/trips/new');
@@ -87,6 +124,25 @@ async function reachBoard(page: Page, dates = AUGUST) {
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
   await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
+}
+
+/**
+ * Ask for the forecast, because nothing asks for it on your behalf any more.
+ *
+ * The board used to fetch weather while rendering, so it simply had a forecast
+ * the first time anybody saw it — and so did every reload, and every reload paid
+ * for it. Weather is now a persisted snapshot written by an explicit operation,
+ * which means a board with no snapshot has no weather and says so.
+ *
+ * That is the product behaviour, so the tests press the button. A helper rather
+ * than a line in each spec, because "the forecast arrives when you ask for it"
+ * is now a precondition of every weather assertion on the board.
+ */
+async function fetchWeather(page: Page) {
+  const button = page.getByTestId('weather-refresh');
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(button).toHaveText('Fetch it again', { timeout: 20_000 });
 }
 
 /**
@@ -295,6 +351,7 @@ test('an ordinary week gets no backup section, because nothing needs one', async
 
 test('a washout week surfaces backups that live in other groups', async ({ page }) => {
   await reachBoard(page, WASHOUT);
+  await fetchWeather(page);
 
   const heading = page.getByRole('heading', { name: 'If the weather turns' });
   await expect(heading).toBeVisible();
@@ -315,6 +372,7 @@ test('a washout week surfaces backups that live in other groups', async ({ page 
 
 test('a place the traveller ruled out never appears as a backup', async ({ page }) => {
   await reachBoard(page, WASHOUT);
+  await fetchWeather(page);
   const heading = page.getByRole('heading', { name: 'If the weather turns' });
   await expect(heading).toBeVisible();
 

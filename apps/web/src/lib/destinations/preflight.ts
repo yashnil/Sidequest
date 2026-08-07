@@ -47,9 +47,15 @@ const CLIMATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** How many index features to cluster. A bound on the work, not a judgement. */
 const MAX_FEATURES = 400;
 
-export function isClimateEnabled(): boolean {
-  return process.env.SIDEQUEST_CLIMATE_PROVIDER?.trim().toLowerCase() !== 'off';
-}
+/**
+ * Re-exported from the import-free switch module.
+ *
+ * A page that only wants to say "climate guidance is switched off in this build"
+ * must not import this module to find out — doing so pulled the Open-Meteo
+ * client into both decide pages' render graph. See `providers/switches.ts`.
+ */
+import { isClimateEnabled } from '../providers/switches';
+export { isClimateEnabled };
 
 function climateProvider() {
   return isClimateEnabled() ? openMeteoClimateProvider() : unavailableClimateProvider();

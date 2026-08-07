@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { answerEveryQuestion, reachScope, waitForLookup } from './support/trip';
+import { answerEveryQuestion, reachScope, waitForLookup, waitUntilInteractive } from './support/trip';
 
 /**
  * The open-world journey, end to end, entirely offline.
@@ -17,7 +17,14 @@ const DATES = { start: '2026-08-12', end: '2026-08-16' };
 
 async function createTrip(page: Page, destination: string): Promise<string> {
   await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill(destination);
+  /*
+   * The composer's second section exists only once the client has the
+   * destination, so typing before the page is interactive loses the keystroke
+   * and the rest of the form never appears. See `waitUntilInteractive`.
+   */
+  const field = page.getByLabel('Destination');
+  await waitUntilInteractive(field);
+  await field.fill(destination);
   await page.getByLabel('Arrive').fill(DATES.start);
   await page.getByLabel('Leave').fill(DATES.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
@@ -227,10 +234,18 @@ test('the compiled result reports coverage and exact OSM attribution', async ({ 
   await compile(page);
 
   await expect(page.getByRole('heading', { name: 'What this is built on' })).toBeVisible();
-  // Every coverage dimension is rendered, not a single score.
-  await expect(page.getByText('Opening hours')).toBeVisible();
-  await expect(page.getByText('Driving times')).toBeVisible();
-  await expect(page.getByText(/Public transport/)).toBeVisible();
+  /*
+   * Every coverage dimension is rendered, not a single score.
+   *
+   * Matched exactly. The finished plan now also carries a record of the build
+   * itself, and one of its stage labels is "Settling opening hours" — so a
+   * substring match on "Opening hours" resolves to two elements and fails on
+   * strict mode. Exact matching is also the sharper assertion: the claim is that
+   * the dimension is named, not that the words appear somewhere on the page.
+   */
+  await expect(page.getByText('Opening hours', { exact: true })).toBeVisible();
+  await expect(page.getByText('Driving times', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Public transport/)).toBeVisible();
 
   await expect(page.getByText(/quality score/i)).toHaveCount(0);
 
@@ -456,12 +471,21 @@ test('a region nothing can be planned from says so on the board, before the buil
   }
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
-  await expect(
-    page.getByRole('heading', { name: /Nothing in this region works on these dates/i }),
-  ).toBeVisible();
+  /*
+   * The empty state used to be a fixed heading naming season, radius and effort.
+   * On the one world that reaches it, every place is *inside* the radius and
+   * simply too far to get back from — so two of the three were false, and the
+   * screen recommended a change that provably could not help. It now names the
+   * constraint that is actually binding, counted off the board's own blockers.
+   */
+  await expect(page.getByTestId('board-integrity').locator('[data-board-state]')).toHaveAttribute(
+    'data-board-state',
+    'blocked',
+  );
   // No build button at all: there is nothing to build from.
   await expect(page.getByRole('button', { name: /Build my trip|Rebuild my trip/ })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Revisit my answers' })).toBeVisible();
+  // The remedy that could move the constraint that is binding here, and no other.
+  await expect(page.getByTestId('board-recovery-adjust_travel_tolerance')).toBeVisible();
 
   await page.goto(`/trips/${id}/itinerary`);
   await expect(page.getByText(/No trip built yet/i).first()).toBeVisible();

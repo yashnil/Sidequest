@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  admitToBoard,
+  placeInclusionTag,
+  placeRoleTag,
   itineraryStructureFingerprint,
   type Itinerary,
   type ItineraryDay,
@@ -178,6 +181,64 @@ describe('candidate resolution', () => {
     const trimmed = easternSierraTravelMatrix([EASTERN_SIERRA_BASE_ID, 'convict-lake']);
     const { rejected } = resolveCandidates(input.candidates, input.selections, trimmed);
     expect(rejected.some((entry) => entry.reasonCode === 'missing_travel_data')).toBe(true);
+  });
+
+  /**
+   * THE REGRESSION TEST FOR THE SILENT DROP. It fails against the old function.
+   *
+   * `resolveCandidates` iterated the *candidate list* and looked each selection
+   * up inside it. A selection whose candidate had left the board — because the
+   * region was recompiled, because deduplication merged the record away, because
+   * the evidence funnel dropped it — was visited by neither branch. It appeared
+   * in neither `eligible` nor `rejected`, and the function's own comment
+   * promised that "there is no third outcome where it quietly disappears".
+   *
+   * There was. This is it, and the traveller who pinned that place by hand was
+   * the one who paid for it: nothing anywhere on the finished plan mentioned the
+   * thing they had asked for.
+   */
+  it('accounts for a chosen place whose candidate has left the board', () => {
+    const scenario = buildScenario();
+    const orphaned = [
+      ...scenario.selections,
+      {
+        placeId: 'a-place-that-left-the-board',
+        status: 'included' as const,
+        source: 'user' as const,
+        updatedAt: '2026-07-30T12:00:00.000Z',
+      },
+    ];
+
+    const { eligible, rejected } = resolveCandidates(
+      scenario.candidates,
+      orphaned,
+      scenario.matrix,
+    );
+
+    expect(eligible.some((entry) => entry.place.id === 'a-place-that-left-the-board')).toBe(false);
+    const entry = rejected.find((item) => item.placeId === 'a-place-that-left-the-board');
+    expect(entry, 'a chosen place vanished from both lists').toBeDefined();
+    expect(entry!.wasManual).toBe(true);
+    expect(entry!.reason.length).toBeGreaterThan(0);
+  });
+
+  /** An excluded selection with no candidate is still not a conflict. */
+  it('does not report a place the traveller skipped, candidate or no candidate', () => {
+    const scenario = buildScenario();
+    const { rejected } = resolveCandidates(
+      scenario.candidates,
+      [
+        ...scenario.selections,
+        {
+          placeId: 'skipped-and-gone',
+          status: 'excluded' as const,
+          source: 'user' as const,
+          updatedAt: '2026-07-30T12:00:00.000Z',
+        },
+      ],
+      scenario.matrix,
+    );
+    expect(rejected.some((entry) => entry.placeId === 'skipped-and-gone')).toBe(false);
   });
 });
 
@@ -832,5 +893,59 @@ describe('planner failure modes', () => {
     const moreDays = result.readiness.remedies.find((entry) => entry.remedy === 'more_days');
     expect(moreDays?.likelyToHelp).toBe(false);
     expect(moreDays?.detail).toMatch(/would not help/i);
+  });
+});
+
+describe('the planner cannot consume an ineligible candidate', () => {
+  /**
+   * THE PROPERTY, PROVEN THROUGH THE GATE RATHER THAN AT THE PLANNER.
+   *
+   * `resolveCandidates` takes `DiscoveryCandidate`s and would schedule anything
+   * handed to it, which is correct: a planner that re-litigated eligibility
+   * would be a fourth place the rule lived, and a fourth chance for it to
+   * disagree with the other three. The gate is upstream, and what has to be
+   * proven is that nothing ineligible can *arrive*.
+   *
+   * So this drives the real admission — the same `admitToBoard` both boards use
+   * — and asserts that a gateway and a utility record are absent from the pool
+   * the planner is given. A traveller cannot select a card that is not on the
+   * board, so a candidate refused here is a candidate the planner never sees.
+   */
+  /*
+   * A real compiled place, borrowed from the authored region and re-tagged.
+   * Building one by hand would be a fixture that agrees with the schema and not
+   * with the product.
+   */
+  const template = placeById('convict-lake')!;
+  function placeWith(id: string, tags: string[]) {
+    return { ...template, id, name: id, tags };
+  }
+
+  it('refuses a gateway, whatever its category says', () => {
+    const gateway = placeWith('airport', [placeRoleTag('gateway'), placeInclusionTag('adjacent_gateway')]);
+    expect(admitToBoard(gateway).admitted).toBe(false);
+    expect(admitToBoard(gateway).refusal).toBe('gateway_only');
+  });
+
+  it('refuses a utility record however completely it is catalogued', () => {
+    const driver = placeWith('driver', [placeRoleTag('support')]);
+    expect(admitToBoard(driver).admitted).toBe(false);
+    expect(admitToBoard(driver).refusal).toBe('utility_role');
+  });
+
+  it('admits a genuine attraction inside the destination', () => {
+    const museum = placeWith('museum', [
+      placeRoleTag('attraction'),
+      placeInclusionTag('inside_selected_division'),
+    ]);
+    expect(admitToBoard(museum).admitted).toBe(true);
+  });
+
+  it('admits a regional-expansion member, because something asked for its area', () => {
+    const lake = placeWith('lake', [
+      placeRoleTag('outdoor'),
+      placeInclusionTag('regional_expansion_member'),
+    ]);
+    expect(admitToBoard(lake).admitted).toBe(true);
   });
 });

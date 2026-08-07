@@ -11,7 +11,26 @@
   --color-paper-sunk: #f2ede4;
   --color-ink: #1c1917;
   --color-ink-muted: #57534e;
-  --color-ink-faint: #8a8279;
+  /*
+   * THE FAINTEST INK IS STILL BODY TEXT.
+   *
+   * This was #8a8279, which measures 3.54:1 on paper, 3.78:1 on paper-raised and
+   * 3.24:1 on paper-sunk. WCAG 1.4.3 asks 4.5:1 for anything under 18.66px bold
+   * or 24px regular, and every single use of this token is 11px or 12px — the
+   * worst pairing being the provisional board's own 11px summary line sitting on
+   * bg-paper-sunk at 3.24. It failed on all three surfaces; it was not close on
+   * any of them.
+   *
+   * #6e6861 gives 5.15 / 4.72 / 5.44 and is still visibly recessive against
+   * --color-ink-muted at 8.13 and --color-ink at 15.9, which is the point of the
+   * token: the hierarchy is preserved and the floor is cleared. Dark mode already
+   * passed throughout and is untouched.
+   *
+   * `visual.spec.ts` captures for human review and asserts only console errors
+   * and overflow, so no pixel test can catch a regression here. The guard is an
+   * offline assertion over this parsed value — `globals.contrast.test.ts`.
+   */
+  --color-ink-faint: #6e6861;
   --color-rule: #e2dcd1;
 
   --color-pine: #2f5d50;

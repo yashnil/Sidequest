@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { coordinatesSchema, httpUrlSchema } from './common';
 import { geoBoundsSchema } from './geography';
+import { geographicEvidenceSchema } from './geographic-evidence';
 import { dataLicenceSchema, licenceIdSchema } from './licence';
 
 /**
@@ -35,7 +36,39 @@ import { dataLicenceSchema, licenceIdSchema } from './licence';
  * response when a bounded subset was what we needed.
  */
 
-export const REGION_PACK_VERSION = 1 as const;
+/**
+ * Bumped to **3** when containment moved out of the pack, once for the whole
+ * closure rather than once per fix.
+ *
+ * A pack no longer carries a verdict at all. It carries *typed geographic
+ * evidence*, which is traveller-independent and therefore genuinely cacheable,
+ * and the verdict is decided by a trip-scope overlay after the destination
+ * identity, the scope strategy and the regional expansion are all known. A
+ * version 2 pack has neither the evidence nor a verdict this codebase can still
+ * read, so it stops matching and the next build re-reads the ground.
+ *
+ * What version 2 was for, kept because the reasoning still holds:
+ *
+ * ---
+ *
+ * Bumped to 2 when containment landed, and the bump was the whole fix.
+ *
+ * A pack is cached on `packScopeHash`, which is version + candidate id + bounds.
+ * `scopeFingerprint` gained a `boundaryEvidence` segment, so a *compiled region*
+ * correctly misses its cache and rebuilds — and the rebuild was then handed the
+ * **pre-containment pack**, whose records carry no `scopeMembership`, which
+ * `scopeRelationshipOf` reads as `membership_unknown`, which is admitted to
+ * every portfolio slot.
+ *
+ * In other words: without this line the exact New York board that started this
+ * work — twenty-three Berks County records — comes back from cache on the first
+ * rebuild after deploy, while the new diagnostics report containment as active.
+ * The two caches have to agree about what changed, and only this makes them.
+ *
+ * Old packs are not migrated or rewritten. They stop matching, and the next
+ * build re-reads the ground under the new rules.
+ */
+export const REGION_PACK_VERSION = 3 as const;
 
 // ---------------------------------------------------------------------------
 // Layers
@@ -81,16 +114,110 @@ export type SourceLayerKind = z.infer<typeof sourceLayerKindSchema>;
  * them being ranked as attractions *and* stops them being thrown away.
  */
 export const PLANNING_ROLES = [
+  /** A reason to build a day around it: a museum, a fortress, a gallery. */
   'attraction',
+  /**
+   * Real, smaller, and worth stopping for on the way to something else.
+   *
+   * Its own role rather than a low-scoring attraction because the *decision* is
+   * different. "Is this worth a morning" and "is this worth ten minutes of
+   * detour" are separate questions, and collapsing them is what produced a board
+   * where a monument plaque and a national museum competed on one ranking.
+   */
+  'side_quest',
+  /**
+   * Weather-bound, daylight-bound, season-bound: trails, peaks, lakes, beaches,
+   * viewpoints, parks.
+   *
+   * Split out of `attraction` because a live measurement forced it. Overture's
+   * *place* layer is built from commercial listings and is dense in cities; the
+   * *base* layers carry the outdoors and are dense everywhere else. Counting them
+   * as one number meant "how much is there to do here" was answered almost
+   * entirely by how commercially mapped the largest city was — which is a fact
+   * about the data and was being rendered as a fact about the country.
+   */
+  'outdoor',
   'food',
+  /**
+   * A market: somewhere to eat *and* a thing to do.
+   *
+   * The one category that routinely falls between `food` and `attraction`. Given
+   * to `food` it never reaches the board; given to `attraction` it never reaches
+   * a meal. It is both, so it is neither, so it is its own role.
+   */
+  'market',
+  /** The grocery, the visitor centre, the trailhead car park. */
   'support',
+  /**
+   * How you arrive and where a base goes: airports, rail and ferry terminals.
+   *
+   * Distinguished from `support` because a gateway anchors a *region*, not a day.
+   * The base portfolio reads these; a day plan never should.
+   */
+  'gateway',
   'lodging',
   'administrative',
+  /**
+   * Mapped, real, and never scheduled: pylons, culverts, service roads.
+   *
+   * Kept rather than dropped, for the same reason `support` is: it is real
+   * geography that something later may want, and throwing it away at read time
+   * means paying to read it again.
+   */
+  'infrastructure',
   /** Mapped, real, and not something a traveller plans around. */
   'excluded',
 ] as const;
 export const planningRoleSchema = z.enum(PLANNING_ROLES);
 export type PlanningRole = z.infer<typeof planningRoleSchema>;
+
+export const PLANNING_ROLE_LABELS: Record<PlanningRole, string> = {
+  attraction: 'Places worth a visit',
+  side_quest: 'Side quests',
+  outdoor: 'Outdoors and scenery',
+  food: 'Food',
+  market: 'Markets',
+  support: 'Practical stops',
+  gateway: 'Ways in and out',
+  lodging: 'Somewhere to stay',
+  administrative: 'Administrative geography',
+  infrastructure: 'Mapped, not planned around',
+  excluded: 'Not a trip',
+};
+
+/**
+ * The roles a traveller chooses *between*.
+ *
+ * Exported rather than inlined because four separate layers need the same
+ * answer — inventory bucketing, supply counting, board grouping and the
+ * destination shortlist's diversity check — and four copies of this list is four
+ * chances for a car park to be counted as a museum.
+ */
+export const VISITABLE_ROLES: readonly PlanningRole[] = [
+  'attraction',
+  'side_quest',
+  'outdoor',
+  'market',
+];
+
+/** Roles that make a day possible without being the reason for it. */
+export const SUPPORTING_ROLES: readonly PlanningRole[] = ['food', 'support', 'gateway'];
+
+export function isVisitableRole(role: PlanningRole): boolean {
+  return VISITABLE_ROLES.includes(role);
+}
+
+/**
+ * Whether a role is *eligible* to anchor a day.
+ *
+ * Eligibility, not a promise. Whether something can actually hold a morning
+ * depends on its evidence and on this traveller's fit, both of which arrive
+ * later and neither of which belongs in a shared, traveller-independent pack.
+ * A side quest is deliberately not eligible: that is what makes it a side quest.
+ */
+export function roleCanAnchor(role: PlanningRole): boolean {
+  return role === 'attraction' || role === 'outdoor' || role === 'market';
+}
 
 /**
  * One upstream contributor's claim that this record exists.
@@ -138,6 +265,64 @@ export const recordContainmentSchema = z.object({
 export type RecordContainment = z.infer<typeof recordContainmentSchema>;
 
 /**
+ * HOW A RECORD USED TO STAND TO THE GROUND THE TRAVELLER CHOSE.
+ *
+ * **Legacy, read-only, and never written again.** The authoritative containment
+ * vocabulary now lives in `schemas/containment.ts` — one vocabulary, one
+ * admission table, one eligibility rule — and the verdict itself is no longer a
+ * property of a pack at all. A pack is traveller-independent ground; a verdict
+ * about one traveller's destination has no business being cached inside it.
+ *
+ * This shape survives only so that packs written before that split still parse.
+ * Records are read for their *evidence* and re-decided by the trip-scope
+ * overlay; this field is ignored.
+ */
+const LEGACY_SCOPE_RELATIONSHIPS = [
+  'inside_scope',
+  'inside_selected_division',
+  'adjacent_gateway',
+  'optional_satellite',
+  'outside_scope',
+  'membership_unknown',
+] as const;
+
+const LEGACY_CONTAINMENT_EVIDENCE = [
+  'selected_boundary_geometry',
+  'selected_division_geometry',
+  'source_administrative_containment',
+  'source_division_hierarchy',
+  'bounded_geographic_fallback',
+  'no_evidence',
+] as const;
+
+export const legacyScopeMembershipSchema = z.object({
+  relationship: z.enum(LEGACY_SCOPE_RELATIONSHIPS),
+  evidence: z.enum(LEGACY_CONTAINMENT_EVIDENCE),
+  rung: z.number().int().min(1).max(5),
+  distanceKm: z.number().min(0),
+  scopeIdentityKnown: z.boolean(),
+  reason: z.string().min(1),
+  conflict: z
+    .object({
+      level: z.enum(['country', 'region', 'locality']),
+      expected: z.string().min(1),
+      found: z.string().min(1),
+    })
+    .optional(),
+  gateway: z
+    .object({
+      reason: z.enum([
+        'traveller_named_gateway',
+        'no_gateway_inside_scope',
+        'water_or_air_crossing_required',
+      ]),
+    })
+    .optional(),
+  satellite: z.object({ areaId: z.string().min(1) }).optional(),
+});
+export type LegacyScopeMembership = z.infer<typeof legacyScopeMembershipSchema>;
+
+/**
  * A normalised source record.
  *
  * The normalisation is deliberately minimal — the Phase-7 rule that a table
@@ -179,6 +364,31 @@ export const sourceRecordSchema = z.object({
   websiteCandidates: z.array(httpUrlSchema).default([]),
   wikidataId: z.string().min(1).optional(),
   containment: recordContainmentSchema,
+  /**
+   * TYPED GEOGRAPHIC EVIDENCE — what a source published about where this is.
+   *
+   * Traveller-independent, which is why it belongs in a pack and why a
+   * *verdict* does not. Country, region, county, locality, neighbourhood, alias
+   * and display name are separate values here, so that a comparison happens
+   * within a level and a country name can never satisfy a city's membership.
+   *
+   * Defaulted rather than optional: a pack written before typed evidence existed
+   * parses to empty evidence and is re-derived from `containment` by the reader,
+   * which is exactly what it would have had.
+   */
+  geography: geographicEvidenceSchema.optional().catch(undefined),
+  /**
+   * The containment verdict a pre-overlay build baked in. **Ignored.**
+   *
+   * `.catch(undefined)` is the load-bearing part: a region pack is immutable and
+   * shared, and a strict schema over a *derived* judgement is a trap. The day the
+   * containment vocabulary gains a member, every pack written under the old one
+   * would fail `regionPackSchema.parse` and take a whole stored artifact down
+   * with it. Degrading an unreadable verdict to absent costs a re-derivation —
+   * which the reader does anyway — and costs nothing else. That vocabulary *has*
+   * now gained members, which is what this field survived to absorb.
+   */
+  scopeMembership: legacyScopeMembershipSchema.optional().catch(undefined),
   /**
    * Planning-relevant attributes the source recorded, by name and value.
    *

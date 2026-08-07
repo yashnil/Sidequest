@@ -110,3 +110,86 @@ describe('the routing layers stay apart', () => {
     }
   });
 });
+
+/**
+ * THE PROVISIONAL FIREWALL.
+ *
+ * A board emitted before the route matrix exists is the newest way for a zero to
+ * become a drive. `travelFromBase` is `{0, 0}` from the moment a candidate is
+ * built until the matrix corrects it; every comparison against zero passes; a
+ * day carrying one satisfies every drive limit and every daylight check
+ * silently.
+ *
+ * The defence is a type with no minutes field. These assert it stays that way,
+ * and that the planner cannot reach one.
+ */
+describe('a provisional board cannot become a plan', () => {
+  const PROVISIONAL = [
+    'packages/core/src/schemas/provisional.ts',
+    'packages/compiler/src/provisional.ts',
+  ];
+
+  it.each(PROVISIONAL)('%s carries no travel time, in any spelling', (file) => {
+    const source = code(file);
+    for (const banned of [/driveMinutes/, /distanceKm/, /travelFromBase/, /detourClass/]) {
+      expect(banned.test(source), `${file} matches ${banned}`).toBe(false);
+    }
+  });
+
+  /**
+   * A `Place` carries six unmeasured defaults — a zeroed travel time, twelve
+   * open months, a paved road, no remote-services flag, a constant source
+   * confidence, and a hidden-gem score that is the algebraic inverse of its own
+   * popularity. Handing one out would put all six on a card. So the schema does
+   * not name the type.
+   */
+  it('never lets a Place cross into a provisional card', () => {
+    const source = code('packages/core/src/schemas/provisional.ts');
+    expect(/from '\.\/place'/.test(source)).toBe(false);
+    expect(/\bplace\s*:\s*placeSchema\b/.test(source)).toBe(false);
+  });
+
+  it('keeps the planner unable to name the provisional layer', () => {
+    for (const file of [
+      'packages/planner/src/plan.ts',
+      'packages/planner/src/types.ts',
+      'packages/planner/src/candidates.ts',
+      'packages/planner/src/assign.ts',
+      'packages/planner/src/schedule.ts',
+    ]) {
+      expect(/Provisional/.test(code(file)), `${file} names the provisional layer`).toBe(false);
+    }
+  });
+
+  /**
+   * The emission must happen before the first call anybody pays for. Asserted
+   * from the source's own ordering, because a browser test of it would be racing
+   * a fixture compiler that finishes in about a second.
+   */
+  it('emits the board before anything is bought', () => {
+    const compiler = code('packages/compiler/src/compile.ts');
+    const cut = compiler.indexOf('onProvisionalBoard(');
+    const food = compiler.indexOf("runStage('discovering_food'");
+    const funnel = compiler.indexOf("runStage('enriching_priority_candidates'");
+    const paid = compiler.indexOf("runStage('discovering_sources'");
+
+    expect(cut).toBeGreaterThan(food);
+    expect(cut).toBeLessThan(funnel);
+    expect(cut).toBeLessThan(paid);
+  });
+
+  /** The projection buys nothing and cannot fail a build by being slow. */
+  it('builds the board without a provider and without awaiting', () => {
+    const source = code('packages/compiler/src/provisional.ts');
+    expect(/\bawait\b/.test(source)).toBe(false);
+    expect(/ledger\./.test(source)).toBe(false);
+  });
+
+  /** The route that shows it starts no external work, so a refresh costs nothing. */
+  it('renders the provisional board without reaching anything', () => {
+    const page = code('apps/web/src/app/trips/[id]/provisional/page.tsx');
+    for (const banned of [/resolveTripRegion/, /resolveTripWeather/, /compilerProviders/, /\bfetch\(/]) {
+      expect(banned.test(page), `the provisional route matches ${banned}`).toBe(false);
+    }
+  });
+});

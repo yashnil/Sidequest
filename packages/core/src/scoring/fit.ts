@@ -184,6 +184,41 @@ export function scorePlace(
   const { profile, travelerNeeds } = context;
   const derived = profile.derived;
 
+  /**
+   * HOW STRONGLY THEY SAID NO, WHERE "NO" WAS NOT A REFUSAL.
+   *
+   * `profile.avoidances` is a boolean list, and a boolean can only ever mean
+   * "remove this". That was the whole of the free-text reader's effect on a
+   * board: somebody who wrote "not massively into long walks" had it recorded
+   * identically to somebody who wrote "no hiking", and a category vanished.
+   *
+   * The taxonomy now separates polarity from magnitude, and `avoidances` holds
+   * only the signals that passed `canApplyAsExclusion` — an explicit,
+   * deterministic, confirmed refusal. Everything softer arrives here instead, as
+   * a number between 0 and 1, and it **ranks** rather than removes.
+   *
+   * Zero for a profile with no interpreted preferences, so every existing score
+   * is unchanged. That is the property that makes this safe to add to a scorer
+   * with a dozen tuned constants: the new term contributes nothing until somebody
+   * has actually said something.
+   */
+  const refusal = (key: string): number => {
+    let strongest = 0;
+    for (const signal of profile.preferenceSignals ?? []) {
+      if (signal.key !== key) continue;
+      if (signal.polarity !== 'refuses') continue;
+      /*
+       * An exclusionary signal is already in `avoidances` and has already had its
+       * effect there. Counting it again here would penalise it twice — once by
+       * removing the place and once by lowering the score of a place that is
+       * gone.
+       */
+      if (signal.exclusionary) continue;
+      strongest = Math.max(strongest, signal.magnitude);
+    }
+    return strongest;
+  };
+
   const blockers: Blocker[] = [];
   const cautions: string[] = [];
 
@@ -355,6 +390,21 @@ export function scorePlace(
     });
   }
 
+  /*
+   * The graded half of the same two statements the blockers above make.
+   *
+   * A soft refusal cannot reach `avoidances`, so it cannot reach those branches;
+   * it lands here and lowers the fit of exactly the places the hard version would
+   * have removed. Half weight, because "I would rather not" should move a place
+   * down the board and must not move it off.
+   */
+  if (place.physicalIntensity === 'strenuous') {
+    intensityFit = clamp01(intensityFit - refusal('avoidance:strenuous_activity') * 0.5);
+  }
+  if (place.category === 'day_hike' && place.typicalDurationMinutes > 180) {
+    intensityFit = clamp01(intensityFit - refusal('avoidance:long_hikes') * 0.5);
+  }
+
   if (
     travelerNeeds.includes('altitude_sensitive') &&
     place.physicalIntensity !== 'none' &&
@@ -365,7 +415,10 @@ export function scorePlace(
 
   // --- Cost ---------------------------------------------------------------
   const costDelta = place.costLevel - derived.comfortableCostLevel;
-  const budgetFit = costDelta <= 0 ? 1 : costDelta === 1 ? 0.6 : costDelta === 2 ? 0.25 : 0.1;
+  let budgetFit = costDelta <= 0 ? 1 : costDelta === 1 ? 0.6 : costDelta === 2 ? 0.25 : 0.1;
+  if (place.costLevel >= derived.comfortableCostLevel + 1) {
+    budgetFit = clamp01(budgetFit - refusal('avoidance:expensive_activities') * 0.4);
+  }
   if (profile.avoidances.includes('expensive_activities') && place.costLevel >= 3) {
     blockers.push({
       code: 'too_expensive',
@@ -401,11 +454,9 @@ export function scorePlace(
   ) {
     detourFit = clamp01(detourFit + 0.1);
   }
-  if (
-    profile.avoidances.includes('long_drives') &&
-    driveMinutes > derived.effectiveDetourMinutes
-  ) {
-    detourFit = clamp01(detourFit - 0.2);
+  if (driveMinutes > derived.effectiveDetourMinutes) {
+    if (profile.avoidances.includes('long_drives')) detourFit = clamp01(detourFit - 0.2);
+    else detourFit = clamp01(detourFit - refusal('avoidance:long_drives') * 0.4);
   }
 
   // --- Logistics ----------------------------------------------------------
@@ -415,8 +466,10 @@ export function scorePlace(
       : place.access.parkingDifficulty === 'moderate'
         ? 0.75
         : 0.45;
-  if (place.access.remoteNoServices) logisticsEase -= 0.15;
-  if (roughRoad) logisticsEase -= 0.1;
+  if (place.access.remoteNoServices) {
+    logisticsEase -= 0.15 + refusal('avoidance:remote_areas_without_services') * 0.4;
+  }
+  if (roughRoad) logisticsEase -= 0.1 + refusal('avoidance:rough_or_gravel_roads') * 0.4;
   if (place.typicalDurationMinutes > 240) logisticsEase -= 0.1;
   if (place.typicalDurationMinutes > 300 && profile.pace === 'slow') logisticsEase -= 0.1;
   logisticsEase = clamp01(logisticsEase);

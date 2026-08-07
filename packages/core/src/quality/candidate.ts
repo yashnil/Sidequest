@@ -146,7 +146,20 @@ export function classifyingTagValue(place: Place): string | undefined {
 export interface QualityInput {
   place: Place;
   evidence?: PlaceEvidence;
-  /** 0–1, from the trip's own scorer. Never popularity. */
+  /**
+   * 0–1, from the trip's own scorer. Never popularity.
+   *
+   * This is also the **only** channel a graded refusal reaches candidate quality
+   * through, and deliberately so. `scorePlace` already scales intensity, cost,
+   * detour and logistics by the magnitude of anything the traveller said they
+   * would rather not do; taking a second, separate `refusalMagnitude` here and
+   * subtracting it again would penalise the same sentence twice, once through
+   * fit and once through quality, for no additional information.
+   *
+   * The property that matters — every consumer interpreting one normalised
+   * magnitude the same way — is held by there being one derivation, not by every
+   * consumer having its own parameter.
+   */
   fitScore: number;
   /** Minutes one way from the base. */
   detourMinutes: number;

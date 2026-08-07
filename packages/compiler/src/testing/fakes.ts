@@ -976,7 +976,7 @@ export function fakeResearchProviders(
           ],
           calls: 1,
           promptVersion: 'fake-extract/1',
-          schemaVersion: 'fake/1',
+          schemaVersion: 'fake-extraction/1',
         };
       }
 
@@ -1078,7 +1078,7 @@ export function fakeResearchProviders(
         gaps: [],
         calls: 1,
         promptVersion: 'fake-extract/1',
-        schemaVersion: 'fake/1',
+        schemaVersion: 'fake-extraction/1',
       };
     },
   };
@@ -1117,6 +1117,7 @@ export function syntheticCandidate(spec: SyntheticWorldSpec): DestinationCandida
     breadth: spec.breadth,
     center: spec.center,
     countryCode: spec.countryCode,
+    aliases: [],
     administrativeAreas: [spec.qualifiedName],
     timeZones: spec.timeZones ?? [spec.timeZone],
     providerRefs: [

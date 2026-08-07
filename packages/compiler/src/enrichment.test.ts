@@ -222,10 +222,29 @@ describe('source-backed enrichment reaches the artifact', () => {
   });
 
   it('survives a retrieval outage, and says pages were refused rather than absent', async () => {
-    const region = await compile('transit_city', { retrievalFails: true });
-    expect(researchedFacts(region)).toHaveLength(0);
-    expect(region.sourceManifest.pages.length).toBeGreaterThan(0);
-    expect(region.sourceManifest.pages.every((page) => page.contentBytes === 0)).toBe(true);
+    const result = await compileRegion({
+      compilationId: 'region-retrieval-outage',
+      scope: scopeFor('transit_city'),
+      dates: DATES,
+      months: MONTHS,
+      providers: fakeProviders(SYNTHETIC_WORLDS.transit_city!, { retrievalFails: true }),
+      now: NOW,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(researchedFacts(result.region)).toHaveLength(0);
+    /*
+     * Refusals are a fact about a *run*, not about the region, so they moved to
+     * the envelope with the rest of the retrieval log. The artifact's own page
+     * list is now derived from the facts it retained, so a warm build names the
+     * same pages as a cold one instead of naming only what it happened to
+     * download — which used to make the warm artifact *understate* what it rests
+     * on.
+     */
+    expect(result.operational.retrieval.pagesRefused).toBeGreaterThan(0);
+    expect(result.operational.retrieval.pagesRead).toBe(0);
+    expect(result.operational.retrieval.bytesRead).toBe(0);
   });
 
   it('survives an extraction failure without losing the geography', async () => {
@@ -248,7 +267,7 @@ describe('source-backed enrichment reaches the artifact', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    const consumed = result.region.diagnostics.budget.consumed;
+    const consumed = result.operational.budget.consumed;
     expect(consumed.maxSourceSearches ?? 0).toBeLessThanOrEqual(2);
     expect(consumed.maxPagesFetched ?? 0).toBeLessThanOrEqual(3);
     expect(consumed.maxExtractionCalls ?? 0).toBeLessThanOrEqual(1);

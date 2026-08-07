@@ -64,6 +64,14 @@ function easternSierraScope(nights: number): GeographicScope {
       center: EASTERN_SIERRA.baseCoordinates,
       radiusKm: EASTERN_SIERRA.maxRadiusKm,
     },
+    /*
+     * A circle, and it says so. The authored region was drawn as a reach radius
+     * around a base rather than traced from a published boundary, so this is the
+     * honest value and containment will treat it accordingly.
+     */
+    boundaryEvidence: 'reach_circle',
+    reachRadiusKm: EASTERN_SIERRA.maxRadiusKm,
+    administrative: { countryCode: 'US', regionCode: 'US-CA', aliases: [], hierarchy: [], divisionIds: [] },
     includedAreas: [],
     excludedAreas: [],
     gateways: [],
@@ -304,7 +312,7 @@ function buildEasternSierra(nights: number): CompiledRegion {
       compilerVersion: STATIC_REGION_COMPILER_VERSION,
       startedAt: now,
       finishedAt: now,
-      durationMs: 0,
+      stageCount: 0,
       stageTimings: [],
       budget: { consumed: {}, limits: {}, exhausted: [] },
       promptVersions: {},

@@ -12,7 +12,7 @@ import {
 import { scopeFitsTrip } from '@sidequest/compiler';
 import { PlanFlow, type PlanStep } from '@/components/PlanFlow';
 import { TripContextBar } from '@/components/TripContextBar';
-import { providerReadiness } from '@/lib/compiler/providers';
+import { providerReadiness } from '@/lib/compiler/readiness';
 import { getIntent, getLatestJob, getLatestWorkPlan } from '@/lib/db/compiler-repository';
 import { getTrip } from '@/lib/db/repository';
 import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
@@ -61,6 +61,16 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
         ...(job.errorCode ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] } : {}),
         retryable: job.errorCode ? isRetryable(job.errorCode) : job.state === 'failed',
         ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
+        /*
+         * So the elapsed clock is right on the first paint rather than blank
+         * until the first poll a second later. A stored timestamp, not a client
+         * clock — two tabs agree and a refresh does not restart it.
+         *
+         * `estimate` is deliberately *not* here: it is derived from timing
+         * history, and a page render must not query history to draw a number
+         * that the very next poll will supply.
+         */
+        startedAt: job.startedAt,
       }
     : { state: 'none', stages: [], retryable: false };
 

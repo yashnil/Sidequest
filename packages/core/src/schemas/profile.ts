@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { transportPrioritySchema } from './access';
+import { preferenceSignalSchema } from './interpretation';
 import {
   breakfastStyleSchema,
   dietaryNeedSchema,
@@ -52,6 +53,22 @@ export const questionnaireAnswersSchema = z.object({
   regionalExpansion: regionalExpansionSchema,
   detourToleranceMinutes: z.number().int().min(0).max(180),
   avoidances: z.array(avoidanceSchema).default([]),
+  /**
+   * Confirmed free-text preferences, as direction and size on a documented range.
+   *
+   * `interests` is a five-rung ladder and `avoidances` is a list of booleans, and
+   * between them they cannot express "really rather not, but do not delete it" —
+   * nine of the twelve avoidance keys have no graded channel at all. So
+   * `applyInterpretation` writes what those two *can* carry and puts the whole
+   * normalised vector here, where a ranker can read a magnitude instead of
+   * re-deriving one from an enum name.
+   *
+   * Defaulted, like every other field added after the fact: `answers_json` is
+   * stored raw and reparsed on every read, so a trip saved before this existed
+   * must not become unreadable. An empty list means "nothing was interpreted",
+   * which is different from and must not be confused with "no preferences".
+   */
+  preferenceSignals: z.array(preferenceSignalSchema).default([]),
   mobilityLimited: z.boolean(),
   accessibilityNotes: z.string().max(500).optional(),
   /**
@@ -175,6 +192,8 @@ export const travelerProfileSchema = z.object({
   regionalExpansion: regionalExpansionSchema,
   detourToleranceMinutes: z.number().int().min(0).max(180),
   avoidances: z.array(avoidanceSchema),
+  /** Carried through from the answers unchanged. See the note there. */
+  preferenceSignals: z.array(preferenceSignalSchema).default([]),
   accessibility: z.object({
     mobilityLimited: z.boolean(),
     notes: z.string().max(500).optional(),

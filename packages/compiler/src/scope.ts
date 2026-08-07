@@ -227,6 +227,52 @@ export function deriveScope(input: ScopeInput): GeographicScope {
       ? 'subregion'
       : candidate.breadth,
     center: candidate.center,
+    /*
+     * WHAT KIND OF EDGE THIS IS, RECORDED RATHER THAN INFERRED.
+     *
+     * `measured_extent` when the source published one, `reach_circle` when it
+     * did not — which is very nearly always, because every city, town, county
+     * and district in the destination index carries a centre and no polygon. A
+     * consumer that needs a *border* can now tell that it has been handed a
+     * circle, instead of discovering it by admitting a county 166 km away.
+     */
+    boundaryEvidence: (candidate.bounds && !narrowed ? 'measured_extent' : 'reach_circle') as
+      | 'published_boundary'
+      | 'measured_extent'
+      | 'reach_circle',
+    /*
+     * The unclipped extent, kept beside the clipped shape.
+     *
+     * `deriveShape` intersects a published boundary with the trip's reach. That
+     * is right for choosing what to compile and wrong for judging what belongs:
+     * the clipped box is a subset of the boundary, so it can confirm membership
+     * and can never refute it.
+     */
+    ...(candidate.bounds ? { administrativeBoundary: candidate.bounds } : {}),
+    /*
+     * Reach as its own number, because the shape can no longer be asked for it.
+     */
+    reachRadiusKm: radiusKm,
+    /*
+     * What the destination is, administratively — the evidence containment
+     * actually uses, since geometry is usually unavailable. It has been on the
+     * candidate all along and was simply never carried through.
+     */
+    administrative: {
+      ...(candidate.countryCode ? { countryCode: candidate.countryCode } : {}),
+      /*
+       * The typed half. A code on both sides of a comparison is the only thing
+       * that survives a catalogue publishing one name in English and another in
+       * the local script — and the destination index has published this all
+       * along while the scope layer wrote only the country and the flat
+       * hierarchy.
+       */
+      ...(candidate.regionCode ? { regionCode: candidate.regionCode } : {}),
+      /* Other spellings of *this entity*, compared only at its own level. */
+      aliases: [...candidate.aliases],
+      hierarchy: [...candidate.administrativeAreas],
+      divisionIds: [],
+    },
     /**
      * The scope's own bounds, never the geocoder's unclipped ones.
      *

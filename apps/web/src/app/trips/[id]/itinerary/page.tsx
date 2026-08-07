@@ -73,6 +73,18 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * rather than to whatever the region looks like today. A region that will not
    * resolve simply produces no checklist, which is the honest outcome and never
    * a reason to withhold the itinerary.
+   *
+   * "Cheap" is now true. It was not: `resolveTripRegion` fetched a forecast, so
+   * opening a *finished, stored* itinerary made an outbound weather request and
+   * a page that exists to show somebody a plan they already have depended on a
+   * provider being up. Weather is read from the persisted snapshot now, and the
+   * two properties that matter here follow from that:
+   *
+   *   - a stale or absent snapshot changes nothing on this page. The plan on
+   *     screen is the plan that was built and stored; a newer forecast is a
+   *     reason to look again, never a licence to edit somebody's trip while they
+   *     are reading it.
+   *   - refreshing the browser starts no provider work at all.
    */
   let preparation: PreparationItem[] = [];
   /*
@@ -83,12 +95,18 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * back to the itinerary's own `baseName`, exactly as before.
    */
   let baseNames: DisplayName | undefined;
+  /**
+   * The zone this trip's wall clock runs on, read from the base it was compiled
+   * for. Absent for an artifact compiled before bases carried one, and the view
+   * says UTC rather than inventing a plausible-looking local hour.
+   */
+  let timeZone: string | undefined;
   try {
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
-      baseNames = resolved.context.compiled.bases.find(
-        (base) => base.id === itinerary.baseId,
-      )?.names;
+      const base = resolved.context.compiled.bases.find((entry) => entry.id === itinerary.baseId);
+      baseNames = base?.names;
+      timeZone = base?.timeZone;
       const scheduled = new Set<string>();
       const namesById = new Map<string, string>();
       const unverifiedHours: string[] = [];
@@ -131,6 +149,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
        * itinerary's own `baseName`, exactly as before.
        */
       {...(baseNames ? { baseNames } : {})}
+      {...(timeZone ? { timeZone } : {})}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a

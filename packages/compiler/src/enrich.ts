@@ -358,8 +358,21 @@ export interface BuildEvidenceResult {
   reusedResolutions: number;
   /** Calendars we are entitled to assert, for the subjects that earned one. */
   calendars: OperatingCalendar[];
-  /** Subjects a source says are shut, and should not be scheduled at all. */
+  /** Subjects a source says must not be scheduled — the union of the two below. */
   blockedSubjectIds: string[];
+  /**
+   * Shut on these dates, as distinct from unsafe on them.
+   *
+   * The two were one set, so both resolved to "An official source says it is shut
+   * on your dates" — which is a different claim from the one a safety advisory
+   * makes, and a wrong one. Somebody told the road is shut plans around a closure;
+   * somebody told the trail is shut when the notice was an avalanche advisory has
+   * been told something that is not true about a place that is open.
+   */
+  closureBlockedSubjectIds: string[];
+  safetyBlockedSubjectIds: string[];
+  /** The published sentence that caused the block, with the stage that produced it. */
+  blockingStatements: Map<string, { text: string; stage: 'availability' | 'safety' }>;
 }
 
 export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
@@ -377,6 +390,9 @@ export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
   const places: PlaceEvidence[] = [];
   const calendars: OperatingCalendar[] = [];
   const blocked = new Set<string>();
+  const closureBlocked = new Set<string>();
+  const safetyBlocked = new Set<string>();
+  const blockingStatement = new Map<string, { text: string; stage: 'availability' | 'safety' }>();
 
   for (const subject of input.subjects) {
     const mine = resolved.filter((entry) => entry.subjectId === subject.id);
@@ -435,8 +451,22 @@ export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
      * the dates in question, scheduling it anyway would be the exact failure the
      * whole evidence layer exists to prevent.
      */
-    if (closures.some((closure) => closure.severity === 'blocks')) blocked.add(subject.id);
-    if (safety.some((entry) => entry.severity === 'blocks')) blocked.add(subject.id);
+    const blockingClosure = closures.find((closure) => closure.severity === 'blocks');
+    const blockingSafety = safety.find((entry) => entry.severity === 'blocks');
+    if (blockingClosure) {
+      blocked.add(subject.id);
+      closureBlocked.add(subject.id);
+      blockingStatement.set(subject.id, { text: blockingClosure.statement, stage: 'availability' });
+    } else if (blockingSafety) {
+      /*
+       * Closure first when both fire. "Shut on your dates" is the stronger and
+       * the more actionable of the two, and a safety notice about a place that is
+       * also shut is not the thing to lead with.
+       */
+      blocked.add(subject.id);
+      safetyBlocked.add(subject.id);
+      blockingStatement.set(subject.id, { text: blockingSafety.statement, stage: 'safety' });
+    }
 
     const calendar = buildCalendar(subject.id, byKey, factsById, input.payloads, booking);
     if (calendar) calendars.push(calendar);
@@ -449,6 +479,9 @@ export function buildEvidence(input: BuildEvidenceInput): BuildEvidenceResult {
     reusedResolutions,
     calendars,
     blockedSubjectIds: [...blocked].sort(),
+    closureBlockedSubjectIds: [...closureBlocked].sort(),
+    safetyBlockedSubjectIds: [...safetyBlocked].sort(),
+    blockingStatements: blockingStatement,
   };
 }
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { completeQuestionnaire } from './support/trip';
 
 /**
  * The journey this slice promises: a traveller enters a Mammoth Lakes trip,
@@ -16,47 +17,6 @@ async function createTrip(page: Page, dates: { start: string; end: string }) {
   await page.getByLabel('Leave').fill(dates.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
   await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
-}
-
-async function completeQuestionnaire(page: Page) {
-  // Interests: the canonical hiking/lakes/viewpoints traveller.
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-  await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Rhythm
-  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
-  await page.getByRole('radio', { name: /^Balanced/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Budget
-  await page.getByRole('radio', { name: /^Mid-range/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Food
-  await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Discovery
-  await page.getByRole('radio', { name: /^A real mix/ }).check();
-  await page.getByRole('radio', { name: /Crowds ruin it/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Transport
-  await expect(page.getByRole('heading', { name: 'How are you getting around?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Region
-  await page.getByRole('radio', { name: /Within ~1 hour/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Constraints
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  // Review
-  await expect(page.getByRole('heading', { name: 'Your trip personality' })).toBeVisible();
 }
 
 test('a traveller goes from a blank trip to a personalised Eastern Sierra board', async ({
@@ -101,7 +61,11 @@ test('the board arrives pre-selected rather than empty', async ({ page }) => {
 
   // A balanced starting set is already applied — the traveller confirms a plan
   // rather than building one from a grid of 22 cards.
-  await expect(page.getByText(/^[1-9]\d* in/)).toBeVisible();
+  // The visible counter by its own identity, not by a text shape. A text shape
+  // matches whatever else happens to start the same way — the board's live
+  // region did, and four specs failed at once for a reason none of them was
+  // about.
+  await expect(page.getByTestId('board-summary')).toContainText(/[1-9]\d* in/);
 
   const card = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
   await expect(card.getByRole('button', { name: 'Include' })).toHaveAttribute(
@@ -146,12 +110,12 @@ test('auto-pick counts persist across a reload', async ({ page }) => {
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
 
   await page.getByRole('button', { name: 'Auto-pick the best mix for me' }).click();
-  const counter = page.getByText(/^\d+ in/);
+  const counter = page.getByTestId('board-summary');
   await expect(counter).toContainText(/[1-9]\d* in/);
 
   const before = await counter.textContent();
   await page.reload();
-  await expect(page.getByText(/^\d+ in/)).toHaveText(before ?? '');
+  await expect(page.getByTestId('board-summary')).toHaveText(before ?? '');
 });
 
 test('a winter trip is told plainly what is shut rather than shown a broken plan', async ({
@@ -198,7 +162,13 @@ test('the questionnaire adapts and refuses to continue on an empty profile', asy
 
   await page.getByLabel('You will have a car').uncheck();
   await expect(page.getByText('Steep mountain roads are fine')).toBeHidden();
-  await expect(page.getByText(/Without a car we will keep to town/)).toBeVisible();
+  /*
+   * The note that appears when the car is unchecked. Its wording moved when the
+   * questionnaire stopped naming one valley's trolley and bus route — the
+   * assertion is on the *behaviour*, which is that a no-car answer says plainly
+   * what it costs.
+   */
+  await expect(page.getByText(/Without a car we will keep to what walks/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('radio', { name: /Up to ~2 hours/ })).toHaveCount(0);

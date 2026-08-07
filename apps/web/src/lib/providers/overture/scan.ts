@@ -327,12 +327,23 @@ export async function scanFile<T>(request: ScanRequest<T>): Promise<ScanResult<T
 }
 
 /**
- * Whether a record's own bounding box falls inside the box we asked for.
+ * Whether a record's own bounding box *overlaps* the box we asked for.
  *
- * Row-group pruning is coarse by design — a group is kept when *any* of its
- * rows might match — so the per-row check is not redundant. Without it a metro
- * query returns half a continent's worth of rows that merely shared a row group
- * with the ones we wanted.
+ * Pruning. Not membership, and it must never be read as membership.
+ *
+ * Row-group pruning is coarse by design — a group is kept when *any* of its rows
+ * might match — so this per-row check is not redundant: without it a metro query
+ * returns half a continent's worth of rows that merely shared a row group with
+ * the ones we wanted. What it does not do, and cannot do, is say a row belongs
+ * to the destination. The box it filters against is the union of partition cells
+ * drawn around a *reach circle*, and a reach circle is a fact about how far the
+ * traveller can get. A build that treated this function's `true` as acceptance
+ * put an auto-parts store from an administrative region a hundred and sixty
+ * kilometres away onto a city board, and every step in between was working
+ * exactly as written.
+ *
+ * Belonging is decided in the compiler's containment layer, from the record's
+ * own administrative evidence, after this has done its job.
  */
 export function rowInBox(row: Record<string, unknown>, box: BoundingBox): boolean {
   const bbox = row.bbox as { xmin?: number; xmax?: number; ymin?: number; ymax?: number } | undefined;
@@ -350,6 +361,25 @@ export function rowInBox(row: Record<string, unknown>, box: BoundingBox): boolea
     return false;
   }
   return !(xmin > box.east || xmax < box.west || ymin > box.north || ymax < box.south);
+}
+
+/**
+ * Whether the record's own position is inside the box we asked for.
+ *
+ * Still pruning, and still not membership — but a strictly better prune than
+ * overlap, and the difference is not academic. An administrative record covering
+ * a whole first-level division overlaps a metropolitan box by a corner while
+ * sitting hundreds of kilometres from it; on overlap it is admitted and then
+ * assigned to whichever cell its south-west corner happened to land in. Filtering
+ * on the record's own point costs nothing and removes that entire class before
+ * anything downstream has to reason about it.
+ */
+export function rowPointInBox(row: Record<string, unknown>, box: BoundingBox): boolean {
+  const point = pointOf(row);
+  if (!point) return false;
+  return (
+    point.lng >= box.west && point.lng <= box.east && point.lat >= box.south && point.lat <= box.north
+  );
 }
 
 /**

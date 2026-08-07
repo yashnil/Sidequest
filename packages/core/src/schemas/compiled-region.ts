@@ -10,7 +10,7 @@ import { placeSchema } from './place';
 import { regionSchema } from './region';
 import { dataLicenceSchema } from './licence';
 import { geographicScopeSchema } from './scope';
-import { sourceManifestSchema } from './source-fact';
+import { retrievedPageSchema, sourceManifestSchema } from './source-fact';
 import { weatherLocationSchema } from './weather';
 
 /**
@@ -36,6 +36,52 @@ import { weatherLocationSchema } from './weather';
  * commercial places API are not ours to keep. What is stored is our own
  * extracted facts with their own citations, open-licensed geodata with its
  * attribution, and provider *identifiers*. See `.claude-private/research`.
+ *
+ * ---
+ *
+ * THE BOUNDARY. SEMANTIC HERE; OPERATIONAL ON THE RUN.
+ *
+ * The rule, stated so it can be checked rather than remembered:
+ *
+ * > **A semantic artifact must not change because one run had a cache hit and
+ * > another had a cache miss, because one worker made fewer calls, because a
+ * > provider retried, because a compile happened later, or because one machine
+ * > was slower.**
+ *
+ * Two builds of the same ground, from the same sources, with the same injected
+ * clock, must produce the same bytes. `determinism.test.ts` compiles twice
+ * against **one** shared evidence store — cold, then warm — and asserts exactly
+ * that. It is the arbiter; this comment is only its explanation.
+ *
+ * | Stays here | Why |
+ * | --- | --- |
+ * | `region`, `scope`, `bases`, `places`, `access`, `operatingHours`, `weatherLocations`, `food`, `travelTimes`, `basePortfolio`, `evidence`, `coverage` | the frozen trip |
+ * | `sourceManifest.facts`, `.attributions` | source provenance, including source-observation timestamps — a fact's `retrievedAt` is when the *content* was seen, not when this run ran |
+ * | `sourceManifest.pages` | the pages the retained facts rest on, derived from them, so a warm build lists the same pages as a cold one |
+ * | `sourceManifest.providers[].name`, `.version` | which sources this rests on, and under which contract |
+ * | `licences`, `regionPack`, `scopeFingerprint` | what it was built from, and under what terms |
+ * | `diagnostics.compilerVersion`, `.promptVersions` | what produced it |
+ * | `diagnostics.startedAt`, `.finishedAt`, `createdAt` | the **injected** clock, advanced one step per stage — reproducible by construction, and never presented as a duration |
+ * | `diagnostics.warnings` | statements about what this artifact does and does not contain |
+ * | `routingDiagnostics` | derived from the routing *plan* — which pairs this artifact needed and which of them could not be measured. Not what the transport cost: a cached leg is still a requested leg |
+ *
+ * | Moved to the run | Why it could not stay |
+ * | --- | --- |
+ * | `diagnostics.budget.consumed` | a warm store spends fewer searches, pages, model calls and bytes for identical content |
+ * | `diagnostics.budget.limits` | a ceiling is a property of the run's configuration, and it travels with the spend it bounds |
+ * | `diagnostics.budget.exhausted` | derived from `consumed` against `limits`, so it inherits the warmth |
+ * | `claimsHeld`, `claimsObserved`, `claimsSuperseded`, `subjectsAnsweredFromClaims`, `sharedResolutionsReused` | reuse counters — literally a measure of how warm the store was |
+ * | `diagnostics.stageCount`, `.stageTimings` | which stages ran depends on which providers were configured, which is an operational fact |
+ * | `sourceManifest.providers[].calls`, `.failures` | provider call counts. `calls` was `ledger.spent(...)`, which is the same warmth again |
+ * | the retrieval log — bytes read, titles as fetched, pages that were refused | what this run downloaded. A warm build downloads almost nothing and rests on exactly the same pages |
+ *
+ * All of it is kept — on `CompileResult.operational`, persisted as the job's
+ * operational diagnostics. Nothing is lost; it is filed where it is true.
+ *
+ * Every moved field stays **optional and permissive on read**. Artifacts
+ * compiled before the split carry theirs and must keep parsing and rendering
+ * exactly as they did: a migration that rewrote them would be editing somebody's
+ * stored trip to make a schema tidier.
  */
 
 /**
@@ -434,27 +480,140 @@ export const coverageReportSchema = z.object({
 });
 export type CoverageReport = z.infer<typeof coverageReportSchema>;
 
-/** What the compilation cost and where it stopped. */
+/**
+ * What produced this artifact, and what it does not contain.
+ *
+ * No longer what it cost. See the boundary table in the file header: the spend,
+ * the ceilings and the stage sequence are properties of a *run* and live on the
+ * job's operational diagnostics, because two builds of one region produce the
+ * same region and wildly different numbers.
+ */
 export const compilationDiagnosticsSchema = z.object({
   compilerVersion: z.string().min(1),
+  /**
+   * The injected clock, not a wall clock.
+   *
+   * `startedAt` is the `now` the compilation was given and `finishedAt` is that
+   * plus one step per stage, so two runs of one input stamp the same pair. It
+   * is deliberately **not** a duration and nothing may read it as one — the
+   * artifact used to carry a per-stage `ms: 1` (the step size, hard-coded,
+   * presented as a measurement) and the progress screen multiplied that median
+   * out and told somebody their four-minute build had "roughly 0s–0s to go".
+   * Real durations are measured on a real clock in `stage_observations`.
+   */
   startedAt: z.string().min(1),
   finishedAt: z.string().min(1),
-  durationMs: z.number().int().min(0),
-  /** Per-stage timings, so a slow stage is visible rather than inferred. */
-  stageTimings: z
-    .array(z.object({ stage: z.string().min(1), ms: z.number().int().min(0) }))
-    .default([]),
-  budget: z.object({
-    /** Every counter that has a ceiling, and where it got to. */
-    consumed: z.record(z.string(), z.number().int().min(0)),
-    limits: z.record(z.string(), z.number().int().min(0)),
-    exhausted: z.array(z.string().min(1)).default([]),
-  }),
+  /**
+   * How many stages ran. **Operational, and no longer written.**
+   *
+   * Which stages a build runs depends on which providers it was configured
+   * with — a build with no backbone provider records four fewer than one with
+   * — so the count is a fact about the run rather than about the region. It
+   * lives on `CompileResult.operational.stages` now.
+   *
+   * Optional rather than removed, and read permissively: an artifact compiled
+   * before the split carries one and must keep parsing untouched.
+   */
+  stageCount: z.number().int().min(0).optional(),
+  /**
+   * Which stages ran, in the order they ran. **Operational, and no longer
+   * written** — same reason as `stageCount`, and kept for the same artifacts.
+   */
+  stageTimings: z.array(z.object({ stage: z.string().min(1) })).optional(),
+  /**
+   * What this build spent against its ceilings. **Operational, and no longer
+   * written.**
+   *
+   * This is the field the determinism test was written for. `consumed` counts
+   * searches, pages, bytes, model calls and extraction calls — every one of
+   * which a warm shared store reduces to zero for *identical* content — and
+   * `exhausted` is derived from `consumed` against `limits`, so it inherits the
+   * same dependency. Two compilations of one region against a store that was
+   * empty the first time and full the second therefore persisted different
+   * bytes for the same trip.
+   *
+   * `consumed` and `limits` stay a permissive `Record<string, number>` so that
+   * an artifact carrying the old folded-in reuse counters — `claimsHeld`,
+   * `sharedResolutionsReused` and the rest — still parses and still renders.
+   * Nothing rewrites them.
+   */
+  budget: z
+    .object({
+      /** Every counter that has a ceiling, and where it got to. */
+      consumed: z.record(z.string(), z.number().int().min(0)),
+      limits: z.record(z.string(), z.number().int().min(0)),
+      exhausted: z.array(z.string().min(1)).default([]),
+    })
+    .optional(),
   /** Prompt versions, so a compiled artifact can be traced to what produced it. */
   promptVersions: z.record(z.string(), z.string()).default({}),
   warnings: z.array(z.string().min(1)).default([]),
 });
 export type CompilationDiagnostics = z.infer<typeof compilationDiagnosticsSchema>;
+
+/**
+ * The source manifest, as an *artifact* carries it.
+ *
+ * Identical to `sourceManifestSchema` but for the two counters on each provider
+ * entry. `calls` was `ledger.spent('maxSourceSearches')` and its friends —
+ * warmth-dependent by construction — and `failures` counted this run's refusals.
+ * Which providers were consulted, and under which version, is provenance and
+ * stays; how many times each was reached is a fact about the run.
+ *
+ * Optional rather than removed so every artifact compiled before the split
+ * parses unchanged, including the authored Eastern Sierra fixture.
+ */
+export const artifactSourceManifestSchema = sourceManifestSchema.extend({
+  /**
+   * The pages this artifact's facts rest on — not the pages this run fetched.
+   *
+   * The distinction is the whole of the defect. `pages` used to be the
+   * *retrieval log*: whatever this compilation happened to download. A warm
+   * build answers most of its subjects from durable claims and never calls
+   * retrieval for them, so the same region compiled twice listed thirty-three
+   * pages the first time and nine the second — and the nine were not a smaller
+   * region, they were a smaller *bill*. Worse, the warm artifact then
+   * understated what it rests on, which is the opposite of what a provenance
+   * list is for.
+   *
+   * It is now derived from the retained facts, so it names every page behind
+   * every fact whether this run read it or held it, and two builds of one
+   * region list the same pages.
+   *
+   * `contentBytes` is optional for the same reason and is no longer written: a
+   * page held as a claim has a URL, a content hash and a content-observation
+   * timestamp, and nobody measured how many bytes it was *this* time. Byte
+   * counts, page titles as fetched, and pages that were refused are the
+   * retrieval log, and the retrieval log is on the run.
+   */
+  pages: z
+    .array(
+      z.object({
+        url: retrievedPageSchema.shape.url,
+        title: z.string().min(1).optional(),
+        /** When the *content* was observed. A source clock, never a run clock. */
+        retrievedAt: z.string().min(1),
+        /** Operational. Present on older artifacts, never written now. */
+        contentBytes: z.number().int().min(0).optional(),
+        contentHash: z.string().min(1).optional(),
+        robotsAllowed: z.boolean(),
+      }),
+    )
+    .default([]),
+  providers: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        /** e.g. `places:v1`, `routes:v2`, `claude-opus-5`. */
+        version: z.string().min(1),
+        /** Operational. Present on older artifacts, never written now. */
+        calls: z.number().int().min(0).optional(),
+        failures: z.number().int().min(0).optional(),
+      }),
+    )
+    .default([]),
+});
+export type ArtifactSourceManifest = z.infer<typeof artifactSourceManifestSchema>;
 
 export const compiledRegionSchema = z.object({
   schemaVersion: z.literal(COMPILED_REGION_VERSION),
@@ -471,6 +630,35 @@ export const compiledRegionSchema = z.object({
   scope: geographicScopeSchema,
   /** Ties the artifact to the exact scope revision that produced it. */
   scopeFingerprint: z.string().min(1),
+  /**
+   * WHAT THE SUPPLY LOOKED LIKE WHEN THIS BOARD WAS BUILT.
+   *
+   * Persisted **with the artifact**, and that is the requirement rather than an
+   * optimisation: the board's own integrity has to render the same after a
+   * refresh and with every provider switched off, and a number recomputed at
+   * render time from whatever happens to be reachable is a different number.
+   *
+   * Optional, so an artifact compiled before this existed still parses and its
+   * board simply omits these facts rather than inventing zeros for them. A
+   * counted zero and an uncounted one are different claims — "we set aside no
+   * practical stops" and "nobody counted" — and only the first is worth saying.
+   */
+  boardSupply: z
+    .object({
+      /** Practical stops the inventory kept apart from the board. */
+      supportKeptSeparately: z.number().int().nonnegative(),
+      /** Admitted, and withheld from final slots because nobody could place them. */
+      withheldUnplaceable: z.number().int().nonnegative(),
+      /** Removed before ranking for sitting outside the chosen ground. */
+      removedOutOfScope: z.number().int().nonnegative(),
+      /** Kept as ways in and out, never as things to do. */
+      gateways: z.number().int().nonnegative(),
+      /** Deliberately included by a regional expansion. */
+      expansionMembers: z.number().int().nonnegative(),
+      /** Offered as optional side trips, still labelled as such. */
+      satellites: z.number().int().nonnegative(),
+    })
+    .optional(),
 
   bases: z.array(baseCandidateSchema).min(1),
   primaryBaseId: z.string().min(1),
@@ -502,12 +690,21 @@ export const compiledRegionSchema = z.object({
   basePortfolio: basePortfolioSchema.optional(),
 
   /**
-   * What routing actually cost, so the saving is auditable rather than claimed.
+   * What routing this artifact needed, so the saving is auditable rather than
+   * claimed.
    *
    * An operator's numbers, not a traveller's, and kept out of coverage on
    * purpose: how many pairs were bought says nothing about how good the region
    * is, and mixing the two is how a cheap build starts looking like a confident
    * one.
+   *
+   * It stays on the artifact where the budget counters left, and the reason is
+   * the boundary rather than an exception to it: every field here is derived
+   * from the routing **plan** — which pairs this artifact's own point set
+   * required, which of them one flat matrix would have cost, which were composed
+   * rather than measured, and which clusters could not be connected. A leg
+   * served from a cache is still a leg this artifact needed. Nothing in here
+   * moves when the store is warm, which is what the determinism test checks.
    */
   routingDiagnostics: routingDiagnosticsSchema.optional(),
 
@@ -549,7 +746,7 @@ export const compiledRegionSchema = z.object({
     })
     .optional(),
 
-  sourceManifest: sourceManifestSchema,
+  sourceManifest: artifactSourceManifestSchema,
   /**
    * Every licence the contents came under.
    *

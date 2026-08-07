@@ -4,7 +4,10 @@ import {
   checkRegionIntegrity,
   tripDates,
   tripMonths,
+  unavailableWeatherDataset,
   validateWeatherDataset,
+  weatherAvailability,
+  isSnapshotRenderable,
   type AccessDataset,
   type CompiledRegion,
   type DiscoveryBoard,
@@ -16,12 +19,13 @@ import {
   type RegionSource,
   type TravelerProfile,
   type Trip,
+  type WeatherAvailability,
   type WeatherDataset,
 } from '@sidequest/core';
 import { easternSierraRegionSource } from '@sidequest/core/data';
 import type { TravelTimeMatrix } from '@sidequest/geo';
 import { getCompiledRegion, getIntent } from './db/compiler-repository';
-import { resolveTripWeather, weatherProviderFor } from './weather';
+import { getWeatherSnapshot, weatherScopeKey } from './weather/snapshot-repository';
 
 /**
  * The region id a dynamically compiled trip carries.
@@ -50,13 +54,30 @@ export interface RegionContext {
   /**
    * The forecast, the seasonal pattern, or an honest record of neither.
    *
-   * The one dataset that is genuinely fetched, and the reason resolving a region
-   * is asynchronous. Deliberately *not* part of the compiled region: a compiled
-   * artifact is cached and reused, and a forecast baked into one is how a
-   * September traveller is shown August's weather. The artifact says where to
-   * ask; this asks.
+   * Deliberately *not* part of the compiled region: a compiled artifact is
+   * cached and reused, and a forecast baked into one is how a September
+   * traveller is shown August's weather. The artifact says where to ask.
+   *
+   * And this no longer asks. It reads the persisted snapshot, and when there is
+   * no usable one it builds a dataset of `unavailable` days. Resolving a region
+   * used to call `resolveTripWeather` here, which meant every render of
+   * `/discover`, `/itinerary`, `/plan` and `/questionnaire` made an outbound
+   * forecast request — a refresh spent money, a slow provider became a slow
+   * page, and the numbers under a stored plan moved without anybody asking.
    */
   weather: WeatherDataset;
+  /**
+   * Whether that dataset came from a snapshot, and how old it is.
+   *
+   * Carried beside the data rather than derived from it, because "we have not
+   * fetched this" and "we fetched it and the provider had nothing" are
+   * different sentences and both produce `unavailable` days. A surface that
+   * could not tell them apart would offer a refresh button for a provider
+   * outage and no button at all for the case a button would actually fix.
+   */
+  weatherAvailability: WeatherAvailability;
+  /** The fingerprint a refresh operation must use to write back. */
+  weatherScopeKey: string;
   /**
    * Where the traveller could eat. Null when the data will not validate —
    * unlike a road or a closing time, food is not something a trip depends on, so
@@ -180,45 +201,32 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
   const food = process.env.SIDEQUEST_FOOD_PROVIDER === 'off' ? null : (compiled.food ?? null);
 
   /**
-   * Weather, and the second.
+   * Weather, and the second — read, never fetched.
    *
    * Access and hours are matters of record: guessing at them puts somebody at a
    * locked gate, so data that will not validate refuses to plan. Weather is a
-   * forecast. A provider that is down produces a dataset of `unavailable` days,
-   * the plan is built without weather reasoning, and every surface says so.
+   * forecast. An absent snapshot produces a dataset of `unavailable` days, the
+   * plan is built without weather reasoning, and every surface says so.
+   *
+   * What used to be here was an `await resolveTripWeather(...)`, and it is the
+   * reason this whole slice exists. Four routes resolve a region during render;
+   * all four therefore asked a forecast provider on every page load, including
+   * every browser-test navigation and every press of the back button. The
+   * request is now an explicit operation — `refreshWeatherAction` — and this
+   * reads what that operation wrote.
+   *
+   * An **expired** snapshot is treated as absent rather than shown with a
+   * caveat. A forecast past its window is not a weaker version of the same
+   * claim; it is a claim about a window that has closed. And nothing here
+   * refetches it: a render that repaired its own staleness would be the original
+   * defect wearing a different name.
    *
    * The locations come off the compiled region. They used to come off a default
    * argument inside the weather module, which meant a second region would have
    * silently been given the Eastern Sierra's forecast points — the single most
    * likely silent-wrong-answer in this whole migration.
    */
-  const expectedWeather = {
-    regionId: compiled.region.id,
-    dates,
-    placeIds: compiled.places.map((place) => place.id),
-  };
-  let weather: WeatherDataset;
-  try {
-    weather = validateWeatherDataset(
-      await resolveTripWeather({
-        regionId: compiled.region.id,
-        dates,
-        locations: compiled.weatherLocations,
-      }),
-      expectedWeather,
-    );
-  } catch (error) {
-    console.error('Weather data for this trip is unusable', error);
-    weather = validateWeatherDataset(
-      await weatherProviderFor('off').getWeather({
-        regionId: compiled.region.id,
-        locations: compiled.weatherLocations,
-        dates,
-        now: new Date(),
-      }),
-      expectedWeather,
-    );
-  }
+  const { weather, availability, scopeKey } = storedWeatherFor(trip.id, compiled, dates);
 
   /**
    * Non-null by the integrity gate above, which fails a region whose primary
@@ -240,6 +248,8 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
       access: compiled.access,
       hours: compiled.operatingHours,
       weather,
+      weatherAvailability: availability,
+      weatherScopeKey: scopeKey,
       food,
       matrix: compiled.travelTimes,
       baseId: primaryBase.routingId,
@@ -249,6 +259,94 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
       compiled,
     },
   };
+}
+
+/**
+ * THE STORED WEATHER FOR ONE TRIP, READ AND NEVER FETCHED.
+ *
+ * Lifted out of `resolveTripRegion` for a reason that is a real cost rather than
+ * a tidiness preference. Building an itinerary must buy a forecast first — a plan
+ * is an explicit act and is allowed to spend, where a render is not — and the
+ * only way to see what that purchase wrote used to be to run the *entire* region
+ * resolution a second time: re-read the compiled artifact, re-validate the access
+ * dataset, re-derive the base portfolio, all to pick up one row that changed.
+ *
+ * This is the part that changed. Everything else in a resolved context is a fact
+ * about a frozen artifact and cannot have moved in the intervening milliseconds.
+ */
+function storedWeatherFor(
+  tripId: string,
+  compiled: CompiledRegion,
+  dates: readonly string[],
+): { weather: WeatherDataset; availability: WeatherAvailability; scopeKey: string } {
+  const expectedWeather = {
+    regionId: compiled.region.id,
+    dates: [...dates],
+    placeIds: compiled.places.map((place) => place.id),
+  };
+  const scopeKey = weatherScopeKey({
+    regionId: compiled.region.id,
+    dates,
+    locations: compiled.weatherLocations,
+  });
+  const availability = weatherAvailability(getWeatherSnapshot(tripId, scopeKey), new Date());
+
+  const unfetched = (): WeatherDataset =>
+    unavailableWeatherDataset({
+      regionId: compiled.region.id,
+      locations: compiled.weatherLocations,
+      dates,
+      now: new Date(),
+      reason: 'not_configured',
+      message:
+        availability.kind === 'present'
+          ? 'The weather we had for these dates has passed the window it was good for. Fetch it again to see it.'
+          : 'We have not fetched the weather for this trip yet.',
+    });
+
+  if (availability.kind === 'present' && isSnapshotRenderable(availability.state)) {
+    try {
+      return {
+        weather: validateWeatherDataset(availability.snapshot.dataset, expectedWeather),
+        availability,
+        scopeKey,
+      };
+    } catch (error) {
+      /*
+       * A stored snapshot that does not cover this trip's places or dates. It
+       * can happen across a recompilation that changed the place set without
+       * changing the scope key's date span. Falling back to "not fetched" is the
+       * only honest reading — the alternative is rendering a forecast for a set
+       * of points that no longer describes the trip.
+       */
+      console.error('Stored weather snapshot does not match this trip', error);
+    }
+  }
+  return {
+    weather: validateWeatherDataset(unfetched(), expectedWeather),
+    availability,
+    scopeKey,
+  };
+}
+
+/**
+ * The same context with its weather re-read, and nothing else touched.
+ *
+ * The one thing an explicit fetch changes. Callers that buy a forecast and then
+ * need to plan against it use this instead of resolving the region twice — which
+ * is what `buildItineraryAction` was doing, at the cost of a full second pass
+ * over the artifact on every plan build.
+ */
+export function withRefreshedWeather(
+  tripId: string,
+  context: RegionContext,
+): RegionContext {
+  const { weather, availability, scopeKey } = storedWeatherFor(
+    tripId,
+    context.compiled,
+    context.dates,
+  );
+  return { ...context, weather, weatherAvailability: availability, weatherScopeKey: scopeKey };
 }
 
 /** The Discovery Board for a trip, from a resolved region context. */

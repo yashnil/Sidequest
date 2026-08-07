@@ -12,8 +12,13 @@ import {
   OPERATING_BADGE_LABELS,
   PLACE_CATEGORY_LABELS,
   PLACE_WEATHER_BADGE_LABELS,
+  SELECTION_STATUSES,
   SELECTION_STATUS_LABELS,
   WORTH_DETOUR_COPY,
+  imageryFallbackFor,
+  summariseSelections,
+  summaryVersion,
+  type DestinationImage as ImageRecord,
   type AccessBadge,
   type BoardGroup,
   type BoardWeatherBackups,
@@ -22,10 +27,12 @@ import {
   type PlaceWeatherBadge,
   type SelectionStatus,
   type PlannerReadiness,
+  type WeatherSnapshotState,
   type ClosureEvidence,
   type SafetyEvidence,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type BadgeTone } from './ui';
+import { DestinationImage } from './DestinationImage';
 import { BuildTripButton } from './BuildTripButton';
 import { formatCost, formatDistance, formatIntensity, formatMinutes } from '@/lib/format';
 import { autoPickAction, setSelectionAction } from '@/app/trips/[id]/discover/actions';
@@ -37,6 +44,25 @@ export interface SerializedGroup {
 
 type SelectionMap = Record<string, SelectionStatus | undefined>;
 
+/**
+ * The smallest a control on this board may be.
+ *
+ * WCAG 2.5.5's 44 px. The three decision buttons under every card were 28 —
+ * three targets side by side inside a card that is itself half a phone wide,
+ * which is the exact situation the criterion exists for. `min-h-11` grows the
+ * target without growing the type.
+ */
+const MIN_TARGET = 'min-h-11';
+
+/**
+ * The same floor, for a `<summary>`.
+ *
+ * Padding rather than a flex box: a summary is a `display: list-item`, and
+ * making it flex removes the disclosure triangle in every WebKit-derived
+ * browser. A 44 px target that no longer looks like a control is not a fix.
+ */
+const MIN_TARGET_SUMMARY = 'min-h-11 py-2.5';
+
 export function DiscoveryBoardView({
   tripId,
   storedReadiness,
@@ -46,8 +72,35 @@ export function DiscoveryBoardView({
   targetCount,
   hasItinerary,
   weatherBackups,
+  boardVersion: declaredVersion,
+  weatherFreshness,
+  images = {},
 }: {
   tripId: string;
+  /**
+   * How old the weather behind this board is, when the page knows.
+   *
+   * Four states and they are not degrees of one thing. `not_fetched` and
+   * `expired` never reach here with numbers attached — `resolveTripRegion`
+   * substitutes an unfetched dataset for both, so every card reads "we have not
+   * checked" — but `stale` does: a snapshot past its freshness window is still
+   * rendered, badges and all, and without this the board says "the forecast
+   * works against X on your dates" about a forecast fetched days ago in exactly
+   * the same voice it uses for one fetched a minute ago.
+   *
+   * Optional, and its absence means the board says nothing about age rather than
+   * asserting freshness it was not told about.
+   */
+  weatherFreshness?: WeatherSnapshotState | 'not_fetched';
+  /**
+   * The artifact this board was projected from, when the page knows it.
+   *
+   * Optional, and its absence is not a hole: when nothing is declared the
+   * version is derived from the cards actually rendered, which is the same
+   * identity by a longer route. Passing the compiled region's id makes the stamp
+   * name something an operator can look up, and is the preferred form.
+   */
+  boardVersion?: string;
   /** The last refusal, from the database, so it survives a refresh. */
   storedReadiness?: PlannerReadiness | null;
   groups: SerializedGroup[];
@@ -60,8 +113,54 @@ export function DiscoveryBoardView({
   autoPickNotes: string[];
   targetCount: number;
   hasItinerary: boolean;
+  /**
+   * Licensed photographs by place id, read from a table by the page.
+   *
+   * Optional and empty by default, and that default is the honest one: an
+   * artifact compiled before imagery existed has no rows, and every card on it
+   * renders exactly as it always did. There is no migration, no backfill and no
+   * version check — the absence of a photograph was already a supported state.
+   */
+  images?: Record<string, ImageRecord>;
 }) {
-  const [selections, setSelections] = useState<SelectionMap>(initialSelections);
+  /*
+   * THE VERSION EVERY NUMBER ON THIS SCREEN BELONGS TO.
+   *
+   * Derived from the cards actually rendered when the page does not declare one,
+   * so the identity moves exactly when the board does and not when a traveller
+   * marks something. That distinction is the whole point: a mark changes the
+   * counts, a rebuild changes what the counts are counting, and the second one
+   * has to invalidate everything derived from the first.
+   */
+  const cardIds = groups.flatMap((entry) => entry.candidates.map((c) => c.place.id));
+  const boardVersion = summaryVersion([declaredVersion ?? '', ...cardIds]);
+
+  /*
+   * THE MIRROR CANNOT OUTLIVE WHAT IT MIRRORS.
+   *
+   * `useState(initialSelections)` seeded once and never again, so a rebuilt
+   * board kept the previous board's marks and the previous board's totals — and
+   * a stale "12 in" beside a board of nine cards reads as a fact. The mirror is
+   * keyed to the server state it was derived from and dropped the moment either
+   * the board version or the stored marks change identity.
+   *
+   * It exists at all for one reason, which is still true: `autoPickAction`
+   * returns what it stored, and adopting that immediately is what makes the
+   * board's counts move on the click rather than on the round trip.
+   */
+  const serverKey = summaryVersion([boardVersion, marksFingerprint(initialSelections)]);
+  const [mirror, setMirror] = useState<{ key: string; value: SelectionMap; notes: string[] }>({
+    key: serverKey,
+    value: initialSelections,
+    notes: autoPickNotes,
+  });
+  if (mirror.key !== serverKey) {
+    setMirror({ key: serverKey, value: initialSelections, notes: autoPickNotes });
+  }
+  const settled = mirror.key === serverKey ? mirror : { value: initialSelections, notes: autoPickNotes };
+  const selections = settled.value;
+  const notes = settled.notes;
+
   const [optimistic, applyOptimistic] = useOptimistic(
     selections,
     (current: SelectionMap, patch: SelectionMap) => ({ ...current, ...patch }),
@@ -69,10 +168,22 @@ export function DiscoveryBoardView({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [onlyIncluded, setOnlyIncluded] = useState(false);
-  const [notes, setNotes] = useState(autoPickNotes);
 
-  const includedCount = Object.values(optimistic).filter((status) => status === 'included').length;
-  const maybeCount = Object.values(optimistic).filter((status) => status === 'maybe').length;
+  /*
+   * Counted over the cards on screen, not over the keys of the mark map.
+   *
+   * The map is trip-scoped and outlives every board it was written against, so
+   * counting its values reported decisions about places this board does not
+   * have — which is how the header claimed more picks than there were cards.
+   */
+  const summary = summariseSelections({
+    boardVersion,
+    cardIds,
+    statuses: SELECTION_STATUSES,
+    selections: optimistic,
+  });
+  const includedCount = summary.counts.included;
+  const maybeCount = summary.counts.maybe;
 
   function choose(placeId: string, status: SelectionStatus) {
     const next = optimistic[placeId] === status ? undefined : status;
@@ -82,10 +193,10 @@ export function DiscoveryBoardView({
       applyOptimistic({ [placeId]: next });
       const result = await setSelectionAction(tripId, placeId, next ?? null);
       if (result.ok) {
-        setSelections((current) => ({ ...current, [placeId]: next }));
+        setMirror((current) => ({ ...current, value: { ...current.value, [placeId]: next } }));
       } else {
         // Roll the card back rather than showing a state the server does not have.
-        setSelections(previous);
+        setMirror((current) => ({ ...current, value: previous }));
         setError(result.error ?? 'That choice did not save.');
       }
     });
@@ -100,9 +211,13 @@ export function DiscoveryBoardView({
         return;
       }
       // Adopt what the server actually stored, which preserves any card the
-      // traveller had already decided on by hand.
-      setSelections(result.selections);
-      setNotes(result.notes ?? []);
+      // traveller had already decided on by hand. Keyed to the board it was
+      // computed for, so a rebuild discards it rather than carrying it across.
+      setMirror((current) => ({
+        key: current.key,
+        value: result.selections!,
+        notes: result.notes ?? [],
+      }));
     });
   }
 
@@ -114,22 +229,35 @@ export function DiscoveryBoardView({
         : entry.candidates,
     }))
     .filter((entry) => entry.candidates.length > 0);
+  const visibleCardCount = visibleGroups.reduce((total, entry) => total + entry.candidates.length, 0);
 
   return (
-    <div>
+    <div data-testid="discovery-board" data-board-version={boardVersion}>
       <Panel className="sticky top-0 z-10 mb-8 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
-        <p className="text-sm text-ink">
+        {/*
+          The count and the version it describes, from one object.
+
+          They cannot disagree because `summary` produced both. The stamp is what
+          makes that checkable from outside — a stale total beside a rebuilt
+          board is invisible to review and obvious to an assertion.
+        */}
+        <p className="text-sm text-ink" data-testid="board-summary" data-board-version={summary.boardVersion}>
           <strong className="font-display text-lg">{includedCount}</strong> in
           {maybeCount > 0 ? <span className="text-ink-muted"> · {maybeCount} maybe</span> : null}
           <span className="text-ink-faint"> · we suggested {targetCount}</span>
         </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-muted">
+          <label
+            className={cx(
+              'flex cursor-pointer items-center gap-2 px-1 text-sm text-ink-muted',
+              MIN_TARGET,
+            )}
+          >
             <input
               type="checkbox"
               checked={onlyIncluded}
               onChange={(event) => setOnlyIncluded(event.target.checked)}
-              className="h-4 w-4 accent-[var(--color-pine)]"
+              className="h-5 w-5 accent-[var(--color-pine)]"
             />
             Only what I picked
           </label>
@@ -137,7 +265,7 @@ export function DiscoveryBoardView({
             type="button"
             onClick={autoPick}
             disabled={pending}
-            className={buttonClass('secondary', 'sm')}
+            className={cx(buttonClass('secondary', 'sm'), MIN_TARGET)}
           >
             {pending ? 'Working…' : 'Auto-pick the best mix for me'}
           </button>
@@ -150,14 +278,67 @@ export function DiscoveryBoardView({
         </div>
       </Panel>
 
+      {/*
+        A polite status line, and the only thing on this board that speaks.
+
+        Every decision here moves a count, sometimes empties a group and — under
+        "Only what I picked" — can empty the whole board. None of that reached a
+        screen reader: the totals are plain text and a filtered card simply
+        vanishes from the DOM, so a keyboard user pressing Skip got silence and a
+        page that had quietly rearranged itself beneath them.
+
+        The state *after* the change rather than the change itself, so three
+        quick decisions announce one settled result instead of racing each other.
+        An error takes precedence, because a failed save is the one thing here
+        somebody has to hear.
+      */}
+      {/*
+        Phrased as a sentence, not as a copy of the counter beside it.
+        Two reasons, and both are about the person hearing it. A live region that
+        repeats the visible summary verbatim is announced *twice* — once as the
+        element, once as the change — and "9 in, 0 maybe" read aloud out of
+        context is a sequence of numbers rather than a statement. And a second
+        node carrying the same leading text made every `getByText(/^\d+ in/)` in
+        the suite ambiguous, which is the sort of collision that is invisible
+        until four specs fail at once.
+      */}
+      <p className="sr-only" role="status" aria-live="polite" data-testid="board-status">
+        {error
+          ? error
+          : `Your board now has ${includedCount} places included and ${maybeCount} marked maybe, out of ${summary.onBoard}. ${visibleCardCount} showing.`}
+      </p>
+
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
       {notes.length > 0 ? (
-        <ul className="mb-8 space-y-1.5 border-l-2 border-pine pl-4 text-sm leading-relaxed text-ink-muted">
+        <ul
+          className="mb-8 space-y-1.5 border-l-2 border-pine pl-4 text-sm leading-relaxed text-ink-muted"
+          data-board-version={summary.boardVersion}
+        >
           {notes.map((note) => (
-            <li key={note}>{note}</li>
+            <li key={`${summary.boardVersion}:${note}`}>{note}</li>
           ))}
         </ul>
+      ) : null}
+
+      {/*
+        Decisions about places this board does not hold.
+
+        Named as history rather than folded into "N in". They are real choices
+        somebody made — about a card an earlier build had, or about a place this
+        trip's answers now rule out — and the count that quietly included them
+        was describing a board nobody was looking at.
+      */}
+      {summary.carriedOver > 0 ? (
+        <p
+          className="mb-8 text-xs leading-relaxed text-ink-faint"
+          data-testid="board-carried-over"
+          data-board-version={summary.boardVersion}
+        >
+          You have also decided on {summary.carriedOver}{' '}
+          {summary.carriedOver === 1 ? 'place' : 'places'} that is not on this board. Those
+          choices are kept and are not counted above.
+        </p>
       ) : null}
 
       {visibleGroups.length === 0 ? (
@@ -168,7 +349,7 @@ export function DiscoveryBoardView({
           <p className="mt-2 text-sm text-ink-muted">
             {onlyIncluded
               ? 'Untick the filter to see everything we found, or use auto-pick for a starting set.'
-              : 'Try widening how far you will travel, or moving your dates — most of this region is behind a snow gate for part of the year.'}
+              : 'Try widening how far you will travel, or moving your dates — some of what we found here is only reachable for part of the year.'}
           </p>
         </Panel>
       ) : (
@@ -189,6 +370,7 @@ export function DiscoveryBoardView({
                   <PlaceCard
                     key={candidate.place.id}
                     candidate={candidate}
+                    image={anchorImage(images, candidate)}
                     status={optimistic[candidate.place.id]}
                     onChoose={choose}
                   />
@@ -201,12 +383,30 @@ export function DiscoveryBoardView({
             backups={weatherBackups}
             selections={optimistic}
             onChoose={choose}
+            {...(weatherFreshness ? { freshness: weatherFreshness } : {})}
           />
 
-          <WeatherCredit groups={groups} />
+          <WeatherCredit groups={groups} {...(weatherFreshness ? { freshness: weatherFreshness } : {})} />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The identity of a set of decisions, so a change made elsewhere is visible.
+ *
+ * Sorted before hashing: `Object.entries` follows insertion order, and two
+ * sessions that recorded the same choices in a different order hold the same
+ * state. Cleared entries are omitted, because `undefined` and absent are one
+ * thing here.
+ */
+function marksFingerprint(selections: SelectionMap): string {
+  return summaryVersion(
+    Object.entries(selections)
+      .filter((entry): entry is [string, SelectionStatus] => entry[1] !== undefined)
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .flat(),
   );
 }
 
@@ -285,10 +485,12 @@ function WeatherBackups({
   backups,
   selections,
   onChoose,
+  freshness,
 }: {
   backups: BoardWeatherBackups | null;
   selections: SelectionMap;
   onChoose: (placeId: string, status: SelectionStatus) => void;
+  freshness?: WeatherSnapshotState | 'not_fetched';
 }) {
   if (!backups) return null;
 
@@ -313,6 +515,17 @@ function WeatherBackups({
         <Badge tone={forecast ? 'blue' : 'neutral'}>
           {forecast ? 'Forecast' : 'Seasonal pattern'}
         </Badge>
+        {/*
+          The age of the evidence, beside the kind of it.
+
+          A stale snapshot renders — that is deliberate, an old forecast is worth
+          more than none — and it must not render in the same voice as a fresh
+          one. Without this the badge said "Forecast" whether it was fetched a
+          minute ago or last week.
+        */}
+        {forecast && freshness === 'stale' ? (
+          <Badge tone="amber">Fetched a while ago</Badge>
+        ) : null}
       </div>
 
       <p className="mt-1 max-w-2xl text-sm text-ink-muted">
@@ -326,10 +539,19 @@ function WeatherBackups({
 
       {usable.length === 0 ? (
         <p className="mt-4 max-w-2xl rounded-md bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
+          {/*
+            No landform, in a sentence whose whole point is not inventing one.
+
+            This used to end "would open up the sheltered stops down the valley"
+            — a claim about one mountain region, rendered on a board that now
+            compiles anywhere. An island, a delta, a steppe or a city centre was
+            being told to widen its radius to reach a valley that does not exist
+            there, inside the paragraph that says we will not invent a fallback.
+          */}
           <span className="font-medium text-ink">Nothing on your board fits.</span> Everything
           else here is either too far, shut on your dates, or exposed to the same weather — so
-          we are not going to invent a fallback. Widening how far you will go would open up the
-          sheltered stops down the valley.
+          we are not going to invent a fallback. Widening how far you will go is the change most
+          likely to open something up.
         </p>
       ) : (
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -348,7 +570,7 @@ function WeatherBackups({
                 </span>
                 <button
                   type="button"
-                  className={buttonClass('ghost', 'sm')}
+                  className={cx(buttonClass('ghost', 'sm'), MIN_TARGET)}
                   onClick={() => onChoose(backup.placeId, 'maybe')}
                   aria-pressed={selections[backup.placeId] === 'maybe'}
                 >
@@ -384,7 +606,13 @@ function listNames(names: readonly string[]): string {
  * is not attribution, it is noise, and the itinerary does the same thing in the
  * same quiet type.
  */
-function WeatherCredit({ groups }: { groups: readonly SerializedGroup[] }) {
+function WeatherCredit({
+  groups,
+  freshness,
+}: {
+  groups: readonly SerializedGroup[];
+  freshness?: WeatherSnapshotState | 'not_fetched';
+}) {
   const candidates = groups.flatMap((group) => group.candidates);
   const notice = candidates.find((candidate) => candidate.weather.attribution)?.weather
     .attribution;
@@ -393,9 +621,21 @@ function WeatherCredit({ groups }: { groups: readonly SerializedGroup[] }) {
   if (!notice) return null;
 
   return (
-    <p className="text-[11px] leading-relaxed text-ink-faint">
+    <p className="text-[11px] leading-relaxed text-ink-faint" data-testid="board-weather-credit">
       {label ? `${label} for your dates. ` : ''}
-      {notice} Conditions change; we have not checked today.
+      {notice}{' '}
+      {/*
+        What is actually known about when this was read.
+
+        "Conditions change; we have not checked today" was said whatever the
+        snapshot's age, which is true of a fresh fetch and an understatement of
+        a stale one. Where the page tells us the state, the sentence says it.
+      */}
+      {freshness === 'stale'
+        ? 'This is the last weather we fetched and it is old enough to be worth fetching again.'
+        : freshness === 'expired' || freshness === 'not_fetched'
+          ? 'Nothing here is a claim about the weather on your dates.'
+          : 'Conditions change; we have not checked today.'}
     </p>
   );
 }
@@ -455,12 +695,44 @@ const STATUS_STYLE: Record<SelectionStatus, string> = {
   excluded: 'border-clay bg-clay-soft text-clay',
 };
 
+/**
+ * WHICH CARDS GET A PHOTOGRAPH, AND WHY IT IS NOT ALL OF THEM.
+ *
+ * Two filters, and they are filters on *meaning* rather than on availability.
+ *
+ * **Only strong subject confidence.** A file matched through a stated media
+ * category is a picture of something in the same category as this place, which
+ * is a fine reason to show it beside a destination's name and a bad reason to
+ * illustrate one specific stop. A card that says "this is the waterfall" with a
+ * picture of a different waterfall in the same valley is worse than a card with
+ * no picture at all — it is a claim, and it is wrong.
+ *
+ * **Only cards where a picture is the argument.** A board carries forty
+ * candidates including car parks, bus stations and supermarkets, and a
+ * photograph on every one of them turns a decision tool into a gallery: the
+ * scanning cost goes up, the information density goes down, and the traveller
+ * stops being able to see which four things matter. So imagery is reserved for
+ * the places whose appeal *is* what they look like — the anchors and the
+ * viewpoints — and support stops keep the category plate they already had.
+ */
+function anchorImage(
+  images: Record<string, ImageRecord>,
+  candidate: DiscoveryCandidate,
+): ImageRecord | null {
+  const image = images[candidate.place.id];
+  if (!image || image.subjectConfidence !== 'strong') return null;
+  return candidate.place.relationship === 'base' || candidate.fit.band === 'top_pick' ? image : null;
+}
+
 function PlaceCard({
   candidate,
+  image,
   status,
   onChoose,
 }: {
   candidate: DiscoveryCandidate;
+  /** Null on most cards, by design. See `anchorImage`. */
+  image: ImageRecord | null;
   status: SelectionStatus | undefined;
   onChoose: (placeId: string, status: SelectionStatus) => void;
 }) {
@@ -477,7 +749,26 @@ function PlaceCard({
       )}
     >
       <div className="relative">
-        <PlacePlate placeId={place.id} category={place.category} className="h-24" />
+        {/*
+          A photograph when one was licensed *and* credibly of this exact place;
+          the generated category plate otherwise. Never cropped: the frame is
+          only a little wider than a photograph, and a crop here would buy a few
+          pixels of composition at the cost of a share-alike question.
+        */}
+        {image ? (
+          <DestinationImage
+            image={image}
+            fallback={imageryFallbackFor({
+              kind: 'candidate',
+              id: place.id,
+              name: place.name,
+              coordinates: place.coordinates,
+            })}
+            ratio="16 / 7"
+          />
+        ) : (
+          <PlacePlate placeId={place.id} category={place.category} className="h-24" />
+        )}
         <span className="absolute top-2 left-2 rounded-full bg-paper-raised/90 px-2 py-0.5 text-[11px] font-medium text-ink">
           {PLACE_CATEGORY_LABELS[place.category]}
         </span>
@@ -620,7 +911,7 @@ function PlaceCard({
 
         {fit.cautions.length > 0 ? (
           <details className="mt-3 text-xs">
-            <summary className="cursor-pointer text-ink-faint hover:text-ink">
+            <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-ink-faint hover:text-ink')}>
               Worth knowing ({fit.cautions.length})
             </summary>
             <ul className="mt-2 space-y-1 leading-relaxed text-ink-muted">
@@ -665,7 +956,8 @@ function PlaceCard({
                   // tells nobody which of their answers to change.
                   title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
                   className={cx(
-                    'flex-1 rounded-md border px-2 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
+                    'flex flex-1 items-center justify-center rounded-md border px-2 text-xs font-medium whitespace-nowrap transition-colors',
+                    MIN_TARGET,
                     unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
                     !unavailable && status === option
                       ? STATUS_STYLE[option]
@@ -777,7 +1069,7 @@ function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
       ) : null}
 
       <details className="text-xs">
-        <summary className="cursor-pointer text-ink-faint hover:text-ink">
+        <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-ink-faint hover:text-ink')}>
           Why we trust this ({answered.length} of {evidence.resolved.length} checked
           {conflicted.length > 0 ? `, ${conflicted.length} disputed` : ''})
         </summary>
