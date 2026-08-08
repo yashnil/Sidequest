@@ -105,6 +105,8 @@ export * from './routing/portfolio';
 
 export * from './naming/display-name';
 
+export * from './pricing/model-rates';
+
 export * from './destinations/normalize';
 export * from './destinations/match';
 export * from './destinations/provider';

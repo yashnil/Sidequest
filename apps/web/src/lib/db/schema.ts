@@ -1018,6 +1018,476 @@ CREATE TABLE IF NOT EXISTS weather_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_weather_snapshots_trip
   ON weather_snapshots(trip_id, fetched_at);
+
+-- ===========================================================================
+-- THE BENCHMARK — AN INTERNAL EXPERIMENT, APPEND-ONLY BY CONSTRUCTION
+-- ===========================================================================
+--
+-- One session is one head-to-head: a shared traveller request, two independent
+-- runs, two neutral plans, a randomised blind presentation, a locked review, an
+-- irreversible reveal, and up to three correction rounds per system.
+--
+-- Two properties of the design are enforced here rather than in application
+-- code, because both are the kind that a second browser tab and a direct POST
+-- walk straight past.
+--
+-- **Content rows are never rewritten.** Plans, validations, reviews and model
+-- calls are inserted and superseded, never updated. An experiment whose earlier
+-- results can be edited after the fact is not evidence of anything, and "we only
+-- ever meant to append" is a habit rather than a guarantee. Every column that any
+-- UPDATE in this directory writes carries a MUTABLE marker below, and
+-- "benchmark.architecture.test.ts" parses both this file and the
+-- repositories to hold the list to its word — so a new UPDATE against an unmarked
+-- column fails a test rather than quietly widening what may be rewritten.
+--
+-- The marked set is not all lifecycle. A correction round's payload, a question's
+-- answer, a draft and an upserted metric are each rewritten in place, and each is
+-- marked and says why it is not evidence being edited.
+--
+-- **A benchmark outlives the trip it ran against.** "trip_id" is a plain TEXT
+-- column with no foreign key, deliberately, following "decision_sessions". With
+-- "foreign_keys = ON" and the cascade every other table carries, deleting one
+-- trip would silently destroy the record of a comparison — which is the one
+-- thing a benchmark must not lose.
+--
+-- Retention does not know these tables exist, and a test asserts it stays that
+-- way. The sweep is an explicit allow-list of five deletes; a new table is safe
+-- precisely because nobody added a rule for it.
+
+CREATE TABLE IF NOT EXISTS benchmark_sessions (
+  id               TEXT PRIMARY KEY,
+  schema_version   INTEGER NOT NULL,
+  case_id          TEXT,
+  benchmark_version TEXT NOT NULL,
+  -- No REFERENCES. See the note above.
+  -- MUTABLE, and set-once: attached when the deterministic arm's trip exists,
+  -- and the write requires the column to still be NULL.
+  trip_id          TEXT,
+  -- Absorbs a retried submit. A second press of the button adopts the first
+  -- session rather than starting a second comparison against the same request.
+  idempotency_key  TEXT NOT NULL,
+  request_version  INTEGER NOT NULL,
+  request_json     TEXT NOT NULL,
+  input_hash       TEXT NOT NULL,
+  locale           TEXT NOT NULL,
+  -- MUTABLE. created | running | ready_for_review | review_locked | revealed
+  --        | corrections | complete | abandoned
+  state            TEXT NOT NULL,
+  -- MUTABLE, and set-once. Written by a compare-and-set that requires the column
+  -- to still be NULL, which is what makes the transition it represents genuinely
+  -- irreversible rather than merely discouraged.
+  review_locked_at TEXT,
+  -- MUTABLE, and set-once, by the same compare-and-set for the same reason.
+  revealed_at      TEXT,
+  created_at       TEXT NOT NULL,
+  -- MUTABLE. Moves with whichever of the columns above moved.
+  updated_at       TEXT NOT NULL,
+  -- MUTABLE, with "state". Who is holding the two states that are held rather
+  -- than passed through, and when they last said they were alive.
+  --
+  -- "preparing" and "running" are entered by a compare-and-set and left only by
+  -- the invocation that entered them, which runs inside "after()" — so a restart
+  -- during a world purchase left a session nothing could move, after it had been
+  -- paid for. Every other durable claim in this schema has a heartbeat; these
+  -- two now do too, and a claim whose pulse stopped is returned to the state it
+  -- was taken from.
+  state_owner      TEXT NOT NULL DEFAULT '',
+  -- MUTABLE, with "state_owner", and on a pulse from the holder.
+  state_heartbeat_at TEXT NOT NULL DEFAULT '',
+  -- MUTABLE once, when the comparison is first started: whether paid operations
+  -- were permitted at that moment. See the migration entry for why this is
+  -- recorded rather than inferred from whether any money was spent.
+  paid_mode        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_sessions_idem
+  ON benchmark_sessions(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_benchmark_sessions_state
+  ON benchmark_sessions(state, created_at);
+CREATE INDEX IF NOT EXISTS idx_benchmark_sessions_case
+  ON benchmark_sessions(case_id, created_at);
+
+-- Drawn once, at session creation, and a stored fact thereafter. Nothing
+-- re-derives it: a layout that changed on refresh would itself be a way to learn
+-- which system is which.
+CREATE TABLE IF NOT EXISTS benchmark_assignments (
+  session_id      TEXT PRIMARY KEY REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  schema_version  INTEGER NOT NULL,
+  label_a_system  TEXT NOT NULL,
+  label_b_system  TEXT NOT NULL,
+  first_label     TEXT NOT NULL,
+  source          TEXT NOT NULL,
+  seed            TEXT,
+  -- The raw uniform draws, kept so the coin can be audited across sessions and
+  -- so a tampered row disagrees with the number that supposedly produced it.
+  draw_label      REAL NOT NULL,
+  draw_order      REAL NOT NULL,
+  assigned_at     TEXT NOT NULL
+);
+
+-- One arm of one session.
+CREATE TABLE IF NOT EXISTS benchmark_runs (
+  id             TEXT PRIMARY KEY,
+  session_id     TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  arm            TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  -- MUTABLE, and only from NULL: an arm names the prompt it used and the model it
+  -- reached when it settles, because neither is known when the row is opened.
+  prompt_version TEXT,
+  -- MUTABLE, on the same terms as "prompt_version".
+  model          TEXT,
+  -- MUTABLE. pending | running | succeeded | partial | failed
+  state          TEXT NOT NULL,
+  -- MUTABLE, written once with the settling state. How a run ended is part of
+  -- how it ended, not a later revision of it.
+  failure_kind   TEXT,
+  -- MUTABLE, written once with "failure_kind".
+  failure_detail TEXT,
+  started_at     TEXT NOT NULL,
+  -- MUTABLE, written once with the settling state.
+  finished_at    TEXT,
+  -- MUTABLE, by the metric writer. cold | warm | mixed | unknown.
+  --
+  -- Here rather than in "benchmark_metrics" because that table stores one row per
+  -- *Measurement* and this is a classification, not a number — so it had nowhere
+  -- to go, was silently dropped on write, and every latency figure on the
+  -- dashboard pooled first runs with repeats as a result. Warmth is the one
+  -- covariate the pre-registered rules name as making latency readable.
+  warmth         TEXT,
+  -- MUTABLE, with "warmth". One sentence naming what the verdict was read off,
+  -- so that "nothing observed this" and "this was observed to be cold" are
+  -- distinguishable afterwards rather than both printing as a word.
+  warmth_basis   TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_runs_arm
+  ON benchmark_runs(session_id, arm);
+CREATE INDEX IF NOT EXISTS idx_benchmark_runs_state
+  ON benchmark_runs(state, started_at);
+
+-- The neutral plan. Immutable and content-addressed: a correction round inserts
+-- a new row at a higher version naming the one it supersedes.
+CREATE TABLE IF NOT EXISTS benchmark_plans (
+  id                TEXT PRIMARY KEY,
+  session_id        TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  run_id            TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+  plan_version      INTEGER NOT NULL,
+  supersedes_plan_id TEXT,
+  schema_version    INTEGER NOT NULL,
+  content_hash      TEXT NOT NULL,
+  fingerprint       TEXT NOT NULL,
+  payload_json      TEXT NOT NULL,
+  created_at        TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_plans_identity
+  ON benchmark_plans(run_id, plan_version);
+CREATE INDEX IF NOT EXISTS idx_benchmark_plans_session
+  ON benchmark_plans(session_id, created_at);
+
+-- What each system produced in its own idiom, kept beside the neutral form so
+-- the neutral form can stay neutral. Never rendered before the reveal.
+CREATE TABLE IF NOT EXISTS benchmark_native_artifacts (
+  id             TEXT PRIMARY KEY,
+  run_id         TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+  plan_id        TEXT,
+  kind           TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  content_hash   TEXT NOT NULL,
+  payload_json   TEXT NOT NULL,
+  created_at     TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_native_identity
+  ON benchmark_native_artifacts(run_id, kind, content_hash);
+
+-- Every question either system asked, why, and who answered it. "asked_by" is
+-- persisted and never rendered before the reveal.
+CREATE TABLE IF NOT EXISTS benchmark_questions (
+  id              TEXT PRIMARY KEY,
+  session_id      TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  asked_by        TEXT NOT NULL,
+  stage           TEXT NOT NULL,
+  sequence        INTEGER NOT NULL,
+  schema_version  INTEGER NOT NULL,
+  -- MUTABLE once, with the answer. The question itself is not edited; the row
+  -- carries the whole question object and the answer is part of it. Re-parsed
+  -- before it is written, because a payload that will not parse afterwards is
+  -- dropped on read and takes the question out of the pooled list with it.
+  payload_json    TEXT NOT NULL,
+  presented_at    TEXT NOT NULL,
+  -- MUTABLE once, when the answer arrives, and only while the review is unlocked.
+  answered_at     TEXT,
+  -- MUTABLE once, with "answered_at". NULL means unanswered. Zero means answered
+  -- from the shared request in no time at all. Collapsing those two is how a
+  -- system looks cheap because nobody answered its questions.
+  elapsed_ms      INTEGER,
+  -- MUTABLE once, with "answered_at".
+  answer_json     TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_questions_identity
+  ON benchmark_questions(session_id, id);
+CREATE INDEX IF NOT EXISTS idx_benchmark_questions_order
+  ON benchmark_questions(session_id, sequence);
+
+CREATE TABLE IF NOT EXISTS benchmark_validations (
+  id             TEXT PRIMARY KEY,
+  session_id     TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  plan_id        TEXT NOT NULL REFERENCES benchmark_plans(id) ON DELETE CASCADE,
+  schema_version INTEGER NOT NULL,
+  critical_count INTEGER NOT NULL,
+  major_count    INTEGER NOT NULL,
+  minor_count    INTEGER NOT NULL,
+  informational_count INTEGER NOT NULL,
+  unknown_count  INTEGER NOT NULL,
+  attempted      INTEGER NOT NULL,
+  decided        INTEGER NOT NULL,
+  payload_json   TEXT NOT NULL,
+  created_at     TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_validations_plan
+  ON benchmark_validations(plan_id);
+
+-- One row per (run, metric). "value_num" is NULL exactly when the measurement is
+-- unavailable, and then the reason says why. There is no zero in this table that
+-- means "we could not tell" — the CHECK makes that shape unrepresentable rather
+-- than merely discouraged, because the equivalent field elsewhere in this schema
+-- coalesces a missing count to 0 and the two have been indistinguishable ever
+-- since.
+-- Every column below the identity is MUTABLE, by upsert: a run's metric set is
+-- recomputed as later boundaries are reached, and the second write replaces the
+-- first rather than adding a row the readers would then have to choose between.
+-- The metric is a derived reading of the run, not a record of what happened, so
+-- recomputing it is not editing evidence.
+CREATE TABLE IF NOT EXISTS benchmark_metrics (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id         TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  run_id             TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+  metric_key         TEXT NOT NULL,
+  -- MUTABLE, by upsert.
+  availability       TEXT NOT NULL,
+  -- MUTABLE, by upsert.
+  value_num          REAL,
+  -- MUTABLE, by upsert.
+  unit               TEXT,
+  -- MUTABLE, by upsert.
+  unavailable_reason TEXT,
+  -- MUTABLE, by upsert.
+  detail             TEXT,
+  -- MUTABLE, by upsert.
+  computed_at        TEXT NOT NULL,
+  CHECK (
+    (availability = 'measured'
+       AND value_num IS NOT NULL AND unit IS NOT NULL
+       AND unavailable_reason IS NULL)
+    OR
+    (availability = 'unavailable'
+       AND value_num IS NULL AND unit IS NULL
+       AND unavailable_reason IS NOT NULL
+       -- Present is not the same as said. An empty detail satisfies IS NOT NULL
+       -- and renders as a blank beside the reason, which reads as an absence
+       -- nobody bothered to explain — the one shape this table exists to refuse.
+       AND detail IS NOT NULL AND length(detail) > 0)
+  ),
+  -- "x != x" is true only for NaN in SQLite; the bounds reject both infinities.
+  -- Either would serialise through JSON as "null" and stop being detectable.
+  CHECK (value_num IS NULL
+         OR (value_num = value_num AND value_num > -1e308 AND value_num < 1e308))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_metrics_identity
+  ON benchmark_metrics(run_id, metric_key);
+CREATE INDEX IF NOT EXISTS idx_benchmark_metrics_session
+  ON benchmark_metrics(session_id, metric_key);
+
+-- The reviewer's blind judgement. Written once, at the lock, and never edited.
+CREATE TABLE IF NOT EXISTS benchmark_reviews (
+  id             TEXT PRIMARY KEY,
+  session_id     TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  reviewer       TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  payload_json   TEXT NOT NULL,
+  submitted_at   TEXT NOT NULL
+);
+
+-- One locked review per session. A second submission changes no rows.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_reviews_session
+  ON benchmark_reviews(session_id);
+
+-- The draft a reviewer is still editing. The only benchmark content row that is
+-- rewritten, and it is not evidence — it exists so a refresh mid-review does not
+-- lose an hour's work. Its contents become evidence only by being copied into
+-- "benchmark_reviews" at the lock.
+CREATE TABLE IF NOT EXISTS benchmark_review_drafts (
+  session_id   TEXT PRIMARY KEY REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  -- MUTABLE, on every keystroke that autosaves, and refused once the review is
+  -- locked. See the note above for why rewriting this one is not editing evidence.
+  payload_json TEXT NOT NULL,
+  -- MUTABLE, with the draft.
+  updated_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS benchmark_post_reveal (
+  session_id   TEXT PRIMARY KEY REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  schema_version INTEGER NOT NULL,
+  -- MUTABLE, by upsert: these answers are given after the reveal, when the blind
+  -- ratings are already locked and beyond reach, so a reviewer revising them
+  -- changes nothing the comparison rests on.
+  payload_json TEXT NOT NULL,
+  -- MUTABLE, with the answers.
+  answered_at  TEXT
+);
+
+-- Correction rounds. Append-only and version-guarded: "supersedes_plan_id" is
+-- the compare-and-set token, so a round that started against an older plan
+-- cannot land on top of a newer one.
+CREATE TABLE IF NOT EXISTS benchmark_corrections (
+  id                 TEXT PRIMARY KEY,
+  session_id         TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  system             TEXT NOT NULL,
+  round              INTEGER NOT NULL,
+  supersedes_plan_id TEXT NOT NULL,
+  -- MUTABLE once, when the round completes: the plan it produced does not exist
+  -- when the round is claimed, and claiming is what reserves the round number.
+  result_plan_id     TEXT,
+  instruction_hash   TEXT NOT NULL,
+  schema_version     INTEGER NOT NULL,
+  -- MUTABLE once, with the outcome. The instruction inside it is never rewritten
+  -- — "instruction_hash" is fixed at the claim and is what proves that.
+  payload_json       TEXT NOT NULL,
+  requested_at       TEXT NOT NULL,
+  -- MUTABLE once, and the guard requires it to still be NULL, so a round settles
+  -- exactly one way.
+  completed_at       TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_corrections_identity
+  ON benchmark_corrections(session_id, system, round);
+CREATE INDEX IF NOT EXISTS idx_benchmark_corrections_session
+  ON benchmark_corrections(session_id, requested_at);
+
+-- The spend ledger. Counters and identifiers only — never a prompt body, never a
+-- header map, never anything that has been near a credential. A failed call is
+-- recorded with its tokens, because a provider that took the request and
+-- returned nothing usable has still spent real money, and a ledger that only
+-- counts successes is wrong in exactly the situation somebody is reading it.
+CREATE TABLE IF NOT EXISTS benchmark_model_calls (
+  id                 TEXT PRIMARY KEY,
+  session_id         TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  run_id             TEXT,
+  operation_key      TEXT NOT NULL,
+  arm                TEXT NOT NULL,
+  operation          TEXT NOT NULL,
+  provider           TEXT NOT NULL,
+  model              TEXT NOT NULL,
+  prompt_version     TEXT NOT NULL,
+  schema_version     INTEGER NOT NULL,
+  request_id         TEXT,
+  attempt            INTEGER NOT NULL,
+  -- NULL when the caller counted calls and not tokens. Not zero: the adjacent
+  -- cost column is carefully guarded and these were not, so a compilation whose
+  -- token counters were absent stored "it used no tokens" — the exact
+  -- coalescence the writer's own header says appears nowhere in it.
+  input_tokens       INTEGER,
+  output_tokens      INTEGER,
+  cache_read_tokens  INTEGER NOT NULL,
+  cache_write_tokens INTEGER NOT NULL,
+  -- NULL when the model has no entry in the checked-in rate table. Not zero: a
+  -- call nobody could price and a call that cost nothing are different facts.
+  cost_micro_usd     INTEGER,
+  cost_unavailable_reason TEXT,
+  outcome            TEXT NOT NULL,
+  failure_kind       TEXT,
+  started_at         TEXT NOT NULL,
+  finished_at        TEXT,
+  duration_ms        INTEGER
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_model_calls_identity
+  ON benchmark_model_calls(operation_key, attempt);
+CREATE INDEX IF NOT EXISTS idx_benchmark_model_calls_session
+  ON benchmark_model_calls(session_id, started_at);
+
+-- Durable single-flight, shaped exactly like "model_operations" above: a
+-- heartbeat rather than an expiry timestamp, so a process killed mid-call
+-- releases its claim instead of wedging a session for ever.
+--
+-- "operation_key" carries the session id. Without it two sessions running the
+-- same request would collide on one operation and the second would be handed the
+-- first's result, which is a cross-session leak wearing a cache's clothes.
+CREATE TABLE IF NOT EXISTS benchmark_operations (
+  id            TEXT PRIMARY KEY,
+  operation_key TEXT NOT NULL,
+  session_id    TEXT NOT NULL REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL,
+  -- MUTABLE. pending | running | succeeded | failed_retryable | failed_terminal
+  --        | superseded
+  state         TEXT NOT NULL,
+  owner         TEXT NOT NULL,
+  attempt       INTEGER NOT NULL,
+  started_at    TEXT NOT NULL,
+  -- MUTABLE, and the point of the table: the holder says it is still alive, and a
+  -- claim that stops arriving is what releases the lease.
+  heartbeat_at  TEXT NOT NULL,
+  -- MUTABLE, written when the operation settles or its lease expires.
+  finished_at   TEXT,
+  -- MUTABLE, written with the settling state.
+  result_ref    TEXT,
+  -- MUTABLE, written with the settling state.
+  failure_kind  TEXT,
+  -- MUTABLE, written with the settling state.
+  detail        TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_operations_active
+  ON benchmark_operations(operation_key) WHERE state IN ('pending','running');
+CREATE INDEX IF NOT EXISTS idx_benchmark_operations_key
+  ON benchmark_operations(operation_key, started_at);
+CREATE INDEX IF NOT EXISTS idx_benchmark_operations_session
+  ON benchmark_operations(session_id, started_at);
+
+-- THE WORLD BOTH ARMS PLAN AGAINST, BOUGHT ONCE AND KEPT.
+--
+-- Written during the question round, before either planner starts, and read back
+-- when the traveller has answered. It exists because the round is a genuine
+-- pause — the harness stops and waits for a person — and the two halves are
+-- separate server invocations either side of it. Without a stored world the
+-- second half would have to buy the same places, routes, hours and forecast a
+-- second time: minutes of somebody else's volunteer-run service, paid twice, for
+-- data that has not changed.
+--
+-- One row per session and never rewritten, which is what makes the world the two
+-- arms are compared on demonstrably the same one the questions were derived from.
+CREATE TABLE IF NOT EXISTS benchmark_shared_worlds (
+  session_id      TEXT PRIMARY KEY REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  schema_version  INTEGER NOT NULL,
+  content_hash    TEXT NOT NULL,
+  -- How long the purchase took. Charged to neither arm and recorded on both.
+  preparation_ms  INTEGER NOT NULL,
+  payload_json    TEXT NOT NULL,
+  gathered_at     TEXT NOT NULL
+);
+
+-- The clock that separates what a person waited from what the machines did.
+--
+-- Written by the harness rather than by either arm: an arm cannot see the other
+-- arm, and neither can see the traveller. "questions_ready_at" and
+-- "answers_closed_at" bound the only span in a comparison that is spent waiting
+-- for a human, and the difference between them is what "humanAnswerWaitMs"
+-- reports. Session-level because the wait is the session's, not either arm's.
+CREATE TABLE IF NOT EXISTS benchmark_session_clock (
+  session_id         TEXT PRIMARY KEY REFERENCES benchmark_sessions(id) ON DELETE CASCADE,
+  -- Set once, when the comparison is first started by a press.
+  started_at         TEXT NOT NULL,
+  -- MUTABLE once: set when the question round opens.
+  questions_ready_at TEXT,
+  -- MUTABLE once: set when the traveller asks for the plans.
+  answers_closed_at  TEXT,
+  -- MUTABLE once: set when both arms have stopped.
+  finished_at        TEXT
+);
 `;
 
 /**
@@ -1184,6 +1654,62 @@ export const COLUMN_MIGRATIONS: readonly {
    * a fact rather than a guess.
    */
   { table: 'compilation_jobs', column: 'schema_version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+
+  /*
+   * THE COLUMNS A NEW TABLE DOES NOT NEED AND AN EXISTING ONE DOES.
+   *
+   * `benchmark_shared_worlds` and `benchmark_session_clock` are new tables and
+   * arrive fine — `CREATE TABLE IF NOT EXISTS` creates them. `benchmark_runs`
+   * already shipped, so `CREATE TABLE IF NOT EXISTS` does nothing to it and the
+   * two warmth columns landed in `SCHEMA_SQL` alone. Any database created by an
+   * earlier build on this branch — including a pilot's — would then answer
+   * `no such column: warmth` to the first `SELECT`, which is on the path of
+   * `startRun`, `getRuns` and `getRunForArm`: the session index, the progress
+   * poll, the review page, the report and both arms of every run, all rendering
+   * the same neutral "something went wrong" with nothing saying it is one column.
+   *
+   * Defaulted rather than nullable, and to the same word the writer uses for an
+   * unobserved run, so a row written before the column existed reads as what it
+   * is: a run whose warmth nobody recorded.
+   */
+  { table: 'benchmark_runs', column: 'warmth', definition: "TEXT NOT NULL DEFAULT 'unknown'" },
+  {
+    table: 'benchmark_runs',
+    column: 'warmth_basis',
+    definition:
+      "TEXT NOT NULL DEFAULT 'This run predates the column, so nothing observed its warmth.'",
+  },
+
+  /*
+   * The lease on the two in-flight session states.
+   *
+   * `preparing` and `running` are entered by a compare-and-set and were left only
+   * by the same invocation, which runs inside `after()` — so a hot reload, a
+   * recycled container or an OOM between the two left the session in a state
+   * nothing could move it out of, after the world had already been bought and
+   * paid for. A lock with no release is not a lock, it is a trap.
+   */
+  { table: 'benchmark_sessions', column: 'state_owner', definition: "TEXT NOT NULL DEFAULT ''" },
+  /*
+   * Whether paid operations were permitted when this session ran.
+   *
+   * Liveness used to be inferred from the spend ledger — a session counted as
+   * live only if *both* arms had recorded a model call. A fully warm compilation
+   * makes none, so eleven repeat sessions on one destination would all be filed
+   * as practice and vanish from the live aggregate. The bias is one-sided and
+   * runs with the outcome: the warmest, fastest, cheapest sessions are the ones
+   * most likely to disappear, and the pre-registered rules forbid excluding a
+   * session for anything but a documented harness defect.
+   *
+   * Recorded rather than inferred. Defaulted to 0 because a row written before
+   * the column existed cannot have been a live run under this build.
+   */
+  { table: 'benchmark_sessions', column: 'paid_mode', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  {
+    table: 'benchmark_sessions',
+    column: 'state_heartbeat_at',
+    definition: "TEXT NOT NULL DEFAULT ''",
+  },
 ];
 
 /**

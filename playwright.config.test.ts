@@ -67,19 +67,36 @@ describe('the browser suite configuration', () => {
     expect(declared.map((project) => project.name).length).toBeGreaterThan(0);
   });
 
-  it('does not run the responsive spec four times over', () => {
+  it('does not run a responsive spec four times over', () => {
     /*
-     * The spec sets its own viewport, so a second project running it re-walks the
-     * composer and learns nothing. This is a runtime guard, not a correctness one:
-     * three redundant walks x three consecutive full runs is real minutes.
+     * A responsive spec sets its own viewport, so a second project running it
+     * re-walks the same screens and learns nothing. This is a runtime guard, not
+     * a correctness one: redundant walks x three consecutive full runs is real
+     * minutes.
+     *
+     * Compared as a set rather than by identity, because there is more than one
+     * such spec now. The benchmark added its own sweep and was initially left off
+     * the list — which meant it ran three times, once per full project, each
+     * overriding the viewport it was written to probe, and never once at the
+     * tablet width it exists for. Passing, three times, while testing nothing it
+     * claimed to.
      */
+    const asSet = (value: unknown): string[] =>
+      (Array.isArray(value) ? value : [value]).filter((entry): entry is string => typeof entry === 'string').sort();
+
     const projects = config.projects ?? [];
-    const runners = projects.filter((project) => project.testMatch === '**/viewports.spec.ts');
-    expect(runners.map((project) => project.name)).toEqual(['tablet']);
+    const responsive = projects
+      .filter((project) => asSet(project.testMatch).some((glob) => glob.includes('viewports.spec.ts')))
+      .map((project) => project.name);
+    expect(responsive).toEqual(['tablet']);
+
+    const expected = asSet(projects.find((project) => project.name === 'tablet')?.testMatch);
+    expect(expected.length, 'the tablet project runs no responsive spec').toBeGreaterThan(0);
+
     for (const project of projects) {
-      if (runners.includes(project)) continue;
-      expect(project.testIgnore, `${project.name} would re-run the responsive spec`).toBe(
-        '**/viewports.spec.ts',
+      if (project.name === 'tablet') continue;
+      expect(asSet(project.testIgnore), `${project.name} would re-run a responsive spec`).toEqual(
+        expected,
       );
     }
   });
@@ -111,5 +128,35 @@ describe('the browser suite configuration', () => {
         ),
     );
     expect(offences, `Tests removed from the suite:\n${offences.join('\n')}`).toEqual([]);
+  });
+
+  /**
+   * THE BROWSER SUITE REACHES NOTHING THAT COSTS MONEY.
+   *
+   * Every one of these pins exists because the absence of a switch is a
+   * property of a shell, and a shell is not something a test suite gets to
+   * assume. `ANTHROPIC_API_KEY=` is blanked rather than merely unset, because a
+   * developer whose environment happens to carry a research credential would
+   * otherwise make every browser run spend real money — and the two newest pins
+   * are here for the sharper version of that: the benchmark surface can spend on
+   * a *reviewer's click*, and it reads its ceiling from the environment.
+   *
+   * Asserted here rather than trusted to the config, so that removing one is a
+   * failing test rather than a quiet change in what a run is allowed to do.
+   */
+  it('pins every provider switch away from live in the server it starts', () => {
+    const command = config.webServer?.command ?? '';
+    for (const pin of [
+      'ANTHROPIC_API_KEY=',
+      'SIDEQUEST_WEATHER_PROVIDER=fixture',
+      'SIDEQUEST_COMPILER_PROVIDER=fixture',
+      'SIDEQUEST_CLIMATE_PROVIDER=off',
+      'SIDEQUEST_BENCHMARK_MODE=fixture',
+      'SIDEQUEST_BENCHMARK_BUDGET_USD=',
+    ]) {
+      expect(command, `the end-to-end server no longer pins ${pin}`).toContain(pin);
+    }
+    expect(command).not.toContain('SIDEQUEST_COMPILER_PROVIDER=open');
+    expect(command).not.toContain('SIDEQUEST_BENCHMARK_MODE=live');
   });
 });

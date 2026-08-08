@@ -67,7 +67,8 @@ function walk(dir: string, out: string[] = []): string[] {
  */
 const SHELL_FILES = [
   'apps/web/src/app/layout.tsx',
-  'apps/web/src/app/page.tsx',
+  'apps/web/src/components/ProductChrome.tsx',
+  'apps/web/src/app/(product)/page.tsx',
   'apps/web/src/app/not-found.tsx',
   'apps/web/src/components/TripContextBar.tsx',
   'apps/web/src/components/ui.tsx',
@@ -89,7 +90,16 @@ describe('the global shell names no place', () => {
   });
 
   it('the footer disclaimer applies anywhere on earth', () => {
-    const layout = code('apps/web/src/app/layout.tsx');
+    /*
+     * Read from `ProductChrome` rather than from the root layout.
+     *
+     * The chrome moved out of the layout when `/labs/benchmark` arrived: that
+     * route shows two plans blind and may not name either system, one of which
+     * is this product, and a nested layout can add chrome but never subtract it.
+     * The assertions below are unchanged — the shell still may not name a place
+     * — they simply follow the markup to where it now lives.
+     */
+    const layout = code('apps/web/src/components/ProductChrome.tsx');
     expect(layout).toMatch(/published sources/i);
     // The words that made the old one local.
     expect(layout).not.toMatch(/snowpack/i);
@@ -97,7 +107,7 @@ describe('the global shell names no place', () => {
   });
 
   it('the header holds only the wordmark and a link, never a region label', () => {
-    const layout = code('apps/web/src/app/layout.tsx');
+    const layout = code('apps/web/src/components/ProductChrome.tsx');
     const header = layout.slice(layout.indexOf('<header'), layout.indexOf('</header>'));
     expect(header).toContain('Sidequest');
     expect(header).not.toMatch(/uppercase tracking-\[0\.18em\] text-ink-faint/);

@@ -343,10 +343,10 @@ describe('the product render surface', () => {
     expect(RENDER_MODULES.length).toBeGreaterThan(10);
     // The routes this slice is actually about, named so a rename is loud.
     const names = RENDER_MODULES.map(relative);
-    expect(names).toContain('app/trips/[id]/discover/page.tsx');
-    expect(names).toContain('app/trips/[id]/itinerary/page.tsx');
-    expect(names).toContain('app/trips/[id]/provisional/page.tsx');
-    expect(names).toContain('app/decide/[id]/page.tsx');
+    expect(names).toContain('app/(product)/trips/[id]/discover/page.tsx');
+    expect(names).toContain('app/(product)/trips/[id]/itinerary/page.tsx');
+    expect(names).toContain('app/(product)/trips/[id]/provisional/page.tsx');
+    expect(names).toContain('app/(product)/decide/[id]/page.tsx');
   });
 
   it('reaches no module that can call a provider', () => {
@@ -525,7 +525,7 @@ describe('the product render surface', () => {
  * work.
  */
 describe('the weather refresh is an explicit operation', () => {
-  const actions = code(join(WEB_SRC, 'app/trips/[id]/discover/actions.ts'));
+  const actions = code(join(WEB_SRC, 'app/(product)/trips/[id]/discover/actions.ts'));
   /*
    * The fetch itself lives one module down, and deliberately.
    *
@@ -584,7 +584,15 @@ describe('the weather refresh is an explicit operation', () => {
    * itinerary with nothing on screen saying so.
    */
   it('is bought before planning, because building a plan is an explicit act', () => {
-    const planning = code(join(WEB_SRC, 'app/trips/[id]/itinerary/actions.ts'));
+    /*
+     * Read from `lib/planning/build.ts` rather than from the server action.
+     *
+     * The sequence moved there so that the benchmark adapter and the button a
+     * traveller presses run the same one; what stayed in the action is the
+     * revalidate and the redirect. The invariant is unchanged and is now
+     * asserted where the invariant lives.
+     */
+    const planning = code(join(WEB_SRC, 'lib/planning/build.ts'));
     expect(planning).toMatch(/ensureWeatherForPlanning/);
     expect(refresh).toMatch(/export async function ensureWeatherForPlanning/);
     // And the render path still never reaches it.
@@ -690,7 +698,7 @@ describe('the discovery board describes no particular place', () => {
   ];
 
   it.each([
-    'app/trips/[id]/discover/page.tsx',
+    'app/(product)/trips/[id]/discover/page.tsx',
     'components/ReconciliationPanel.tsx',
   ])('%s assumes nothing about the climate', (file) => {
     const source = code(join(WEB_SRC, file));

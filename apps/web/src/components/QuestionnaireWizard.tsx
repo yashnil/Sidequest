@@ -36,7 +36,7 @@ import { Badge, ErrorNote, Fieldset, FOCUS_RING, OVERLAY_INPUT, Panel, buttonCla
 import {
   completeQuestionnaireAction,
   saveDraftAction,
-} from '@/app/trips/[id]/questionnaire/actions';
+} from '@/app/(product)/trips/[id]/questionnaire/actions';
 
 /** Compact labels for the interest frequency control; the long forms are too wide for a segmented row. */
 const LEVEL_SHORT: Record<InterestLevel, string> = {

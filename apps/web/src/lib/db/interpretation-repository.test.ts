@@ -66,8 +66,26 @@ const provider = {
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', () => ({ redirect: () => {} }));
-vi.mock('@/lib/db/repository', () => ({}));
-vi.mock('@/lib/region', () => ({}));
+/*
+ * THESE TWO USED TO BE EMPTY, AND USED TO DO NOTHING.
+ *
+ * The test config had no `@/` alias, so a `vi.mock('@/lib/db/repository')` named
+ * a specifier nothing resolved to, and the file this test actually imports —
+ * `./repository`, the same module by a different name — was never mocked. The
+ * empty factories were inert, and the tests passed because of it rather than
+ * despite it.
+ *
+ * Adding the alias so that components could be unit-tested made both mocks
+ * suddenly real, and twenty tests started failing on a `createTrip` that had
+ * been replaced with nothing.
+ *
+ * The fix is to say what was always meant. These modules are mocked only so that
+ * importing a server action does not drag its whole import graph into a test
+ * about a database lease; the modules themselves are wanted, and forwarding to
+ * the real implementation is what the neighbouring line has always done.
+ */
+vi.mock('@/lib/db/repository', async () => await import('./repository'));
+vi.mock('@/lib/region', async () => await import('../region'));
 vi.mock('@/lib/db/compiler-repository', async () => await import('./compiler-repository'));
 vi.mock(
   '@/lib/db/interpretation-repository',
@@ -161,7 +179,7 @@ function cacheKeyFor(mustDo: string): string {
 }
 
 async function read(tripId: string) {
-  const { readUnresolvedTextAction } = await import('../../app/trips/[id]/questionnaire/actions');
+  const { readUnresolvedTextAction } = await import('../../app/(product)/trips/[id]/questionnaire/actions');
   return readUnresolvedTextAction(tripId);
 }
 

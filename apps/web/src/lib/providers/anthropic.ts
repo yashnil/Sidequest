@@ -132,6 +132,28 @@ export function emptyUsage(): ModelUsage {
 /** Opus 5, in dollars per token. Used for a diagnostic figure, never a bill. */
 const RATE = { input: 5 / 1e6, output: 25 / 1e6 };
 
+/**
+ * ABOVE THIS MANY OUTPUT TOKENS, THE REQUEST IS STREAMED.
+ *
+ * Not a preference. A non-streaming request is rejected outright — HTTP 400,
+ * `invalid_request_error`, nothing generated and nothing billed — once its
+ * `max_tokens` is large enough that generation could outrun the non-streaming
+ * response limit. The rejection arrives in a few hundred milliseconds and reads
+ * in a log exactly like an outage, which is how it survived: every offline test
+ * passes, and the only symptom is that the one call which asks for real room
+ * fails the moment it is pointed at the live provider.
+ *
+ * Sixteen thousand is comfortably under the limit rather than derived from it.
+ * Guessing the exact boundary would buy nothing — a streamed request is correct
+ * at every size, so the threshold only has to be low enough to be safe and high
+ * enough that the small calls keep the simpler path and its client-side parse.
+ *
+ * It is applied here, once, so both arms of the benchmark cross it on the same
+ * terms. Fixing this for the arm that happened to trip it would have made the
+ * comparison a measurement of which planner asked for more room.
+ */
+const STREAMING_REQUIRED_ABOVE_MAX_TOKENS = 16_000;
+
 export class ResearchModelError extends Error {
   readonly code: 'not_configured' | 'malformed_output' | 'rate_limited' | 'request_failed';
   readonly requestId: string | undefined;
@@ -148,6 +170,17 @@ export interface ResearchModelOptions {
   /** Hard ceiling for one compilation. Reaching it is a normal outcome. */
   maxCalls: number;
   model?: string;
+  /**
+   * How many times the SDK may retry a request on its own.
+   *
+   * Two by default, which is right for a compilation: a transient 5xx costs a
+   * retry rather than a whole build. It is wrong for anything keeping a ledger,
+   * because an SDK retry is invisible to `usage.calls` — the request is billed
+   * again and recorded once, so a spend total quietly under-reports and a budget
+   * ceiling reads low. A caller that must account for every request sets this to
+   * zero and does its own retrying where it can count it.
+   */
+  maxRetries?: number;
 }
 
 /**
@@ -170,7 +203,7 @@ export class ResearchModel {
     }
     // The key is read here and nowhere else, and it is passed to the SDK, which
     // sends it as a header. It never enters a URL, a log line or a stored row.
-    this.client = new Anthropic({ apiKey, maxRetries: 2, timeout: 60_000 });
+    this.client = new Anthropic({ apiKey, maxRetries: options.maxRetries ?? 2, timeout: 60_000 });
     this.model = options.model ?? process.env.ANTHROPIC_MODEL?.trim() ?? DEFAULT_MODEL;
     this.maxCalls = options.maxCalls;
   }
@@ -191,6 +224,35 @@ export class ResearchModel {
     effort?: 'low' | 'medium' | 'high';
     /** Per-request, because a big structured answer legitimately takes longer. */
     timeoutMs?: number;
+    /**
+     * WHO HOLDS THE SHAPE TO ACCOUNT — AND WHY THERE IS A CHOICE AT ALL.
+     *
+     * `grammar` is the default and the one to want: the schema is compiled into
+     * a decoding constraint, so a non-conforming answer is not merely rejected,
+     * it is unrepresentable.
+     *
+     * `prompt` exists because that compilation has a size limit, and one schema
+     * in this repository is past it. A whole multi-day itinerary — days of
+     * blocks, each with its own travel, meal and opening-hours sub-objects —
+     * compiles to a grammar the provider refuses outright: HTTP 400, "the
+     * compiled grammar is too large", nothing generated and nothing billed. It
+     * is not close to the limit, and the parts that would have to go to get
+     * under it are precisely the ones the checks read.
+     *
+     * So that one call states the schema in its prompt instead and is held to it
+     * on the way back. What is *not* lost in the trade is the part that matters:
+     * the security properties were never enforced by the grammar in the first
+     * place. `zodOutputFormat` cannot express `pattern`, so the rule that keeps
+     * a URL out of a rendered field has always been stripped before the request
+     * left this process, and has always been enforced here by re-running the
+     * caller's own schema over the answer. Both modes do that, identically.
+     *
+     * What is genuinely given up is first-pass conformance: an unconstrained
+     * answer can come back misshapen, where a constrained one cannot. That is a
+     * cost in retries, which the caller already has a path for, rather than a
+     * cost in safety.
+     */
+    schemaEnforcement?: 'grammar' | 'prompt';
   }): Promise<T> {
     if (this.callsRemaining <= 0) {
       throw new ResearchModelError('request_failed', 'This trip has no model calls left.');
@@ -213,39 +275,61 @@ export class ResearchModel {
         ],
       });
     }
+    const enforcement = input.schemaEnforcement ?? 'grammar';
+    const outputFormat = zodOutputFormat(input.schema as z.ZodType);
+
     // Our instruction comes after the untrusted block, never inside it.
-    content.push({ role: 'user', content: input.task });
+    content.push({
+      role: 'user',
+      content:
+        enforcement === 'grammar'
+          ? input.task
+          : `${input.task}\n\nAnswer with a single JSON object and nothing else — no prose ` +
+            `before or after it, no code fence. It must validate against this JSON Schema:\n` +
+            `${JSON.stringify(outputFormat.schema)}`,
+    });
+
+    const maxTokens = input.maxTokens ?? 8192;
+    const params = {
+      model: this.model,
+      max_tokens: maxTokens,
+      output_config: {
+        ...(enforcement === 'grammar' ? { format: outputFormat } : {}),
+        ...(input.effort ? { effort: input.effort } : {}),
+      },
+      system: [
+        {
+          type: 'text' as const,
+          text: `${input.instruction}\n\n${UNTRUSTED_POLICY}`,
+          cache_control: { type: 'ephemeral' as const },
+        },
+      ],
+      messages: content,
+    };
+    /**
+     * The client's own 60-second default is a floor, not a ceiling.
+     *
+     * A live New York compile asked for ninety-six classifications in one call
+     * and the request was cut off client-side with no status and no request id —
+     * which surfaces as "the research model did not answer" and looks exactly
+     * like an outage. Batching is the real fix (see `classifyPlaces`); a longer
+     * per-request budget is what stops the remaining large calls failing the
+     * same way.
+     */
+    const requestOptions = { timeout: input.timeoutMs ?? 60_000 };
 
     try {
-      const message = await this.client.messages.parse(
-        {
-        model: this.model,
-        max_tokens: input.maxTokens ?? 8192,
-        output_config: {
-          format: zodOutputFormat(input.schema as z.ZodType),
-          ...(input.effort ? { effort: input.effort } : {}),
-        },
-        system: [
-          {
-            type: 'text',
-            text: `${input.instruction}\n\n${UNTRUSTED_POLICY}`,
-            cache_control: { type: 'ephemeral' },
-          },
-        ],
-        messages: content,
-        },
-        /**
-         * The client's own 60-second default is a floor, not a ceiling.
-         *
-         * A live New York compile asked for ninety-six classifications in one
-         * call and the request was cut off client-side with no status and no
-         * request id — which surfaces as "the research model did not answer" and
-         * looks exactly like an outage. Batching is the real fix (see
-         * `classifyPlaces`); a longer per-request budget is what stops the
-         * remaining large calls failing the same way.
-         */
-        { timeout: input.timeoutMs ?? 60_000 },
-      );
+      // Prompt-enforced answers have no `format` for the parse helper to
+      // validate against, so they always come back through the hand-rolled path.
+      if (enforcement === 'prompt' || maxTokens > STREAMING_REQUIRED_ABOVE_MAX_TOKENS) {
+        const message = await this.client.messages
+          .stream(params, requestOptions)
+          .finalMessage();
+        this.record(message);
+        return this.parseStreamedOutput(message, input.schema);
+      }
+
+      const message = await this.client.messages.parse(params, requestOptions);
 
       this.record(message);
 
@@ -275,6 +359,17 @@ export class ResearchModel {
           type: error.type,
           requestId: error.requestID,
           promptVersion: input.promptVersion,
+          /*
+           * The provider's own sentence, not the error object.
+           *
+           * It was omitted for a while, and that turned a precise, actionable
+           * rejection — "the compiled grammar is too large" — into an
+           * indistinguishable "the model did not answer", which cost a live run
+           * to diagnose. What must not be logged is the *error*, which carries
+           * the outbound request and therefore its headers; a bounded string
+           * describing why the request was invalid carries no credential.
+           */
+          providerMessage: String(error.message).slice(0, 300),
         });
         throw new ResearchModelError(
           'request_failed',
@@ -353,6 +448,77 @@ export class ResearchModel {
       throw new ResearchModelError('rate_limited', 'The research model asked us to slow down.');
     }
     throw new ResearchModelError('request_failed', 'The search provider did not answer.');
+  }
+
+  /**
+   * WHAT `messages.parse` DOES FOR US, DONE BY HAND FOR THE STREAMED PATH.
+   *
+   * The helper that validates a non-streamed answer has no streaming twin, so
+   * the streamed path has to reproduce it — and the half of it that matters is
+   * not the JSON parse.
+   *
+   * `zodOutputFormat` does not send the whole schema. The provider's structured
+   * output supports types and enums, and the SDK silently drops what it cannot
+   * express: lengths, numeric bounds, and — the one that counts — `pattern`.
+   * The baseline plan schema's `SAFE_PROSE_PATTERN` is the rule that stops a
+   * URL or an angle bracket reaching a field a reviewer's browser renders, and
+   * it never crosses the wire. It is enforced *here*, client-side, by running
+   * the caller's own schema over the answer. Trusting the response because the
+   * server was sent a schema would be trusting a schema with the security
+   * property removed from it.
+   *
+   * So: text blocks only (adaptive thinking is on by default on this model and
+   * arrives as its own block kind), parsed, then validated in full. Anything
+   * that fails is `malformed_output` — and the message carries the stop reason
+   * verbatim, because the one caller that retries tells a truncated answer from
+   * a misshapen one by looking for `max_tokens` in exactly this sentence.
+   */
+  private parseStreamedOutput<T>(
+    message: Anthropic.Message & { _request_id?: string | null },
+    schema: z.ZodType<T>,
+  ): T {
+    const requestId = message._request_id ?? undefined;
+    const text = message.content
+      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+
+    if (!text.trim()) {
+      throw new ResearchModelError(
+        'malformed_output',
+        `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}).`,
+        requestId,
+      );
+    }
+
+    let json: unknown;
+    try {
+      /*
+       * A fenced answer is still an answer. An unconstrained call is asked for
+       * bare JSON and usually gives it, but a stray ```json wrapper is the one
+       * deviation worth absorbing rather than spending a retry on — it changes
+       * nothing about what the schema then has to accept.
+       */
+      json = JSON.parse(text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, ''));
+    } catch {
+      throw new ResearchModelError(
+        'malformed_output',
+        `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}).`,
+        requestId,
+      );
+    }
+
+    const validated = schema.safeParse(json);
+    if (!validated.success) {
+      // The failure detail is deliberately not included: it quotes the offending
+      // value, and the offending value is the thing we just refused to trust.
+      throw new ResearchModelError(
+        'malformed_output',
+        `The model answered in a shape the schema refused (${message.stop_reason ?? 'no stop reason'}).`,
+        requestId,
+      );
+    }
+    return validated.data;
   }
 
   private record(message: { usage: Anthropic.Usage; _request_id?: string | null }): void {

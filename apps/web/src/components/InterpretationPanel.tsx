@@ -16,7 +16,7 @@ import { Badge, ErrorNote, Panel, buttonClass, cx } from './ui';
 import {
   confirmInterpretationAction,
   readUnresolvedTextAction,
-} from '@/app/trips/[id]/questionnaire/actions';
+} from '@/app/(product)/trips/[id]/questionnaire/actions';
 
 /**
  * WHAT WE MADE OF WHAT YOU WROTE — SHOWN BEFORE IT CHANGES ANYTHING.

@@ -14,7 +14,7 @@ import {
   type BoardReconciliation,
   type ReconciledSelection,
 } from '@sidequest/core';
-import { acknowledgeRemovalAction } from '@/app/trips/[id]/discover/actions';
+import { acknowledgeRemovalAction } from '@/app/(product)/trips/[id]/discover/actions';
 import { Badge, Panel, buttonClass } from './ui';
 
 /**

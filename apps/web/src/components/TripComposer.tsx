@@ -21,7 +21,7 @@ import {
 } from '@sidequest/core';
 import { DestinationCombobox, type DestinationSuggestionView } from './DestinationCombobox';
 import { Choice, ChoiceGroup, ErrorNote, FieldLabel, Panel, buttonClass, cx } from './ui';
-import { createTripFromComposer, type ComposerResult } from '@/app/trips/new/actions';
+import { createTripFromComposer, type ComposerResult } from '@/app/(product)/trips/new/actions';
 
 /**
  * THE TRIP COMPOSER.

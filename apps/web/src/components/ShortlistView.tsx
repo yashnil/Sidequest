@@ -14,7 +14,7 @@ import {
 } from '@sidequest/core';
 import { Badge, ErrorNote, Panel, buttonClass, cx } from './ui';
 import { DestinationImage } from './DestinationImage';
-import { adoptDestinationAction, buildShortlistAction } from '@/app/decide/actions';
+import { adoptDestinationAction, buildShortlistAction } from '@/app/(product)/decide/actions';
 
 /**
  * THE SHORTLIST, AND WHY EACH ONE IS ON IT.

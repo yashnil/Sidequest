@@ -19,10 +19,15 @@ const TABLET = viewport('tablet');
 const MOBILE = viewport('mobile');
 
 /**
- * The one spec that sets its own viewport, named once because two projects need
- * to agree about it: `tablet` runs it, everything else ignores it.
+ * The specs that walk every viewport themselves, named once because two projects
+ * need to agree about them: `tablet` runs them, everything else ignores them.
+ *
+ * A list rather than a single glob since the benchmark gained its own responsive
+ * sweep. Left off it, that spec ran three times — once in each full project,
+ * each overriding the viewport it was written to probe — and never once at the
+ * tablet width, which is the width it exists for.
  */
-const RESPONSIVE_SPEC = '**/viewports.spec.ts';
+const RESPONSIVE_SPEC = ['**/viewports.spec.ts', '**/benchmark-viewports.spec.ts'];
 
 /**
  * The port is not defined here. `config.port` in the root package.json is the one
@@ -228,7 +233,13 @@ export default defineConfig({
     // *traveller* can trigger from a button, so a developer shell that happens
     // to carry a research credential would make every browser run spend real
     // money. Blanked here rather than trusted to be absent.
-    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} ANTHROPIC_API_KEY= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
+    // And the benchmark in fixture mode, for the fifth time and a reason of its
+    // own: the internal comparison surface is the one place in the build that
+    // can spend money on a *reviewer's* click rather than on a compile, and its
+    // budget switch is read from the environment. Pinned here as well as
+    // defaulted in code, so that a future change to the default cannot make a
+    // browser run reach a model.
+    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} ANTHROPIC_API_KEY= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

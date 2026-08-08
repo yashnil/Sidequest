@@ -16,7 +16,7 @@ import {
   saveDecisionAnswersAction,
   startDecisionAction,
   type DecisionAnswersInput,
-} from '@/app/decide/actions';
+} from '@/app/(product)/decide/actions';
 
 /**
  * THE FOUR QUESTIONS THAT CAN RANK ANYWHERE.

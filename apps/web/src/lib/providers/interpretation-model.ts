@@ -108,6 +108,15 @@ export interface StructuredModel {
     maxTokens?: number;
     effort?: 'low' | 'medium' | 'high';
     timeoutMs?: number;
+    /**
+     * Whether the shape is enforced by constrained decoding or by the prompt.
+     *
+     * On the interface because one caller genuinely needs the second option —
+     * a schema large enough that the provider will not compile a grammar for
+     * it — and a fake that silently ignored the field would be a fake of a
+     * different function. See `ResearchModel.structured`.
+     */
+    schemaEnforcement?: 'grammar' | 'prompt';
   }): Promise<T>;
 }
 

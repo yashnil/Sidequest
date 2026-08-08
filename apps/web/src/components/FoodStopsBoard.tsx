@@ -2,7 +2,7 @@
 
 import { useOptimistic, useState, useTransition } from 'react';
 import type { FoodBoardEntry } from '@sidequest/core';
-import { setFoodSelectionAction } from '@/app/trips/[id]/discover/actions';
+import { setFoodSelectionAction } from '@/app/(product)/trips/[id]/discover/actions';
 import { Badge, ErrorNote, Panel, buttonClass, cx } from './ui';
 
 type FoodChoice = 'included' | 'excluded';

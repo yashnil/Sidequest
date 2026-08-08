@@ -1019,7 +1019,14 @@ export async function resolveImageryForSubjects(
       calls += result.calls;
       if (result.outcome.status === 'accepted') accepted += 1;
     } catch (error) {
-      console.error('Imagery lookup failed', { subject: subject.id, error });
+      // The name only. A provider SDK error routinely carries the request that
+      // produced it — the outbound headers among them — and a server log is not
+      // a place any of that may end up. Every neighbouring handler already does
+      // this; this one did not, and it is on a path a benchmark run reaches.
+      console.error('Imagery lookup failed', {
+        subject: subject.id,
+        error: error instanceof Error ? error.name : 'unknown',
+      });
     }
   }
   return { resolved, accepted, calls };

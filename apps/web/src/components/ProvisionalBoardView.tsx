@@ -20,7 +20,7 @@ import {
 } from '@sidequest/core';
 import { Badge, ErrorNote, EvidenceBadge, Panel, buttonClass, cx } from './ui';
 import { BoardIntegrityPanel } from './BoardIntegrityPanel';
-import { setProvisionalIntentAction } from '@/app/trips/[id]/provisional/actions';
+import { setProvisionalIntentAction } from '@/app/(product)/trips/[id]/provisional/actions';
 
 /**
  * THE BOARD BEFORE ANYTHING HAS BEEN VERIFIED.

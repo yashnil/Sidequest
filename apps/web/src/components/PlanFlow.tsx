@@ -57,7 +57,7 @@ import {
   selectInterpretationAction,
   startCompilationAction,
   type CompilationSnapshot,
-} from '@/app/trips/[id]/plan/actions';
+} from '@/app/(product)/trips/[id]/plan/actions';
 
 /**
  * The open-world journey, as one screen that knows which step it is on.

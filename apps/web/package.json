@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@sidequest/bench": "*",
     "@sidequest/compiler": "*",
     "@sidequest/core": "*",
     "better-sqlite3": "^13.0.2",

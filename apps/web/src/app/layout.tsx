@@ -1,22 +1,22 @@
 import type { Metadata, Viewport } from 'next';
-import Link from 'next/link';
 import './globals.css';
 
 /**
- * THE GLOBAL SHELL, WHICH NOW BELONGS TO NO PARTICULAR PLACE.
+ * THE DOCUMENT, AND NOTHING ELSE.
  *
- * What was here before: a fixed `EASTERN SIERRA` label beside the wordmark, and
- * a footer explaining that seasonal access moves with the snowpack. Both were
- * true of one valley in California and shown to somebody planning Kyrgyzstan.
+ * Everything this file used to render — the wordmark, the "New trip" link, the
+ * footer — now lives in `ProductChrome` and is rendered by `app/(product)`. The
+ * reason is `/labs/benchmark`, an internal surface that shows two trip plans
+ * blind and must not name either system, one of which is this product. A layout
+ * nests; it does not subtract. So the shared part had to become the part that is
+ * genuinely shared.
  *
- * The replacement rule is simple and enforced by `shell.spec.ts`: **the shell
- * may not name a place.** Anything about where the traveller is going comes from
- * a persisted trip and is rendered by the page, not by the chrome.
+ * No URL moved. A route group's name never appears in a path, so `(product)` is
+ * a statement about who owns the chrome and not about where anything lives.
  *
- * The footer says the three things that are true of every destination this
- * product will ever plan — the data is somebody else's, it is incomplete, and it
- * is frozen at compile time — and says them quietly, because a disclaimer that
- * dominates a page is one nobody reads.
+ * The title here is the default a page overrides. It is deliberately the
+ * product's, because every customer-facing route wants it; `/labs` sets its own
+ * and marks itself `noindex`.
  */
 
 export const metadata: Metadata = {
@@ -33,54 +33,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="flex min-h-dvh flex-col paper-grain">
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
-        >
-          Skip to content
-        </a>
-        <header className="sticky top-0 z-30 border-b border-rule bg-paper/85 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3.5 sm:px-8">
-            <Link
-              href="/"
-              className="shrink-0 font-display text-xl tracking-tight text-ink"
-              aria-label="Sidequest home"
-            >
-              Sidequest
-            </Link>
-            {/*
-              Nothing else lives up here.
-
-              Trip context is rendered by the page that knows about the trip,
-              immediately below this bar. The alternative — a slot the layout
-              fills — would mean the shell reading the database on every request
-              to decide what to say, which is how a global header comes to hold a
-              destination-specific claim in the first place.
-            */}
-            <span className="flex-1" />
-            <Link
-              href="/trips/new"
-              className="shrink-0 text-sm text-ink-muted hover:text-pine"
-            >
-              New trip
-            </Link>
-          </div>
-        </header>
-        <main id="main" className="flex-1">
-          {children}
-        </main>
-        <footer className="mt-16 border-t border-rule">
-          <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8">
-            <p className="measure text-xs leading-relaxed text-ink-faint">
-              Sidequest plans from published sources — map data, official pages, climate records —
-              and each of them is incomplete somewhere. A finished plan is frozen to the day it was
-              built and will not notice a change made afterwards. Check opening times, road status
-              and anything you are booking against the official source shown on the card.
-            </p>
-          </div>
-        </footer>
-      </body>
+      <body className="flex min-h-dvh flex-col paper-grain">{children}</body>
     </html>
   );
 }

@@ -1,7 +1,4 @@
-'use server';
-
-import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 import { planTrip } from '@sidequest/planner';
 import {
   getFoodSelections,
@@ -15,6 +12,29 @@ import { boardFor, resolveTripRegion, withRefreshedWeather } from '@/lib/region'
 import { ensureWeatherForPlanning } from '@/lib/weather/refresh';
 
 import type { PlannerReadiness } from '@sidequest/core';
+
+/**
+ * BUILDING THE PLAN — THE WHOLE OF IT, AND THE ONLY COPY.
+ *
+ * This was the body of `buildItineraryAction`. It moved here unchanged so that
+ * there is exactly one sequence that turns a trip into an itinerary, and so that
+ * a second caller cannot drift from it.
+ *
+ * The second caller is the Phase 13 benchmark adapter. The alternative was for it
+ * to call the server action and catch the `NEXT_REDIRECT` the action throws on
+ * success — which works, and which would have meant the benchmark measured a
+ * code path held together by an exception. Worse, the tempting repair for that is
+ * to reassemble the same seven calls in the adapter, and *that* is the version
+ * where Sidequest's benchmark result slowly stops being Sidequest's production
+ * result because somebody fixed a bug in one of the two copies.
+ *
+ * So: this function plans and persists. The server action wrapping it adds only
+ * `revalidatePath` and `redirect`, which are the two things a benchmark harness
+ * must not do and a browser must.
+ *
+ * Nothing about the ordering here is incidental — see the comments inline, which
+ * came with the code.
+ */
 
 export interface BuildResult {
   ok: boolean;
@@ -30,14 +50,7 @@ export interface BuildResult {
   readiness?: PlannerReadiness;
 }
 
-/**
- * Builds and stores the itinerary, then navigates to it.
- *
- * Nothing here claims success it did not achieve: planning failures and
- * persistence failures both return a message and stay on the board. The redirect
- * only happens after the plan is safely written.
- */
-export async function buildItineraryAction(tripId: string): Promise<BuildResult> {
+export async function buildItinerary(tripId: string): Promise<BuildResult> {
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
 
@@ -153,8 +166,7 @@ export async function buildItineraryAction(tripId: string): Promise<BuildResult>
     };
   }
 
-  revalidatePath(`/trips/${tripId}/itinerary`);
-  redirect(`/trips/${tripId}/itinerary`);
+  return { ok: true };
 }
 
 function planFailureCopy(code: string, message: string): string {

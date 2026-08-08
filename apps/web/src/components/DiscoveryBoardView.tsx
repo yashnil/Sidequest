@@ -35,7 +35,7 @@ import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type Ba
 import { DestinationImage } from './DestinationImage';
 import { BuildTripButton } from './BuildTripButton';
 import { formatCost, formatDistance, formatIntensity, formatMinutes } from '@/lib/format';
-import { autoPickAction, setSelectionAction } from '@/app/trips/[id]/discover/actions';
+import { autoPickAction, setSelectionAction } from '@/app/(product)/trips/[id]/discover/actions';
 
 export interface SerializedGroup {
   group: BoardGroup;

@@ -75,7 +75,7 @@ const ALLOWED_PATTERNS = [
  * destination against the authored region before the open-world path is taken,
  * and it may not name that region in anything a traveller reads.
  */
-const SEED_BRIDGE = ['apps/web/src/app/trips/new/actions.ts'];
+const SEED_BRIDGE = ['apps/web/src/app/(product)/trips/new/actions.ts'];
 
 /**
  * Identifiers from the one authored region.
@@ -808,7 +808,21 @@ describe('the product surface names no destination', () => {
         ? code.replace(/^.*@sidequest\/core\/data.*$/gm, ' ')
         : code;
       for (const identifier of FIXTURE_IDENTIFIERS) {
-        if (scanned.toLowerCase().includes(identifier.toLowerCase())) {
+        /*
+         * Whole words, not substrings.
+         *
+         * A plain `includes` reads "Bodie" out of `weightBodies` and reports a
+         * screen for naming a Californian ghost town it has never heard of. One
+         * false positive is enough to teach somebody to rename an innocent
+         * variable to appease the check, and the next person reads the rename as
+         * evidence the rule is arbitrary. `\b` on both sides keeps the rule
+         * exactly as strict about the thing it cares about — a sentence, an
+         * identifier or a string that actually names the seed region still fails,
+         * in any casing — while no longer catching a word that merely contains
+         * one.
+         */
+        const pattern = new RegExp(`\\b${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (pattern.test(scanned)) {
           offenders.push(`${relative(path)} mentions "${identifier}"`);
         }
       }

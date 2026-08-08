@@ -187,7 +187,7 @@ describe('a provisional board cannot become a plan', () => {
 
   /** The route that shows it starts no external work, so a refresh costs nothing. */
   it('renders the provisional board without reaching anything', () => {
-    const page = code('apps/web/src/app/trips/[id]/provisional/page.tsx');
+    const page = code('apps/web/src/app/(product)/trips/[id]/provisional/page.tsx');
     for (const banned of [/resolveTripRegion/, /resolveTripWeather/, /compilerProviders/, /\bfetch\(/]) {
       expect(banned.test(page), `the provisional route matches ${banned}`).toBe(false);
     }

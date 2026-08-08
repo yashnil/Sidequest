@@ -9,7 +9,7 @@ import {
   type PlannerReadiness,
 } from '@sidequest/core';
 import { buttonClass, ErrorNote, Panel } from './ui';
-import { buildItineraryAction } from '@/app/trips/[id]/itinerary/actions';
+import { buildItineraryAction } from '@/app/(product)/trips/[id]/itinerary/actions';
 
 /**
  * The primary action on the board. `useTransition` gives a real pending state and

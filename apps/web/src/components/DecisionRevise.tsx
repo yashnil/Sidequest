@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DecisionComposer } from './DecisionComposer';
-import type { DecisionAnswersInput } from '@/app/decide/actions';
+import type { DecisionAnswersInput } from '@/app/(product)/decide/actions';
 
 /**
  * CHANGING YOUR MIND, WITHOUT STARTING OVER.
