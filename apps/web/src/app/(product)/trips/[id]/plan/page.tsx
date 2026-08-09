@@ -169,6 +169,7 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       scopeFits={intent.scope ? scopeFitsTrip(intent.scope) : { fits: true }}
       snapshot={snapshot}
       coverage={compiled?.coverage ?? null}
+      {...(compiled?.researchReadiness ? { researchReadiness: compiled.researchReadiness } : {})}
       licences={compiled?.licences ?? []}
       attributions={compiled?.sourceManifest.attributions ?? []}
       compiledSummary={

@@ -8,6 +8,7 @@ import { getItinerary, getTrip, StaleItineraryError } from '@/lib/db/repository'
 import {
   buildPreparation,
   findOperatingCalendar,
+  licence,
   type DisplayName,
   type PreparationItem,
 } from '@sidequest/core';
@@ -101,12 +102,47 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * says UTC rather than inventing a plausible-looking local hour.
    */
   let timeZone: string | undefined;
+  /**
+   * ODbL attribution for the place data this plan is made of.
+   *
+   * The board and the plan-detail screen have carried this since the backbone
+   * landed; the itinerary — the product's primary output, and the one page a
+   * traveller prints and takes with them — did not. `docs/osm-database-boundary.md`
+   * names it explicitly, "including any exported form", so this is the
+   * prerequisite for the print path below rather than a nicety beside it.
+   *
+   * Rendered from the artifact's own `DataLicence.attribution` strings. A
+   * component that writes its own wording has stopped complying.
+   */
+  let attributions: readonly string[] = [];
+  /**
+   * Where each scheduled place is, so a day can be handed to a map app.
+   *
+   * Coordinates live on the compiled region, not on the stored plan — a plan
+   * records what to do and when, and duplicating geometry into it would be a
+   * second copy to keep true. Read here, on the server, from the region the plan
+   * was built against.
+   */
+  const coordinates = new Map<string, { lat: number; lng: number }>();
   try {
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
       const base = resolved.context.compiled.bases.find((entry) => entry.id === itinerary.baseId);
       baseNames = base?.names;
       timeZone = base?.timeZone;
+      attributions = resolved.context.compiled.sourceManifest.attributions ?? [];
+      for (const place of resolved.context.compiled.places) {
+        coordinates.set(place.id, {
+          lat: place.coordinates.lat,
+          lng: place.coordinates.lng,
+        });
+      }
+      for (const entry of resolved.context.compiled.bases) {
+        coordinates.set(entry.id, {
+          lat: entry.coordinates.lat,
+          lng: entry.coordinates.lng,
+        });
+      }
       const scheduled = new Set<string>();
       const namesById = new Map<string, string>();
       const unverifiedHours: string[] = [];
@@ -133,7 +169,29 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       });
     }
   } catch (error) {
-    console.error('Preparation list could not be derived', error);
+    console.error('Preparation list could not be derived', {
+      name: error instanceof Error ? error.name : 'unknown',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  /**
+   * The licence notice does not depend on the region resolving.
+   *
+   * `attributions` stays empty when `resolveTripRegion` fails or throws, and the
+   * view renders the paragraph only when it is non-empty — so a plan built from
+   * OpenStreetMap-derived places would render, and print, with no ODbL notice on
+   * it. The obligation follows the data, not the success of a lookup we happen to
+   * be doing for a checklist, so a plan that reached this page falls back to the
+   * required attribution rather than to silence.
+   *
+   * Read off the licence record, never written here. A component that
+   * paraphrases the required text has stopped complying, which is why
+   * `docs/osm-database-boundary.md` insists the string come from
+   * `DataLicence.attribution` — and why this is a lookup rather than a literal.
+   */
+  if (attributions.length === 0) {
+    attributions = [licence('ODbL-1.0').attribution];
   }
 
   return (
@@ -150,6 +208,8 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
        */
       {...(baseNames ? { baseNames } : {})}
       {...(timeZone ? { timeZone } : {})}
+      attributions={attributions}
+      coordinates={Object.fromEntries(coordinates)}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a

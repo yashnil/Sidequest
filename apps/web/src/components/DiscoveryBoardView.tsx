@@ -233,7 +233,7 @@ export function DiscoveryBoardView({
 
   return (
     <div data-testid="discovery-board" data-board-version={boardVersion}>
-      <Panel className="sticky top-0 z-10 mb-8 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
+      <Panel className="sm:sticky sm:top-[var(--chrome-height)] z-20 mb-8 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
         {/*
           The count and the version it describes, from one object.
 

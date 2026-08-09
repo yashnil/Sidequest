@@ -174,7 +174,12 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
     }
 
     for (const item of items) {
-      if (item.kind === 'travel' && item.travel && item.durationMinutes < item.travel.minutes) {
+      if (
+        item.kind === 'travel' &&
+        item.travel &&
+        item.travel.minutes !== null &&
+        item.durationMinutes < item.travel.minutes
+      ) {
         issues.push({
           code: 'travel_without_time',
           severity: 'error',
@@ -382,6 +387,10 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
   const summed = travelItems.reduce(
     (acc, item) => {
       const travel = item.travel!;
+      // An unmeasured leg contributes to no total. That is the whole point of the
+      // null: a day's travel minutes are the minutes somebody stands behind, and
+      // the count of what is missing rides beside them rather than inside them.
+      if (travel.minutes === null) return acc;
       if (travel.mode === 'drive') acc.drive += travel.minutes;
       else if (travel.role === 'wait') acc.wait += travel.minutes;
       else if (travel.mode === 'walk') acc.walk += travel.minutes;
@@ -607,6 +616,33 @@ function validateDayHours(day: ItineraryDay, input: ValidationInput): Validation
     }
 
     if (onDate.status === 'unknown') {
+      /**
+       * A caution, and — after two attempts at making it more than that — still
+       * a caution. The reasoning is worth keeping, because it is a fair argument
+       * that loses to the data.
+       *
+       * The defect is real: nothing stopped an unknown-hours place being the
+       * thing a day was built around, so a plan could put a museum at seven in
+       * the evening on no evidence and report itself ready with cautions. The
+       * obvious fix is to escalate the severity when the visit falls outside the
+       * hours most staffed places keep.
+       *
+       * It does not survive contact with two facts. `unknown` is the compiler's
+       * *default* for every OSM record with no `opening_hours` tag — which is
+       * most lakes, viewpoints and trailheads — and `dayStartByPreference.early`
+       * is 07:30. So any early riser's first stop of the day trips the rule, the
+       * reviser drops it, the next stop slides into 07:30 and trips it again,
+       * and three passes later the whole trip is refused. Narrowing the band
+       * until that stops happening leaves 07:30–20:00, and `dayEndByPace.fast`
+       * is 20:00, so the ceiling becomes unreachable and the rule can only ever
+       * fire as a false positive.
+       *
+       * What the check actually needs is a staffed-versus-unstaffed signal, and
+       * the open record does not carry one. Until it does, the honest
+       * consequence of unknown hours is the one already in place everywhere it
+       * matters: the place cannot be a weather backup (`backups.ts`), and it
+       * becomes a named verification action in the preparation list.
+       */
       issues.push({
         code: 'operating_hours_unknown',
         severity: 'warning',

@@ -8,6 +8,7 @@ import { destinationEntityTypeSchema, scopeBreadthSchema } from './geography';
 import { operatingHoursDatasetSchema } from './hours';
 import { placeSchema } from './place';
 import { regionSchema } from './region';
+import { destinationResearchReadinessSchema } from './research-readiness';
 import { dataLicenceSchema } from './licence';
 import { geographicScopeSchema } from './scope';
 import { retrievedPageSchema, sourceManifestSchema } from './source-fact';
@@ -659,6 +660,19 @@ export const compiledRegionSchema = z.object({
       satellites: z.number().int().nonnegative(),
     })
     .optional(),
+
+  /**
+   * Whether this packet is a fair picture of the destination it names.
+   *
+   * Optional because artifacts compiled before the contract existed do not carry
+   * one, and an absence here means "nobody asked" rather than "the answer was
+   * yes" — every consumer must treat a missing reading as unknown and not as
+   * permission. Frozen onto the artifact for the same reason `boardSupply` is:
+   * a verdict recomputed at render time from whatever happens to be reachable is
+   * a different verdict, and a board that explains itself differently on the
+   * second look is worse than one that does not explain itself at all.
+   */
+  researchReadiness: destinationResearchReadinessSchema.optional(),
 
   bases: z.array(baseCandidateSchema).min(1),
   primaryBaseId: z.string().min(1),

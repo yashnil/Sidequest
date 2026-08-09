@@ -51,6 +51,7 @@ export * from './schemas/provisional';
 export * from './schemas/reconciliation';
 export * from './schemas/itinerary';
 export * from './schemas/planner-readiness';
+export * from './schemas/research-readiness';
 export * from './schemas/weather';
 export * from './schemas/climate';
 

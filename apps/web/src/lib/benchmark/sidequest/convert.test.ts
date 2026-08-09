@@ -231,6 +231,7 @@ describe('a run that produced nothing still produces a reviewable plan', () => {
   const readiness: PlannerReadiness = {
     schemaVersion: 2,
     level: 'insufficient',
+    unresolvedIssues: [],
     funnel: {
       considered: 12,
       selected: 6,

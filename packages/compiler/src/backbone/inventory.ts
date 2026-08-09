@@ -32,8 +32,8 @@ import {
   hasMinimumIdentity,
   RejectionLedger,
   ROLE_QUOTA_SHARE,
-  roleCanOccupy,
   scopeRelationshipOf,
+  VISITABLE_SLOTS,
   type BalanceDiagnostics,
   type InclusionReason,
   type PortfolioRejection,
@@ -151,6 +151,17 @@ export interface CandidatePortfolio {
   inclusion: { reason: InclusionReason; count: number }[];
   /** How many admitted records nobody could establish membership for. */
   membershipUnverified: number;
+  /**
+   * Attractions kept as discoveries because we could not place them well enough
+   * to build a day around them.
+   *
+   * Reported rather than absorbed. This number used to be the size of a silent
+   * deletion — every one of these was refused outright, which turned a gap in
+   * our geography into an apparent absence of anything to do. A board that is
+   * short on anchors and long on discoveries is a specific, explainable state,
+   * and readiness reads this to say so.
+   */
+  anchorDemotions: number;
   /** Counting attractions apart from infrastructure, and the shortfall. */
   supply: VisitableSupplyVerdict;
 }
@@ -387,6 +398,8 @@ export function buildInventory(input: {
   const inclusionCounts = new Map<InclusionReason, number>();
   let excludedByRole = 0;
   let membershipUnverified = 0;
+  /** Attractions that could not anchor and were kept as discoveries. */
+  let anchorDemotions = 0;
 
   for (const record of records) {
     // 1. Duplicate resolution. A superseded record is not a second candidate.
@@ -455,7 +468,59 @@ export function buildInventory(input: {
      * record whose role and scope permit nothing in common is refused with the
      * reason that says so rather than disappearing.
      */
-    const slots = eligibility.eligibleFor.filter((slot) => admission.permits.includes(slot));
+    let slots = eligibility.eligibleFor.filter((slot) => admission.permits.includes(slot));
+
+    /*
+     * 6a. An attraction we cannot place is demoted, not deleted.
+     *
+     * This is the single line that produced the worst board this product has
+     * ever shown. `slotsFromPermissions` sends every attraction role except
+     * `side_quest` to `anchor`, and `membership_unknown` permits `discovery`,
+     * `food` and `support` — but not `anchor`. So wherever the divisions layer
+     * could not place records, the intersection above came back empty for every
+     * museum, temple, park and viewpoint, and those were all rejected as
+     * `role_ineligible_for_slot` — while restaurants, shops and markets, whose
+     * own slots *are* permitted, sailed through.
+     *
+     * The result was a Discovery Board for a major world city consisting of
+     * forty-five places to eat in one outlying suburb, with nothing anywhere
+     * saying that a categorical filter had been applied. A containment gap had
+     * quietly become a claim about what there is to do.
+     *
+     * The honest reading of "we could not establish where this is" is not "this
+     * is not an attraction". It is "we cannot build a day around this" — which
+     * is exactly what the `anchor` slot means, and exactly what `discovery`
+     * does not. So an attraction whose only refusal was the anchor slot lands in
+     * the discovery pool instead, carrying its uncertainty, and the count of how
+     * often that happened is reported rather than lost.
+     *
+     * What this does not do: it does not widen `outside_scope`, whose `permits`
+     * is empty, so a record with positive evidence that it is somewhere else is
+     * still refused here and is not rescued by this branch. It does not move
+     * food or support into a visitable pool — those roles never asked for the
+     * anchor slot. And it does not let an unplaceable record anchor a day:
+     * `canAnchor` is unchanged and still requires positive membership.
+     */
+    if (
+      eligibility.eligibleFor.includes('anchor') &&
+      !slots.includes('anchor') &&
+      admission.permits.includes('discovery') &&
+      !slots.includes('discovery')
+    ) {
+      /*
+       * Keyed on "lost its anchor slot", not on "lost every slot".
+       *
+       * The first version tested `slots.length === 0`, which closed the defect
+       * for a museum and left it open for a market: a market is eligible for
+       * `['anchor','food']`, so with unresolved membership it kept `['food']`,
+       * was never demoted, and disappeared from the board exactly as before —
+       * while still counting as somewhere to eat. One role's worth of the same
+       * "the city came back as food" failure, surviving the fix for it.
+       */
+      slots = [...slots, 'discovery'];
+      anchorDemotions += 1;
+    }
+
     if (slots.length === 0) {
       ledger.reject('role_ineligible_for_slot', record.name);
       continue;
@@ -523,31 +588,45 @@ export function buildInventory(input: {
   for (const role of VISITABLE_ROLES) {
     /*
      * Anchors compete with anchors and discoveries with discoveries: the slot a
-     * role occupies decides which pool it is ranked inside. A side quest that
+     * record occupies decides which pool it is ranked inside. A side quest that
      * outranked a museum could never take its place, because they are never in
      * the same list.
+     *
+     * Read off the *record's admission*, not off its role. This loop used to say
+     * `roleCanOccupy(role, 'anchor') ? 'anchor' : 'discovery'` — one slot per
+     * role, decided by a table — and that made the demotion above unreachable: a
+     * museum whose membership could not be resolved was admitted into the
+     * discovery pool and then looked for in the anchor pool, so it vanished
+     * between two correct-looking lines. Two tables meaning one thing is how
+     * that happens; the record's own admission is the single source now.
      */
-    const slot: PortfolioSlot = roleCanOccupy(role, 'anchor') ? 'anchor' : 'discovery';
-    const pool = rank(admittedFor(slot, role));
-    if (pool.length === 0) continue;
-    const share = ROLE_QUOTA_SHARE[role] ?? 0;
-    const result = balanceAcrossAreas({
-      ranked: pool,
-      areaOf: areaOfRecord,
-      categoryOf,
-      limits: {
-        quota: Math.max(1, Math.round(limits.maxAttractions * share)),
-        maxPerCategory: limits.maxPerCategory,
-        maxAreaShare: limits.maxAreaShare,
-      },
-    });
-    balanced.push({
-      slot,
-      role,
-      kept: result.kept,
-      available: pool.length,
-      diagnostics: result.diagnostics,
-    });
+    const roleQuota = Math.max(1, Math.round(limits.maxAttractions * (ROLE_QUOTA_SHARE[role] ?? 0)));
+    let remaining = roleQuota;
+    // Anchor first: a role's quota is spent on things that can hold a day before
+    // it is spent on things that cannot.
+    for (const slot of VISITABLE_SLOTS) {
+      if (remaining <= 0) break;
+      const pool = rank(admittedFor(slot, role));
+      if (pool.length === 0) continue;
+      const result = balanceAcrossAreas({
+        ranked: pool,
+        areaOf: areaOfRecord,
+        categoryOf,
+        limits: {
+          quota: remaining,
+          maxPerCategory: limits.maxPerCategory,
+          maxAreaShare: limits.maxAreaShare,
+        },
+      });
+      remaining -= result.kept.length;
+      balanced.push({
+        slot,
+        role,
+        kept: result.kept,
+        available: pool.length,
+        diagnostics: result.diagnostics,
+      });
+    }
   }
 
   /*
@@ -579,8 +658,9 @@ export function buildInventory(input: {
        * refused, which is how a shortage of attractions becomes a board of
        * infrastructure.
        */
-      const slot: PortfolioSlot = roleCanOccupy(role, 'anchor') ? 'anchor' : 'discovery';
-      const pool = rank(admittedFor(slot, role));
+      // Both visitable slots, for the same reason as the first pass: the record's
+      // admission decides where it is, not a table keyed on its role.
+      const pool = rank(VISITABLE_SLOTS.flatMap((slot) => admittedFor(slot, role)));
       const spare = pool.filter((record) => !taken.has(record.id));
       if (spare.length === 0) continue;
       const result = balanceAcrossAreas({
@@ -810,6 +890,7 @@ export function buildInventory(input: {
         .map(([reason, count]) => ({ reason, count }))
         .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)),
       membershipUnverified,
+      anchorDemotions,
       supply,
     },
     diagnostics: {
@@ -1054,7 +1135,7 @@ function crossLayerCorroboration(
 // Record → Place
 // ---------------------------------------------------------------------------
 
-function toCandidate(input: {
+export function toCandidate(input: {
   record: SourceRecord;
   scope: GeographicScope;
   crossLayerCorroborated: boolean;
@@ -1070,19 +1151,56 @@ function toCandidate(input: {
   });
 
   /**
-   * How completely the source describes this, as a weak proxy and labelled one.
+   * TWO DIFFERENT THINGS THAT USED TO BE ONE NUMBER.
    *
-   * There is no rating and no review count anywhere in the open stack, which is
-   * a feature: there is no popularity number to mistake for quality. What there
-   * is, is how much somebody bothered to record — a place many people care about
-   * carries a site, an operator, posted hours. It never outranks what the
-   * traveller said they came for.
+   * `popularity` was derived from *attribute count* — how many fields the source
+   * happened to fill in, plus websites, plus a Wikidata id, over six. The
+   * reasoning was that "a place many people care about carries a site, an
+   * operator, posted hours", and for a museum that is often true. For a chain
+   * café it is *always* true: a franchise publishes a website, an operator and
+   * posted hours as a matter of course, and scored 3 of the 6 before anyone
+   * looked at what it was. A significant shrine that nobody has tagged beyond
+   * its name scored 0. The board then ranked the café above the shrine, and
+   * `hiddenGemScore`, being `1 - popularity`, called the *shrine* the hidden gem
+   * — which is accidentally right and for entirely the wrong reason, and would
+   * have been wrong the moment somebody tagged it properly.
+   *
+   * The two are separated here.
+   *
+   * **Significance** is evidence that the wider world has taken note: an entry in
+   * an encyclopaedic knowledge base, names recorded in more than one language,
+   * and a second catalogue independently describing the same thing. None of
+   * these is a side effect of a business filling in its own listing.
+   *
+   * **Completeness** is how much a source recorded. It is real and useful — it is
+   * why the hours are known and the website is linkable — and it belongs to
+   * source confidence, not to how much a place matters. It is deliberately *not*
+   * an input to popularity any more.
    */
-  const richness = Math.min(
-    1,
-    (Object.keys(record.attributes).length + record.websiteCandidates.length + (record.wikidataId ? 1 : 0)) / 6,
-  );
-  const popularity = Math.min(0.9, 0.2 + richness * 0.6);
+  const multilingual = record.alternateNames.length >= 2;
+  const corroborated = new Set(record.sources.map((entry) => entry.dataset)).size > 1;
+  const significance =
+    (record.wikidataId ? 0.5 : 0) + (multilingual ? 0.25 : 0) + (corroborated ? 0.25 : 0);
+
+  /**
+   * Still capped and still conservative. Without a rating or a review count
+   * anywhere in the open stack there is no popularity figure to be had, and this
+   * is an evidence-of-note score wearing the field's name — which is why nothing
+   * lets it outrank what the traveller said they came for.
+   */
+  const popularity = Math.min(0.9, 0.15 + significance * 0.75);
+
+  /*
+   * Completeness is deliberately *not* computed here.
+   *
+   * A first pass kept it as a local and discarded it with `void`, on the
+   * argument that a future source-confidence layer would want it. That is a
+   * value nothing reads, guarded by a statement whose only purpose is to silence
+   * a lint rule, beside a comment describing an intent the code does not carry
+   * out — three ways of saying the same thing is not there. When that layer
+   * exists it can derive the figure from `record.attributes` in one line, which
+   * is where the data already is.
+   */
 
   const place: Place = {
     id: record.id,

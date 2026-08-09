@@ -12,6 +12,7 @@ import {
   type TransportMode,
   type TransportService,
   type TravelerProfile,
+  type UnmeasuredTravelReason,
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
 import type { PlanningCandidate } from './types';
@@ -37,6 +38,15 @@ export interface AccessLegPlan {
   toId: string;
   fromName: string;
   toName: string;
+  /**
+   * Always a number here.
+   *
+   * A leg reaches this type only when something stated or measured its duration:
+   * `buildOption` refuses the whole unit when the approach can be neither, so an
+   * unmeasurable journey becomes an unplannable place rather than a leg with a
+   * hole in it. The itinerary's own `TravelSegment` is the nullable one, because
+   * that is the type a screen renders.
+   */
   minutes: number;
   km: number;
   /** What this leg is for, so the timeline can label it without parsing prose. */
@@ -46,9 +56,30 @@ export interface AccessLegPlan {
   note?: string;
   /**
    * Where the number came from. `modelled` is the corridor road model,
-   * `official` a published timetable, `estimated` an authored allowance.
+   * `official` a published timetable, `estimated` an authored allowance,
+   * `unmeasured` nobody at all — and then `minutes` is null.
    */
-  provenance: 'measured' | 'modelled' | 'official' | 'estimated';
+  provenance: 'measured' | 'modelled' | 'official' | 'estimated' | 'unmeasured';
+  /** Required exactly when `provenance` is `unmeasured`. */
+  unmeasuredReason?: UnmeasuredTravelReason;
+}
+
+/**
+ * Does the measured matrix cover a leg travelled this way?
+ *
+ * The matrix is measured in exactly one mode per compilation. A walking approach
+ * is a real measurement when the matrix was measured on foot, and is nothing at
+ * all when it was measured by car — a car's road time is not a slow walk, and
+ * multiplying one to get the other is how the product used to produce a
+ * fabricated number that looked derived.
+ */
+export function matrixCoversMode(matrix: TravelTimeMatrix, mode: TransportMode): boolean {
+  if (mode === 'drive' || mode === 'rideshare' || mode === 'private_transfer') {
+    return matrix.mode === 'car';
+  }
+  if (mode === 'walk') return matrix.mode === 'foot';
+  // Scheduled modes are never in a road or pedestrian matrix, whatever it says.
+  return false;
 }
 
 /**
@@ -245,6 +276,24 @@ function buildOption(args: {
   // rest of the planner follows: a missing travel time is a failure, not a zero.
   if (!hasPoint(matrix, gatewayRoutingId)) return null;
 
+  /**
+   * And refusing to plan an approach nobody can time is the same rule again.
+   *
+   * The matrix does not cover this mode and no authored dataset states an
+   * allowance, so there is no honest number for "how long does it take to get
+   * there". The previous code read `rule.approachMinutes ?? 0` and scheduled a
+   * zero-minute journey — which is the same defect as inventing ten minutes,
+   * only harder to see, because a zero disappears into a timeline instead of
+   * appearing on it. The unit drops out here, the place becomes unplannable with
+   * a reason, and readiness reports a transport gap rather than a plan.
+   */
+  if (
+    !matrixCoversMode(matrix, rule.approachMode) &&
+    (rule.approachMinutes === null || rule.approachMinutes === undefined)
+  ) {
+    return null;
+  }
+
   const entryLegs: AccessLegPlan[] = [];
   const exitLegs: AccessLegPlan[] = [];
   const notes = [...rule.notes];
@@ -395,7 +444,19 @@ function buildOption(args: {
       ? gatewayRoutingId
       : (unit.members[unit.members.length - 1]?.place.id ?? gatewayRoutingId),
     approachMode: rule.approachMode,
-    approachMinutes: rule.approachMode === 'drive' ? null : (rule.approachMinutes ?? 0),
+    /**
+     * Null means "the matrix measures this", a number means "an authored dataset
+     * states it".
+     *
+     * The test used to be `approachMode === 'drive'`, which quietly asserted that
+     * the matrix only ever measures roads. It measures whatever mode it was
+     * compiled in, so a walking approach against a pedestrian matrix is a real
+     * measurement and is now taken as one. What it never was, and never is, is a
+     * conversion: a car's road time is not a slow walk.
+     */
+    approachMinutes: matrixCoversMode(matrix, rule.approachMode)
+      ? null
+      : (rule.approachMinutes ?? 0),
     entryLegs,
     exitLegs,
     internalTransfer,

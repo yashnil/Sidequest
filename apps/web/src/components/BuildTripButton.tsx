@@ -36,8 +36,22 @@ export function BuildTripButton({
   storedReadiness?: PlannerReadiness | null;
 }) {
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Show a stored refusal whenever there was one — not only when nothing was
+   * scheduled.
+   *
+   * `funnel.scheduled === 0` was the whole test, and it was the right test while
+   * the only refusal was "we could not place a single stop". The planner now
+   * also refuses a plan whose *days* do not work, and that refusal happens with
+   * every stop scheduled — so the explanation was discarded on reload and the
+   * traveller came back to an ordinary board and a button that had, as far as
+   * they could tell, silently done nothing.
+   *
+   * The condition is now the honest one: a readiness that is not `ready` is a
+   * finding, and a finding that does not survive a refresh is not much of one.
+   */
   const [readiness, setReadiness] = useState<PlannerReadiness | null>(
-    storedReadiness && storedReadiness.funnel.scheduled === 0 ? storedReadiness : null,
+    storedReadiness && storedReadiness.level !== 'ready' ? storedReadiness : null,
   );
   const [pending, startTransition] = useTransition();
 
@@ -101,6 +115,31 @@ function PlannerReadinessPanel({ readiness }: { readiness: PlannerReadiness }) {
         {PLANNER_READINESS_LEVEL_LABELS[readiness.level]}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-ink">{readiness.summary}</p>
+
+      {/*
+        WHAT IS ACTUALLY UNRESOLVED.
+
+        The funnel below diagnoses a plan that lost stops. It says nothing at all
+        about the other refusal — a plan where every stop was scheduled and the
+        days themselves do not work — because every gate in it reads healthy.
+        These are those errors, named, so the panel cannot head itself "we did
+        not build a plan" and then list six things that all went fine.
+      */}
+      {readiness.unresolvedIssues.length > 0 ? (
+        <ul className="mt-3 space-y-1.5" data-testid="readiness-unresolved">
+          {readiness.unresolvedIssues.map((issue, index) => (
+            <li key={`${issue.code}-${index}`} className="flex gap-2 text-sm">
+              <span aria-hidden="true" className="text-clay">
+                ▲
+              </span>
+              <span className="text-ink-muted">
+                {issue.dayNumber === undefined ? '' : `Day ${issue.dayNumber}: `}
+                {issue.message}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {/*
         The funnel, gate by gate. The *shape* of the loss is the diagnosis:

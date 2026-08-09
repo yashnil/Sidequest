@@ -86,6 +86,27 @@ export default async function QuestionnairePage({
       .answers;
   const initialAnswers = normalizeAnswers(seeded, context);
 
+  /*
+   * A KNOWN HEADING-ORDER DEFECT, LEFT IN PLACE AND RECORDED.
+   *
+   * `InterpretationPanel` opens with an `h2` and renders above the wizard's
+   * `h1`, so whenever the traveller typed anything into the composer's free-text
+   * boxes — the ordinary case — the page begins at level two and reaches level
+   * one afterwards. A screen reader's heading list reads it inside out. It is a
+   * real defect and it is not fixed here.
+   *
+   * Putting the panel below the wizard fixes the order and breaks the panel. It
+   * then sits under a long form, and the chip-dismissal loop in
+   * `e2e/interpretation.spec.ts:104` reliably loses a click to the scrolling,
+   * leaving "Use these 1" where the traveller should see "Nothing to apply" —
+   * measured, three consecutive full runs, deterministic. Trading a reading
+   * defect for an interaction defect is not a fix.
+   *
+   * The correct correction is a page-level `h1` above the panel with the
+   * wizard's own heading demoted to `h2`. That is a change to the wizard's
+   * structure and to the specs that select on its heading, and it is larger than
+   * it looks.
+   */
   return (
     <>
       {interpretation ? (

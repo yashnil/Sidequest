@@ -20,6 +20,7 @@ import {
   type ItineraryItem,
   type ScheduledFood,
   type TransportStrategy,
+  type TravelSegment,
   PREPARATION_KIND_COPY,
   groupPreparation,
   type PreparationItem,
@@ -27,6 +28,8 @@ import {
 } from '@sidequest/core';
 import { Badge, Panel, buttonClass, cx, type BadgeTone, PlaceName } from './ui';
 import { formatMinutes } from '@/lib/format';
+import { dayRouteLinks, mapModeFor } from '@/lib/maps';
+import { PrintButton } from './PrintButton';
 
 const STATUS_TONE: Record<Itinerary['status'], BadgeTone> = {
   ready: 'pine',
@@ -86,8 +89,25 @@ export function ItineraryView({
   renderedAt,
   baseNames,
   timeZone,
+  attributions = [],
+  coordinates = {},
 }: {
   itinerary: Itinerary;
+  /**
+   * ODbL attribution strings, verbatim, from the compiled region's licences.
+   *
+   * Required on this page: the plan is made of OpenStreetMap-derived records and
+   * this is the surface a traveller prints. Passed as the licence's own text so
+   * no component here can paraphrase it into non-compliance.
+   */
+  attributions?: readonly string[];
+  /**
+   * Where each place is, keyed by the id the timeline already carries.
+   *
+   * Only used to build a map link. A place missing from this map simply does not
+   * appear in the link, and the link says how many stops it carries.
+   */
+  coordinates?: Record<string, { lat: number; lng: number }>;
   /**
    * Derived on the server from this plan and the evidence it was built on.
    *
@@ -158,7 +178,8 @@ export function ItineraryView({
 
         <p className="mt-4 text-sm text-ink-muted">{itinerary.summary}</p>
 
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap gap-2 print:hidden">
+          <PrintButton />
           <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
             Back to the board
           </Link>
@@ -208,8 +229,8 @@ export function ItineraryView({
 
       <ol className="mt-10 space-y-12">
         {itinerary.days.map((day) => (
-          <li key={day.dayNumber}>
-            <DayCard day={day} renderedAt={renderedAt} />
+          <li key={day.dayNumber} className="break-inside-avoid">
+            <DayCard day={day} renderedAt={renderedAt} coordinates={coordinates} />
           </li>
         ))}
       </ol>
@@ -243,7 +264,21 @@ export function ItineraryView({
                 >
                   ▲
                 </span>
-                <span className="text-ink-muted">{issue.message}</span>
+                <span className="text-ink-muted">
+                  {issue.message}
+                  {issue.wasResolvedByRemoval ? (
+                    /*
+                     * The finding is real and the hazard is gone. Without this
+                     * sentence "the place we chose cannot meet your dietary
+                     * requirement" reads as a live problem about a venue that
+                     * appears nowhere in the plan.
+                     */
+                    <span className="text-ink-faint">
+                      {' '}
+                      We took it off the plan rather than leave it in — nothing above depends on it.
+                    </span>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>
@@ -263,9 +298,27 @@ export function ItineraryView({
           {itinerary.diagnostics.revisions.map((revision) => revision.description).join(' ')}
         </footer>
       ) : null}
+
+      {attributions.length > 0 ? (
+        /**
+         * The licence text, verbatim, on the page a traveller takes with them.
+         *
+         * Not `print:hidden` — this is the one part of the page furniture that
+         * has to survive into the printed copy, because the obligation follows
+         * the data rather than the screen.
+         */
+        <p
+          data-testid="itinerary-attribution"
+          className="mt-10 border-t border-rule pt-6 text-[11px] leading-relaxed text-ink-faint"
+        >
+          {attributions.join(' · ')}. Place data is normalised from these sources; the plan,
+          the timings and the reasoning are ours.
+        </p>
+      ) : null}
     </div>
   );
 }
+
 
 /**
  * The trip's transportation position.
@@ -500,6 +553,38 @@ function Metric({ label, children }: { label: string; children: React.ReactNode 
       <dd className="mt-0.5 text-ink tabular-nums">{children}</dd>
     </div>
   );
+}
+
+/**
+ * What to say about where a leg's duration came from.
+ *
+ * One sentence per provenance, and the important one is the last. "Estimated
+ * travel time" was previously printed against a constant that no source stood
+ * behind, and a traveller cannot tell that apart from "roughly measured" — so a
+ * leg nobody timed now says nobody timed it, and says what would fix that.
+ */
+function travelProvenanceLabel(travel: TravelSegment): string {
+  switch (travel.provenance) {
+    case 'measured':
+      return 'measured travel time';
+    case 'official':
+      return 'published timetable';
+    case 'modelled':
+      return 'modelled travel time';
+    case 'estimated':
+      return 'estimated travel time';
+    case 'unmeasured':
+      switch (travel.unmeasuredReason) {
+        case 'mode_not_routed':
+          return 'travel time not measured — we have no route data for this way of travelling';
+        case 'no_route_found':
+          return 'travel time not measured — no route was found between these two points';
+        case 'operator_unpublished':
+          return 'travel time not measured — the operator does not publish one';
+        default:
+          return 'travel time not measured';
+      }
+  }
 }
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
@@ -786,8 +871,34 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
   );
 }
 
-function DayCard({ day, renderedAt }: { day: ItineraryDay; renderedAt: number }) {
+function DayCard({
+  day,
+  renderedAt,
+  coordinates,
+}: {
+  day: ItineraryDay;
+  renderedAt: number;
+  coordinates: Record<string, { lat: number; lng: number }>;
+}) {
   const isEmpty = day.totals.activityMinutes === 0;
+
+  /**
+   * The day's stops, in the order the plan puts them, for a map link.
+   *
+   * Built from the timeline rather than from the candidate list, so the link
+   * follows the route that was actually scheduled. A stop whose coordinates the
+   * compiled region does not carry is left out — and `dayRouteLinks` reports how
+   * many, so the label can say the link is short rather than imply it is whole.
+   */
+  const stops = day.items
+    .filter((item) => item.kind === 'activity' && item.placeId !== undefined)
+    .map((item) => {
+      const point = coordinates[item.placeId!];
+      return point ? { id: item.placeId!, name: item.title, ...point } : null;
+    })
+    .filter((stop): stop is { id: string; name: string; lat: number; lng: number } => stop !== null);
+
+  const links = dayRouteLinks(stops, mapModeFor(day.transport.modes));
 
   return (
     <Panel className="overflow-hidden">
@@ -843,6 +954,30 @@ function DayCard({ day, renderedAt }: { day: ItineraryDay; renderedAt: number })
             <li key={warning}>{warning}</li>
           ))}
         </ul>
+      ) : null}
+
+      {links ? (
+        <div className="border-t border-rule p-4 print:hidden">
+          <a
+            href={links.google}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={buttonClass('secondary', 'sm')}
+            data-testid={`day-route-${day.dayNumber}`}
+          >
+            Open day {day.dayNumber} in Google Maps
+          </a>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+            {links.omitted > 0
+              ? `The link carries the first ${links.included} stops of this day — a maps URL will not hold more. The remaining ${links.omitted} are on the plan above.`
+              : `${links.included} of the day's places to visit, in order. Meals and stops without a location are not in the link.`}{' '}
+            <a href={links.apple} target="_blank" rel="noreferrer noopener" className="underline">
+              Apple Maps
+            </a>{' '}
+            takes one destination at a time, so that link runs from the first stop straight to the
+            last and skips what is in between.
+          </p>
+        </div>
       ) : null}
     </Panel>
   );
@@ -1201,10 +1336,10 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
         {item.travel ? (
           <p className="mt-1 text-xs text-ink-faint">
             {item.travel.fromName} → {item.travel.toName}
-            {item.travel.km > 0 ? ` · ${Math.round(item.travel.km)} km` : ''} ·{' '}
-            {item.travel.provenance === 'official'
-              ? 'published timetable'
-              : `${item.travel.provenance} travel time`}
+            {item.travel.km !== null && item.travel.km > 0
+              ? ` · ${Math.round(item.travel.km)} km`
+              : ''}{' '}
+            · {travelProvenanceLabel(item.travel)}
           </p>
         ) : null}
 

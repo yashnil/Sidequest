@@ -277,7 +277,7 @@ describe('validator', () => {
       theme: 'Test',
       window: { startMinute: 480, endMinute: 1080, usableMinutes: 600 },
       items: [],
-      totals: { activityMinutes: 0, travelMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 0, freeMinutes: 0, strenuousCount: 0 },
+      totals: { activityMinutes: 0, travelMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 0, freeMinutes: 0, strenuousCount: 0, unmeasuredLegCount: 0 },
       transport: {
         primaryMode: 'drive',
         modes: ['drive'],
@@ -371,14 +371,14 @@ describe('validator', () => {
 
   it('catches excessive driving and excessive intensity', () => {
     const overDriven = dayWith({
-      totals: { activityMinutes: 60, travelMinutes: 900, driveMinutes: 900, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 500, freeMinutes: 0, strenuousCount: 0 },
+      totals: { activityMinutes: 60, travelMinutes: 900, driveMinutes: 900, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 500, freeMinutes: 0, strenuousCount: 0, unmeasuredLegCount: 0 },
     });
     expect(
       validateItinerary({ ...common, days: [overDriven] }).some((issue) => issue.code === 'daily_drive_exceeded'),
     ).toBe(true);
 
     const overWorked = dayWith({
-      totals: { activityMinutes: 400, travelMinutes: 60, driveMinutes: 60, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 40, freeMinutes: 0, strenuousCount: 3 },
+      totals: { activityMinutes: 400, travelMinutes: 60, driveMinutes: 60, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 40, freeMinutes: 0, strenuousCount: 3, unmeasuredLegCount: 0 },
     });
     expect(
       validateItinerary({ ...common, days: [overWorked] }).some((issue) => issue.code === 'intensity_exceeded'),
@@ -387,7 +387,7 @@ describe('validator', () => {
 
   it('warns about a long day with nothing to eat', () => {
     const day = dayWith({
-      totals: { activityMinutes: 300, travelMinutes: 30, driveMinutes: 30, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 20, freeMinutes: 0, strenuousCount: 0 },
+      totals: { activityMinutes: 300, travelMinutes: 30, driveMinutes: 30, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, travelKm: 20, freeMinutes: 0, strenuousCount: 0, unmeasuredLegCount: 0 },
       items: [
         { id: 'a', kind: 'activity', title: 'A', startMinute: 500, endMinute: 800, durationMinutes: 300, placeId: 'convict-lake', reason: 'r', weatherSensitive: false },
       ],

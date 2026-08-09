@@ -706,7 +706,23 @@ export function fakeProviders(
   const routing: RoutingProvider = {
     name: 'fake-routing',
     supportedModes() {
-      return spec.primaryMode === 'walk' ? ['foot', 'transit'] : ['car'];
+      /**
+       * What this router can measure, which is not the same as what the world is
+       * shaped for.
+       *
+       * This returned `['foot','transit']` for a walking world and `['car']` for
+       * a driving one — a statement about the destination wearing a capability
+       * declaration's name. Once readiness began asking the router what it
+       * supports, a driving traveller in a walk-shaped world was told no
+       * provider could measure a car, and the trip came back blocked.
+       *
+       * A synthetic matrix answers any pair in any mode, exactly as a real
+       * routing engine answers both car and foot. What it cannot do is transit,
+       * and saying so is the honest part: there is no transit provider in this
+       * product, and a fixture that claimed one would hide the gap the readiness
+       * check exists to surface.
+       */
+      return ['car', 'foot'];
     },
     async matrix({ points, maxElements }) {
       // Truncated rather than silently short: a provider that would exceed the

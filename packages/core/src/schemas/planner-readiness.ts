@@ -179,7 +179,24 @@ export const plannerUnresolvedSchema = z.object({
 });
 export type PlannerUnresolved = z.infer<typeof plannerUnresolvedSchema>;
 
+/**
+ * An error the planner could not resolve, carried on the readiness record.
+ *
+ * The refusal used to hand back a readiness derived from the *unscheduled*
+ * funnel, which for this failure is healthy — every stop was scheduled, the days
+ * themselves are wrong — so a panel headed "We did not build a plan" reported
+ * "All 9 places you picked are in the plan" and named no cause at all.
+ */
+export const unresolvedPlannerIssueSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().min(1),
+  dayNumber: z.number().int().min(1).optional(),
+});
+export type UnresolvedPlannerIssue = z.infer<typeof unresolvedPlannerIssueSchema>;
+
 export const plannerReadinessSchema = z.object({
+  /** Present only on a refusal the revision loop could not clear. */
+  unresolvedIssues: z.array(unresolvedPlannerIssueSchema).default([]),
   schemaVersion: z.literal(PLANNER_READINESS_VERSION),
   level: plannerReadinessLevelSchema,
   funnel: plannerFunnelSchema,

@@ -65,6 +65,24 @@
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
+  /*
+   * The height of the sticky product header, as a token rather than a magic
+   * number repeated at every offset.
+   *
+   * Two sticky elements on the Discovery Board were pinned to `top-0` and
+   * `top-6` beneath a `top-0`, `z-30` header of about this height — so the
+   * board's selection counter and its primary "Build my trip" control slid
+   * *behind* the header on scroll, at every viewport, and the analysis rail's
+   * lower half was unreachable at 1024x768 while pinned. Hard-coding the pixel
+   * value at each site would have fixed it until somebody changed the header's
+   * padding.
+   *
+   * The `+ 1px` is the bottom rule: `py-3.5` (28px) plus a `text-xl` line box
+   * (28px) plus `border-b` is 57, and 3.5rem alone left a one-pixel sliver of
+   * the sticky content riding under the header edge.
+   */
+  --chrome-height: calc(3.5rem + 1px);
+
   --radius-card: 0.875rem;
   --radius-panel: 1.125rem;
 
@@ -193,5 +211,129 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+  THE PRINTED TRIP.
+
+  The itinerary is the thing a traveller carries, and until now printing it
+  produced the navigation, a sticky header floating mid-page, every evidence
+  panel collapsed, and page breaks straight through a day. This makes the
+  browser's own print dialog — which is also its "save as PDF" — produce a
+  usable document, without a second renderer to keep true to the first.
+
+  Four rules, in order of how much they matter.
+
+  1. Furniture goes. The header, the footer's caveat and every in-page control
+     are screen things. What must NOT go is the licence attribution: the ODbL
+     obligation follows the data into "any exported form", so the attribution
+     paragraph carries no `print:hidden` and this block does not remove it.
+
+  2. Disclosures open. A `<details>` prints closed by default, which would drop
+     the hours evidence, the source lines and the caution lists — precisely the
+     material that makes a printed plan trustworthy rather than a pretty list.
+     Opened selectively: the technical stage list on the progress screen is not
+     on this page, so there is nothing here worth keeping shut.
+
+  3. Days do not split. A day card broken across a page boundary is the single
+     most annoying thing a printed itinerary can do.
+
+  4. Nothing sticks. `position: sticky` in paged media pins an element to every
+     page in some engines and to none in others.
+*/
+@media print {
+  /*
+   * Furniture. The attribution paragraph is deliberately not in this list.
+   *
+   * These were `body > div > header` and `body > div > footer`, which matched
+   * nothing: `ProductChrome` returns a fragment, so the header and footer are
+   * direct children of `body`. The rule the comment above calls the first and
+   * most important one was a silent no-op, and a printed itinerary carried the
+   * navigation bar across the top of the page.
+   */
+  body > header,
+  body > footer,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Colour that survives a monochrome printer, and no wasted ink on grounds. */
+  :root {
+    --color-paper: #ffffff;
+    --color-paper-raised: #ffffff;
+    --color-paper-sunk: #ffffff;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000;
+  }
+
+  /* Evidence prints open. A collapsed disclosure is a missing fact on paper. */
+  details {
+    display: block !important;
+  }
+
+  details > summary {
+    /* The twisty is a control; the label it carries is a heading worth keeping. */
+    list-style: none;
+    font-weight: 600;
+  }
+
+  details > *:not(summary) {
+    display: block !important;
+  }
+
+  /*
+   * And the part `display` cannot reach.
+   *
+   * Chrome, Safari and Firefox now implement `::details-content`, a shadow
+   * wrapper carrying `content-visibility: hidden` when the element is closed.
+   * A light-DOM `display: block` on the children does not override it, so on
+   * every current browser the rule above opened nothing — the hours evidence and
+   * the source lines printed blank, which is precisely the material that makes a
+   * printed plan worth carrying.
+   */
+  details::details-content {
+    content-visibility: visible !important;
+  }
+
+  /*
+   * Keep a day card whole, and nothing larger.
+   *
+   * This applied to every `li` and every `section`, including ones taller than a
+   * page — which an engine either ignores or honours by ejecting the block to a
+   * fresh sheet, leaving half a page blank. Narrowed to the day cards (which
+   * carry the class) and to timeline rows, which are always short.
+   */
+  .break-inside-avoid,
+  li > article,
+  dl,
+  tr {
+    break-inside: avoid;
+  }
+
+  /* Paged media and sticky do not agree. Take it out entirely. */
+  [class*='sticky'] {
+    position: static !important;
+  }
+
+  /* A link's destination is invisible on paper, so print it once, small. */
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 9px;
+    word-break: break-all;
+  }
+
+  /*
+    Except where the text already is the destination, or where the URL is a
+    machine address nobody will type — a maps deep link is 200 characters of
+    coordinates and reads as damage on a printed page.
+  */
+  a[data-testid^='day-route']::after,
+  a[href^='https://maps.apple.com']::after,
+  a[href^='https://www.google.com/maps']::after {
+    content: '';
   }
 }

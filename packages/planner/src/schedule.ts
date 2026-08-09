@@ -18,7 +18,7 @@ import {
   type TravelerProfile,
 } from '@sidequest/core';
 import { leg, orderStops, type TravelTimeMatrix } from '@sidequest/geo';
-import type { AccessLegPlan, AccessOption, AccessUnit } from './access';
+import { matrixCoversMode, type AccessLegPlan, type AccessOption, type AccessUnit } from './access';
 import {
   latestStartOn,
   placeVisit,
@@ -283,7 +283,7 @@ export function layoutDay(
           km: choice.approachKm,
           mode: choice.approachMode,
           role: 'approach',
-          provenance: choice.approachMode === 'drive' ? matrix.provenance.kind : 'estimated',
+          provenance: foodLegProvenance(matrix, choice.approachMode),
         },
       });
       cursor += choice.approachMinutes;
@@ -331,7 +331,7 @@ export function layoutDay(
           km: choice.approachKm,
           mode: choice.approachMode,
           role: 'return',
-          provenance: choice.approachMode === 'drive' ? matrix.provenance.kind : 'estimated',
+          provenance: foodLegProvenance(matrix, choice.approachMode),
         },
       });
       cursor += choice.approachMinutes;
@@ -584,7 +584,9 @@ export function layoutDay(
    * day then "drove" to dinner from a base the car was not at, and the drive out
    * to fetch it appeared nowhere.
    */
-  const leavesByCar = units[0] ? units[0].option.approachMinutes === null : true;
+  // Read off the mode rather than off "is this measured": a walking approach is
+  // measured too now, and a day that walks out of town does not leave by car.
+  const leavesByCar = units[0] ? units[0].option.approachMode === 'drive' : true;
   if (hasFood() && foodPlan!.provisionForDay !== null) {
     // Filed as a snack slot rather than a meal: it is not one, the day summary
     // filters it out of the meal list, and the window checks are bypassed for a
@@ -670,33 +672,48 @@ export function layoutDay(
     if (members.length === 0) continue;
 
     // --- Approach: get to the gateway --------------------------------------
-    if (option.approachMinutes === null && atRoutingId !== vehicleAt && homeward) {
+    if (option.approachMode === 'drive' && atRoutingId !== vehicleAt && homeward) {
       // The next leg is a drive and the traveller is not standing where the car
       // is. Get back to it the way they left it, before driving anywhere.
+      /*
+       * Measured from where the traveller is, like every other leg.
+       *
+       * `homeward` was recorded on the way out — base to the first gateway — and
+       * reusing it here labels a walk back to the car with a duration taken
+       * between two different points. The return-leg block further down was
+       * fixed for exactly this and this one was left; both now re-measure when
+       * the matrix covers the mode, and fall back to the stated allowance only
+       * when it does not.
+       */
+      const measuredBack = matrixCoversMode(matrix, homeward.mode)
+        ? tryHop(matrix, atRoutingId, vehicleAt)
+        : null;
+      const backMinutes = measuredBack ? measuredBack.minutes : homeward.minutes;
+      const backProvenance = measuredBack ? matrix.provenance.kind : ('estimated' as const);
       items.push({
         id: `travel-${day.dayNumber}-${sequence++}`,
         kind: 'travel',
         title: `${TRANSPORT_MODE_LABELS[homeward.mode]} back to the car`,
         startMinute: cursor,
-        endMinute: cursor + homeward.minutes,
-        durationMinutes: homeward.minutes,
+        endMinute: cursor + backMinutes,
+        durationMinutes: backMinutes,
         reason: 'Back to where you left the car before driving on.',
         weatherSensitive: false,
         travel: {
           fromId: atRoutingId,
           toId: vehicleAt,
           fromName: atName,
-          toName: baseName,
-          minutes: homeward.minutes,
-          km: 0,
+          toName: vehicleAt === baseId ? baseName : atName,
+          minutes: backMinutes,
+          km: measuredBack ? measuredBack.km : 0,
           mode: homeward.mode,
           role: 'return',
-          provenance: 'estimated',
+          provenance: backProvenance,
         },
       });
-      cursor += homeward.minutes;
-      if (homeward.mode === 'walk') walkMinutes += homeward.minutes;
-      else transitMinutes += homeward.minutes;
+      cursor += backMinutes;
+      if (homeward.mode === 'walk') walkMinutes += backMinutes;
+      else transitMinutes += backMinutes;
       useMode(homeward.mode);
       atRoutingId = vehicleAt;
       atName = baseName;
@@ -704,6 +721,15 @@ export function layoutDay(
     }
 
     if (option.approachMinutes === null) {
+      /**
+       * The approach the matrix measures. Driving, when the matrix is a road
+       * matrix; walking, when it is a pedestrian one. The only thing that used to
+       * reach this branch was a drive, and the block below still said so in every
+       * label and every counter.
+       */
+      const approachIsDrive = option.approachMode === 'drive';
+      // Parking, boots and getting going. There is no car to park on a walk.
+      const approachBuffer = approachIsDrive ? config.bufferMinutes : 0;
       /**
        * Leaving later beats standing about: if the first thing this day does is
        * catch a service or wait for a gate, set off in time to meet it rather
@@ -714,7 +740,7 @@ export function layoutDay(
        */
       if (!hasLeftBase) {
         const ride = tryHop(matrix, atRoutingId, option.gatewayRoutingId);
-        const driveIn = ride ? ride.minutes + config.bufferMinutes : 0;
+        const driveIn = ride ? ride.minutes + approachBuffer : 0;
         if (option.service) {
           const leadIn = driveIn + option.service.transferBufferMinutes;
           cursor = Math.max(cursor, option.service.window.firstDeparture - leadIn);
@@ -748,16 +774,18 @@ export function layoutDay(
         const hop = tryHop(matrix, atRoutingId, option.gatewayRoutingId) ?? direct;
         // Transition slack rides on the travel block rather than sitting as an
         // invisible gap: parking, boots, and getting going are real minutes.
-        const duration = hop.minutes + config.bufferMinutes;
+        const duration = hop.minutes + approachBuffer;
         const toName = gatewayLabel(option, members);
         items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
-          title: `Drive to ${toName}`,
+          title: `${TRANSPORT_MODE_LABELS[option.approachMode]} to ${toName}`,
           startMinute: cursor,
           endMinute: cursor + duration,
           durationMinutes: duration,
-          reason: `${hop.minutes} min on the road, plus ${config.bufferMinutes} min to park and get going.`,
+          reason: approachIsDrive
+            ? `${hop.minutes} min on the road, plus ${approachBuffer} min to park and get going.`
+            : `${hop.minutes} min on foot, measured between the two points.`,
           weatherSensitive: false,
           travel: {
             fromId: atRoutingId,
@@ -766,18 +794,32 @@ export function layoutDay(
             toName,
             minutes: hop.minutes,
             km: hop.km,
-            mode: 'drive',
+            mode: option.approachMode,
             role: 'approach',
             provenance: matrix.provenance.kind,
           },
         });
         cursor += duration;
-        driveMinutes += hop.minutes;
-        travelKm += hop.km;
-        useMode('drive');
-        homeward = null;
+        if (approachIsDrive) {
+          driveMinutes += hop.minutes;
+          travelKm += hop.km;
+          homeward = null;
+          vehicleAt = option.gatewayRoutingId;
+        } else {
+          walkMinutes += hop.minutes;
+          /**
+           * The way back, measured rather than assumed symmetric later.
+           *
+           * A walk out of base has to be walked back, and the return leg used to
+           * be a copy of a constant. It is now the same measurement, which is
+           * true for a pedestrian matrix in a way it would not be for a road one
+           * with one-way streets — and the return is re-measured at the point it
+           * is scheduled anyway.
+           */
+          homeward = { mode: option.approachMode, minutes: hop.minutes };
+        }
+        useMode(option.approachMode);
         hasLeftBase = true;
-        vehicleAt = option.gatewayRoutingId;
       }
     } else if (atRoutingId !== option.gatewayRoutingId && option.approachMinutes > 0) {
       if (option.service && !hasLeftBase) {
@@ -1170,7 +1212,9 @@ export function layoutDay(
     const exitedFrom = option.service ? option.exitRoutingId : (previous?.place.id ?? option.exitRoutingId);
     atRoutingId = exitedFrom;
     atName = option.service ? option.gatewayName : (previous?.place.name ?? atName);
-    if (!option.service && option.approachMinutes === null) vehicleAt = exitedFrom;
+    // The car moves with the traveller only when the traveller drove it. Keyed on
+    // the mode rather than on "was this measured", now that walks are measured.
+    if (!option.service && option.approachMode === 'drive') vehicleAt = exitedFrom;
   }
 
   /**
@@ -1221,30 +1265,51 @@ export function layoutDay(
 
   // --- Home ----------------------------------------------------------------
   if (atRoutingId !== baseId && homeward) {
+    /**
+     * Measured from where the traveller actually is, not from where they set off.
+     *
+     * `homeward` is the allowance recorded on the way out, and the way out
+     * started at base and ended at the first gateway. By the time this runs the
+     * day has moved: the return is a different pair of points, and reusing the
+     * outbound number labels one journey with another journey's duration. That
+     * is the same defect the driving branch fixed once already — "a leg read
+     * 'from the bakery to Inyo Craters, 50 min' when the bakery is 26 minutes
+     * away" — and it applies to a walk for exactly the same reason.
+     *
+     * So: re-measure when the matrix covers this mode, and fall back to the
+     * stated allowance only when it does not.
+     */
+    const measured = matrixCoversMode(matrix, homeward.mode)
+      ? tryHop(matrix, atRoutingId, baseId)
+      : null;
+    const back = measured
+      ? { minutes: measured.minutes, km: measured.km, provenance: matrix.provenance.kind }
+      : { minutes: homeward.minutes, km: 0, provenance: 'estimated' as const };
     items.push({
       id: `travel-${day.dayNumber}-${sequence++}`,
       kind: 'travel',
       title: `${TRANSPORT_MODE_LABELS[homeward.mode]} back to ${baseName}`,
       startMinute: cursor,
-      endMinute: cursor + homeward.minutes,
-      durationMinutes: homeward.minutes,
-      reason: `${homeward.minutes} min back to ${baseName}, the way you came.`,
+      endMinute: cursor + back.minutes,
+      durationMinutes: back.minutes,
+      reason: `${back.minutes} min back to ${baseName}.`,
       weatherSensitive: false,
       travel: {
         fromId: atRoutingId,
         toId: baseId,
         fromName: atName,
         toName: baseName,
-        minutes: homeward.minutes,
-        km: 0,
+        minutes: back.minutes,
+        km: back.km,
         mode: homeward.mode,
         role: 'return',
-        provenance: 'estimated',
+        provenance: back.provenance,
       },
     });
-    cursor += homeward.minutes;
-    if (homeward.mode === 'walk') walkMinutes += homeward.minutes;
-    else transitMinutes += homeward.minutes;
+    cursor += back.minutes;
+    if (homeward.mode === 'walk') walkMinutes += back.minutes;
+    else transitMinutes += back.minutes;
+    if (homeward.mode === 'walk') travelKm += back.km;
     useMode(homeward.mode);
   } else if (atRoutingId !== baseId) {
     const hop = tryHop(matrix, atRoutingId, baseId);
@@ -1255,15 +1320,30 @@ export function layoutDay(
         message: `No travel time is recorded from ${atName} back to ${baseName}.`,
       });
     } else if (hop.minutes > 0) {
-      const duration = hop.minutes + config.bufferMinutes;
+      /**
+       * The way home is whatever the matrix measured, not always a drive.
+       *
+       * This block asserted `mode: 'drive'` and charged the minutes to
+       * `driveMinutes`. That was true while only a road matrix ever reached the
+       * timeline. Now that a car-free trip genuinely routes on a pedestrian
+       * matrix, a walking city day rendered "Drive to X" and — worse — spent the
+       * traveller's *driving* budget, which the terminal gate turns into a hard
+       * refusal. The mode follows the measurement.
+       */
+      const homeMode = matrix.mode === 'foot' ? ('walk' as const) : ('drive' as const);
+      const isDrive = homeMode === 'drive';
+      const buffer = isDrive ? config.bufferMinutes : 0;
+      const duration = hop.minutes + buffer;
       items.push({
         id: `travel-${day.dayNumber}-${sequence++}`,
         kind: 'travel',
-        title: `Drive to ${baseName}`,
+        title: `${TRANSPORT_MODE_LABELS[homeMode]} to ${baseName}`,
         startMinute: cursor,
         endMinute: cursor + duration,
         durationMinutes: duration,
-        reason: `${hop.minutes} min on the road, plus ${config.bufferMinutes} min to park and get going.`,
+        reason: isDrive
+          ? `${hop.minutes} min on the road, plus ${buffer} min to park and get going.`
+          : `${hop.minutes} min on foot, measured between the two points.`,
         weatherSensitive: false,
         travel: {
           fromId: atRoutingId,
@@ -1272,16 +1352,20 @@ export function layoutDay(
           toName: baseName,
           minutes: hop.minutes,
           km: hop.km,
-          mode: 'drive',
+          mode: homeMode,
           role: 'return',
           provenance: matrix.provenance.kind,
         },
       });
       cursor += duration;
-      driveMinutes += hop.minutes;
-      travelKm += hop.km;
-      useMode('drive');
-      vehicleAt = baseId;
+      if (isDrive) {
+        driveMinutes += hop.minutes;
+        travelKm += hop.km;
+        vehicleAt = baseId;
+      } else {
+        walkMinutes += hop.minutes;
+      }
+      useMode(homeMode);
     }
   }
 
@@ -1445,6 +1529,22 @@ function legTitle(plan: AccessLegPlan): string {
 function gatewayLabel(option: AccessOption, members: readonly PlanningCandidate[]): string {
   if (option.service) return option.gatewayName;
   return members[0]?.place.name ?? option.gatewayName;
+}
+
+/**
+ * Where a food leg's duration came from.
+ *
+ * `food.ts` reads the leg straight off the matrix and no longer converts between
+ * modes, so the answer is simply whether the matrix covers the way the traveller
+ * is getting there. The old expression tested `=== 'drive'` and called everything
+ * else estimated — which mislabelled a genuinely measured walk in a pedestrian
+ * region as a guess, in the one place a traveller is most likely to check.
+ */
+function foodLegProvenance(
+  matrix: TravelTimeMatrix,
+  mode: 'drive' | 'walk',
+): 'measured' | 'modelled' | 'estimated' {
+  return matrixCoversMode(matrix, mode) ? matrix.provenance.kind : 'estimated';
 }
 
 function tryHop(
@@ -2106,6 +2206,17 @@ export function buildDay(
       travelKm: layout.travelKm,
       freeMinutes: layout.freeMinutes,
       strenuousCount: layout.strenuousCount,
+      /**
+       * Counted off the timeline rather than tracked through the layout, so it
+       * cannot drift from what the day actually contains. Zero on every day the
+       * planner builds today — an approach it cannot time is refused upstream —
+       * and the count exists so that a future provider which legitimately cannot
+       * measure a leg has somewhere honest to put it, and so the validator has
+       * something to assert against rather than a convention.
+       */
+      unmeasuredLegCount: layout.items.filter(
+        (item) => item.travel !== undefined && item.travel.minutes === null,
+      ).length,
     },
     transport,
     availability: summariseAvailability(context, layout),

@@ -32,12 +32,13 @@ import {
   type TripScopeOverlay,
   type TripIncludedArea,
 } from '@sidequest/compiler';
-import { placeInclusionTag, type SourceRecord } from '@sidequest/core';
+import { placeInclusionTag, type RegionPack, type SourceRecord } from '@sidequest/core';
 import type {
   CompilerProviders,
   ConstraintResearchProvider,
   DestinationResolver,
   DiscoveredCandidate,
+  DiscoveryResult,
   ExtractedClaim,
   FactExtractionProvider,
   FoodDiscoveryProvider,
@@ -169,6 +170,99 @@ const TTL = {
   poi: 7 * 24 * 60 * 60 * 1000,
   matrix: 14 * 24 * 60 * 60 * 1000,
 } as const;
+
+/**
+ * The portfolio, as the set-level arithmetic readiness needs.
+ *
+ * Derived here rather than in the assessor because this is the only layer that
+ * holds the inventory, the pack and the overlay at once — and derived rather
+ * than counted downstream because `candidates` has already been narrowed to
+ * things to do, so counting it later cannot tell an empty board apart from a
+ * board of food.
+ */
+function portfolioFactsFrom(
+  inventory: InventoryResult,
+  pack: RegionPack,
+  overlay: TripScopeOverlay,
+): NonNullable<DiscoveryResult['portfolioFacts']> {
+  const pools = inventory.portfolio.pools;
+  const kept = (slot: string) =>
+    pools.filter((pool) => pool.slot === slot).reduce((sum, pool) => sum + pool.kept, 0);
+
+  /*
+   * Which part of the ground each thing to do sits in.
+   *
+   * Computed from coordinates against the partition's own cells rather than read
+   * off the place, because every place in one compiled region carries the same
+   * `regionId` — using it would make "things to do in 1 of 12 parts" true of
+   * every destination on earth, and a spread check that always fires is a spread
+   * check nobody reads.
+   */
+  const areas = new Map<string, number>();
+  for (const candidate of inventory.candidates) {
+    const { lat, lng } = candidate.place.coordinates;
+    const cell = pack.partition.cells.find(
+      (entry) =>
+        lat >= entry.bounds.southWest.lat &&
+        lat <= entry.bounds.northEast.lat &&
+        lng >= entry.bounds.southWest.lng &&
+        lng <= entry.bounds.northEast.lng,
+    );
+    /*
+     * A candidate outside every cell is not a part of the destination.
+     *
+     * Bucketing it under one synthetic key counted it towards
+     * `areasWithVisitable`, which is compared against the number of real cells —
+     * so the spread check could report "13 of 12 parts". It is left out of the
+     * area tally entirely; whether it should be here at all is containment's
+     * question, not this one's.
+     */
+    if (!cell) continue;
+    areas.set(cell.id, (areas.get(cell.id) ?? 0) + 1);
+  }
+
+  return {
+    packRecords: pack.layers.reduce((sum, layer) => sum + layer.records.length, 0),
+    anchors: kept('anchor'),
+    discoveries: kept('discovery'),
+    food: inventory.foodRecords.length,
+    support: kept('support'),
+    gateways: kept('gateway'),
+    anchorDemotions: inventory.portfolio.anchorDemotions,
+    membershipUnverified: inventory.portfolio.membershipUnverified,
+    categories: new Set(inventory.candidates.map((entry) => entry.place.category)).size,
+    /*
+     * Cells rather than named subregions, because cells are the only division of
+     * the ground that exists at this point and every record carries one. It is a
+     * coarse proxy for "part of the destination" and is stated as such: what it
+     * detects reliably is the failure it was added for — everything in one cell
+     * of many.
+     */
+    areasWithVisitable: areas.size,
+    areasTotal: pack.partition.cells.length,
+    largestAreaVisitable: Math.max(0, ...areas.values()),
+    sourceCatalogues: new Set(pack.layers.map((layer) => layer.catalog)).size,
+    packPartial: pack.state !== 'ready',
+    /*
+     * Read off the overlay's own verdicts rather than recomputed here. These are
+     * the relationships that mean "this agrees with the destination's published
+     * identity", as opposed to the ones that mean "we could not tell" or "this is
+     * near it".
+     */
+    insideSelected: overlay.integrity.byRelationship
+      .filter((entry) =>
+        ['inside_scope', 'inside_selected_division', 'inside_selected_region'].includes(
+          entry.relationship,
+        ),
+      )
+      .reduce((sum, entry) => sum + entry.count, 0),
+    membershipDecided: overlay.integrity.byRelationship
+      .filter((entry) => entry.relationship !== 'membership_unknown')
+      .reduce((sum, entry) => sum + entry.count, 0),
+    divisionsAvailable: overlay.integrity.divisionsAvailable,
+    scopeIdentityUnknown: overlay.integrity.scopeIdentityUnknown,
+  };
+}
 
 function cacheFor<T>(provider: string, ttlMs: number) {
   return {
@@ -639,7 +733,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
 
   const places: PlaceDiscoveryProvider = {
     name: 'region-pack',
-    async discover({ scope, queries, pack, includedAreas }) {
+    async discover({ scope, queries, pack, includedAreas, recovery }) {
       /**
        * A pack is the answer, and asking anything else would be worse.
        *
@@ -677,7 +771,14 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           roleEligible,
           ...(includedAreas ? { includedAreas: includedAreas.map(toIncludedArea) } : {}),
         }));
-        const inventory = buildInventory({ pack, scope, overlay });
+        const inventory = buildInventory({
+          pack,
+          scope,
+          overlay,
+          // Absent on an ordinary build; set only by the recovery loop, and only
+          // ever in the widening direction.
+          ...(recovery ? { limits: recovery } : {}),
+        });
         packInventory = inventory;
         for (const layer of pack.layers) {
           for (const record of layer.records) packRecords.set(record.id, record);
@@ -738,6 +839,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             expansionMembers: overlay.integrity.expansionMembers,
             satellites: overlay.integrity.satellites,
           },
+          portfolioFacts: portfolioFactsFrom(inventory, pack, overlay),
         };
       }
 
@@ -1123,10 +1225,22 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           placeIds: [subject.id],
           months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
           approachMode: scope.transport.carAvailable ? ('drive' as const) : ('walk' as const),
-          ...(scope.transport.carAvailable ? {} : { approachMinutes: 10 }),
+          /**
+           * Null, not a number.
+           *
+           * Nothing here knows how long it takes to walk to this place. What we
+           * have is a routable location, which is why the provenance below says
+           * so. Writing a constant made every car-free plan in the product read
+           * "10 min" for every leg of every day, and the day totals, the trip
+           * totals and both travel-budget validators were computed from it.
+           * The planner reads the walking matrix when there is one and reports
+           * an absence when there is not.
+           */
+          ...(scope.transport.carAvailable ? {} : { approachMinutes: null }),
           privateVehicle: 'allowed' as const,
           serviceRequirement: 'none' as const,
-          walkMinutesFromDropOff: 5,
+          /** Same reason. There is no drop-off here and no walk from one. */
+          walkMinutesFromDropOff: 0,
           internalTransfer: { mode: 'walk' as const, minutes: 0 },
           permitRequired: false,
           notes: [],

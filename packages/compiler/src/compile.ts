@@ -49,6 +49,18 @@ import {
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, type CompilerBudget } from './budget';
 import { buildCoverageReport } from './coverage';
+import {
+  assessResearchReadiness,
+  MAX_RECOVERY_PASSES,
+  recoveryAdjustment,
+  unmeasurableModesFor,
+} from './research-readiness';
+import {
+  RESEARCH_REPAIR_COPY,
+  shouldAttemptRecovery,
+  type DestinationResearchReadiness,
+  type ResearchRepair,
+} from '@sidequest/core';
 import { dedupeCandidates } from './dedupe';
 import { buildProvisionalBoard } from './provisional';
 import type { ProvisionalBoard, ResearchPriorityHints } from '@sidequest/core';
@@ -746,6 +758,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * shape of what was *not* in it.
      */
     let boardSupply: DiscoveryResult['boardSupply'];
+    let portfolioFacts: DiscoveryResult['portfolioFacts'];
     const discovered = await runStage('discovering_candidates', async () => {
       const queries = buildQueries(input.scope, input.profile, ledger.remaining('maxCoarseCandidates'));
       /*
@@ -787,6 +800,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       });
       ledger.record('maxModelCalls', value.calls);
       boardSupply = value.boardSupply;
+      portfolioFacts = value.portfolioFacts;
       const allowed = ledger.take('maxCoarseCandidates', value.candidates.length);
       gaps.push(...value.gaps);
       for (const entry of value.licences ?? []) licences.set(entry.id, entry);
@@ -2147,6 +2161,205 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       return { value, outcome: `${value.dimensions.length} layers checked, ${weak} thin` };
     });
 
+    /**
+     * IS THIS A FAIR PICTURE OF THE DESTINATION?
+     *
+     * Computed here, after coverage and before the artifact is written, because
+     * this is the first point where every input exists: the portfolio as a set,
+     * the ground it came from, what routing could measure, and what the traveller
+     * asked for. Deterministic and pure — it reads values, decides a level, and
+     * touches nothing.
+     *
+     * Not a stage of its own. It costs no provider call and no model call, and a
+     * progress row that always completes in under a millisecond teaches a
+     * traveller to ignore progress rows.
+     */
+    const readinessFrom = (
+      facts: NonNullable<DiscoveryResult['portfolioFacts']>,
+      visitable: number,
+    ) =>
+      assessResearchReadiness({
+          scope: input.scope,
+          ...(input.profile ? { profile: input.profile } : {}),
+          tripDays: Math.max(1, input.scope.nights + 1),
+          funnel: {
+            packRecords: facts.packRecords,
+            visitable,
+            anchors: facts.anchors,
+            discoveries: facts.discoveries,
+            food: facts.food,
+            support: facts.support,
+            gateways: facts.gateways,
+            anchorDemotions: facts.anchorDemotions,
+            membershipUnverified: facts.membershipUnverified,
+            tripDays: Math.max(1, input.scope.nights + 1),
+          },
+          categories: facts.categories,
+          areasWithVisitable: facts.areasWithVisitable,
+          areasTotal: facts.areasTotal,
+          largestAreaVisitable: facts.largestAreaVisitable,
+          sourceCatalogues: facts.sourceCatalogues,
+          hoursKnown: hours.calendars.filter((entry) => entry.kind !== 'unknown').length,
+          /*
+           * Pairs, not nodes.
+           *
+           * This read `matrix.ids.length` against `plannable.length` — two node
+           * counts, and `matrix.ids` also holds bases, food venues and gateways,
+           * so the observed figure essentially always exceeded the expected one
+           * and the dimension could never grade below `met`. A matrix over n
+           * points holds n×(n−1) ordered pairs; what a plan needs is that its
+           * own stops can reach one another.
+           */
+          routing: {
+            measuredPairs: matrix.ids.length * Math.max(0, matrix.ids.length - 1),
+            requiredPairs: visitable * Math.max(0, visitable - 1),
+          },
+          /*
+           * Modes this trip needs that no configured provider can measure.
+           *
+           * Asked of the provider rather than assumed, so adding a transit
+           * router later changes this answer without changing this code — and so
+           * a walking matrix can never be mistaken for evidence about a train.
+           */
+          unroutableModes: unmeasurableModesFor(input.scope, input.providers),
+          bases: usableBases.length,
+          satellites: expansion.subregions.length,
+          /**
+           * Does the ground we read agree with the place that was asked for?
+           *
+           * Answered from the overlay's own typed verdicts, never from a
+           * distance and never from a string comparison here. A record counts as
+           * agreement only when containment placed it *positively* inside the
+           * destination's published administrative chain — which is exactly the
+           * question, and is why an archipelago whose second island came back
+           * empty and a city whose candidates all sit in a neighbouring
+           * municipality both fail it while a legitimately borough-spread New
+           * York passes.
+           *
+           * Explicitly unknown when the instrument could not answer: no division
+           * records to resolve names through, or no scope identity to compare
+           * against. Unknown is not zero and not one — it is excluded from the
+           * level rule entirely, so a hole in our directory cannot read as a
+           * verdict about somebody's destination.
+           */
+          ...(facts.divisionsAvailable === 0 ||
+          facts.scopeIdentityUnknown ||
+          facts.membershipDecided === 0
+            ? {}
+            : {
+                identityAgrees:
+                  facts.insideSelected >= facts.membershipDecided / 2,
+              }),
+          /*
+           * Not supplied, and therefore `unmeasured`.
+           *
+           * This read `destinationCoverage: 1` — a hardcoded claim that we
+           * covered the whole destination, printed to the traveller as "We
+           * covered 100% of the area this destination officially spans." It is
+           * the one dimension that would have caught a country compiled from
+           * twenty-four cells clustered on its centroid, and it was wired to
+           * always pass. A fabricated measurement in the layer built to stop
+           * fabricated measurements is worse than no measurement, so until the
+           * ratio is actually computed from the shape against the published
+           * boundary, this dimension says it does not know.
+           */
+          packPartial: facts.packPartial,
+      });
+
+    /**
+     * BOUNDED, DEFICIT-DIRECTED RECOVERY.
+     *
+     * Readiness on its own is a verdict nobody acts on. This is the part that
+     * acts: while the reading is `recoverable`, take the highest-value repair
+     * that addresses an actually-binding deficit, run it, and read again.
+     *
+     * Four properties, and each one is a way this could have gone wrong.
+     *
+     * **It spends nothing.** Every executable repair re-selects from the pack
+     * already in hand — no provider call, no model call, no widened ground. That
+     * is not a limitation dressed up: a food-dominated board is very often a
+     * *selection* artifact, where a per-category ceiling crowded eleven museums
+     * out behind four hundred plaques, or an area cap let one cell hold
+     * everything. Those are repairable for free. What is not repairable for free
+     * is an empty pack, and the loop correctly fails to fix that.
+     *
+     * **It is monotone.** A pass that does not raise the visitable count ends the
+     * loop. Without this a repair that returns the same answer twice is an
+     * infinite loop wearing a budget.
+     *
+     * **It never lowers a bar.** `recoveryAdjustment` may only widen a ceiling.
+     * A repair that relaxed `assessCandidateQuality` or the containment gate
+     * would be manufacturing the readiness it claims to measure.
+     *
+     * **Every attempt is recorded, including the ones that achieved nothing.** A
+     * failed repair that disappears from the diagnostics is how a loop comes to
+     * look like it never ran.
+     */
+    let researchReadiness: DestinationResearchReadiness | undefined = portfolioFacts
+      ? readinessFrom(portfolioFacts, plannable.length)
+      : undefined;
+
+    if (portfolioFacts && researchReadiness && pack) {
+      const attempted = new Set<ResearchRepair>();
+      let facts = portfolioFacts;
+      let visitable = plannable.length;
+
+      for (let pass = 0; pass < MAX_RECOVERY_PASSES; pass += 1) {
+        const reading: DestinationResearchReadiness = researchReadiness;
+        if (!shouldAttemptRecovery(reading)) break;
+
+        const repair: ResearchRepair | undefined = reading.repairs.find(
+          (candidate) => !attempted.has(candidate) && recoveryAdjustment(candidate, pass) !== null,
+        );
+        if (!repair) break;
+        attempted.add(repair);
+
+        const adjustment = recoveryAdjustment(repair, pass)!;
+        const before: DestinationResearchReadiness = reading;
+        const recovered = await runStage('recovering_supply', async () => {
+          const value = await input.providers.places.discover({
+            scope: input.scope,
+            queries: [],
+            ...(input.profile ? { profile: input.profile } : {}),
+            pack,
+            recovery: adjustment,
+          });
+          return {
+            value,
+            outcome: `${value.candidates.length} candidates after ${RESEARCH_REPAIR_COPY[repair].toLowerCase()}`,
+          };
+        });
+
+        const nextFacts = recovered.portfolioFacts ?? facts;
+        const nextVisitable = recovered.candidates.length;
+        const after = readinessFrom(nextFacts, nextVisitable);
+        const improved = nextVisitable > visitable;
+
+        researchReadiness = {
+          ...(improved ? after : before),
+          repairsAttempted: [
+            ...reading.repairsAttempted,
+            {
+              repair,
+              addressing: [...before.binding],
+              outcome: improved ? 'improved' : 'no_change',
+              levelBefore: before.level,
+              levelAfter: improved ? after.level : before.level,
+              visitableBefore: visitable,
+              visitableAfter: nextVisitable,
+              detail: improved
+                ? `${RESEARCH_REPAIR_COPY[repair]} — ${nextVisitable - visitable} more things to do.`
+                : `${RESEARCH_REPAIR_COPY[repair]} — nothing further came back.`,
+            },
+          ],
+        };
+
+        if (!improved) break;
+        facts = nextFacts;
+        visitable = nextVisitable;
+      }
+    }
+
     // ---- Stage: compile ----------------------------------------------------------
     const region = await runStage('compiling', async () => {
       /*
@@ -2192,6 +2405,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          * second look is worse than one that does not explain itself at all.
          */
         ...(boardSupply ? { boardSupply } : {}),
+        ...(researchReadiness ? { researchReadiness } : {}),
         bases: routedBases,
         primaryBaseId: primary.id,
         subregions: buildSubregions(expansion.subregions, usableBases, plannable),
@@ -2556,12 +2770,32 @@ const WALKABLE_SPAN_KM = 12;
 
 export function matrixModeFor(scope: GeographicScope): 'car' | 'foot' {
   if (scope.transport.primaryMode === 'drive') return 'car';
+
+  /**
+   * Measured against what the traveller can *reach*, not against the whole
+   * destination.
+   *
+   * This read `scopeBounds(scope)`, which was fine while the shape was always
+   * clipped to the traveller's reach — the two were the same thing. They are not
+   * any more: a country keeps its full published extent so that its second
+   * island is not deleted before anything is read, and a country's span is
+   * always over twelve kilometres. So a car-free traveller asking for a region
+   * got a *car* matrix, `matrixCoversMode` then refused every walking approach,
+   * and the plan came back empty. One fix undid the other.
+   *
+   * The reach is the right denominator and always was. A walking trip is
+   * walkable if the ground a walker can cover is walkable, which is a statement
+   * about them rather than about the size of the country they are in.
+   */
+  const reachKm = scope.reachRadiusKm ?? WALKABLE_SPAN_KM;
   const bounds = scopeBounds(scope);
-  const latKm = (bounds.northEast.lat - bounds.southWest.lat) * 111;
-  const lngKm =
+  const latKm = Math.min((bounds.northEast.lat - bounds.southWest.lat) * 111, reachKm * 2);
+  const lngKm = Math.min(
     (bounds.northEast.lng - bounds.southWest.lng) *
-    111 *
-    Math.max(0.1, Math.cos((scope.center.lat * Math.PI) / 180));
+      111 *
+      Math.max(0.1, Math.cos((scope.center.lat * Math.PI) / 180)),
+    reachKm * 2,
+  );
   return Math.max(latKm, lngKm) <= WALKABLE_SPAN_KM ? 'foot' : 'car';
 }
 

@@ -11,6 +11,7 @@ import {
   type MinuteInterval,
   type Place,
   type UnscheduledPlace,
+  type ValidationIssue,
   type WeatherEvidenceKind,
 } from '@sidequest/core';
 import { MatrixError, tryLeg, validateMatrix } from '@sidequest/geo';
@@ -933,7 +934,33 @@ export function planTrip(input: PlannerInput): PlanResult {
     hadFoodDataset: input.food !== undefined,
     ...(input.now ? { now: input.now } : {}),
   });
-  let issues = validateItinerary(validationInput());
+  /**
+   * Findings the planner resolved by removing their subject.
+   *
+   * Held apart from the live list and merged into every revalidation, because a
+   * revalidation asks "what is wrong with the plan as it stands" and the answer
+   * is legitimately "nothing" once the offending thing is gone. That is exactly
+   * how a dietary conflict used to vanish: correct question, correct answer,
+   * lost finding. These survive every subsequent pass by construction rather
+   * than by each pass remembering to carry them.
+   */
+  /**
+   * Errors that mean "we could not give you something you asked for", as
+   * distinct from "this plan does not work".
+   *
+   * Both are errors and both must be loud. Only the second invalidates the
+   * itinerary: the first is surfaced as a named conflict with its reason, which
+   * is the honest answer to a request nothing could satisfy.
+   */
+  const REQUEST_NOT_MET_CODES = new Set<ValidationIssue['code']>([
+    'must_include_unscheduled',
+    'food_choice_unscheduled',
+  ]);
+
+  const carriedIssues: ValidationIssue[] = [];
+  const revalidate = () => [...carriedIssues, ...validateItinerary(validationInput())];
+
+  let issues = revalidate();
 
   const revisions = [];
   let passes = 0;
@@ -951,18 +978,46 @@ export function planTrip(input: PlannerInput): PlanResult {
     ),
   ].sort((a, b) => a - b);
 
+  /**
+   * Food errors are resolved by taking the food off — and the finding stays.
+   *
+   * The reassignment below (`issues = validateItinerary(...)`) is what made this
+   * a silence: the meals come off, the plan re-validates, and the new list has no
+   * dietary conflict in it because there is no longer a venue to conflict with.
+   * A `strict_dietary_conflict` — a venue's own statement that it cannot meet a
+   * requirement the traveller declared — disappeared with no trace anywhere, and
+   * the revision note said only "what we had picked did not hold up".
+   *
+   * Carried forward instead: original code, original message, downgraded to a
+   * warning because the plan no longer contains the hazard, and flagged so no
+   * surface can mistake it for a live problem or for something nobody found.
+   */
   if (foodErrorDays.length > 0) {
+    const carried = issues
+      .filter(
+        (issue) =>
+          issue.severity === 'error' &&
+          FOOD_ISSUE_CODES.has(issue.code) &&
+          issue.dayNumber !== undefined,
+      )
+      .map((issue) => ({ ...issue, severity: 'warning' as const, wasResolvedByRemoval: true }));
+    carriedIssues.push(...carried);
+
     for (const dayNumber of foodErrorDays) {
       foodSuppressed.add(dayNumber);
+      const why = carried
+        .filter((issue) => issue.dayNumber === dayNumber)
+        .map((issue) => issue.message)
+        .join(' ');
       revisions.push({
         code: 'changed_meal' as const,
-        description: `Took the meals off day ${dayNumber} rather than the stops: what we had picked did not hold up.`,
+        description: `Took the meals off day ${dayNumber} rather than the stops. ${why}`,
         dayNumber,
       });
     }
     build = buildAll(dayPlans);
     built = build.days;
-    issues = validateItinerary(validationInput());
+    issues = revalidate();
   }
 
   while (passes < config.maxRevisionPasses && issues.some((issue) => issue.severity === 'error')) {
@@ -984,7 +1039,7 @@ export function planTrip(input: PlannerInput): PlanResult {
 
     build = buildAll(dayPlans);
     built = build.days;
-    issues = validateItinerary(validationInput());
+    issues = revalidate();
     passes += 1;
   }
 
@@ -1005,7 +1060,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       suggestedRemedy: 'Drop something else from that day, or give the trip another day.',
     });
   }
-  if (build.dropped.size > 0) issues = validateItinerary(validationInput());
+  if (build.dropped.size > 0) issues = revalidate();
 
   const scheduledCount = built.reduce(
     (sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length,
@@ -1078,6 +1133,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       readiness: readinessFor(0),
     };
   }
+
   const totals = built.reduce(
     (acc, day) => ({
       usable: acc.usable + day.window.usableMinutes,
@@ -1111,6 +1167,75 @@ export function planTrip(input: PlannerInput): PlanResult {
     matrixProvenance: input.matrix.provenance.kind,
   });
   issues = [...issues, ...validateStrategy(transportStrategy, built)];
+
+  /**
+   * A successful plan has no unresolved errors in it. That was not true.
+   *
+   * `planTrip` returned `ok: true` after a bounded revision loop whatever the
+   * loop had managed, and the only refusal was "nothing was scheduled at all".
+   * So a plan that exceeded the traveller's driving cap, arrived somewhere
+   * before it opened, and left a must-do out came back as a success with a
+   * `needs_decision` badge on it — a complete, downloadable-looking itinerary
+   * carrying errors nobody had resolved. Two contradictory claims about the same
+   * artifact, and the confident one is the one a traveller reads.
+   *
+   * The loop is deliberately blunt and bounded and should stay that way; raising
+   * `maxRevisionPasses` buys oscillation, not correctness. What changes is what
+   * happens when it runs out: the plan is refused and the reasons are handed back
+   * as readiness, rather than shipped with a badge.
+   *
+   * Errors carried forward from a resolved-by-removal finding are excluded by
+   * construction — they are warnings, and the thing they described is gone.
+   *
+   * `REQUEST_NOT_MET_CODES` are excluded deliberately, and the distinction is
+   * the difference between a broken plan and a disappointing one. "This day
+   * exceeds the driving you agreed to" is a defect in the itinerary. "Devils
+   * Postpile is shut on your dates and you asked for it" is not — the days that
+   * were built are correct, the request is reported by name with the reason, and
+   * refusing the whole trip over it would replace a good plan with no plan.
+   */
+  const unresolved = issues.filter(
+    (issue) => issue.severity === 'error' && !REQUEST_NOT_MET_CODES.has(issue.code),
+  );
+  if (unresolved.length > 0) {
+    /**
+     * The readiness handed back has to describe *this* refusal.
+     *
+     * `readinessFor` derives its level and summary from the unscheduled funnel,
+     * which for a gate failure is healthy — every stop was scheduled, the plan
+     * is simply wrong — so it returned `level: 'ready'` with the summary "All 9
+     * places you picked are in the plan", underneath a panel headed "We did not
+     * build a plan". Two claims in one view, and no cause named.
+     */
+    const base = readinessFor(scheduledCount);
+    return {
+      ok: false,
+      code: 'planner_coverage_insufficient',
+      message:
+        unresolved.length === 1
+          ? `We could not build a day that works: ${unresolved[0]!.message}`
+          : `We could not build days that work. ${unresolved.length} things are unresolved, starting with: ${unresolved[0]!.message}`,
+      readiness: {
+        ...base,
+        level: 'partial',
+        summary:
+          unresolved.length === 1
+            ? `Everything you picked fits, but one thing about the days themselves does not work yet: ${unresolved[0]!.message}`
+            : `Everything you picked fits, but ${unresolved.length} things about the days themselves do not work yet. The first is: ${unresolved[0]!.message}`,
+        /*
+         * The unresolved errors, as the blockers they are. Without these the
+         * remedy list has nothing to rank against and every remedy falls into
+         * "what would not help" — a refusal that names no cause and offers no
+         * action.
+         */
+        unresolvedIssues: unresolved.map((issue) => ({
+          code: issue.code,
+          message: issue.message,
+          ...(issue.dayNumber === undefined ? {} : { dayNumber: issue.dayNumber }),
+        })),
+      },
+    };
+  }
 
   const itinerary: Itinerary = {
     version: ITINERARY_VERSION,

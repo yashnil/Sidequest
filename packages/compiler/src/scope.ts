@@ -7,6 +7,7 @@ import {
   type ConfidenceSignal,
   type DestinationCandidate,
   type GeographicScope,
+  type ScopeBreadth,
   type ScopeShape,
   type TransportMode,
   type TravelerProfile,
@@ -78,6 +79,17 @@ export interface ScopeInput {
  * when that happens the scope says so through its confidence signals rather
  * than presenting the circle as if it were a border.
  */
+/**
+ * Destination breadths that are a *container of parts* rather than one place.
+ *
+ * The distinction this list draws is the whole of the fix below. A city is one
+ * settlement: clipping it to what a traveller can cross leaves you inside the
+ * same place, which is what the New York evaluation wanted. A country, an island
+ * group or a region is a set of constituent parts, and clipping *that* to a
+ * traveller's reach does not narrow the destination — it deletes members of it.
+ */
+const MULTI_PART_BREADTHS: readonly ScopeBreadth[] = ['subregion', 'region', 'country', 'multi_country'];
+
 function deriveShape(
   candidate: DestinationCandidate,
   radiusKm: number,
@@ -85,7 +97,8 @@ function deriveShape(
 ): ScopeShape {
   if (candidate.bounds && !narrowed) {
     /**
-     * A published boundary, clipped to what the trip can actually reach.
+     * A published boundary, clipped to what the trip can actually reach —
+     * but only where clipping narrows a place rather than dismembering one.
      *
      * The boundary alone was the shape, and a live New York evaluation showed
      * what that costs: a four-night walking trip took the city's full
@@ -93,13 +106,32 @@ function deriveShape(
      * and seventy-two of three hundred and eighty walking legs across the
      * harbour, and the plan came out as whichever borough the base landed in.
      *
-     * A city boundary is a fact about governance. What a traveller covers is a
-     * fact about their transport and their nights. Where the two disagree by a
-     * lot, the smaller one is the honest scope — and the intersection is still a
-     * real boundary rather than a circle drawn over one.
+     * Then the opposite failure arrived, from the same line. A traveller who
+     * simply did not want to drive asked for a two-island country. Not driving
+     * selects the walking reach; the walking reach caps at twelve kilometres;
+     * and twelve kilometres around the centroid of an archipelago is one island.
+     * The second island was outside the compiled shape before a single record
+     * was read, and nothing anywhere said so — the trip was quietly redefined
+     * to the part of the destination the traveller could walk across.
+     *
+     * Those two are not the same operation wearing different numbers. Clipping a
+     * *city* answers "which part of this place will you actually cover", and the
+     * answer is a fact about transport and nights. Clipping a *country* answers
+     * "which of these places still counts as your destination", and that is not
+     * a question a walking speed is entitled to answer.
+     *
+     * So: settlements clip, containers do not. A traveller's reach still
+     * constrains everything it legitimately constrains — `reachRadiusKm` travels
+     * on the scope, base selection reads it, and the planner's per-day travel
+     * caps are unchanged — but it no longer decides what the destination *is*.
+     * A country whose parts a walker cannot cross becomes a readiness and
+     * transport problem, stated, rather than a smaller country, unstated.
      */
-     const clipped = clipToReach(candidate.bounds, candidate.center, radiusKm);
-     return { kind: 'bounds', bounds: clipped };
+    if (MULTI_PART_BREADTHS.includes(candidate.breadth)) {
+      return { kind: 'bounds', bounds: candidate.bounds };
+    }
+    const clipped = clipToReach(candidate.bounds, candidate.center, radiusKm);
+    return { kind: 'bounds', bounds: clipped };
   }
   return { kind: 'radius', center: candidate.center, radiusKm };
 }

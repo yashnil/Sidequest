@@ -95,10 +95,13 @@ const TRAVEL_MODE: Record<TransportMode, NeutralTravelMode> = {
 /**
  * Where a stated travel time came from.
  *
- * The neutral schema has three buckets and this pipeline has four. `official`
+ * The neutral schema has three buckets and this pipeline has five. `official`
  * means a published timetable and says so; `measured` means a routing engine
- * answered; and both of the remaining two mean nobody measured this pair, which
- * is one fact and gets one word.
+ * answered; and the remaining three all mean nobody measured this pair, which is
+ * one fact and gets one word. `unmeasured` is the explicit member the itinerary
+ * schema gained when a leg was allowed to carry no duration at all — it maps
+ * here exactly as the two inferred ones always did, so the benchmark's reading of
+ * a Sidequest plan is unchanged by that contract bump.
  */
 const TRAVEL_PROVENANCE: Record<
   TravelSegment['provenance'],
@@ -108,6 +111,7 @@ const TRAVEL_PROVENANCE: Record<
   official: 'published_timetable',
   modelled: 'unknown',
   estimated: 'unknown',
+  unmeasured: 'unknown',
 };
 
 const MEAL_STOP_KIND: Record<FoodStopKind, 'venue' | 'grocery' | 'packed' | 'unstated'> = {

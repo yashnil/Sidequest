@@ -111,17 +111,55 @@ const FIXTURE_DESTINATIONS: readonly {
    * The planner's own refusal, as opposed to the board's.
    */
   { match: 'longday', worlds: ['unplannable_region'], isPlace: true },
+  /**
+   * The three worlds below existed and were unreachable from any browser test,
+   * because nothing mapped a name onto them. `broad_country` and `rail_corridor`
+   * are the multi-base and multi-time-zone shapes — the whole hotel-move path —
+   * and `weak_data` is the thin-evidence one. A world with no entry here is a
+   * world only the unit tests ever see, which is how three of eight came to be
+   * exercised by nothing that renders.
+   */
+  { match: 'wide republic', worlds: ['broad_country'], isPlace: true },
+  { match: 'northern line', worlds: ['rail_corridor'], isPlace: true },
+  { match: 'little-known', worlds: ['weak_data'], isPlace: true },
 ];
 
+/**
+ * Longest match wins, and that is not a nicety.
+ *
+ * The table is scanned in order, so `'Ferry Island'` — which contains no entry's
+ * substring — fell through to the default and silently resolved to the transit
+ * city. Two browser specs believed they were exercising a ferry world and were
+ * exercising a metro. A test that passes against the wrong fixture is worse than
+ * one that fails, because it reports coverage it does not have.
+ *
+ * Sorting by match length also stops a short entry shadowing a longer, more
+ * specific one as the table grows.
+ */
 function fixtureMatch(query: string): (typeof FIXTURE_DESTINATIONS)[number] {
   const needle = query.trim().toLowerCase();
+  const matches = FIXTURE_DESTINATIONS.filter((entry) => needle.includes(entry.match)).sort(
+    (a, b) => b.match.length - a.match.length,
+  );
   return (
-    FIXTURE_DESTINATIONS.find((entry) => needle.includes(entry.match)) ?? {
+    matches[0] ?? {
       match: needle,
       worlds: ['transit_city'],
       isPlace: true,
     }
   );
+}
+
+/**
+ * Which synthetic world a query resolves to, exported so a test can assert it.
+ *
+ * The reason this is public: a specification that types a destination name and
+ * checks what comes back cannot tell a correct fixture from the default one, and
+ * the default is a plausible-looking metro. Asserting the world by name is the
+ * only way a test can know it exercised the shape it claims to.
+ */
+export function fixtureWorldsFor(query: string): readonly string[] {
+  return fixtureMatch(query).worlds;
 }
 
 /**

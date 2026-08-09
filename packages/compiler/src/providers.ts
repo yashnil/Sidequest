@@ -131,6 +131,54 @@ export interface DiscoveryResult {
     expansionMembers: number;
     satellites: number;
   };
+  /**
+   * What the portfolio looked like as a *set*, for the readiness assessment.
+   *
+   * Separate from `boardSupply` rather than folded into it, because the two
+   * answer different questions and have different audiences. `boardSupply` is
+   * what a traveller is told about a short board. This is the arithmetic behind
+   * "is this a fair picture of the destination" — the question nothing asked
+   * until a major city came back as forty-five restaurants in one suburb, every
+   * one of which was individually admissible.
+   *
+   * Optional for the same reason `boardSupply` is: a provider with no inventory
+   * reports nothing rather than a row of zeroes, and readiness reads the absence
+   * as unmeasured rather than as a failing grade.
+   */
+  portfolioFacts?: {
+    packRecords: number;
+    anchors: number;
+    discoveries: number;
+    food: number;
+    support: number;
+    gateways: number;
+    anchorDemotions: number;
+    membershipUnverified: number;
+    /** Distinct place categories among the things to do. */
+    categories: number;
+    /** Areas of the ground holding at least one thing to do, and the total. */
+    areasWithVisitable: number;
+    areasTotal: number;
+    largestAreaVisitable: number;
+    /** Distinct catalogues that contributed a kept record. */
+    sourceCatalogues: number;
+    /** Whether the ground we read was itself incomplete. */
+    packPartial: boolean;
+    /**
+     * Typed containment evidence, for the identity question.
+     *
+     * `insideSelected` counts records the overlay placed *positively* within the
+     * destination's own administrative chain — not near it, not within some
+     * radius of it, but agreeing with it on a published name or code.
+     * `divisionsAvailable` is how many division records the directory held; zero
+     * means the overlay could not have placed anything, which is a hole in our
+     * instrument rather than a verdict about the destination.
+     */
+    insideSelected: number;
+    membershipDecided: number;
+    divisionsAvailable: number;
+    scopeIdentityUnknown: boolean;
+  };
 }
 
 /** What to go looking for. Categories rather than one "things to do" sweep. */
@@ -210,6 +258,26 @@ export interface PlaceDiscoveryProvider {
      * path, where no pack could be built.
      */
     pack?: RegionPack;
+    /**
+     * A deficit-directed second look at evidence already bought.
+     *
+     * Set only by the recovery loop, and only when readiness named a specific
+     * shortfall. It does not widen the ground, issue a provider call or lower a
+     * quality bar — it changes how the inventory *selects* from records the pack
+     * already holds, which is where a surprising amount of a bad board comes
+     * from: a per-category ceiling that let four hundred plaques crowd out
+     * eleven museums, or an area cap that let one cell hold everything.
+     *
+     * Bounded by construction: no network, no budget, and the pack is fixed.
+     */
+    recovery?: {
+      /** Raise the per-category ceiling, for a board short on variety. */
+      maxPerCategory?: number;
+      /** Raise the visitable ceiling, for a board short on things to do. */
+      maxAttractions?: number;
+      /** Lower the share one area may hold, for a board pooled in one corner. */
+      maxAreaShare?: number;
+    };
     /**
      * The areas the regional expansion asked for, once it has run.
      *

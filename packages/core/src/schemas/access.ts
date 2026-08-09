@@ -265,11 +265,16 @@ export const accessRuleSchema = z
     /**
      * Minutes for the approach, when it is not a drive.
      *
-     * Driving is measured by the travel-time matrix, which is the one place road
-     * times live. Walking to a bus stop is not in that matrix and never will be,
-     * so it is stated here rather than derived from a car journey.
+     * Three states, and the difference between the last two is the difference
+     * between a plan and a guess.
+     *
+     * A number — an authored dataset states this allowance and names a source.
+     * `null` — this rule's producer has no source for it. The planner measures
+     *   the leg off the matrix when the matrix covers the approach mode, and
+     *   otherwise carries it as an unmeasured leg with no duration at all.
+     * absent — only legal for a drive, which the matrix always measures.
      */
-    approachMinutes: z.number().int().min(0).max(240).optional(),
+    approachMinutes: z.number().int().min(0).max(240).nullable().optional(),
     /** Where the approach ends. Absent means the approach ends at the place itself. */
     gatewayPointId: z.string().min(1).optional(),
     privateVehicle: privateVehiclePolicySchema,
@@ -311,8 +316,20 @@ export const accessRuleSchema = z
       path: ['serviceRequirement'],
     },
   )
+  /**
+   * A non-driving approach must say how long it takes, or say explicitly that
+   * nobody knows.
+   *
+   * This rule used to demand a number unconditionally, and that is where the
+   * product's worst factual defect came from: the live provider had no source
+   * for a walking allowance and a schema insisted on one, so it wrote `10` for
+   * every place on earth and the planner rendered it as the traveller's day.
+   * A required field with no available source does not produce data; it produces
+   * fiction. `null` is now the way a producer says so, and the planner turns it
+   * into a measurement off the matrix or into a labelled absence.
+   */
   .refine((rule) => rule.approachMode === 'drive' || rule.approachMinutes !== undefined, {
-    message: 'A non-driving approach must say how long it takes',
+    message: 'A non-driving approach must state its duration, or null if nobody measured one',
     path: ['approachMinutes'],
   });
 export type AccessRule = z.infer<typeof accessRuleSchema>;

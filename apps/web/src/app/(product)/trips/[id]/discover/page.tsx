@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import {
   autoSelect,
   countTripDays,
+  mayShowDiscoveryBoard,
   readBoardIntegrity,
   tripPersonality,
   type SelectionStatus,
@@ -14,6 +15,7 @@ import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
 import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
+import { ResearchReadinessPanel } from '@/components/ResearchReadinessPanel';
 import { formatDateRange, formatMinutes } from '@/lib/format';
 import {
   getFoodSelections,
@@ -133,6 +135,14 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
    * refresh and a provider being switched off; an artifact compiled before that
    * field existed simply omits those facts rather than inventing zeros for them.
    */
+  /**
+   * The compiled reading, if this artifact carries one.
+   *
+   * Read off the artifact rather than recomputed, so the verdict a traveller
+   * sees is the verdict the build reached — including whatever recovery it ran.
+   */
+  const readiness = compiled?.researchReadiness;
+
   const integrity = readBoardIntegrity({
     board,
     profile,
@@ -161,24 +171,6 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
        * nothing was lost is a result worth stating rather than a reason to say
        * nothing; the panel's own copy already adapts to it.
        */}
-      {reconciliation && reconciliation.entries.length > 0 ? (
-        <ReconciliationPanel
-          tripId={id}
-          reconciliation={reconciliation}
-          acknowledgements={acknowledgements}
-        />
-      ) : awaitingReconciliation > 0 ? (
-        <Panel className="mb-8 p-5" as="section" testId="reconciliation-pending">
-          <p className="eyebrow">Since you last looked</p>
-          <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
-            {awaitingReconciliation}{' '}
-            {awaitingReconciliation === 1 ? 'choice you made is' : 'choices you made are'} still
-            waiting to be checked against a finished build. Nothing has been lost — we simply have
-            not been able to tell you what became of{' '}
-            {awaitingReconciliation === 1 ? 'it' : 'them'} yet.
-          </p>
-        </Panel>
-      ) : null}
       <header className="border-b border-rule pb-8">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Discovery board</p>
         <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-5xl">
@@ -215,6 +207,52 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
         </div>
       </header>
 
+      {/*
+        BELOW THE HEADING, NOT ABOVE IT.
+
+        `ReconciliationPanel` opens with an `h2` and carries three `h3`s, and it
+        rendered before the page's own `h1` — so after any rebuild, which is
+        exactly when a traveller most needs to orient themselves, the document
+        began at level two. Nothing about the panel changed; it is simply after
+        the thing it is a note about.
+      */}
+      {reconciliation && reconciliation.entries.length > 0 ? (
+        <ReconciliationPanel
+          tripId={id}
+          reconciliation={reconciliation}
+          acknowledgements={acknowledgements}
+        />
+      ) : awaitingReconciliation > 0 ? (
+        <Panel className="mb-8 p-5" as="section" testId="reconciliation-pending">
+          <p className="eyebrow">Since you last looked</p>
+          <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
+            {awaitingReconciliation}{' '}
+            {awaitingReconciliation === 1 ? 'choice you made is' : 'choices you made are'} still
+            waiting to be checked against a finished build. Nothing has been lost — we simply have
+            not been able to tell you what became of{' '}
+            {awaitingReconciliation === 1 ? 'it' : 'them'} yet.
+          </p>
+        </Panel>
+      ) : null}
+
+      {/*
+        WHAT THE RESEARCH READING ACTUALLY DOES.
+
+        The readiness contract was, for one pass, a value frozen onto an artifact
+        that nothing read — which is a diagnostic, not a product behaviour. This
+        is where it becomes load-bearing: `blocked` withholds the board entirely,
+        because a board that misrepresents a destination is worse than no board
+        and a traveller cannot tell the difference; `thin` shows the board with
+        the shortfall stated above it, so it can never be mistaken for a full
+        one; `recoverable` says the second look happened and what it bought.
+
+        An artifact compiled before the contract existed carries no reading, and
+        that is treated as unknown rather than as permission — the board renders
+        as it always did.
+      */}
+      {readiness ? <ResearchReadinessPanel tripId={id} readiness={readiness} /> : null}
+
+      {readiness && !mayShowDiscoveryBoard(readiness) ? null : (
       <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <div className="order-2 lg:order-1">
           {workable.length === 0 ? (
@@ -293,7 +331,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : null}
         </div>
 
-        <aside className="order-1 space-y-6 lg:order-2 lg:sticky lg:top-6">
+        <aside className="order-1 space-y-6 lg:order-2 lg:sticky lg:top-[calc(var(--chrome-height)+1.5rem)] lg:max-h-[calc(100dvh-var(--chrome-height)-3rem)] lg:overflow-y-auto">
           {/*
             Beside the board rather than above it when there *is* a board: the
             question "how much is here" is context for the cards, not a warning
@@ -343,6 +381,8 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : null}
         </aside>
       </div>
+
+      )}
 
       {attributions.length > 0 ? (
         /**

@@ -32,6 +32,16 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * has since stopped being true. When in doubt, bump: a rebuild costs a click and
  * keeps every selection.
  *
+ * 7 — a travel leg may have no duration. `minutes` and `km` are nullable and
+ * `provenance` gained `unmeasured`, so a pair nobody routed is an absence rather
+ * than a number. Days carry `unmeasuredLegCount` and travel totals count only
+ * measured minutes. A version-6 plan cannot be rendered on this screen honestly:
+ * every non-driving approach in one was a constant that the UI printed as an
+ * estimate and summed into the day's travel total, so re-displaying it beside
+ * totals that now mean "measured only" would understate the day and overstate
+ * what was known. Rebuild rather than migrate — the missing values were never
+ * recorded, so there is nothing to migrate from.
+ *
  * 6 — meals are placed on the route rather than assumed at base. A meal item can
  * name a real venue, the window it was placed in, what that costs in detour
  * minutes and where the facts came from; days carry a food summary; and a
@@ -66,7 +76,7 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * split driving from riding, walking and waiting, and every day carries a
  * transport summary.
  */
-export const ITINERARY_VERSION = 6 as const;
+export const ITINERARY_VERSION = 7 as const;
 
 /** What a block of time on a day actually is. */
 export const ITINERARY_ITEM_KINDS = [
@@ -84,23 +94,67 @@ export const TRAVEL_ROLES = ['approach', 'wait', 'ride', 'walk', 'transfer', 're
 export const travelRoleSchema = z.enum(TRAVEL_ROLES);
 export type TravelRole = z.infer<typeof travelRoleSchema>;
 
-export const travelSegmentSchema = z.object({
-  fromId: z.string().min(1),
-  toId: z.string().min(1),
-  fromName: z.string().min(1),
-  toName: z.string().min(1),
-  minutes: z.number().int().min(0),
-  km: z.number().min(0),
-  mode: transportModeSchema,
-  role: travelRoleSchema.default('approach'),
-  /** Set when this leg is a ride on a scheduled service. */
-  serviceId: z.string().min(1).optional(),
-  /**
-   * Carried through so the UI can never present a model as a measurement.
-   * `official` means it came off a published timetable.
-   */
-  provenance: z.enum(['measured', 'modelled', 'official', 'estimated']),
-});
+/**
+ * Why a leg carries no duration.
+ *
+ * A closed vocabulary rather than prose, because each of these is a different
+ * product problem with a different remedy, and the traveller-facing sentence and
+ * the readiness remedy are both derived from which one it is.
+ */
+export const UNMEASURED_TRAVEL_REASONS = [
+  /** The mode this leg uses is one no configured routing provider can measure. */
+  'mode_not_routed',
+  /** The provider was asked and returned no route between these two points. */
+  'no_route_found',
+  /** A scheduled operator's own ride time, which nobody publishes as a duration. */
+  'operator_unpublished',
+] as const;
+export const unmeasuredTravelReasonSchema = z.enum(UNMEASURED_TRAVEL_REASONS);
+export type UnmeasuredTravelReason = z.infer<typeof unmeasuredTravelReasonSchema>;
+
+export const travelSegmentSchema = z
+  .object({
+    fromId: z.string().min(1),
+    toId: z.string().min(1),
+    fromName: z.string().min(1),
+    toName: z.string().min(1),
+    /**
+     * Null when nobody measured this pair.
+     *
+     * Nullable rather than absent-or-zero on purpose. A leg that takes an unknown
+     * amount of time is not a leg that takes no time, and the two were the same
+     * value here until a car-free plan was found rendering a constant as a
+     * measurement. A null can be refused by a total; a zero is silently summed.
+     */
+    minutes: z.number().int().min(0).nullable(),
+    km: z.number().min(0).nullable(),
+    mode: transportModeSchema,
+    role: travelRoleSchema.default('approach'),
+    /** Set when this leg is a ride on a scheduled service. */
+    serviceId: z.string().min(1).optional(),
+    /**
+     * Carried through so the UI can never present a model as a measurement.
+     * `official` means it came off a published timetable. `estimated` means an
+     * authored dataset stated it and named a source. `unmeasured` means nobody
+     * did, and then `minutes` is null — there is no fourth option in which a
+     * number appears without somebody standing behind it.
+     */
+    provenance: z.enum(['measured', 'modelled', 'official', 'estimated', 'unmeasured']),
+    /** Required exactly when `provenance` is `unmeasured`. */
+    unmeasuredReason: unmeasuredTravelReasonSchema.optional(),
+  })
+  .refine((leg) => (leg.provenance === 'unmeasured') === (leg.minutes === null), {
+    message: 'A leg has a duration when and only when somebody measured or published one',
+    path: ['minutes'],
+  })
+  .refine((leg) => leg.provenance !== 'unmeasured' || leg.unmeasuredReason !== undefined, {
+    message: 'An unmeasured leg must say why it could not be measured',
+    path: ['unmeasuredReason'],
+  })
+  .refine((leg) => leg.provenance === 'unmeasured' || leg.unmeasuredReason === undefined, {
+    message: 'A leg with a duration cannot also carry a reason for having none',
+    path: ['unmeasuredReason'],
+  });
 export type TravelSegment = z.infer<typeof travelSegmentSchema>;
 
 /**
@@ -307,6 +361,16 @@ export const dayTotalsSchema = z
     travelKm: z.number().min(0),
     freeMinutes: z.number().int().min(0),
     strenuousCount: z.number().int().min(0),
+    /**
+     * Legs on this day that nobody measured.
+     *
+     * Kept as a count rather than folded into the minute totals above, which is
+     * the whole point: `travelMinutes` is a sum of durations somebody stands
+     * behind, and a day with unmeasured legs has a travel total that is a floor
+     * rather than an answer. Every surface that prints a total has to read this
+     * beside it, and a validator refuses a budget verdict that depends on it.
+     */
+    unmeasuredLegCount: z.number().int().min(0),
   })
   .refine(
     (totals) =>
@@ -720,6 +784,25 @@ export const validationIssueSchema = z.object({
   message: z.string().min(1),
   dayNumber: z.number().int().min(1).optional(),
   placeId: z.string().min(1).optional(),
+  /**
+   * True when the planner resolved this by removing what the issue was about.
+   *
+   * The reviser has one move that makes an error disappear without fixing
+   * anything: taking the subject away. Dropping the day's meals ends a
+   * `strict_dietary_conflict` — the venue that could not meet the requirement is
+   * no longer on the plan — and the issue list was then *reassigned* from a fresh
+   * validation, so the finding vanished with it. What remained was a
+   * warning-severity "no verified food option" and a revision note reading "what
+   * we had picked did not hold up".
+   *
+   * That is a real fix and an unacceptable silence. A traveller who told us they
+   * cannot eat something is owed the sentence "the place we had chosen said it
+   * could not accommodate that", not a shrug. The issue now survives with its
+   * original code, downgraded to a warning and carrying this flag, so the
+   * finding is still in the record and the severity still reflects that the plan
+   * no longer contains the hazard.
+   */
+  wasResolvedByRemoval: z.boolean().optional(),
 });
 export type ValidationIssue = z.infer<typeof validationIssueSchema>;
 

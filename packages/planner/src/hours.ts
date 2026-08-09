@@ -201,6 +201,24 @@ export function placeVisit(input: PlaceVisitInput): VisitPlacement {
    * as a caution the traveller has to act on, not silently treated as closed and
    * not silently treated as unrestricted.
    */
+  /**
+   * `always_open` and `unknown` share this window, and that is a deliberate,
+   * bounded decision rather than an oversight.
+   *
+   * A lake has no gate and the whole day is genuinely available. A museum nobody
+   * published hours for is a different claim — but narrowing it here to a
+   * plausible civil window would be inventing an operator's timetable, and it
+   * would refuse every unstaffed outdoor place in the world that no source
+   * happens to describe. `bounds` already confines the visit to the day, the way
+   * out and the daylight.
+   *
+   * What was genuinely wrong was the *consequence*: nothing anywhere stopped an
+   * unknown-hours place being the thing a day was built around, and a visit
+   * placed at seven in the evening on no evidence raised only a warning. That is
+   * fixed where it belongs — `validateDayHours` now treats a visit outside
+   * ordinary opening hours at a place with no published hours as an error, and
+   * the traveller gets a verification action rather than a confident slot.
+   */
   const unconstrained = hours.status !== 'open' || hours.windows.length === 0;
   const windows: readonly OpeningWindowOnDate[] = unconstrained
     ? [{ openMinute: bounds.startMinute, closeMinute: bounds.endMinute, lastAdmissionMinute: null }]

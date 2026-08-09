@@ -21,7 +21,7 @@ import { createTrip, reachScope } from './support/trip';
  *    correct and untappable is not a fixed screen.
  *
  * Offline throughout: the compiler runs against the deterministic synthetic
- * worlds. "Ferry Island" is a synthetic test world; no real destination is named.
+ * worlds. "Outer Isles" is a synthetic test world; no real destination is named.
  */
 
 /** WCAG 2.5.5 (AA), and the product's own floor. */
@@ -36,7 +36,7 @@ const MIN_TARGET_PX = 44;
  * screen's own poll interval.
  */
 async function reachProvisionalBoard(page: Page): Promise<string> {
-  const tripId = await createTrip(page, 'Ferry Island');
+  const tripId = await createTrip(page, 'Outer Isles');
   await reachScope(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
   await page.waitForTimeout(2_000);

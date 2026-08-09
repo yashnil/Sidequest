@@ -33,7 +33,7 @@ import { createTrip, reachScope } from './support/trip';
  * with a tolerance for the fixture having already finished.
  */
 async function reachProvisionalBoard(page: Page): Promise<string> {
-  const tripId = await createTrip(page, 'Ferry Island');
+  const tripId = await createTrip(page, 'Outer Isles');
   await reachScope(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
   await page.waitForTimeout(2_000);

@@ -100,17 +100,6 @@ export const PROVISIONING_MINUTES = 20;
 /** What a packed meal takes, sitting on a rock. */
 export const PACKED_MEAL_MINUTES = 30;
 
-/**
- * A walk is roughly four times a drive over the same short distance in a
- * mountain town. Used only for a traveller with no car, only over the first few
- * minutes of the corridor model, and labelled `estimated` wherever it surfaces —
- * it is a conversion, not a measurement.
- */
-const WALK_MINUTES_PER_DRIVE_MINUTE = 4;
-
-/** Beyond this many drive-minutes from base, a car-free traveller cannot reach it. */
-const CAR_FREE_REACH_DRIVE_MINUTES = 3;
-
 // ---------------------------------------------------------------------------
 // Pre-layout: what does each day need, and from what may it choose?
 // ---------------------------------------------------------------------------
@@ -860,12 +849,25 @@ function approachTo(
 ): { minutes: number; km: number; mode: 'drive' | 'walk' } | null {
   const leg = hop(request.matrix, request.fromRoutingId, venue.routingId);
   if (!leg) return null;
-  if (request.canDrive) return { minutes: leg.minutes, km: leg.km, mode: 'drive' };
 
-  if (leg.minutes > CAR_FREE_REACH_DRIVE_MINUTES) return null;
-  const walkMinutes = leg.minutes * WALK_MINUTES_PER_DRIVE_MINUTE;
-  if (walkMinutes > request.profile.transport.maxAccessWalkMinutes) return null;
-  return { minutes: walkMinutes, km: 0, mode: 'walk' };
+  /**
+   * The matrix was measured in one mode, and that mode decides what this leg is.
+   *
+   * A pedestrian matrix already answers "how long is the walk", so the walk is
+   * the measurement. A road matrix answers a question about a car, and there is
+   * no arithmetic that turns it into a walk — this code used to multiply it by
+   * four, which produced a number that looked derived, was labelled `estimated`,
+   * and in a walkable city quadrupled a time the matrix had already measured
+   * correctly. A car-free traveller against a road matrix now gets no venue,
+   * which is the honest answer and shows up as a food gap rather than as lunch
+   * forty minutes away.
+   */
+  if (request.matrix.mode === 'foot') {
+    if (leg.minutes > request.profile.transport.maxAccessWalkMinutes) return null;
+    return { minutes: leg.minutes, km: leg.km, mode: 'walk' };
+  }
+  if (request.canDrive) return { minutes: leg.minutes, km: leg.km, mode: 'drive' };
+  return null;
 }
 
 function routeContextFor(

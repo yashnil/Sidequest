@@ -181,6 +181,22 @@ test('refresh, leave and return is safe at every phase', async ({ page }) => {
 
   for (const route of routes) {
     await page.goto(route);
+    /*
+     * Let the route finish arriving before refreshing it.
+     *
+     * `goto` resolves on `load`, which for a segment with a `loading.tsx` is the
+     * loading shell — the real content is still streaming in behind it. Calling
+     * `reload()` in that window cancels the navigation Playwright is still
+     * tracking and rejects with `net::ERR_ABORTED`, which is a statement about
+     * the harness rather than about the product: a person pressing refresh
+     * mid-stream simply gets the page again.
+     *
+     * Waiting for the heading is *stricter* than tolerating the abort would be.
+     * It keeps the assertion this test exists for — a settled page can be
+     * refreshed and comes back alive — rather than excusing a failure to make
+     * the suite pass.
+     */
+    await page.getByRole('heading', { level: 1 }).first().waitFor({ state: 'attached' });
     await page.reload();
     /*
      * Back and forward, and the forward is allowed to be refused.

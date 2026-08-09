@@ -403,6 +403,20 @@ const STAGE_SEEDS = [
     runsInJob: true,
   },
   {
+    /**
+     * A second look at what we already bought, when the first look came back
+     * unrepresentative. Traveller-visible because it is real work with a real
+     * duration, and because "still looking" is the honest thing to show while
+     * it runs.
+     */
+    id: 'recovering_supply',
+    phase: 'building',
+    label: 'Going back over what we found',
+    exposesResult: true,
+    technicalOnly: false,
+    runsInJob: true,
+  },
+  {
     id: 'calculating_coverage',
     phase: 'building',
     label: 'Counting what we found and what we missed',

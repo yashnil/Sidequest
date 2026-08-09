@@ -12,6 +12,7 @@ import {
 } from '@sidequest/core';
 import { assemblePack } from '../backbone/assemble';
 import { buildInventory, foodVenueFromRecord } from '../backbone/inventory';
+import { buildTripScopeOverlay } from '../backbone/overlay';
 import { partitionScope, scopeBounds } from '../backbone/partition';
 import type {
   CompilerProviders,
@@ -427,7 +428,7 @@ export function packBackedProviders(
 
   const places: PlaceDiscoveryProvider = {
     name: 'synthetic-pack-places',
-    async discover({ scope, pack }) {
+    async discover({ scope, pack, recovery }) {
       if (!pack) {
         return {
           candidates: [],
@@ -435,7 +436,14 @@ export function packBackedProviders(
           calls: 0,
         };
       }
-      const inventory = buildInventory({ pack, scope });
+      const inventory = buildInventory({
+        pack,
+        scope,
+        // Honoured here for the same reason the live provider honours it: a
+        // fixture that ignored the recovery hint would make the loop untestable
+        // in a browser, which is where it has to be seen to work.
+        ...(recovery ? { limits: recovery } : {}),
+      });
       /**
        * The duration override, applied here rather than in the pack.
        *
@@ -453,11 +461,70 @@ export function packBackedProviders(
             },
           }))
         : inventory.candidates;
+      const overlay = buildTripScopeOverlay({ scope, records: pack.layers.flatMap((l) => l.records) });
       return {
         candidates,
         gaps: [],
         calls: 0,
         licences: inventory.licences,
+        /**
+         * The set-level arithmetic, from the fixture path too.
+         *
+         * Without this, readiness is computed on the live path and nowhere else
+         * — so the browser suite, which runs entirely on fixtures, could never
+         * see a `thin` or `blocked` board and the whole contract would be
+         * asserted only by unit tests over hand-made numbers.
+         */
+        portfolioFacts: {
+          packRecords: pack.layers.reduce((sum, layer) => sum + layer.records.length, 0),
+          anchors: inventory.portfolio.pools
+            .filter((pool) => pool.slot === 'anchor')
+            .reduce((sum, pool) => sum + pool.kept, 0),
+          discoveries: inventory.portfolio.pools
+            .filter((pool) => pool.slot === 'discovery')
+            .reduce((sum, pool) => sum + pool.kept, 0),
+          food: inventory.foodRecords.length,
+          support: inventory.portfolio.pools
+            .filter((pool) => pool.slot === 'support')
+            .reduce((sum, pool) => sum + pool.kept, 0),
+          gateways: inventory.portfolio.pools
+            .filter((pool) => pool.slot === 'gateway')
+            .reduce((sum, pool) => sum + pool.kept, 0),
+          anchorDemotions: inventory.portfolio.anchorDemotions,
+          membershipUnverified: inventory.portfolio.membershipUnverified,
+          categories: new Set(candidates.map((entry) => entry.place.category)).size,
+          /*
+           * The world's own shape, not the pack's cell layout.
+           *
+           * `syntheticPack` assigns every record to `cells[0]` — a fixture
+           * simplification, not a statement about the world — so counting
+           * distinct cells reported one area out of twelve for every synthetic
+           * destination and made the spread check fail universally. That is a
+           * property of the fixture, and letting it drive a traveller-facing
+           * warning would put a banner on every trip in the browser suite for a
+           * reason that has nothing to do with the product.
+           *
+           * A world declares how many subregions it has; that is its real
+           * spread, and the base counts as one more.
+           */
+          areasWithVisitable: candidates.length > 0 ? spec.subregionCount + 1 : 0,
+          areasTotal: spec.subregionCount + 1,
+          largestAreaVisitable: candidates.length,
+          sourceCatalogues: new Set(pack.layers.map((layer) => layer.catalog)).size,
+          packPartial: pack.state !== 'ready',
+          insideSelected: overlay.integrity.byRelationship
+            .filter((entry) =>
+              ['inside_scope', 'inside_selected_division', 'inside_selected_region'].includes(
+                entry.relationship,
+              ),
+            )
+            .reduce((sum, entry) => sum + entry.count, 0),
+          membershipDecided: overlay.integrity.byRelationship
+            .filter((entry) => entry.relationship !== 'membership_unknown')
+            .reduce((sum, entry) => sum + entry.count, 0),
+          divisionsAvailable: overlay.integrity.divisionsAvailable,
+          scopeIdentityUnknown: overlay.integrity.scopeIdentityUnknown,
+        },
       };
     },
   };

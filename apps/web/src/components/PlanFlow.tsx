@@ -24,7 +24,9 @@ import {
   type StoredBasePortfolio,
   type TripPreflight,
   WORK_PLAN_DECISION_LABELS,
+  type DestinationResearchReadiness,
 } from '@sidequest/core';
+import { ResearchReadinessPanel } from './ResearchReadinessPanel';
 import {
   Badge,
   buttonClass,
@@ -105,6 +107,16 @@ export type PlanStep =
 export interface PlanFlowProps {
   tripId: string;
   step: PlanStep;
+  /**
+   * The research reading, when this trip has been compiled.
+   *
+   * Rendered here as well as on the board, and the placement is deliberate: this
+   * is the screen a traveller reaches *before* answering nine questions. Telling
+   * them the ground is thin after they have invested in the questionnaire is
+   * strictly worse than telling them now, and for a `blocked` destination it is
+   * the difference between an explanation and a wasted quarter of an hour.
+   */
+  researchReadiness?: DestinationResearchReadiness;
   destinationQuery: string;
   /** The name to lead with: the selected index row, or the typed string. */
   destinationName: string;
@@ -1355,6 +1367,7 @@ function decisionLabel(decision: string): string | null {
 
 function ReadyStep({
   tripId,
+  researchReadiness,
   coverage,
   licences,
   attributions,
@@ -1457,13 +1470,33 @@ function ReadyStep({
           ) : null}
         </section>
 
+        {/*
+          One route on, and it is the one that works.
+
+          There used to be a "Skip to the board" button beside this, and it could
+          not skip anything: `/discover` redirects to the questionnaire whenever
+          the trip has no profile, and a profile is written *only* by finishing
+          the questionnaire. So the control offered a shortcut, and every press
+          of it landed on the screen it promised to bypass. No test ever clicked
+          it.
+
+          The honest fix is not to seed a placeholder profile so the board has
+          something to rank against — a board ranked on answers nobody gave is
+          worse than no board. It is to say what the next step actually is, and
+          how long it takes.
+        */}
+        {researchReadiness ? (
+          <ResearchReadinessPanel tripId={tripId} readiness={researchReadiness} />
+        ) : null}
+
         <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-rule pt-6">
           <a className={buttonClass('primary')} href={`/trips/${tripId}/questionnaire`}>
             Tell us how you travel
           </a>
-          <a className={buttonClass('secondary')} href={`/trips/${tripId}/discover`}>
-            Skip to the board
-          </a>
+          <p className="text-sm text-ink-muted">
+            A few questions about pace, budget and what you like. The board is ranked against your
+            answers, so this is the step that makes it yours.
+          </p>
         </div>
       </div>
 
