@@ -230,12 +230,49 @@ const STAGE_SEEDS = [
     technicalOnly: false,
     runsInJob: true,
   },
+  {
+    /**
+     * The real local clock, before anything is scheduled against it.
+     *
+     * Here rather than later because everything downstream that reads an
+     * opening time, a sunrise or a departure formats it in this zone — so a
+     * stage that resolved it after the hours were built would be answering a
+     * question that had already been decided.
+     */
+    id: 'resolving_time_zones',
+    phase: 'shaping',
+    label: 'Checking what time it is there',
+    exposesResult: false,
+    technicalOnly: true,
+    runsInJob: true,
+  },
 
   // ---- finding: everything above THE CUT, which costs nothing ------------
   {
     id: 'discovering_candidates',
     phase: 'finding',
     label: 'Looking for places',
+    exposesResult: true,
+    technicalOnly: false,
+    runsInJob: true,
+  },
+  {
+    /**
+     * A SECOND LOOK, WHILE A SECOND LOOK IS STILL WORTH ANYTHING.
+     *
+     * This sat in `building`, after the matrix, the calendars and the access
+     * rules had all been bought — which meant anything it found arrived too late
+     * to be scheduled, and the loop's own result never reached the board at all.
+     * Moved above the cut, what recovery finds flows through deduplication,
+     * classification, quality, research, hours and routing exactly like every
+     * other candidate, because it *is* one.
+     *
+     * Its position here is also the position the registry always declared. The
+     * code was the thing that disagreed.
+     */
+    id: 'recovering_supply',
+    phase: 'finding',
+    label: 'Going back over what we found',
     exposesResult: true,
     technicalOnly: false,
     runsInJob: true,
@@ -404,14 +441,34 @@ const STAGE_SEEDS = [
   },
   {
     /**
-     * A second look at what we already bought, when the first look came back
-     * unrepresentative. Traveller-visible because it is real work with a real
-     * duration, and because "still looking" is the honest thing to show while
-     * it runs.
+     * Public transport, for the handful of journeys a trip turns on.
+     *
+     * After the road or pedestrian matrix rather than instead of it, because the
+     * two answer different questions and a trip usually needs both: you walk
+     * between two stops in one neighbourhood and take a train between
+     * neighbourhoods. Deliberately sparse — see the transit seam.
      */
-    id: 'recovering_supply',
+    id: 'measuring_transit',
     phase: 'building',
-    label: 'Going back over what we found',
+    label: 'Measuring public transport journeys',
+    exposesResult: true,
+    technicalOnly: false,
+    runsInJob: true,
+  },
+  {
+    /**
+     * The named places, re-read against the whole map once the trip's own
+     * geography is settled.
+     *
+     * Separate from `recovering_supply` because it happens at a different point
+     * for a real reason: it needs the search space — what survived, what was
+     * removed and why — which does not exist until routing and admission have
+     * run. What it produces is a truer *status* for a request, never a
+     * manufactured inclusion.
+     */
+    id: 'rechecking_named_places',
+    phase: 'building',
+    label: 'Looking again for what you named',
     exposesResult: true,
     technicalOnly: false,
     runsInJob: true,

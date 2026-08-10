@@ -1193,6 +1193,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     unscheduled,
     matrixNote: input.matrix.provenance.note,
     matrixProvenance: input.matrix.provenance.kind,
+    matrixMode: input.matrix.mode,
   });
   issues = [...issues, ...validateStrategy(transportStrategy, built)];
 

@@ -29,14 +29,29 @@ describe('a finding the planner resolved by removing its subject', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // Any issue the planner resolved by removal must still be in the record,
-    // with its original code, marked as resolved rather than silently gone.
+    /**
+     * Any issue the planner resolved by removal must still be in the record,
+     * with its original code, marked as resolved rather than silently gone.
+     *
+     * The loop body ran zero times: the baseline scenario produces eleven issues
+     * and not one of them carries `wasResolvedByRemoval`, so the assertion inside
+     * had never executed. A guarded loop over an empty set is not a weaker test,
+     * it is no test.
+     *
+     * So the property is asserted over *every* issue instead — the record must be
+     * readable whatever became of it — and the resolved-by-removal case is
+     * asserted where it can actually be reached, below.
+     */
     for (const issue of result.itinerary.issues) {
-      if (issue.wasResolvedByRemoval) {
-        expect(issue.severity).toBe('warning');
-        expect(issue.message.length).toBeGreaterThan(0);
-      }
+      expect(issue.message.length).toBeGreaterThan(0);
+      expect(issue.code.length).toBeGreaterThan(0);
+      if (issue.wasResolvedByRemoval) expect(issue.severity).toBe('warning');
     }
+    /*
+     * And the scenario genuinely produces issues, so "every issue is readable"
+     * is a claim about something rather than a claim about nothing.
+     */
+    expect(result.itinerary.issues.length).toBeGreaterThan(0);
   });
 
   it('says what did not hold up, not merely that something did not', () => {
@@ -46,14 +61,60 @@ describe('a finding the planner resolved by removing its subject', () => {
      * carry more than the bare sentence.
      */
     const result = planTrip(buildScenario());
+    /*
+     * Asserted rather than returned past: a scenario that stops planning is a
+     * finding, and `if (!result.ok) return` turns this file into a no-op the
+     * moment it does.
+     */
+    expect(result.ok).toBe(true);
     if (!result.ok) return;
-    for (const revision of result.itinerary.diagnostics.revisions) {
+    /**
+     * THE LOOP WAS EMPTY, AND ADDING AN ASSERTION TO AN EMPTY LOOP IS NOT A FIX.
+     *
+     * The baseline scenario produces **no** revisions, so a `for` over them
+     * asserted nothing — and a previous attempt at this put a second assertion
+     * inside that same zero-iteration loop with a comment explaining that it was
+     * empty. Two vacuous assertions where there was one.
+     *
+     * A scenario that genuinely revises is the only way to observe the property.
+     * Making the day too tight to hold its meals is what forces the revision
+     * loop to act, and then the claim — that a revision names what it changed
+     * rather than restating the bare sentence — is about something.
+     */
+    const revised = planTrip(
+      buildScenario({
+        answers: {
+          /*
+           * A traveller who wants a sit-down breakfast and a special dinner, on a
+           * short travel budget. That is the combination the revision loop exists
+           * for: the meals no longer fit around the stops, so something has to
+           * give and the loop has to say which.
+           */
+          breakfastStyle: 'full',
+          specialMealAppetite: 'often',
+          maxDailyTravelMinutes: 90,
+        },
+      }),
+    );
+    expect(revised.ok).toBe(true);
+    if (!revised.ok) return;
+    const revisions = revised.itinerary.diagnostics.revisions;
+    for (const revision of revisions) {
+      expect(revision.description.length).toBeGreaterThan(0);
       if (revision.code === 'changed_meal') {
         expect(revision.description).not.toBe(
           `Took the meals off day ${revision.dayNumber} rather than the stops: what we had picked did not hold up.`,
         );
       }
     }
+    /*
+     * And if neither scenario revises anything, that is worth knowing rather than
+     * passing over: the assertion above would be decoration and this says so.
+     */
+    expect(
+      revisions.length + result.itinerary.diagnostics.revisions.length,
+      'no scenario in this file produces a revision, so the copy rule is untested',
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -95,11 +156,27 @@ describe('an itinerary that says it succeeded', () => {
     const result = planTrip(
       buildScenario({ answers: { willDrive: false, maxDailyTravelMinutes: 30 } }),
     );
+    /**
+     * The two-branch form tested nothing about the gate.
+     *
+     * This input plans successfully, so only the `ok` branch ever ran and the
+     * refusal half — `readiness` present, a message a person could read — was
+     * dead. A test named "refuses rather than shipping a plan whose days do not
+     * work" that never observes a refusal is asserting the opposite of its name.
+     *
+     * Both outcomes are still legitimate, and both now carry a real obligation:
+     * a plan that ships carries no correctness errors, and a refusal carries the
+     * readiness that explains it. Neither branch can be reached without being
+     * checked.
+     */
     if (result.ok) {
       const correctness = result.itinerary.issues.filter((issue) => issue.severity === 'error');
       expect(correctness).toEqual([]);
+      /* A shipped plan has days in it. An empty itinerary is not a success. */
+      expect(result.itinerary.days.length).toBeGreaterThan(0);
     } else {
       expect(result.readiness).toBeDefined();
+      expect(result.readiness!.rejections.length).toBeGreaterThan(0);
       expect(result.message.length).toBeGreaterThan(0);
     }
   });

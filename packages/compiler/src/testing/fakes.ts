@@ -29,6 +29,8 @@ import type {
   SourceDiscoveryProvider,
   SourceReference,
   SourceRetrievalProvider,
+  TimeZoneProvider,
+  TransitRoutingProvider,
   WeatherLocationProvider,
 } from '../providers';
 
@@ -91,6 +93,71 @@ export interface SyntheticWorldSpec {
    * a browser test reaches the planner's own refusal rather than the board's.
    */
   placeDurationMinutes?: number;
+  /**
+   * What a civil-timezone source would say about this world's coordinates.
+   *
+   * `resolved` is the ordinary case: a real zone comes back and the scope is
+   * authoritative. `unresolved` is the one that matters — the source is
+   * configured, is asked, and cannot answer, which is how a fixture reaches the
+   * degraded solar fallback *by the route a traveller would*. Absent means the
+   * world does not exercise the seam and no provider is supplied at all.
+   */
+  timeZoneResolution?: 'resolved' | 'unresolved';
+  /**
+   * Whether the destination record itself carries a zone.
+   *
+   * Separate from `timeZoneResolution` so a fixture can express the case the
+   * compile stage exists for: a destination nobody published a clock for, whose
+   * zone is established by *asking a source* during the compilation. With both
+   * flags tied together, a test could only ever observe a value the candidate
+   * had stamped on itself — which is a round-trip, not a measurement.
+   *
+   * Defaults to true, so every existing world keeps its published zone.
+   */
+  publishesTimeZone?: boolean;
+  /**
+   * Per-base zones the fake source publishes, keyed by base id suffix.
+   *
+   * Present only for a world that genuinely spans clocks. Without it every base
+   * resolves to the world's own zone, which is the common and correct answer.
+   */
+  baseTimeZones?: Record<string, string>;
+  /**
+   * PUBLIC TRANSPORT THIS WORLD CAN AND CANNOT MEASURE.
+   *
+   * Deliberately expressive enough to hold all four honest failures beside the
+   * success, because the whole claim being tested is that they stay *distinct*.
+   * A world with no `transit` key configures no transit provider at all, which
+   * is the state most of the suite is in and must remain in.
+   */
+  transit?: {
+    /** Ordinary measured journeys: minutes, transfers, and the legs behind them. */
+    measured?: {
+      minutes: number;
+      transfers: number;
+      walkingMinutes: number;
+      legs: { mode: 'walk' | 'rail' | 'subway' | 'tram' | 'bus' | 'ferry'; minutes: number }[];
+    };
+    /** Place-id suffixes for which the provider answers "no service runs". */
+    noRouteFor?: readonly string[];
+    /** Place-id suffixes for which the provider itself fails. */
+    providerErrorFor?: readonly string[];
+    /** When true, the provider covers nowhere in this world. */
+    outOfCoverage?: boolean;
+  };
+  /**
+   * RECORDS HELD BACK FROM THE ORDINARY SWEEP, RELEASED ONLY ON ACQUISITION.
+   *
+   * The piece without which an acquiring-recovery test cannot mean anything. A
+   * fixture whose provider returns the same inventory however it is asked cannot
+   * tell "we went back and found something new" apart from "we went back", and
+   * that is exactly the confusion that let a non-functional acquire path ship
+   * once already.
+   *
+   * Keyed by intent, so an acquisition directed at a deficit can be shown to
+   * retrieve the thing that fixes *that* deficit and nothing else.
+   */
+  acquirable?: Record<string, number>;
 }
 
 /**
@@ -269,6 +336,134 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
     legMinutes: 12,
     // Ten hours at the stop, before any driving. No day is that long.
     placeDurationMinutes: 600,
+  },
+  /**
+   * (i) A metropolis where public transport is the way you get around, and the
+   * only world in which anything can measure one.
+   *
+   * Every honest failure sits beside the success on purpose. Two stops have no
+   * service, one makes the journey planner fall over, and the rest are measured
+   * rail-plus-walk journeys with a change in the middle. A world that only ever
+   * succeeded would prove that transit *can* be measured and nothing about
+   * whether the four ways it fails stay distinguishable — which is the claim
+   * that actually matters, because collapsing them is how a walking matrix came
+   * to stand in for a rail network.
+   */
+  transit_metro: {
+    id: 'transit-metro',
+    name: 'Grand Central Metro',
+    qualifiedName: 'Grand Central Metro, Testland',
+    countryCode: 'TL',
+    timeZone: 'Europe/Madrid',
+    center: { lat: 40.42, lng: -3.7 },
+    entityType: 'city',
+    breadth: 'city',
+    placeCount: 20,
+    baseCount: 1,
+    subregionCount: 0,
+    primaryMode: 'walk',
+    hoursCoverage: 0.9,
+    accessCoverage: 1,
+    foodVenues: 10,
+    weatherPoints: 1,
+    routingKind: 'measured',
+    failedLegs: 0,
+    hasFerry: false,
+    timeZoneResolution: 'resolved',
+    transit: {
+      measured: {
+        minutes: 34,
+        transfers: 1,
+        walkingMinutes: 11,
+        legs: [
+          { mode: 'walk', minutes: 6 },
+          { mode: 'subway', minutes: 14 },
+          { mode: 'rail', minutes: 9 },
+          { mode: 'walk', minutes: 5 },
+        ],
+      },
+      /* Suffixes, matched against the end of a place id. */
+      noRouteFor: ['-place-17', '-place-18'],
+      providerErrorFor: ['-place-19'],
+    },
+  },
+  /**
+   * (j) A packet that is deliberately not good enough, so recovery has something
+   * to recover from.
+   *
+   * Every other world compiles clean, which meant the recovery loop was tested
+   * only against hand-built number sets and never once against a compilation —
+   * so nothing could tell a loop that works from a loop that never runs. This
+   * world is food-dominated and short on things to do, which is exactly the shape
+   * `support_balance` and `experience_supply` exist to catch, and it holds a
+   * reserve of records **withheld from its pack** that only a genuine acquisition
+   * can reach.
+   */
+  recovery_adversary: {
+    id: 'recovery-adversary',
+    name: 'Thin Harbour',
+    qualifiedName: 'Thin Harbour, Testland',
+    countryCode: 'TL',
+    timeZone: 'Europe/Dublin',
+    center: { lat: 53.35, lng: -6.26 },
+    entityType: 'city',
+    breadth: 'city',
+    placeCount: 3,
+    baseCount: 1,
+    subregionCount: 0,
+    primaryMode: 'walk',
+    hoursCoverage: 0.4,
+    accessCoverage: 1,
+    foodVenues: 16,
+    weatherPoints: 1,
+    routingKind: 'measured',
+    failedLegs: 0,
+    hasFerry: false,
+    timeZoneResolution: 'resolved',
+    /**
+     * Reachable only by asking, and only for the kind that was asked about.
+     *
+     * `food` is in the reserve deliberately and is a kind the shortfall logic
+     * never requests — the board is already dominated by places to eat, which is
+     * half of why it is deficient. So a provider that honoured the intents
+     * returns none of it, and one that ignored them and shipped its whole
+     * reserve leaks six food records onto the board. That difference is what
+     * makes "the query was directed" an observation rather than an assertion.
+     */
+    acquirable: { culture: 5, nature: 4, landmark: 3, food: 6 },
+  },
+  /**
+   * (k) A destination nobody published a clock for.
+   *
+   * The only world in which `provider_resolved` can be reached at all: its
+   * record carries no zone, so the scope starts on the solar approximation and
+   * ends on a real civil zone if — and only if — the compilation asked a source
+   * and used the answer. Delete the time-zone stage and this world's scope stays
+   * `Etc/GMT+…`, which is exactly what a test of that stage needs to be able to
+   * observe.
+   */
+  unclocked_valley: {
+    id: 'unclocked-valley',
+    name: 'Unclocked Valley',
+    qualifiedName: 'Unclocked Valley, Testland',
+    countryCode: 'TL',
+    timeZone: 'America/Denver',
+    center: { lat: 39.7, lng: -104.99 },
+    entityType: 'subregion',
+    breadth: 'subregion',
+    placeCount: 10,
+    baseCount: 1,
+    subregionCount: 0,
+    primaryMode: 'drive',
+    hoursCoverage: 0.7,
+    accessCoverage: 1,
+    foodVenues: 4,
+    weatherPoints: 1,
+    routingKind: 'measured',
+    failedLegs: 0,
+    hasFerry: false,
+    publishesTimeZone: false,
+    timeZoneResolution: 'resolved',
   },
   weak_data: {
     id: 'weak-data',
@@ -760,6 +955,129 @@ export function fakeProviders(
     },
   };
 
+  /**
+   * The civil clock, as a source that publishes one would answer.
+   *
+   * Supplied only when the world says it exercises this seam, so the great
+   * majority of the suite keeps compiling with no timezone provider at all —
+   * which is a real deployment shape and has to stay tested.
+   */
+  const timeZone: TimeZoneProvider | undefined =
+    spec.timeZoneResolution === undefined
+      ? undefined
+      : {
+          name: 'fake-timezone',
+          async resolve({ points, maxCalls }) {
+            const answered = points.slice(0, Math.max(0, maxCalls));
+            const zoneFor = (pointId: string): string | null => {
+              if (spec.timeZoneResolution === 'unresolved') return null;
+              const suffix = pointId.split('-').at(-1) ?? pointId;
+              return spec.baseTimeZones?.[suffix] ?? spec.timeZone;
+            };
+            return {
+              zones: answered.map((point) => {
+                const zone = zoneFor(point.id);
+                return {
+                  pointId: point.id,
+                  timeZone: zone,
+                  detail: zone
+                    ? 'Resolved from a source that publishes civil time zones.'
+                    : 'The service could only offer a fixed offset here, not a real local time zone.',
+                };
+              }),
+              gaps: answered
+                .filter((point) => zoneFor(point.id) === null)
+                .map((point) => ({
+                  subjectId: point.id,
+                  reason: 'no_official_source' as const,
+                  detail: 'No civil time zone is published for this point.',
+                })),
+              calls: answered.length,
+              source: 'fake-timezone',
+              resolvedAt: `${VERIFIED}T00:00:00.000Z`,
+            };
+          },
+        };
+
+  /**
+   * PUBLIC TRANSPORT, INCLUDING EVERY WAY IT HONESTLY FAILS.
+   *
+   * The fixture that makes §4's central claim testable: a measured journey, a
+   * pair with no service, a provider that errors, and a region the provider does
+   * not cover are four different answers, and none of them may be substituted by
+   * a road or pedestrian duration.
+   */
+  const transit: TransitRoutingProvider | undefined =
+    spec.transit === undefined
+      ? undefined
+      : {
+          name: 'fake-transit',
+          supportsTransit() {
+            return true;
+          },
+          async routes({ pairs, departAt, timeZone: zone, maxPairs }) {
+            const asked = pairs.slice(0, Math.max(0, maxPairs));
+            const matches = (id: string, list: readonly string[] | undefined): boolean =>
+              (list ?? []).some((suffix) => id.endsWith(suffix));
+            const requestBasis = {
+              kind: 'depart_at' as const,
+              instant: departAt.toISOString(),
+              timeZone: zone,
+            };
+            const measured = spec.transit?.measured;
+            return {
+              journeys: asked.map((pair) => {
+                const base = {
+                  fromId: pair.fromId,
+                  toId: pair.toId,
+                  requestBasis,
+                  source: 'fake-transit',
+                  retrievedAt: `${VERIFIED}T00:00:00.000Z`,
+                };
+                if (spec.transit?.outOfCoverage) {
+                  return {
+                    ...base,
+                    status: 'out_of_coverage' as const,
+                    detail: 'We hold no timetables for this area.',
+                  };
+                }
+                if (matches(pair.toId, spec.transit?.providerErrorFor)) {
+                  return {
+                    ...base,
+                    status: 'provider_error' as const,
+                    detail: 'The journey planner did not answer for this one.',
+                  };
+                }
+                if (matches(pair.toId, spec.transit?.noRouteFor)) {
+                  return {
+                    ...base,
+                    status: 'no_route' as const,
+                    detail: 'No public transport runs between these two on this day.',
+                  };
+                }
+                if (!measured) {
+                  return {
+                    ...base,
+                    status: 'no_route' as const,
+                    detail: 'No public transport runs between these two on this day.',
+                  };
+                }
+                return {
+                  ...base,
+                  status: 'measured' as const,
+                  minutes: measured.minutes,
+                  transfers: measured.transfers,
+                  walkingMinutes: measured.walkingMinutes,
+                  legs: measured.legs.map((leg) => ({ ...leg })),
+                  detail: 'Measured against published timetables.',
+                };
+              }),
+              gaps: [],
+              calls: asked.length,
+            };
+          },
+        };
+
   const weatherLocations: WeatherLocationProvider = {
     name: 'fake-weather-locations',
     async plan({ places: subjects, maxLocations }) {
@@ -810,6 +1128,14 @@ export function fakeProviders(
     places,
     constraints,
     routing,
+    /*
+     * Both conditional, and that is the point. A world that says nothing about
+     * time zones or transit gets no provider at all — the same shape as a
+     * deployment with neither configured — so the suite keeps proving that the
+     * degraded and unsupported paths still work.
+     */
+    ...(timeZone ? { timeZone } : {}),
+    ...(transit ? { transit } : {}),
     weatherLocations,
     food,
     ...research,
@@ -1135,7 +1461,20 @@ export function syntheticCandidate(spec: SyntheticWorldSpec): DestinationCandida
     countryCode: spec.countryCode,
     aliases: [],
     administrativeAreas: [spec.qualifiedName],
-    timeZones: spec.timeZones ?? [spec.timeZone],
+    /**
+     * THE RESOLVER PUBLISHES A ZONE, OR IT DOES NOT. IT NEVER STAMPS ONE.
+     *
+     * An earlier version wrote `timeZoneSource: 'fake-timezone'` here whenever
+     * the world declared a resolvable zone — and `deriveScope` promotes a scope
+     * to `provider_resolved` purely from that field. So a test asserting the
+     * scope was provider-resolved was reading back a value the fixture had set
+     * on itself, and the compile stage that actually does the resolving could be
+     * deleted with the whole suite still green.
+     *
+     * Now the only route to `provider_resolved` is the one a traveller takes:
+     * the compilation asks a source and upgrades the scope with the answer.
+     */
+    timeZones: spec.publishesTimeZone === false ? [] : (spec.timeZones ?? [spec.timeZone]),
     providerRefs: [
       { provider: 'fake-resolver', externalId: spec.id },
       { provider: 'fake-second-resolver', externalId: spec.id },

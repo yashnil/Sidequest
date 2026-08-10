@@ -188,6 +188,27 @@ export type ResearchFunnel = z.infer<typeof researchFunnelSchema>;
 export const RESEARCH_REPAIRS = [
   /** Ask the fallback source for the specific categories that came back empty. */
   'category_targeted_query',
+  /**
+   * GO AND BUY EVIDENCE WE DO NOT HAVE, FOR THE THING WE ARE SHORT OF.
+   *
+   * The one repair here that spends money, and it is deliberately ranked
+   * *after* `category_targeted_query` for the same deficits — because a board
+   * short on museums is very often a board where eleven museums were crowded out
+   * behind four hundred plaques, and re-selecting from records already bought
+   * fixes that for nothing. Only when the free repair has been and not helped is
+   * the honest conclusion "the ground does not hold enough", and only then is
+   * asking a source a question it has not been asked worth paying for.
+   *
+   * A previous attempt at this shipped and was removed after review proved it
+   * could not work: it passed queries into a provider that short-circuits on the
+   * region pack before reading them, so it returned the identical inventory and
+   * booked spend for work nobody did. What makes this one different is not the
+   * intent but the position — it runs *above the cut*, so anything it acquires
+   * flows through deduplication, classification, quality, research, hours and
+   * routing like any other candidate — and the seam: a dedicated `acquire`
+   * field a provider cannot mistake for an ordinary call.
+   */
+  'category_targeted_acquisition',
   /** Re-read the parts of the ground that produced nothing. */
   'reread_underserved_areas',
   /** Look for stations, terminals and airports where the trip needs a way in. */
@@ -221,6 +242,8 @@ export type ResearchRepair = z.infer<typeof researchRepairSchema>;
 
 export const RESEARCH_REPAIR_COPY: Record<ResearchRepair, string> = {
   category_targeted_query: 'Looking specifically for the kinds of places we came up short on',
+  category_targeted_acquisition:
+    'Searching the map again for the kinds of places this trip is missing',
   reread_underserved_areas: 'Going back over the parts of the area that turned up empty',
   gateway_discovery: 'Finding the stations and terminals this trip needs',
   refresh_stale_pack: 'Fetching the map data again, because what we had was incomplete',
@@ -289,7 +312,48 @@ export const researchRepairAttemptSchema = z.object({
       modelCalls: z.number().int().min(0).default(0),
     })
     .optional(),
-  /** Wall-clock milliseconds the attempt took. */
+  /**
+   * WHAT WAS ASKED, OF WHOM, AND ABOUT WHAT.
+   *
+   * The three fields that turn "recovery ran" into a claim somebody can check.
+   * Without them an attempt record says a repair happened and cannot say whether
+   * anything was actually asked of anybody — which is precisely the state a
+   * previous acquiring loop shipped in, reporting spend for a call that reached
+   * no provider.
+   *
+   * All optional, because a free re-selection genuinely asks nobody anything and
+   * a zero-valued provider name would be worse than an absent one.
+   */
+  capability: z.string().min(1).optional(),
+  provider: z.string().min(1).optional(),
+  /** The *class* of query, never the query. A scope, not a search string. */
+  scopeClass: z.string().min(1).optional(),
+  /**
+   * Why the loop stopped after this attempt, when it did.
+   *
+   * `recoverable` is the only level that promises further work, and a promise
+   * nobody is going to keep is the one sentence on that panel a traveller cannot
+   * check for themselves. This is how the panel can say which it was.
+   */
+  stopReason: z
+    .enum([
+      'improved',
+      'no_change',
+      'budget_refused',
+      'no_repair_left',
+      'pass_cap',
+      'not_recoverable',
+    ])
+    .optional(),
+  /**
+   * Wall-clock milliseconds the attempt took.
+   *
+   * **Never written into a compiled artifact.** A compiled region is asserted
+   * byte-identical across two runs, and a duration is the one field here that
+   * cannot be: it is a reading of a clock. It travels on the operational record
+   * instead, beside every other stage's observed duration. The field stays in
+   * the schema because that operational record uses the same shape.
+   */
   latencyMs: z.number().int().min(0).optional(),
   /**
    * The evidence delta, as counts rather than as a verdict.

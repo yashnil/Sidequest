@@ -94,17 +94,35 @@ test('the reading survives a refresh rather than being recomputed differently', 
 });
 
 test('a repair that ran is reported, whether or not it helped', async ({ page }) => {
-  await compileWorld(page, 'Little-Known Valley');
+  /**
+   * THIS SPEC'S ENTIRE BODY USED TO BE INSIDE `if (count > 0)`.
+   *
+   * Against `Little-Known Valley`, which is thin but not deficient enough to
+   * trigger a repair, the panel never rendered and the test asserted nothing —
+   * the same vacuity this file's own header condemns, two hundred lines above.
+   *
+   * `Thin Harbour` is the world built to be repaired: three things to do against
+   * sixteen places to eat, with a reserve of records only a genuine search can
+   * reach. The panel is therefore *required* to be there, and the assertions run
+   * unconditionally.
+   */
+  await compileWorld(page, 'Thin Harbour');
 
   const recovery = page.getByTestId('readiness-recovery');
-  if ((await recovery.count()) > 0) {
-    /*
-     * A failed attempt that disappears from the record is how an automatic loop
-     * comes to look like it never ran — and a traveller who waited through it is
-     * owed the sentence either way.
-     */
-    await expect(recovery).toContainText(/found \d+ more|nothing further came back/i);
-  }
+  await expect(recovery).toBeVisible();
+  /*
+   * A failed attempt that disappears from the record is how an automatic loop
+   * comes to look like it never ran — and a traveller who waited through it is
+   * owed the sentence either way.
+   */
+  await expect(recovery).toContainText(
+    /more (place|places) to consider|nothing further came back|search allowance|did not come back|what became of/i,
+  );
+  /*
+   * And the paid attempt says it cost something, in words. A second look that
+   * spent a search must not read like a free one.
+   */
+  await expect(recovery).toContainText(/cost a fresh search/i);
 });
 
 test('no readiness copy leaks the machinery', async ({ page }) => {

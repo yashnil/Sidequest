@@ -233,13 +233,20 @@ export default defineConfig({
     // *traveller* can trigger from a button, so a developer shell that happens
     // to carry a research credential would make every browser run spend real
     // money. Blanked here rather than trusted to be absent.
+    // The time-zone resolver off and the transit provider blanked, for the sixth
+    // and seventh time and for the sharpest reason on this list: the time-zone
+    // switch is the only one here that **defaults to on**. It is keyless and free,
+    // so nothing would have failed — a browser run would simply have reached out
+    // to a real service on every compilation, quietly, which is precisely the
+    // thing every other line in this block exists to prevent. Pinned rather than
+    // trusted to the fixture compiler short-circuiting first.
     // And the benchmark in fixture mode, for the fifth time and a reason of its
     // own: the internal comparison surface is the one place in the build that
     // can spend money on a *reviewer's* click rather than on a compile, and its
     // budget switch is read from the environment. Pinned here as well as
     // defaulted in code, so that a future change to the default cannot make a
     // browser run reach a model.
-    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} ANTHROPIC_API_KEY= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
+    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} ANTHROPIC_API_KEY= SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

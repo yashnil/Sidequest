@@ -68,6 +68,42 @@ export function isClimateEnabled(): boolean {
 }
 
 /**
+ * The source that resolves a coordinate to a real civil time zone.
+ *
+ * Defaults to **on**, like the climate archive and for the same reasons: it is
+ * the same keyless, free, CC BY 4.0 service, so there is no credential to be
+ * missing. Turning it off is a deliberate act — and a deliberate acceptance that
+ * every destination falls back to a solar approximation, which the product then
+ * says out loud on screen.
+ */
+export function isTimeZoneResolverEnabled(): boolean {
+  return process.env.SIDEQUEST_TIMEZONE_PROVIDER?.trim().toLowerCase() !== 'off';
+}
+
+/**
+ * The source that measures a public-transport journey.
+ *
+ * Off unless named, unlike the two above, because there is no free keyless
+ * service that answers it: a transit journey needs timetable data built into a
+ * routing graph, and a deployment either has one or does not. Naming the value
+ * rather than testing for `'off'` is what keeps a build from *appearing* to have
+ * transit because somebody left a variable blank.
+ *
+ * `valhalla` means a Valhalla instance built with GTFS tiles — the public demo
+ * server is not one, which is why this is not simply tied to
+ * `SIDEQUEST_ROUTES_PROVIDER`.
+ */
+export function transitProviderName(): 'valhalla' | null {
+  return process.env.SIDEQUEST_TRANSIT_PROVIDER?.trim().toLowerCase() === 'valhalla'
+    ? 'valhalla'
+    : null;
+}
+
+export function isTransitProviderEnabled(): boolean {
+  return transitProviderName() !== null;
+}
+
+/**
  * Whether the whole open-licensed stack can run.
  *
  * The backbone *or* the fallback place service — not neither. A build with the

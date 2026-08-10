@@ -6,6 +6,7 @@ import type {
   AccessRule,
   DataLicence,
   ConfidenceSignal,
+  Coordinates,
   DestinationResolution,
   FactPath,
   GeographicScope,
@@ -96,6 +97,16 @@ export interface DiscoveryResult {
   gaps: ProviderGap[];
   /** Provider calls actually made, for the budget ledger. */
   calls: number;
+  /**
+   * Model calls this result cost, where they are a different budget.
+   *
+   * Optional and separate from `calls` because the two are billed by different
+   * providers under different ceilings, and a path that classifies its records
+   * with a language model spends both. Folding them into one number made a real
+   * Anthropic call invisible to `maxModelCalls` — the counter written to bound
+   * exactly that spend.
+   */
+  modelCalls?: number;
   /**
    * What the traveller's screen now owes the source.
    *
@@ -293,6 +304,43 @@ export interface PlaceDiscoveryProvider {
      * sent anywhere, and a provider with no pack has nothing to do with it.
      */
     namedByTraveller?: readonly string[];
+    /**
+     * A DELIBERATE, DEFICIT-DIRECTED REQUEST FOR EVIDENCE WE DO NOT HAVE.
+     *
+     * The seam `recovery` above is not and could not be. That one changes how
+     * the inventory *selects* from a pack already bought — genuinely useful when
+     * a good board was hidden behind a ceiling, and completely powerless when the
+     * ground simply does not hold enough museums. This asks a source a question
+     * it has not been asked.
+     *
+     * Its own field rather than a use of `queries`, and that is a correctness
+     * decision rather than a stylistic one. Every pack-backed provider
+     * short-circuits on the pack *before* it reads `queries` — so the previous
+     * attempt at acquisition passed queries nobody looked at, returned the
+     * identical inventory, and booked ledger spend for work nobody did. A
+     * separate field makes `pack && acquire` a state the provider cannot
+     * accidentally treat as an ordinary call.
+     *
+     * Three rules a provider implementing this must hold to, all of which exist
+     * because the previous attempt broke them:
+     *
+     * 1. **Additive only.** Return records the ordinary call did not; never a
+     *    narrower version of the same inventory.
+     * 2. **Do not disturb the broad read.** Any cached inventory or overlay the
+     *    ordinary call established stays exactly as it was. A narrow answer must
+     *    not become the answer everything downstream reads.
+     * 3. **Report the calls honestly.** `calls: 0` from something that reached a
+     *    network, or a non-zero count from something that did not, makes the
+     *    budget ledger a work of fiction.
+     */
+    acquire?: {
+      /** Kinds of place to go looking for, chosen from what the board lacks. */
+      intents: readonly string[];
+      /** Hard ceiling on records returned. */
+      maxRecords: number;
+      /** Which shape of query this is, for the attempt record and the cache key. */
+      scopeClass: 'category_in_scope_bbox';
+    };
     /**
      * The areas the regional expansion asked for, once it has run.
      *
@@ -634,6 +682,177 @@ export interface RoutingProvider {
   }): Promise<RoutingMatrixResult>;
 }
 
+/**
+ * PUBLIC TRANSPORT, MEASURED — AND EVERY WAY IT CAN FAIL TO BE.
+ *
+ * A separate seam from `RoutingProvider` rather than a third `TravelMode` on it,
+ * and the reason is the shape of the question rather than tidiness. A road
+ * matrix is a dense all-pairs object because road travel is a property of two
+ * points. A transit journey is a property of two points **and an instant**: the
+ * same pair is forty minutes at nine in the morning, ninety at eleven at night
+ * and impossible on a Sunday. Squeezing that into a square matrix would either
+ * throw the departure time away or multiply the matrix by every hour of the
+ * trip, and the first is how a rail journey comes to be quoted as a drive.
+ *
+ * So this asks for **named pairs at a named time**, which is also what makes the
+ * cost argument work: the pairs worth buying are the handful a trip actually
+ * turns on, not the square of everything on the board.
+ */
+export const TRANSIT_ROUTE_STATUSES = [
+  /** A journey exists and was measured. The only status carrying a duration. */
+  'measured',
+  /**
+   * The provider covers here, understood the question, and there is no service.
+   *
+   * Emphatically not the same as the two below. "There is no bus between these
+   * two villages" is a fact about the world that a traveller can plan around;
+   * "we cannot see the buses" is a fact about us.
+   */
+  'no_route',
+  /** The provider exists and holds no timetable data for this area. */
+  'out_of_coverage',
+  /** Nothing in this deployment can answer transit at all. */
+  'unsupported',
+  /** Something was configured, was asked, and failed. Retryable; not a verdict. */
+  'provider_error',
+] as const;
+export type TransitRouteStatus = (typeof TRANSIT_ROUTE_STATUSES)[number];
+
+/** The vehicle a measured leg was made on, as the provider reported it. */
+export const TRANSIT_LEG_MODES = [
+  'walk',
+  'rail',
+  'subway',
+  'tram',
+  'bus',
+  'ferry',
+  'cable',
+  'other',
+] as const;
+export type TransitLegMode = (typeof TRANSIT_LEG_MODES)[number];
+
+export interface TransitLeg {
+  mode: TransitLegMode;
+  minutes: number;
+  /**
+   * The line's own name, only ever verbatim from the provider.
+   *
+   * Optional and frequently absent. A plausible-sounding line name is the single
+   * easiest thing to fabricate on this whole interface and the single most
+   * damaging: a traveller standing on a platform looking for the "Harbour Line"
+   * has been sent somewhere by us rather than by a timetable.
+   */
+  line?: string;
+}
+
+/**
+ * One measured journey, or one honest account of why there is not one.
+ *
+ * Every optional field is optional because a provider may not supply it, never
+ * because it might be inconvenient to fill in. Nothing here is derived: a
+ * `minutes` this object does not carry is a journey nobody measured, and the
+ * planner treats that as unmeasured rather than as zero.
+ */
+export interface TransitJourney {
+  fromId: string;
+  toId: string;
+  status: TransitRouteStatus;
+  /** Present if and only if `status === 'measured'`. */
+  minutes?: number;
+  /** Present only when the provider reported one. Display-only; never scheduled on. */
+  km?: number;
+  /** Vehicle changes. `0` is a real answer and different from absent. */
+  transfers?: number;
+  /** Access and egress on foot, when the provider separates them out. */
+  walkingMinutes?: number;
+  legs?: TransitLeg[];
+  /**
+   * A fare, only when the provider states one authoritatively.
+   *
+   * There is no "estimated fare" here on purpose. A number a traveller budgets
+   * against has to come from the operator.
+   */
+  fare?: { amount: number; currency: string };
+  /** What was asked: leave at, or arrive by, and in whose local clock. */
+  requestBasis: {
+    kind: 'depart_at' | 'arrive_by';
+    /** ISO instant. */
+    instant: string;
+    /** The IANA zone the instant was chosen in, so a reader can see the wall clock. */
+    timeZone: string;
+  };
+  source: string;
+  retrievedAt: string;
+  /** One sentence a traveller could read. Never a stack trace or a provider code. */
+  detail: string;
+}
+
+export interface TransitRoutingResult {
+  journeys: TransitJourney[];
+  gaps: ProviderGap[];
+  /** Provider calls actually made, for the budget ledger. */
+  calls: number;
+  licences?: DataLicence[];
+}
+
+export interface TransitRoutingProvider {
+  readonly name: string;
+  /**
+   * Whether this deployment can measure a transit journey at all.
+   *
+   * Asked separately from calling, because the answer changes what the *planner*
+   * may assume long before any pair is chosen: it is what decides whether a
+   * car-free traveller's reach is a walking radius or a transit one, and getting
+   * that wrong widens the ground before anything can measure it.
+   */
+  supportsTransit(): boolean;
+  routes(input: {
+    pairs: readonly {
+      fromId: string;
+      toId: string;
+      from: Coordinates;
+      to: Coordinates;
+    }[];
+    /** When to travel. A transit answer without one is not an answer. */
+    departAt: Date;
+    /** The destination's resolved zone, carried so the reply can state the basis. */
+    timeZone: string;
+    /** Hard ceiling on pairs. A provider that would exceed it answers fewer and says so. */
+    maxPairs: number;
+  }): Promise<TransitRoutingResult>;
+}
+
+/**
+ * A COORDINATE RESOLVED TO THE CLOCK PEOPLE THERE ACTUALLY KEEP.
+ *
+ * Its own seam for the same reason `civil_time_zone` is its own capability: the
+ * source that knows where somewhere is is very often not the source that knows
+ * what time it is there, and the two fail apart.
+ */
+export interface TimeZoneResolutionResult {
+  zones: {
+    pointId: string;
+    /** An IANA *civil* identifier, or null. A fixed offset is not an answer. */
+    timeZone: string | null;
+    detail: string;
+  }[];
+  gaps: ProviderGap[];
+  calls: number;
+  source: string;
+  /** ISO instant the lookup was made at. */
+  resolvedAt: string;
+}
+
+export interface TimeZoneProvider {
+  readonly name: string;
+  resolve(input: {
+    points: readonly { id: string; lat: number; lng: number }[];
+    /** The instant the answer is for, for a provider that answers with an offset. */
+    at: Date;
+    maxCalls: number;
+  }): Promise<TimeZoneResolutionResult>;
+}
+
 export interface WeatherLocationResult {
   locations: WeatherLocation[];
   gaps: ProviderGap[];
@@ -750,6 +969,25 @@ export interface CompilerProviders {
   places: PlaceDiscoveryProvider;
   constraints: ConstraintResearchProvider;
   routing: RoutingProvider;
+  /**
+   * Public transport, where this build can measure it.
+   *
+   * Optional, and the absence is a *reported* state rather than a branch: with
+   * no provider here the capability registry reports `route_transit` as
+   * unsupported, `unmeasurableModesFor` names the gap, and a car-free
+   * traveller's reach stays a walking radius. What must never happen is the
+   * road matrix quietly answering instead, which is why this is a separate seam
+   * from `routing` rather than a third mode on it.
+   */
+  transit?: TransitRoutingProvider;
+  /**
+   * The destination's real civil clock, where a source publishes one.
+   *
+   * Optional for the same reason and with the same discipline: absent means the
+   * scope falls back to a solar approximation *labelled as one*, all the way to
+   * the screen. It is never silently authoritative.
+   */
+  timeZone?: TimeZoneProvider;
   weatherLocations: WeatherLocationProvider;
   food: FoodDiscoveryProvider;
   /**

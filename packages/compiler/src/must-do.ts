@@ -4,6 +4,7 @@ import {
   foldForMatch,
   foldedTokens,
   mustDoDecisionFor,
+  mustDoIsAccountedFor,
   type MustDoCoverage,
   type MustDoDecision,
   type MustDoMatch,
@@ -487,4 +488,61 @@ export function mustDoCoverageFrom(
 ): MustDoCoverage | undefined {
   if (resolutions.length === 0) return undefined;
   return { schemaVersion: MUST_DO_VERSION, resolutions: resolutions.slice(0, 24) };
+}
+
+/**
+ * A SECOND LOOK MAY ONLY IMPROVE AN ANSWER, NEVER UN-ANSWER ONE.
+ *
+ * The invariant, lifted out of the one call site that used to hold it inline.
+ * That is the whole reason this function exists: the rule is a property of the
+ * *domain* rather than of a branch, and an inline version can only ever be true
+ * for the branch it is written in. Every producer of a second resolution list
+ * goes through here, and a new one that forgets to is a new one that can silently
+ * take something away.
+ *
+ * The failure it prevents is real and subtle. Re-resolving against a larger set
+ * of subjects genuinely changes answers, because `distinctiveWords` counts how
+ * often a word occurs across the names in play — so a one-word name that
+ * identified exactly one place among a plannable set can stop identifying
+ * anything once ten thousand map records join it. Taking the new list wholesale
+ * turns a `covered` request into `not_found`: a second look that lost something,
+ * which is the precise failure the readiness contract exists to prevent.
+ *
+ * Requests present only in the newer list are carried through — a second look
+ * may *add*. Requests present only in the earlier one are kept, because a
+ * producer that stopped mentioning a request has not answered it.
+ */
+export function mergeMustDoResolutions(
+  previous: readonly MustDoResolution[],
+  next: readonly MustDoResolution[],
+): MustDoResolution[] {
+  const earlier = new Map(previous.map((entry) => [entry.request.id, entry] as const));
+  const merged: MustDoResolution[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of next) {
+    seen.add(entry.request.id);
+    const before = earlier.get(entry.request.id);
+    /**
+     * "ANSWERED" IS NOT THE ONLY THING WORTH KEEPING.
+     *
+     * The first version kept the earlier answer only when it was *accounted for*
+     * — `covered`, `withdrawn`, `replaced` — which protects three of seven
+     * statuses and loses the rest. `unusable` ("we found it, and it will not fit
+     * on these dates") is a real answer with a real remedy behind it, and
+     * `outside_area` tells a traveller something they can act on. Both were
+     * overwritable by a widened pass returning `not_found`, which is the same
+     * loss the function exists to prevent, one rung down.
+     *
+     * So the rule is stated as the thing it actually means: a second look may
+     * never turn an answer of any kind into "we could not find it".
+     */
+    const lostAnAnswer =
+      before !== undefined && before.status !== 'not_found' && entry.status === 'not_found';
+    merged.push(before && (mustDoIsAccountedFor(before) || lostAnAnswer) ? before : entry);
+  }
+  for (const entry of previous) {
+    if (!seen.has(entry.request.id)) merged.push(entry);
+  }
+  return merged;
 }

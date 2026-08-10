@@ -69,7 +69,7 @@ export function ProductChrome({ children }: { children: React.ReactNode }) {
       <main id="main" className="flex-1">
         {children}
       </main>
-      <footer className="mt-16 border-t border-rule">
+      <footer className="mt-16 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))] border-t border-rule">
         <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8">
           <p className="measure text-xs leading-relaxed text-ink-faint">
             Sidequest plans from published sources — map data, official pages, climate records —

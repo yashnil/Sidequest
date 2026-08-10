@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import type { TravelCapability } from '@sidequest/core';
 
 /**
  * THE DOCTOR IS ONLY WORTH HAVING IF IT AGREES WITH THE APP.
@@ -37,6 +38,34 @@ function runDoctor(env: Record<string, string>): { code: number; out: string } {
     return { code: failure.status ?? 1, out: failure.stdout ?? '' };
   }
 }
+
+/**
+ * The capabilities whose verdict both implementations must agree on.
+ *
+ * Deliberately the three this pass made load-bearing plus the two that were
+ * already: a capability the doctor prints and the registry does not model, or
+ * the reverse, is the divergence being guarded against.
+ */
+const COMPARED: readonly { capability: TravelCapability; heading: string }[] = [
+  { capability: 'route_transit', heading: 'Public transit routing' },
+  { capability: 'civil_time_zone', heading: 'Real local time zone' },
+  { capability: 'climate_normals', heading: 'Historical climate' },
+  { capability: 'official_web_research', heading: 'Bounded web research' },
+];
+
+/** Every switch the matrix sets, cleared between cases so one cannot leak. */
+const TOGGLES = [
+  'SIDEQUEST_COMPILER_PROVIDER',
+  'SIDEQUEST_GEOCODER_PROVIDER',
+  'SIDEQUEST_PLACE_BACKBONE',
+  'SIDEQUEST_POI_PROVIDER',
+  'SIDEQUEST_ROUTES_PROVIDER',
+  'SIDEQUEST_RESEARCH_PROVIDER',
+  'SIDEQUEST_TRANSIT_PROVIDER',
+  'SIDEQUEST_TIMEZONE_PROVIDER',
+  'SIDEQUEST_CLIMATE_PROVIDER',
+  'ANTHROPIC_API_KEY',
+] as const;
 
 const FULLY_CONFIGURED = {
   SIDEQUEST_COMPILER_PROVIDER: 'open',
@@ -90,15 +119,98 @@ describe('the configuration doctor', () => {
     expect(out).toContain('fixture worlds only');
   });
 
-  it('does not claim transit routing it cannot do', () => {
-    const { out } = runDoctor(FULLY_CONFIGURED);
+  /**
+   * THE AGREEMENT THIS FILE'S OWN DOCSTRING CLAIMED AND DID NOT HAVE.
+   *
+   * The previous version of the transit test asserted `out` contained the string
+   * `'not available'` — a hard-coded literal pinned against a hard-coded
+   * `mark(false, …)`. It could not fail, and while it sat there passing, the
+   * switches and the capability registry grew the ability to enable transit and
+   * the doctor did not. A deployment with a transit-capable router was told it
+   * had none, by a test written to prevent exactly that.
+   *
+   * So the assertion is now a *comparison*. The script is run under a matrix of
+   * environments, and each capability verdict is checked against
+   * `capabilityRegistry()` evaluated in this process under the same environment.
+   * The two implementations stay two — the zero-import property is what lets the
+   * doctor answer before there is a build — but they can no longer disagree
+   * quietly, which is the only property the duplication ever needed.
+   */
+  it.each([
+    { label: 'nothing configured', env: {} },
+    { label: 'the open stack', env: FULLY_CONFIGURED },
+    {
+      label: 'transit enabled',
+      env: { ...FULLY_CONFIGURED, SIDEQUEST_TRANSIT_PROVIDER: 'valhalla' },
+    },
+    {
+      label: 'transit named as something else',
+      env: { ...FULLY_CONFIGURED, SIDEQUEST_TRANSIT_PROVIDER: 'yes' },
+    },
+    {
+      label: 'time zones switched off',
+      env: { ...FULLY_CONFIGURED, SIDEQUEST_TIMEZONE_PROVIDER: 'off' },
+    },
+  ])('agrees with the capability registry about $label', async ({ env }) => {
+    const { out } = runDoctor(env);
+
     /*
-     * The one capability the product must never overstate. Walking is not
-     * transit, and a road matrix is not a timetable — the honest answer while
-     * no transit provider exists is that scheduled modes stay unmeasured.
+     * The registry read in this process, under the same environment the script
+     * saw. Imported dynamically *after* the environment is set, because the
+     * switch predicates read `process.env` at call time and a module graph
+     * loaded earlier would answer for the developer's shell instead.
      */
-    expect(out).toContain('Public transit routing');
-    expect(out).toContain('not available');
+    const previous = { ...process.env };
+    try {
+      for (const key of TOGGLES) delete process.env[key];
+      Object.assign(process.env, env);
+      const { capabilityRegistry } = await import('../capabilities');
+      const registry = capabilityRegistry();
+
+      for (const { capability, heading } of COMPARED) {
+        const available = registry.assess(capability).available;
+        const line = out
+          .split('\n')
+          .find((entry) => entry.includes(heading) && entry.includes('—'));
+        expect(line, `the doctor never mentions ${heading}`).toBeDefined();
+        /*
+         * `✓` is the doctor's own affirmative mark. Comparing the mark rather
+         * than the prose is deliberate: the sentence is allowed to change, the
+         * verdict is not.
+         */
+        expect(
+          line!.trimStart().startsWith('✓'),
+          `${heading}: the doctor says ${line!.trimStart().slice(0, 1)} and the registry says ${available}`,
+        ).toBe(available);
+      }
+    } finally {
+      for (const key of TOGGLES) delete process.env[key];
+      Object.assign(process.env, previous);
+    }
+  });
+
+  it('reports the time-zone database its offsets are computed against', () => {
+    /*
+     * Not decoration. Every opening hour and daylight window is derived from an
+     * IANA identifier through this runtime's own copy of the database, and a
+     * runtime lagging the published release is wrong about a rule change that
+     * has already happened — undetectably, from inside the process.
+     */
+    const { out } = runDoctor(FULLY_CONFIGURED);
+    expect(out).toContain('Time-zone database');
+    expect(out).toContain('offsets are computed, never stored');
+  });
+
+  it('does not imply it has checked that any endpoint answers', () => {
+    /*
+     * A doctor that reported a fully-ready build with three endpoints pointed at
+     * a closed port is a doctor that reassures rather than diagnoses. It still
+     * cannot reach them — that would make a configuration check into a network
+     * call — so the requirement is that it says so.
+     */
+    const { out } = runDoctor(FULLY_CONFIGURED);
+    expect(out).toContain('SIDEQUEST_ROUTES_URL');
+    expect(out).toContain('This is a configuration report, not a reachability check.');
   });
 
   it('warns when the internal surface is live without a token', () => {

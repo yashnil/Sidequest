@@ -177,7 +177,20 @@ export const geographicScopeSchema = z.object({
    * Optional so scopes written before this field existed still parse; absent
    * reads as "not recorded", never as `published`.
    */
-  timeZoneBasis: z.enum(['published', 'derived_from_longitude', 'unknown']).optional(),
+  timeZoneBasis: z
+    .enum(['provider_resolved', 'published', 'derived_from_longitude', 'unknown'])
+    .optional(),
+  /**
+   * The adapter that established the zone, when one did.
+   *
+   * Recorded rather than inferred from the basis, because "a provider answered"
+   * and "which provider answered" are different questions and only the second
+   * survives a provider being swapped. Absent on every scope written before this
+   * pass, which reads as "not recorded" and never as "nobody".
+   */
+  timeZoneSource: z.string().min(1).optional(),
+  /** When the zone was resolved, so a stale answer is visible as one. */
+  timeZoneResolvedAt: z.string().min(1).optional(),
 
   shape: scopeShapeSchema,
   includedAreas: z.array(namedAreaSchema).default([]),

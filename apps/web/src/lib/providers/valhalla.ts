@@ -50,12 +50,25 @@ export { isRoutesProviderEnabled } from './switches';
 
 export type ValhallaCosting = 'auto' | 'pedestrian' | 'bicycle' | 'bus' | 'motor_scooter';
 
+/**
+ * ONE QUEUE FOR ONE HOST.
+ *
+ * Exported because the transit adapter talks to the *same* routing service on
+ * the same endpoint, and it had a second gate of its own — so two schedulers
+ * each politely waited 1.1 seconds while between them issuing requests at twice
+ * the rate either believed it was enforcing. A rate limit split across two
+ * modules is not a rate limit.
+ */
 let gate: Promise<void> = Promise.resolve();
 
-function nextSlot(): Promise<void> {
-  const wait = gate.then(() => new Promise<void>((resolve) => setTimeout(resolve, MIN_INTERVAL_MS)));
+export function nextRoutingSlot(intervalMs: number = MIN_INTERVAL_MS): Promise<void> {
+  const wait = gate.then(() => new Promise<void>((resolve) => setTimeout(resolve, intervalMs)));
   gate = wait.catch(() => undefined);
   return wait;
+}
+
+function nextSlot(): Promise<void> {
+  return nextRoutingSlot();
 }
 
 const matrixCellSchema = z.object({
@@ -509,10 +522,23 @@ export function isPlausibleLeg(input: {
   return true;
 }
 
-export function costingFor(mode: 'car' | 'foot' | 'transit'): ValhallaCosting {
-  if (mode === 'car') return 'auto';
-  if (mode === 'foot') return 'pedestrian';
-  // Valhalla has no general transit costing on the demo deployment. Bus is the
-  // closest honest answer, and the provenance says what was actually measured.
-  return 'bus';
+/**
+ * THE TRANSIT MAPPING IS GONE, AND ITS ABSENCE IS THE POINT.
+ *
+ * This used to answer `'bus'` for `transit` — Valhalla's road-network *vehicle*
+ * costing, a bus-shaped thing driving on roads with no timetable behind it — on
+ * the reasoning that it was "the closest honest answer". It is not an honest
+ * answer at all: it measures a road journey and returns it under the name of a
+ * scheduled one, which is the precise substitution the capability registry, the
+ * separate transit seam and the whole readiness deficit exist to prevent.
+ *
+ * It was unreachable, and unreachability is not a safety property. Removing the
+ * case from the type means a caller that acquires a transit mode fails to
+ * compile rather than quietly receiving a drive.
+ *
+ * Real multimodal routing lives in `providers/transit.ts`, against
+ * `costing=multimodal`, and refuses any reply with no transit leg in it.
+ */
+export function costingFor(mode: 'car' | 'foot'): ValhallaCosting {
+  return mode === 'car' ? 'auto' : 'pedestrian';
 }

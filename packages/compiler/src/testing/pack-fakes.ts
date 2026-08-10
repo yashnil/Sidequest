@@ -7,6 +7,7 @@ import {
   type GeographicScope,
   type OperatingCalendar,
   type PackLayer,
+  type PlaceCategory,
   type RegionPack,
   type SourceRecord,
 } from '@sidequest/core';
@@ -17,12 +18,18 @@ import { partitionScope, scopeBounds } from '../backbone/partition';
 import type {
   CompilerProviders,
   ConstraintResearchProvider,
+  DiscoveredCandidate,
   FoodDiscoveryProvider,
   PlaceDiscoveryProvider,
   ProviderGap,
 } from '../providers';
 import type { RegionPackProvider } from '../backbone/pack';
-import { fakeProviders, type FakeResearchOptions, type SyntheticWorldSpec } from './fakes';
+import {
+  fakeProviders,
+  syntheticPlace,
+  type FakeResearchOptions,
+  type SyntheticWorldSpec,
+} from './fakes';
 
 /**
  * A SEVENTH SYNTHETIC WORLD, AND THE ONLY ONE THAT GOES THROUGH THE BACKBONE.
@@ -91,6 +98,20 @@ function spiral(index: number): { lat: number; lng: number } {
  * the same names and a shared open identifier, so the linker has something real
  * to collapse and the corroboration signal has something real to earn.
  */
+/**
+ * Which category an acquired record lands in, per intent.
+ *
+ * Mirrors the compiler's own category-to-intent table in reverse, so a fixture
+ * acquisition for "culture" genuinely raises the culture category count that the
+ * deficit was measured on. A reserve that came back in an unrelated category
+ * would let a test pass while the product learnt nothing.
+ */
+const ACQUIRED_CATEGORY: Record<string, PlaceCategory> = {
+  landmark: 'viewpoint',
+  culture: 'museum',
+  nature: 'lake',
+};
+
 export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope): RegionPack {
   const partition = partitionScope(scope);
   const cellId = partition.cells[0]?.id ?? 'g-0-0';
@@ -428,7 +449,67 @@ export function packBackedProviders(
 
   const places: PlaceDiscoveryProvider = {
     name: 'synthetic-pack-places',
-    async discover({ scope, pack, recovery, namedByTraveller }) {
+    async discover({ scope, pack, recovery, namedByTraveller, acquire }) {
+      /**
+       * THE WITHHELD RESERVE, RELEASED ONLY WHEN SOMETHING GOES AND ASKS.
+       *
+       * Without this a fixture cannot make the claim the acquiring loop needs to
+       * be judged on. A provider that returns the same inventory however it is
+       * asked makes "we went back and found something new" and "we went back"
+       * the same observation — which is precisely the confusion that let a
+       * non-functional acquire path ship, pass its tests, and be caught only by
+       * a reviewer reading the provider.
+       *
+       * So these records are deliberately absent from `syntheticPack`. Nothing
+       * but an explicit acquisition can reach them, and the intents they answer
+       * to are declared per world, so a test can prove an acquisition directed at
+       * a *particular* deficit retrieved the thing that fixes it.
+       */
+      if (acquire) {
+        const reserve = spec.acquirable ?? {};
+        const candidates: DiscoveredCandidate[] = [];
+        for (const intent of acquire.intents) {
+          const count = reserve[intent] ?? 0;
+          for (let index = 0; index < count && candidates.length < acquire.maxRecords; index += 1) {
+            /*
+             * Offset well past the ordinary place indices so an acquired record
+             * can never collide with one the pack already published — a
+             * collision would make the dedupe step, not the acquisition, the
+             * thing under test.
+             */
+            const place = syntheticPlace(spec, 500 + candidates.length);
+            candidates.push({
+              place: {
+                ...place,
+                id: `${spec.id}-acquired-${intent}-${index}`,
+                name: `${spec.name} ${titleCase(intent)} ${index + 1}`,
+                category: ACQUIRED_CATEGORY[intent] ?? place.category,
+              },
+              providerRefs: [
+                { provider: 'synthetic-acquisition', externalId: `${intent}-${index}` },
+              ],
+              facts: [],
+              confidenceSignals: ['single_provider_only'],
+            });
+          }
+        }
+        return {
+          candidates,
+          gaps:
+            candidates.length === 0
+              ? [
+                  {
+                    subjectId: spec.id,
+                    reason: 'not_found',
+                    detail: 'Nothing further is published here for the kinds of place we asked about.',
+                  },
+                ]
+              : [],
+          /* One call per intent actually asked about. Never a fictional zero. */
+          calls: acquire.intents.length,
+        };
+      }
+
       if (!pack) {
         return {
           candidates: [],

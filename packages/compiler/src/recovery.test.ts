@@ -325,17 +325,67 @@ describe('what recovery can and cannot do', () => {
     }
   });
 
-  it('offers no acquiring action at all, on any repair, at any pass', () => {
-    /*
-     * The claim that keeps "recovery is free" true. If a repair ever starts
-     * returning `acquire`, this fails — which is the point: the spending
-     * argument has to be re-made deliberately rather than acquired by a patch.
-     */
+  /**
+   * THE SPENDING ARGUMENT, RE-MADE DELIBERATELY.
+   *
+   * The previous version of this test asserted that **no** repair returns an
+   * `acquire` action at any pass, and it was right to at the time: an acquiring
+   * repair had shipped, been proved non-functional and been withdrawn, and the
+   * assertion existed so that reviving it could not happen by patch. Reviving it
+   * is what this pass did, so the assertion is replaced rather than deleted —
+   * with the four properties that make the revival defensible.
+   */
+  it('offers acquisition only for the one repair that is meant to spend', () => {
     for (const repair of RESEARCH_REPAIRS) {
+      if (repair === 'category_targeted_acquisition') continue;
       for (const pass of [0, 1]) {
-        expect(recoveryActionFor(repair, pass)?.kind).not.toBe('acquire');
+        expect(
+          recoveryActionFor(repair, pass, { shortIntents: ['culture', 'nature'] })?.kind,
+          `${repair} must not be able to spend`,
+        ).not.toBe('acquire');
       }
     }
+  });
+
+  it('refuses to acquire when no deficit named anything to look for', () => {
+    /*
+     * The line that stops an acquisition being a rerun with a budget attached.
+     * A query for "things" is exactly what the withdrawn attempt issued, and it
+     * is why it could not help: the request has to come from the shortfall.
+     */
+    expect(recoveryActionFor('category_targeted_acquisition', 0)).toBeNull();
+    expect(recoveryActionFor('category_targeted_acquisition', 0, { shortIntents: [] })).toBeNull();
+    expect(
+      recoveryActionFor('category_targeted_acquisition', 0, { shortIntents: ['  '] }),
+    ).toBeNull();
+  });
+
+  it('bounds an acquisition to a small, deficit-derived request', () => {
+    const action = recoveryActionFor('category_targeted_acquisition', 0, {
+      shortIntents: ['culture', 'nature', 'landmark', 'food', 'nightlife'],
+    });
+    expect(action?.kind).toBe('acquire');
+    if (action?.kind !== 'acquire') return;
+    /* The intents are the ones asked for, capped — never a generic sweep. */
+    expect(action.intents).toEqual(['culture', 'nature', 'landmark']);
+    expect(action.maxQueries).toBeLessThanOrEqual(2);
+    expect(action.maxPerQuery).toBeLessThanOrEqual(40);
+  });
+
+  it('ranks the free repair ahead of the paid one for the same deficits', () => {
+    /*
+     * The ordering *is* the safety argument: the loop takes the first repair it
+     * has not attempted, so nothing is bought until re-selecting from records
+     * already held has been tried and has not helped. Asserted here rather than
+     * left to the loop, because reversing two lines in `repairsFor` would spend
+     * money on every thin board and break no other test.
+     */
+    const repairs = repairsFor(['experience_supply', 'support_balance'], input());
+    expect(repairs).toContain('category_targeted_query');
+    expect(repairs).toContain('category_targeted_acquisition');
+    expect(repairs.indexOf('category_targeted_query')).toBeLessThan(
+      repairs.indexOf('category_targeted_acquisition'),
+    );
   });
 
   it('still refuses the three repairs that need a stage the loop does not own', () => {

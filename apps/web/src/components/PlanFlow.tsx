@@ -12,6 +12,7 @@ import {
   SUPPLY_LEVEL_LABELS,
   classifyObservedSpan,
   confidenceExplanation,
+  describeTimeZone,
   stageLabel,
   summaryVersion,
   type ClarificationQuestion,
@@ -1060,7 +1061,28 @@ function ScopeStep({ tripId, scope, scopeFits, pending, onRun }: StepProps) {
             }
           />
           <Row label="Getting around" value={scope.transport.note} />
-          <Row label="Time zone" value={scope.timeZones.join(', ')} />
+          {/*
+            * THE CLOCK, AND HOW MUCH IT IS WORTH.
+            *
+            * This printed `scope.timeZones.join(', ')` — raw IANA identifiers,
+            * with `scope.timeZoneBasis` rendered nowhere at all. Two problems,
+            * and the second is the serious one. `Etc/GMT-3` is not a sentence
+            * anybody can act on, and a longitude-derived approximation printed
+            * in the same typeface as `Europe/Lisbon` reads as the civil clock —
+            * so the one screen that could have said "we could not confirm this"
+            * said nothing, and every opening time downstream inherited the
+            * silence.
+            *
+            * `describeTimeZone` turns a fixed offset back into `UTC−3` and says
+            * plainly that it was estimated.
+            */}
+          <Row
+            label="Time zone"
+            value={describeTimeZone({
+              zones: scope.timeZones,
+              basis: scope.timeZoneBasis ?? 'unknown',
+            })}
+          />
           <Row label="Why this" value={scope.rationale} />
         </dl>
       </Panel>

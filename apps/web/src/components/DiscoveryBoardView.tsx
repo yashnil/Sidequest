@@ -81,6 +81,25 @@ const MIN_TARGET = 'min-h-11';
  */
 const MIN_TARGET_SUMMARY = 'min-h-11 py-2.5';
 
+/**
+ * The label above a travel time, named for the network that measured it.
+ *
+ * "From base" was mode-blind, and a mode-blind duration is the shape of the
+ * founder regression: a traveller with no car read road-network minutes as
+ * though they were their own. Naming the network costs one word and makes the
+ * number checkable.
+ */
+const TRAVEL_MODE_STAT_LABEL: Record<'car' | 'foot' | 'transit', string> = {
+  car: 'Drive from base',
+  foot: 'Walk from base',
+  /*
+   * Named, not left blank. `'From base'` here would be the exact mode-blind
+   * string this table exists to remove — reintroduced through the one entry
+   * nothing currently reaches, which is how a latent hole becomes a live one.
+   */
+  transit: 'By transit from base',
+};
+
 export function DiscoveryBoardView({
   tripId,
   storedReadiness,
@@ -92,9 +111,25 @@ export function DiscoveryBoardView({
   weatherBackups,
   boardVersion: declaredVersion,
   weatherFreshness,
+  travelMode = 'car',
   images = {},
 }: {
   tripId: string;
+  /**
+   * WHICH NETWORK THE MINUTES ON THESE CARDS WERE MEASURED ON.
+   *
+   * Every "From base" figure here is a real measurement and none of them said
+   * what *kind*. That was harmless while a road matrix was the only thing that
+   * reached the board, and it stopped being harmless the moment a car-free
+   * traveller's trip started routing on the pedestrian network: forty-five
+   * minutes means very different things on foot and behind a wheel, and a card
+   * that will not say which is a card a traveller cannot plan a morning around.
+   *
+   * Defaulted rather than required so a caller written before this exists keeps
+   * its previous meaning, which was "driving" — the honest reading of what it
+   * used to show.
+   */
+  travelMode?: 'car' | 'foot' | 'transit';
   /**
    * How old the weather behind this board is, when the page knows.
    *
@@ -313,7 +348,18 @@ export function DiscoveryBoardView({
           // made the two sticky bars fight over which one painted on top.
           'z-20 flex flex-wrap items-center gap-x-5 gap-y-3 p-4',
           'sm:sticky sm:top-[var(--chrome-height)] sm:mb-6',
+          /*
+           * The safe area, paid for by the bar rather than assumed away.
+           *
+           * `bottom-0` on an iPhone is behind the home indicator, so the last
+           * thirty-four pixels of this bar — which is where the primary action
+           * sits — were not tappable. Nothing in the repository used
+           * `env(safe-area-inset-*)` anywhere; this is the control that most
+           * needed it.
+           */
           'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:max-h-[70vh]',
+          /* Additive. A bare `pb-[env(...)]` replaces the padding it should extend. */
+          'max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]',
           'max-sm:overflow-y-auto max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0',
           'max-sm:shadow-panel print:hidden',
         )}
@@ -511,6 +557,7 @@ export function DiscoveryBoardView({
                 <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {entry.candidates.map((candidate) => (
                     <PlaceCard
+                      travelMode={travelMode}
                       key={candidate.place.id}
                       candidate={candidate}
                       image={anchorImage(images, candidate)}
@@ -941,8 +988,11 @@ function PlaceCard({
   status,
   onChoose,
   boardWeatherNote,
+  travelMode,
 }: {
   candidate: DiscoveryCandidate;
+  /** Which network measured this card's travel time. See the board's own prop. */
+  travelMode: 'car' | 'foot' | 'transit';
   /** Null on most cards, by design. See `anchorImage`. */
   image: ImageRecord | null;
   status: SelectionStatus | undefined;
@@ -1055,7 +1105,7 @@ function PlaceCard({
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-          <Stat label="From base">
+          <Stat label={TRAVEL_MODE_STAT_LABEL[travelMode]}>
             {candidate.detourClass === 'base'
               ? 'At your base'
               : `${formatMinutes(candidate.driveMinutes)} · ${formatDistance(candidate.distanceKm)}`}

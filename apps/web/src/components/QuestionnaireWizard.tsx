@@ -287,7 +287,21 @@ export function QuestionnaireWizard({
                     <label
                       key={level}
                       className={cx(
-                        'relative cursor-pointer rounded-md border px-1 py-2 text-center text-[11px] leading-tight sm:text-xs',
+                        /*
+                         * WCAG 2.5.5's forty-four pixels, on the control this
+                         * screen has most of.
+                         *
+                         * Five of these sit across a 390px phone inside a row
+                         * that repeats for every interest, and at `py-2` they
+                         * were about thirty-two pixels tall. `min-h-11` is the
+                         * floor the rest of the product already holds itself to
+                         * — the board, the boards's disclosures, the plan flow,
+                         * the progress panel all use it — and the questionnaire
+                         * is the one screen the discipline was never applied to.
+                         * Grown with flex centring rather than with padding, so
+                         * the type size and the five-across grid are unchanged.
+                         */
+                        'relative flex min-h-11 cursor-pointer items-center justify-center rounded-md border px-1 py-2 text-center text-[11px] leading-tight sm:text-xs',
                         FOCUS_RING,
                         (answers.interests[interest] ?? 'low') === level
                           ? 'border-pine bg-pine-soft font-medium text-pine'
@@ -393,7 +407,8 @@ export function QuestionnaireWizard({
                   <label
                     key={option.value}
                     className={cx(
-                      'relative cursor-pointer rounded-full border border-rule px-3.5 py-1.5 text-sm text-ink-muted has-[:checked]:border-pine has-[:checked]:bg-pine-soft has-[:checked]:text-pine',
+                      /* The same forty-four-pixel floor. See the interest grid. */
+                      'relative inline-flex min-h-11 cursor-pointer items-center rounded-full border border-rule px-3.5 py-1.5 text-sm text-ink-muted has-[:checked]:border-pine has-[:checked]:bg-pine-soft has-[:checked]:text-pine',
                       FOCUS_RING,
                     )}
                   >
@@ -564,7 +579,8 @@ export function QuestionnaireWizard({
                   <label
                     key={option.value}
                     className={cx(
-                      'relative cursor-pointer rounded-full border border-rule px-3.5 py-1.5 text-sm text-ink-muted has-[:checked]:border-clay has-[:checked]:bg-clay-soft has-[:checked]:text-clay',
+                      /* The same forty-four-pixel floor. See the interest grid. */
+                      'relative inline-flex min-h-11 cursor-pointer items-center rounded-full border border-rule px-3.5 py-1.5 text-sm text-ink-muted has-[:checked]:border-clay has-[:checked]:bg-clay-soft has-[:checked]:text-clay',
                       FOCUS_RING,
                     )}
                   >

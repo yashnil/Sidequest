@@ -25,6 +25,9 @@ export const BROWSER_REACHABLE_WORLDS = [
   'broad_country',
   'rail_corridor',
   'weak_data',
+  'transit_metro',
+  'recovery_adversary',
+  'unclocked_valley',
 ] as const;
 
 describe('synthetic worlds', () => {
@@ -44,6 +47,15 @@ describe('synthetic worlds', () => {
       'broad regional destination': 'broad_country',
       'multi-base rail corridor': 'rail_corridor',
       'thin evidence': 'weak_data',
+      /*
+       * Two classes this suite could not express before. The first is the only
+       * world in which anything can measure a public-transport journey; the
+       * second is the only one deliberately deficient enough for the recovery
+       * loop to have something to do.
+       */
+      'measured public transport': 'transit_metro',
+      'a packet that is not good enough': 'recovery_adversary',
+      'a destination nobody published a clock for': 'unclocked_valley',
     };
     for (const [label, world] of Object.entries(classes)) {
       expect(SYNTHETIC_WORLDS[world], `${label} has no world`).toBeDefined();

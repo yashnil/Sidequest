@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
-    "doctor": "node apps/web/scripts/doctor.mjs"
+    "doctor": "node apps/web/scripts/doctor.mjs",
+    "source-hash": "node scripts/source-hash.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

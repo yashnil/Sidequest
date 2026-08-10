@@ -6,6 +6,7 @@ import {
   durationClustersFrom,
   monthsForSeason,
   nightsFrom,
+  reachClassFor,
   recommendTripLength,
   seasonMonths,
   SUPPLY_ASSESSMENT_VERSION,
@@ -17,6 +18,7 @@ import {
 } from '@sidequest/core';
 import { destinationIndexRelease, entriesInCountry, recommendationUniverse } from '../db/destination-index-repository';
 import { climateFor, isClimateEnabled } from './preflight';
+import { capabilityRegistry } from '../capabilities';
 
 /**
  * "WHERE SHOULD I GO", GATHERED IN TWO STAGES.
@@ -74,13 +76,32 @@ const RECOMMENDABLE = ['region', 'county', 'island', 'national_park', 'protected
 /** Feature types worth clustering into areas inside a candidate. */
 const WITHIN = ['city', 'town', 'county', 'district'];
 
+/**
+ * How far this traveller reaches in a day — asked of the one definition.
+ *
+ * This file kept its own copy after the preview and the compiler were
+ * reconciled, and the copy is the version the reconciliation was written to
+ * remove: it returns `transit` for an unstated answer on the reasonable ground
+ * that the recoverable error is the wider one. That reasoning is only sound
+ * where a transit journey can actually be measured. Where it cannot, a
+ * forty-kilometre ring is a promise about bases the traveller has no way of
+ * reaching, and the shortlist here is the *first* screen that promise appears
+ * on — one earlier than the preview where the same defect was found.
+ *
+ * So it calls `reachClassFor`, like the other two, and `transitMeasurable`
+ * decides. Three screens, one definition.
+ */
 function modeFor(answers: TripComposerAnswers): 'drive' | 'transit' | 'walk' {
-  if (answers.transport === 'drive' || answers.transport === 'mixed') return 'drive';
-  if (answers.transport === 'public_transport') return 'transit';
-  // Nobody has said, so nothing is assumed. Transit is the conservative error:
-  // a portfolio that grows when they say they will drive, rather than one full
-  // of bases they cannot reach.
-  return 'transit';
+  return reachClassFor({
+    carAvailable:
+      answers.transport === 'drive' || answers.transport === 'mixed'
+        ? true
+        : answers.transport === 'public_transport'
+          ? false
+          : null,
+    acceptsScheduled: null,
+    transitMeasurable: capabilityRegistry().assess('route_transit').available,
+  });
 }
 
 function maxBaseChangesFrom(answers: TripComposerAnswers): number | undefined {

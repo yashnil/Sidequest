@@ -122,6 +122,14 @@ const FIXTURE_DESTINATIONS: readonly {
   { match: 'wide republic', worlds: ['broad_country'], isPlace: true },
   { match: 'northern line', worlds: ['rail_corridor'], isPlace: true },
   { match: 'little-known', worlds: ['weak_data'], isPlace: true },
+  /**
+   * The two worlds this pass added, both reachable by name for the same reason
+   * the three above are: a shape only the unit tests can see is a shape the
+   * interface has never been shown to handle.
+   */
+  { match: 'grand central metro', worlds: ['transit_metro'], isPlace: true },
+  { match: 'thin harbour', worlds: ['recovery_adversary'], isPlace: true },
+  { match: 'unclocked valley', worlds: ['unclocked_valley'], isPlace: true },
 ];
 
 /**

@@ -410,7 +410,25 @@ export function deriveScope(input: ScopeInput): GeographicScope {
   if (!signals.includes('user_confirmed')) signals.push('user_confirmed');
 
   const shape = deriveShape(candidate, radiusKm, narrowed);
-  const zones = resolveTimeZones({ published: candidate.timeZones, center: candidate.center });
+  /*
+   * A resolver-supplied source promotes the same zones from "published" to
+   * "provider_resolved", which is the difference between a value that travelled
+   * with a record and one a civil-timezone source answered for this coordinate.
+   * Both are authoritative; only the second can be re-asked.
+   */
+  const zones = resolveTimeZones({
+    published: candidate.timeZones,
+    center: candidate.center,
+    ...(candidate.timeZoneSource && candidate.timeZones.length > 0
+      ? {
+          resolved: {
+            zones: candidate.timeZones,
+            source: candidate.timeZoneSource,
+            resolvedAt: candidate.timeZoneResolvedAt ?? '',
+          },
+        }
+      : {}),
+  });
 
   return {
     schemaVersion: GEOGRAPHIC_SCOPE_VERSION,
@@ -500,6 +518,8 @@ export function deriveScope(input: ScopeInput): GeographicScope {
      */
     timeZones: zones.zones,
     timeZoneBasis: zones.basis,
+    ...(zones.source ? { timeZoneSource: zones.source } : {}),
+    ...(zones.resolvedAt ? { timeZoneResolvedAt: zones.resolvedAt } : {}),
     shape,
     includedAreas: [],
     excludedAreas: [],

@@ -27,6 +27,9 @@ const NAME_FOR_WORLD: Record<keyof typeof SYNTHETIC_WORLDS, string> = {
   broad_country: 'Wide Republic',
   rail_corridor: 'The Northern Line',
   weak_data: 'Little-Known Valley',
+  transit_metro: 'Grand Central Metro',
+  recovery_adversary: 'Thin Harbour',
+  unclocked_valley: 'Unclocked Valley',
 };
 
 describe('the fixture destination table', () => {

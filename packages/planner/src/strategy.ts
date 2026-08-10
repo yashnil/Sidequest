@@ -28,10 +28,20 @@ export interface StrategyInput {
   unscheduled: readonly UnscheduledPlace[];
   matrixNote: string;
   matrixProvenance: 'measured' | 'modelled' | 'estimated';
+  /**
+   * Which network the matrix measured.
+   *
+   * Optional so a caller written before this existed still compiles, and
+   * defaulting to `car` because that is what the disclosure has always said —
+   * the point is that a *pedestrian* trip stops claiming driving times, not
+   * that every existing caller has to be revisited at once.
+   */
+  matrixMode?: 'car' | 'foot' | 'transit';
 }
 
 export function buildTransportStrategy(input: StrategyInput): TransportStrategy {
   const { days, profile, region, dataset, matrixNote, matrixProvenance } = input;
+  const matrixMode = input.matrixMode ?? 'car';
 
   const totals = days.reduce(
     (acc, day) => ({
@@ -132,7 +142,15 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
     // The matrix note already says it is not measured road data; repeating the
     // phrase around it produced "modelled, not measured road data. Modelled …
     // not measured road data." on the page.
-    dataDisclosure: `Driving times are ${matrixProvenance}. ${matrixNote} Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.`,
+    /*
+     * WHICH TIMES, NAMED FROM THE MATRIX RATHER THAN ASSUMED.
+     *
+     * This said "Driving times are …" on every plan, including the ones with no
+     * driving in them: a car-free traveller on a pedestrian matrix was told the
+     * driving times were measured, over a day whose every leg was a walk. The
+     * matrix knows which network it measured and is the only thing that does.
+     */
+    dataDisclosure: `${matrixMode === 'foot' ? 'Walking' : 'Driving'} times are ${matrixProvenance}. ${matrixNote} Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.`,
   };
 }
 

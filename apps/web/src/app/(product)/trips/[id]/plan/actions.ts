@@ -38,6 +38,7 @@ import {
   scopeFitsTrip,
   withAdaptiveQuestions,
 } from '@sidequest/compiler';
+import { capabilityRegistry } from '@/lib/capabilities';
 import { compilerProviders, providerReadiness } from '@/lib/compiler/providers';
 import { runCompilation, startCompilation } from '@/lib/compiler/runner';
 import {
@@ -243,6 +244,16 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
     ...(preflightReachFor(intent, candidate.id) === undefined
       ? {}
       : { preflightReachKm: preflightReachFor(intent, candidate.id)! }),
+    /*
+     * WHETHER A TRANSIT JOURNEY CAN BE MEASURED, ASKED OF THE BROKER.
+     *
+     * `deriveScope` has taken this parameter since the reach split and no
+     * production caller ever supplied one, so it defaulted to `false` while the
+     * preflight computed the real answer — the same two-screens-one-question
+     * divergence the split existed to close, reopened by an omission. It is a
+     * pure registry read: no socket, no provider import.
+     */
+    transitMeasurable: capabilityRegistry().assess('route_transit').available,
     nights: countNights(trip.basics.startDate, trip.basics.endDate),
     revision: intent.scopeRevision + 1,
   });

@@ -28,6 +28,17 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  /**
+   * OPTING IN, SO THE SAFE-AREA INSETS ARE NON-ZERO.
+   *
+   * `env(safe-area-inset-*)` resolves to `0px` unless the document asks for the
+   * full viewport. Without this line every `env()` in the stylesheet is a no-op
+   * — and a `padding-bottom: env(safe-area-inset-bottom)` written to *protect* a
+   * control silently becomes `padding-bottom: 0` and removes the padding it was
+   * meant to extend. The board's pinned action bar and the footer's clearance
+   * both depend on this being set.
+   */
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -82,6 +82,21 @@ export const destinationCandidateSchema = z.object({
    * single guessed zone is how a shuttle timetable moves by an hour.
    */
   timeZones: z.array(z.string().min(1)).default([]),
+  /**
+   * WHICH SOURCE ESTABLISHED THE ZONE, WHEN ONE DID.
+   *
+   * Without this, `timeZones` carried two very different claims under one field:
+   * a zone a catalogue publishes about itself, and a zone a live lookup returned
+   * for this coordinate. Both are real, and the scope layer needs to be able to
+   * say which — because "provider-resolved" is the state that lets everything
+   * downstream stop hedging, and a bare list cannot distinguish it from a value
+   * somebody seeded.
+   *
+   * Absent on every resolution written before this pass, and absent reads as
+   * "published, source unrecorded" rather than as "nobody".
+   */
+  timeZoneSource: z.string().min(1).optional(),
+  timeZoneResolvedAt: z.string().min(1).optional(),
   providerRefs: z.array(providerRefSchema).default([]),
   confidence: confidenceAssessmentSchema,
   /** One line on what this interpretation would mean for the trip. */

@@ -287,6 +287,99 @@ export const travelTimeMatrixSchema = z.object({
 export type TravelTimeMatrixData = z.infer<typeof travelTimeMatrixSchema>;
 
 /**
+ * PUBLIC TRANSPORT, MEASURED PAIR BY PAIR RATHER THAN AS A MATRIX.
+ *
+ * Beside `travelTimes`, never inside it, and the separation is the whole
+ * safeguard. A matrix has one `mode`, so folding transit into it would force a
+ * choice between measuring the walk and measuring the train — and whichever lost
+ * would be silently answered by the other. That substitution is the specific
+ * failure this shape exists to make impossible: a forty-kilometre bus journey
+ * with two transfers must never render as a twenty-three-minute drive because a
+ * road matrix happened to exist.
+ *
+ * Sparse on purpose. A trip turns on a handful of journeys — where you sleep
+ * against what you named, one base against the next — and those are what get
+ * bought. Everything else is honestly absent rather than cheaply guessed.
+ */
+export const transitJourneySchema = z.object({
+  fromId: z.string().min(1),
+  toId: z.string().min(1),
+  status: z.enum(['measured', 'no_route', 'out_of_coverage', 'unsupported', 'provider_error']),
+  /** Present only on `measured`. Refined below so the two cannot drift apart. */
+  minutes: z.number().min(0).optional(),
+  km: z.number().min(0).optional(),
+  transfers: z.number().int().min(0).optional(),
+  walkingMinutes: z.number().min(0).optional(),
+  legs: z
+    .array(
+      z.object({
+        mode: z.enum(['walk', 'rail', 'subway', 'tram', 'bus', 'ferry', 'cable', 'other']),
+        minutes: z.number().min(0),
+        line: z.string().min(1).optional(),
+      }),
+    )
+    .optional(),
+  fare: z.object({ amount: z.number().min(0), currency: z.string().min(1) }).optional(),
+  requestBasis: z.object({
+    kind: z.enum(['depart_at', 'arrive_by']),
+    instant: z.string().min(1),
+    timeZone: z.string().min(1),
+  }),
+  source: z.string().min(1),
+  retrievedAt: z.string().min(1),
+  detail: z.string().min(1),
+});
+
+/**
+ * A duration and a verdict cannot disagree.
+ *
+ * Enforced in the schema rather than by convention, because the two ways this
+ * can go wrong are the two ways a traveller gets lied to: a `measured` journey
+ * with no number is a card that renders blank, and a `no_route` journey carrying
+ * a number is a train that does not run being given a departure time.
+ */
+export const transitEvidenceSchema = z.object({
+  journeys: z.array(transitJourneySchema).superRefine((journeys, ctx) => {
+    journeys.forEach((journey, index) => {
+      if (journey.status === 'measured' && journey.minutes === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [index, 'minutes'],
+          message: 'A measured transit journey has to carry the duration that was measured.',
+        });
+      }
+      if (journey.status !== 'measured' && journey.minutes !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [index, 'minutes'],
+          message: 'Only a measured transit journey may carry a duration.',
+        });
+      }
+    });
+  }),
+  /** The adapter that answered, or the reason nothing could. */
+  provider: z.string().min(1).optional(),
+  /** Pairs asked for, so "we bought little" and "there is little" stay distinct. */
+  requested: z.number().int().min(0),
+  measured: z.number().int().min(0),
+  /**
+   * Why there is no transit evidence at all, when there is none.
+   *
+   * `unsupported` — nothing in this build can measure it. `not_needed` — the
+   * trip does not lean on scheduled transport, so nothing was bought.
+   * `out_of_coverage` — something could have measured it and holds no timetables
+   * for here. `budget_exhausted` — we ran out before asking. Four different
+   * sentences, and a traveller is owed the difference between "there are no
+   * trains" and "we cannot see the trains".
+   */
+  absence: z
+    .enum(['unsupported', 'not_needed', 'budget_exhausted', 'out_of_coverage'])
+    .optional(),
+});
+export type TransitEvidence = z.infer<typeof transitEvidenceSchema>;
+export type TransitJourneyRecord = z.infer<typeof transitJourneySchema>;
+
+/**
  * WHAT WE KNOW, PER LAYER.
  *
  * Sixteen dimensions rather than one score, because "92% confident" is not a
@@ -702,6 +795,16 @@ export const compiledRegionSchema = z.object({
   /** Absent and empty are different answers, and the planner reads them differently. */
   food: foodDatasetSchema.optional(),
   travelTimes: travelTimeMatrixSchema,
+  /**
+   * Public-transport journeys, beside the matrix rather than inside it.
+   *
+   * Optional, and the absence is the migration story *and* a real runtime state:
+   * every artifact compiled before this existed has none, and so does every
+   * build with no transit provider. A reader that finds nothing here must say
+   * "not verified" rather than assume the matrix answered — which is exactly the
+   * substitution the two fields are separate to prevent.
+   */
+  transitEvidence: transitEvidenceSchema.optional(),
 
   /**
    * The multi-base structure this region was routed and planned as.

@@ -58,6 +58,16 @@ export const TRAVEL_CAPABILITIES = [
    */
   'route_transit',
   'transit_schedule',
+  /**
+   * The real civil clock a destination keeps.
+   *
+   * Its own capability rather than a corner of `destination_identity`, because it
+   * is answered by a different kind of source and fails independently: a geocoder
+   * that knows exactly where somewhere is very often does not publish what time
+   * it is there. Everything downstream that formats an opening hour, a sunrise or
+   * a departure needs to know whether this was *answered* or approximated.
+   */
+  'civil_time_zone',
   'route_ferry',
   'gateway_discovery',
   'travel_time_matrix',
@@ -82,6 +92,7 @@ export const TRAVEL_CAPABILITY_LABELS: Record<TravelCapability, string> = {
   route_walk: 'Walking times',
   route_transit: 'Public transport times',
   transit_schedule: 'How often public transport runs',
+  civil_time_zone: 'What time it is where you are going',
   route_ferry: 'Ferry crossings',
   gateway_discovery: 'Stations, terminals and airports',
   travel_time_matrix: 'Travel times between many points',

@@ -34,7 +34,13 @@ import {
   type TripScopeOverlay,
   type TripIncludedArea,
 } from '@sidequest/compiler';
-import { placeInclusionTag, type RegionPack, type SourceRecord } from '@sidequest/core';
+import {
+  placeInclusionTag,
+  runtimeTimeZoneDataVersion,
+  singleTimeZone,
+  type RegionPack,
+  type SourceRecord,
+} from '@sidequest/core';
 import type {
   CompilerProviders,
   ConstraintResearchProvider,
@@ -53,6 +59,9 @@ import type {
   SourceReference,
   SourceRetrievalProvider,
   SourceRetrievalResult,
+  TimeZoneProvider,
+  TransitJourney,
+  TransitRoutingProvider,
   WeatherLocationProvider,
 } from '@sidequest/compiler';
 import {
@@ -83,11 +92,13 @@ import {
   boxAreaDeg2,
   fetchFoodPois,
   fetchPois,
+  fetchPoisForIntents,
   isPoiProviderEnabled,
   WAY_QUERY_AREA_LIMIT_DEG2,
   normalizeElement,
   type BoundingBox,
   type NormalizedOsmPlace,
+  type OverpassResult,
 } from './overpass';
 import {
   computeMatrix as valhallaMatrix,
@@ -105,6 +116,13 @@ import {
   type ModelUsage,
   type PlanningExtraction,
 } from './anthropic';
+import {
+  isTimeZoneResolverEnabled,
+  resolveCivilTimeZones,
+  TIME_ZONE_TTL_MS,
+} from './timezone';
+import { isTransitProviderEnabled } from './switches';
+import { measureTransitJourneys, transitTilesAvailable } from './transit';
 import { readProviderCache, writeProviderCache } from '../db/compiler-repository';
 
 /**
@@ -152,6 +170,22 @@ export interface LiveDiagnostics {
   pagesRejected: number;
   model: ModelUsage;
   timeZone: string | null;
+  timeZoneCalls: number;
+  timeZoneCacheHits: number;
+  /** Public-transport journeys asked for, measured, and refused. */
+  transitCalls: number;
+  transitPairsRequested: number;
+  transitPairsMeasured: number;
+  /**
+   * The timezone database this process computed offsets under.
+   *
+   * Recorded because it is the one input to every daylight and opening-hours
+   * calculation that nothing in this repository controls. A runtime lagging the
+   * published database is wrong about a rule change that has already happened,
+   * and there is no way to detect that from inside the process — so the version
+   * travels with the diagnostic instead of being assumed current.
+   */
+  timeZoneDataVersion: string | null;
   attributions: string[];
 }
 
@@ -288,21 +322,23 @@ function staleCacheFor<T>() {
   };
 }
 
-/** A zone, from a source that publishes zones. Never derived from an offset. */
+/**
+ * A zone, from a source that publishes zones. Never derived from an offset.
+ *
+ * This used to be an inline `fetch` with no cache, no budget and no record of
+ * where the answer came from — so a resolution that succeeded and one that
+ * quietly fell back to a solar approximation were indistinguishable one line
+ * later. It now goes through the adapter, which is cached for a month, refuses a
+ * fixed offset, and is registered against `civil_time_zone` so the doctor and
+ * the product path agree about whether it can be asked at all.
+ */
 async function resolveTimeZone(lat: number, lng: number): Promise<string | null> {
-  try {
-    const url = new URL('https://api.open-meteo.com/v1/forecast');
-    url.searchParams.set('latitude', String(lat));
-    url.searchParams.set('longitude', String(lng));
-    url.searchParams.set('timezone', 'auto');
-    url.searchParams.set('forecast_days', '1');
-    const response = await fetch(url, { signal: AbortSignal.timeout(6_000) });
-    if (!response.ok) return null;
-    const body = (await response.json()) as { timezone?: string };
-    return typeof body.timezone === 'string' && body.timezone.length > 0 ? body.timezone : null;
-  } catch {
-    return null;
-  }
+  if (!isTimeZoneResolverEnabled()) return null;
+  const outcome = await resolveCivilTimeZones([{ id: 'destination', lat, lng }], {
+    maxCalls: 1,
+    cache: cacheFor<{ timeZone: string }>('open-meteo-timezone', TIME_ZONE_TTL_MS),
+  });
+  return outcome.answers[0]?.timeZone ?? null;
 }
 
 /**
@@ -511,8 +547,42 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     pagesRejected: 0,
     model: model.usage,
     timeZone: null,
+    timeZoneCalls: 0,
+    timeZoneCacheHits: 0,
+    transitCalls: 0,
+    transitPairsRequested: 0,
+    transitPairsMeasured: 0,
+    timeZoneDataVersion: runtimeTimeZoneDataVersion(),
     attributions: [OSM_LICENCE_PLACES.attribution],
   };
+
+  /**
+   * ONE ANSWER TO "WHAT CLOCK IS THIS REGION ON", USED EVERYWHERE.
+   *
+   * Three call sites derived this independently and two of them disagreed about
+   * precedence: the expansion read `diagnostics.timeZone ?? scope.timeZones[0]`
+   * and the weather stage read `scope.timeZones[0] ?? diagnostics.timeZone` —
+   * opposite orders, in one file, against the same question. The weather stage's
+   * own comment argued for its order at length; the expansion's contradicted it
+   * silently.
+   *
+   * The scope wins, and the scope is right to: it holds the zone that was
+   * actually resolved for *this compilation*, while `diagnostics.timeZone` is
+   * whatever this provider instance happened to look up — and resolution and
+   * compilation are separate requests, so on a compile it is usually null.
+   *
+   * `singleTimeZone` rather than `timeZones[0]`, which is the guard this
+   * repository wrote for exactly this and then called from nowhere: a region
+   * spanning a boundary that gets one side's clock applied to both is how a
+   * timetable moves by an hour. When the honest answer is "more than one", the
+   * first zone is still used — a base has to be on *some* clock — but the choice
+   * is made visibly here rather than by an index nobody reads.
+   */
+  const regionTimeZone = (scope: GeographicScope): string =>
+    singleTimeZone(scope.timeZones) ??
+    scope.timeZones[0] ??
+    diagnostics.timeZone ??
+    'UTC';
 
   const resolver: DestinationResolver = {
     name: 'nominatim',
@@ -552,7 +622,31 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       if (leading) {
         const zone = await resolveTimeZone(leading.center.lat, leading.center.lng);
         diagnostics.timeZone = zone;
-        if (zone) for (const candidate of candidates) candidate.timeZones = [zone];
+        if (zone) {
+          /**
+           * THE LEADING CANDIDATE ONLY, AND THIS IS NOT A DETAIL.
+           *
+           * One coordinate is looked up — the leading reading's — and the answer
+           * used to be written onto *every* candidate. That was survivable while
+           * it was a bare value; stamping it `provider_resolved` turns it into a
+           * claim that a source confirmed this zone for this place, which is
+           * false for every candidate but one.
+           *
+           * The failure is concrete and common. "San Jose" resolves to San José,
+           * Costa Rica first; the traveller picks San Jose, California from the
+           * ambiguity screen; and the scope carries `America/Costa_Rica` marked
+           * authoritative. Every opening hour, sunrise and departure is two hours
+           * out, and nothing on the artifact can be used to notice.
+           *
+           * The other readings keep no zone at all, which is honest: nobody
+           * asked about them. If one is chosen, the solar fallback applies and
+           * says so — a visibly degraded answer rather than an invisibly wrong
+           * one.
+           */
+          leading.timeZones = [zone];
+          leading.timeZoneSource = 'open-meteo';
+          leading.timeZoneResolvedAt = new Date().toISOString();
+        }
       }
 
       const unambiguous =
@@ -679,7 +773,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             name: names.display,
             names,
             coordinates: { lat, lng },
-            timeZone: diagnostics.timeZone ?? scope.timeZones[0] ?? 'UTC',
+            timeZone: regionTimeZone(scope),
             suggestedNights: {
               min: Math.max(1, candidate.suggestedMinNights),
               max: Math.max(1, candidate.suggestedMaxNights),
@@ -704,7 +798,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           id: `base-${scope.destinationCandidateId}`,
           name: scope.destinationName,
           coordinates: scope.center,
-          timeZone: diagnostics.timeZone ?? scope.timeZones[0] ?? 'UTC',
+          timeZone: regionTimeZone(scope),
           suggestedNights: { min: 1, max: Math.max(1, nights) },
           transportModes: scope.transport.carAvailable
             ? ['drive', 'walk']
@@ -733,9 +827,387 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     },
   };
 
+  /**
+   * NORMALISED MAP ELEMENTS, TURNED INTO CANDIDATES THE BOARD CAN HOLD.
+   *
+   * Extracted so the ordinary fallback sweep and a deficit-directed acquisition
+   * share one definition of what a candidate *is*. Two copies of this would
+   * drift, and the way they would drift is the dangerous way: an acquisition
+   * path with its own gate, its own standing model or its own confidence
+   * default is an acquisition path that can admit a record the ordinary one
+   * would have refused.
+   */
+  async function buildOsmCandidates(inputs: {
+    normalized: readonly NormalizedOsmPlace[];
+    scope: GeographicScope;
+    includedAreas?: readonly TripIncludedArea[];
+    limit: number;
+  }): Promise<{
+    candidates: DiscoveredCandidate[];
+    gaps: ProviderGap[];
+    /** Classification calls spent here, so a caller can charge them. */
+    modelCalls: number;
+  }> {
+    const { normalized, scope, includedAreas, limit } = inputs;
+    const modelCallsBefore = model.usage.calls;
+      // Bounded before classification: the model call is the expensive one, and
+      // a bbox in a dense city returns far more than a trip can hold.
+      const shortlist = normalized.slice(0, Math.min(120, Math.max(20, limit)));
+
+      let classified: Awaited<ReturnType<typeof classifyPlaces>>;
+      try {
+        classified = await classifyPlaces(
+          model,
+          shortlist.map((entry) => ({
+            name: entry.name,
+            types: [entry.primaryTag, ...Object.keys(entry.planningTags)],
+            locality: scope.destinationName,
+          })),
+        );
+      } catch {
+        return {
+          candidates: [],
+          gaps: [
+            {
+              subjectId: scope.destinationCandidateId,
+              reason: 'provider_error' as const,
+              detail: 'Nothing could be classified, so nothing was kept rather than guessed at.',
+            },
+          ],
+          modelCalls: Math.max(0, model.usage.calls - modelCallsBefore),
+        };
+      }
+
+      /*
+       * THE GATE, ON THE FALLBACK PATH — CS-10.
+       *
+       * This branch used to build candidates straight from a reach box and hand
+       * them to the board, so a source family that answered when the primary
+       * catalogue did not was the one family nothing checked. A live New York
+       * build reached a traveller's board with twenty-three records from another
+       * state, and the same shape was reachable here with no pack at all.
+       *
+       * The fallback carries no administrative geography of its own — the map
+       * service publishes tags, not addresses — so almost everything here is
+       * honestly `membership_unknown`: shown on a provisional board, labelled,
+       * and kept out of a final attraction slot and away from the planner. That
+       * is a thinner board than the old behaviour and it is the truthful one.
+       */
+      const fallbackOverlay = buildTripScopeOverlay({
+        scope,
+        records: shortlist.map(fallbackRecordFor),
+        roleEligible,
+        ...(includedAreas ? { includedAreas: includedAreas.map(toIncludedArea) } : {}),
+      });
+      let refusedByScope = 0;
+
+      const candidates: DiscoveredCandidate[] = [];
+      for (const entry of classified.places) {
+        const osm = shortlist[entry.index];
+        if (!osm) continue;
+
+        const decision = decisionFor(fallbackOverlay, `fallback:${osm.elementId}`);
+        if (!decision.eligibility.provisionalBoardEligible) {
+          refusedByScope += 1;
+          continue;
+        }
+
+        /**
+         * STANDING, FROM WHAT THE MAP ACTUALLY CARRIES.
+         *
+         * This branch used to read `popularity = 0.25 + (tagCount / 5) * 0.5`
+         * and then `hiddenGem = 1 − popularity` and `crowd = popularity > 0.7`.
+         * A tag count is how thoroughly a mapper described something; calling it
+         * popularity, its inverse a hidden gem and its threshold a crowd meant
+         * three of a card's badges were one number, and the number was somebody
+         * else's editing effort. A well-maintained chain café read as famous and
+         * busy; an untagged shrine read as an undiscovered find.
+         *
+         * `assessPlaceStanding` is the same model the compiled path uses, so the
+         * two producers cannot drift apart again — which is the state they were
+         * found in, with different formulas for the same field.
+         *
+         * OSM has no rating and no review count, and that stays a feature rather
+         * than a gap: there is no popularity number here to mistake for quality,
+         * so most of these places carry no prominence at all — and now say so by
+         * leaving it absent instead of by scoring low.
+         */
+        const standing = assessPlaceStanding({
+          inKnowledgeBase: osm.planningTags.wikidata !== undefined,
+          publishedSites: [osm.planningTags.website, osm.planningTags['contact:website']].filter(
+            (url): url is string => url !== undefined,
+          ),
+          classifyingValues: [osm.primaryTag],
+          recordedAttributeCount: Object.keys(osm.planningTags).length,
+          // The one crowd signal a tag set carries. A `seasonal` element packs a
+          // year of visitors into a short window; it never says how many.
+          crowd: { seasonalConcentration: osm.planningTags.seasonal !== undefined },
+        });
+
+        const placeId = `osm-${osm.elementId.replace('/', '-')}`;
+        osmByPlaceId.set(placeId, osm);
+        const operatorSite = websiteTagFor(placeId);
+
+        const place: Place = {
+          id: placeId,
+          regionId: `compiled-${scope.destinationCandidateId}`,
+          name: osm.name,
+          locality: scope.destinationName,
+          shortDescription: entry.shortDescription.slice(0, 280),
+          coordinates: osm.coordinates,
+          /**
+           * The classifying tag, plus the *names* of the attributes the map data
+           * recorded. Names, never values: a place with a website, posted hours
+           * and a Wikidata entry is a place somebody maintains, and that is a
+           * quality signal — while a table of somebody else's tag values would
+           * be a redistribution of their database.
+           */
+          /*
+           * The containment relationship travels as a tag, which is the one
+           * channel that survives every artifact boundary a place crosses. A
+           * consumer reads why this is here rather than assuming it belongs.
+           */
+          tags: [
+            osm.primaryTag,
+            ...Object.keys(osm.planningTags).map((key) => `attr:${key}`),
+            placeInclusionTag(decision.relationship),
+          ],
+          source: {
+            name: 'OpenStreetMap',
+            kind: 'osm',
+            /**
+             * The operator's own domain where the map data carries one, and the
+             * map element otherwise. This is what lets the research funnel skip
+             * a billable search: a `website` tag is the answer the search would
+             * have been buying.
+             */
+            url: operatorSite ?? osm.url,
+            /*
+             * Derived from how much the element carries, where this was the
+             * constant `0.7` — a number that claimed somebody had measured our
+             * confidence in a record nobody had looked at.
+             */
+            confidence: standing.sourceConfidence,
+            lastVerified: new Date().toISOString().slice(0, 10),
+            element: {
+              elementId: osm.elementId,
+              database: 'openstreetmap',
+              licenceId: 'ODbL-1.0',
+              ...(osm.sourceTimestamp ? { sourceTimestamp: osm.sourceTimestamp } : {}),
+              url: osm.url,
+            },
+          },
+          relationship: 'satellite',
+          category: entry.category,
+          interests: entry.interests.length > 0 ? entry.interests : ['scenic_viewpoints'],
+          typicalDurationMinutes: Math.min(600, Math.max(15, entry.typicalDurationMinutes)),
+          costLevel: Math.min(3, Math.max(0, entry.costLevel)) as 0 | 1 | 2 | 3,
+          physicalIntensity: entry.physicalIntensity,
+          /*
+           * Popularity, hidden-gem and crowd are reads of the standing above,
+           * and the separated scores travel beside them. One spread, so this
+           * producer has no fallback of its own to disagree with.
+           */
+          ...standingFields(standing),
+          weather: {
+            exposure: entry.exposure,
+            precipitation: entry.exposure === 'indoor' ? 'low' : 'high',
+            wind: entry.exposure === 'exposed_outdoor' ? 'moderate' : 'low',
+            heat: entry.exposure === 'indoor' ? 'low' : 'moderate',
+            cold: entry.exposure === 'indoor' ? 'low' : 'moderate',
+            visibilityDependent: entry.visibilityDependent,
+            poorWeatherBackup: entry.poorWeatherBackup,
+            approachDegradesWhenWet: false,
+          },
+          bestTimeOfDay: 'any',
+          seasonalAccess: {
+            openMonths:
+              entry.openMonths.length > 0
+                ? entry.openMonths
+                : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            closureRisk: entry.openMonths.length < 12 ? 'seasonal' : 'none',
+          },
+          access: {
+            roadSurface: 'paved',
+            mountainRoad: false,
+            parkingDifficulty: scope.transport.carAvailable ? 'moderate' : 'hard',
+            remoteNoServices: false,
+          },
+          travelFromBase: { distanceKm: 0, driveMinutes: 0, driveIsScenic: false },
+        };
+
+        candidates.push({
+          place,
+          providerRefs: [
+            { provider: 'openstreetmap', externalId: osm.elementId, url: osm.url },
+          ],
+          facts: [],
+          confidenceSignals:
+            Object.keys(osm.planningTags).length >= 2
+              ? ['multiple_providers_agree']
+              : ['single_provider_only'],
+        });
+      }
+
+      const gaps: ProviderGap[] = [];
+      if (refusedByScope > 0) {
+        gaps.push({
+          subjectId: scope.destinationCandidateId,
+          reason: 'not_found',
+          detail: `${refusedByScope} ${refusedByScope === 1 ? 'place' : 'places'} the map data returned belong somewhere else, so they were left out.`,
+        });
+      }
+      return {
+        candidates,
+        gaps,
+        modelCalls: Math.max(0, model.usage.calls - modelCallsBefore),
+      };
+  }
+
   const places: PlaceDiscoveryProvider = {
     name: 'region-pack',
-    async discover({ scope, queries, pack, includedAreas, recovery, namedByTraveller }) {
+    async discover({
+      scope,
+      queries,
+      pack,
+      includedAreas,
+      recovery,
+      namedByTraveller,
+      acquire,
+    }) {
+      /**
+       * A DEFICIT-DIRECTED SEARCH, BEFORE THE PACK SHORT-CIRCUIT.
+       *
+       * Placed above the `if (pack)` branch on purpose. A pack is a bounded,
+       * release-pinned inventory and that branch correctly refuses to ask a live
+       * service the same question again — which is exactly why the previous
+       * acquiring repair achieved nothing: it passed queries into a function
+       * that returns before reading them, and reported spend for a call nobody
+       * made. An acquisition is not the same question, so it is answered before
+       * the short-circuit rather than inside it.
+       *
+       * Three disciplines hold here, and each one is a defect that shipped:
+       *
+       * 1. **Nothing this returns is written to `packInventory` or
+       *    `packOverlay`.** Those are what the food stage and the must-do
+       *    resolver read, and a narrow answer replacing them is how a repair
+       *    partially undid the free repair before it.
+       * 2. **The cache entry is its own.** `fetchPoisForIntents` uses a distinct
+       *    `kind` *and* a selector digest, so a targeted read can never land on
+       *    the broad sweep's key.
+       * 3. **Calls are reported honestly**, so the ledger is not a work of
+       *    fiction in either direction.
+       */
+      if (acquire) {
+        if (!isPoiProviderEnabled()) {
+          return {
+            candidates: [],
+            gaps: [
+              {
+                subjectId: scope.destinationCandidateId,
+                reason: 'provider_error',
+                detail:
+                  'There is no map service switched on that we could ask for the kinds of place this trip is missing.',
+              },
+            ],
+            calls: 0,
+          };
+        }
+        const acquireRadiusKm = scope.shape.kind === 'radius' ? scope.shape.radiusKm : 40;
+        const lngDegree = (km: number): number =>
+          km / (111 * Math.max(0.1, Math.cos((scope.center.lat * Math.PI) / 180)));
+        const acquireBox: BoundingBox =
+          scope.bounds !== undefined
+            ? {
+                south: scope.bounds.southWest.lat,
+                west: scope.bounds.southWest.lng,
+                north: scope.bounds.northEast.lat,
+                east: scope.bounds.northEast.lng,
+              }
+            : {
+                south: scope.center.lat - acquireRadiusKm / 111,
+                north: scope.center.lat + acquireRadiusKm / 111,
+                west: scope.center.lng - lngDegree(acquireRadiusKm),
+                east: scope.center.lng + lngDegree(acquireRadiusKm),
+              };
+
+        const targeted = await fetchPoisForIntents(acquireBox, acquire.intents, {
+          limit: acquire.maxRecords,
+          retries: 0,
+          /*
+           * AN ABSOLUTE INSTANT, NOT A DURATION.
+           *
+           * `deadlineMs` is an epoch millisecond and is compared against
+           * `Date.now()`. Passing the *budget* here rather than `now + budget`
+           * made every selector group fail its deadline check on the first
+           * iteration, so the acquisition returned an empty answer without
+           * issuing a single request — and reported it as "nothing further came
+           * back", which is indistinguishable from the map genuinely holding
+           * nothing. A one-token unit error that reproduced, exactly, the defect
+           * this whole path was rebuilt to fix.
+           */
+          deadlineMs: Date.now() + POI_STAGE_BUDGET_MS,
+          cache: cacheFor<OverpassResult>('overpass-targeted', TTL.poi),
+        });
+        diagnostics.poiCalls += targeted.calls;
+        diagnostics.poiElements += targeted.elements.length;
+
+        const acquired = targeted.elements
+          .map((element) => normalizeElement(element))
+          .filter((entry): entry is NormalizedOsmPlace => entry !== null);
+
+        const built = await buildOsmCandidates({
+          normalized: acquired,
+          scope,
+          ...(includedAreas ? { includedAreas } : {}),
+          limit: acquire.maxRecords,
+        });
+        /*
+         * A REFUSAL IS AN ANSWER, AND HAS TO BE REPORTED AS ONE.
+         *
+         * `failedGroups` was discarded, so an acquisition where every selector
+         * group was rate-limited or timed out returned `candidates: []` with no
+         * gap attached — which the loop then recorded as "nothing further came
+         * back". The provider contract on this seam is explicit that a provider
+         * may not answer "I don't know" by omission, and a silent empty answer
+         * is exactly that.
+         */
+        const acquireGaps = [...built.gaps];
+        if (targeted.failedGroups.length > 0) {
+          acquireGaps.push({
+            subjectId: scope.destinationCandidateId,
+            reason: 'provider_error',
+            detail:
+              targeted.elements.length === 0
+                ? 'The map service refused every one of the searches we made for the kinds of place this trip is missing.'
+                : `The map service refused ${targeted.failedGroups.length} of the searches we made, so this second look is incomplete.`,
+          });
+        }
+        return {
+          candidates: built.candidates,
+          gaps: acquireGaps,
+          /*
+           * Map calls *and* the classification call, because both were spent.
+           *
+           * An earlier version returned only the Overpass count on the reasoning
+           * that "the model spend is separate" — and then charged it nowhere, so
+           * a real Anthropic call inside `buildOsmCandidates` was invisible to
+           * every budget and the attempt record asserted `modelCalls: 0`. A
+           * counter that omits a spend is worse than no counter.
+           */
+          calls: targeted.calls,
+          modelCalls: built.modelCalls,
+          /*
+           * Attribution only for data we actually used. Returning the ODbL
+           * notice on an empty answer puts an attribution on a compiled region
+           * for a source that contributed nothing to it.
+           */
+          ...(built.candidates.length > 0
+            ? { licences: [OSM_LICENCE_PLACES, AUTHORED_LICENCE] }
+            : {}),
+        };
+      }
+
       /**
        * A pack is the answer, and asking anything else would be worse.
        *
@@ -959,217 +1431,16 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         return { candidates: [], gaps, calls: diagnostics.poiCalls, licences: [OSM_LICENCE_PLACES] };
       }
 
-      // Bounded before classification: the model call is the expensive one, and
-      // a bbox in a dense city returns far more than a trip can hold.
-      const shortlist = normalized.slice(0, Math.min(120, Math.max(20, wanted)));
-
-      let classified: Awaited<ReturnType<typeof classifyPlaces>>;
-      try {
-        classified = await classifyPlaces(
-          model,
-          shortlist.map((entry) => ({
-            name: entry.name,
-            types: [entry.primaryTag, ...Object.keys(entry.planningTags)],
-            locality: scope.destinationName,
-          })),
-        );
-      } catch {
-        return {
-          candidates: [],
-          gaps: [
-            ...gaps,
-            {
-              subjectId: scope.destinationCandidateId,
-              reason: 'provider_error',
-              detail: 'Nothing could be classified, so nothing was kept rather than guessed at.',
-            },
-          ],
-          calls: diagnostics.poiCalls,
-          licences: [OSM_LICENCE_PLACES],
-        };
-      }
-
-      /*
-       * THE GATE, ON THE FALLBACK PATH — CS-10.
-       *
-       * This branch used to build candidates straight from a reach box and hand
-       * them to the board, so a source family that answered when the primary
-       * catalogue did not was the one family nothing checked. A live New York
-       * build reached a traveller's board with twenty-three records from another
-       * state, and the same shape was reachable here with no pack at all.
-       *
-       * The fallback carries no administrative geography of its own — the map
-       * service publishes tags, not addresses — so almost everything here is
-       * honestly `membership_unknown`: shown on a provisional board, labelled,
-       * and kept out of a final attraction slot and away from the planner. That
-       * is a thinner board than the old behaviour and it is the truthful one.
-       */
-      const fallbackOverlay = buildTripScopeOverlay({
+      const built = await buildOsmCandidates({
+        normalized,
         scope,
-        records: shortlist.map(fallbackRecordFor),
-        roleEligible,
-        ...(includedAreas ? { includedAreas: includedAreas.map(toIncludedArea) } : {}),
+        ...(includedAreas ? { includedAreas } : {}),
+        limit: wanted,
       });
-      let refusedByScope = 0;
-
-      const candidates: DiscoveredCandidate[] = [];
-      for (const entry of classified.places) {
-        const osm = shortlist[entry.index];
-        if (!osm) continue;
-
-        const decision = decisionFor(fallbackOverlay, `fallback:${osm.elementId}`);
-        if (!decision.eligibility.provisionalBoardEligible) {
-          refusedByScope += 1;
-          continue;
-        }
-
-        /**
-         * STANDING, FROM WHAT THE MAP ACTUALLY CARRIES.
-         *
-         * This branch used to read `popularity = 0.25 + (tagCount / 5) * 0.5`
-         * and then `hiddenGem = 1 − popularity` and `crowd = popularity > 0.7`.
-         * A tag count is how thoroughly a mapper described something; calling it
-         * popularity, its inverse a hidden gem and its threshold a crowd meant
-         * three of a card's badges were one number, and the number was somebody
-         * else's editing effort. A well-maintained chain café read as famous and
-         * busy; an untagged shrine read as an undiscovered find.
-         *
-         * `assessPlaceStanding` is the same model the compiled path uses, so the
-         * two producers cannot drift apart again — which is the state they were
-         * found in, with different formulas for the same field.
-         *
-         * OSM has no rating and no review count, and that stays a feature rather
-         * than a gap: there is no popularity number here to mistake for quality,
-         * so most of these places carry no prominence at all — and now say so by
-         * leaving it absent instead of by scoring low.
-         */
-        const standing = assessPlaceStanding({
-          inKnowledgeBase: osm.planningTags.wikidata !== undefined,
-          publishedSites: [osm.planningTags.website, osm.planningTags['contact:website']].filter(
-            (url): url is string => url !== undefined,
-          ),
-          classifyingValues: [osm.primaryTag],
-          recordedAttributeCount: Object.keys(osm.planningTags).length,
-          // The one crowd signal a tag set carries. A `seasonal` element packs a
-          // year of visitors into a short window; it never says how many.
-          crowd: { seasonalConcentration: osm.planningTags.seasonal !== undefined },
-        });
-
-        const placeId = `osm-${osm.elementId.replace('/', '-')}`;
-        osmByPlaceId.set(placeId, osm);
-        const operatorSite = websiteTagFor(placeId);
-
-        const place: Place = {
-          id: placeId,
-          regionId: `compiled-${scope.destinationCandidateId}`,
-          name: osm.name,
-          locality: scope.destinationName,
-          shortDescription: entry.shortDescription.slice(0, 280),
-          coordinates: osm.coordinates,
-          /**
-           * The classifying tag, plus the *names* of the attributes the map data
-           * recorded. Names, never values: a place with a website, posted hours
-           * and a Wikidata entry is a place somebody maintains, and that is a
-           * quality signal — while a table of somebody else's tag values would
-           * be a redistribution of their database.
-           */
-          /*
-           * The containment relationship travels as a tag, which is the one
-           * channel that survives every artifact boundary a place crosses. A
-           * consumer reads why this is here rather than assuming it belongs.
-           */
-          tags: [
-            osm.primaryTag,
-            ...Object.keys(osm.planningTags).map((key) => `attr:${key}`),
-            placeInclusionTag(decision.relationship),
-          ],
-          source: {
-            name: 'OpenStreetMap',
-            kind: 'osm',
-            /**
-             * The operator's own domain where the map data carries one, and the
-             * map element otherwise. This is what lets the research funnel skip
-             * a billable search: a `website` tag is the answer the search would
-             * have been buying.
-             */
-            url: operatorSite ?? osm.url,
-            /*
-             * Derived from how much the element carries, where this was the
-             * constant `0.7` — a number that claimed somebody had measured our
-             * confidence in a record nobody had looked at.
-             */
-            confidence: standing.sourceConfidence,
-            lastVerified: new Date().toISOString().slice(0, 10),
-            element: {
-              elementId: osm.elementId,
-              database: 'openstreetmap',
-              licenceId: 'ODbL-1.0',
-              ...(osm.sourceTimestamp ? { sourceTimestamp: osm.sourceTimestamp } : {}),
-              url: osm.url,
-            },
-          },
-          relationship: 'satellite',
-          category: entry.category,
-          interests: entry.interests.length > 0 ? entry.interests : ['scenic_viewpoints'],
-          typicalDurationMinutes: Math.min(600, Math.max(15, entry.typicalDurationMinutes)),
-          costLevel: Math.min(3, Math.max(0, entry.costLevel)) as 0 | 1 | 2 | 3,
-          physicalIntensity: entry.physicalIntensity,
-          /*
-           * Popularity, hidden-gem and crowd are reads of the standing above,
-           * and the separated scores travel beside them. One spread, so this
-           * producer has no fallback of its own to disagree with.
-           */
-          ...standingFields(standing),
-          weather: {
-            exposure: entry.exposure,
-            precipitation: entry.exposure === 'indoor' ? 'low' : 'high',
-            wind: entry.exposure === 'exposed_outdoor' ? 'moderate' : 'low',
-            heat: entry.exposure === 'indoor' ? 'low' : 'moderate',
-            cold: entry.exposure === 'indoor' ? 'low' : 'moderate',
-            visibilityDependent: entry.visibilityDependent,
-            poorWeatherBackup: entry.poorWeatherBackup,
-            approachDegradesWhenWet: false,
-          },
-          bestTimeOfDay: 'any',
-          seasonalAccess: {
-            openMonths:
-              entry.openMonths.length > 0
-                ? entry.openMonths
-                : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-            closureRisk: entry.openMonths.length < 12 ? 'seasonal' : 'none',
-          },
-          access: {
-            roadSurface: 'paved',
-            mountainRoad: false,
-            parkingDifficulty: scope.transport.carAvailable ? 'moderate' : 'hard',
-            remoteNoServices: false,
-          },
-          travelFromBase: { distanceKm: 0, driveMinutes: 0, driveIsScenic: false },
-        };
-
-        candidates.push({
-          place,
-          providerRefs: [
-            { provider: 'openstreetmap', externalId: osm.elementId, url: osm.url },
-          ],
-          facts: [],
-          confidenceSignals:
-            Object.keys(osm.planningTags).length >= 2
-              ? ['multiple_providers_agree']
-              : ['single_provider_only'],
-        });
-      }
-
-      if (refusedByScope > 0) {
-        gaps.push({
-          subjectId: scope.destinationCandidateId,
-          reason: 'not_found',
-          detail: `${refusedByScope} ${refusedByScope === 1 ? 'place' : 'places'} the map data returned belong somewhere else, so they were left out.`,
-        });
-      }
+      gaps.push(...built.gaps);
 
       return {
-        candidates,
+        candidates: built.candidates,
         gaps,
         calls: diagnostics.poiCalls,
         licences: [OSM_LICENCE_PLACES, AUTHORED_LICENCE],
@@ -1308,6 +1579,21 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       return ['car', 'foot'];
     },
     async matrix({ points, mode, maxElements }) {
+      /**
+       * A ROAD MATRIX IS NEVER ASKED FOR A TRANSIT ANSWER.
+       *
+       * `costingFor` used to map `transit` onto Valhalla's `bus` costing — a
+       * road-network vehicle with no timetable — and the mapping was unreachable
+       * only because nothing happened to pass `transit`. "Nothing calls it
+       * today" is a property of the current control flow rather than of the
+       * build, and it is one refactor away from being false. Transit is measured
+       * by the transit seam or not at all.
+       */
+      if (mode === 'transit') {
+        throw new Error(
+          'The road router was asked for a public-transport journey. Transit is measured by the transit provider or reported as unavailable.',
+        );
+      }
       const outcome = await valhallaMatrix([...points], costingFor(mode), {
         maxPairs: maxElements,
         cache: cacheFor('valhalla', TTL.matrix),
@@ -1324,12 +1610,139 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         km: dense.km,
         provenance: {
           kind: 'measured' as const,
+          /*
+           * Named from the mode, with no `else`.
+           *
+           * This was a binary — anything that was not `car` was labelled
+           * *walking* — which was harmless while only two modes could reach it
+           * and becomes a fabricated claim the moment a third can. A mode this
+           * router cannot measure is refused above rather than described here.
+           */
           note: `Measured ${mode === 'car' ? 'driving' : 'walking'} times from a Valhalla routing engine over OpenStreetMap data.`,
           source: 'Valhalla / OpenStreetMap',
         },
         failedPairs: outcome.failedPairs.map((pair) => ({ ...pair, reason: 'not_found' as const })),
         calls: outcome.calls,
         elements: outcome.pairs,
+      };
+    },
+  };
+
+  /**
+   * Public transport, when this build was told it has a router that can answer.
+   *
+   * `supportsTransit` reads the switch rather than probing, because it is
+   * consulted before any pair is chosen — it decides whether a car-free
+   * traveller's reach is a walking radius or a transit one, and a network round
+   * trip inside that decision would put a socket in a scope derivation. The
+   * probing happens per journey, where it can be acted on.
+   */
+  const transitProvider: TransitRoutingProvider = {
+    name: 'valhalla-multimodal',
+    supportsTransit() {
+      return isTransitProviderEnabled();
+    },
+    async routes({ pairs, departAt, timeZone, maxPairs }) {
+      /**
+       * ONE PRE-FLIGHT, BEFORE ANY PAIR IS BOUGHT.
+       *
+       * `supportsTransit()` reads a switch, and a switch says what somebody
+       * *configured*, not what the instance actually holds. A Valhalla server
+       * built without GTFS tiles answers a multimodal request with a walking
+       * route or a 170, so a build pointed at one would have widened a car-free
+       * traveller's ground to a transit radius, reported no readiness gap, and
+       * then failed every journey — the widened ground justified by a
+       * measurement that was never going to arrive.
+       *
+       * `has_transit_tiles` is computed from the same predicate that drives the
+       * 170 refusal, so it predicts it reliably. Absent means the instance does
+       * not publish verbose status, which is treated as unknown and therefore
+       * unavailable: a capability we cannot confirm is not one we claim.
+       */
+      const tiles = await transitTilesAvailable({});
+      if (!tiles) {
+        const now = new Date().toISOString();
+        return {
+          journeys: pairs.slice(0, maxPairs).map((pair) => ({
+            fromId: pair.fromId,
+            toId: pair.toId,
+            status: 'out_of_coverage' as const,
+            requestBasis: {
+              kind: 'depart_at' as const,
+              instant: departAt.toISOString(),
+              timeZone,
+            },
+            source: 'valhalla-multimodal',
+            retrievedAt: now,
+            detail: 'The journey planner here holds no public-transport timetables.',
+          })),
+          gaps: [
+            {
+              subjectId: 'transit',
+              reason: 'no_official_source' as const,
+              detail:
+                'The routing service configured for this build was not prepared with timetable data, so no public-transport journey could be measured.',
+            },
+          ],
+          calls: 0,
+        };
+      }
+      const outcome = await measureTransitJourneys(
+        pairs,
+        { departAt, timeZone },
+        { maxPairs, cache: cacheFor<TransitJourney>('valhalla-transit', TTL.matrix) },
+      );
+      diagnostics.transitCalls += outcome.calls;
+      diagnostics.transitPairsRequested += outcome.journeys.length;
+      diagnostics.transitPairsMeasured += outcome.journeys.filter(
+        (journey) => journey.status === 'measured',
+      ).length;
+      return {
+        journeys: outcome.journeys,
+        gaps: outcome.journeys
+          .filter((journey) => journey.status === 'provider_error')
+          .map((journey) => ({
+            subjectId: journey.toId,
+            reason: 'provider_error' as const,
+            detail: journey.detail,
+          })),
+        calls: outcome.calls,
+        licences: [OSM_LICENCE_ROUTING],
+      };
+    },
+  };
+
+  const timeZoneProvider: TimeZoneProvider = {
+    name: 'open-meteo',
+    async resolve({ points, maxCalls }) {
+      const outcome = await resolveCivilTimeZones(points, {
+        maxCalls,
+        cache: cacheFor<{ timeZone: string }>('open-meteo-timezone', TIME_ZONE_TTL_MS),
+      });
+      diagnostics.timeZoneCalls += outcome.calls;
+      diagnostics.timeZoneCacheHits += outcome.cacheHits;
+      return {
+        zones: outcome.answers.map((answer) => ({
+          pointId: answer.id,
+          timeZone: answer.timeZone,
+          detail: answer.detail,
+        })),
+        /*
+         * A point with no zone is a gap rather than an omission. Downstream it
+         * keeps whatever zone it arrived with, and the artifact's own basis says
+         * how much that is worth — but the reason it could not be improved is
+         * recorded here rather than inferred from an absence.
+         */
+        gaps: outcome.answers
+          .filter((answer) => answer.timeZone === null)
+          .map((answer) => ({
+            subjectId: answer.id,
+            reason: 'no_official_source' as const,
+            detail: answer.detail,
+          })),
+        calls: outcome.calls,
+        source: 'open-meteo',
+        resolvedAt: new Date().toISOString(),
       };
     },
   };
@@ -1365,7 +1778,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
        * sunset and every daylight-only visit by the offset. The scope carries the
        * zone that was actually resolved, and it is the durable answer.
        */
-      const zone = scope.timeZones[0] ?? diagnostics.timeZone ?? 'UTC';
+      const zone = regionTimeZone(scope);
       const locations: WeatherLocation[] = buckets
         .filter((bucket) => bucket.length > 0)
         .map((bucket, index) => ({
@@ -1977,6 +2390,15 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       places,
       constraints,
       routing,
+      /*
+       * Both registered against the capability broker, and both present here
+       * only when the broker says this build can actually reach them. A
+       * capability the doctor reports as available and the product path cannot
+       * invoke is the exact divergence the registry exists to prevent, so the
+       * same predicate decides both.
+       */
+      ...(isTimeZoneResolverEnabled() ? { timeZone: timeZoneProvider } : {}),
+      ...(isTransitProviderEnabled() ? { transit: transitProvider } : {}),
       weatherLocations,
       food,
       sourceDiscovery,

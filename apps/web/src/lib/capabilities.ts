@@ -7,6 +7,9 @@ import {
   isPoiProviderEnabled,
   isResearchModelConfigured,
   isRoutesProviderEnabled,
+  isTimeZoneResolverEnabled,
+  isTransitProviderEnabled,
+  transitProviderName,
 } from './providers/switches';
 
 /**
@@ -133,6 +136,58 @@ export function capabilityRegistry(): TravelCapabilityRegistry {
     attribution: 'Open-Meteo, CC BY 4.0',
   });
 
+  /**
+   * THE ENTRY THAT MOVED FROM "NOT REGISTERED, ON PURPOSE" TO A REAL PROVIDER.
+   *
+   * The same keyless CC BY 4.0 service the weather and climate rows already
+   * name, asked a different question: `timezone=auto` resolves a coordinate to
+   * an IANA identifier. `storable` is the load-bearing word — a compiled region
+   * outlives the request that made it, and the one obvious alternative publishes
+   * terms that forbid keeping a `timeZone` at all.
+   */
+  registry.register({
+    provider: 'open-meteo',
+    capability: 'civil_time_zone',
+    authority: 'structured_provider',
+    freshness: 'static',
+    persistence: 'storable',
+    coverage: 'global',
+    configured: isTimeZoneResolverEnabled(),
+    missing: isTimeZoneResolverEnabled() ? [] : ['SIDEQUEST_TIMEZONE_PROVIDER'],
+    attribution: 'Open-Meteo, CC BY 4.0',
+    note: 'Answers with a real zone or with nothing. A fixed offset is refused rather than accepted.',
+  });
+
+  /**
+   * PUBLIC TRANSPORT, REGISTERED ONLY WHEN SOMETHING CAN MEASURE IT.
+   *
+   * `route_transit` was the registry's worked example of an unsupplied
+   * capability, and the point of the example was never that transit is
+   * unmeasurable — it was that a walking matrix must not be allowed to answer
+   * for it. This registration keeps that guarantee and adds the other half: a
+   * deployment whose router was built with timetable data registers here, and
+   * one whose was not still reports `unsupported`.
+   *
+   * Deliberately not tied to `SIDEQUEST_ROUTES_PROVIDER`. A Valhalla instance
+   * only speaks about transit if GTFS tiles were built into it, and the public
+   * demo endpoint's were not — so "we have a router" and "we have transit" are
+   * two facts and are configured as two.
+   */
+  if (isTransitProviderEnabled()) {
+    registry.register({
+      provider: transitProviderName() ?? 'valhalla',
+      capability: 'route_transit',
+      authority: 'structured_provider',
+      freshness: 'daily',
+      persistence: 'storable',
+      coverage: 'global',
+      configured: true,
+      missing: [],
+      attribution: 'Valhalla / © OpenStreetMap contributors / transit agency GTFS',
+      note: 'Measured journeys only. Where no service runs, that is reported rather than filled in.',
+    });
+  }
+
   registry.register({
     provider: 'derived',
     capability: 'daylight',
@@ -148,16 +203,20 @@ export function capabilityRegistry(): TravelCapabilityRegistry {
   /*
    * NOT REGISTERED, ON PURPOSE:
    *
-   *   route_transit, transit_schedule, route_ferry, gateway_discovery,
-   *   place_details, place_images, opening_hours, seasonal_access,
-   *   food_near_anchor, local_context
+   *   transit_schedule, route_ferry, gateway_discovery, place_details,
+   *   place_images, opening_hours, seasonal_access, food_near_anchor,
+   *   local_context
    *
    * Some of these are supplied *within* a compilation by the research funnel
-   * rather than by a standalone adapter, and some — the transit ones — have no
-   * supplier at all. Both cases are better reported as `unsupported` than
-   * registered against something that does not really answer them: a capability
-   * claimed and then quietly served by a different measurement is exactly the
-   * substitution this registry exists to make impossible.
+   * rather than by a standalone adapter, and some have no supplier at all. Both
+   * cases are better reported as `unsupported` than registered against something
+   * that does not really answer them: a capability claimed and then quietly
+   * served by a different measurement is exactly the substitution this registry
+   * exists to make impossible.
+   *
+   * `route_transit` left this list conditionally rather than outright — see
+   * above. A build with no transit provider still lands here, and the readiness
+   * layer still reports the gap.
    */
 
   return registry;

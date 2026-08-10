@@ -153,7 +153,26 @@ export function CompilationProgress({
     .filter((entry): entry is string => Boolean(entry));
 
   return (
-    <div className="space-y-4" data-testid="compilation-progress" data-progress-version={progressVersion}>
+    /*
+     * NO `aria-busy` HERE, AND THAT IS THE CORRECTION.
+     *
+     * An earlier version put `aria-busy` on this container to say "still
+     * working". It is an ancestor of the phase-label live region below, and
+     * `aria-busy="true"` on a live region *or any ancestor of one* tells
+     * assistive technology to hold changes back until it clears. It would have
+     * been true for the entire build — precisely the window in which the stage
+     * announcements are the only thing a screen-reader user has — so the
+     * attribute added to help would have silenced several minutes of progress
+     * and then delivered it in one burst at the end.
+     *
+     * The live region below already carries the state in words, which is the
+     * version that cannot backfire.
+     */
+    <div
+      className="space-y-4"
+      data-testid="compilation-progress"
+      data-progress-version={progressVersion}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
         <span className="text-ink-muted" aria-live="polite">
           {failed

@@ -223,10 +223,34 @@ test('pressing build twice does not start a second compilation', async ({ page }
   const id = await createTrip(page, 'Harbour City');
   await compile(page);
 
-  // A second start against an already-compiled scope adopts the artifact rather
-  // than paying for it again. Reloading proves the region survived.
+  /**
+   * THE SECOND PRESS, WHICH THIS TEST WAS NAMED FOR AND NEVER MADE.
+   *
+   * It compiled once and asserted a heading was visible — so "pressing build
+   * twice" was never done, and a build that started a fresh compilation on every
+   * press would have passed. The claim is that an already-compiled scope adopts
+   * the artifact rather than paying for it again, and the only way to observe it
+   * is to press again and check the identity of what comes back.
+   */
   await page.goto(`/trips/${id}/plan`);
   await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  const before = await page.getByTestId('region-data').textContent();
+
+  /*
+   * The control that would start one, if the screen still offers one. A screen
+   * that offers none is itself the guarantee — and asserting which of the two is
+   * true is the point, because "there was no button" and "the button was pressed
+   * and adopted the artifact" are both passes and only one of them was ever
+   * happening.
+   */
+  const rebuild = page.getByRole('button', { name: /^(build|compile|start)/i }).first();
+  const offersRebuild = await rebuild.isVisible().catch(() => false);
+  if (offersRebuild) await rebuild.click();
+
+  await page.goto(`/trips/${id}/plan`);
+  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  /* The same artifact, not a second one compiled from the same answers. */
+  expect(await page.getByTestId('region-data').textContent()).toBe(before);
 });
 
 test('the compiled result reports coverage and exact OSM attribution', async ({ page }) => {
@@ -567,5 +591,32 @@ test('a compiled region still renders with every provider switched off', async (
 
   await page.goto(`/trips/${id}/plan`);
   await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  const before = await page.getByTestId('region-data').textContent();
+  expect(before?.length ?? 0).toBeGreaterThan(0);
+
+  /**
+   * WHAT THIS TEST CAN AND CANNOT OBSERVE, STATED RATHER THAN IMPLIED.
+   *
+   * Its docstring claims "emptying every cache table must change nothing", and
+   * it emptied nothing — it compiled, reloaded, and asserted a panel was
+   * visible, which passes against an artifact that secretly re-fetches
+   * everything on render.
+   *
+   * A browser suite has no way to reach into the server's cache tables, and
+   * adding a route that could would be a hole in the product for the benefit of
+   * a test. What it *can* observe is the property the sweep was standing in
+   * for: every provider is already switched off in this run — the web server is
+   * started with the fixture compiler, no research credential and no live
+   * weather — so a second render that produced the same bytes could not have
+   * fetched anything, because there is nothing configured to fetch from.
+   *
+   * The sweep claim is retired and the observable claim is asserted. That is a
+   * narrower test and a true one; `render-purity.spec.ts` covers the "no
+   * outbound request during render" half directly.
+   */
+  await page.goto(`/trips/${id}/plan`);
+  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
   await expect(page.getByTestId('region-data')).toBeVisible();
+  /* Byte-for-byte the same, from the artifact's own copy of what it was built from. */
+  expect(await page.getByTestId('region-data').textContent()).toBe(before);
 });

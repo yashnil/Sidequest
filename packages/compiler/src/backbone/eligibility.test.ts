@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SourceRecord } from '@sidequest/core';
+import { PLANNING_ROLES, type SourceRecord } from '@sidequest/core';
 import {
   assessRecordEligibility,
   assessRoleEligibility,
@@ -9,7 +9,6 @@ import {
   isAttractionRole,
   isFoodRole,
   isRejectedRole,
-  planningRoleOf,
   ROLE_PERMISSIONS,
   type CandidateRole,
 } from './eligibility';
@@ -374,9 +373,22 @@ describe('role eligibility over the complete category vocabulary', () => {
   });
 
   it('gives every key a role that maps back onto a storable pack role', () => {
+    /**
+     * `expect(a.planningRole).toBe(planningRoleOf(a.role))` was a literal
+     * tautology: the assessor *assigns* `planningRole: planningRoleOf(role)`, so
+     * the assertion reduced to `f(x) === f(x)` and holds under every possible
+     * implementation of `planningRoleOf`, including one that returns a constant.
+     *
+     * What the test's own name claims is that the mapping lands on a role a pack
+     * can actually store, which is a fact about the *vocabulary* rather than
+     * about the function agreeing with itself.
+     */
+    const storable = new Set(PLANNING_ROLES);
     for (const key of everyKey) {
       const assessment = assessRoleEligibility({ sourceCategory: key, name: 'A Named Thing' });
-      expect(assessment.planningRole).toBe(planningRoleOf(assessment.role));
+      expect(storable.has(assessment.planningRole), `${key} -> ${assessment.planningRole}`).toBe(
+        true,
+      );
     }
   });
 

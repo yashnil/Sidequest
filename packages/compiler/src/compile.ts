@@ -21,7 +21,13 @@ import {
   type CompilationErrorCode,
   type CompilationOperational,
   type CompilationStage,
+  isCivilTimeZone,
+  singleTimeZone,
+  timeZoneConfidence,
+  utcOffsetMinutesOn,
   type CompiledRegion,
+  type ResearchRepairAttempt,
+  type TransitEvidence,
   type DataLicence,
   type DisplayName,
   type FactPath,
@@ -54,11 +60,17 @@ import {
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, type CompilerBudget } from './budget';
 import { buildCoverageReport } from './coverage';
-import { mustDoCoverageFrom, resolveMustDos, type MustDoSearchSpace } from './must-do';
+import {
+  mergeMustDoResolutions,
+  mustDoCoverageFrom,
+  resolveMustDos,
+  type MustDoSearchSpace,
+} from './must-do';
 import {
   assessResearchReadiness,
   MAX_RECOVERY_PASSES,
   recoveryActionFor,
+  SUPPLY_REPAIRS,
   unmeasurableModesFor,
 } from './research-readiness';
 import {
@@ -84,6 +96,7 @@ import type {
   CompilerProviders,
   DiscoveryQuery,
   ProviderGap,
+  DiscoveredCandidate,
   DiscoveryResult,
   ResearchSubject,
   RoutingMatrixResult,
@@ -771,6 +784,56 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       );
     }
 
+    /**
+     * THE CLOCK EACH BASE ACTUALLY KEEPS.
+     *
+     * Bases arrived carrying whatever zone the expansion adapter had to hand,
+     * which in practice was the destination's — so a trip whose second base sits
+     * across a boundary was scheduled an hour out, and nothing said so. A region
+     * that legitimately spans two zones is not exotic: most of Europe, the whole
+     * US Mountain/Pacific border, and every rail corridor that crosses a country.
+     *
+     * Deliberately small and cache-first. The destination's own zone is usually
+     * the answer for every base, and the adapter rounds coordinates before it
+     * looks anything up, so a one-base trip in a resolved destination costs
+     * nothing at all. A base the lookup cannot settle keeps the zone it came
+     * with, which is a fallback rather than a failure — and the scope's own basis
+     * still says how much that zone is worth.
+     */
+    const baseTimeZones = await runStage('resolving_time_zones', async () => {
+      const resolved = new Map<string, string>();
+      const provider = input.providers.timeZone;
+      if (!provider) {
+        return {
+          value: resolved,
+          outcome: 'no source configured; using the zone the destination resolved to',
+        };
+      }
+      const affordable = ledger.take('maxTimeZoneLookups', expansion.bases.length);
+      if (affordable === 0) {
+        return { value: resolved, outcome: 'no budget for time-zone lookups' };
+      }
+      const result = await provider.resolve({
+        points: expansion.bases
+          .slice(0, affordable)
+          .map((base) => ({ id: base.id, lat: base.coordinates.lat, lng: base.coordinates.lng })),
+        at: input.now,
+        maxCalls: affordable,
+      });
+      gaps.push(...result.gaps);
+      for (const entry of result.zones) {
+        if (entry.timeZone) resolved.set(entry.pointId, entry.timeZone);
+      }
+      const distinct = new Set(resolved.values());
+      return {
+        value: resolved,
+        outcome:
+          distinct.size > 1
+            ? `${distinct.size} different local clocks across this trip`
+            : `${resolved.size} of ${expansion.bases.length} confirmed against ${result.source}`,
+      };
+    });
+
     // ---- Stage: discover candidates -----------------------------------------
     /*
      * The supply account, captured beside the stage rather than inside its
@@ -904,9 +967,415 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       };
     });
 
+    /**
+     * ---- Stage: recovering supply, ABOVE THE CUT -----------------------------
+     *
+     * BOUNDED, DEFICIT-DIRECTED RECOVERY — AND WHY IT LIVES HERE NOW.
+     *
+     * This loop used to run at the very end of the pipeline, after the matrix,
+     * the operating calendars and the access rules had all been bought. Two
+     * things were wrong with that and only one of them was the documented one.
+     *
+     * The documented one: an acquired record arriving there would have no travel
+     * time, no opening hours and no way to be scheduled, so recovery could never
+     * acquire anything.
+     *
+     * The undocumented one, found by reading the code rather than the notes:
+     * **the loop's result never reached the board at all, even on the free
+     * path.** `plannable` was frozen long before it ran, and the loop's output
+     * was consumed only to recompute a readiness *reading*. So a compilation
+     * could report "twelve more things to do" on a board that still held the
+     * original nine — a claim the artifact itself contradicted.
+     *
+     * Moved above deduplication, both problems are the same problem and it is
+     * gone. Whatever recovery finds flows through dedupe, classification,
+     * quality, research, hours and routing exactly like every other candidate,
+     * because it *is* one. The position is also the one the stage registry has
+     * declared all along; the code was what disagreed.
+     *
+     * Four properties, each a way this could still go wrong:
+     *
+     * **It is additive.** Recovered candidates are appended to what was already
+     * found and the merged list is deduplicated with the originals first, so an
+     * earlier record always wins the merge. A repair cannot narrow the board.
+     *
+     * **It is monotone.** A pass that adds nothing ends the loop. Without this a
+     * repair that returns the same answer twice is an infinite loop wearing a
+     * budget.
+     *
+     * **It never lowers a bar.** A `reselect` may only widen a ceiling; an
+     * `acquire` adds records that then face every gate the ordinary ones do.
+     * A repair that relaxed the quality assessor or the containment gate would
+     * be manufacturing the readiness it claims to measure.
+     *
+     * **Every attempt is recorded, including the ones that achieved nothing** —
+     * with what was asked, of whom, what it cost and why the loop stopped. A
+     * failed repair that disappears from the diagnostics is how a loop comes to
+     * look like it never ran.
+     */
+    let supplyAttempts: ResearchRepairAttempt[] = [];
+    const supplyRepairsSpent = new Set<ResearchRepair>();
+    let recoveredCandidates: DiscoveredCandidate[] = [];
+
+    if (portfolioFacts) {
+      const supplyReading = (
+        facts: NonNullable<DiscoveryResult['portfolioFacts']>,
+        visitable: number,
+        exhausted: readonly ResearchRepair[],
+      ): DestinationResearchReadiness =>
+        assessResearchReadiness({
+          scope: input.scope,
+          ...(input.profile ? { profile: input.profile } : {}),
+          tripDays: Math.max(1, input.scope.nights + 1),
+          funnel: {
+            packRecords: facts.packRecords,
+            visitable,
+            anchors: facts.anchors,
+            discoveries: facts.discoveries,
+            food: facts.food,
+            support: facts.support,
+            gateways: facts.gateways,
+            anchorDemotions: facts.anchorDemotions,
+            membershipUnverified: facts.membershipUnverified,
+            tripDays: Math.max(1, input.scope.nights + 1),
+          },
+          categories: facts.categories,
+          areasWithVisitable: facts.areasWithVisitable,
+          areasTotal: facts.areasTotal,
+          largestAreaVisitable: facts.largestAreaVisitable,
+          sourceCatalogues: facts.sourceCatalogues,
+          /*
+           * Nothing has been researched or routed yet, and both dimensions read
+           * an absence as `unmeasured` rather than as a failure — which is the
+           * contract's own rule and is why an early reading is a *supply gate*
+           * rather than a second verdict. Neither is binding here, so neither can
+           * trigger a repair before the evidence that would answer it exists.
+           */
+          hoursKnown: 0,
+          unroutableModes: unmeasurableModesFor(input.scope, input.providers),
+          bases: expansion.bases.length,
+          satellites: expansion.subregions.length,
+          ...(facts.divisionsAvailable === 0 ||
+          facts.scopeIdentityUnknown ||
+          facts.membershipDecided === 0
+            ? {}
+            : { identityAgrees: facts.insideSelected >= facts.membershipDecided / 2 }),
+          packPartial: facts.packPartial,
+          ...(exhausted.length === 0 ? {} : { exhaustedRepairs: exhausted }),
+        });
+
+      let facts = portfolioFacts;
+      let visitable = dedupeCandidates([...discovered]).candidates.length;
+      let reading = supplyReading(facts, visitable, []);
+      let stopReason: NonNullable<ResearchRepairAttempt['stopReason']> = 'not_recoverable';
+
+      for (let pass = 0; pass < MAX_RECOVERY_PASSES; pass += 1) {
+        if (!shouldAttemptRecovery(reading)) {
+          stopReason = 'not_recoverable';
+          break;
+        }
+        /*
+         * The intents are derived from the deficit, and this is the line that
+         * makes an acquisition deficit-directed rather than a rerun: the kinds
+         * of thing the traveller asked for that the board has none of, then the
+         * general experience categories, never a generic sweep.
+         */
+        const shortIntents = shortfallIntentsFor(
+          input.profile,
+          [...discovered, ...recoveredCandidates],
+          Math.max(2, (input.scope.nights + 1) * 2),
+        );
+        const repair = reading.repairs.find(
+          (candidate) =>
+            SUPPLY_REPAIRS.includes(candidate) &&
+            !supplyRepairsSpent.has(candidate) &&
+            recoveryActionFor(candidate, pass, { shortIntents }) !== null,
+        );
+        if (!repair) {
+          stopReason = 'no_repair_left';
+          break;
+        }
+        supplyRepairsSpent.add(repair);
+        const action = recoveryActionFor(repair, pass, { shortIntents })!;
+        const before = reading;
+        let providerCalls = 0;
+        let modelCalls = 0;
+        let budgetRefused = false;
+        let searchFailed = false;
+        let capability: string | undefined;
+        let scopeClass: string | undefined;
+
+        const outcome = await runStage('recovering_supply', async () => {
+          if (action.kind === 'acquire') {
+            capability = 'place_inventory';
+            scopeClass = 'category_in_scope_bbox';
+            /*
+             * The ledger decides, not this loop. `take` rather than `record`, so
+             * the reservation happens before the call and a concurrent stage
+             * cannot overspend the counter behind it.
+             */
+            const affordable = ledger.take('maxRecoveryQueries', action.maxQueries);
+            if (affordable === 0) {
+              budgetRefused = true;
+              return {
+                value: [] as DiscoveredCandidate[],
+                outcome: 'no budget left to search again',
+              };
+            }
+            /*
+             * A FAILED SEARCH ENDS THE SEARCH, NOT THE COMPILATION.
+             *
+             * Every other provider stage here is defended this way and this one
+             * was not: recovery is by definition the optional part, so a
+             * compilation that has already produced a real board must not be
+             * thrown away because a second, best-effort look at the map did not
+             * come back. The budget stays spent — the reservation was made, and
+             * pretending otherwise would let a failing provider be retried
+             * without limit.
+             */
+            let result: DiscoveryResult;
+            try {
+              result = await input.providers.places.discover({
+                scope: input.scope,
+                queries: [],
+                includedAreas: discoveryIncludedAreas,
+                ...(input.profile ? { profile: input.profile } : {}),
+                ...(pack ? { pack } : {}),
+                acquire: {
+                  intents: action.intents.slice(0, affordable),
+                  maxRecords: action.maxPerQuery * affordable,
+                  scopeClass: 'category_in_scope_bbox',
+                },
+              });
+            } catch {
+              /*
+               * `failed` rather than `no_change`, because they are different
+               * news: one is "we looked and there is nothing there", the other
+               * is "we could not look". The schema has always distinguished
+               * them and nothing ever produced the second, so the panel's
+               * branch for it was unreachable copy.
+               */
+              searchFailed = true;
+              gaps.push({
+                subjectId: input.scope.destinationCandidateId,
+                reason: 'provider_error',
+                detail: 'We looked again for the kinds of place this trip is missing, and the map service did not answer.',
+              });
+              return {
+                value: [] as DiscoveredCandidate[],
+                outcome: 'the map service did not answer the second time either',
+              };
+            }
+            /*
+             * Charged to the recovery counter and to nothing else.
+             *
+             * An earlier draft added `result.calls` to `maxModelCalls`, which is
+             * a different budget for a different provider: these are map-service
+             * calls, and spending the model allowance on them would exhaust the
+             * research funnel's budget for work it never did. `maxRecoveryQueries`
+             * was already reserved above and is the counter that bounds this.
+             */
+            providerCalls = result.calls;
+            /*
+             * The model spend, charged to the model budget.
+             *
+             * The live acquire path classifies what it finds with a language
+             * model, reports it on `modelCalls`, and this read it nowhere — so a
+             * real Anthropic call inside a recovery attempt was invisible to
+             * `maxModelCalls` and the attempt record asserted zero.
+             */
+            modelCalls = result.modelCalls ?? 0;
+            if (modelCalls > 0) ledger.record('maxModelCalls', modelCalls);
+            gaps.push(...result.gaps);
+            for (const entry of result.licences ?? []) licences.set(entry.id, entry);
+            return {
+              value: result.candidates,
+              outcome: `${result.candidates.length} more found by searching for ${action.intents.slice(0, affordable).map((intent) => intent.replace(/_/g, ' ')).join(' and ')}`,
+              workUnits: result.candidates.length,
+            };
+          }
+
+          /* Same defence, same reason: a second look is never worth a compilation. */
+          let result: DiscoveryResult;
+          try {
+            result = await input.providers.places.discover({
+              scope: input.scope,
+              queries: [],
+              includedAreas: discoveryIncludedAreas,
+              ...(input.profile ? { profile: input.profile } : {}),
+              ...(pack ? { pack } : {}),
+              recovery: action.adjustment,
+            });
+          } catch {
+            searchFailed = true;
+            return {
+              value: [] as DiscoveredCandidate[],
+              outcome: 'the second look did not come back',
+            };
+          }
+          /*
+           * A re-selection returns the whole inventory again. Only what is
+           * genuinely new is carried forward — the originals are already held,
+           * and appending the overlap would make `candidatesAdded` a count of
+           * how big the inventory is rather than of what the repair bought.
+           */
+          const known = new Set(
+            [...discovered, ...recoveredCandidates].map((entry) => entry.place.id),
+          );
+          const fresh = result.candidates.filter((entry) => !known.has(entry.place.id));
+          if (result.portfolioFacts) facts = result.portfolioFacts;
+          return {
+            value: fresh,
+            outcome: `${fresh.length} more after ${RESEARCH_REPAIR_COPY[repair].toLowerCase()}`,
+            workUnits: fresh.length,
+          };
+        });
+
+        const known = new Set(
+          [...discovered, ...recoveredCandidates].map((entry) => entry.place.id),
+        );
+        const categoriesBefore = new Set(
+          [...discovered, ...recoveredCandidates].map((entry) => entry.place.category),
+        ).size;
+        /**
+         * WHAT ACTUALLY SURVIVES THE MERGE, NOT WHAT CAME BACK.
+         *
+         * `added` was an id comparison, and acquired ids never collide with pack
+         * ids by construction — so every returned record counted as new, the
+         * attempt claimed "N more places to consider", and `dedupeCandidates`
+         * then folded the duplicates away one stage later. The traveller-facing
+         * number and the board disagreed by however many duplicates there were.
+         *
+         * Running the same dedupe the pipeline will run is the only honest
+         * measure of what a repair bought. It is pure and cheap, and doing it
+         * twice is a great deal better than reporting a number that is wrong.
+         */
+        const fresh = outcome.filter((entry) => !known.has(entry.place.id));
+        const beforeMerge = dedupeCandidates([...discovered, ...recoveredCandidates]).candidates
+          .length;
+        const afterMerge = dedupeCandidates([
+          ...discovered,
+          ...recoveredCandidates,
+          ...fresh,
+        ]).candidates.length;
+        const added = afterMerge > beforeMerge ? fresh : [];
+        recoveredCandidates = [...recoveredCandidates, ...added];
+        /*
+         * Post-dedupe on both sides, so `visitableBefore` and `visitableAfter`
+         * are counts of the same kind of thing. Comparing a raw provider answer
+         * against a deduplicated board is how the old loop reported growth that
+         * never reached anybody.
+         */
+        const nextVisitable = added.length > 0 ? afterMerge : beforeMerge;
+        const improved = afterMerge > beforeMerge;
+        const after = supplyReading(
+          facts,
+          nextVisitable,
+          improved ? [] : [...supplyRepairsSpent],
+        );
+        stopReason = improved
+          ? 'improved'
+          : budgetRefused
+            ? 'budget_refused'
+            : 'no_change';
+        const attemptOutcome = improved
+          ? ('improved' as const)
+          : budgetRefused
+            ? ('budget_refused' as const)
+            : searchFailed
+              ? ('failed' as const)
+              : ('no_change' as const);
+
+        supplyAttempts = [
+          ...supplyAttempts,
+          {
+            repair,
+            addressing: [...before.binding],
+            outcome: attemptOutcome,
+            levelBefore: before.level,
+            levelAfter: after.level,
+            visitableBefore: visitable,
+            visitableAfter: nextVisitable,
+            /*
+             * The whole sentence, written where the facts are, and rendered
+             * verbatim. A panel that re-derives copy from a numeric delta cannot
+             * know that a repair which produces a *truer status* legitimately
+             * moves no counts — and duly printed "found 0 more" over a
+             * successful one.
+             *
+             * `budget_refused` leads with the refusal rather than appending it,
+             * because "Looking specifically for … — we stopped before looking"
+             * asserts and then withdraws the same thing in one line.
+             */
+            detail: improved
+              ? `${RESEARCH_REPAIR_COPY[repair]} — ${added.length} more ${added.length === 1 ? 'place' : 'places'} to consider.`
+              : budgetRefused
+                ? `We did not look again for the kinds of places we came up short on — we had already spent this trip's search allowance.`
+                : searchFailed
+                  ? `${RESEARCH_REPAIR_COPY[repair]} — the search did not come back, so nothing was added.`
+                  : `${RESEARCH_REPAIR_COPY[repair]} — nothing further came back.`,
+            kind: action.kind,
+            cost: { providerCalls, searches: 0, pages: 0, modelCalls },
+            ...(capability ? { capability } : {}),
+            provider: input.providers.places.name,
+            ...(scopeClass ? { scopeClass } : {}),
+            stopReason,
+            /*
+             * Counted, not asserted.
+             *
+             * `categoriesAdded: 0` was a literal — on a repair whose entire
+             * purpose is category coverage, which made the one number that would
+             * show whether it worked permanently zero. The categories are on the
+             * records themselves, so this is arithmetic rather than an estimate.
+             */
+            evidenceDelta: {
+              candidatesAdded: added.length,
+              categoriesAdded: Math.max(
+                0,
+                new Set(
+                  [...discovered, ...recoveredCandidates].map((entry) => entry.place.category),
+                ).size - categoriesBefore,
+              ),
+            },
+          },
+        ];
+
+        /**
+         * AN INEFFECTIVE REPAIR ENDS *THAT REPAIR*, NOT THE LOOP.
+         *
+         * This used to `break` here, and the consequence was that the free
+         * repair — which is deliberately tried first and very often achieves
+         * nothing, because a board can be short for reasons re-selection cannot
+         * fix — ended the loop before the paid one it exists to be tried ahead
+         * of was ever reached. The ordering that makes "never spend until free
+         * has failed" true was also making "spend after free has failed"
+         * unreachable.
+         *
+         * Repeating an *ineffective action* is still refused, and by a stronger
+         * mechanism than a break: `supplyRepairsSpent` means no repair is ever
+         * attempted twice, and the pass cap bounds the whole loop at two. So the
+         * worst case is one free attempt and one paid one, which is exactly the
+         * budget argument.
+         */
+        visitable = nextVisitable;
+        reading = after;
+        if (pass + 1 >= MAX_RECOVERY_PASSES) stopReason = 'pass_cap';
+      }
+    }
+
     // ---- Stage: deduplicate --------------------------------------------------
     const deduped = await runStage('deduplicating', async () => {
-      const value = dedupeCandidates(discovered);
+      /*
+       * ORIGINALS FIRST. This ordering is the additivity guarantee.
+       *
+       * `dedupeCandidates` keeps the first occurrence of a duplicate and unions
+       * the provider refs, facts and signals of the rest onto it. Putting the
+       * recovered records second therefore means a recovered duplicate can only
+       * ever *enrich* an existing record and can never replace it — so a second
+       * look that happened to return a thinner version of something we already
+       * had cannot downgrade it.
+       */
+      const value = dedupeCandidates([...discovered, ...recoveredCandidates]);
       return {
         value: value.candidates,
         outcome: `${value.candidates.length} distinct places, ${value.mergedCount} duplicates merged`,
@@ -1117,7 +1586,46 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * artifact whose own integrity gate rejected it, which is exactly the bug
      * that gate exists to catch.
      */
-    const bases = buildBases(expansion.bases, input.scope, places);
+    /**
+     * THE SCOPE, UPGRADED BY WHAT THE TIME-ZONE STAGE ACTUALLY LEARNED.
+     *
+     * The stage resolved real IANA zones for the bases and wrote them only onto
+     * the bases — so a compilation could confirm `Asia/Tokyo` and still ship a
+     * scope saying `Etc/GMT-9, estimated`. Everything that reads the *scope*
+     * rather than a base then used the solar approximation: the transit
+     * departure basis, every weather location's zone, and the Plan screen's own
+     * sentence, which told the traveller we could not confirm the local time
+     * zone in the same run that confirmed it.
+     *
+     * Only ever an upgrade, and only from a degraded reading. A scope whose zone
+     * a source already published is not overwritten by a base lookup — the
+     * destination's own clock is the destination's, not its first hotel's — and
+     * a set of bases that disagree with each other is left alone, because "more
+     * than one" is a real answer and collapsing it here would be the exact
+     * substitution `singleTimeZone` exists to prevent.
+     */
+    const resolvedBaseZone = singleTimeZone([...baseTimeZones.values()]);
+    const scope: GeographicScope =
+      resolvedBaseZone !== null &&
+      isCivilTimeZone(resolvedBaseZone) &&
+      timeZoneConfidence(input.scope.timeZoneBasis ?? 'unknown') !== 'authoritative'
+        ? {
+            ...input.scope,
+            timeZones: [resolvedBaseZone],
+            timeZoneBasis: 'provider_resolved',
+            timeZoneSource: input.providers.timeZone?.name ?? 'unknown',
+            timeZoneResolvedAt: input.now.toISOString(),
+          }
+        : input.scope;
+
+    const bases = buildBases(
+      expansion.bases.map((base) => {
+        const resolved = baseTimeZones.get(base.id);
+        return resolved ? { ...base, timeZone: resolved } : base;
+      }),
+      input.scope,
+      places,
+    );
     const food = await runStage('discovering_food', async () => {
       const value = await input.providers.food.discover({
         scope: input.scope,
@@ -2130,6 +2638,218 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       );
     }
 
+    /**
+     * ---- Stage: public transport, sparsely -----------------------------------
+     *
+     * The pairs a trip actually turns on, and nothing else. A dense transit
+     * matrix is both unaffordable and meaningless: a transit answer is a
+     * property of two points *and an instant*, so the square of everything on
+     * the board would be a very expensive way to buy a number nobody reads.
+     *
+     * The priority order is the contract's, and it is an order of consequence
+     * rather than of convenience — where you sleep against what you named by
+     * hand, then against what a day can be built around, then base to base.
+     */
+    /**
+     * How long the transit stage may spend before it reports what it has.
+     *
+     * A ceiling on a traveller's wait rather than a guess at how long a routing
+     * service should take. Ninety seconds buys most of a sparse pair list at the
+     * politeness interval, and anything past it is better spent telling somebody
+     * their board is ready.
+     */
+    const TRANSIT_STAGE_BUDGET_MS = 90_000;
+    const transitEvidence = await runStage<TransitEvidence>('measuring_transit', async () => {
+      const provider = input.providers.transit;
+      /*
+       * The upgraded scope, so a trip whose zone was only confirmed at base level
+       * still asks the journey planner in the right clock.
+       */
+      const zone = singleTimeZone(scope.timeZones) ?? scope.timeZones[0] ?? 'UTC';
+      const dependsOnTransit = !scope.transport.carAvailable;
+
+      /**
+       * "DOES THIS TRIP NEED IT" IS ASKED FIRST, AND THE ORDER IS THE WHOLE BUG.
+       *
+       * These two checks were the other way round, so a traveller with a car —
+       * whose trip has nothing to do with timetables — got `unsupported` on every
+       * build, and the board told them their journey times could not be verified.
+       * Their journey times had been measured on a road network. A caveat about a
+       * capability their trip does not use, attached to the best-evidenced number
+       * on the screen.
+       */
+      if (!dependsOnTransit) {
+        return {
+          value: { journeys: [], requested: 0, measured: 0, absence: 'not_needed' as const },
+          outcome: 'this trip is planned around a car, so no timetables were bought',
+        };
+      }
+      if (!provider || !provider.supportsTransit()) {
+        return {
+          value: {
+            journeys: [],
+            requested: 0,
+            measured: 0,
+            absence: 'unsupported' as const,
+          },
+          outcome: 'nothing here can measure a public-transport journey',
+        };
+      }
+
+      const primary = usableBases[0] ?? bases[0];
+      const budget = ledger.remaining('maxTransitPairs');
+      if (!primary || budget === 0) {
+        return {
+          value: {
+            journeys: [],
+            requested: 0,
+            measured: 0,
+            absence: 'budget_exhausted' as const,
+          },
+          outcome: 'no budget left for public-transport journeys',
+        };
+      }
+
+      /*
+       * Ranked, then truncated. Ranking before truncating is the whole point:
+       * a budget that ran out should have spent itself on the journeys that
+       * decide whether the trip works, not on whichever place sorted first.
+       */
+      const named = (input.mustDo ?? []).map((request) => request.quote.trim().toLowerCase());
+      const wasNamed = (place: Place): boolean =>
+        named.some((quote) => {
+          const name = place.name.toLowerCase();
+          /*
+           * Both sides guarded. The length check applied only to the quote, so a
+           * place called "Bar" or "Sé" matched *any* quote containing those
+           * letters — "Barcelona Cathedral" among them — and jumped the queue
+           * ahead of the place the traveller actually named.
+           */
+          if (quote.length <= 3 || name.length <= 3) return name === quote;
+          return name.includes(quote) || quote.includes(name);
+        });
+      const rank = (place: Place): number => {
+        if (wasNamed(place)) return 0;
+        if (place.relationship === 'base') return 1;
+        return 2;
+      };
+      const targets = [...plannable]
+        .sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))
+        .slice(0, Math.max(0, budget - Math.max(0, usableBases.length - 1)));
+
+      const pairs = [
+        ...targets.map((place) => ({
+          fromId: primary.routingId,
+          toId: place.id,
+          from: primary.coordinates,
+          to: place.coordinates,
+        })),
+        /* Base to base decides whether a multi-base trip is possible at all. */
+        ...usableBases.slice(1).map((base) => ({
+          fromId: primary.routingId,
+          toId: base.routingId,
+          from: primary.coordinates,
+          to: base.coordinates,
+        })),
+      ].slice(0, budget);
+
+      if (pairs.length === 0) {
+        return {
+          value: { journeys: [], requested: 0, measured: 0, absence: 'not_needed' as const },
+          outcome: 'nothing to measure a journey to',
+        };
+      }
+
+      /*
+       * A weekday mid-morning departure on the first day of the trip.
+       *
+       * A transit duration without a departure basis is not an answer, and the
+       * basis has to be *stated* rather than implied — it travels on every
+       * journey so a reader can see that a Sunday evening would be a different
+       * number.
+       */
+      /**
+       * 09:30 WHERE THE TRAVELLER IS, NOT 09:30 IN GREENWICH.
+       *
+       * This was `T09:30:00Z`, and the comment above it said "mid-morning" —
+       * which it is, on the prime meridian. In Tokyo it asked for 18:30. In San
+       * Francisco it asked for **02:30**, when almost nothing runs, so a city
+       * with one of the densest networks in the world came back with no journeys
+       * and the board printed "we hold no timetables for this area".
+       *
+       * The offset is read for the trip's own first date so a daylight-saving
+       * boundary inside the trip cannot shift it, and the resulting instant is
+       * what travels on every journey's `requestBasis` — so a reader can always
+       * check which wall clock was asked about.
+       */
+      const departureDate = input.dates[0] ?? '1970-01-01';
+      const offsetMinutes = utcOffsetMinutesOn(departureDate, zone);
+      const departAt = new Date(
+        Date.parse(`${departureDate}T09:30:00Z`) - offsetMinutes * 60_000,
+      );
+      /**
+       * A WALL-CLOCK CEILING, BECAUSE THIS IS THE FIRST STAGE THAT CAN RUN FOR
+       * MINUTES.
+       *
+       * Journeys are measured one at a time behind a politeness gate, so
+       * twenty-four pairs against a slow service is minutes rather than seconds
+       * — and the compilation's own `maxDurationMs` is not enforced anywhere, so
+       * nothing else would stop it. The evidence is optional by construction: a
+       * stage that runs out of time reports what it has and the board says the
+       * rest is unverified, which is a far better outcome than a traveller
+       * watching a progress screen for eight minutes.
+       */
+      let result: Awaited<ReturnType<NonNullable<typeof provider>['routes']>>;
+      try {
+        result = await Promise.race([
+          provider.routes({ pairs, departAt, timeZone: zone, maxPairs: budget }),
+          new Promise<never>((_resolve, reject) =>
+            setTimeout(() => reject(new Error('transit_stage_timeout')), TRANSIT_STAGE_BUDGET_MS),
+          ),
+        ]);
+      } catch {
+        return {
+          value: {
+            journeys: [],
+            provider: provider.name,
+            requested: pairs.length,
+            measured: 0,
+          },
+          outcome: 'the journey planner did not answer',
+          note: 'We could not reach the public-transport planner, so the journeys on this trip are unverified.',
+        };
+      }
+
+      /*
+       * What the provider says it spent, not what we asked for. A fully cached
+       * stage asked for twenty-four pairs and paid for none of them, and
+       * recording the request count would mark the counter exhausted for work
+       * nobody did — the same fiction the acquire seam's own contract forbids.
+       */
+      ledger.record('maxTransitPairs', Math.min(pairs.length, result.calls));
+      gaps.push(...result.gaps);
+      for (const entry of result.licences ?? []) licences.set(entry.id, entry);
+      const measured = result.journeys.filter((journey) => journey.status === 'measured').length;
+      const noRoute = result.journeys.filter((journey) => journey.status === 'no_route').length;
+      void noRoute;
+      const outOfCoverage = result.journeys.some(
+        (journey) => journey.status === 'out_of_coverage',
+      );
+      return {
+        value: {
+          journeys: result.journeys,
+          provider: provider.name,
+          requested: pairs.length,
+          measured,
+          ...(measured === 0 && outOfCoverage ? { absence: 'out_of_coverage' as const } : {}),
+        },
+        outcome: outOfCoverage
+          ? 'we hold no timetables for this area'
+          : `${measured} of ${pairs.length} journeys measured${noRoute > 0 ? `, ${noRoute} with no service` : ''}`,
+        workUnits: pairs.length,
+      };
+    });
+
     // ---- Stage: weather points -------------------------------------------------
     const weatherLocations = await runStage('resolving_weather_locations', async () => {
       const value = await input.providers.weatherLocations.plan({
@@ -2505,201 +3225,94 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * look like it never ran.
      */
     let researchReadiness: DestinationResearchReadiness | undefined = portfolioFacts
-      ? readinessFrom(portfolioFacts, plannable.length)
+      ? {
+          ...readinessFrom(portfolioFacts, plannable.length, mustDoResolutions, [
+            ...supplyRepairsSpent,
+          ]),
+          /*
+           * The supply loop's attempts, carried onto the reading that ships.
+           *
+           * They happened hundreds of lines and a dozen stages ago, against a
+           * different population, and the artifact is the only place a traveller
+           * can see them. Dropping them here would make a loop that ran look like
+           * one that never did — the exact failure the record exists to prevent.
+           *
+           * The repairs it spent are also marked exhausted, so the level stops
+           * saying "we are going back for more" once we have been back.
+           */
+          /**
+           * Carried whole, because nothing in an attempt is clock-dependent.
+           *
+           * An earlier version stripped `latencyMs` here with a comment claiming
+           * it was "the one field that could break byte-identity". It is not
+           * written by any producer — the strip removed a field that was never
+           * there, and the comment described a mechanism that did not exist. The
+           * determinism it claimed to protect is real and is asserted directly,
+           * against the world that actually runs a recovery pass.
+           */
+          repairsAttempted: supplyAttempts,
+        }
       : undefined;
 
+    /**
+     * THE ONE REPAIR THAT STILL BELONGS DOWN HERE.
+     *
+     * The supply repairs moved above the cut, where what they find can still
+     * become a card. This one cannot follow them: its search space is *what
+     * survived admission and why*, which does not exist until routing has run.
+     * So it stays, alone, and what it produces is a truer status for a request
+     * rather than a wider board.
+     *
+     * Not a loop any more. There is exactly one repair it can run and running it
+     * twice would re-read the same ground for the same answer.
+     */
     if (portfolioFacts && researchReadiness && pack) {
-      const attempted = new Set<ResearchRepair>();
-      let facts = portfolioFacts;
-      let visitable = plannable.length;
-
-      for (let pass = 0; pass < MAX_RECOVERY_PASSES; pass += 1) {
-        const reading: DestinationResearchReadiness = researchReadiness;
-        if (!shouldAttemptRecovery(reading)) break;
-
-        const repair: ResearchRepair | undefined = reading.repairs.find(
-          (candidate) =>
-            !attempted.has(candidate) &&
-            (candidate === 'targeted_subject_query' || recoveryActionFor(candidate, pass) !== null),
-        );
-        if (!repair) break;
-        attempted.add(repair);
-
+      const reading: DestinationResearchReadiness = researchReadiness;
+      if (
+        shouldAttemptRecovery(reading) &&
+        reading.repairs.includes('targeted_subject_query')
+      ) {
+        const repair = 'targeted_subject_query' as const;
         const before: DestinationResearchReadiness = reading;
 
-        /**
-         * THE SECOND LOOK FOR A PLACE SOMEBODY NAMED.
-         *
-         * Its own branch, because it is the one repair whose subject is a
-         * request rather than a shape, and because what it re-reads is not the
-         * *selection* but the **ground**: every record the map layer holds,
-         * including the ones the inventory refused, with the containment
-         * overlay's verdict on each. That is the only place left where evidence
-         * about a named subject could still be, and reading it is bounded, free
-         * and directed at the deficit.
-         *
-         * What it deliberately cannot do is put the place on the board. The
-         * matrix, the hours and the access rules were bought for the set that
-         * survived admission, and a record added after them would be a card with
-         * no travel time, no opening hours and no way to schedule it. So the
-         * outcome of this repair is a *truer status* — "it is outside the area
-         * you asked for", "we found it and could not confirm enough about it" —
-         * and never a manufactured inclusion. A repair that quietly widened the
-         * board would be the substitution this whole contract exists to refuse.
-         */
-        if (repair === 'targeted_subject_query') {
-          const widened = await runStage('recovering_supply', async () => {
-            const value = resolveMustDoAgainst(true);
-            const settled = value.filter((entry) => entry.status !== 'not_found').length;
-            return {
-              value,
-              outcome: `${settled} of ${value.length} named places accounted for after reading the whole map layer`,
-            };
-          });
-          /**
-           * A REPAIR MAY ONLY IMPROVE AN ANSWER, NEVER UN-ANSWER ONE.
-           *
-           * The widened pass re-resolves *every* request against a larger set of
-           * subjects, and a larger set can genuinely change an earlier answer:
-           * `distinctiveWords` counts how often a word occurs across the names in
-           * play, so a one-word name that identified exactly one place among the
-           * plannable set can stop identifying anything once ten thousand map
-           * records join it. Taking the widened list wholesale would then turn a
-           * `covered` request into `not_found` — a second look that lost
-           * something, which is the precise failure this whole contract exists to
-           * prevent.
-           *
-           * So the two lists are merged per request, and a request that was
-           * already accounted for keeps its earlier answer.
-           */
-          const beforeById = new Map(
-            mustDoResolutions.map((entry) => [entry.request.id, entry] as const),
-          );
-          const merged = widened.map((entry) => {
-            const earlier = beforeById.get(entry.request.id);
-            return earlier && mustDoIsAccountedFor(earlier) ? earlier : entry;
-          });
-          const stillMissing = (list: readonly MustDoResolution[]) =>
-            list.filter((entry) => entry.status === 'not_found').length;
-          const missingBefore = stillMissing(mustDoResolutions);
-          const missingAfter = stillMissing(merged);
-          const improved = missingAfter < missingBefore;
-          if (improved) mustDoResolutions = merged;
-          const after = readinessFrom(facts, visitable, mustDoResolutions, [...attempted]);
-          researchReadiness = {
-            ...after,
-            repairsAttempted: [
-              ...reading.repairsAttempted,
-              {
-                repair,
-                addressing: [...before.binding],
-                outcome: improved ? 'improved' : 'no_change',
-                levelBefore: before.level,
-                levelAfter: after.level,
-                visitableBefore: visitable,
-                visitableAfter: visitable,
-                detail: improved
-                  ? `${RESEARCH_REPAIR_COPY[repair]} — we can now say what became of ${missingBefore - missingAfter} of them.`
-                  : `${RESEARCH_REPAIR_COPY[repair]} — nothing on the map answers to those names.`,
-              },
-            ],
-          };
-          continue;
-        }
-
-        /**
-         * RESELECT OR ACQUIRE — AND THE DIFFERENCE IS WHAT IT COSTS.
-         *
-         * Until this branch existed, every executable repair re-selected from
-         * records already bought, which is why the loop could honestly say it
-         * spent nothing. That was also its ceiling: a board short on museums
-         * because the ground holds few of them cannot be repaired by widening a
-         * ceiling over the same records, and no amount of re-selection invents
-         * one. Section 7 asks for recovery that can *acquire* evidence, and this
-         * is it.
-         *
-         * The safety argument changes shape rather than disappearing. A paid
-         * attempt is bounded to two queries, charged to the compilation's own
-         * ledger, refused outright when the budget is gone, and tried only after
-         * the free repair for the same deficit has been and not helped — because
-         * `repairsFor` pushes them in that order and the loop takes the first it
-         * has not attempted.
-         */
-        const action = recoveryActionFor(repair, pass)!;
-        const attemptStartedMs = Date.now();
-        let attemptKind: 'reselect' | 'acquire' = 'reselect';
-        let providerCalls = 0;
-        let budgetRefused = false;
-
-        const recovered = await runStage('recovering_supply', async () => {
-          if (action.kind === 'acquire') {
-            attemptKind = 'acquire';
-            /*
-             * The ledger decides, not this loop. `remaining` is the same
-             * accounting every other stage is charged against, so a recovery
-             * that would push a compilation over its own ceiling is refused
-             * here rather than discovered as an overspend afterwards.
-             */
-            const affordable = Math.min(
-              action.maxQueries,
-              Math.max(0, ledger.remaining('maxRecoveryQueries')),
-            );
-            if (affordable === 0) {
-              budgetRefused = true;
-              return {
-                value: { candidates: [], gaps: [], calls: 0 } as DiscoveryResult,
-                outcome: 'no budget left to search again',
-              };
-            }
-            const queries: DiscoveryQuery[] = action.intents
-              .slice(0, affordable)
-              .map((intent, index) => ({
-                id: `recovery-${repair}-${pass}-${index}`,
-                intent,
-                text: `${intent.replace(/_/g, ' ')} in ${input.scope.destinationName}`,
-                limit: action.maxPerQuery,
-              }));
-            const value = await input.providers.places.discover({
-              scope: input.scope,
-              queries,
-              ...(input.profile ? { profile: input.profile } : {}),
-              pack,
-            });
-            providerCalls = value.calls;
-            ledger.record('maxRecoveryQueries', queries.length);
-            return {
-              value,
-              outcome: `${value.candidates.length} candidates after searching for ${queries.length} kind${queries.length === 1 ? '' : 's'} of place we were short of`,
-            };
-          }
-
-          const value = await input.providers.places.discover({
-            scope: input.scope,
-            queries: [],
-            ...(input.profile ? { profile: input.profile } : {}),
-            pack,
-            recovery: action.adjustment,
-          });
+        const widened = await runStage('rechecking_named_places', async () => {
+          const value = resolveMustDoAgainst(true);
+          const settled = value.filter((entry) => entry.status !== 'not_found').length;
           return {
             value,
-            outcome: `${value.candidates.length} candidates after ${RESEARCH_REPAIR_COPY[repair].toLowerCase()}`,
+            outcome: `${settled} of ${value.length} named places accounted for after reading the whole map layer`,
           };
         });
 
-        const nextFacts = recovered.portfolioFacts ?? facts;
-        const nextVisitable = recovered.candidates.length;
-        const improved = nextVisitable > visitable;
-        /*
-         * The failed case is re-read with the repair marked spent, so the level
-         * stops saying "we are going back for more" once we have been back.
-         * `recoverable` is the only level that promises further work, and a
-         * promise nobody is going to keep is the one sentence on that panel a
-         * traveller cannot check for themselves.
+        /**
+         * A REPAIR MAY ONLY IMPROVE AN ANSWER, NEVER UN-ANSWER ONE.
+         *
+         * The widened pass re-resolves *every* request against a larger set of
+         * subjects, and a larger set can genuinely change an earlier answer:
+         * `distinctiveWords` counts how often a word occurs across the names in
+         * play, so a one-word name that identified exactly one place among the
+         * plannable set can stop identifying anything once ten thousand map
+         * records join it. Taking the widened list wholesale would then turn a
+         * `covered` request into `not_found` — a second look that lost
+         * something, which is the precise failure this whole contract exists to
+         * prevent.
+         *
+         * The merge lives in `must-do.ts` now rather than here, because it is an
+         * invariant of the domain rather than of this call site: *any* second
+         * producer of resolutions has to hold it, and one written inline could
+         * only ever hold it for one branch.
          */
-        const after = improved
-          ? readinessFrom(nextFacts, nextVisitable, mustDoResolutions)
-          : readinessFrom(facts, visitable, mustDoResolutions, [...attempted]);
-
+        const merged = mergeMustDoResolutions(mustDoResolutions, widened);
+        const stillMissing = (list: readonly MustDoResolution[]) =>
+          list.filter((entry) => entry.status === 'not_found').length;
+        const missingBefore = stillMissing(mustDoResolutions);
+        const missingAfter = stillMissing(merged);
+        const improved = missingAfter < missingBefore;
+        if (improved) mustDoResolutions = merged;
+        const after = readinessFrom(portfolioFacts, plannable.length, mustDoResolutions, [
+          ...supplyRepairsSpent,
+          repair,
+        ]);
         researchReadiness = {
           ...after,
           repairsAttempted: [
@@ -2710,42 +3323,23 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
               outcome: improved ? 'improved' : 'no_change',
               levelBefore: before.level,
               levelAfter: after.level,
-              visitableBefore: visitable,
-              visitableAfter: nextVisitable,
+              visitableBefore: plannable.length,
+              visitableAfter: plannable.length,
               detail: improved
-                ? `${RESEARCH_REPAIR_COPY[repair]} — ${nextVisitable - visitable} more things to do.`
-                : budgetRefused
-                  ? `${RESEARCH_REPAIR_COPY[repair]} — there was no budget left to look again.`
-                  : `${RESEARCH_REPAIR_COPY[repair]} — nothing further came back.`,
-              /*
-               * WHAT THIS ATTEMPT COST, RECORDED ON THE ATTEMPT.
-               *
-               * Section 21 asks for recovery cost accounted for separately from
-               * compilation cost, and this is the only row that can carry it —
-               * a run-level total cannot say which attempt spent it. Recording
-               * it also makes "we paid and learnt nothing" a visible outcome
-               * rather than an invisible one, which is the failure mode a paid
-               * recovery loop actually has.
-               */
-              kind: attemptKind,
-              cost: { providerCalls, searches: 0, pages: 0, modelCalls: 0 },
-              latencyMs: Math.max(0, Date.now() - attemptStartedMs),
-              evidenceDelta: {
-                candidatesAdded: Math.max(0, nextVisitable - visitable),
-                categoriesAdded: Math.max(
-                  0,
-                  (nextFacts.categories ?? 0) - (facts.categories ?? 0),
-                ),
-              },
+                ? `${RESEARCH_REPAIR_COPY[repair]} — we can now say what became of ${missingBefore - missingAfter} of them.`
+                : `${RESEARCH_REPAIR_COPY[repair]} — nothing on the map answers to those names.`,
+              kind: 'reselect' as const,
+              cost: { providerCalls: 0, searches: 0, pages: 0, modelCalls: 0 },
+              provider: 'region-ground',
+              scopeClass: 'pack_ground_reread',
+              stopReason: improved ? ('improved' as const) : ('no_change' as const),
+              evidenceDelta: { candidatesAdded: 0, categoriesAdded: 0 },
             },
           ],
         };
-
-        if (!improved) break;
-        facts = nextFacts;
-        visitable = nextVisitable;
       }
     }
+
 
     /** Built once, after the loop, from whatever the loop settled on. */
     const mustDoCoverage = mustDoCoverageFrom(mustDoResolutions);
@@ -2784,8 +3378,16 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         schemaVersion: COMPILED_REGION_VERSION,
         id: input.compilationId,
         compilerVersion: COMPILER_VERSION,
-        region: buildRegion(input.scope, primary, plannable),
-        scope: input.scope,
+        region: buildRegion(scope, primary, plannable),
+        scope,
+        /*
+         * Fingerprinted from the *input* scope, deliberately.
+         *
+         * The fingerprint keys the cache and answers "was this compiled from the
+         * answers we hold". A time zone we resolved during the compilation is
+         * not one of those answers, and folding it in would make every artifact
+         * miss its own cache entry on the next look.
+         */
         scopeFingerprint: scopeFingerprint(input.scope),
         /*
          * Frozen with the artifact, because the board's own account of itself
@@ -2796,6 +3398,12 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          */
         ...(boardSupply ? { boardSupply } : {}),
         ...(researchReadiness ? { researchReadiness } : {}),
+        /*
+         * Written whatever it says, including "nothing here can measure this".
+         * An absent field and a field saying `unsupported` are different claims,
+         * and only the second one lets a screen explain itself.
+         */
+        transitEvidence,
         ...(mustDoCoverage ? { mustDoCoverage } : {}),
         bases: routedBases,
         primaryBaseId: primary.id,
@@ -3137,6 +3745,103 @@ function wantedPathsFor(
  */
 const WALKABLE_SPAN_KM = 12;
 
+/**
+ * WHAT THE BOARD IS SHORT OF, AS SOMETHING A SOURCE CAN BE ASKED FOR.
+ *
+ * The hinge of deficit-directed acquisition. A repair that always asked for the
+ * same categories would be a rerun with a budget attached — the exact shape of
+ * the attempt that shipped and was removed — so the query has to come from what
+ * is actually missing.
+ *
+ * Two inputs, in priority order. First the kinds of thing this traveller said
+ * they came for and the board holds none of, because a missing interest is the
+ * most specific shortfall there is. Then the broad experience intents with no
+ * representation at all. A board that already holds something of every kind
+ * returns nothing here, and the acquisition is correctly refused rather than
+ * spent on a sweep.
+ */
+const CATEGORY_INTENT: Record<string, string> = {
+  viewpoint: 'landmark',
+  museum: 'culture',
+  historic_site: 'culture',
+  cultural_site: 'culture',
+  town_and_food: 'culture',
+  lake: 'nature',
+  easy_walk: 'nature',
+  day_hike: 'nature',
+  wildlife_area: 'nature',
+  beach: 'nature',
+  park: 'nature',
+};
+
+const INTEREST_INTENT: Record<string, string> = {
+  history_and_culture: 'culture',
+  museums: 'culture',
+  architecture: 'culture',
+  scenic_viewpoints: 'landmark',
+  landmarks: 'landmark',
+  photography_golden_hour: 'landmark',
+  hiking: 'nature',
+  lakes_and_rivers: 'nature',
+  easy_nature_walks: 'nature',
+  wildlife: 'nature',
+  beaches: 'nature',
+};
+
+export function shortfallIntentsFor(
+  profile: TravelerProfile | undefined,
+  candidates: readonly DiscoveredCandidate[],
+  wantedVisitable: number,
+): string[] {
+  const held = new Map<string, number>([
+    ['landmark', 0],
+    ['culture', 0],
+    ['nature', 0],
+  ]);
+  for (const candidate of candidates) {
+    const intent = CATEGORY_INTENT[candidate.place.category];
+    if (intent !== undefined) held.set(intent, (held.get(intent) ?? 0) + 1);
+  }
+
+  /**
+   * What counts as short.
+   *
+   * Absence is the obvious shortfall and it is not the common one. A board with
+   * one museum for a five-day trip is short of museums in every sense a
+   * traveller cares about, and a rule that only fired on zero would refuse to
+   * ask for more of anything the ground happened to hold one of — which is
+   * exactly the shape of the world this loop most needs to repair.
+   *
+   * A quarter of what the trip wants, floored at two, so the threshold scales
+   * with the trip rather than being a constant somebody would have to defend.
+   */
+  const threshold = Math.max(2, Math.ceil(wantedVisitable / 4));
+
+  const wanted: string[] = [];
+  const push = (intent: string): void => {
+    if ((held.get(intent) ?? 0) < threshold && !wanted.includes(intent)) wanted.push(intent);
+  };
+
+  /*
+   * The traveller's own reasons first. `interests` is a five-rung ladder, and
+   * treating "would not mind" the same as "this is why I am going" would make
+   * the shortfall list identical for everybody — which is the generic sweep this
+   * exists not to be.
+   */
+  for (const [interest, level] of Object.entries(profile?.interests ?? {})) {
+    if (level !== 'frequent' && level !== 'core') continue;
+    const intent = INTEREST_INTENT[interest];
+    if (intent) push(intent);
+  }
+  /* Then the scarcest first, so a bounded request spends itself where it counts. */
+  for (const [intent] of [...held.entries()].sort(
+    (a, b) => a[1] - b[1] || a[0].localeCompare(b[0]),
+  )) {
+    push(intent);
+  }
+  return wanted;
+}
+
 export function matrixModeFor(scope: GeographicScope): 'car' | 'foot' {
   if (scope.transport.primaryMode === 'drive') return 'car';
 
@@ -3165,7 +3870,41 @@ export function matrixModeFor(scope: GeographicScope): 'car' | 'foot' {
       Math.max(0.1, Math.cos((scope.center.lat * Math.PI) / 180)),
     reachKm * 2,
   );
-  return Math.max(latKm, lngKm) <= WALKABLE_SPAN_KM ? 'foot' : 'car';
+  if (Math.max(latKm, lngKm) <= WALKABLE_SPAN_KM) return 'foot';
+
+  /**
+   * THE LINE THAT USED TO HAND A WALKER A DRIVING MATRIX.
+   *
+   * Above the walkable span this returned `'car'` unconditionally, and the
+   * comment above defended it: a walking matrix over a national park is no
+   * answer. That reasoning is sound for a *driver* and it was being applied to
+   * somebody who told us they have no car.
+   *
+   * The arithmetic is not marginal. A walking reach is three kilometres a night
+   * capped at twelve, and a radius scope spans twice its radius — so a one-night
+   * trip spans twelve kilometres and gets a pedestrian matrix, and **every
+   * car-free trip of two nights or more spans eighteen or more and got a road
+   * one**. Those minutes then reached the board with no mode on them, and
+   * `unmeasurableModesFor` reported no gap because it reads the reach cap and
+   * concluded the traveller was walking. Two modules, one traveller, opposite
+   * conclusions, and the number on the screen came from the wrong one.
+   *
+   * So: a scope whose traveller has no car never gets a road matrix from here.
+   * The pedestrian network is what a person without a car actually moves on
+   * between nearby stops, and the journeys it cannot cover are answered — where
+   * anything can answer them — by the transit stage, whose evidence is kept
+   * beside this matrix rather than inside it. `transitEvidence` and
+   * `travelTimes` are two measurements of two different things, and a matrix
+   * with one `mode` cannot hold both without one of them standing in for the
+   * other.
+   *
+   * The road network is still reachable from here, once, deliberately and
+   * loudly: the caller retries on `car` when the pedestrian graph returns almost
+   * nothing — which is a real condition across a national park or an island —
+   * and records both the substitution and a warning the traveller reads. What is
+   * gone is the silent version.
+   */
+  return 'foot';
 }
 
 /**

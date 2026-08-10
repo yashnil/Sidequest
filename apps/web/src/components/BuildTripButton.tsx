@@ -69,6 +69,20 @@ export function BuildTripButton({
       >
         {pending ? 'Building your trip…' : hasItinerary ? 'Rebuild my trip' : 'Build my trip'}
       </button>
+      {/*
+        THE ONLY ANNOUNCEMENT OF A MULTI-SECOND OPERATION.
+
+        The button disabled itself and changed its own label, which reaches
+        nobody: a disabled control can lose focus, so the changed label may never
+        be read, and there is no other signal that anything is happening. A
+        traveller pressing this waits several seconds with no feedback at all.
+
+        `role="status"` outside the button, so it is announced whatever focus
+        does, and empty when idle so it says nothing on arrival.
+      */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {pending ? 'Building your trip. This takes a few seconds.' : ''}
+      </p>
       {includedCount === 0 ? (
         <p id="build-hint" className="mt-2 text-sm text-ink-muted">
           Include at least one place first, or use auto-pick.

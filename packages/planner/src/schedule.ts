@@ -946,9 +946,24 @@ export function layoutDay(
        */
       const measured =
         previous && !option.service ? tryHop(matrix, previous.place.id, candidate.place.id) : null;
+      /*
+       * The mode follows the measurement, exactly as the return leg already
+       * does twenty lines further down.
+       *
+       * This branch hard-labelled every measured intra-unit hop `drive`, which
+       * was true while only a road matrix ever reached the timeline. A car-free
+       * trip now genuinely routes on the pedestrian network, and the consequence
+       * of the old label was not merely cosmetic: those minutes were charged to
+       * `driveMinutes`, so a walking city day spent a driving budget the
+       * traveller does not have, and the terminal gate turns an exceeded driving
+       * budget into a refusal.
+       */
       const transfer =
         measured !== null
-          ? { mode: 'drive' as const, minutes: measured.minutes }
+          ? {
+              mode: matrix.mode === 'foot' ? ('walk' as const) : ('drive' as const),
+              minutes: measured.minutes,
+            }
           : option.internalTransfer;
       const straightMinutes = previous && transfer.minutes > 0 ? transfer.minutes : 0;
 

@@ -54,6 +54,29 @@ export interface CompilerBudget {
   maxModelCalls: number;
   /** Matrix cells. The single largest cost driver, and it grows as N². */
   maxRouteElements: number;
+  /**
+   * Public-transport journeys measured, counted as origin–destination pairs.
+   *
+   * Its own counter rather than a share of `maxRouteElements`, and the separation
+   * is not tidiness. A road matrix and a transit journey are bought from
+   * different providers, billed under different terms and — the part that
+   * decides architecture — carry different rights to be *stored*. "What did
+   * transit cost" has to be answerable without subtracting one from the other.
+   *
+   * Small on purpose. Transit evidence is bought for the handful of pairs a trip
+   * genuinely turns on — where you sleep against what you named — and a counter
+   * big enough for an all-pairs matrix would be an invitation to build one.
+   */
+  maxTransitPairs: number;
+  /**
+   * Coordinates resolved to a real civil time zone.
+   *
+   * Tiny, and it should be: the destination and its bases usually round to two
+   * or three distinct points, and the cache is measured in weeks. A build that
+   * needs more than this has asked the same question about a hundred places,
+   * which is a bug rather than a budget.
+   */
+  maxTimeZoneLookups: number;
   maxFoodVenues: number;
   maxWeatherLocations: number;
   /** Wall clock. A compilation that has run this long stops wherever it is. */
@@ -92,6 +115,8 @@ export const DEFAULT_COMPILER_BUDGET: CompilerBudget = {
   maxEnrichmentMs: 120_000,
   maxModelCalls: 20,
   maxRouteElements: 3_600,
+  maxTransitPairs: 24,
+  maxTimeZoneLookups: 6,
   maxFoodVenues: 18,
   maxWeatherLocations: 8,
   maxDurationMs: 180_000,

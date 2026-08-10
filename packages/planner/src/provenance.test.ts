@@ -198,7 +198,36 @@ describe('a car-free traveller against a live-shaped access dataset', () => {
     });
     const result = planTrip(scenario); // scenario.matrix is the car corridor model
 
-    if (!result.ok) return; // Refusing outright is the strongest honest answer.
+    /**
+     * THE REFUSAL IS THE ANSWER, SO IT IS ASSERTED RATHER THAN RETURNED PAST.
+     *
+     * `if (!result.ok) return;` sat here with the comment "refusing outright is
+     * the strongest honest answer" — and it is, which is exactly why stepping
+     * over it silently was wrong. This input *does* make the planner refuse, so
+     * every assertion below this line, including the constant-detector the
+     * docstring calls "the shape of the old defect, caught directly", had never
+     * run. The test named for the regression could not observe it.
+     *
+     * The refusal is now the claim, with the reason checked: a walking traveller
+     * against a road matrix has no honest duration for any approach, and the
+     * planner must say so rather than produce a plan.
+     */
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.readiness).toBeDefined();
+      /* And it says why, in words, rather than failing silently. */
+      expect(result.readiness!.summary.length).toBeGreaterThan(0);
+      expect(result.readiness!.rejections.length).toBeGreaterThan(0);
+      /*
+       * The reason is the one this test is named for: every approach needs a
+       * duration nothing can honestly supply, because the only matrix in hand
+       * measures a different network.
+       */
+      expect(result.readiness!.rejections.map((entry) => entry.reasonCode)).toContain(
+        'missing_travel_data',
+      );
+      return;
+    }
 
     const walks = travelSegments(result.itinerary).filter((s) => s.travel.mode === 'walk');
     const stated = walks.map((s) => s.travel.minutes).filter((m): m is number => m !== null);

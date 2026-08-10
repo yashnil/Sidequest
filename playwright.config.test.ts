@@ -153,6 +153,15 @@ describe('the browser suite configuration', () => {
       'SIDEQUEST_CLIMATE_PROVIDER=off',
       'SIDEQUEST_BENCHMARK_MODE=fixture',
       'SIDEQUEST_BENCHMARK_BUDGET_USD=',
+      /*
+       * The two this pass added, and the first one on the list that defaults to
+       * **on**. A keyless, free service fails nothing when it is reached — which
+       * is exactly why it has to be pinned rather than assumed absent: a browser
+       * run would have contacted a real host on every compilation and nothing
+       * would have gone red.
+       */
+      'SIDEQUEST_TIMEZONE_PROVIDER=off',
+      'SIDEQUEST_TRANSIT_PROVIDER=',
     ]) {
       expect(command, `the end-to-end server no longer pins ${pin}`).toContain(pin);
     }

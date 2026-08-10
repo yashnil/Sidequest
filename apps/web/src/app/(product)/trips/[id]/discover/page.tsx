@@ -39,6 +39,7 @@ import {
   boardWeatherBackups,
   foodBoardFor,
   weatherPanelCopy,
+  type CompiledRegion,
   type WeatherAvailability,
 } from '@sidequest/core';
 import { boardFor, compiledRegionFor, resolveTripRegion } from '@/lib/region';
@@ -202,6 +203,22 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           <Fact label="Region searched">
             {formatMinutes(board.expansion.radiusMinutes)} from base
           </Fact>
+          {/*
+            PUBLIC TRANSPORT, SAID PLAINLY OR NOT CLAIMED.
+
+            The board is where a traveller decides what to include, and until now
+            it said nothing at all about whether the journeys between these
+            places had been measured on the network they will actually use. Four
+            different silences read identically on a screen — nothing can measure
+            it, nothing needed to, we hold no timetables here, we ran out of
+            budget — and each one leads somewhere different.
+
+            "Not verified" is the honest headline for all of them, and the
+            sentence beside it says which.
+          */}
+          {compiled?.transitEvidence ? (
+            <Fact label="Public transport">{transitSummaryFor(compiled.transitEvidence)}</Fact>
+          ) : null}
           <Fact label="Found">
             {board.expansion.base.length} at base · {board.expansion.satellites.length} satellites
           </Fact>
@@ -296,8 +313,23 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
 
           Only where there is a board, because only a board renders that bar —
           and padding under a panel that has no bar beneath it is just a gap.
+
+          THE CLEARANCE WAS ON THE WRONG ELEMENT, AND THE COST WAS A LICENCE.
+
+          It sat here, on the board column. On a phone the grid collapses and the
+          document order is board → rail → attribution → footer, so the padding
+          landed *between the board and the rail* and everything after it scrolled
+          under an opaque bar with no way to reach it: the integrity panel, the
+          weather panel, the "places that are shut" list, the site footer, and —
+          the part that is not merely a layout bug — the OpenStreetMap
+          attribution. ODbL's attribution obligation is met by rendering the
+          notice, and a notice nobody can scroll to is not rendered.
+
+          The clearance now goes on the page's own bottom, below everything, so
+          there is nothing left for the bar to cover. It is kept off the
+          board column so the rail does not gain a stray gap above it.
         */}
-        <div className={workable.length === 0 ? 'order-1' : 'order-1 max-sm:pb-28'}>
+        <div className="order-1">
           {workable.length === 0 ? (
             /*
              * THE EMPTY BOARD, EXPLAINED BY THE THING THAT IS ACTUALLY BINDING.
@@ -321,6 +353,14 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : (
             <DiscoveryBoardView
               tripId={id}
+              /*
+               * The network behind every travel time on the cards below. Read
+               * from the artifact rather than assumed, because a car-free
+               * traveller's board is measured on a different one and reading
+               * road minutes as walking minutes is the regression this names
+               * its way out of.
+               */
+              travelMode={compiled?.travelTimes.mode ?? 'car'}
               /*
                * The artifact these counts are counts *of*.
                *
@@ -399,6 +439,23 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
             <BoardIntegrityPanel tripId={id} reading={integrity} />
           ) : null}
 
+          {/*
+            THE PUBLIC-TRANSPORT JOURNEYS, WHERE ANY WERE MEASURED.
+
+            The fact line above counts them; this is where a traveller can see
+            what was actually measured — a duration, how many changes, and how
+            much of it is on foot. Every number here comes from a journey the
+            provider returned; nothing is derived, nothing is averaged, and a
+            journey the provider could not answer for is not in this list at all.
+
+            Rendered only when something was measured. A panel that appeared to
+            say "we measured nothing" would compete with the fact line, which
+            already says it in one sentence and in the right place.
+          */}
+          {compiled?.transitEvidence && compiled.transitEvidence.measured > 0 ? (
+            <TransitPanel evidence={compiled.transitEvidence} places={compiled.places} />
+          ) : null}
+
           <div>
             <h2 className="font-display text-lg text-ink">Your trip personality</h2>
             <p className="mt-1 text-sm text-ink-muted">
@@ -457,8 +514,133 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           scoring are ours.
         </p>
       ) : null}
+
+      {/*
+        THE ROOM THE PINNED BAR NEEDS IS NOT THIS PAGE'S TO GIVE.
+
+        A spacer here was the second wrong answer. The first put the clearance on
+        the board column, so on a phone it landed *between* the board and the
+        rail and everything after it — including the ODbL attribution — scrolled
+        under an opaque bar. Moving it to the end of the page fixed the
+        attribution and not the footer, because the footer is rendered by the
+        chrome, **after** `</main>`, and a spacer inside `<main>` structurally
+        cannot clear something outside it. The site-wide "check anything you are
+        booking against the official source" disclaimer stayed uncoverable.
+
+        The clearance now lives on the footer itself, which is genuinely the last
+        element in the document. It costs a little dead space at the bottom of
+        pages that pin nothing, which is invisible because it is below the last
+        line of content — and is a great deal better than a licence notice and a
+        staleness warning nobody can read.
+      */}
     </div>
   );
+}
+
+/**
+ * The measured journeys, listed rather than summarised.
+ *
+ * Bounded to a handful because the rail is a summary column and a long list
+ * belongs in the board — and because transit evidence is sparse by design, so a
+ * handful is usually all there is.
+ */
+function TransitPanel({
+  evidence,
+  places,
+}: {
+  evidence: NonNullable<CompiledRegion['transitEvidence']>;
+  places: CompiledRegion['places'];
+}) {
+  const nameOf = new Map(places.map((place) => [place.id, place.name] as const));
+  const measured = evidence.journeys
+    .filter((journey) => journey.status === 'measured')
+    .slice(0, 6);
+  return (
+    <Panel className="p-5" data-testid="transit-panel">
+      <p className="eyebrow">Getting around by public transport</p>
+      <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
+        Journeys from where you are staying, checked against published timetables for a weekday
+        morning. A different time of day is a different journey.
+      </p>
+      <ul className="mt-3 space-y-2 text-sm">
+        {measured.map((journey) => (
+          <li key={`${journey.fromId}-${journey.toId}`} className="text-ink">
+            <span className="text-ink-muted">{nameOf.get(journey.toId) ?? 'Somewhere on the board'}</span>
+            {' — '}
+            {formatMinutes(journey.minutes ?? 0)}
+            {typeof journey.transfers === 'number' ? (
+              <span className="text-ink-faint">
+                {journey.transfers === 0
+                  ? ', no changes'
+                  : `, ${journey.transfers} change${journey.transfers === 1 ? '' : 's'}`}
+              </span>
+            ) : null}
+            {typeof journey.walkingMinutes === 'number' && journey.walkingMinutes > 0 ? (
+              <span className="text-ink-faint">
+                {' '}
+                including {formatMinutes(journey.walkingMinutes)} on foot
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {evidence.measured > measured.length ? (
+        <p className="mt-3 text-xs text-ink-faint">
+          {evidence.measured - measured.length} more were checked.
+        </p>
+      ) : null}
+    </Panel>
+  );
+}
+
+/**
+ * What the board says about getting around by public transport.
+ *
+ * One sentence, and it never implies more than was measured. A measured count is
+ * the only case that states a number; every other case names the reason and
+ * stops, because "we could not check" and "there is nothing to catch" are
+ * different facts and a traveller plans differently around each.
+ */
+function transitSummaryFor(evidence: NonNullable<CompiledRegion['transitEvidence']>): string {
+  if (evidence.measured > 0) {
+    const total = evidence.requested;
+    return `${evidence.measured} of ${total} journeys checked against timetables`;
+  }
+  /**
+   * THE ONE CASE WHERE THE PRODUCT LEARNED SOMETHING AND USED TO DISCARD IT.
+   *
+   * A run where every journey came back `no_route` is a run where a provider
+   * answered, in coverage, and the answer was "there is no way to do this by
+   * public transport". For a car-free traveller that is the single most
+   * trip-defining thing the compiler found — and it fell into the vague default
+   * below, which says nothing came back. Something came back; it was bad news.
+   */
+  const asked = evidence.journeys.length;
+  const noService = evidence.journeys.filter((journey) => journey.status === 'no_route').length;
+  if (asked > 0 && noService === asked) {
+    return `We checked ${asked} ${asked === 1 ? 'journey' : 'journeys'} and found no public-transport service for any of them`;
+  }
+
+  switch (evidence.absence) {
+    case 'unsupported':
+      /*
+       * Scoped to journeys, not to the trip.
+       *
+       * This used to end "so treat any journey time as a guess", which is a
+       * claim about *every* number on the board — including the road or walking
+       * times that were genuinely measured. A caveat about a capability this
+       * build lacks must not cast doubt on the evidence it has.
+       */
+      return 'Not verified — we cannot check timetables here, so any public-transport journey is unmeasured';
+    case 'out_of_coverage':
+      return 'Not verified — we hold no timetables for this area';
+    case 'budget_exhausted':
+      return 'Not verified — we stopped before checking any journeys';
+    case 'not_needed':
+      return 'Not checked — this trip is planned around a car';
+    default:
+      return 'Not verified — nothing came back for the journeys we asked about';
+  }
 }
 
 /**

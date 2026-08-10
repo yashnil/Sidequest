@@ -472,7 +472,18 @@ export function repairsFor(
   if (has('identity_agreement')) repairs.push('reresolve_identity');
   if (has('geographic_spread')) repairs.push('reread_underserved_areas');
   if (has('support_balance') || has('experience_supply') || has('category_diversity')) {
+    /*
+     * FREE FIRST, THEN PAID — AND THE ORDER IS THE SAFETY ARGUMENT.
+     *
+     * Both address the same deficits and the loop takes the first it has not
+     * attempted, so the ordering here is what guarantees a compilation never
+     * pays for a search until re-selecting from records already bought has been
+     * tried and has not helped. Reversing these two lines would spend money on
+     * every thin board, including the many where the ground was fine and a
+     * ceiling was the problem.
+     */
     repairs.push('category_targeted_query');
+    repairs.push('category_targeted_acquisition');
   }
   if (has('transport_routeability') && input.unroutableModes.length === 0) {
     // A missing gateway is findable. A missing *mode* is not, and asking a place
@@ -555,9 +566,22 @@ const WALKABLE_REACH_KM = 12;
 
 export function unmeasurableModesFor(
   scope: GeographicScope,
-  providers: { routing?: { supportedModes(): readonly string[] } },
+  providers: {
+    routing?: { supportedModes(): readonly string[] };
+    /**
+     * The transit seam, asked separately because it *is* separate.
+     *
+     * A road router's `supportedModes()` can never honestly include transit —
+     * that was the whole finding behind splitting the two — so the day a transit
+     * provider is configured, this is the only thing that changes and the answer
+     * changes with it. Asked here rather than hard-coded so the readiness layer
+     * has no opinion about which deployments have one.
+     */
+    transit?: { supportsTransit(): boolean };
+  },
 ): string[] {
   const supported = new Set(providers.routing?.supportedModes() ?? []);
+  if (providers.transit?.supportsTransit()) supported.add('transit');
   /** What each planning mode would need the router to be able to measure. */
   const NEEDS: Record<string, string> = {
     drive: 'car',
@@ -693,33 +717,81 @@ export type RecoveryAction =
 /**
  * The action a repair implies, or `null` where this pass cannot execute it.
  *
- * **No repair returns an `acquire` action today, and that is a finding rather
- * than an omission.** One was written — a deficit-directed query for the
- * categories a board came up short on, charged to the compilation's own ledger
- * — and a review proved it could not work: every place provider short-circuits
- * on the region pack *before* it looks at `queries`, so the call returned the
- * identical inventory, reported zero provider calls, and booked ledger spend
- * for work nobody did. It also overwrote the provider's cached inventory with a
- * narrower one, partially undoing the free repair that had just widened it.
+ * **One repair now returns an `acquire` action, and the spending argument was
+ * re-made deliberately to get there.** A previous version of it shipped and was
+ * removed after review proved it non-functional: it passed queries into a
+ * provider that short-circuits on the region pack before reading them, so it
+ * returned the identical inventory, reported zero provider calls, booked ledger
+ * spend for work nobody did, and overwrote a broad cached inventory with a
+ * narrower one. Three things are different now, and all three had to be:
  *
- * A paid repair that cannot help is strictly worse than no repair, so it is
- * out. The `acquire` variant stays in the type because the seam is real and the
- * work to make it executable is known: the pack path has to honour
- * `query.intent`, or acquisition has to route through the fallback place
- * service. Until one of those exists, this returns `reselect` or nothing.
+ * 1. **It runs above the cut.** The supply loop moved ahead of deduplication,
+ *    so an acquired record flows through classification, quality, research,
+ *    hours and routing like any other candidate. Previously it arrived after the
+ *    matrix had been bought and could not have been scheduled.
+ * 2. **It uses a seam a provider cannot mistake for an ordinary call** — an
+ *    explicit `acquire` field rather than `queries`, which the pack path
+ *    genuinely never reads.
+ * 3. **It is ranked after the free repair for the same deficits**, so nothing is
+ *    ever bought until re-selection has been tried and has not helped.
+ *
+ * `intents` comes from the caller rather than from the repair id, because the
+ * whole claim is that the query is derived from the *deficit*. A repair that
+ * always asked for the same categories would be a rerun with a budget attached.
  *
  * `reresolve_identity`, `gateway_discovery` and `refresh_stale_pack` remain
- * unexecutable for a different reason: each needs a stage the recovery loop
- * does not own — resolution, a station query, buying ground again — and wiring
- * them from inside the loop would mean re-entering the pipeline halfway
- * through. `repairsFor` still names all of them, so a traveller-facing surface
- * can say what *would* help.
+ * unexecutable: each needs a stage the recovery loop does not own — resolution,
+ * a station query, buying ground again — and wiring them from inside the loop
+ * would mean re-entering the pipeline halfway through. `repairsFor` still names
+ * all of them, so a traveller-facing surface can say what *would* help.
  */
-export function recoveryActionFor(repair: ResearchRepair, attempt: number): RecoveryAction | null {
+export function recoveryActionFor(
+  repair: ResearchRepair,
+  attempt: number,
+  context: {
+    /** Kinds of thing the board is short of, derived from the deficit. */
+    shortIntents?: readonly string[];
+  } = {},
+): RecoveryAction | null {
+  if (repair === 'category_targeted_acquisition') {
+    const intents = [...new Set(context.shortIntents ?? [])].filter(
+      (intent) => intent.trim().length > 0,
+    );
+    /*
+     * No deficit-derived intents, no acquisition. A query for "things" is the
+     * rerun this repair exists not to be, and paying for one would be the
+     * previous attempt with better plumbing.
+     */
+    if (intents.length === 0) return null;
+    return {
+      kind: 'acquire',
+      intents: intents.slice(0, 3),
+      maxQueries: 2,
+      maxPerQuery: 40,
+    };
+  }
   const adjustment = recoveryAdjustment(repair, attempt);
   if (adjustment) return { kind: 'reselect', adjustment };
   return null;
 }
+
+/**
+ * WHICH REPAIRS BELONG ABOVE THE CUT.
+ *
+ * The supply loop runs before deduplication, where what it finds can still
+ * become a card on the board. `targeted_subject_query` cannot run there — it
+ * needs the search space of what survived admission and why, which does not
+ * exist until routing has run — so it is deliberately excluded and handled
+ * later under its own stage.
+ *
+ * A set rather than a condition at the call site, so the two loops cannot
+ * silently start overlapping.
+ */
+export const SUPPLY_REPAIRS: readonly ResearchRepair[] = [
+  'category_targeted_query',
+  'category_targeted_acquisition',
+  'reread_underserved_areas',
+];
 
 /** Ceilings on the loop, exported so a test can assert them rather than infer them. */
 export const MAX_RECOVERY_PASSES = 2;

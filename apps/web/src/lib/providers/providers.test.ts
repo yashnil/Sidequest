@@ -204,6 +204,22 @@ describe('valhalla', () => {
   it('maps costing from our mode vocabulary', () => {
     expect(costingFor('car')).toBe('auto');
     expect(costingFor('foot')).toBe('pedestrian');
+    /**
+     * AND THERE IS NO THIRD CASE — ENFORCED BY THE TYPE, NOT BY AN ASSERTION.
+     *
+     * `costingFor('transit')` used to answer `'bus'`: Valhalla's road-network
+     * vehicle costing, with no timetable behind it, which would have returned a
+     * drive under the name of a scheduled journey.
+     *
+     * A runtime assertion here would be theatre. The function is now
+     * `mode === 'car' ? 'auto' : 'pedestrian'`, so `not.toBe('bus')` holds for
+     * every possible input and could never fail — and asserting it would in fact
+     * *certify* the remaining oddity, which is that passing `'transit'` at
+     * runtime yields a pedestrian costing. The real guard is that `'transit'` is
+     * gone from the parameter type, so a caller that acquires a transit mode
+     * fails to compile; and the matrix seam refuses `'transit'` outright before
+     * this is ever reached. Both are checked where they live, not restated here.
+     */
   });
 
   it('reads a matrix and zeroes only the diagonal', async () => {

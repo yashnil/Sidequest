@@ -221,18 +221,22 @@ export function daysWorthOf(weight: number): number {
  *
  * **`transitMeasurable` is what stops a widened reach becoming a new lie.**
  * Raising a car-free traveller from the walking cap to the transit cap only
- * makes sense if something can actually measure a transit journey. Nothing can
- * today — the capability registry reports `route_transit` as `unsupported` —
- * and raising it anyway had a consequence that was worse than the narrowness it
- * fixed: `matrixModeFor` switches from the pedestrian network to the road
- * network above twelve kilometres, so every leg a car-free traveller saw would
- * have become a *driving* duration presented as their travel time. A forty-
- * kilometre bus journey with two transfers rendered as a twenty-three minute
- * drive is a worse answer than a scope that was too small.
+ * makes sense if something can actually measure a transit journey. When this was
+ * written nothing could, and raising it anyway had a consequence worse than the
+ * narrowness it fixed: `matrixModeFor` switched from the pedestrian network to
+ * the road network above twelve kilometres, so every leg a car-free traveller
+ * saw would have become a *driving* duration presented as their travel time.
  *
- * The parameter exists so the day a transit provider is configured, the reach
- * widens and the matrix has something honest to measure it with — and until
- * then, the gap is a stated readiness deficit rather than a confident number.
+ * **Both halves of that have since changed, and the parameter is still the
+ * gate.** `route_transit` is now registered when a deployment configures a
+ * router built with timetable data, so this can genuinely be `true`; and
+ * `matrixModeFor` no longer escalates a car-free scope to the road network at
+ * any span, so the specific lie it names is no longer reachable. What the
+ * parameter now controls is narrower and still load-bearing: a forty-kilometre
+ * ring is a promise about ground the traveller can reach, and a build that
+ * cannot measure a journey has no business making it. The reach widens the day
+ * something can measure one; until then the gap is a stated readiness deficit
+ * rather than a confident number.
  */
 export function reachClassFor(input: {
   /** True, false, or null when nobody has established it. */

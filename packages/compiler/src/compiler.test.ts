@@ -652,9 +652,25 @@ describe('compileRegion', () => {
         onStage: (record) => stages.push(record),
       });
 
-      const routes = stages.find((record) => record.stage === 'validating_routes');
-      if (!routes?.outcome) continue;
-      const match = /^(-?\d+) of (-?\d+) legs measured$/.exec(routes.outcome);
+      /**
+       * `findLast`, and the one word is the whole test.
+       *
+       * A stage emits two records — one when it starts and one when it
+       * finishes — and only the second carries an outcome. `find` returned the
+       * `running` record, whose outcome is null, so `continue` fired on every
+       * iteration for every world and **not one of the four assertions below
+       * had ever executed.** The test named for "never reports an impossible
+       * measured leg count" was reporting nothing at all.
+       *
+       * Asserted rather than skipped, too: a world whose routing stage never
+       * finished is a finding, not a reason to say nothing.
+       */
+      const routes = stages.findLast(
+        (record) => record.stage === 'validating_routes' && record.outcome !== null,
+      );
+      expect(routes?.outcome, `${key} never finished validating routes`).toBeTruthy();
+      if (!routes?.outcome) throw new Error(`${key} never finished validating routes`);
+      const match = /^(-?\d+) of (-?\d+) legs measured/.exec(routes.outcome);
       expect(match, `unreadable outcome for ${key}: ${routes.outcome}`).toBeTruthy();
       const measured = Number(match![1]);
       const total = Number(match![2]);

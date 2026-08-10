@@ -254,9 +254,86 @@ export interface OverpassOptions {
   };
 }
 
-export function overpassCacheKey(box: BoundingBox, limit: number, kind = 'poi'): string {
+/**
+ * THE KEY THAT STOPS A NARROW ANSWER OVERWRITING A BROAD ONE.
+ *
+ * `fetchTagged` has always taken a *selector subset*, and this key has never
+ * included it. While there were exactly two callers with two fixed subsets and
+ * two `kind` strings, that was harmless. It stops being harmless the moment
+ * recovery can ask for one category over the same bounding box: the narrow query
+ * clamps to the same box, asks for the same limit, and — with the selectors
+ * absent from the key — lands on the **same cache entry** as the full sweep. The
+ * provider cache upserts unconditionally, so the broad inventory is replaced by
+ * a slice of itself, and the next compilation reads a truncated sweep believing
+ * it to be complete.
+ *
+ * That is not hypothetical: it is one of the two reasons the previous acquiring
+ * repair was withdrawn.
+ *
+ * The digest is order-independent so two spellings of one subset share an entry,
+ * and the version is bumped to `v2` because entries written under the ambiguous
+ * key cannot be told apart from correct ones and some of them may already be
+ * truncated.
+ */
+export function overpassCacheKey(
+  box: BoundingBox,
+  limit: number,
+  kind = 'poi',
+  selectors: readonly { key: string; values: readonly string[] }[] = POI_SELECTORS,
+): string {
   const bbox = [box.south, box.west, box.north, box.east].map((value) => value.toFixed(3)).join(',');
-  return ['overpass', 'v1', kind, overpassEndpoint(), bbox, String(limit)].join('|');
+  const digest = selectors
+    .map((entry) => `${entry.key}=${[...entry.values].sort().join(',')}`)
+    .sort()
+    .join(';');
+  return ['overpass', 'v2', kind, overpassEndpoint(), bbox, String(limit), digest].join('|');
+}
+
+/**
+ * Which selector groups answer a given intent.
+ *
+ * The table already existed — every entry in `POI_SELECTORS` carries an
+ * `intent` — and nothing read it. This is what turns "the board has no museums"
+ * into a query for the tag groups that hold museums, rather than into another
+ * sweep for everything.
+ */
+export function selectorsForIntents(
+  intents: readonly string[],
+): (typeof POI_SELECTORS)[number][] {
+  const wanted = new Set(intents);
+  return POI_SELECTORS.filter((entry) => wanted.has(entry.intent));
+}
+
+/**
+ * A deliberately narrow sweep, for evidence a deficit says we are missing.
+ *
+ * Its own `kind` as well as its own selector digest, so a targeted read can
+ * never share an entry with the broad one even if a future change made the
+ * subsets coincide. Two independent guards for one hazard, because the cost of
+ * the hazard is a silently truncated inventory that looks complete.
+ */
+export async function fetchPoisForIntents(
+  box: BoundingBox,
+  intents: readonly string[],
+  options: OverpassOptions = {},
+): Promise<OverpassResult> {
+  const selectors = selectorsForIntents(intents);
+  if (selectors.length === 0) {
+    /*
+     * An intent nothing maps to buys nothing, and says so without a call. A
+     * request for a category this source has no tags for is a real state — not
+     * every kind of thing a traveller wants is a tag somebody records.
+     */
+    return {
+      elements: [],
+      dataTimestamp: null,
+      calls: 0,
+      cacheHit: false,
+      bytes: 0,
+      failedGroups: [],
+    };
+  }
+  return fetchTagged(box, selectors, 'poi-targeted', options);
 }
 
 export async function fetchPois(
@@ -290,7 +367,7 @@ async function fetchTagged(
 ): Promise<OverpassResult> {
   const limit = Math.min(400, Math.max(1, options.limit ?? 200));
   const bounded = clampBoundingBox(box);
-  const key = overpassCacheKey(bounded, limit, kind);
+  const key = overpassCacheKey(bounded, limit, kind, selectors);
 
   const cached = options.cache?.read(key);
   if (cached) return { ...cached, calls: 0, cacheHit: true };

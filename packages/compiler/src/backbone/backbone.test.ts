@@ -1445,12 +1445,30 @@ describe('compiling through the backbone', () => {
     expect(JSON.stringify(first.region)).toBe(JSON.stringify(second.region));
   });
 
-  it('measures a spread-out region on roads even when nobody is driving', () => {
+  it('never hands a traveller with no car a road matrix, however spread out the ground', () => {
     /**
-     * Two live destinations failed outright with "we could not work out travel
-     * times across this region" — a national park and an island, both with the
-     * scope's primary mode set to `walk` and no continuous pedestrian graph
-     * across either. Every non-driving mode a scope allows travels on roads.
+     * THIS TEST ASSERTED THE OPPOSITE, AND THE OPPOSITE WAS THE FOUNDER BUG.
+     *
+     * It was written for a real failure — two live destinations, a national park
+     * and an island, refused outright because there is no continuous pedestrian
+     * graph across either — and the fix it pinned was "measure on roads when
+     * nobody is driving". That reasoning holds for the *salvage* and not for the
+     * default, and as a default it is the substitution the whole transit
+     * capability exists to prevent.
+     *
+     * The arithmetic is not marginal. A walking reach is three kilometres a
+     * night capped at twelve, and a radius scope spans twice its radius: one
+     * night spans twelve and measures on foot, and **every car-free trip of two
+     * nights or more** spanned eighteen or more and measured on roads. Those
+     * minutes reached the board with no mode on them, so a forty-kilometre
+     * journey a traveller would make by bus, with two changes, was shown to them
+     * as a twenty-three-minute hop.
+     *
+     * The salvage survives and is now visible instead of silent: the compiler
+     * retries on the road network when the pedestrian graph comes back with
+     * almost nothing, records the substitution on the artifact, and warns the
+     * traveller in words. What is gone is the road matrix arriving as the first
+     * answer for somebody who told us they have no car.
      */
     const walkableCity = scopeFor({
       transport: {
@@ -1475,10 +1493,41 @@ describe('compiling through the backbone', () => {
         bounds: { southWest: { lat: 63.0, lng: -151.5 }, northEast: { lat: 63.6, lng: -150.5 } },
       },
     });
-    expect(matrixModeFor(nationalPark)).toBe('car');
+    /*
+     * The ground is six hundred square kilometres of Denali and the traveller
+     * has no car. The old answer was `car`; the true answer is that we measure
+     * what they can actually walk and let the routeability dimension say the
+     * trip is bigger than the way they can move around it.
+     */
+    expect(matrixModeFor(nationalPark)).toBe('foot');
 
+    /*
+     * The two halves of the claim, asserted together so neither can be satisfied
+     * by a function that ignores its input: a driver still gets the road
+     * network, and no non-driving scope of any size can reach it from here.
+     */
     const driving = scopeFor();
     expect(matrixModeFor(driving)).toBe('car');
+
+    const spans: [number, number][] = [
+      [0.02, 0.02],
+      [0.4, 0.4],
+      [3, 3],
+      [12, 12],
+    ];
+    for (const [latSpan, lngSpan] of spans) {
+      const scope = scopeFor({
+        transport: walkableCity.transport,
+        shape: {
+          kind: 'bounds',
+          bounds: {
+            southWest: { lat: 10, lng: 10 },
+            northEast: { lat: 10 + latSpan, lng: 10 + lngSpan },
+          },
+        },
+      });
+      expect(matrixModeFor(scope)).not.toBe('car');
+    }
   });
 
   it('writes the measured drive from base onto every place it keeps', async () => {

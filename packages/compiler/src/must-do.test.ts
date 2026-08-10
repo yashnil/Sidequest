@@ -3,14 +3,16 @@ import {
   classifyPreferences,
   mustDoRequestsFrom,
   namesSomething,
+  mustDoIsAccountedFor,
   settleMustDoCoverage,
   type DestinationResearchReadiness,
   type InterpretationSet,
   type MustDoCoverage,
   type MustDoRequest,
+  type MustDoResolution,
   type Place,
 } from '@sidequest/core';
-import { mustDoCoverageFrom, resolveMustDos } from './must-do';
+import { mergeMustDoResolutions, mustDoCoverageFrom, resolveMustDos } from './must-do';
 
 /**
  * CAN A TRAVELLER SAY "THIS ONE IS NON-NEGOTIABLE" AND TRUST THE ANSWER?
@@ -472,5 +474,104 @@ describe('applying a decision to a reading that was already written', () => {
 describe('the artifact-shaped value', () => {
   it('is absent when nobody named anything, rather than an empty claim', () => {
     expect(mustDoCoverageFrom([])).toBeUndefined();
+  });
+});
+
+describe('a second look at what somebody named', () => {
+  /**
+   * THE INVARIANT, TESTED AS AN INVARIANT RATHER THAN AS ONE CALL SITE.
+   *
+   * `mergeMustDoResolutions` exists because re-resolving against a larger set of
+   * subjects genuinely changes answers: `distinctiveWords` counts how often a
+   * word occurs across the names in play, so a one-word name that identified
+   * exactly one place among a plannable set can stop identifying anything once
+   * ten thousand map records join it. Taking the newer list wholesale then turns
+   * a `covered` request into `not_found` — a second look that *lost* something,
+   * which is the precise failure the readiness contract exists to prevent.
+   *
+   * The rule lived inline at one call site and now lives in the domain, because
+   * an inline version can only ever be true for the branch it is written in.
+   */
+  const request = (id: string, quote: string): MustDoRequest => ({
+    id,
+    quote,
+    kind: 'named_subject',
+    source: 'composer_text',
+    namedExplicitly: true,
+  });
+
+  const resolution = (id: string, status: MustDoResolution['status']): MustDoResolution => ({
+    request: request(id, `thing ${id}`),
+    status,
+    detail: `thing ${id} is ${status}`,
+    candidates: [],
+  });
+
+  it('never turns an answered request back into an unanswered one', () => {
+    const before = [
+      resolution('a', 'covered'),
+      resolution('b', 'withdrawn'),
+      resolution('c', 'replaced'),
+      resolution('d', 'not_found'),
+    ];
+    /* The widened pass loses every answer it previously had. */
+    const after = before.map((entry) => ({ ...entry, status: 'not_found' as const }));
+
+    const merged = mergeMustDoResolutions(before, after);
+    expect(merged.find((entry) => entry.request.id === 'a')?.status).toBe('covered');
+    expect(merged.find((entry) => entry.request.id === 'b')?.status).toBe('withdrawn');
+    expect(merged.find((entry) => entry.request.id === 'c')?.status).toBe('replaced');
+    /* And a request that was never answered takes the newer answer, whatever it is. */
+    expect(merged.find((entry) => entry.request.id === 'd')?.status).toBe('not_found');
+  });
+
+  it('lets a second look improve an answer, which is the whole point of taking one', () => {
+    const before = [resolution('a', 'not_found'), resolution('b', 'ambiguous')];
+    const after = [resolution('a', 'covered'), resolution('b', 'covered')];
+    const merged = mergeMustDoResolutions(before, after);
+    expect(merged.map((entry) => entry.status)).toEqual(['covered', 'covered']);
+  });
+
+  it('keeps a request the second pass stopped mentioning', () => {
+    /*
+     * A producer that drops a request has not answered it. Silently losing the
+     * row would make "nothing is silently lost" false by omission rather than by
+     * downgrade — the same failure through a different door.
+     */
+    const before = [resolution('a', 'covered'), resolution('b', 'not_found')];
+    const after = [resolution('a', 'covered')];
+    const merged = mergeMustDoResolutions(before, after);
+    expect(merged.map((entry) => entry.request.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('is monotone in the number accounted for, for every combination', () => {
+    /**
+     * The property, asserted over the whole status space rather than over three
+     * hand-picked pairs: for any before and any after, merging can never reduce
+     * how many requests are accounted for. That is the claim the readiness layer
+     * relies on, and a spot check cannot establish it.
+     */
+    const statuses = [
+      'covered',
+      'withdrawn',
+      'replaced',
+      'not_found',
+      'ambiguous',
+      'outside_area',
+      'unusable',
+    ] as const;
+    for (const first of statuses) {
+      for (const second of statuses) {
+        const before = [resolution('a', first)];
+        const after = [resolution('a', second)];
+        const accountedBefore = before.filter((entry) => mustDoIsAccountedFor(entry)).length;
+        const merged = mergeMustDoResolutions(before, after);
+        const accountedAfter = merged.filter((entry) => mustDoIsAccountedFor(entry)).length;
+        expect(
+          accountedAfter,
+          `${first} then ${second} lost an answer`,
+        ).toBeGreaterThanOrEqual(accountedBefore);
+      }
+    }
   });
 });

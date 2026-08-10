@@ -20,10 +20,26 @@
  *
  * **It imports nothing from the app.** Plain Node reading `process.env`, so it
  * runs without a build, without a database and without starting a server —
- * which is the only way it can answer *before* the thing it is diagnosing. The
- * predicates are deliberately duplicated from `lib/providers/switches.ts`
- * rather than imported, and `doctor.test.ts` asserts the two agree, so the
- * duplication cannot rot silently.
+ * which is the only way it can answer *before* the thing it is diagnosing.
+ *
+ * That last rule has a cost, and the cost came due. The predicates are
+ * duplicated from `lib/providers/switches.ts`, this file's own comment claimed
+ * `doctor.test.ts` asserted the two agree, and **it never did** — the test
+ * pinned a hard-coded output string instead. The duplication rotted exactly as
+ * predicted: transit was reported unavailable by a literal `false` while the
+ * switches and the capability registry had grown the ability to enable it, so a
+ * deployment with a transit-capable router was told it had none.
+ *
+ * The duplication stays, because the zero-import property is worth more than
+ * the tidiness. What changed is that `doctor.test.ts` now runs this script under
+ * a matrix of environments and compares every capability verdict against
+ * `capabilityRegistry()` evaluated in-process under the *same* environment. The
+ * two are still two implementations; they can no longer disagree quietly.
+ *
+ * **It reports what it cannot verify, as unverified.** Every check here is
+ * configuration, not reachability: a build with a real-looking key and three
+ * endpoints pointed at a closed port passes every line below. Saying so is the
+ * difference between a diagnostic and a reassurance.
  */
 
 const env = (name) => process.env[name]?.trim() ?? '';
@@ -37,6 +53,10 @@ const routes = equals('SIDEQUEST_ROUTES_PROVIDER', 'valhalla');
 const researchModel = isSet('ANTHROPIC_API_KEY');
 const researchProvider = equals('SIDEQUEST_RESEARCH_PROVIDER', 'anthropic');
 const climate = !equals('SIDEQUEST_CLIMATE_PROVIDER', 'off');
+/* Mirrors `isTimeZoneResolverEnabled`: on unless explicitly switched off. */
+const timeZone = !equals('SIDEQUEST_TIMEZONE_PROVIDER', 'off');
+/* Mirrors `transitProviderName`: named, never merely non-empty. */
+const transit = equals('SIDEQUEST_TRANSIT_PROVIDER', 'valhalla');
 const weather = env('SIDEQUEST_WEATHER_PROVIDER') || '(default)';
 const imagery = env('SIDEQUEST_IMAGERY_PROVIDER') || '(default)';
 const food = env('SIDEQUEST_FOOD_PROVIDER') || '(default)';
@@ -84,6 +104,20 @@ mark(
     : 'SIDEQUEST_RESEARCH_PROVIDER not set',
 );
 mark(climate, 'Climate archive', climate ? 'on (keyless)' : 'off');
+mark(
+  timeZone,
+  'Civil time zone',
+  timeZone
+    ? 'open-meteo (keyless)'
+    : 'off — every destination falls back to a solar approximation, and says so',
+);
+mark(
+  transit,
+  'Public transport routing',
+  transit
+    ? 'valhalla multimodal — requires an instance built with timetable data'
+    : 'SIDEQUEST_TRANSIT_PROVIDER not set',
+);
 say(`  · Weather provider — ${weather}`);
 say(`  · Imagery provider — ${imagery}`);
 say(`  · Food provider — ${food}`);
@@ -102,9 +136,18 @@ mark(
         : 'no — configuration missing (see below)',
 );
 mark(
-  false,
+  transit,
   'Public transit routing',
-  'not available — no transit provider is configured, so scheduled modes stay unmeasured and are reported as a readiness deficit rather than substituted with walking',
+  transit
+    ? 'yes — journeys are measured against timetables, and a reply with no transit leg in it is refused rather than reported as a walk'
+    : 'not available — no transit provider is configured, so scheduled modes stay unmeasured and are reported as a readiness deficit rather than substituted with walking',
+);
+mark(
+  timeZone,
+  'Real local time zone',
+  timeZone
+    ? 'yes — resolved from coordinates; a fixed offset is refused rather than accepted'
+    : 'no — a solar approximation is used and is labelled as one',
 );
 mark(
   researchProvider && researchModel,
@@ -117,6 +160,40 @@ mark(
   'Live weather',
   weather === 'fixture' ? 'fixture generator' : weather === 'off' ? 'off' : 'yes',
 );
+say('');
+
+say('Endpoints');
+/*
+ * Named, never reached. Each of these silently defaults to a public
+ * volunteer-run service, and a deployment pointed at a dead host reported itself
+ * fully ready — because nothing here had ever mentioned them. Listing them does
+ * not verify them, and the line below says so rather than implying otherwise.
+ */
+for (const [label, name] of [
+  ['Geocoder', 'SIDEQUEST_GEOCODER_URL'],
+  ['Routing', 'SIDEQUEST_ROUTES_URL'],
+  ['Place fallback', 'SIDEQUEST_POI_URL'],
+  ['Place catalogue', 'SIDEQUEST_PLACE_CATALOG_URL'],
+]) {
+  say(`  · ${label} — ${isSet(name) ? `${name} set` : `${name} not set, using the public default`}`);
+}
+say('  · Not contacted. This is a configuration report, not a reachability check.');
+say('');
+
+say('Runtime');
+/*
+ * The timezone database this process computes offsets against.
+ *
+ * Every opening hour, sunrise and daylight window in the product is derived from
+ * an IANA identifier through this runtime's own copy of the database, and a
+ * runtime lagging the published release is wrong about a rule change that has
+ * already happened — with nothing inside the process able to detect it. Node
+ * 22.21 ships 2025b; releases through 2026 moved Morocco, British Columbia and
+ * Alberta onto permanent standard time. Printed so the basis of a stored plan's
+ * daylight numbers is knowable rather than assumed.
+ */
+say(`  · Node ${process.version}`);
+say(`  · Time-zone database ${process.versions.tz ?? 'unknown'} (offsets are computed, never stored)`);
 say('');
 
 say('Spending guards');

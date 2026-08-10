@@ -28,6 +28,33 @@ import { Panel, buttonClass } from './ui';
  * deficits that are binding, so a blocked destination never gets a button that
  * cannot move the thing blocking it.
  */
+/**
+ * THE SENTENCE THE COMPILER ALREADY WROTE.
+ *
+ * This panel used to re-derive its copy from `visitableAfter - visitableBefore`,
+ * and that arithmetic cannot express what every repair does. The one that goes
+ * back over the map for a place somebody named produces a *truer status* rather
+ * than a wider board, so its two counts are equal by construction — and a
+ * successful one rendered as **"found 0 more."**
+ *
+ * `detail` is written where the facts are, per repair, and already reads
+ * correctly for every outcome the pipeline produces. Rendering it is both less
+ * code and the only version that can be right.
+ *
+ * The cost note stays, because it is the one thing `detail` deliberately does
+ * not say — and it says *what it cost* rather than restating the label above it,
+ * which was the previous version's problem.
+ */
+function attemptSentence(entry: DestinationResearchReadiness['repairsAttempted'][number]) {
+  const paid = entry.kind === 'acquire' && (entry.cost?.providerCalls ?? 0) > 0;
+  return (
+    <>
+      {entry.detail}
+      {paid ? <span className="text-ink-faint"> This one cost a fresh search.</span> : null}
+    </>
+  );
+}
+
 export function ResearchReadinessPanel({
   tripId,
   readiness,
@@ -35,9 +62,43 @@ export function ResearchReadinessPanel({
   tripId: string;
   readiness: DestinationResearchReadiness;
 }) {
-  // `ready` is the ordinary case and says nothing: a banner on every healthy
-  // trip is a banner nobody reads by the third one.
-  if (readiness.level === 'ready') return null;
+  /**
+   * `ready` is the ordinary case and says nothing — unless something was done.
+   *
+   * A banner on every healthy trip is a banner nobody reads by the third one,
+   * and that reasoning is right. What it got wrong is the case where the board
+   * is healthy *because* a second look made it so: the panel's own comment below
+   * says "a traveller who waited through it is owed the sentence", and the early
+   * return meant the sentence was withheld in precisely the case where the work
+   * succeeded. Recovery was visible when it failed and invisible when it worked.
+   *
+   * So a ready board with attempts behind it gets the record and nothing else —
+   * no verdict, no deficits, no remedies, because there is nothing wrong.
+   */
+  if (readiness.level === 'ready') {
+    if (readiness.repairsAttempted.length === 0) return null;
+    return (
+      <section data-testid="research-readiness" data-readiness-level={readiness.level}>
+        <Panel className="mt-8 p-5 sm:p-6">
+          <div data-testid="readiness-recovery">
+            <h3 className="text-xs uppercase tracking-[0.12em] text-ink-faint">
+              {readiness.repairsAttempted.length === 1
+                ? 'We went back for more'
+                : 'What we tried again'}
+            </h3>
+            <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink-muted">
+              {readiness.repairsAttempted.map((entry, index) => (
+                <li key={`${entry.repair}-${index}`}>
+                  {RESEARCH_REPAIR_COPY[entry.repair]} —{' '}
+                  {attemptSentence(entry)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Panel>
+      </section>
+    );
+  }
 
   const copy = RESEARCH_READINESS_COPY[readiness.level];
   const deficits = reportableDeficits(readiness).slice(0, 4);
@@ -84,15 +145,12 @@ export function ResearchReadinessPanel({
       {attempted.length > 0 ? (
         <div className="mt-4" data-testid="readiness-recovery">
           <h3 className="text-xs uppercase tracking-[0.12em] text-ink-faint">
-            {attempted.length === 1 ? 'We went back for more' : 'We went back for more, twice'}
+            {attempted.length === 1 ? 'We went back for more' : 'What we tried again'}
           </h3>
           <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink-muted">
             {attempted.map((entry, index) => (
               <li key={`${entry.repair}-${index}`}>
-                {RESEARCH_REPAIR_COPY[entry.repair]} —{' '}
-                {entry.outcome === 'improved'
-                  ? `found ${entry.visitableAfter - entry.visitableBefore} more.`
-                  : 'nothing further came back.'}
+                {attemptSentence(entry)}
               </li>
             ))}
           </ul>

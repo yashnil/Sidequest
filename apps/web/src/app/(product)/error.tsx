@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Panel, buttonClass } from '@/components/ui';
 
 /**
@@ -28,6 +28,20 @@ export default function ProductError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  /**
+   * FOCUS FOLLOWS THE CONTENT, ON THE WIDEST BOUNDARY OF THE THREE.
+   *
+   * An error boundary swaps the page's content without changing the URL, so a
+   * keyboard user is left holding focus on a control that no longer exists —
+   * and a screen-reader user is told nothing happened at all. The three nested
+   * boundaries all move focus to their heading; this one, which catches
+   * everything the other three do not, was the one that did not.
+   */
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+
   useEffect(() => {
     /*
      * Named fields only. The error object carries whatever threw it, which for a
@@ -44,7 +58,11 @@ export default function ProductError({
   return (
     <div className="mx-auto max-w-2xl px-5 py-16 sm:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Something went wrong</p>
-      <h1 className="mt-3 font-display text-3xl leading-tight text-ink">
+      <h1
+        ref={heading}
+        tabIndex={-1}
+        className="mt-3 font-display text-3xl leading-tight text-ink outline-none"
+      >
         That page did not load
       </h1>
       <p className="mt-4 text-ink-muted">
