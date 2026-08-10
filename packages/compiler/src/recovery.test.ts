@@ -222,7 +222,7 @@ describe('a packet nothing can repair', () => {
   it('does not loop: it offers no executable repair and settles', () => {
     const unfixable = input({
       unroutableModes: ['ferry'],
-      mustDo: { found: 0, asked: 2 },
+      mustDo: { asked: 2, accounted: 0, needsTraveller: 0, retriable: false },
       funnel: {
         packRecords: 900,
         visitable: 14,

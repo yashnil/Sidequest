@@ -37,6 +37,11 @@ import {
   type RegionPack,
   type RetrievedPage,
   type EvidenceClaimRecord,
+  type MustDoDecision,
+  type MustDoRequest,
+  type MustDoResolution,
+  mustDoIsAccountedFor,
+  mustDoNeedsTraveller,
   type ResolvedFact,
   type SatelliteCandidate,
   type SourceFact,
@@ -49,6 +54,7 @@ import {
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, type CompilerBudget } from './budget';
 import { buildCoverageReport } from './coverage';
+import { mustDoCoverageFrom, resolveMustDos, type MustDoSearchSpace } from './must-do';
 import {
   assessResearchReadiness,
   MAX_RECOVERY_PASSES,
@@ -71,6 +77,8 @@ import {
 } from './enrich';
 import { claimCoverage, factsFromClaims, shareableResolution, toClaimRecords } from './claims';
 import type { RegionPackOutcome } from './backbone/pack';
+import { buildTripScopeOverlay, type TripScopeOverlay } from './backbone/overlay';
+import type { IncludedArea } from './backbone/containment';
 import { partitionScope, scopeBounds } from './backbone/partition';
 import type {
   CompilerProviders,
@@ -132,6 +140,18 @@ export interface CompileInput {
    * survive evidence, access and routing exactly as an unpinned one does.
    */
   priorityHints?: ResearchPriorityHints;
+  /**
+   * The things the traveller named by hand, typed at intake.
+   *
+   * Extracted by `mustDoRequestsFrom` from what they wrote in the composer,
+   * before any provider ran. The compiler resolves them against what it actually
+   * found and never against a string it composed itself — there is no field here
+   * a destination name, a coordinate or a claim could arrive in that the
+   * traveller did not type.
+   */
+  mustDo?: readonly MustDoRequest[];
+  /** What they have already decided about a request we could not settle. */
+  mustDoDecisions?: readonly MustDoDecision[];
 }
 
 /**
@@ -759,6 +779,17 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      */
     let boardSupply: DiscoveryResult['boardSupply'];
     let portfolioFacts: DiscoveryResult['portfolioFacts'];
+    /**
+     * Hoisted out of the stage closure so the must-do resolver can build a
+     * containment overlay on the *same* terms the inventory did.
+     *
+     * Without the expansion's areas an overlay reports `outside_scope` for every
+     * satellite and every regional-expansion member — so a traveller who named
+     * the lake the expansion deliberately added would be told it is outside the
+     * trip. Same input, same verdict, or the two layers disagree about the same
+     * record.
+     */
+    let discoveryIncludedAreas: readonly TripIncludedArea[] = [];
     const discovered = await runStage('discovering_candidates', async () => {
       const queries = buildQueries(input.scope, input.profile, ledger.remaining('maxCoarseCandidates'));
       /*
@@ -791,12 +822,26 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           radiusKm: subregion.radiusKm,
         })),
       ];
+      discoveryIncludedAreas = includedAreas;
       const value = await input.providers.places.discover({
         scope: input.scope,
         queries,
         includedAreas,
         ...(input.profile ? { profile: input.profile } : {}),
         ...(pack ? { pack } : {}),
+        /*
+         * The places the traveller named, ranked first among records that
+         * already qualified.
+         *
+         * On the ordinary path rather than in the recovery loop, deliberately.
+         * The commonest way a named place goes missing is a density ceiling or
+         * the coarse-candidate cap cutting it off the bottom of a list it was
+         * already on — and preventing that costs nothing, while recovering from
+         * it after the matrix has been bought cannot put it back on the board.
+         */
+        ...(input.mustDo && input.mustDo.length > 0
+          ? { namedByTraveller: input.mustDo.map((request) => request.quote) }
+          : {}),
       });
       ledger.record('maxModelCalls', value.calls);
       boardSupply = value.boardSupply;
@@ -2162,6 +2207,161 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     });
 
     /**
+     * WHY A PLACE WE FOUND IS NOT IN THE PLAN.
+     *
+     * Defined here rather than at the point the removal list is built, because
+     * two readers need the same answer and a second derivation would be a second
+     * account of the same events. The must-do resolver asks it so that "we found
+     * it and it is shut while you are here" can be said instead of "we could not
+     * find it"; the reconciliation list asks it so the board can explain a card
+     * that vanished. One function, one vocabulary.
+     */
+    const removalGapDetail = new Map<string, string>();
+    for (const gap of gaps) {
+      if (!removalGapDetail.has(gap.subjectId)) removalGapDetail.set(gap.subjectId, gap.detail);
+    }
+    const closureBlockedIds = new Set(reconciled.closureBlockedSubjectIds);
+    const safetyBlockedIds = new Set(reconciled.safetyBlockedSubjectIds);
+    const removalFor = (place: Place): PlaceRemoval => {
+      const blocking = reconciled.blockingStatements.get(place.id);
+      if (closureBlockedIds.has(place.id) && blocking) {
+        return {
+          placeId: place.id,
+          outcome: 'removed_closed',
+          detail: blocking.text,
+          detailStage: 'availability',
+        };
+      }
+      /*
+       * A safety advisory is not a closure, and saying it is tells somebody a
+       * place is shut when it is open and dangerous. Different fact, different
+       * remedy, different sentence.
+       */
+      if (safetyBlockedIds.has(place.id) && blocking) {
+        return {
+          placeId: place.id,
+          outcome: 'removed_safety_blocked',
+          detail: blocking.text,
+          detailStage: 'safety',
+        };
+      }
+      if (routable.has(place.id)) {
+        const detail = removalGapDetail.get(place.id);
+        return {
+          placeId: place.id,
+          outcome: 'removed_insufficient_support',
+          ...(detail ? { detail, detailStage: 'evidence' as const } : {}),
+        };
+      }
+      // No measurable leg. No gap explains that, so nothing is attached.
+      return { placeId: place.id, outcome: 'removed_unreachable' };
+    };
+    const removalOutcomeFor = (place: Place): ReconcileOutcome => removalFor(place).outcome;
+
+    /**
+     * WHAT BECAME OF THE THINGS THE TRAVELLER NAMED THEMSELVES.
+     *
+     * Resolved here, immediately before readiness, because this is the first
+     * point where all four search spaces exist together: what a plan can use,
+     * what we found and dropped, which areas the trip covers, and what the
+     * ground layer read and never admitted. Pure, deterministic, and it makes no
+     * provider call — the lookup is a folded-name equality against records
+     * already in hand.
+     *
+     * A compilation with no named must-dos does no work here at all, and in
+     * particular never builds the second overlay: `isOutsideDestination` is a
+     * callback and is only reached by a request that matched a ground record.
+     */
+    const mustDoRequests = input.mustDo ?? [];
+    /*
+     * Flattened only when somebody named something. A pack can hold tens of
+     * thousands of records and the overwhelming majority of trips name none.
+     */
+    const packRecordsForMustDo =
+      pack && mustDoRequests.length > 0 ? pack.layers.flatMap((layer) => layer.records) : [];
+    let mustDoOverlay: TripScopeOverlay | null = null;
+    const isOutsideDestination = (recordId: string): boolean => {
+      if (packRecordsForMustDo.length === 0) return false;
+      mustDoOverlay ??= buildTripScopeOverlay({
+        scope: input.scope,
+        records: packRecordsForMustDo,
+        includedAreas: discoveryIncludedAreas.map(toMustDoIncludedArea),
+      });
+      /*
+       * Only the verdict that means "we placed this positively somewhere else".
+       *
+       * `membership_unknown` is not outside — it is unplaced, and reporting it as
+       * outside would turn a hole in our directory into a statement about the
+       * traveller's destination.
+       */
+      return mustDoOverlay.decisions.get(recordId)?.relationship === 'outside_scope';
+    };
+
+    const plannableIds = new Set(plannable.map((place) => place.id));
+    const mustDoSearchSpace = (readTheGround: boolean): MustDoSearchSpace => ({
+      plannable,
+      removed: places
+        .filter((place) => !plannableIds.has(place.id))
+        .map((place) => ({ place, outcome: removalOutcomeFor(place) })),
+      areas: [
+        ...usableBases.map((base) => ({ id: base.id, name: base.name })),
+        ...expansion.subregions.map((subregion) => ({ id: subregion.id, name: subregion.name })),
+      ],
+      /*
+       * The whole ground is read only on the second look.
+       *
+       * Not an optimisation dressed as a design: the first pass answers from
+       * what this trip can actually use, which is the answer that matters, and
+       * every record the pack holds is a much larger set whose only verdicts are
+       * negative ones. Staging it makes "we went back and looked at everything
+       * the map has" a real, bounded, deficit-directed repair rather than
+       * something that silently always happened.
+       */
+      ...(readTheGround
+        ? {
+            groundRecords: packRecordsForMustDo.map((record) => ({
+              id: record.id,
+              name: record.name,
+              alternateNames: record.alternateNames,
+            })),
+            isOutsideDestination,
+          }
+        : {}),
+    });
+
+    const resolveMustDoAgainst = (readTheGround: boolean): MustDoResolution[] =>
+      mustDoRequests.length === 0
+        ? []
+        : resolveMustDos({
+            requests: mustDoRequests,
+            space: mustDoSearchSpace(readTheGround),
+            ...(input.mustDoDecisions ? { decisions: input.mustDoDecisions } : {}),
+          });
+
+    let mustDoResolutions = resolveMustDoAgainst(false);
+
+    /**
+     * The counts readiness grades on, and whether a second look could help.
+     *
+     * `retriable` is true only for a request that came back `not_found` — the
+     * one outcome a re-selection from evidence already bought could plausibly
+     * change. An ambiguity is waiting on a person, a closure is a fact about the
+     * world, and a record placed outside the destination is not going to move;
+     * offering a repair for any of those would be a button that re-runs a search
+     * whose answer is already known.
+     */
+    const mustDoCounts = (resolutions: readonly MustDoResolution[]) => ({
+      asked: resolutions.length,
+      accounted: resolutions.filter((entry) => mustDoIsAccountedFor(entry)).length,
+      needsTraveller: resolutions.filter((entry) => mustDoNeedsTraveller(entry)).length,
+      retriable:
+        pack !== null &&
+        pack !== undefined &&
+        resolutions.some((entry) => entry.status === 'not_found'),
+    });
+
+
+    /**
      * IS THIS A FAIR PICTURE OF THE DESTINATION?
      *
      * Computed here, after coverage and before the artifact is written, because
@@ -2177,6 +2377,8 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     const readinessFrom = (
       facts: NonNullable<DiscoveryResult['portfolioFacts']>,
       visitable: number,
+      resolutions: readonly MustDoResolution[] = mustDoResolutions,
+      exhaustedRepairs: readonly ResearchRepair[] = [],
     ) =>
       assessResearchReadiness({
           scope: input.scope,
@@ -2264,6 +2466,13 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
            * boundary, this dimension says it does not know.
            */
           packPartial: facts.packPartial,
+          /*
+           * The dimension that read `not_applicable` on every trip for a whole
+           * phase because nothing supplied it. It is supplied now, from typed
+           * resolutions rather than from a count somebody derived twice.
+           */
+          ...(resolutions.length === 0 ? {} : { mustDo: mustDoCounts(resolutions) }),
+          ...(exhaustedRepairs.length === 0 ? {} : { exhaustedRepairs }),
       });
 
     /**
@@ -2309,13 +2518,96 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         if (!shouldAttemptRecovery(reading)) break;
 
         const repair: ResearchRepair | undefined = reading.repairs.find(
-          (candidate) => !attempted.has(candidate) && recoveryAdjustment(candidate, pass) !== null,
+          (candidate) =>
+            !attempted.has(candidate) &&
+            (candidate === 'targeted_subject_query' || recoveryAdjustment(candidate, pass) !== null),
         );
         if (!repair) break;
         attempted.add(repair);
 
-        const adjustment = recoveryAdjustment(repair, pass)!;
         const before: DestinationResearchReadiness = reading;
+
+        /**
+         * THE SECOND LOOK FOR A PLACE SOMEBODY NAMED.
+         *
+         * Its own branch, because it is the one repair whose subject is a
+         * request rather than a shape, and because what it re-reads is not the
+         * *selection* but the **ground**: every record the map layer holds,
+         * including the ones the inventory refused, with the containment
+         * overlay's verdict on each. That is the only place left where evidence
+         * about a named subject could still be, and reading it is bounded, free
+         * and directed at the deficit.
+         *
+         * What it deliberately cannot do is put the place on the board. The
+         * matrix, the hours and the access rules were bought for the set that
+         * survived admission, and a record added after them would be a card with
+         * no travel time, no opening hours and no way to schedule it. So the
+         * outcome of this repair is a *truer status* — "it is outside the area
+         * you asked for", "we found it and could not confirm enough about it" —
+         * and never a manufactured inclusion. A repair that quietly widened the
+         * board would be the substitution this whole contract exists to refuse.
+         */
+        if (repair === 'targeted_subject_query') {
+          const widened = await runStage('recovering_supply', async () => {
+            const value = resolveMustDoAgainst(true);
+            const settled = value.filter((entry) => entry.status !== 'not_found').length;
+            return {
+              value,
+              outcome: `${settled} of ${value.length} named places accounted for after reading the whole map layer`,
+            };
+          });
+          /**
+           * A REPAIR MAY ONLY IMPROVE AN ANSWER, NEVER UN-ANSWER ONE.
+           *
+           * The widened pass re-resolves *every* request against a larger set of
+           * subjects, and a larger set can genuinely change an earlier answer:
+           * `distinctiveWords` counts how often a word occurs across the names in
+           * play, so a one-word name that identified exactly one place among the
+           * plannable set can stop identifying anything once ten thousand map
+           * records join it. Taking the widened list wholesale would then turn a
+           * `covered` request into `not_found` — a second look that lost
+           * something, which is the precise failure this whole contract exists to
+           * prevent.
+           *
+           * So the two lists are merged per request, and a request that was
+           * already accounted for keeps its earlier answer.
+           */
+          const beforeById = new Map(
+            mustDoResolutions.map((entry) => [entry.request.id, entry] as const),
+          );
+          const merged = widened.map((entry) => {
+            const earlier = beforeById.get(entry.request.id);
+            return earlier && mustDoIsAccountedFor(earlier) ? earlier : entry;
+          });
+          const stillMissing = (list: readonly MustDoResolution[]) =>
+            list.filter((entry) => entry.status === 'not_found').length;
+          const missingBefore = stillMissing(mustDoResolutions);
+          const missingAfter = stillMissing(merged);
+          const improved = missingAfter < missingBefore;
+          if (improved) mustDoResolutions = merged;
+          const after = readinessFrom(facts, visitable, mustDoResolutions, [...attempted]);
+          researchReadiness = {
+            ...after,
+            repairsAttempted: [
+              ...reading.repairsAttempted,
+              {
+                repair,
+                addressing: [...before.binding],
+                outcome: improved ? 'improved' : 'no_change',
+                levelBefore: before.level,
+                levelAfter: after.level,
+                visitableBefore: visitable,
+                visitableAfter: visitable,
+                detail: improved
+                  ? `${RESEARCH_REPAIR_COPY[repair]} — we can now say what became of ${missingBefore - missingAfter} of them.`
+                  : `${RESEARCH_REPAIR_COPY[repair]} — nothing on the map answers to those names.`,
+              },
+            ],
+          };
+          continue;
+        }
+
+        const adjustment = recoveryAdjustment(repair, pass)!;
         const recovered = await runStage('recovering_supply', async () => {
           const value = await input.providers.places.discover({
             scope: input.scope,
@@ -2332,11 +2624,20 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
 
         const nextFacts = recovered.portfolioFacts ?? facts;
         const nextVisitable = recovered.candidates.length;
-        const after = readinessFrom(nextFacts, nextVisitable);
         const improved = nextVisitable > visitable;
+        /*
+         * The failed case is re-read with the repair marked spent, so the level
+         * stops saying "we are going back for more" once we have been back.
+         * `recoverable` is the only level that promises further work, and a
+         * promise nobody is going to keep is the one sentence on that panel a
+         * traveller cannot check for themselves.
+         */
+        const after = improved
+          ? readinessFrom(nextFacts, nextVisitable, mustDoResolutions)
+          : readinessFrom(facts, visitable, mustDoResolutions, [...attempted]);
 
         researchReadiness = {
-          ...(improved ? after : before),
+          ...after,
           repairsAttempted: [
             ...reading.repairsAttempted,
             {
@@ -2344,7 +2645,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
               addressing: [...before.binding],
               outcome: improved ? 'improved' : 'no_change',
               levelBefore: before.level,
-              levelAfter: improved ? after.level : before.level,
+              levelAfter: after.level,
               visitableBefore: visitable,
               visitableAfter: nextVisitable,
               detail: improved
@@ -2359,6 +2660,9 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         visitable = nextVisitable;
       }
     }
+
+    /** Built once, after the loop, from whatever the loop settled on. */
+    const mustDoCoverage = mustDoCoverageFrom(mustDoResolutions);
 
     // ---- Stage: compile ----------------------------------------------------------
     const region = await runStage('compiling', async () => {
@@ -2406,6 +2710,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          */
         ...(boardSupply ? { boardSupply } : {}),
         ...(researchReadiness ? { researchReadiness } : {}),
+        ...(mustDoCoverage ? { mustDoCoverage } : {}),
         bases: routedBases,
         primaryBaseId: primary.id,
         subregions: buildSubregions(expansion.subregions, usableBases, plannable),
@@ -2526,54 +2831,9 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * at this distance from the evidence is a paraphrase of a paraphrase.
      */
     const survived = new Set(plannable.map((place) => place.id));
-    const closureBlocked = new Set(reconciled.closureBlockedSubjectIds);
-    const safetyBlocked = new Set(reconciled.safetyBlockedSubjectIds);
-    /*
-     * A gap is a statement from the *evidence* stage. It explains a removal for
-     * insufficient support and it explains nothing else — attaching it to a
-     * closure or to a routing failure names the wrong cause in a more convincing
-     * voice than the generic sentence it would have replaced.
-     */
-    const gapDetail = new Map<string, string>();
-    for (const gap of gaps) {
-      if (!gapDetail.has(gap.subjectId)) gapDetail.set(gap.subjectId, gap.detail);
-    }
     const removals: PlaceRemoval[] = places
       .filter((place) => !survived.has(place.id))
-      .map((place): PlaceRemoval => {
-        const blocking = reconciled.blockingStatements.get(place.id);
-        if (closureBlocked.has(place.id) && blocking) {
-          return {
-            placeId: place.id,
-            outcome: 'removed_closed',
-            detail: blocking.text,
-            detailStage: 'availability',
-          };
-        }
-        /*
-         * A safety advisory is not a closure, and saying it is tells somebody a
-         * place is shut when it is open and dangerous. Different fact, different
-         * remedy, different sentence.
-         */
-        if (safetyBlocked.has(place.id) && blocking) {
-          return {
-            placeId: place.id,
-            outcome: 'removed_safety_blocked',
-            detail: blocking.text,
-            detailStage: 'safety',
-          };
-        }
-        if (routable.has(place.id)) {
-          const detail = gapDetail.get(place.id);
-          return {
-            placeId: place.id,
-            outcome: 'removed_insufficient_support',
-            ...(detail ? { detail, detailStage: 'evidence' as const } : {}),
-          };
-        }
-        // No measurable leg. No gap explains that, so nothing is attached.
-        return { placeId: place.id, outcome: 'removed_unreachable' };
-      })
+      .map(removalFor)
       .sort((a, b) => a.placeId.localeCompare(b.placeId));
 
     const exhausted = ledger.exhausted().length > 0;
@@ -2601,6 +2861,29 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * The discovery seam's area shape, as the containment gate wants it.
+ *
+ * The same two-declarations-of-one-idea the live adapter already has, and for
+ * the same reason: the provider interface must not import the backbone's types
+ * or every adapter would depend on the compiler's internals to satisfy a
+ * signature. Used so the must-do overlay is built on exactly the terms the
+ * inventory's was — without the expansion's areas, an overlay calls every
+ * satellite `outside_scope`, and a traveller who named the lake the expansion
+ * deliberately added would be told it is outside their trip.
+ */
+function toMustDoIncludedArea(area: TripIncludedArea): IncludedArea {
+  return {
+    id: area.id,
+    name: area.name,
+    reason: area.reason,
+    status: area.status,
+    ...(area.center ? { center: area.center } : {}),
+    ...(area.radiusKm !== undefined ? { radiusKm: area.radiusKm } : {}),
+    ...(area.divisionIds ? { divisionIds: area.divisionIds } : {}),
+  };
+}
 
 /**
  * A first-pass fit, from interests alone.

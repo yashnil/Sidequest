@@ -25,6 +25,7 @@ import {
   STAGE_PHASE,
   destinationShapeFrom,
   failureCategoryFor,
+  mustDoRequestsFrom,
   observedDurationMs,
   reuseShare,
 } from '@sidequest/core';
@@ -50,7 +51,7 @@ import {
   reconcilePendingActions,
   saveProvisionalBoard,
 } from '../db/provisional-repository';
-import { getProfile } from '../db/repository';
+import { getProfile, getSelections, setSelection } from '../db/repository';
 import { evidenceStoreNeedsSweep, sweepEvidenceStore } from '../db/evidence-repository';
 import {
   attachCompiledRegionToObservations,
@@ -227,6 +228,22 @@ export async function runCompilation(input: {
    * does not lengthen it.
    */
   const priorityHints = priorityHintsFrom(getProvisionalSelections(input.trip.id));
+
+  /**
+   * THE THINGS THE TRAVELLER NAMED THEMSELVES, TYPED BEFORE ANYTHING IS BOUGHT.
+   *
+   * Derived from what they wrote in the composer, by a pure function, here — not
+   * inside the compiler. The composer is the intake layer and this is intake's
+   * job: the compiler receives typed requests and never parses free text, which
+   * is what keeps traveller prose out of every layer below this one.
+   *
+   * The decisions travel with them. A traveller who withdrew a request, or
+   * picked which of three matches they meant, has said something that must
+   * survive a rebuild — so it is read from the stored composer rather than from
+   * anything this run computes.
+   */
+  const mustDo = mustDoRequestsFrom(intent.composer?.interpretation);
+  const mustDoDecisions = intent.composer?.mustDoDecisions ?? [];
 
   /**
    * ONE OBSERVATION PER STAGE, WRITTEN AS THE STAGE LANDS.
@@ -489,6 +506,8 @@ export async function runCompilation(input: {
        * would make the ordering depend on when somebody happened to click.
        */
       ...(priorityHints ? { priorityHints } : {}),
+      ...(mustDo.length > 0 ? { mustDo } : {}),
+      ...(mustDoDecisions.length > 0 ? { mustDoDecisions } : {}),
       onProvisionalBoard: (board) => {
         try {
           saveProvisionalBoard({ ...board, tripId: input.trip.id }, new Date());
@@ -611,6 +630,45 @@ export async function runCompilation(input: {
    * once, after the commit, over the observations this job already wrote.
    */
   attachCompiledRegionToObservations(input.jobId, region.id);
+
+  /**
+   * A PLACE SOMEBODY NAMED IS A PLACE SOMEBODY PICKED.
+   *
+   * The link between the compile-time half of the guarantee and the downstream
+   * half. `must_include_unscheduled` is already an error, the reviser already
+   * refuses to drop a manual pick to satisfy a machine constraint, and the
+   * terminal gate already excludes it from refusal so a named place that is shut
+   * is reported rather than silently dropped — but every one of those turns on
+   * the selection being marked as the traveller's own, and typing a place into
+   * "anything you would regret missing" was not marking anything.
+   *
+   * `source: 'user'` is not a fib. Typing a place by name is a *more* explicit
+   * statement than ticking a box on a board, and the row records what a person
+   * did rather than what the ranker suggested.
+   *
+   * Never overwrites. A traveller who has already said something about this
+   * place — including "no" — has said the more recent thing, and a build must
+   * not argue with them. Wrapped and never fatal: a region with a selection
+   * missing is still a region.
+   */
+  try {
+    const covered = (region.mustDoCoverage?.resolutions ?? []).filter(
+      (entry) =>
+        (entry.status === 'covered' || entry.status === 'replaced') &&
+        entry.match?.target === 'place',
+    );
+    if (covered.length > 0) {
+      const already = new Set(getSelections(input.trip.id).map((entry) => entry.placeId));
+      for (const entry of covered) {
+        const placeId = entry.match!.id;
+        if (already.has(placeId)) continue;
+        if (!region.places.some((place) => place.id === placeId)) continue;
+        setSelection(input.trip.id, placeId, 'included', 'user');
+      }
+    }
+  } catch (error) {
+    console.error('Could not mark a named must-do as chosen', { jobId: input.jobId, error });
+  }
 
   /*
    * Written again, because the counters moved after the early returns above:

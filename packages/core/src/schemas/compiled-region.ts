@@ -8,6 +8,7 @@ import { destinationEntityTypeSchema, scopeBreadthSchema } from './geography';
 import { operatingHoursDatasetSchema } from './hours';
 import { placeSchema } from './place';
 import { regionSchema } from './region';
+import { mustDoCoverageSchema } from './must-do';
 import { destinationResearchReadinessSchema } from './research-readiness';
 import { dataLicenceSchema } from './licence';
 import { geographicScopeSchema } from './scope';
@@ -673,6 +674,20 @@ export const compiledRegionSchema = z.object({
    * second look is worse than one that does not explain itself at all.
    */
   researchReadiness: destinationResearchReadinessSchema.optional(),
+
+  /**
+   * What became of each thing the traveller named by hand.
+   *
+   * Frozen onto the artifact for the same reason the readiness reading is: a
+   * status recomputed at render time from whatever happens to be reachable is a
+   * different status, and a traveller who is told "not found" on one visit and
+   * "found" on the next has learned that neither sentence means anything.
+   *
+   * Optional, and its absence means nobody asked rather than nobody named
+   * anything — an artifact compiled before this existed must not read as a
+   * clean bill of health.
+   */
+  mustDoCoverage: mustDoCoverageSchema.optional(),
 
   bases: z.array(baseCandidateSchema).min(1),
   primaryBaseId: z.string().min(1),

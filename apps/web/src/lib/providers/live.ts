@@ -733,7 +733,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
 
   const places: PlaceDiscoveryProvider = {
     name: 'region-pack',
-    async discover({ scope, queries, pack, includedAreas, recovery }) {
+    async discover({ scope, queries, pack, includedAreas, recovery, namedByTraveller }) {
       /**
        * A pack is the answer, and asking anything else would be worse.
        *
@@ -778,6 +778,9 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           // Absent on an ordinary build; set only by the recovery loop, and only
           // ever in the widening direction.
           ...(recovery ? { limits: recovery } : {}),
+          // A record the traveller named by hand is ranked first among records
+          // that already qualified. It cannot get past a gate; see `rank`.
+          ...(namedByTraveller ? { prioritizeNames: namedByTraveller } : {}),
         });
         packInventory = inventory;
         for (const layer of pack.layers) {

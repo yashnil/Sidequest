@@ -25,7 +25,9 @@ import {
   type TripPreflight,
   WORK_PLAN_DECISION_LABELS,
   type DestinationResearchReadiness,
+  type MustDoCoverage,
 } from '@sidequest/core';
+import { MustDoPanel } from './MustDoPanel';
 import { ResearchReadinessPanel } from './ResearchReadinessPanel';
 import {
   Badge,
@@ -117,6 +119,15 @@ export interface PlanFlowProps {
    * the difference between an explanation and a wasted quarter of an hour.
    */
   researchReadiness?: DestinationResearchReadiness;
+  /**
+   * What became of the things this traveller named by hand, with their own
+   * decisions already applied.
+   *
+   * Beside the reading rather than inside it, because the two answer different
+   * questions — "is this a fair picture of the destination" and "did you get the
+   * one thing I asked for" — and only the second is per-request and actionable.
+   */
+  mustDoCoverage?: MustDoCoverage;
   destinationQuery: string;
   /** The name to lead with: the selected index row, or the typed string. */
   destinationName: string;
@@ -1368,6 +1379,7 @@ function decisionLabel(decision: string): string | null {
 function ReadyStep({
   tripId,
   researchReadiness,
+  mustDoCoverage,
   coverage,
   licences,
   attributions,
@@ -1488,6 +1500,15 @@ function ReadyStep({
         {researchReadiness ? (
           <ResearchReadinessPanel tripId={tripId} readiness={researchReadiness} />
         ) : null}
+
+        {/*
+          The named requests, before the questionnaire rather than after it.
+
+          Same argument as the reading above: somebody who named a place we could
+          not find should hear about it now, while changing the destination or
+          dropping the request is still cheap, and not from a finished plan.
+        */}
+        {mustDoCoverage ? <MustDoPanel tripId={tripId} coverage={mustDoCoverage} /> : null}
 
         <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-rule pt-6">
           <a className={buttonClass('primary')} href={`/trips/${tripId}/questionnaire`}>

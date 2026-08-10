@@ -1,5 +1,6 @@
 import {
   RESEARCH_READINESS_VERSION,
+  researchLevelFor,
   type DestinationResearchReadiness,
   type GeographicScope,
   type ResearchDimension,
@@ -54,8 +55,34 @@ export interface ReadinessInput {
   satellites: number;
   /** Traveller interests with at least one matching visitable candidate, and the total asked for. */
   interestsCovered?: { matched: number; asked: number };
-  /** Named must-dos, and how many were found. */
-  mustDo?: { found: number; asked: number };
+  /**
+   * What became of the things the traveller named by hand.
+   *
+   * Counts rather than the resolutions themselves, so this function stays a pure
+   * arithmetic over numbers a test can write down. `accounted` deliberately
+   * includes a request the traveller withdrew or settled: the contract is that
+   * nothing is *silently* lost, not that every request is granted.
+   *
+   * `retriable` is the compiler's own answer to "would looking again plausibly
+   * help?", and it is the caller's to give because only the caller knows whether
+   * there is ground left to look at. Absent means nobody asked for anything.
+   */
+  mustDo?: {
+    asked: number;
+    accounted: number;
+    /** Outstanding requests that are waiting on the traveller, not on us. */
+    needsTraveller: number;
+    retriable: boolean;
+  };
+  /**
+   * Repairs this build has already tried and which did not help.
+   *
+   * Filtered out of `repairs`, which is what makes the level truthful after the
+   * loop has run: `recoverable` says "we are going back for more", and once the
+   * only repair that addressed the deficit has been spent, that sentence is no
+   * longer true. Empty on the first reading, by construction.
+   */
+  exhaustedRepairs?: readonly ResearchRepair[];
   /** Whether the compiled ground still covers the destination's published extent. */
   destinationCoverage?: number;
   /** Whether the resolved identity and the ground agree. Absent when unmeasurable. */
@@ -264,17 +291,46 @@ export function assessResearchReadiness(input: ReadinessInput): DestinationResea
     ),
   );
 
+  /**
+   * WHAT YOU ASKED FOR BY NAME.
+   *
+   * The dimension that read `not_applicable` on every trip in the product for a
+   * whole phase, because nothing supplied its input. It is `required` — a packet
+   * with forty good generic attractions and no account of the one thing the
+   * traveller said they came for is not ready — but it is in
+   * `NON_WITHHOLDING_DIMENSIONS`, so failing it never withholds the board. The
+   * rest of what we found is still true.
+   *
+   * `met` requires every request to be *accounted for*, not granted: a request
+   * the traveller withdrew, or settled by picking one of several matches, is an
+   * answer. There is no partial grade, deliberately. "Two of your three" is not
+   * a state anybody can act on; the panel lists each request with its own
+   * status, which is the actionable form of the same information.
+   */
+  const outstandingMustDo =
+    input.mustDo === undefined ? 0 : Math.max(0, input.mustDo.asked - input.mustDo.accounted);
   dimensions.push(
     input.mustDo === undefined || input.mustDo.asked === 0
       ? report('must_do_coverage', 'not_applicable', 'You did not name anything specific.', false)
-      : report(
-          'must_do_coverage',
-          grade(input.mustDo.found, input.mustDo.asked, 1),
-          `${input.mustDo.found} of the ${input.mustDo.asked} places you named by hand.`,
-          true,
-          input.mustDo.found,
-          input.mustDo.asked,
-        ),
+      : outstandingMustDo === 0
+        ? report(
+            'must_do_coverage',
+            'met',
+            `All ${input.mustDo.asked} ${input.mustDo.asked === 1 ? 'thing' : 'things'} you named ${input.mustDo.asked === 1 ? 'is' : 'are'} accounted for.`,
+            true,
+            input.mustDo.accounted,
+            input.mustDo.asked,
+          )
+        : report(
+            'must_do_coverage',
+            'unmet',
+            input.mustDo.needsTraveller > 0
+              ? `${outstandingMustDo} of the ${input.mustDo.asked} things you named ${outstandingMustDo === 1 ? 'is' : 'are'} still open, and ${input.mustDo.needsTraveller === 1 ? 'one needs' : `${input.mustDo.needsTraveller} need`} you to pick which you meant.`
+              : `${outstandingMustDo} of the ${input.mustDo.asked} things you named ${outstandingMustDo === 1 ? 'is' : 'are'} still unaccounted for.`,
+            true,
+            input.mustDo.accounted,
+            input.mustDo.asked,
+          ),
   );
 
   // --- Shape and geography -------------------------------------------------
@@ -368,7 +424,7 @@ export function assessResearchReadiness(input: ReadinessInput): DestinationResea
     .map((entry) => entry.dimension);
 
   const repairs = repairsFor(binding, input);
-  const level = levelFor(binding, repairs, dimensions);
+  const level = researchLevelFor(binding, repairs, dimensions);
 
   return {
     schemaVersion: RESEARCH_READINESS_VERSION,
@@ -423,32 +479,27 @@ export function repairsFor(
     // source for one would be looking for something no provider can supply.
     repairs.push('gateway_discovery');
   }
-  return [...new Set(repairs)];
-}
+  /*
+   * A named place we could not find, where there is still ground to look at.
+   *
+   * `retriable` is false when the outstanding requests are ones no second look
+   * could settle — an ambiguity only the traveller can resolve, a record the
+   * containment layer placed elsewhere, a place that is shut on these dates.
+   * Offering a repair for those would be a button that re-runs a search whose
+   * answer is already known, which is worse than no button.
+   */
+  if (has('must_do_coverage') && input.mustDo?.retriable) repairs.push('targeted_subject_query');
 
-/**
- * The level, as a rule over the dimensions rather than a score.
- *
- * The line between `ready` and `thin` is the one worth being careful about. An
- * advisory dimension coming back `partial` is the *ordinary* condition of open
- * data — we know the opening hours for ten places out of fourteen, which is a
- * good day — and treating that as a shortfall would mark every destination on
- * earth as thin, which tells a traveller nothing. `thin` is reserved for a
- * material shortfall: a required dimension that only half holds, or an advisory
- * one that fails outright.
- */
-function levelFor(
-  binding: readonly ResearchDimension[],
-  repairs: readonly ResearchRepair[],
-  dimensions: readonly ResearchDimensionReport[],
-): ResearchReadinessLevel {
-  if (binding.length > 0) return repairs.length > 0 ? 'recoverable' : 'blocked';
-
-  const material = dimensions.some(
-    (entry) =>
-      (entry.required && entry.state === 'partial') || (!entry.required && entry.state === 'unmet'),
-  );
-  return material ? 'thin' : 'ready';
+  /*
+   * A repair this build already spent is not a repair.
+   *
+   * Without this filter the level stays `recoverable` — "we are going back for
+   * more" — after the loop has been back and returned empty-handed. That is the
+   * one sentence on the panel a traveller cannot check, so it has to be the one
+   * that is true.
+   */
+  const exhausted = new Set(input.exhaustedRepairs ?? []);
+  return [...new Set(repairs)].filter((repair) => !exhausted.has(repair));
 }
 
 function summarise(

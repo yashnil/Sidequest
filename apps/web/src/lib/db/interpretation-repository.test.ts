@@ -129,6 +129,7 @@ function composerFor(mustDo: string): TripComposerAnswers {
   return {
     schemaVersion: TRIP_COMPOSER_VERSION,
     mode: 'known_destination',
+    mustDoDecisions: [],
     destinationQuery: 'Somewhere',
     dates: {
       mode: 'exact',

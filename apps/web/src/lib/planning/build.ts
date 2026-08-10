@@ -9,6 +9,11 @@ import {
   saveReadiness,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather } from '@/lib/region';
+import {
+  attributableWorkMs,
+  journeySpanOf,
+  recordJourneySpan,
+} from '@/lib/db/journey-repository';
 import { ensureWeatherForPlanning } from '@/lib/weather/refresh';
 
 import type { PlannerReadiness } from '@sidequest/core';
@@ -110,6 +115,16 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
   try {
     const board = boardFor(trip, profile, context);
 
+    /*
+     * The planner's own clock, monotonic.
+     *
+     * `performance.now()` rather than `Date.now()` for the same reason the stage
+     * observations use it: this figure is a *duration*, and a wall-clock span
+     * that crosses an NTP correction is the correction. It is also the one span
+     * in the journey with no human in it, which makes it the one a change to the
+     * planner can actually be judged by.
+     */
+    const plannerStartedMs = performance.now();
     const result = planTrip({
       tripId,
       basics: trip.basics,
@@ -135,6 +150,8 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
       ...(context.basePortfolio ? { basePortfolio: context.basePortfolio } : {}),
     });
 
+    const plannerElapsedMs = Math.max(0, Math.round(performance.now() - plannerStartedMs));
+
     if (!result.ok) {
       /**
        * A plan with nothing in it is never saved.
@@ -158,6 +175,45 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
 
     saveItinerary(result.itinerary);
     saveReadiness(tripId, result.readiness, new Date());
+
+    /**
+     * TWO MILESTONES, RECORDED WHERE THEY ACTUALLY HAPPEN.
+     *
+     * `planning` is machine time and nothing else. `usable_itinerary` is the
+     * whole path from creating a trip to having something to open, thinking time
+     * and all — which is the number a traveller experiences and the one no stage
+     * clock can produce, because the span crosses every stage and both screens
+     * in between.
+     *
+     * Best-effort and never fatal, deliberately after the plan is saved: a
+     * measurement is not worth failing a finished itinerary for.
+     */
+    const finishedAt = new Date();
+    recordJourneySpan(
+      journeySpanOf({
+        tripId,
+        span: 'planning',
+        startedAt: new Date(finishedAt.getTime() - plannerElapsedMs),
+        completedAt: finishedAt,
+        machineMs: plannerElapsedMs,
+      }),
+    );
+    recordJourneySpan(
+      journeySpanOf({
+        tripId,
+        span: 'usable_itinerary',
+        startedAt: new Date(trip.createdAt),
+        completedAt: finishedAt,
+        /*
+         * The compile plus this plan. Absent when no stage was observed, never
+         * zero — "we did no work" and "nobody counted" are different claims.
+         */
+        machineMs: (() => {
+          const compiled = attributableWorkMs(tripId, trip.createdAt);
+          return compiled === null ? plannerElapsedMs : compiled + plannerElapsedMs;
+        })(),
+      }),
+    );
   } catch (error) {
     console.error('Failed to build itinerary', error);
     return {

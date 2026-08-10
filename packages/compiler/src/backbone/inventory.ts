@@ -1,4 +1,5 @@
 import {
+  foldForMatch,
   licence,
   parseOsmOpeningHours,
   PLACE_CATEGORY_LABELS,
@@ -343,8 +344,17 @@ export function buildInventory(input: {
    * that has both can hand over an overlay that knows about them.
    */
   overlay?: TripScopeOverlay;
+  /**
+   * Names the traveller asked for, unfolded. Ranked first among records that
+   * already qualified; see `rank`.
+   */
+  prioritizeNames?: readonly string[];
 }): InventoryResult {
   const limits = { ...DEFAULT_INVENTORY_LIMITS, ...input.limits };
+  const prioritized: ReadonlySet<string> =
+    input.prioritizeNames && input.prioritizeNames.length > 0
+      ? new Set(input.prioritizeNames.map(foldForMatch).filter((value) => value.length > 0))
+      : EMPTY_PRIORITY;
   const resolveEligibility = input.eligibility ?? DEFAULT_ELIGIBILITY;
   const rawRecords = input.pack.layers.flatMap((layer) => layer.records);
 
@@ -606,7 +616,7 @@ export function buildInventory(input: {
     // it is spent on things that cannot.
     for (const slot of VISITABLE_SLOTS) {
       if (remaining <= 0) break;
-      const pool = rank(admittedFor(slot, role));
+      const pool = rank(admittedFor(slot, role), prioritized);
       if (pool.length === 0) continue;
       const result = balanceAcrossAreas({
         ranked: pool,
@@ -660,7 +670,7 @@ export function buildInventory(input: {
        */
       // Both visitable slots, for the same reason as the first pass: the record's
       // admission decides where it is, not a table keyed on its role.
-      const pool = rank(VISITABLE_SLOTS.flatMap((slot) => admittedFor(slot, role)));
+      const pool = rank(VISITABLE_SLOTS.flatMap((slot) => admittedFor(slot, role)), prioritized);
       const spare = pool.filter((record) => !taken.has(record.id));
       if (spare.length === 0) continue;
       const result = balanceAcrossAreas({
@@ -698,7 +708,7 @@ export function buildInventory(input: {
    * mountain day.
    */
   const supportBalance = balanceAcrossAreas({
-    ranked: rank(allAdmittedFor('support')),
+    ranked: rank(allAdmittedFor('support'), prioritized),
     areaOf: areaOfRecord,
     categoryOf,
     limits: {
@@ -720,7 +730,7 @@ export function buildInventory(input: {
    * balanced like everything else.
    */
   const gatewayBalance = balanceAcrossAreas({
-    ranked: preferNamedGateways(rank(allAdmittedFor('gateway')), input.scope),
+    ranked: preferNamedGateways(rank(allAdmittedFor('gateway'), prioritized), input.scope),
     areaOf: areaOfRecord,
     categoryOf,
     limits: {
@@ -740,7 +750,7 @@ export function buildInventory(input: {
    * food layer and *was* emitted as a discovery card: the worst of the three
    * available outcomes.
    */
-  const foodPool = rank(allAdmittedFor('food'));
+  const foodPool = rank(allAdmittedFor('food'), prioritized);
   const food = foodPool.slice(0, limits.maxFoodVenues);
 
   /*
@@ -1019,12 +1029,36 @@ function interleaveByRole(
  * Deterministic to the last tiebreak, because the pack's content hash depends on
  * it and so does the reproducibility of a compilation.
  */
-function rank(records: readonly SourceRecord[]): SourceRecord[] {
+function rank(
+  records: readonly SourceRecord[],
+  /**
+   * Folded names the traveller asked for by hand.
+   *
+   * Ranked above everything else and nothing more than that. It changes the
+   * order of records that have *already* passed every admission gate, so it
+   * cannot rescue anything scope, closure, identity or role refused — which is
+   * the property that keeps a recovery pass from being able to manufacture the
+   * coverage it is measuring. Within the prioritised group the ordinary order
+   * still applies, so it stays deterministic.
+   */
+  prioritized: ReadonlySet<string> = EMPTY_PRIORITY,
+): SourceRecord[] {
+  const named = (record: SourceRecord): boolean =>
+    prioritized.size > 0 &&
+    [record.name, ...record.alternateNames].some((value) => prioritized.has(foldForMatch(value)));
   return [...records]
-    .map((record) => ({ record, score: knownness(record) }))
-    .sort((a, b) => b.score - a.score || a.record.id.localeCompare(b.record.id))
+    .map((record) => ({ record, score: knownness(record), named: named(record) }))
+    .sort(
+      (a, b) =>
+        Number(b.named) - Number(a.named) ||
+        b.score - a.score ||
+        a.record.id.localeCompare(b.record.id),
+    )
     .map((entry) => entry.record);
 }
+
+/** Shared so the default path allocates nothing per call. */
+const EMPTY_PRIORITY: ReadonlySet<string> = new Set<string>();
 
 /**
  * Scored by *kinds* of evidence, not by how many attributes a layer happens to

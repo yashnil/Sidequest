@@ -263,7 +263,7 @@ describe('when nothing can be done', () => {
    */
   const unfixable = input({
     unroutableModes: ['ferry'],
-    mustDo: { found: 0, asked: 2 },
+    mustDo: { asked: 2, accounted: 0, needsTraveller: 0, retriable: false },
   });
 
   it('offers no repair for a deficit no repair addresses', () => {

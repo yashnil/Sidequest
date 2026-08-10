@@ -25,6 +25,11 @@ import {
 } from '@/lib/db/repository';
 import { getIntent, saveComposerAnswers } from '@/lib/db/compiler-repository';
 import {
+  attributableWorkMs,
+  journeySpanOf,
+  recordJourneySpan,
+} from '@/lib/db/journey-repository';
+import {
   awaitModelOperation,
   claimModelOperation,
   getCachedInterpretation,
@@ -85,6 +90,20 @@ export async function completeQuestionnaireAction(
     };
   }
 
+  /**
+   * WHERE THE CROSS-STAGE CLOCK STOPS.
+   *
+   * `stage_observations` measures each stage of a compilation and cannot answer
+   * "how long from starting a trip to having a board", because that span crosses
+   * stages, crosses screens, and contains the parts where nothing of ours is
+   * running. Two milestones land on this one write — a profile exists, and a
+   * board exists with a starting selection on it — so both are recorded here.
+   *
+   * Best-effort and never fatal: a measurement is not worth failing a finished
+   * questionnaire for.
+   */
+  let boardIsUsable = false;
+
   try {
     const tripDays = countTripDays(trip.basics.startDate, trip.basics.endDate);
     const profile = buildTravelerProfile(parsed.data, {
@@ -107,10 +126,45 @@ export async function completeQuestionnaireAction(
       const board = boardFor(trip, profile, resolved.context);
       const selection = autoSelect({ candidates: board.candidates, profile, tripDays });
       replaceAutoSelections(tripId, selection.selectedIds);
+      boardIsUsable = true;
     }
   } catch (error) {
     console.error('Failed to save traveler profile', error);
     return { ok: false, error: 'We could not save your profile. Nothing was lost — try again.' };
+  }
+
+  const reachedAt = new Date();
+  const startedAt = new Date(trip.createdAt);
+  /*
+   * The part of the wall clock that was us, from the observations this trip's
+   * own builds wrote. Absent when nothing was measured, never zero — the two
+   * are different claims and only the first is worth acting on.
+   */
+  const machineMs = attributableWorkMs(tripId, trip.createdAt);
+  recordJourneySpan(
+    journeySpanOf({
+      tripId,
+      span: 'questionnaire_completion',
+      startedAt,
+      completedAt: reachedAt,
+      machineMs,
+    }),
+  );
+  /*
+   * Only when a board actually exists. A trip whose region would not resolve
+   * reaches the discover screen and finds nothing there, and recording a
+   * "first useful board" for it would put a milestone on a screen that has none.
+   */
+  if (boardIsUsable) {
+    recordJourneySpan(
+      journeySpanOf({
+        tripId,
+        span: 'first_useful_board',
+        startedAt,
+        completedAt: reachedAt,
+        machineMs,
+      }),
+    );
   }
 
   redirect(`/trips/${tripId}/discover`);

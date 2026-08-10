@@ -150,6 +150,9 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
   const answers: TripComposerAnswers = {
     schemaVersion: TRIP_COMPOSER_VERSION,
     mode: 'known_destination',
+    // Nobody has decided anything about a named must-do yet, and an empty list
+    // says that. It is not the same as the field being absent.
+    mustDoDecisions: [],
     ...(destination ? { destination } : {}),
     destinationQuery: input.destinationText,
     dates: {

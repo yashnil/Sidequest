@@ -428,7 +428,7 @@ export function packBackedProviders(
 
   const places: PlaceDiscoveryProvider = {
     name: 'synthetic-pack-places',
-    async discover({ scope, pack, recovery }) {
+    async discover({ scope, pack, recovery, namedByTraveller }) {
       if (!pack) {
         return {
           candidates: [],
@@ -443,6 +443,9 @@ export function packBackedProviders(
         // fixture that ignored the recovery hint would make the loop untestable
         // in a browser, which is where it has to be seen to work.
         ...(recovery ? { limits: recovery } : {}),
+        // And the same for the named-place hint, which is what stops a density
+        // ceiling from being the reason somebody's own must-do is missing.
+        ...(namedByTraveller ? { prioritizeNames: namedByTraveller } : {}),
       });
       /**
        * The duration override, applied here rather than in the pack.

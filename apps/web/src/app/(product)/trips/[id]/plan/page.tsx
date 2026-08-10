@@ -5,6 +5,7 @@ import {
   decideInterpretation,
   displayStages,
   identityAmbiguityReasons,
+  settleMustDoCoverage,
   unansweredRequired,
   visibleQuestions,
   type ClarificationQuestion,
@@ -53,6 +54,19 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
    */
   const workPlan = getLatestWorkPlan(id);
   const readiness = providerReadiness();
+
+  /**
+   * The frozen reading, with what the traveller has since decided applied.
+   *
+   * Both halves come from storage — the artifact and the composer — so this is a
+   * pure function of two persisted values rather than a verdict recomputed from
+   * whatever happens to be reachable at render. See `settleMustDoCoverage`.
+   */
+  const settled = settleMustDoCoverage({
+    ...(compiled?.researchReadiness ? { readiness: compiled.researchReadiness } : {}),
+    ...(compiled?.mustDoCoverage ? { coverage: compiled.mustDoCoverage } : {}),
+    decisions: intent.composer?.mustDoDecisions ?? [],
+  });
 
   const snapshot: CompilationSnapshot = job
     ? {
@@ -169,7 +183,8 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       scopeFits={intent.scope ? scopeFitsTrip(intent.scope) : { fits: true }}
       snapshot={snapshot}
       coverage={compiled?.coverage ?? null}
-      {...(compiled?.researchReadiness ? { researchReadiness: compiled.researchReadiness } : {})}
+      {...(settled.readiness ? { researchReadiness: settled.readiness } : {})}
+      {...(settled.coverage ? { mustDoCoverage: settled.coverage } : {})}
       licences={compiled?.licences ?? []}
       attributions={compiled?.sourceManifest.attributions ?? []}
       compiledSummary={

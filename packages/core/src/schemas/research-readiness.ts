@@ -196,6 +196,25 @@ export const RESEARCH_REPAIRS = [
   'refresh_stale_pack',
   /** The destination we resolved does not agree with the ground we read. */
   'reresolve_identity',
+  /**
+   * Read the whole map layer again, looking for the things the traveller named.
+   *
+   * Deficit-directed in the strict sense: the subject is one specific request
+   * rather than the shape of the board. The first pass answers from what this
+   * trip can actually use; this one goes back over **every record the ground
+   * layer holds**, including the ones the inventory refused, with the
+   * containment overlay's verdict on each — which is the only place left where
+   * evidence about a named subject could still be.
+   *
+   * What it produces is a *truer status*, never a wider board. The matrix, the
+   * hours and the access rules were bought for the set that survived admission,
+   * so a record added after them would be a card with no travel time and no
+   * opening hours. A repair that quietly included one would be manufacturing the
+   * coverage it claims to measure. Keeping a named place *on* the board in the
+   * first place is a different mechanism and happens earlier; see
+   * `namedByTraveller` on the discovery seam.
+   */
+  'targeted_subject_query',
 ] as const;
 export const researchRepairSchema = z.enum(RESEARCH_REPAIRS);
 export type ResearchRepair = z.infer<typeof researchRepairSchema>;
@@ -206,7 +225,29 @@ export const RESEARCH_REPAIR_COPY: Record<ResearchRepair, string> = {
   gateway_discovery: 'Finding the stations and terminals this trip needs',
   refresh_stale_pack: 'Fetching the map data again, because what we had was incomplete',
   reresolve_identity: 'Checking we searched the right place',
+  targeted_subject_query: 'Looking again for the places you named yourself',
 };
+
+/**
+ * DIMENSIONS THAT MAY NOT WITHHOLD A BOARD, EVEN WHEN THEY FAIL OUTRIGHT.
+ *
+ * `blocked` means "what we found would not make an honest trip here". That is a
+ * verdict about the *destination*, and only a dimension that measures the
+ * destination may reach it.
+ *
+ * `must_do_coverage` does not. It measures our answer to one specific request,
+ * and failing it says nothing about whether the other forty things we found are
+ * real. Withholding the whole board because one named place could not be found
+ * would replace a good trip with no trip — which is the same mistake the
+ * planner's terminal gate already refuses to make, where `must_include_unscheduled`
+ * is deliberately excluded from the codes that invalidate an itinerary. One
+ * argument, applied at both ends of the pipeline.
+ */
+export const NON_WITHHOLDING_DIMENSIONS: readonly ResearchDimension[] = ['must_do_coverage'];
+
+export function dimensionWithholdsBoard(dimension: ResearchDimension): boolean {
+  return !NON_WITHHOLDING_DIMENSIONS.includes(dimension);
+}
 
 export const researchRepairAttemptSchema = z.object({
   repair: researchRepairSchema,
@@ -238,6 +279,50 @@ export const destinationResearchReadinessSchema = z.object({
   summary: z.string().min(1),
 });
 export type DestinationResearchReadiness = z.infer<typeof destinationResearchReadinessSchema>;
+
+/**
+ * THE LEVEL, AS A RULE OVER THE DIMENSIONS RATHER THAN A SCORE.
+ *
+ * In core rather than beside the assessor, because two things now need it and a
+ * second copy would drift: the compiler decides a level at build time, and the
+ * settlement below re-decides one after a traveller has answered a question the
+ * build could not. Two implementations of a level rule is how a board comes to
+ * explain itself differently on two screens.
+ *
+ * The line between `ready` and `thin` is the one worth being careful about. An
+ * advisory dimension coming back `partial` is the *ordinary* condition of open
+ * data — we know the opening hours for ten places out of fourteen, which is a
+ * good day — and treating that as a shortfall would mark every destination on
+ * earth as thin, which tells a traveller nothing. `thin` is reserved for a
+ * material shortfall: a required dimension that only half holds, or an advisory
+ * one that fails outright.
+ */
+export function researchLevelFor(
+  binding: readonly ResearchDimension[],
+  repairs: readonly ResearchRepair[],
+  dimensions: readonly ResearchDimensionReport[],
+): ResearchReadinessLevel {
+  if (binding.length > 0) {
+    if (repairs.length > 0) return 'recoverable';
+    /*
+     * A failure that is about our answer to one request, rather than about the
+     * destination, is stated and not made fatal.
+     *
+     * `blocked` withholds the Discovery Board entirely, and it should: a board
+     * that misrepresents a place is worse than no board. But "we could not find
+     * the museum you named" says nothing about whether the other forty things we
+     * found are real, and refusing the trip over it would replace a good trip
+     * with no trip. See `NON_WITHHOLDING_DIMENSIONS`.
+     */
+    return binding.some((dimension) => dimensionWithholdsBoard(dimension)) ? 'blocked' : 'thin';
+  }
+
+  const material = dimensions.some(
+    (entry) =>
+      (entry.required && entry.state === 'partial') || (!entry.required && entry.state === 'unmet'),
+  );
+  return material ? 'thin' : 'ready';
+}
 
 /**
  * The one rule that must never be softened.

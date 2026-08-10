@@ -279,6 +279,21 @@ export interface PlaceDiscoveryProvider {
       maxAreaShare?: number;
     };
     /**
+     * Names the traveller typed into "anything you would regret missing".
+     *
+     * A **ranking hint, never a gate override**. A record matching one of these
+     * is ranked first among the records that have already passed scope, closure,
+     * identity and role admission; nothing here can admit a record those refused.
+     * What it prevents is the commonest way a named place goes missing — a
+     * density ceiling or a coarse-candidate cap cutting it off the bottom of a
+     * list it was on. Preventing that is better than recovering from it, which
+     * is why this is on the ordinary path rather than in the recovery loop.
+     *
+     * Verbatim traveller text, folded by the inventory. Not a query: it is never
+     * sent anywhere, and a provider with no pack has nothing to do with it.
+     */
+    namedByTraveller?: readonly string[];
+    /**
      * The areas the regional expansion asked for, once it has run.
      *
      * The plumbing CS-8 was missing. `optional_satellite` and

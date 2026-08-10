@@ -5,6 +5,7 @@ import {
   countTripDays,
   mayShowDiscoveryBoard,
   readBoardIntegrity,
+  settleMustDoCoverage,
   tripPersonality,
   type SelectionStatus,
 } from '@sidequest/core';
@@ -15,7 +16,9 @@ import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
 import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
+import { MustDoPanel } from '@/components/MustDoPanel';
 import { ResearchReadinessPanel } from '@/components/ResearchReadinessPanel';
+import { getIntent } from '@/lib/db/compiler-repository';
 import { formatDateRange, formatMinutes } from '@/lib/format';
 import {
   getFoodSelections,
@@ -141,7 +144,16 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
    * Read off the artifact rather than recomputed, so the verdict a traveller
    * sees is the verdict the build reached — including whatever recovery it ran.
    */
-  const readiness = compiled?.researchReadiness;
+  /**
+   * The reading and the named requests, with the traveller's own decisions
+   * applied. Two persisted values in, one pair out; see `settleMustDoCoverage`.
+   */
+  const settled = settleMustDoCoverage({
+    ...(compiled?.researchReadiness ? { readiness: compiled.researchReadiness } : {}),
+    ...(compiled?.mustDoCoverage ? { coverage: compiled.mustDoCoverage } : {}),
+    decisions: getIntent(id)?.composer?.mustDoDecisions ?? [],
+  });
+  const readiness = settled.readiness;
 
   const integrity = readBoardIntegrity({
     board,
@@ -251,6 +263,16 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
         as it always did.
       */}
       {readiness ? <ResearchReadinessPanel tripId={id} readiness={readiness} /> : null}
+
+      {/*
+        The named requests, above the board rather than inside it.
+
+        A card that is not on the board cannot explain its own absence, which is
+        exactly the failure this panel exists to close: somebody who typed one
+        place name and got forty other places is owed a sentence about theirs
+        before they are shown anything else.
+      */}
+      {settled.coverage ? <MustDoPanel tripId={id} coverage={settled.coverage} /> : null}
 
       {readiness && !mayShowDiscoveryBoard(readiness) ? null : (
       <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">

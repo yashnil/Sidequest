@@ -3,6 +3,7 @@ import { isoDateSchema, isoTimeSchema } from './common';
 import { selectedDestinationSchema } from './destination-index';
 import { travelerNeedSchema, tripModeSchema } from './trip';
 import { interpretationSetSchema } from './interpretation';
+import { mustDoDecisionSchema } from './must-do';
 
 /**
  * WHAT THE TRAVELLER HAS TOLD US, BEFORE ANYTHING EXPENSIVE HAPPENS.
@@ -291,6 +292,19 @@ export const tripComposerAnswersSchema = z.object({
    */
   interpretation: interpretationSetSchema.optional(),
 
+  /**
+   * What the traveller decided about a named must-do we could not settle.
+   *
+   * Here rather than in a table of its own, for one reason that matters more
+   * than tidiness: this column is the trip's record of *what a person said*, it
+   * is already parsed leniently, and a decision that outlives a recompilation
+   * has to be stored beside the text that produced the request. Defaulted and
+   * additive at `schemaVersion: 1`, exactly as `interpretation` was — a stored
+   * composer written before this existed parses to an empty list, which reads
+   * correctly as "nobody has decided anything".
+   */
+  mustDoDecisions: z.array(mustDoDecisionSchema).max(24).default([]),
+
   /** Which questions have been shown and dismissed, so they are not re-asked. */
   skipped: z.array(z.string().min(1)).default([]),
   updatedAt: z.string().min(1),
@@ -307,6 +321,7 @@ export function emptyComposerAnswers(mode: z.infer<typeof tripModeSchema>, now: 
     children: 0,
     travelerNeeds: [],
     themes: [],
+    mustDoDecisions: [],
     skipped: [],
     updatedAt: now.toISOString(),
   };

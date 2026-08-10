@@ -959,6 +959,32 @@ CREATE INDEX IF NOT EXISTS idx_stage_observations_observed
   ON stage_observations(observed_at);
 
 -- ===========================================================================
+-- JOURNEY SPANS
+-- ===========================================================================
+--
+-- How long the whole path took, as against how long each stage of a compilation
+-- took. The stage-observation table cannot answer "how long from starting a trip
+-- to having something I can use", because that answer crosses stage boundaries,
+-- crosses screens, and contains the parts where nothing of ours is running.
+--
+-- Cascades with the trip, because a span is a fact about one person's afternoon
+-- and has no meaning once the trip is gone — which is also why it needs no
+-- retention rule of its own.
+CREATE TABLE IF NOT EXISTS journey_spans (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id      TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  span         TEXT NOT NULL,
+  duration_ms  INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  observed_at  TEXT NOT NULL
+);
+
+-- One row per trip per span: a second questionnaire pass replaces the first
+-- rather than accumulating, so "how long did this take" has one answer.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_journey_spans_trip_span
+  ON journey_spans(trip_id, span);
+
+-- ===========================================================================
 -- FREE-TEXT INTERPRETATION CACHE
 -- ===========================================================================
 --
