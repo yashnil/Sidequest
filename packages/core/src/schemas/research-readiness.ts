@@ -261,6 +261,50 @@ export const researchRepairAttemptSchema = z.object({
   visitableBefore: z.number().int().min(0),
   visitableAfter: z.number().int().min(0),
   detail: z.string().min(1),
+
+  /* ---- What the attempt cost, and what it actually bought ---------------
+   *
+   * All optional, because attempts recorded before this existed genuinely have
+   * no measurement and a zero would be a claim that one was taken. Section 21
+   * asks for recovery cost to be accounted for separately from compilation
+   * cost, and this is where the two meet: one row per attempt, with the spend
+   * attributable to it.
+   */
+
+  /**
+   * Whether this attempt spent anything.
+   *
+   * The distinction the recovery loop is built on. A `reselect` re-reads
+   * records already bought and cannot fail for money; an `acquire` asks a
+   * provider a new question and is charged for it. Recording which happened is
+   * what stops "recovery is free" from quietly becoming untrue.
+   */
+  kind: z.enum(['reselect', 'acquire']).optional(),
+  /** Provider calls, searches and pages this attempt was charged for. */
+  cost: z
+    .object({
+      providerCalls: z.number().int().min(0).default(0),
+      searches: z.number().int().min(0).default(0),
+      pages: z.number().int().min(0).default(0),
+      modelCalls: z.number().int().min(0).default(0),
+    })
+    .optional(),
+  /** Wall-clock milliseconds the attempt took. */
+  latencyMs: z.number().int().min(0).optional(),
+  /**
+   * The evidence delta, as counts rather than as a verdict.
+   *
+   * `visitableBefore`/`After` already say whether the *board* moved.
+   * These say whether new evidence arrived at all — which is a different
+   * question, and the one that distinguishes "we asked and learnt nothing" from
+   * "we did not ask".
+   */
+  evidenceDelta: z
+    .object({
+      candidatesAdded: z.number().int().min(0).default(0),
+      categoriesAdded: z.number().int().min(0).default(0),
+    })
+    .optional(),
 });
 export type ResearchRepairAttempt = z.infer<typeof researchRepairAttemptSchema>;
 

@@ -128,6 +128,51 @@ export function createTrip(basics: TripBasics): Trip {
  * dates, so changing them means the next build produces a *new* artifact rather
  * than reinterpreting an old one.
  */
+/**
+ * REWRITE A TRIP'S BASICS IN PLACE.
+ *
+ * Deliberately wider than `updateTripDates`, and deliberately narrower than an
+ * arbitrary update: it takes a whole validated `TripBasics` and rewrites
+ * exactly the columns `createTrip` writes, leaving id, status and `created_at`
+ * alone. Anything less than the whole record would let the two paths drift, and
+ * the point of it existing is that editing a trip and creating one produce the
+ * same row.
+ *
+ * The status is untouched on purpose. A traveller correcting their party size
+ * has not un-profiled themselves, and resetting the status would send them back
+ * through a questionnaire they already completed.
+ *
+ * Compiled artifacts are untouched here too. Whether an edit invalidates a
+ * build is a question about *which* answer changed, and it is answered by
+ * `invalidateDependentStages` rather than by a blanket reset — see its note for
+ * why over-invalidating is not the safe direction.
+ */
+export function updateTripBasics(id: string, basics: TripBasics): void {
+  const parsed = tripBasicsSchema.parse(basics);
+  getDb()
+    .prepare(
+      `UPDATE trips SET mode = @mode, destination_input = @destination_input, region_id = @region_id,
+         start_date = @start_date, end_date = @end_date, arrival_time = @arrival_time,
+         departure_time = @departure_time, adults = @adults, children = @children,
+         traveler_needs = @traveler_needs, updated_at = @updated_at
+       WHERE id = @id`,
+    )
+    .run({
+      id,
+      mode: parsed.mode,
+      destination_input: parsed.destinationInput,
+      region_id: parsed.regionId,
+      start_date: parsed.startDate,
+      end_date: parsed.endDate,
+      arrival_time: parsed.arrivalTime,
+      departure_time: parsed.departureTime,
+      adults: parsed.adults,
+      children: parsed.children,
+      traveler_needs: JSON.stringify(parsed.travelerNeeds),
+      updated_at: new Date().toISOString(),
+    });
+}
+
 export function updateTripDates(id: string, startDate: string, endDate: string): void {
   getDb()
     .prepare('UPDATE trips SET start_date = ?, end_date = ?, updated_at = ? WHERE id = ?')
@@ -152,17 +197,61 @@ function setTripStatus(tripId: string, status: TripStatus): void {
     .run(status, new Date().toISOString(), tripId);
 }
 
-/** Stores in-progress questionnaire answers so a refresh does not lose them. */
-export function saveAnswers(tripId: string, answers: QuestionnaireAnswers): void {
+/**
+ * Stores in-progress questionnaire answers so a refresh does not lose them.
+ *
+ * `step` is stored alongside because the answers alone were never enough. They
+ * were saved as the traveller moved, the *position* was React state, and a
+ * refresh on step seven of nine came back at step one — with every answer
+ * intact and nothing to say which of them had been reached on purpose. The
+ * screen said "Saved as you go" the whole time.
+ *
+ * Omitting `step` leaves the stored position untouched rather than resetting
+ * it, so a save that is only about answers cannot silently send somebody back
+ * to the beginning.
+ */
+export function saveAnswers(tripId: string, answers: QuestionnaireAnswers, step?: number): void {
   const parsed = questionnaireAnswersSchema.parse(answers);
   const now = new Date().toISOString();
+  const safeStep = step === undefined ? null : Math.max(0, Math.floor(step));
   getDb()
     .prepare(
-      `INSERT INTO traveler_profiles (trip_id, profile_version, answers_json, profile_json, created_at, updated_at)
-       VALUES (?, ?, ?, NULL, ?, ?)
-       ON CONFLICT(trip_id) DO UPDATE SET answers_json = excluded.answers_json, updated_at = excluded.updated_at`,
+      /*
+       * `COALESCE` ON THE WAY IN, NOT ON `excluded`.
+       *
+       * The obvious form — binding NULL and coalescing against
+       * `excluded.draft_step` in the update — does not work, and fails loudly:
+       * the column is `NOT NULL`, SQLite checks that *before* it detects the
+       * uniqueness conflict, so the insert throws before the update clause is
+       * ever reached. Every call that omitted a step would have crashed.
+       *
+       * So the insert coalesces to zero (a row nobody recorded a position for
+       * starts at the first step) and the update coalesces against the *stored*
+       * value, which is what "omitting `step` leaves the position untouched"
+       * actually requires.
+       */
+      `INSERT INTO traveler_profiles (trip_id, profile_version, answers_json, profile_json, draft_step, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, COALESCE(?, 0), ?, ?)
+       ON CONFLICT(trip_id) DO UPDATE SET
+         answers_json = excluded.answers_json,
+         draft_step = COALESCE(?, traveler_profiles.draft_step),
+         updated_at = excluded.updated_at`,
     )
-    .run(tripId, 1, JSON.stringify(parsed), now, now);
+    .run(tripId, 1, JSON.stringify(parsed), safeStep, now, now, safeStep);
+}
+
+/**
+ * The step the traveller had reached, or zero when nobody recorded one.
+ *
+ * Zero rather than null at the boundary: every caller wants a step index, and
+ * "we do not know" and "the first step" are the same instruction to a wizard.
+ */
+export function getDraftStep(tripId: string): number {
+  const row = getDb()
+    .prepare('SELECT draft_step FROM traveler_profiles WHERE trip_id = ?')
+    .get(tripId) as { draft_step?: number } | undefined;
+  const step = row?.draft_step;
+  return typeof step === 'number' && Number.isFinite(step) && step > 0 ? Math.floor(step) : 0;
 }
 
 export function saveProfile(

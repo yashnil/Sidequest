@@ -101,5 +101,18 @@ export function missingProviderSwitches(): string[] {
   if (process.env.SIDEQUEST_RESEARCH_PROVIDER?.trim().toLowerCase() !== 'anthropic') {
     missing.push('SIDEQUEST_RESEARCH_PROVIDER=anthropic');
   }
+  /*
+   * The credential, named — because it was the one thing `openProvidersEnabled`
+   * required and this list did not report.
+   *
+   * A deployment with every switch set and no key produced `ready: false` with
+   * an empty list, which rendered as the sentence **"This build is missing: ."**
+   * A diagnostic that knows something is wrong and will not say what is worse
+   * than no diagnostic, because it is the one a developer trusts.
+   *
+   * The variable's *name*, never any part of its value. `isResearchModelConfigured`
+   * reads length alone for the same reason.
+   */
+  if (!isResearchModelConfigured()) missing.push('ANTHROPIC_API_KEY');
   return missing;
 }

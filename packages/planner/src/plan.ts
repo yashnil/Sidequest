@@ -25,6 +25,7 @@ import {
   type AccessUnit,
 } from './access';
 import { assignToDays } from './assign';
+import { assessMustDoFeasibility } from './feasibility';
 import { resolveCandidates } from './candidates';
 import {
   couldVisitOnDate,
@@ -129,6 +130,33 @@ export function planTrip(input: PlannerInput): PlanResult {
       ok: false,
       code: 'no_candidates',
       message: 'Nothing on the Discovery Board is marked to include yet.',
+    };
+  }
+
+  /**
+   * BEFORE ANY PACKING: CAN THE TRAVELLER'S OWN PICKS EVEN FIT?
+   *
+   * Placed here — after the days are known and before a single stop is
+   * assigned — because it is the only point at which the answer is still the
+   * traveller's to give. Once the greedy packer runs, the set has been resolved
+   * by dropping whichever picks it reached last, and the itinerary that comes
+   * out is an answer to a question nobody asked.
+   *
+   * It stays quiet unless the set is *impossible*: the bound is conservative in
+   * the traveller's favour on both sides, so anything short of impossible falls
+   * through to the planner, which is where ambitious-but-doable belongs.
+   */
+  const conflict = assessMustDoFeasibility({
+    candidates: eligible,
+    matrix: input.matrix,
+    days: days.length,
+  });
+  if (conflict) {
+    return {
+      ok: false,
+      code: 'must_do_conflict',
+      message: conflict.summary,
+      mustDoConflict: conflict,
     };
   }
 

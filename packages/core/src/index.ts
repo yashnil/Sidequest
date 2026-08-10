@@ -90,6 +90,8 @@ export * from './weather/solar';
 
 export * from './region/season';
 export * from './region/expansion';
+export * from './region/graph';
+export * from './capability/registry';
 export * from './region/source';
 
 export * from './evidence/resolve';

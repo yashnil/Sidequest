@@ -95,11 +95,58 @@ export const placeSchema = z.object({
   typicalDurationMinutes: z.number().int().min(15).max(600),
   costLevel: costLevelSchema,
   physicalIntensity: physicalIntensitySchema,
+  /**
+   * How busy to expect it. **A required read of `crowdExpectation`.**
+   *
+   * `'quiet'` here can mean "nothing published anything about visitation", which
+   * is why `crowdExpectation` exists beside it: a consumer that can act on an
+   * absence should read that one. This field used to be
+   * `popularityScore > 0.7 ? 'busy' : 'quiet'` — a threshold on a metadata count
+   * wearing a third name.
+   */
   crowdLevel: crowdLevelSchema,
-  /** 0-1 how well known the place is. Deliberately separate from fit. */
+  /**
+   * 0-1 how well known the place is. **A derived read of `globalProminence`.**
+   *
+   * Kept because the board, the autoselector, the fit scorer and the coverage
+   * report all read it and none of them can express an absence. It carries
+   * `UNKNOWN_PROMINENCE_READ` when no knowledge base mentions the place, so a
+   * low value here means "unnoticed *or* unobserved" — `globalProminence` is the
+   * field that tells those apart. Produced by `standingFields`, never by hand.
+   */
   popularityScore: z.number().min(0).max(1),
-  /** 0-1 how far off the standard tourist track it is. */
+  /**
+   * 0-1 how far off the standard tourist track it is. **A read of `hiddenness`.**
+   *
+   * It was `1 − popularityScore`, which made "hidden gem" a synonym for "we hold
+   * less metadata about it" and made the board's classics and hidden-gem groups
+   * the two ends of one number. See `quality/significance.ts`.
+   */
   hiddenGemScore: z.number().min(0).max(1),
+  /**
+   * THE SEPARATED SCORES — see `quality/significance.ts` for why they exist.
+   *
+   * All optional, and the optionality is the contract: an absent score means
+   * nobody could establish it, which is a different claim from a low one and
+   * must never be written as `0` or `0.5`. A place with no evidence at all is not
+   * a hidden gem; it is a place we know nothing about.
+   */
+  /** 0-1 knowledge-base breadth only. Never an attribute count. */
+  globalProminence: z.number().min(0).max(1).optional(),
+  /** 0-1 official publication, conferred designation, the region's own naming. */
+  localSignificance: z.number().min(0).max(1).optional(),
+  /**
+   * 0-1 how much a source wrote down.
+   *
+   * Feeds `source.confidence` and **must not feed ranking**. It is the figure
+   * that used to masquerade as popularity, and a franchise scores highly on it
+   * by definition.
+   */
+  evidenceRichness: z.number().min(0).max(1).optional(),
+  /** 0-1 locally significant beyond what the wider world has noticed. */
+  hiddenness: z.number().min(0).max(1).optional(),
+  /** Only when visitation, capacity or season evidence exists. Never a threshold. */
+  crowdExpectation: crowdLevelSchema.optional(),
   /**
    * How this place reacts to weather, on the axes that change a decision.
    * Canonical facts about the place itself — never a forecast, never a date.

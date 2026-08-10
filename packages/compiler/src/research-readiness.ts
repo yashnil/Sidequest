@@ -663,5 +663,63 @@ export function recoveryAdjustment(
   }
 }
 
+/**
+ * WHAT A REPAIR *IS* — RESELECT OR ACQUIRE.
+ *
+ * `recoveryAdjustment` answers "how should selection change", which was the only
+ * question the loop could ask while every repair was free. Section 7 requires
+ * recovery to be able to acquire new evidence, and that is a different kind of
+ * action with a different safety argument: it costs money, it can fail for
+ * reasons that have nothing to do with the deficit, and it has to be charged to
+ * a budget.
+ *
+ * A discriminated union rather than a nullable adjustment, so a caller cannot
+ * treat a paid action as a free one by forgetting to check.
+ */
+export type RecoveryAction =
+  | {
+      kind: 'reselect';
+      adjustment: { maxPerCategory?: number; maxAttractions?: number; maxAreaShare?: number };
+    }
+  | {
+      kind: 'acquire';
+      /** Categories to go looking for, chosen from what the board is short of. */
+      intents: string[];
+      /** Hard ceiling on this attempt. Charged to the compilation's own ledger. */
+      maxQueries: number;
+      maxPerQuery: number;
+    };
+
+/**
+ * The action a repair implies, or `null` where this pass cannot execute it.
+ *
+ * **No repair returns an `acquire` action today, and that is a finding rather
+ * than an omission.** One was written — a deficit-directed query for the
+ * categories a board came up short on, charged to the compilation's own ledger
+ * — and a review proved it could not work: every place provider short-circuits
+ * on the region pack *before* it looks at `queries`, so the call returned the
+ * identical inventory, reported zero provider calls, and booked ledger spend
+ * for work nobody did. It also overwrote the provider's cached inventory with a
+ * narrower one, partially undoing the free repair that had just widened it.
+ *
+ * A paid repair that cannot help is strictly worse than no repair, so it is
+ * out. The `acquire` variant stays in the type because the seam is real and the
+ * work to make it executable is known: the pack path has to honour
+ * `query.intent`, or acquisition has to route through the fallback place
+ * service. Until one of those exists, this returns `reselect` or nothing.
+ *
+ * `reresolve_identity`, `gateway_discovery` and `refresh_stale_pack` remain
+ * unexecutable for a different reason: each needs a stage the recovery loop
+ * does not own — resolution, a station query, buying ground again — and wiring
+ * them from inside the loop would mean re-entering the pipeline halfway
+ * through. `repairsFor` still names all of them, so a traveller-facing surface
+ * can say what *would* help.
+ */
+export function recoveryActionFor(repair: ResearchRepair, attempt: number): RecoveryAction | null {
+  const adjustment = recoveryAdjustment(repair, attempt);
+  if (adjustment) return { kind: 'reselect', adjustment };
+  return null;
+}
+
 /** Ceilings on the loop, exported so a test can assert them rather than infer them. */
 export const MAX_RECOVERY_PASSES = 2;

@@ -8,3 +8,4 @@
  */
 export * from './fakes';
 export * from './pack-fakes';
+export * from './world-identity';

@@ -8,6 +8,7 @@ import {
   durationClustersFrom,
   monthsForSeason,
   nightsFrom,
+  reachClassFor,
   recommendDateWindows,
   recommendTripLength,
   scopeStrategiesFor,
@@ -18,6 +19,7 @@ import {
   type TripComposerAnswers,
   type TripPreflight,
 } from '@sidequest/core';
+import { capabilityRegistry } from '../capabilities';
 import { entriesInCountry } from '../db/destination-index-repository';
 import { readProviderCache, writeProviderCache } from '../db/compiler-repository';
 import { openMeteoClimateProvider, unavailableClimateProvider } from '../climate/openmeteo';
@@ -131,19 +133,23 @@ export function featuresWithin(destination: SelectedDestination): DestinationInd
     .slice(0, MAX_FEATURES);
 }
 
+/**
+ * How far this traveller reaches in a day — asked of the one definition.
+ *
+ * This used to decide independently, and it disagreed with the compiler for the
+ * commonest traveller of all: the one who has not said. Silence read as
+ * `transit` here and as `walk` there, so a preview ring labelled "40 km — a day
+ * out and back" sat beside a build described as "about 12 km out". See
+ * `reachClassFor` for why the answer now also depends on whether a transit
+ * journey can be measured at all.
+ */
 function modeFor(answers: TripComposerAnswers | null): 'drive' | 'transit' | 'walk' {
   const transport = answers?.transport;
-  if (transport === 'drive' || transport === 'mixed') return 'drive';
-  if (transport === 'public_transport') return 'transit';
-  /*
-   * Nobody has said, so nothing is assumed.
-   *
-   * Transit rather than drive: a portfolio built on driving reach that the
-   * traveller then turns out not to have is a set of bases they cannot get
-   * between, where the reverse is merely a portfolio that grows when they say
-   * yes. The conservative error is the recoverable one.
-   */
-  return 'transit';
+  return reachClassFor({
+    carAvailable: transport === 'drive' || transport === 'mixed' ? true : transport === 'public_transport' ? false : null,
+    acceptsScheduled: null,
+    transitMeasurable: capabilityRegistry().assess('route_transit').available,
+  });
 }
 
 function maxBaseChangesFrom(answers: TripComposerAnswers | null): number | undefined {
@@ -264,10 +270,19 @@ export async function runPreflight(input: PreflightInput): Promise<TripPreflight
     portfolio: portfolio.gateway === null ? null : {
       gateway: portfolio.gateway,
       route: portfolio.route,
+      baseReasons: portfolio.baseReasons,
+      satellites: portfolio.satellites,
       excluded: portfolio.excluded,
       basesProposed: portfolio.basesProposed,
       transferDays: portfolio.transferDays,
       mode: portfolio.mode,
+      /*
+       * The reach the structure actually implies, carried onto the trip so the
+       * compilation can use the same number rather than deriving a second one.
+       * This is the whole of the fix for a preview and a build describing
+       * different-sized trips.
+       */
+      reachRadiusKm: portfolio.reachRadiusKm,
       rationale: portfolio.rationale,
       estimated: true,
     },

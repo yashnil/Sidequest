@@ -37,6 +37,17 @@ export interface CompilerBudget {
   maxSourceSearches: number;
   /** Model calls spent turning pages into claims. */
   maxExtractionCalls: number;
+  /**
+   * Deficit-directed searches the recovery loop may issue.
+   *
+   * Its own counter rather than a share of `maxCoarseCandidates`, and the
+   * separation is the point: recovery used to be free by construction, and the
+   * moment it can spend, "what did recovery cost" has to be answerable without
+   * subtracting one stage's spend from another's. Small on purpose — a recovery
+   * loop is not a second discovery stage, and a deficit two queries cannot
+   * address is a thin destination rather than a budget problem.
+   */
+  maxRecoveryQueries: number;
   /** Wall clock for the whole research funnel, separate from the compilation. */
   maxEnrichmentMs: number;
   /** Calls to a research model. */
@@ -77,6 +88,7 @@ export const DEFAULT_COMPILER_BUDGET: CompilerBudget = {
   maxRetrievalBytes: 24_000_000,
   maxSourceSearches: 12,
   maxExtractionCalls: 6,
+  maxRecoveryQueries: 2,
   maxEnrichmentMs: 120_000,
   maxModelCalls: 20,
   maxRouteElements: 3_600,

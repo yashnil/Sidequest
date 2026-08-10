@@ -275,8 +275,29 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
       {settled.coverage ? <MustDoPanel tripId={id} coverage={settled.coverage} /> : null}
 
       {readiness && !mayShowDiscoveryBoard(readiness) ? null : (
-      <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-        <div className="order-2 lg:order-1">
+      /*
+        THE BOARD FIRST, AT EVERY WIDTH.
+
+        The board carried `order-2` and the rail `order-1`, so on a phone — the
+        only width where the two columns become one — a traveller landed on the
+        board page and scrolled past the integrity panel, the personality chart,
+        the weather panel and the closures list before reaching a single card.
+        That is roughly two screens of commentary in front of the thing the page
+        is named after. The desktop order was already board-then-rail; this
+        simply stops the small screen inverting it.
+
+        The rail is also wider. At 20rem the personality facts wrapped to four
+        lines each, which is what made the panel feel like filler rather than
+        like a summary.
+      */
+      <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_25rem]">
+        {/*
+          Room for the bar the board pins to the bottom of a phone screen.
+
+          Only where there is a board, because only a board renders that bar —
+          and padding under a panel that has no bar beneath it is just a gap.
+        */}
+        <div className={workable.length === 0 ? 'order-1' : 'order-1 max-sm:pb-28'}>
           {workable.length === 0 ? (
             /*
              * THE EMPTY BOARD, EXPLAINED BY THE THING THAT IS ACTUALLY BINDING.
@@ -353,7 +374,21 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : null}
         </div>
 
-        <aside className="order-1 space-y-6 lg:order-2 lg:sticky lg:top-[calc(var(--chrome-height)+1.5rem)] lg:max-h-[calc(100dvh-var(--chrome-height)-3rem)] lg:overflow-y-auto">
+        {/*
+          NO INNER SCROLLER.
+
+          `lg:max-h-… lg:overflow-y-auto` made the right third of the page its
+          own scroll container: a wheel gesture that happened to be over the rail
+          scrolled the rail to its end and then, only then, started scrolling the
+          page — and a trackpad flick that began over the rail moved nothing the
+          reader was looking at. It is the classic nested-scroll trap, and it was
+          introduced to stop a tall rail outrunning the viewport while pinned.
+
+          The honest fix for a rail that is too tall to pin is a rail that is
+          short enough to pin. It stays sticky, and the panels inside it are the
+          summary ones; anything long belongs in the board column, not here.
+        */}
+        <aside className="order-2 space-y-6 lg:sticky lg:top-[calc(var(--chrome-height)+1.5rem)]">
           {/*
             Beside the board rather than above it when there *is* a board: the
             question "how much is here" is context for the cards, not a warning

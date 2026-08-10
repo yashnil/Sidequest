@@ -16,6 +16,7 @@ import {
 } from '@/lib/db/journey-repository';
 import { ensureWeatherForPlanning } from '@/lib/weather/refresh';
 
+import type { MustDoConflict } from '@sidequest/planner';
 import type { PlannerReadiness } from '@sidequest/core';
 
 /**
@@ -53,6 +54,16 @@ export interface BuildResult {
    * it, and a test can assert on the numbers instead of on copy.
    */
   readiness?: PlannerReadiness;
+  /**
+   * A set of hand-picked places that cannot all fit in the time available.
+   *
+   * Distinct from `readiness`, and the distinction matters: readiness explains
+   * why *the region* could not carry a plan, while this explains why *the
+   * traveller's own request* could not be met — with the hours, the number of
+   * days, and the places by name, so the screen can offer a choice rather than
+   * an apology.
+   */
+  mustDoConflict?: MustDoConflict;
 }
 
 export async function buildItinerary(tripId: string): Promise<BuildResult> {
@@ -170,6 +181,15 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
         ok: false,
         error: planFailureCopy(result.code, result.message),
         ...(result.readiness ? { readiness: result.readiness } : {}),
+        /*
+         * The arithmetic behind a must-do conflict, carried through rather than
+         * flattened into the message.
+         *
+         * The screen has to let the traveller choose which of their own picks
+         * gives way, and it cannot do that from a sentence — which is the whole
+         * difference between stating a conflict and reporting a failure.
+         */
+        ...(result.mustDoConflict ? { mustDoConflict: result.mustDoConflict } : {}),
       };
     }
 
@@ -235,6 +255,15 @@ function planFailureCopy(code: string, message: string): string {
       return 'Those dates do not contain a usable day. Check your arrival and departure times.';
     case 'planner_coverage_insufficient':
       return message;
+    /*
+     * The traveller's own words back at them, because this is the one failure
+     * they caused and the one they can fix. `message` is already the conflict's
+     * own summary, with the hours and the number of days in it — what is added
+     * here is *where to go*, because a stated conflict with no route out is a
+     * dead end wearing arithmetic.
+     */
+    case 'must_do_conflict':
+      return `${message} Change a few to “maybe” on the board below, or give the trip more days.`;
     default:
       return message;
   }

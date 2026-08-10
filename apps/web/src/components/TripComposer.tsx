@@ -20,8 +20,21 @@ import {
   type TripComposerAnswers,
 } from '@sidequest/core';
 import { DestinationCombobox, type DestinationSuggestionView } from './DestinationCombobox';
-import { Choice, ChoiceGroup, ErrorNote, FieldLabel, Panel, buttonClass, cx } from './ui';
-import { createTripFromComposer, type ComposerResult } from '@/app/(product)/trips/new/actions';
+import {
+  Choice,
+  ChoiceGroup,
+  ErrorNote,
+  FieldLabel,
+  FOCUS_RING,
+  Panel,
+  buttonClass,
+  cx,
+} from './ui';
+import {
+  createTripFromComposer,
+  updateTripFromComposer,
+  type ComposerResult,
+} from '@/app/(product)/trips/new/actions';
 
 /**
  * THE TRIP COMPOSER.
@@ -53,32 +66,76 @@ type Draft = Partial<TripComposerAnswers> & {
   destinationEntryId?: string | null;
 };
 
-export function TripComposer({ defaults }: { defaults: { startDate: string; endDate: string } }) {
+export function TripComposer({
+  defaults,
+  editing,
+}: {
+  defaults: { startDate: string; endDate: string };
+  /**
+   * The trip being edited, and everything it already said.
+   *
+   * Absent means this is a new trip and the composer behaves exactly as before.
+   * Present is the whole of the fix for the product's worst dead end: every
+   * "Change the trip" control used to link here *without* it, so correcting one
+   * answer meant a blank form and the loss of the destination, the dates, the
+   * party, the must-dos, the questionnaire and any research already paid for.
+   */
+  editing?: { tripId: string; answers: TripComposerAnswers };
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const prior = editing?.answers;
   const [draft, setDraft] = useState<Draft>({
-    destinationText: '',
-    destinationEntryId: null,
-    adults: 2,
-    children: 0,
-    travelerNeeds: [],
-    themes: [],
+    destinationText: prior?.destinationQuery ?? prior?.destination?.displayName ?? '',
+    destinationEntryId: prior?.destination?.entryId ?? null,
+    adults: prior?.adults ?? 2,
+    children: prior?.children ?? 0,
+    travelerNeeds: prior ? [...prior.travelerNeeds] : [],
+    themes: prior ? [...prior.themes] : [],
+    ...(prior?.shape ? { shape: prior.shape } : {}),
+    ...(prior?.pace ? { pace: prior.pace } : {}),
+    ...(prior?.transport ? { transport: prior.transport } : {}),
+    ...(prior?.budget ? { budget: prior.budget } : {}),
+    ...(prior?.crowdTolerance ? { crowdTolerance: prior.crowdTolerance } : {}),
+    ...(prior?.outdoorIntensity ? { outdoorIntensity: prior.outdoorIntensity } : {}),
+    ...(prior?.mustDo ? { mustDo: prior.mustDo } : {}),
+    ...(prior?.avoid ? { avoid: prior.avoid } : {}),
+    ...(prior?.origin ? { origin: prior.origin } : {}),
   });
-  const [dateMode, setDateMode] = useState<TripComposerAnswers['dates']['mode']>('exact');
-  const [startDate, setStartDate] = useState(defaults.startDate);
-  const [endDate, setEndDate] = useState(defaults.endDate);
-  const [flexDays, setFlexDays] = useState(3);
-  const [month, setMonth] = useState(new Date().getUTCMonth() + 2);
-  const [season, setSeason] = useState<'spring' | 'summer' | 'autumn' | 'winter'>('summer');
-  const [wantsDateHelp, setWantsDateHelp] = useState(false);
-  const [wantsLengthHelp, setWantsLengthHelp] = useState(false);
-  const [nights, setNights] = useState<number | ''>('');
-  const [arrival, setArrival] = useState<(typeof ARRIVAL_PRECISIONS)[number]>('afternoon');
-  const [departure, setDeparture] = useState<(typeof ARRIVAL_PRECISIONS)[number]>('morning');
-  const [showMore, setShowMore] = useState(false);
+  const [dateMode, setDateMode] = useState<TripComposerAnswers['dates']['mode']>(
+    prior?.dates.mode ?? 'exact',
+  );
+  const [startDate, setStartDate] = useState(prior?.dates.startDate ?? defaults.startDate);
+  const [endDate, setEndDate] = useState(prior?.dates.endDate ?? defaults.endDate);
+  const [flexDays, setFlexDays] = useState(prior?.dates.flexDays ?? 3);
+  /**
+   * The default month, which used to be able to be thirteen.
+   *
+   * `getUTCMonth()` is zero-based, so `+ 2` means "the month after next" — and
+   * in November and December that is 13 or 14, outside the 1–12 the schema
+   * accepts and outside the array the label is read from. A traveller opening
+   * the composer in December got a blank month and a validation failure nobody
+   * rendered.
+   */
+  const [month, setMonth] = useState(prior?.dates.month ?? (new Date().getUTCMonth() % 12) + 1);
+  const [season, setSeason] = useState<'spring' | 'summer' | 'autumn' | 'winter'>(
+    prior?.dates.season ?? 'summer',
+  );
+  const [wantsDateHelp, setWantsDateHelp] = useState(prior?.dates.wantsRecommendation ?? false);
+  const [wantsLengthHelp, setWantsLengthHelp] = useState(
+    prior?.duration.wantsRecommendation ?? false,
+  );
+  const [nights, setNights] = useState<number | ''>(prior?.duration.nights ?? '');
+  const [arrival, setArrival] = useState<(typeof ARRIVAL_PRECISIONS)[number]>(
+    prior?.arrival?.precision ?? 'afternoon',
+  );
+  const [departure, setDeparture] = useState<(typeof ARRIVAL_PRECISIONS)[number]>(
+    prior?.departure?.precision ?? 'morning',
+  );
+  const [showMore, setShowMore] = useState(Boolean(prior));
 
   function patch(next: Partial<Draft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -95,7 +152,7 @@ export function TripComposer({ defaults }: { defaults: { startDate: string; endD
     setError(null);
     setFieldErrors({});
     startTransition(async () => {
-      const result: ComposerResult = await createTripFromComposer({
+      const payload = {
         destinationText: draft.destinationText ?? '',
         destinationEntryId: draft.destinationEntryId ?? null,
         dateMode,
@@ -124,7 +181,15 @@ export function TripComposer({ defaults }: { defaults: { startDate: string; endD
         mustDo: draft.mustDo ?? '',
         avoid: draft.avoid ?? '',
         origin: draft.origin ?? '',
-      });
+      };
+      /*
+       * One payload, two destinations for it. Editing must not become a second
+       * reading of the same form — see `readComposer`, which is shared by both
+       * server actions for exactly this reason.
+       */
+      const result: ComposerResult = editing
+        ? await updateTripFromComposer(editing.tripId, payload)
+        : await createTripFromComposer(payload);
 
       if (!result.ok) {
         setError(result.error ?? null);
@@ -145,6 +210,12 @@ export function TripComposer({ defaults }: { defaults: { startDate: string; endD
             label="Destination"
             hint="A city, a region, a national park or a whole country — we will work out how much of it a trip can hold."
             autoFocus
+            /*
+             * Seeded when editing, so the screen opens on what the traveller
+             * actually said rather than on an empty box. Without this the edit
+             * route reproduces the defect it exists to fix — a blank form.
+             */
+            {...(prior?.destinationQuery ? { defaultValue: prior.destinationQuery } : {})}
             onSelect={(suggestion: DestinationSuggestionView | null) =>
               patch({
                 destinationEntryId: suggestion?.id ?? null,
@@ -378,30 +449,24 @@ export function TripComposer({ defaults }: { defaults: { startDate: string; endD
         {hasDestination && datesSettled ? (
           <Section step={4} title="Who is going?">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <FieldLabel htmlFor="adults">Adults</FieldLabel>
-                <input
-                  id="adults"
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={draft.adults ?? 2}
-                  onChange={(event) => patch({ adults: Number(event.target.value) })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <FieldLabel htmlFor="children">Children</FieldLabel>
-                <input
-                  id="children"
-                  type="number"
-                  min={0}
-                  max={12}
-                  value={draft.children ?? 0}
-                  onChange={(event) => patch({ children: Number(event.target.value) })}
-                  className={inputClass}
-                />
-              </div>
+              <CountField
+                id="adults"
+                label="Adults"
+                singular="adult"
+                min={1}
+                max={12}
+                value={draft.adults ?? 2}
+                onChange={(adults) => patch({ adults })}
+              />
+              <CountField
+                id="children"
+                label="Children"
+                singular="child"
+                min={0}
+                max={12}
+                value={draft.children ?? 0}
+                onChange={(children) => patch({ children })}
+              />
             </div>
 
             <ChoiceGroup
@@ -694,6 +759,141 @@ function Fact({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">{label}</dt>
       <dd className="mt-0.5 text-ink">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * A HEAD COUNT, WITH THE THREE SEMANTICS A BARE NUMBER INPUT DOES NOT HAVE.
+ *
+ * The founder test reported a traveller count that read `01`, and the mechanism
+ * is worth stating because it is not obvious. A controlled `type="number"` was
+ * bound to a number and updated with `Number(event.target.value)`. Clearing the
+ * children field yields `''`, `Number('')` is `0`, and `0` is the value already
+ * in state — so React bails out of the re-render, the DOM keeps the empty
+ * string it has, and the next keystroke makes it `"01"`. For adults the same
+ * path silently wrote `0`, below the `min` the markup advertised, and the only
+ * complaint arrived from the server at submit time.
+ *
+ * Three fixes, all of which have to be here rather than in the caller:
+ *
+ * 1. **The text is the state.** An empty field stays empty while it is being
+ *    typed in, instead of snapping to a number nobody chose.
+ * 2. **Empty means unset, not zero.** It is reported as the minimum on blur,
+ *    which is the only defensible reading of "how many adults" left blank.
+ * 3. **The bounds are enforced where they are declared.** `min` and `max` on a
+ *    number input are advisory outside a submitting form, and this form does
+ *    not submit — the button is a `type="button"`. So they are clamped on blur.
+ *
+ * Stepper buttons because this is a phone-first control: forty-four-pixel
+ * targets beat a spinner two pixels tall, and they make the bounds visible by
+ * disabling at the ends.
+ */
+function CountField({
+  id,
+  label,
+  singular,
+  min,
+  max,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  /**
+   * The singular noun, for the steppers' accessible names.
+   *
+   * "One fewer adult" rather than "One fewer adults" — better English, and
+   * load-bearing besides: an accessible name containing the field's own label
+   * makes three controls answer to the same lookup, which is ambiguous for a
+   * screen-reader user reading a control list and fatal for any test that
+   * addresses a control by its name.
+   */
+  singular: string;
+  min: number;
+  max: number;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  const [lastValue, setLastValue] = useState(value);
+
+  /*
+   * The parent is the source of truth; the local text is a typing buffer.
+   *
+   * Adjusted during render rather than in an effect. React's own guidance, and
+   * for a reason that matters here: an effect that calls `setState` renders the
+   * stale text once, commits it, and then renders again — so a stepper press
+   * would paint the old number for a frame. Comparing against the last value
+   * seen instead means the corrected text is in the *same* render as the change.
+   */
+  if (value !== lastValue) {
+    setLastValue(value);
+    setText(String(value));
+  }
+
+  const clamp = (next: number): number => Math.max(min, Math.min(max, next));
+
+  function commit(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      onChange(min);
+      setText(String(min));
+      return;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    const next = Number.isFinite(parsed) ? clamp(parsed) : min;
+    onChange(next);
+    setText(String(next));
+  }
+
+  return (
+    <div>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <div className="mt-1 flex items-stretch gap-1">
+        <button
+          type="button"
+          aria-label={`One fewer ${singular}`}
+          disabled={value <= min}
+          onClick={() => onChange(clamp(value - 1))}
+          className={cx(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40',
+            FOCUS_RING,
+          )}
+        >
+          −
+        </button>
+        <input
+          id={id}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          aria-describedby={`${id}-range`}
+          value={text}
+          onChange={(event) => setText(event.target.value.replace(/[^0-9]/g, ''))}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit((event.target as HTMLInputElement).value);
+          }}
+          className={cx(inputClass, 'mt-0 h-11 text-center')}
+        />
+        <button
+          type="button"
+          aria-label={`One more ${singular}`}
+          disabled={value >= max}
+          onClick={() => onChange(clamp(value + 1))}
+          className={cx(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40',
+            FOCUS_RING,
+          )}
+        >
+          +
+        </button>
+      </div>
+      <span id={`${id}-range`} className="sr-only">
+        Between {min} and {max}
+      </span>
     </div>
   );
 }

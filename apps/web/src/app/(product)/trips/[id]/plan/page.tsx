@@ -250,6 +250,8 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       workPlan={workPlan ? workPlan.entries.map((entry) => ({ ...entry })) : null}
       providerMessage={readiness.message}
       providerReady={readiness.ready}
+      providerNextActions={readiness.nextActions}
+      providerMissing={readiness.missing}
     />
     </>
   );

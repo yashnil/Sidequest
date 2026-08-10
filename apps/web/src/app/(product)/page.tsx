@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ProductChrome } from '@/components/ProductChrome';
 import { buttonClass, Panel } from '@/components/ui';
 import { destinationIndexRelease } from '@/lib/db/destination-index-repository';
+import { providerReadiness } from '@/lib/compiler/readiness';
 import { listTrips } from '@/lib/db/repository';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,13 @@ const PROMISES = [
 export default function HomePage() {
   const trips = listTrips();
   const release = destinationIndexRelease();
+  /*
+   * Read here rather than inside the paragraph so the render stays a pure
+   * function of two values. `readiness.ts` imports nothing, which is what makes
+   * asking this question free — see its own note on why the predicate lives
+   * apart from the providers it is about.
+   */
+  const compileReady = providerReadiness().ready;
 
   return (
     <ProductChrome>
@@ -155,7 +163,29 @@ export default function HomePage() {
             ) : (
               <>
                 Destination search is not built on this deployment yet, so typing a destination will be
-                looked up rather than suggested. Everything else works.
+                looked up rather than suggested.
+              </>
+            )}
+            {/*
+              WHETHER A LOOKUP CAN ACTUALLY HAPPEN, DERIVED RATHER THAN ASSERTED.
+
+              This paragraph used to end "Everything else works" — which was
+              false in exactly the configuration that produces the founder-test
+              dead end. Somebody read it, typed a destination, answered a
+              composer and a questionnaire, and only then met "compiling new
+              destinations is switched off in this build". A marketing sentence
+              contradicting a blocked state is worse than no sentence, because
+              it is the reason they invested the fifteen minutes.
+            */}
+            {compileReady ? (
+              ' Everything else works.'
+            ) : (
+              <>
+                {' '}
+                <strong className="font-medium text-ink">
+                  This deployment cannot research a new destination right now
+                </strong>
+                , so a typed name will not build. Anything already researched still plans normally.
               </>
             )}
           </p>

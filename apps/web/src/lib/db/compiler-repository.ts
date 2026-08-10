@@ -1021,3 +1021,78 @@ export function getStoredOperationalDiagnostics(
     return null;
   }
 }
+
+/**
+ * WHAT AN EDITED ANSWER INVALIDATES, AND — MORE IMPORTANTLY — WHAT IT DOES NOT.
+ *
+ * Until this existed, "change the trip" meant a link to a blank composer: the
+ * traveller lost the destination, the dates, the party, the must-dos, the
+ * questionnaire and any research already paid for, because there was no way to
+ * correct one answer without starting again. That is the dead end section 18.1
+ * forbids, and it was reachable from four different screens.
+ *
+ * The rule is that a stage is cleared only when the thing it was derived *from*
+ * changed. Each field below names its own dependents rather than everything
+ * downstream of it, because over-invalidating is not the safe direction — it
+ * re-buys research the traveller already waited for, and a product that charges
+ * for a typo teaches people not to correct typos.
+ *
+ * Deliberately preserved in every case: questionnaire answers, must-do
+ * decisions and discovery selections. Those are statements about the traveller
+ * rather than about the destination, and none of the edits here can make one of
+ * them untrue.
+ */
+export interface InvalidationPlan {
+  /** The destination itself changed. Everything geographic is now about nowhere. */
+  destinationChanged: boolean;
+  /** Dates or length changed. Seasonal access and the preflight were date-keyed. */
+  datesChanged: boolean;
+  /** Transport, shape or party changed. The scope was derived from these. */
+  scopeInputsChanged: boolean;
+}
+
+export function invalidateDependentStages(tripId: string, plan: InvalidationPlan): string[] {
+  const cleared: string[] = [];
+  const patch: Record<string, unknown> = {};
+
+  if (plan.destinationChanged) {
+    patch.resolution_json = null;
+    patch.selected_candidate_id = null;
+    patch.selected_destination_json = null;
+    patch.preflight_json = null;
+    patch.scope_json = null;
+    patch.selected_compiled_region_id = null;
+    patch.clarifications_json = JSON.stringify(EMPTY_CLARIFICATIONS);
+    cleared.push('destination', 'region reading', 'questions', 'build');
+  } else {
+    if (plan.datesChanged) {
+      /*
+       * The preflight is date-keyed — its climate windows, its duration advice
+       * and its seasonal notes are all about the dates it was run for — so it
+       * goes. The *destination* reading does not, which is the distinction
+       * that keeps a one-day change from costing a fresh compilation.
+       */
+      patch.preflight_json = null;
+      cleared.push('region reading');
+    }
+    if (plan.scopeInputsChanged || plan.datesChanged) {
+      patch.scope_json = null;
+      patch.selected_compiled_region_id = null;
+      cleared.push('build');
+    }
+  }
+
+  if (Object.keys(patch).length === 0) return [];
+  upsertIntent(tripId, patch);
+  /*
+   * Bumping the revision is not optional when the scope is dropped. It travels
+   * into the scope fingerprint, and without it a rebuild could adopt the
+   * artifact compiled from the answers the traveller just corrected.
+   */
+  if (patch.scope_json === null) {
+    getDb()
+      .prepare('UPDATE trip_intents SET scope_revision = scope_revision + 1 WHERE trip_id = ?')
+      .run(tripId);
+  }
+  return [...new Set(cleared)];
+}

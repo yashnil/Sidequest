@@ -86,3 +86,67 @@ for (const viewport of VIEWPORTS) {
     expectNoRuntimeProblems(problems, `Runtime problems at ${viewport.name}`);
   });
 }
+
+/**
+ * THE TWO LONG SURFACES, AT THE ONE WIDTH THAT BREAKS THEM.
+ *
+ * The sweep above deliberately stops at the personality screen, because building
+ * a board compiles a region and paying for that three times buys three copies of
+ * the same signal. But the board and the itinerary are the two densest layouts
+ * in the product and the two that changed most in this pass — a three-up card
+ * grid that collapses to one column, a filter rail of chips, an action bar
+ * pinned to the bottom of the viewport, and a horizontally scrolling day rail.
+ * Every one of those is a way to make a document scroll sideways.
+ *
+ * So: one journey, at 390x844 only, ending on a built itinerary.
+ */
+test('the board and the itinerary do not scroll sideways on a phone', async ({ page }) => {
+  const mobile = VIEWPORTS.find((entry) => entry.name === 'mobile');
+  expect(mobile, 'the suite must declare a mobile viewport').toBeTruthy();
+  const problems = watchForRuntimeProblems(page);
+  await page.setViewportSize({ width: mobile!.width, height: mobile!.height });
+
+  await page.goto('/trips/new');
+  const destination = page.getByLabel('Destination');
+  await waitUntilInteractive(destination);
+  await destination.fill('Mammoth Lakes');
+  await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
+  await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
+  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
+  await completeQuestionnaire(page);
+
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await expect(page).toHaveURL(/\/discover$/);
+  await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, 'discovery board at 390x844');
+
+  /*
+   * The board first, the commentary after. On a phone the two columns become
+   * one, and the rail used to be laid out ahead of the cards — so the traveller
+   * scrolled past four analysis panels to reach the thing the page is named
+   * after. Measured rather than asserted on class names.
+   */
+  const firstCard = page.getByTestId('discovery-board').getByRole('article').first();
+  const personality = page.getByRole('heading', { name: 'Your trip personality' });
+  const cardBox = await firstCard.boundingBox();
+  const railBox = await personality.boundingBox();
+  expect(cardBox, 'the board should have a card').not.toBeNull();
+  expect(railBox, 'the rail should carry the personality heading').not.toBeNull();
+  expect(cardBox!.y, 'the first card must come before the analysis rail').toBeLessThan(railBox!.y);
+
+  /*
+   * And the action bar is pinned to the bottom of the viewport rather than
+   * having scrolled away with the top of a thirty-screen page.
+   */
+  const bar = page.getByTestId('board-action-bar');
+  await page.mouse.wheel(0, 4000);
+  await expect(bar).toBeInViewport();
+
+  await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
+  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
+  await expectNoHorizontalOverflow(page, 'itinerary at 390x844');
+
+  expectNoRuntimeProblems(problems, 'Runtime problems at 390x844');
+});

@@ -20,8 +20,12 @@ import {
 } from '@sidequest/core';
 import { classifyPreferences } from '@sidequest/core';
 import { resolveRegion } from '@sidequest/core/data';
-import { createTrip } from '@/lib/db/repository';
+import { revalidatePath } from 'next/cache';
+import { clearItinerary, createTrip, getTrip, updateTripBasics } from '@/lib/db/repository';
 import {
+  getActiveJob,
+  getIntent,
+  invalidateDependentStages,
   saveComposerAnswers,
   saveDestinationQuery,
   saveSelectedDestination,
@@ -91,7 +95,30 @@ export type ComposerInput = z.input<typeof inputSchema>;
 /** Nights to assume when the traveller has not decided and has not been advised. */
 const PLACEHOLDER_NIGHTS = 6;
 
-export async function createTripFromComposer(raw: ComposerInput): Promise<ComposerResult> {
+/**
+ * WHAT THE COMPOSER MEANS, INDEPENDENT OF WHETHER IT IS A NEW TRIP.
+ *
+ * Extracted so that *editing* a trip and *creating* one cannot drift apart.
+ * Before this, there was no edit path at all: every "Change the trip" control
+ * in the product linked to a blank composer, so correcting a single answer
+ * meant losing the destination, the dates, the party, the must-dos, the
+ * questionnaire and any research already paid for. The obvious way to add an
+ * edit route is to write a second version of the interpretation below, and the
+ * obvious consequence of that is two screens that disagree about what an answer
+ * means. One reading, two callers.
+ */
+type ComposerReading =
+  | { ok: false; fieldErrors: Record<string, string> }
+  | {
+      ok: true;
+      input: z.infer<typeof inputSchema>;
+      answers: TripComposerAnswers;
+      destination: SelectedDestination | null;
+      region: ReturnType<typeof resolveRegion>;
+      basics: z.infer<typeof tripBasicsSchema>;
+    };
+
+function readComposer(raw: ComposerInput, now: Date): ComposerReading {
   const parsed = inputSchema.safeParse(raw);
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -99,10 +126,9 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
       const key = String(issue.path[0] ?? 'form');
       fieldErrors[key] ??= issue.message;
     }
-    return { ok: false, href: '', fieldErrors };
+    return { ok: false, fieldErrors };
   }
   const input = parsed.data;
-  const now = new Date();
 
   /*
    * The identity, when there is one.
@@ -253,12 +279,20 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
       const key = String(issue.path[0] ?? 'form');
       fieldErrors[key] ??= issue.message;
     }
-    return { ok: false, href: '', fieldErrors };
+    return { ok: false, fieldErrors };
   }
+
+  return { ok: true, input, answers, destination, region, basics: basics.data };
+}
+
+export async function createTripFromComposer(raw: ComposerInput): Promise<ComposerResult> {
+  const reading = readComposer(raw, new Date());
+  if (!reading.ok) return { ok: false, href: '', fieldErrors: reading.fieldErrors };
+  const { input, answers, destination, region, basics } = reading;
 
   let tripId: string;
   try {
-    tripId = createTrip(basics.data).id;
+    tripId = createTrip(basics).id;
     saveComposerAnswers(tripId, answers);
     if (!region) {
       saveDestinationQuery(tripId, 'known_destination', input.destinationText);
@@ -269,6 +303,146 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
     return { ok: false, href: '', error: 'We could not save that trip. Nothing was lost — try again.' };
   }
 
+  return {
+    ok: true,
+    href: region ? `/trips/${tripId}/questionnaire` : `/trips/${tripId}/plan`,
+  };
+}
+
+/**
+ * EDIT AN EXISTING TRIP, INVALIDATING ONLY WHAT THE EDIT ACTUALLY BROKE.
+ *
+ * The counterpart to `createTripFromComposer`, and the route every "Change the
+ * trip" control now points at. Two properties matter more than anything else
+ * here:
+ *
+ * **It never creates a second trip.** The old escape hatch was a link to a
+ * blank composer, which produced an orphan trip beside the one the traveller
+ * was trying to fix and left the original in whatever broken state sent them
+ * looking for the exit.
+ *
+ * **It invalidates by dependency, not by fear.** `invalidateDependentStages`
+ * drops the region reading only when the dates moved, drops the scope only when
+ * something the scope was derived from moved, and drops everything geographic
+ * only when the destination itself changed. Questionnaire answers, must-do
+ * decisions and board selections survive all three, because none of those edits
+ * can make a statement about the traveller untrue.
+ */
+export async function updateTripFromComposer(
+  tripId: string,
+  raw: ComposerInput,
+): Promise<ComposerResult> {
+  const existingTrip = getTrip(tripId);
+  const existing = getIntent(tripId);
+  if (!existingTrip) return { ok: false, href: '', error: 'We could not find that trip.' };
+
+  /**
+   * NOT WHILE A BUILD IS RUNNING.
+   *
+   * A compilation started before the edit keeps going, and `completeJob` writes
+   * `selected_compiled_region_id` unconditionally when it lands. So editing
+   * mid-build produced the worst possible outcome: the invalidation cleared the
+   * pointer, the job finished a few seconds later and put it straight back, and
+   * the traveller arrived on a finished screen holding a region compiled for
+   * the answers they had just changed — with nothing anywhere saying so.
+   *
+   * Refused rather than raced. Cancelling is already a control on the build
+   * screen, so the traveller has a way through that does not depend on us
+   * getting a compare-and-set right under a rewrite of the very row the job
+   * keys on.
+   */
+  if (getActiveJob(tripId)) {
+    return {
+      ok: false,
+      href: '',
+      error:
+        'That trip is being built right now. Stop the build first — then you can change anything you like and start it again.',
+    };
+  }
+
+  const reading = readComposer(raw, new Date());
+  if (!reading.ok) return { ok: false, href: '', fieldErrors: reading.fieldErrors };
+  const { input, answers, destination, region, basics } = reading;
+
+  const before = existing?.composer ?? undefined;
+  /*
+   * Compared on the *resolved* identity where there is one and on the typed
+   * string otherwise, because those are the two things that decide which ground
+   * gets compiled. Comparing the free-text box alone would miss somebody
+   * switching between two index rows whose names differ only by a suffix.
+   */
+  const destinationChanged =
+    (before?.destination?.entryId ?? before?.destinationQuery ?? '') !==
+    (destination?.entryId ?? input.destinationText);
+  const datesChanged =
+    before === undefined ||
+    before.dates.mode !== answers.dates.mode ||
+    before.dates.startDate !== answers.dates.startDate ||
+    before.dates.endDate !== answers.dates.endDate ||
+    before.duration.nights !== answers.duration.nights;
+  const scopeInputsChanged =
+    before === undefined ||
+    before.transport !== answers.transport ||
+    before.shape !== answers.shape ||
+    before.adults !== answers.adults ||
+    before.children !== answers.children ||
+    before.travelerNeeds.join(',') !== answers.travelerNeeds.join(',');
+
+  try {
+    /*
+     * The must-do decisions the traveller has already made are carried across
+     * rather than reset. They are answers about their own trip, and an edit to
+     * the dates is not a reason to ask them again about a place they already
+     * withdrew.
+     */
+    saveComposerAnswers(tripId, {
+      ...answers,
+      /*
+       * Decisions about places survive an edit — unless the edit changed which
+       * places there are. A withdrawal of something in the destination they
+       * just abandoned is not an answer about the new one, and carrying it
+       * across would silently suppress a place in a region the traveller has
+       * never seen.
+       */
+      mustDoDecisions: destinationChanged ? answers.mustDoDecisions : (before?.mustDoDecisions ?? []),
+    });
+    updateTripBasics(tripId, basics);
+    if (!region) {
+      saveDestinationQuery(tripId, 'known_destination', input.destinationText);
+      saveSelectedDestination(tripId, destination);
+    }
+    invalidateDependentStages(tripId, {
+      destinationChanged,
+      datesChanged,
+      scopeInputsChanged,
+    });
+
+    /**
+     * AN ITINERARY IS A FUNCTION OF THE ANSWERS IT WAS BUILT FROM.
+     *
+     * The repository says so in as many words, and the edit path was the one
+     * caller that did not honour it: `getItinerary` rejects only on schema
+     * version, so moving the dates by a week left the plan rendering its old
+     * day dates under a trip that now says something else. A plan that
+     * contradicts the trip it belongs to is worse than no plan, because the
+     * traveller has no way to tell which of the two is current.
+     *
+     * Cleared only when something the plan actually depends on moved. A
+     * traveller correcting a typo in their must-do text keeps their itinerary.
+     */
+    if (destinationChanged || datesChanged || scopeInputsChanged) {
+      clearItinerary(tripId);
+    }
+  } catch (error) {
+    console.error('Failed to update trip', error);
+    return {
+      ok: false,
+      href: '',
+      error: 'We could not save that change. Nothing was lost — try again.',
+    };
+  }
+
+  revalidatePath(`/trips/${tripId}/plan`);
   return {
     ok: true,
     href: region ? `/trips/${tripId}/questionnaire` : `/trips/${tripId}/plan`,

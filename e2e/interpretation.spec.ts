@@ -105,11 +105,43 @@ test('the primary action never reads "Use these 0"', async ({ page }) => {
   await composeWith(page, 'We must go hiking and see a hot spring.', '');
 
   const panel = page.getByRole('region', { name: /This is what we made of it/i });
+
+  /*
+   * DISMISS UNTIL NONE REMAIN, RATHER THAN N TIMES.
+   *
+   * The chip is a *toggle*: pressing it turns "Not that" into "Put it back".
+   * The old loop counted the chips, then pressed `.first()` that many times —
+   * so a press that landed before React had re-rendered hit a chip already
+   * turned off and turned it back on, and the count came out short. It failed
+   * on a phone, in a full run, and passed in isolation: the signature of a race
+   * rather than of a defect in what is being tested.
+   *
+   * Polling to a fixed point asserts the end state instead of assuming a number
+   * of presses reaches it, which is both deterministic and a stronger claim.
+   * The bound is a bound, not a tolerance — running out is a real failure.
+   */
   const drops = panel.getByRole('button', { name: 'Not that' });
-  const total = await drops.count();
-  for (let index = 0; index < total; index += 1) {
-    await panel.getByRole('button', { name: 'Not that' }).first().click();
+
+  /*
+   * WAIT FOR THE PANEL BEFORE COUNTING IT.
+   *
+   * This was the whole defect, and it hid behind two plausible-looking others.
+   * The original loop read `await drops.count()` as its bound — and on a page
+   * that had not finished rendering the panel that count is **zero**, so the
+   * loop ran no iterations, dismissed nothing, and the assertion below failed
+   * against a panel that had appeared in the meantime with every chip intact.
+   * In isolation the page is fast enough that the count is never zero, which is
+   * why it passed alone and failed in a full run.
+   *
+   * A readiness condition rather than a tolerance: this waits for a state to be
+   * true, and fails loudly if it never becomes true.
+   */
+  await expect(drops.first()).toBeVisible();
+
+  for (let attempt = 0; attempt < 20 && (await drops.count()) > 0; attempt += 1) {
+    await drops.first().click();
   }
+  await expect(drops).toHaveCount(0);
 
   await expect(page.getByRole('button', { name: /Use these 0/ })).toHaveCount(0);
   const action = page.getByRole('button', { name: /^Nothing to apply$/ });

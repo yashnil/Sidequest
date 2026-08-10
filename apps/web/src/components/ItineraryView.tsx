@@ -30,6 +30,44 @@ import { Badge, Panel, buttonClass, cx, type BadgeTone, PlaceName } from './ui';
 import { formatMinutes } from '@/lib/format';
 import { dayRouteLinks, mapModeFor } from '@/lib/maps';
 import { PrintButton } from './PrintButton';
+import {
+  roundedDuration,
+  roundedMinuteOfDay,
+  travellerVoice,
+  type ClockEdge,
+} from './plan-language';
+
+/**
+ * A clock time as this page prints it: five-minute precision, in the direction
+ * that cannot make a claim false. See `plan-language.ts` for why.
+ */
+function clock(minute: number, edge: ClockEdge): string {
+  return formatMinuteOfDay(roundedMinuteOfDay(minute, edge));
+}
+
+/** A span as this page prints it: rounded down, so it never overstates. */
+function span(minutes: number): string {
+  return formatMinutes(roundedDuration(minutes));
+}
+
+/**
+ * "Wed 12 Aug" — a date a person reads, from the ISO one a machine stores.
+ *
+ * The day headings printed `Day 1` immediately followed by `2026-08-12` with no
+ * separator, so the accessible name of every day was "Day 12026-08-12" — a
+ * screen reader read the day number and the year as one number. The `<time>`
+ * element keeps the machine-readable value where a machine can still find it.
+ */
+function humanDate(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
 
 const STATUS_TONE: Record<Itinerary['status'], BadgeTone> = {
   ready: 'pine',
@@ -227,7 +265,9 @@ export function ItineraryView({
 
       <FoodPlanPanel plan={itinerary.foodPlan} />
 
-      <ol className="mt-10 space-y-12">
+      <DayRail days={itinerary.days} />
+
+      <ol className="space-y-12">
         {itinerary.days.map((day) => (
           <li key={day.dayNumber} className="break-inside-avoid">
             <DayCard day={day} renderedAt={renderedAt} coordinates={coordinates} />
@@ -321,6 +361,54 @@ export function ItineraryView({
 
 
 /**
+ * GETTING TO A DAY ON AN EIGHT-THOUSAND-PIXEL PAGE.
+ *
+ * The finished plan had no navigation at all: reaching day 3 meant scrolling
+ * past two complete days, and checking one thing on day 1 while reading day 4
+ * meant scrolling back and then finding your place again. This is the one
+ * structure a printed itinerary has that a web page was missing — a contents.
+ *
+ * Anchors, not JavaScript. `href="#day-3"` works with no client bundle, survives
+ * a page that has not hydrated, is a real browser history entry, and lands in the
+ * tab order for free. The days carry `scroll-mt` so the sticky chrome and this
+ * rail do not cover the heading they just jumped to.
+ *
+ * Hidden in print, where the page numbers do this job and a row of links is
+ * furniture.
+ */
+function DayRail({ days }: { days: readonly ItineraryDay[] }) {
+  // One day is not a journey through a document.
+  if (days.length < 2) return null;
+
+  return (
+    <nav
+      aria-label="Jump to a day"
+      data-testid="day-rail"
+      className="sticky top-[var(--chrome-height)] z-20 -mx-5 mt-10 mb-6 border-y border-rule bg-paper px-5 py-2 print:hidden sm:-mx-8 sm:px-8"
+    >
+      <ol className="flex gap-2 overflow-x-auto">
+        {days.map((day) => (
+          <li key={day.dayNumber} className="shrink-0">
+            <a
+              href={`#day-${day.dayNumber}`}
+              className="flex min-h-11 w-40 flex-col justify-center rounded-lg border border-rule px-3 py-1.5 transition-colors hover:border-ink-faint hover:bg-paper-sunk"
+            >
+              <span className="flex items-baseline gap-1.5">
+                <span className="font-display text-sm text-ink">Day {day.dayNumber}</span>
+                <time dateTime={day.date} className="text-[11px] text-ink-muted">
+                  {humanDate(day.date)}
+                </time>
+              </span>
+              <span className="truncate text-[11px] text-ink-muted">{day.theme}</span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+/**
  * The trip's transportation position.
  *
  * Reads as an editorial page rather than a dashboard: a recommendation, the
@@ -407,7 +495,7 @@ function WeatherPlan({ itinerary, timeZone }: { itinerary: Itinerary; timeZone?:
       ) : null}
 
       <p className="mt-5 text-[11px] leading-relaxed text-ink-faint">
-        {attribution ?? 'No weather source was reached for this trip.'}
+        {travellerVoice(attribution ?? 'No weather source was reached for this trip.')}
         {fetchedAt ? ` Read ${formatReadAt(fetchedAt, timeZone)}.` : ''} Conditions change; we
         have not checked today.
       </p>
@@ -439,7 +527,16 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
   const { totals } = strategy;
 
   return (
-    <section className="mt-10 border-t border-rule pt-8" aria-labelledby="transport-plan">
+    /*
+      ONE RULE, NOT TWO.
+
+      The trip header already closes with `border-b`, and this section opened
+      with `border-t` 36 pixels below it — two hairlines with nothing between
+      them but whitespace, on screen and on paper. A rule is punctuation; two in
+      a row is a stammer. The header's rule is the one that stays, because it is
+      the one that belongs to a thing (the header) rather than to a gap.
+    */
+    <section className="mt-10" aria-labelledby="transport-plan">
       <h2 id="transport-plan" className="font-display text-xl text-ink">
         Getting around
       </h2>
@@ -472,15 +569,15 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
       */}
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
         {totals.driveMinutes > 0 ? (
-          <Metric label="At the wheel">{formatMinutes(totals.driveMinutes)}</Metric>
+          <Metric label="At the wheel">{span(totals.driveMinutes)}</Metric>
         ) : null}
         {totals.transitMinutes + totals.waitMinutes > 0 ? (
           <Metric label="Riding & waiting">
-            {formatMinutes(totals.transitMinutes + totals.waitMinutes)}
+            {span(totals.transitMinutes + totals.waitMinutes)}
           </Metric>
         ) : null}
         {totals.walkMinutes > 0 ? (
-          <Metric label="On foot to reach things">{formatMinutes(totals.walkMinutes)}</Metric>
+          <Metric label="On foot to reach things">{span(totals.walkMinutes)}</Metric>
         ) : null}
         {totals.driveKm >= 0.5 ? (
           <Metric label="Road distance">{Math.round(totals.driveKm)} km</Metric>
@@ -541,7 +638,14 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
         </div>
       ) : null}
 
-      <p className="mt-4 text-xs leading-relaxed text-ink-faint">{strategy.dataDisclosure}</p>
+      {/*
+        The same disclosure, addressed to the traveller rather than to whoever
+        maintains the routing layer. `travellerVoice` never removes a caveat —
+        see `plan-language.ts`.
+      */}
+      <p className="mt-4 text-xs leading-relaxed text-ink-faint">
+        {travellerVoice(strategy.dataDisclosure)}
+      </p>
     </section>
   );
 }
@@ -606,9 +710,15 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 function DayTransport({ day }: { day: ItineraryDay }) {
   const sequence = accessSequence(day);
   const { totals, transport } = day;
+  const split = [
+    totals.driveMinutes > 0 ? `${span(totals.driveMinutes)} driving` : null,
+    totals.transitMinutes > 0 ? `${span(totals.transitMinutes)} riding` : null,
+    totals.walkMinutes > 0 ? `${span(totals.walkMinutes)} walking there` : null,
+    totals.waitMinutes > 0 ? `${span(totals.waitMinutes)} waiting` : null,
+  ].filter((entry): entry is string => entry !== null);
 
   return (
-    <div className="mt-3">
+    <div className="mt-2">
       {/*
         A real list, so a screen reader announces "list, 6 items" and reads them
         one at a time. As bare spans with an aria-hidden arrow between them the
@@ -626,26 +736,20 @@ function DayTransport({ day }: { day: ItineraryDay }) {
                   →
                 </span>
               ) : null}
-              <span className="rounded-full bg-paper-raised px-2 py-0.5">{step}</span>
+              <span>{step}</span>
             </li>
           ))}
         </ol>
       ) : null}
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {totals.driveMinutes > 0 ? (
-          <Badge>{formatMinutes(totals.driveMinutes)} driving</Badge>
-        ) : null}
-        {totals.transitMinutes > 0 ? (
-          <Badge tone="blue">{formatMinutes(totals.transitMinutes)} riding</Badge>
-        ) : null}
-        {totals.walkMinutes > 0 ? (
-          <Badge tone="blue">{formatMinutes(totals.walkMinutes)} walking there</Badge>
-        ) : null}
-        {totals.waitMinutes > 0 ? (
-          <Badge>{formatMinutes(totals.waitMinutes)} waiting</Badge>
-        ) : null}
-      </div>
+      {/*
+        The split, as a sentence rather than four more chips.
+
+        The day header now promotes one travel figure; this is the breakdown of
+        it, and a breakdown is reference material. Four badges here made the
+        header's own two badges indistinguishable from them.
+      */}
+      {split.length > 0 ? <p className="mt-1 text-xs text-ink-muted">{split.join(' · ')}</p> : null}
 
       {transport.lastReturnNote ? (
         <p className="mt-2 text-xs leading-relaxed text-ink-muted">{transport.lastReturnNote}</p>
@@ -824,8 +928,8 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
 
       {weather.sunriseMinute !== undefined && weather.sunsetMinute !== undefined ? (
         <p className="mt-1 text-xs text-ink-faint">
-          Light from {formatMinuteOfDay(weather.sunriseMinute)} to{' '}
-          {formatMinuteOfDay(weather.sunsetMinute)}.
+          Light from {clock(weather.sunriseMinute, 'later')} to{' '}
+          {clock(weather.sunsetMinute, 'earlier')}.
         </p>
       ) : null}
 
@@ -862,7 +966,7 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
       ) : null}
 
       <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-        {weather.attribution}
+        {travellerVoice(weather.attribution)}
         {weather.evidence === 'historical_pattern'
           ? ' These are patterns from past years, not a forecast for your dates.'
           : ''}
@@ -902,27 +1006,75 @@ function DayCard({
 
   return (
     <Panel className="overflow-hidden">
-      <div className="border-b border-rule bg-paper-sunk p-5">
+      {/*
+        The anchor the day rail jumps to, with room above it for the two sticky
+        elements — the product chrome and the rail itself — so a jump lands on
+        the heading rather than under it.
+      */}
+      <div
+        id={`day-${day.dayNumber}`}
+        className="scroll-mt-[calc(var(--chrome-height)+4.5rem)] border-b border-rule bg-paper-sunk p-5"
+      >
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          {/*
+            A separator that is part of the accessible name, not decoration.
+
+            `Day 1` followed by `2026-08-12` with only a margin between them
+            announced as "Day 12026-08-12". The middle dot is real text for
+            exactly that reason, and the ISO value lives on the `<time>` where a
+            machine can still read it.
+          */}
           <h2 className="font-display text-2xl text-ink">
             Day {day.dayNumber}
-            <span className="ml-3 text-base font-normal text-ink-faint">{day.date}</span>
+            {/*
+              Real spaces around the dot, not margin.
+
+              Margin is invisible to the accessibility tree, so `Day 1` + `·` +
+              the date still concatenated into "Day 1·Wed 12 Aug" when read
+              aloud. The separator has to be text on both sides to be a
+              separator in both renderings.
+            */}
+            <span className="font-normal text-ink-faint">{' · '}</span>
+            <time dateTime={day.date} className="text-base font-normal text-ink-muted">
+              {humanDate(day.date)}
+            </time>
           </h2>
-          <span className="text-sm text-ink-muted">
-            {formatMinuteOfDay(day.window.startMinute)} – {formatMinuteOfDay(day.window.endMinute)}
+          <span className="text-sm tabular-nums text-ink-muted">
+            {clock(day.window.startMinute, 'later')} – {clock(day.window.endMinute, 'earlier')}
           </span>
         </div>
         <p className="mt-1 text-ink-muted">{day.theme}</p>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        {/*
+          TWO FACTS PROMOTED, THE REST DEMOTED.
+
+          The header carried three stacked rows of identical grey pills — the
+          day's intensity, its hours at stops, its free hours, the shape of its
+          journey and its per-mode splits, all at the same weight. Six or seven
+          pills of equal emphasis is a list, and a list has no answer in it.
+
+          What a traveller decides on when they look at a day is: how hard is it,
+          and how much of it is spent moving. Those two get chips. Everything
+          else is still here, one line down, in text — legible, ordered, and no
+          longer competing.
+        */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity} day</Badge>
-          {day.totals.activityMinutes > 0 ? (
-            <Badge>{formatMinutes(day.totals.activityMinutes)} at stops</Badge>
-          ) : null}
-          {day.totals.freeMinutes > 0 ? (
-            <Badge>{formatMinutes(day.totals.freeMinutes)} free</Badge>
+          {day.totals.travelMinutes > 0 ? (
+            <Badge tone="blue">{span(day.totals.travelMinutes)} travelling</Badge>
           ) : null}
         </div>
+
+        {day.totals.activityMinutes > 0 || day.totals.freeMinutes > 0 ? (
+          <p className="mt-2 text-xs text-ink-muted">
+            {[
+              day.totals.activityMinutes > 0 ? `${span(day.totals.activityMinutes)} at stops` : null,
+              day.totals.freeMinutes > 0 ? `${span(day.totals.freeMinutes)} free` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        ) : null}
 
         {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
         <DayHours day={day} />
@@ -1003,8 +1155,8 @@ function FoodDetail({ food }: { food: ScheduledFood }) {
     <>
       {food.hours ? (
         <p className="mt-1 text-xs tabular-nums text-ink-faint">
-          Open {formatMinuteOfDay(food.hours.openMinute)}–
-          {formatMinuteOfDay(food.hours.closeMinute)}
+          Open {clock(food.hours.openMinute, 'later')}–
+          {clock(food.hours.closeMinute, 'earlier')}
           {food.hours.periodLabel ? ` · ${food.hours.periodLabel}` : ''}
           {food.hours.confidence !== 'published' ? ' · closing time is ours, not theirs' : ''}
         </p>
@@ -1234,7 +1386,9 @@ function FoodPlanPanel({ plan }: { plan: FoodPlan }) {
         </div>
       ) : null}
 
-      <p className="mt-4 text-[11px] leading-relaxed text-ink-faint">{plan.dataDisclosure}</p>
+      <p className="mt-4 text-[11px] leading-relaxed text-ink-faint">
+        {travellerVoice(plan.dataDisclosure)}
+      </p>
     </Panel>
   );
 }
@@ -1258,10 +1412,10 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
     <div className="flex gap-3 p-4 sm:gap-4 sm:p-5">
       <div className="w-14 shrink-0 pt-0.5 text-right sm:w-16">
         <time className="block text-sm tabular-nums text-ink">
-          {formatMinuteOfDay(item.startMinute)}
+          {clock(item.startMinute, 'later')}
         </time>
         <span className="mt-0.5 block text-[11px] tabular-nums text-ink-faint">
-          {formatMinutes(item.durationMinutes)}
+          {span(item.durationMinutes)}
         </span>
       </div>
 
@@ -1321,9 +1475,9 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
 
         {hours ? (
           <p className="mt-1 text-xs tabular-nums text-ink-faint">
-            Open {formatMinuteOfDay(hours.openMinute)}–{formatMinuteOfDay(hours.closeMinute)}
+            Open {clock(hours.openMinute, 'later')}–{clock(hours.closeMinute, 'earlier')}
             {hours.lastAdmissionMinute !== undefined
-              ? ` · arrive before ${formatMinuteOfDay(hours.lastAdmissionMinute)}`
+              ? ` · arrive before ${clock(hours.lastAdmissionMinute, 'earlier')}`
               : ''}
             {hours.periodLabel ? ` · ${hours.periodLabel}` : ''}
           </p>
@@ -1378,8 +1532,9 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
           <p className="mt-2 text-xs leading-relaxed text-ink-faint">
             Signed for daylight use only.{' '}
             {item.daylight
-              ? `Placed inside ${formatMinuteOfDay(item.daylight.sunriseMinute)}–${formatMinuteOfDay(
+              ? `Placed inside ${clock(item.daylight.sunriseMinute, 'later')}–${clock(
                   item.daylight.sunsetMinute,
+                  'earlier',
                 )} for this date.`
               : 'We could not work out sunrise and sunset for this one, so check the light yourself.'}
           </p>

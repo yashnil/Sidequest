@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   AVOIDANCE_OPTIONS,
   BREAKFAST_STYLE_OPTIONS,
@@ -28,6 +28,7 @@ import {
   type DietaryNeed,
   type Interest,
   type InterestLevel,
+  type ComposerAnsweredField,
   type QuestionnaireAnswers,
   type QuestionnaireContext,
   type QuestionnaireStepId,
@@ -51,24 +52,97 @@ export function QuestionnaireWizard({
   tripId,
   context,
   initialAnswers,
+  initialStep = 0,
+  prefilled = [],
 }: {
   tripId: string;
   context: QuestionnaireContext;
   initialAnswers: QuestionnaireAnswers;
+  /**
+   * Where the traveller had got to, from the server.
+   *
+   * This used to be `useState(0)` with the answers saved separately, so a
+   * refresh on step seven of nine returned to step one with everything intact
+   * and nothing to say which answers had been reached deliberately — while the
+   * header said "Saved as you go".
+   */
+  initialStep?: number;
+  /**
+   * Fields the composer already answered.
+   *
+   * Shown as a confirmable assumption instead of asked a second time. The
+   * questionnaire used to re-ask five of these *and* discard what the composer
+   * had been told, which is how a traveller who chose trains and buses arrived
+   * here with "You will have a car" ticked.
+   */
+  prefilled?: readonly ComposerAnsweredField[];
 }) {
   const [answers, setAnswers] = useState(initialAnswers);
-  const [stepIndex, setStepIndex] = useState(0);
+  const allSteps = stepDefinitions(context);
+  const [stepIndex, setStepIndex] = useState(() => Math.max(0, initialStep));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /** Prefilled fields the traveller has since touched. Their edit wins, and stays won. */
+  const [edited, setEdited] = useState<Set<string>>(() => new Set());
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
-  const steps = stepDefinitions(context);
-  const step = steps[stepIndex]!;
-  const isLast = stepIndex === steps.length - 1;
+  const prefill = (field: ComposerAnsweredField): boolean =>
+    prefilled.includes(field) && !edited.has(field);
+
+  /**
+   * A STEP WHOSE ONLY QUESTION IS ALREADY ANSWERED IS NOT SHOWN.
+   *
+   * Carrying the composer's answers across stopped the questionnaire
+   * *contradicting* the traveller, which was the worst of it — but a review
+   * pointed out it did not make the questionnaire any shorter. Every question
+   * was still asked, in the same words, with a badge over it. "We already know
+   * this, please confirm" nine times is not fewer questions; it is the same
+   * form with an apology attached.
+   *
+   * So a step every one of whose questions is carried over is dropped from the
+   * flow entirely. Today that is `budget`, whose sole control is the spending
+   * style — one screen of nine, removed for anybody who answered it up front.
+   * The answer is not lost and not hidden: it appears on the review screen,
+   * marked `assumed`, with a control that jumps back to change it.
+   *
+   * Recomputed on every render rather than frozen, because the moment the
+   * traveller edits a carried-over field on another step it stops being an
+   * assumption — and a step that reappeared mid-flow would be worse than one
+   * that never left. `edited` is only ever added to, so this list can only
+   * grow, never shrink.
+   */
+  const ONLY_CARRIED: Partial<Record<QuestionnaireStepId, ComposerAnsweredField[]>> = {
+    budget: ['budgetStyle'],
+  };
+  const steps = allSteps.filter((entry) => {
+    const fields = ONLY_CARRIED[entry.id];
+    return fields === undefined || !fields.every((field) => prefill(field));
+  });
+
+  /*
+   * Clamped on read rather than on write, because the visible list can shrink
+   * *after* a position was stored — a traveller who reaches step eight, goes
+   * back and answers something that removes a step would otherwise resume past
+   * the end and render nothing.
+   */
+  const safeIndex = Math.min(Math.max(0, stepIndex), steps.length - 1);
+  const step = steps[safeIndex]!;
+  const isLast = safeIndex === steps.length - 1;
   const visible = (id: Parameters<typeof isQuestionVisible>[0]) =>
     isQuestionVisible(id, { answers, context });
 
   function update(patch: Partial<QuestionnaireAnswers>) {
     setError(null);
+    /*
+     * A prefilled field the traveller has now touched stops being an
+     * assumption. Recorded rather than inferred from value equality: choosing
+     * the same answer we had assumed is still a decision they made, and a
+     * screen that kept calling it an assumption would be ignoring them twice.
+     */
+    const touched = Object.keys(patch);
+    if (touched.some((field) => prefilled.includes(field as ComposerAnsweredField))) {
+      setEdited((current) => new Set([...current, ...touched]));
+    }
     // Re-normalising on every change keeps hidden answers consistent as soon as
     // the answer that hides them changes, rather than at submit time.
     setAnswers((current) => normalizeAnswers({ ...current, ...patch }, context));
@@ -105,27 +179,78 @@ export function QuestionnaireWizard({
     return null;
   }
 
+  /**
+   * Move, saving both the answers and the position.
+   *
+   * One function for both directions, and that is the fix rather than a tidy-up.
+   * `goBack` used to change the index and save nothing, so an edit made on a
+   * step and then stepped away from was lost until the traveller happened to
+   * walk forward through it again — on a screen headed "Saved as you go".
+   *
+   * The move happens **after** the save resolves in both directions, so a
+   * failed write leaves the traveller on the step whose answers did not persist
+   * rather than one further on with a message about a screen they can no longer
+   * see.
+   */
+  function goTo(target: number) {
+    const clamped = Math.min(Math.max(target, 0), steps.length - 1);
+    if (clamped === safeIndex) return;
+    startTransition(async () => {
+      const result = await saveDraftAction(tripId, answers, clamped);
+      if (!result.ok) {
+        setError(result.error ?? 'We could not save your progress.');
+        return;
+      }
+      setError(null);
+      setStepIndex(clamped);
+    });
+  }
+
   function goNext() {
     const problem = stepError(step.id);
     if (problem) {
       setError(problem);
       return;
     }
-    startTransition(async () => {
-      const result = await saveDraftAction(tripId, answers);
-      if (!result.ok) {
-        setError(result.error ?? 'We could not save your progress.');
-        return;
-      }
-      setError(null);
-      setStepIndex((index) => Math.min(index + 1, steps.length - 1));
-    });
+    goTo(safeIndex + 1);
   }
 
   function goBack() {
     setError(null);
-    setStepIndex((index) => Math.max(index - 1, 0));
+    goTo(safeIndex - 1);
   }
+
+  /**
+   * Move focus to the new step's heading after the step changes.
+   *
+   * Two defects, one fix. A keyboard or screen-reader user pressing Continue
+   * was left with focus on a button whose label no longer described what would
+   * happen, with no announcement that the page had changed underneath them. And
+   * a sighted user was scrolled to wherever the previous step had left them —
+   * a visual audit caught the review step's heading sitting cut in half behind
+   * the sticky header. `scroll-mt` on the heading is what keeps the browser's
+   * own scroll-into-view clear of the chrome.
+   */
+  const hasMoved = useRef(false);
+  useEffect(() => {
+    /*
+     * Not on first render, and that exception is load-bearing.
+     *
+     * Scrolling the wizard's heading to the top of the viewport is right when
+     * the *step changes* — it is what stops the new heading appearing under the
+     * sticky chrome. On arrival it is wrong: the interpretation panel sits
+     * above the wizard, and scrolling past it on load hides the chips a
+     * traveller has to act on before anything else. A browser suite caught it
+     * as a lost click on a phone; the traveller's version is a screen that
+     * silently starts halfway down.
+     */
+    if (!hasMoved.current) {
+      hasMoved.current = true;
+      return;
+    }
+    headingRef.current?.focus({ preventScroll: true });
+    headingRef.current?.scrollIntoView({ block: 'start' });
+  }, [safeIndex]);
 
   function finish() {
     startTransition(async () => {
@@ -137,9 +262,13 @@ export function QuestionnaireWizard({
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
-      <Progress current={stepIndex} total={steps.length} />
+      <Progress current={safeIndex} total={steps.length} />
 
-      <h1 className="mt-6 font-display text-3xl leading-tight text-ink sm:text-4xl">
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="mt-6 scroll-mt-24 font-display text-3xl leading-tight text-ink outline-none sm:text-4xl"
+      >
         {step.title}
       </h1>
       <p className="mt-3 text-ink-muted">{step.intro}</p>
@@ -192,6 +321,7 @@ export function QuestionnaireWizard({
               options={PACE_OPTIONS}
               value={answers.pace}
               onChange={(pace) => update({ pace })}
+              carriedOver={prefill('pace')}
             />
             <ChoiceGroup
               legend="When do you want to be out the door?"
@@ -205,6 +335,7 @@ export function QuestionnaireWizard({
                 options={DAILY_INTENSITY_OPTIONS}
                 value={answers.dailyIntensity}
                 onChange={(dailyIntensity) => update({ dailyIntensity })}
+                carriedOver={prefill('dailyIntensity')}
               />
             ) : (
               <Note>
@@ -221,6 +352,7 @@ export function QuestionnaireWizard({
             options={BUDGET_OPTIONS}
             value={answers.budgetStyle}
             onChange={(budgetStyle) => update({ budgetStyle })}
+            carriedOver={prefill('budgetStyle')}
           />
         ) : null}
 
@@ -300,6 +432,7 @@ export function QuestionnaireWizard({
               options={CROWD_TOLERANCE_OPTIONS}
               value={answers.crowdTolerance}
               onChange={(crowdTolerance) => update({ crowdTolerance })}
+              carriedOver={prefill('crowdTolerance')}
             />
             {visible('avoidTouristTraps') ? (
               <Toggle
@@ -319,6 +452,7 @@ export function QuestionnaireWizard({
               detail="This is the difference between a region and a town. Some destinations run local transport in season; beyond that, a lot of what we find is only reachable with a vehicle."
               checked={answers.willDrive}
               onChange={(willDrive) => update({ willDrive })}
+              carriedOver={prefill('willDrive')}
             />
             {visible('roadComfort') ? (
               <>
@@ -462,7 +596,15 @@ export function QuestionnaireWizard({
           </>
         ) : null}
 
-        {step.id === 'review' ? <ReviewStep answers={answers} context={context} /> : null}
+        {step.id === 'review' ? (
+          <ReviewStep
+            answers={answers}
+            context={context}
+            steps={steps}
+            onJumpTo={goTo}
+            prefilled={prefilled.filter((field) => !edited.has(field))}
+          />
+        ) : null}
       </div>
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
@@ -471,7 +613,7 @@ export function QuestionnaireWizard({
         <button
           type="button"
           onClick={goBack}
-          disabled={stepIndex === 0 || pending}
+          disabled={safeIndex === 0 || pending}
           className={buttonClass('ghost')}
         >
           Back
@@ -518,19 +660,42 @@ function Progress({ current, total }: { current: number; total: number }) {
   );
 }
 
+/**
+ * A note that this answer was carried over rather than asked twice.
+ *
+ * Shown rather than hidden, and shown *next to a live control*: the honest
+ * middle ground between asking a question the traveller has already answered
+ * and silently deciding on their behalf. Rendered by both controls below so the
+ * wording cannot drift between them.
+ */
+function CarriedOver() {
+  return (
+    <span className="ml-2 align-middle">
+      <Badge>from your answers · change if wrong</Badge>
+    </span>
+  );
+}
+
 function ChoiceGroup<T extends string>({
   legend,
   options,
   value,
   onChange,
+  carriedOver = false,
 }: {
   legend: string;
   options: readonly { value: T; label: string; detail: string }[];
   value: T;
   onChange: (value: T) => void;
+  carriedOver?: boolean;
 }) {
   return (
     <Fieldset legend={legend}>
+      {carriedOver ? (
+        <p className="-mt-1 mb-2 text-sm text-ink-muted">
+          <CarriedOver />
+        </p>
+      ) : null}
       <div className="grid gap-2 sm:grid-cols-2">
         {options.map((option) => (
           <label
@@ -576,11 +741,13 @@ function Toggle({
   detail,
   checked,
   onChange,
+  carriedOver = false,
 }: {
   label: string;
   detail: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  carriedOver?: boolean;
 }) {
   return (
     <label className="flex cursor-pointer gap-3 rounded-lg border border-rule bg-paper-raised p-4">
@@ -591,7 +758,10 @@ function Toggle({
         className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-pine)]"
       />
       <span>
-        <span className="block text-sm font-medium text-ink">{label}</span>
+        <span className="block text-sm font-medium text-ink">
+          {label}
+          {carriedOver ? <CarriedOver /> : null}
+        </span>
         <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">{detail}</span>
       </span>
     </label>
@@ -654,12 +824,32 @@ function Note({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * WHAT THE REVIEW SCREEN HAS TO SHOW: THE ANSWERS.
+ *
+ * It used to render a derived personality card and **nothing else** — no answer
+ * the traveller had given appeared anywhere on it. A review screen that shows a
+ * summary of a summary is not a review; there is nothing on it to check, and
+ * the one thing standing between an intake and the expensive research that
+ * follows it was a paragraph of adjectives.
+ *
+ * So: every answer, grouped by the step that asked it, each row linking back to
+ * that step. Plus the assumptions carried over from the composer, marked as
+ * assumptions, because a value we inferred and a value somebody typed must not
+ * look the same on the screen where they confirm both.
+ */
 function ReviewStep({
   answers,
   context,
+  steps,
+  onJumpTo,
+  prefilled,
 }: {
   answers: QuestionnaireAnswers;
   context: QuestionnaireContext;
+  steps: readonly { id: QuestionnaireStepId; title: string }[];
+  onJumpTo: (index: number) => void;
+  prefilled: readonly ComposerAnsweredField[];
 }) {
   const personality = useMemo(() => {
     try {
@@ -669,15 +859,144 @@ function ReviewStep({
     }
   }, [answers, context]);
 
-  if (!personality) {
-    return (
-      <Note>
-        Something in your answers is incomplete. Step back through and check anything you skipped.
-      </Note>
-    );
-  }
+  const stepIndexOf = (id: QuestionnaireStepId): number =>
+    Math.max(0, steps.findIndex((entry) => entry.id === id));
 
-  return <TripPersonalityCard personality={personality} />;
+  const labelOf = <T extends string>(
+    options: readonly { value: T; label: string }[],
+    value: T,
+  ): string => options.find((option) => option.value === value)?.label ?? String(value);
+
+  const rows: {
+    step: QuestionnaireStepId;
+    label: string;
+    value: string;
+    field?: ComposerAnsweredField;
+  }[] = [
+    {
+      step: 'interests',
+      label: 'What you are here for',
+      value:
+        INTERESTS.filter((interest) =>
+          ['occasional', 'frequent', 'core'].includes(answers.interests[interest] ?? 'low'),
+        )
+          .map((interest) => `${INTEREST_LABELS[interest]} (${LEVEL_SHORT[answers.interests[interest]!]})`)
+          .join(', ') || 'Nothing marked yet',
+    },
+    { step: 'rhythm', label: 'Pace', value: labelOf(PACE_OPTIONS, answers.pace), field: 'pace' },
+    { step: 'rhythm', label: 'Day start', value: labelOf(DAY_START_OPTIONS, answers.dayStart) },
+    {
+      step: 'rhythm',
+      label: 'How hard the days work',
+      value: labelOf(DAILY_INTENSITY_OPTIONS, answers.dailyIntensity),
+      field: 'dailyIntensity',
+    },
+    {
+      step: 'budget',
+      label: 'Spending style',
+      value: labelOf(BUDGET_OPTIONS, answers.budgetStyle),
+      field: 'budgetStyle',
+    },
+    { step: 'food', label: 'Breakfast', value: labelOf(BREAKFAST_STYLE_OPTIONS, answers.breakfastStyle) },
+    { step: 'food', label: 'Eating', value: labelOf(FOOD_STYLE_OPTIONS, answers.foodStyle) },
+    {
+      step: 'food',
+      label: 'Meals that are an event',
+      value: labelOf(SPECIAL_MEAL_OPTIONS, answers.specialMealAppetite),
+    },
+    {
+      step: 'food',
+      label: 'Dietary',
+      value:
+        answers.dietaryNeeds.length === 0
+          ? 'Nothing stated'
+          : answers.dietaryNeeds
+              .map((need) => labelOf(DIETARY_NEED_OPTIONS, need))
+              .join(', ') + (answers.dietaryStrict ? ' · requirements, not preferences' : ''),
+    },
+    { step: 'discovery', label: 'Famous or hidden', value: labelOf(DISCOVERY_MIX_OPTIONS, answers.discoveryMix) },
+    {
+      step: 'discovery',
+      label: 'Crowds',
+      value: labelOf(CROWD_TOLERANCE_OPTIONS, answers.crowdTolerance),
+      field: 'crowdTolerance',
+    },
+    {
+      step: 'transport',
+      label: 'Getting around',
+      value: answers.willDrive ? 'Driving' : 'Without a car',
+      field: 'willDrive',
+    },
+    {
+      step: 'transport',
+      label: 'Furthest walk to a stop',
+      value: formatMinutes(answers.maxAccessWalkMinutes),
+    },
+    {
+      step: 'region',
+      label: 'How far from base',
+      value: labelOf(regionalExpansionOptions(context), answers.regionalExpansion),
+    },
+    {
+      step: 'constraints',
+      label: 'Steering around',
+      value:
+        answers.avoidances.length === 0
+          ? 'Nothing stated'
+          : answers.avoidances.map((item) => labelOf(AVOIDANCE_OPTIONS, item)).join(', '),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {personality ? (
+        <TripPersonalityCard personality={personality} />
+      ) : (
+        <Note>
+          Something in your answers is incomplete. Step back through and check anything you skipped.
+        </Note>
+      )}
+
+      <Panel className="p-5 sm:p-6">
+        <h2 className="font-display text-lg text-ink">Everything you told us</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          This is what the research runs on. Anything that reads wrong, change it now — it is far
+          cheaper to fix here than after the board is built.
+        </p>
+        {prefilled.length > 0 ? (
+          <p className="mt-3 rounded-lg border border-dashed border-rule bg-paper-sunk p-3 text-sm text-ink-muted">
+            Rows marked <em>assumed</em> came from what you told us when you started the trip. We
+            have not asked again — change any of them if they are wrong.
+          </p>
+        ) : null}
+        <dl className="mt-4 divide-y divide-rule" data-testid="review-answers">
+          {rows.map((row) => (
+            <div key={`${row.step}-${row.label}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3">
+              <dt className="w-full text-xs uppercase tracking-[0.12em] text-ink-faint sm:w-52 sm:shrink-0">
+                {row.label}
+              </dt>
+              <dd className="flex-1 text-sm text-ink">
+                {row.value}
+                {row.field && prefilled.includes(row.field) ? (
+                  <span className="ml-2 align-middle">
+                    <Badge>assumed</Badge>
+                  </span>
+                ) : null}
+              </dd>
+              <button
+                type="button"
+                onClick={() => onJumpTo(stepIndexOf(row.step))}
+                className={cx('text-sm text-pine underline underline-offset-2', FOCUS_RING)}
+              >
+                Change
+                <span className="sr-only"> {row.label}</span>
+              </button>
+            </div>
+          ))}
+        </dl>
+      </Panel>
+    </div>
+  );
 }
 
 export function TripPersonalityCard({

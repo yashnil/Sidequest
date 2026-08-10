@@ -244,6 +244,49 @@
 */
 @media print {
   /*
+   * THE PAGE ITSELF.
+   *
+   * A4 with a 16mm margin, because the printed itinerary is a document somebody
+   * folds into a glovebox and not a screenshot of a web page. Without this the
+   * browser used its own default margin against a body whose type was sized for
+   * a 1440px viewport, and the result was a plan that ran to twice the pages it
+   * needed and still broke a day in half.
+   *
+   * Point sizes, not pixels: `pt` is the unit paged media is actually measured
+   * in, and 10.5pt at 1.45 is a comfortable reading size for continuous prose at
+   * arm's length.
+   */
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  html {
+    font-size: 10.5pt;
+    line-height: 1.45;
+  }
+
+  /*
+   * A heading never ends a page, and no paragraph leaves one line behind.
+   *
+   * `break-after: avoid` on the headings is what stops "Day 3" printing as the
+   * last line of a sheet with its day overleaf — the single thing that makes a
+   * printed itinerary feel accidental.
+   */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+
+  p,
+  li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /*
    * Furniture. The attribution paragraph is deliberately not in this list.
    *
    * These were `body > div > header` and `body > div > footer`, which matched
@@ -255,6 +298,23 @@
   body > header,
   body > footer,
   .print\:hidden {
+    display: none !important;
+  }
+
+  /*
+   * NO INTERACTIVE CHROME ON PAPER.
+   *
+   * Anything that only exists to be pressed is furniture in a printed document:
+   * a disabled-looking grey rectangle where a button was, a nav rail of links to
+   * anchors that mean nothing on a sheet of paper. The day rail already carries
+   * `print:hidden`; this is the catch-all for controls that do not, and it is
+   * deliberately narrow — `button` and the two navigations, never `a`, because a
+   * link on this page is usually a source citation and the URL rule below is
+   * what makes those *more* useful on paper rather than less.
+   */
+  button,
+  nav[aria-label='Jump to a day'],
+  [role='group'] {
     display: none !important;
   }
 

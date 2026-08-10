@@ -1736,6 +1736,24 @@ export const COLUMN_MIGRATIONS: readonly {
     column: 'state_heartbeat_at',
     definition: "TEXT NOT NULL DEFAULT ''",
   },
+  /**
+   * WHERE IN THE QUESTIONNAIRE THE TRAVELLER HAD GOT TO.
+   *
+   * The answers were saved as they went and the *position* was React state, so
+   * a refresh on step seven of nine restarted at step one with every answer
+   * intact and no way to tell which of them had been reached deliberately. The
+   * screen said "Saved as you go" while it lost the one thing a traveller
+   * notices being lost.
+   *
+   * Defaulted to 0 rather than nullable: a row written before this column
+   * existed has no recorded position, and the first step is the only safe place
+   * to resume somebody whose progress nobody wrote down.
+   */
+  {
+    table: 'traveler_profiles',
+    column: 'draft_step',
+    definition: 'INTEGER NOT NULL DEFAULT 0',
+  },
 ];
 
 /**

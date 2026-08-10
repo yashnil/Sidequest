@@ -2,6 +2,8 @@ import 'server-only';
 import { candidatesFromNominatim, resolveEntityName } from './names';
 import {
   assessConfidence,
+  assessPlaceStanding,
+  standingFields,
   DESTINATION_RESOLUTION_VERSION,
   licence,
   normalizeDestinationQuery,
@@ -1022,18 +1024,36 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         }
 
         /**
-         * Popularity and hidden-gem, from what OSM actually carries.
+         * STANDING, FROM WHAT THE MAP ACTUALLY CARRIES.
          *
-         * OSM has no rating and no review count, which is a feature here rather
-         * than a gap: there is no popularity number to mistake for quality. What
-         * it does have is how completely an element is tagged — a place many
-         * mappers have cared about carries a website, an operator, opening
-         * hours. That is a weak proxy and it is labelled as one; it never
-         * outranks the traveller's own stated preferences.
+         * This branch used to read `popularity = 0.25 + (tagCount / 5) * 0.5`
+         * and then `hiddenGem = 1 − popularity` and `crowd = popularity > 0.7`.
+         * A tag count is how thoroughly a mapper described something; calling it
+         * popularity, its inverse a hidden gem and its threshold a crowd meant
+         * three of a card's badges were one number, and the number was somebody
+         * else's editing effort. A well-maintained chain café read as famous and
+         * busy; an untagged shrine read as an undiscovered find.
+         *
+         * `assessPlaceStanding` is the same model the compiled path uses, so the
+         * two producers cannot drift apart again — which is the state they were
+         * found in, with different formulas for the same field.
+         *
+         * OSM has no rating and no review count, and that stays a feature rather
+         * than a gap: there is no popularity number here to mistake for quality,
+         * so most of these places carry no prominence at all — and now say so by
+         * leaving it absent instead of by scoring low.
          */
-        const tagRichness = Math.min(1, Object.keys(osm.planningTags).length / 5);
-        const popularity = Math.min(0.9, 0.25 + tagRichness * 0.5);
-        const hiddenGem = Math.max(0.1, 1 - popularity - 0.1);
+        const standing = assessPlaceStanding({
+          inKnowledgeBase: osm.planningTags.wikidata !== undefined,
+          publishedSites: [osm.planningTags.website, osm.planningTags['contact:website']].filter(
+            (url): url is string => url !== undefined,
+          ),
+          classifyingValues: [osm.primaryTag],
+          recordedAttributeCount: Object.keys(osm.planningTags).length,
+          // The one crowd signal a tag set carries. A `seasonal` element packs a
+          // year of visitors into a short window; it never says how many.
+          crowd: { seasonalConcentration: osm.planningTags.seasonal !== undefined },
+        });
 
         const placeId = `osm-${osm.elementId.replace('/', '-')}`;
         osmByPlaceId.set(placeId, osm);
@@ -1073,7 +1093,12 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
              * have been buying.
              */
             url: operatorSite ?? osm.url,
-            confidence: 0.7,
+            /*
+             * Derived from how much the element carries, where this was the
+             * constant `0.7` — a number that claimed somebody had measured our
+             * confidence in a record nobody had looked at.
+             */
+            confidence: standing.sourceConfidence,
             lastVerified: new Date().toISOString().slice(0, 10),
             element: {
               elementId: osm.elementId,
@@ -1089,9 +1114,12 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           typicalDurationMinutes: Math.min(600, Math.max(15, entry.typicalDurationMinutes)),
           costLevel: Math.min(3, Math.max(0, entry.costLevel)) as 0 | 1 | 2 | 3,
           physicalIntensity: entry.physicalIntensity,
-          crowdLevel: popularity > 0.7 ? 'busy' : 'quiet',
-          popularityScore: popularity,
-          hiddenGemScore: hiddenGem,
+          /*
+           * Popularity, hidden-gem and crowd are reads of the standing above,
+           * and the separated scores travel beside them. One spread, so this
+           * producer has no fallback of its own to disagree with.
+           */
+          ...standingFields(standing),
           weather: {
             exposure: entry.exposure,
             precipitation: entry.exposure === 'indoor' ? 'low' : 'high',

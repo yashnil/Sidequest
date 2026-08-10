@@ -2,6 +2,8 @@ import {
   assessConfidence,
   breadthRank,
   GEOGRAPHIC_SCOPE_VERSION,
+  reachClassFor,
+  resolveTimeZones,
   singleAnswer,
   type ClarificationSet,
   type ConfidenceSignal,
@@ -13,6 +15,7 @@ import {
   type TravelerProfile,
 } from '@sidequest/core';
 import { QUESTION_IDS } from './clarify';
+import { ADAPTIVE_QUESTION_IDS } from './adaptive';
 
 /**
  * Turning an interpretation plus a handful of answers into the ground a trip
@@ -69,6 +72,22 @@ export interface ScopeInput {
    * refinement of it.
    */
   composerShape?: 'one_base' | 'two_bases' | 'circuit' | 'undecided';
+  /**
+   * The reach the preflight structure implies, in kilometres.
+   *
+   * The hand-off that keeps the regional preview and the compilation describing
+   * the same trip. See the note beside `radiusKm` below for why it wins, and
+   * why it is still clamped.
+   */
+  preflightReachKm?: number;
+  /**
+   * Whether anything configured can measure a public-transport journey.
+   *
+   * Defaults to false. Passed in rather than read here because the compiler
+   * package has no business knowing which adapters a deployment configured —
+   * that is what the capability registry is for, and it lives one layer up.
+   */
+  transitMeasurable?: boolean;
 }
 
 /**
@@ -160,43 +179,115 @@ function clipToReach(
   };
 }
 
+/**
+ * HOW FAR A TRAVELLER GOES IS NOT THE SAME QUESTION AS WHAT THEY TRAVEL BY.
+ *
+ * `TransportMode` is a vocabulary of things that move — `drive`, `walk`, `rail`,
+ * `ferry`. A *reach class* is how much ground a day of that costs, and there are
+ * only three of them. Collapsing the two is what produced the defect this split
+ * exists to remove: a traveller who said "public transport" was assigned
+ * `primaryMode: 'walk'`, which selected the walking radius, which capped their
+ * destination at twelve kilometres — while the preview screen beside it had
+ * already used a forty-kilometre transit reach for the same answer.
+ *
+ * `primaryMode` stays conservative and stays honest: we may not claim rail
+ * service exists before anything has measured it, and `unmeasurableModesFor`
+ * turns that gap into a named readiness deficit rather than a silent assumption.
+ * What changes is that a stated intention to use public transport now decides
+ * how far the trip reaches, because that is a fact about the traveller rather
+ * than a claim about a network.
+ */
+type ReachClass = 'drive' | 'transit' | 'walk';
+
 function primaryModeFor(
   profile: TravelerProfile | undefined,
   carAnswer: string | undefined,
   composerTransport: string | undefined,
-): { mode: TransportMode; carAvailable: boolean | null; basis: 'profile' | 'clarification' | 'default' } {
-  if (profile) {
-    return {
-      mode: profile.transport.willDrive ? 'drive' : 'walk',
-      carAvailable: profile.transport.willDrive,
-      basis: 'profile',
-    };
-  }
-  if (carAnswer === 'yes') return { mode: 'drive', carAvailable: true, basis: 'clarification' };
-  if (carAnswer === 'no') return { mode: 'walk', carAvailable: false, basis: 'clarification' };
-  if (composerTransport === 'drive' || composerTransport === 'mixed') {
-    return { mode: 'drive', carAvailable: true, basis: 'clarification' };
-  }
-  if (composerTransport === 'public_transport') {
-    return { mode: 'walk', carAvailable: false, basis: 'clarification' };
-  }
-  /**
-   * Nobody has said, and that is a third state.
+  transitMeasurable: boolean,
+): {
+  mode: TransportMode;
+  reachClass: ReachClass;
+  carAvailable: boolean | null;
+  basis: 'profile' | 'clarification' | 'default';
+} {
+  /*
+   * TWO QUESTIONS, ANSWERED FROM DIFFERENT SOURCES.
    *
-   * `carAvailable: null` rather than `false`, because "we have not established
-   * this" and "no car" produce different plans and different sentences. Walking
-   * is the conservative *primary* mode — it never invents reach the traveller
-   * may not have — but the null is what stops a later screen claiming they said
-   * no.
+   * "Will you have a car" and "how will you get around without one" are not the
+   * same question, and the precedence rules are not the same either. The car
+   * question has a dedicated clarification and a profile field, and the later,
+   * more specific one wins. The *reach* question is only ever answered by the
+   * composer's transport choice or by the profile's shuttle tolerance — the car
+   * clarification says nothing about it.
+   *
+   * Resolving both in one cascade is what broke: answering the car question
+   * `no` short-circuited before the composer's explicit "on foot" was read, so
+   * a walker and a metro traveller got the same ground.
    */
-  return { mode: 'walk', carAvailable: null, basis: 'default' };
+  const carAvailable: boolean | null = profile
+    ? profile.transport.willDrive
+    : carAnswer === 'yes'
+      ? true
+      : carAnswer === 'no'
+        ? false
+        : composerTransport === 'drive' || composerTransport === 'mixed'
+          ? true
+          : composerTransport === 'public_transport' || composerTransport === 'walk'
+            ? false
+            : null;
+
+  const basis: 'profile' | 'clarification' | 'default' = profile
+    ? 'profile'
+    : carAnswer !== undefined || composerTransport !== undefined
+      ? 'clarification'
+      : 'default';
+
+  if (carAvailable === true) {
+    return { mode: 'drive', reachClass: 'drive', carAvailable, basis };
+  }
+
+  /*
+   * Without a car, how far a day reaches depends on whether scheduled transport
+   * is on the table. The profile states it outright; the composer's "on foot"
+   * states the opposite outright; a bare "no car" is read as transit, because
+   * `allowedModes` below has always granted rail, bus and shuttle to a car-free
+   * traveller and a reach that contradicted that was the inconsistency.
+   *
+   * `primaryMode` stays `walk` throughout. We may not claim a rail network
+   * exists before anything has measured one — `unmeasurableModesFor` turns that
+   * gap into a named readiness deficit instead.
+   */
+  const reachClass: ReachClass = reachClassFor({
+    carAvailable,
+    acceptsScheduled: profile ? profile.transport.willUseShuttles : composerTransport === 'walk' ? false : null,
+    transitMeasurable,
+  });
+
+  /**
+   * `carAvailable: null` rather than `false` when nobody has said, because "we
+   * have not established this" and "no car" produce different plans and
+   * different sentences. Walking reach is the conservative default — it never
+   * invents reach the traveller may not have — but the null is what stops a
+   * later screen claiming they said no.
+   */
+  return { mode: 'walk', reachClass, carAvailable, basis };
 }
 
 export function deriveScope(input: ScopeInput): GeographicScope {
   const { candidate, clarifications, profile, nights, revision } = input;
 
   const carAnswer = singleAnswer(clarifications, QUESTION_IDS.carAvailable);
-  const { mode, carAvailable, basis } = primaryModeFor(profile, carAnswer, input.composerTransport);
+  const { mode, reachClass, carAvailable, basis } = primaryModeFor(
+    profile,
+    carAnswer,
+    input.composerTransport,
+    /*
+     * False unless a caller says otherwise, and every caller today leaves it
+     * so — no transit provider exists. See `reachClassFor` for why widening a
+     * car-free traveller's reach without one made the plan *less* truthful.
+     */
+    input.transitMeasurable ?? false,
+  );
 
   const breadthAnswer = singleAnswer(clarifications, QUESTION_IDS.breadthStrategy);
   const chosenShape = input.composerShape;
@@ -211,15 +302,34 @@ export function deriveScope(input: ScopeInput): GeographicScope {
     (breadthAnswer === undefined && chosenShape === 'one_base');
 
   const baseAnswer = singleAnswer(clarifications, QUESTION_IDS.baseStrategy);
+  /**
+   * WHAT AN ADAPTIVE ANSWER ACTUALLY CHANGES.
+   *
+   * The worst thing an adaptive question can be is one nothing reads. It costs
+   * the traveller a decision, promises a consequence in `planChangeByAnswer`,
+   * and then the plan comes out the same — which is worse than not asking,
+   * because it teaches them their answers do not matter.
+   *
+   * `adaptive.hotel-switch-tolerance` is asked only when the region genuinely
+   * offers two bases two hours or more apart and nobody has said which they
+   * want. This is where the answer lands: `move` allows one hotel change,
+   * `stay` forbids any, and `either` — the working "decide for me" — leaves the
+   * derived answer alone so the structure decides on travel logic.
+   */
+  const moveAnswer = singleAnswer(clarifications, ADAPTIVE_QUESTION_IDS.hotelSwitchTolerance);
   const maxBaseChanges = narrowed
     ? 0
-    : baseAnswer !== undefined && /^\d+$/.test(baseAnswer)
-      ? Number(baseAnswer)
-      : chosenShape === 'two_bases'
-        ? 1
-        : chosenShape === 'circuit'
-          ? 2
-          : 0;
+    : moveAnswer === 'stay'
+      ? 0
+      : moveAnswer === 'move'
+        ? Math.max(1, baseAnswer !== undefined && /^\d+$/.test(baseAnswer) ? Number(baseAnswer) : 1)
+        : baseAnswer !== undefined && /^\d+$/.test(baseAnswer)
+          ? Number(baseAnswer)
+          : chosenShape === 'two_bases'
+            ? 1
+            : chosenShape === 'circuit'
+              ? 2
+              : 0;
 
   const waterAnswer = singleAnswer(clarifications, QUESTION_IDS.waterOrAir);
   const acceptsWaterOrAir =
@@ -229,7 +339,7 @@ export function deriveScope(input: ScopeInput): GeographicScope {
         : true
       : waterAnswer !== 'no';
 
-  const reach = RADIUS_KM_BY_MODE[mode === 'drive' ? 'drive' : mode === 'walk' ? 'walk' : 'transit'];
+  const reach = RADIUS_KM_BY_MODE[reachClass];
   /**
    * A radius that grows with the trip, not with the destination.
    *
@@ -237,7 +347,59 @@ export function deriveScope(input: ScopeInput): GeographicScope {
    * and stretching the scope to match the name is how a compiler spends its
    * whole budget on ground the traveller will never see.
    */
-  const radiusKm = Math.min(reach.cap, Math.max(reach.perNight, reach.perNight * (nights + 1)));
+  const derivedRadiusKm = Math.min(
+    reach.cap,
+    Math.max(reach.perNight, reach.perNight * (nights + 1)),
+  );
+
+  /**
+   * THE REACH THE TRAVELLER WAS ALREADY SHOWN WINS.
+   *
+   * The preflight screen draws a structure — these bases, those day trips, this
+   * much left out — and publishes the reach that structure implies. Deriving a
+   * *second* number from a table here is how one screen came to propose bases a
+   * hundred kilometres apart while the next described the same build as a dozen
+   * kilometres across.
+   *
+   * Clamped rather than trusted: a preflight is a cheap estimate over index
+   * records, and a runaway one must not be able to buy an arbitrarily large
+   * compilation. The ceiling is the reach class's own cap, which is the same
+   * bound the derived figure obeys.
+   *
+   * Absent — an older trip, or a destination with no index coverage — falls
+   * back to the derived radius exactly as before.
+   */
+  /*
+   * NARROWING IGNORES THE PREVIEW ENTIRELY.
+   *
+   * The preview's reach describes the structure it drew. A traveller who has
+   * since said "just one area of this" has replaced that structure, and
+   * adopting its reach anyway produced the absurdity that **choosing narrow
+   * made the compiled circle bigger** — because `narrowed` also switches
+   * `deriveShape` to a radius, so a multi-base preview's 300 km became a 300 km
+   * circle around one centre.
+   */
+  const fromPreflight =
+    !narrowed && input.preflightReachKm !== undefined && input.preflightReachKm > 0
+      ? Math.min(reach.cap, Math.max(derivedRadiusKm, Math.round(input.preflightReachKm)))
+      : derivedRadiusKm;
+
+  /**
+   * The other adaptive answer that has to land somewhere.
+   *
+   * `adaptive.extend-reach` is asked only when the structure dropped an area
+   * for reach — close enough that a change of mind would admit it. Saying
+   * "make room for it" has to widen the ground, or the question was theatre.
+   *
+   * A single step rather than an open-ended widening, and still clamped by the
+   * reach class's own cap: the traveller is agreeing to one longer travel day,
+   * not to a different trip.
+   */
+  const reachAnswer = singleAnswer(clarifications, ADAPTIVE_QUESTION_IDS.extendReach);
+  const radiusKm =
+    reachAnswer === 'include'
+      ? Math.min(reach.cap, Math.round(fromPreflight * 1.5))
+      : fromPreflight;
 
   const allowedModes: TransportMode[] = carAvailable
     ? ['drive', 'walk', 'shuttle', 'public_bus', 'rail']
@@ -248,6 +410,7 @@ export function deriveScope(input: ScopeInput): GeographicScope {
   if (!signals.includes('user_confirmed')) signals.push('user_confirmed');
 
   const shape = deriveShape(candidate, radiusKm, narrowed);
+  const zones = resolveTimeZones({ published: candidate.timeZones, center: candidate.center });
 
   return {
     schemaVersion: GEOGRAPHIC_SCOPE_VERSION,
@@ -320,7 +483,23 @@ export function deriveScope(input: ScopeInput): GeographicScope {
      * straddling a boundary that gets one side's clock applied to both is how a
      * timetable moves by an hour.
      */
-    timeZones: candidate.timeZones.length > 0 ? [...candidate.timeZones] : ['UTC'],
+    /**
+     * NO FABRICATED ZONE.
+     *
+     * This used to fall back to `['UTC']` when the resolver published none, and
+     * that is a claim rather than a default: every consumer downstream reads
+     * `timeZones[0]` and formats hours, daylight and forecast day-boundaries
+     * with it. A museum in a destination nine hours off UTC then opened at
+     * midnight, and nothing anywhere said the zone had been invented.
+     *
+     * `resolveTimeZones` prefers what the resolver published and otherwise
+     * derives one from the destination's own longitude — a deterministic
+     * measurement rather than a guess, within half an hour of local solar noon
+     * by construction — and reports which it did, so a consumer that needs a
+     * *political* zone can tell it has been handed a solar one.
+     */
+    timeZones: zones.zones,
+    timeZoneBasis: zones.basis,
     shape,
     includedAreas: [],
     excludedAreas: [],

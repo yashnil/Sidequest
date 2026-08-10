@@ -73,3 +73,55 @@ export function singleTimeZone(zones: readonly string[]): string | null {
   if (distinct.size !== 1) return null;
   return [...distinct][0] ?? null;
 }
+
+/**
+ * A DESTINATION'S CLOCK, DERIVED, WHEN NOBODY PUBLISHED ONE.
+ *
+ * `'UTC'` was the fallback everywhere a zone was missing, and it is not a
+ * neutral default — it is a claim, and for most of the inhabited world a wrong
+ * one by several hours. Every consumer downstream formats opening hours,
+ * daylight and forecast day-boundaries with `timeZones[0]`, so a destination
+ * nine hours off UTC had its museums opening at midnight and nothing anywhere
+ * said the zone had been invented.
+ *
+ * The longitude is a real measurement we always have, and solar time from it is
+ * a **derived deterministic fact** rather than a guess: the returned zone is
+ * within half an hour of local solar noon by construction. It is not a
+ * political zone — it has no daylight saving and does not know that a country
+ * has chosen a neighbour's clock — so callers must record the basis and prefer
+ * a published zone whenever one exists.
+ *
+ * Note the sign. POSIX `Etc/GMT±N` is inverted relative to ISO 8601: UTC+9 is
+ * `Etc/GMT-9`. Getting this backwards is an eighteen-hour error, so it is
+ * asserted in the tests rather than trusted to a comment.
+ */
+export function deriveTimeZoneFromLongitude(longitude: number): string {
+  if (!Number.isFinite(longitude)) return 'UTC';
+  const wrapped = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  const offsetHours = Math.max(-14, Math.min(14, Math.round(wrapped / 15)));
+  if (offsetHours === 0) return 'UTC';
+  return offsetHours > 0 ? `Etc/GMT-${offsetHours}` : `Etc/GMT+${Math.abs(offsetHours)}`;
+}
+
+/** Where a zone came from. A published zone is worth more than a derived one. */
+export const TIME_ZONE_BASES = ['published', 'derived_from_longitude', 'unknown'] as const;
+export type TimeZoneBasis = (typeof TIME_ZONE_BASES)[number];
+
+/**
+ * The zones to plan in, and how much they are worth.
+ *
+ * One place that answers "what clock is this destination on", so no consumer
+ * has to write `?? 'UTC'` again. Every remaining occurrence of that string in a
+ * planning path is a bug this function exists to make unnecessary.
+ */
+export function resolveTimeZones(input: {
+  published: readonly string[];
+  center: { lat: number; lng: number };
+}): { zones: string[]; basis: TimeZoneBasis } {
+  const published = input.published.filter((zone) => zone.trim().length > 0);
+  if (published.length > 0) return { zones: [...published], basis: 'published' };
+  return {
+    zones: [deriveTimeZoneFromLongitude(input.center.lng)],
+    basis: 'derived_from_longitude',
+  };
+}

@@ -60,6 +60,16 @@ export interface SaveResult {
 export async function saveDraftAction(
   tripId: string,
   answers: QuestionnaireAnswers,
+  /**
+   * Where they had got to, saved with what they had said.
+   *
+   * Optional so a caller that only has answers cannot accidentally reset the
+   * position — see `saveAnswers`. Passed on going *backwards* as well as
+   * forwards, which is the half that was missing: `goBack` never saved, so an
+   * edit made on a step and then stepped away from was lost until the traveller
+   * happened to come forward through it again.
+   */
+  step?: number,
 ): Promise<SaveResult> {
   const parsed = questionnaireAnswersSchema.safeParse(answers);
   if (!parsed.success) {
@@ -67,7 +77,7 @@ export async function saveDraftAction(
   }
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
-    saveAnswers(tripId, parsed.data);
+    saveAnswers(tripId, parsed.data, step);
     return { ok: true };
   } catch (error) {
     console.error('Failed to save questionnaire draft', error);

@@ -132,13 +132,22 @@ test('the plan survives a refresh unchanged, then changes when the preference do
   const url = page.url();
   const tripPath = url.slice(0, url.lastIndexOf('/'));
 
-  // Change how they want to eat, and nothing else.
+  /*
+   * Change how they want to eat, and nothing else.
+   *
+   * Returning to the questionnaire lands on the step the traveller had reached
+   * — the review, since they finished it — rather than on step one. That is the
+   * point of storing the position, and the review screen is the right place to
+   * arrive: it lists every answer with a control that jumps straight to the one
+   * being changed. So this uses that control instead of walking the whole form
+   * again, which also means the specification exercises the affordance rather
+   * than routing around it.
+   */
   await page.goto(`${tripPath}/questionnaire`);
-  await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
-  for (const heading of ['How should the days feel?', 'What is the spending style?', 'How do you want to eat?']) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
+  const jump = page.getByRole('button', { name: 'Change Eating' });
+  await expect(jump).toBeVisible();
+  await jump.click();
+  await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
   await page.getByRole('radio', { name: /Keep it cheap/ }).check();
   await finishQuestionnaire(page);
   await buildTrip(page);

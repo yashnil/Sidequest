@@ -11,13 +11,30 @@ export function cx(...values: (string | false | null | undefined)[]): string {
   return values.filter(Boolean).join(' ');
 }
 
+/**
+ * The focus treatment is stated here as well as in `globals.css`.
+ *
+ * The base layer's `:focus-visible` rule sets an offset ring, and a button that
+ * later grows a `focus:` or `focus-visible:outline-*` utility — or sits inside a
+ * surface that resets outlines — silently loses it. Stating the ring *and* its
+ * offset on the component means the offset cannot be dropped by a utility that
+ * only meant to change the colour: without the offset the ring is drawn on the
+ * button's own edge, which on a filled primary button is invisible.
+ */
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
 
 const BUTTON_VARIANTS = {
   primary: 'bg-ink text-paper hover:bg-ink-muted',
   secondary: 'border border-rule bg-paper-raised text-ink hover:border-ink-faint',
-  ghost: 'text-ink-muted hover:text-ink hover:bg-paper-sunk',
+  /*
+   * `text-ink-muted` here was the product's quiet *action* colour sitting at the
+   * same weight as its quiet *prose* colour — 8.1:1 is a fine ratio and a bad
+   * signal, because on cream a ghost button then reads as a caption rather than
+   * as something you can press. Ghost actions are still secondary; they are made
+   * secondary by having no ground, not by being faded.
+   */
+  ghost: 'text-ink hover:text-pine hover:bg-paper-sunk',
 } as const;
 
 /**
@@ -146,11 +163,25 @@ const BAND_TONE: Record<FitBand, BadgeTone> = {
  * Five coarse steps and a word. The underlying score is a weighted heuristic, not
  * a measurement, so showing "83.4% match" would be a lie told with a decimal
  * point.
+ *
+ * The dashes used to be `aria-hidden` with no replacement, which was right when
+ * the word beside them said everything. It stopped being right once the board
+ * put seventeen of these on one screen: sighted readers use the dashes to
+ * *compare* cards at a glance, and a screen-reader user had no equivalent — they
+ * got six repetitions of "Strong fit" with nothing ordering them. `role="img"`
+ * with a count restores the comparison without reading a gradient aloud.
+ *
+ * The visible key for what the dashes mean is `FitMeterLegend`, rendered once per
+ * board rather than once per card.
  */
 export function FitMeter({ band, label, meter }: { band: FitBand; label: string; meter: number }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1.5">
-      <span className="flex gap-[3px]" aria-hidden="true">
+      <span
+        className="flex gap-[3px]"
+        role="img"
+        aria-label={`How well this fits you: ${meter} out of 5`}
+      >
         {[1, 2, 3, 4, 5].map((step) => (
           <span
             key={step}
@@ -167,6 +198,48 @@ export function FitMeter({ band, label, meter }: { band: FitBand; label: string;
       </span>
       <Badge tone={BAND_TONE[band]}>{label}</Badge>
     </span>
+  );
+}
+
+/**
+ * WHAT THE FIVE DASHES MEAN, SAID ONCE.
+ *
+ * The meter shipped without a key. Five dashes with a word beside them look like
+ * a rating out of five, and nothing on the board said what the five were of —
+ * popularity, our confidence, how good the place is — so the one control that
+ * carries the product's whole argument was decorative to a first-time reader.
+ *
+ * Once per board rather than once per card: seventeen copies of a legend is the
+ * same mistake as seventeen copies of a weather caveat.
+ */
+export function FitMeterLegend({ className }: { className?: string }) {
+  return (
+    /*
+      Each swatch and its meaning are one unbreakable unit.
+
+      Laid out as five separate flex children, the line wrapped between a swatch
+      and the phrase it explains — so the legend read as two rows of dashes and
+      two orphaned sentences, which is worse than no legend at all.
+    */
+    <p className={cx('flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted', className)}>
+      <span className="inline-flex items-center gap-2">
+        <span aria-hidden="true" className="flex gap-[3px]">
+          {[1, 2, 3, 4, 5].map((step) => (
+            <span key={step} className="h-1.5 w-4 rounded-full bg-pine" />
+          ))}
+        </span>
+        <span>built for the trip you described</span>
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <span aria-hidden="true" className="flex gap-[3px]">
+          <span className="h-1.5 w-4 rounded-full bg-pine" />
+          {[2, 3, 4, 5].map((step) => (
+            <span key={step} className="h-1.5 w-4 rounded-full bg-rule" />
+          ))}
+        </span>
+        <span>here for completeness — never a popularity ranking</span>
+      </span>
+    </p>
   );
 }
 
@@ -192,41 +265,62 @@ const CATEGORY_MARK: Record<PlaceCategory, string> = {
   wildlife_area: 'M6 20 q0 -8 6 -8 t6 8 M9 9 q-2 -4 0 -6 M15 9 q2 -4 0 -6',
 };
 
-const PLATE_PALETTES = [
-  ['#2f5d50', '#7f9e8f'],
-  ['#3c5a77', '#8fa9bf'],
-  ['#a85c22', '#d3a172'],
-  ['#5a5340', '#9c9480'],
-  ['#4a3f55', '#9b8fa6'],
-  ['#1f4b4a', '#79a3a0'],
-];
+/**
+ * THE PLATE'S HUE IS A CATEGORY, NOT A HASH.
+ *
+ * This used to pick one of six saturated palettes from a hash of the place id,
+ * which meant a row of three lakes read orange, purple and green. Every card on
+ * the board carried a strong colour that encoded *nothing* — the eye reads a
+ * colour difference as a meaning difference, so the board was making a claim on
+ * every card and the claim was noise. Worse, the palettes were the same weight
+ * as the product's semantic colours (pine confirms, amber cautions, clay
+ * blocks), so decoration and status competed.
+ *
+ * Five families, each a single hue, deliberately close together and deliberately
+ * quiet: water, high ground, volcanic ground, built places, and open country. A
+ * lake looks like a lake wherever it appears, and two lakes look like each
+ * other. `PLATE_HUE` is exported so `DestinationImage`'s generated graphic can
+ * share it rather than invent a second system.
+ */
+export const PLATE_HUE: Record<PlaceCategory, number> = {
+  lake: 199,
+  hot_spring: 190,
+  viewpoint: 158,
+  day_hike: 150,
+  easy_walk: 145,
+  gondola_or_tram: 164,
+  geothermal: 22,
+  national_monument: 28,
+  scenic_drive: 38,
+  historic_site: 216,
+  museum: 222,
+  town_and_food: 228,
+  wildlife_area: 96,
+};
 
-function hashId(id: string): number {
-  let hash = 0;
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
-  }
-  return hash;
+/**
+ * Saturation and lightness are constants, not variables.
+ *
+ * Holding both fixed is what makes the hue the only thing that differs, and
+ * therefore the only thing that means anything. 22% is low enough that the plate
+ * sits behind the card's type rather than shouting over it.
+ */
+function plateGradient(category: PlaceCategory): string {
+  const hue = PLATE_HUE[category];
+  return `linear-gradient(145deg, hsl(${hue} 22% 40%), hsl(${hue} 18% 62%))`;
 }
 
 export function PlacePlate({
-  placeId,
   category,
   className,
 }: {
-  placeId: string;
   category: PlaceCategory;
   className?: string;
 }) {
-  const hash = hashId(placeId);
-  const palette = PLATE_PALETTES[hash % PLATE_PALETTES.length] ?? PLATE_PALETTES[0]!;
-  const [from, to] = palette;
-  const angle = 120 + (hash % 5) * 15;
-
   return (
     <div
       className={cx('relative overflow-hidden', className)}
-      style={{ background: `linear-gradient(${angle}deg, ${from}, ${to})` }}
+      style={{ background: plateGradient(category) }}
       aria-hidden="true"
     >
       <svg
@@ -352,7 +446,24 @@ export function Choice({
         disabled
           ? 'cursor-not-allowed border-dashed border-rule opacity-60'
           : checked
-            ? 'cursor-pointer border-pine bg-pine-soft'
+            ? /*
+               * A CHOSEN OPTION HAS TO LOOK CHOSEN.
+               *
+               * `border-pine bg-pine-soft` was a 4% mint wash behind a 1px
+               * border — at arm's length, on a warm paper ground, next to five
+               * unchosen siblings, it is very close to nothing. The
+               * questionnaire is nine screens of these, and a traveller who
+               * cannot see which option they just picked cannot check their own
+               * answers, which is the whole promise of the review step.
+               *
+               * Three redundant signals rather than a darker tint alone: the
+               * ground, a doubled border in the strong pine, and a check glyph.
+               * The glyph is `aria-hidden` — the input's own checked state is
+               * what assistive technology reads, and a tick inside the label
+               * would be spoken as part of the option's name and would land in
+               * every `getByRole(..., { name })` in the suite.
+               */
+              'cursor-pointer border-2 border-pine-strong bg-pine-soft px-[13px] py-[9px]'
             : 'cursor-pointer border-rule bg-paper-raised hover:border-ink-faint',
       )}
     >
@@ -365,7 +476,19 @@ export function Choice({
         onChange={onChange}
         className={cx(OVERLAY_INPUT, disabled && 'cursor-not-allowed')}
       />
-      <span className={cx('text-sm', checked ? 'font-medium text-pine' : 'text-ink')}>{label}</span>
+      <span
+        className={cx(
+          'flex items-start gap-1.5 text-sm',
+          checked ? 'font-semibold text-pine-strong' : 'text-ink',
+        )}
+      >
+        {checked ? (
+          <span aria-hidden="true" className="leading-tight">
+            ✓
+          </span>
+        ) : null}
+        <span className="min-w-0">{label}</span>
+      </span>
       {detail ? <span className="mt-0.5 text-xs leading-relaxed text-ink-muted">{detail}</span> : null}
     </label>
   );

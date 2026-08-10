@@ -197,6 +197,17 @@ test('refresh, leave and return is safe at every phase', async ({ page }) => {
      * the suite pass.
      */
     await page.getByRole('heading', { level: 1 }).first().waitFor({ state: 'attached' });
+    /*
+     * And wait for the loading shell to be *gone*, not merely for a heading to
+     * exist — because the shell has one too.
+     *
+     * The comment above is right about the mechanism and was no longer
+     * sufficient: two more routes on this list gained a `loading.tsx` in this
+     * pass, which widened exactly the window it describes. Every shell now
+     * carries `data-loading`, so "the page has settled" is a state the suite can
+     * wait for rather than a duration it has to guess at.
+     */
+    await expect(page.locator('[data-loading]')).toHaveCount(0);
     await page.reload();
     /*
      * Back and forward, and the forward is allowed to be refused.

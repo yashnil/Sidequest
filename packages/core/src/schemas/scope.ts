@@ -165,6 +165,19 @@ export const geographicScopeSchema = z.object({
    * an hour.
    */
   timeZones: z.array(z.string().min(1)).min(1),
+  /**
+   * WHERE THE ZONE CAME FROM.
+   *
+   * `published` is a real political zone from the resolver. `derived_from_longitude`
+   * is solar time computed from the destination's own coordinates — right to
+   * within half an hour, and blind to daylight saving and to countries that have
+   * adopted a neighbour's clock. A consumer scheduling against a published
+   * timetable needs to know which it has.
+   *
+   * Optional so scopes written before this field existed still parse; absent
+   * reads as "not recorded", never as `published`.
+   */
+  timeZoneBasis: z.enum(['published', 'derived_from_longitude', 'unknown']).optional(),
 
   shape: scopeShapeSchema,
   includedAreas: z.array(namedAreaSchema).default([]),

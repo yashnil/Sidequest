@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   AMBIGUITY_REASON_COPY,
   COVERAGE_DIMENSION_LABELS,
@@ -55,6 +56,7 @@ import {
   compilationSnapshotAction,
   confirmScopeAction,
   proposeScopeAction,
+  reopenPreflightAction,
   resolveDestinationAction,
   retryCompilationAction,
   saveClarificationAnswersAction,
@@ -169,6 +171,15 @@ export interface PlanFlowProps {
   workPlan: { step: string; decision: string; reason: string; items?: number }[] | null;
   providerMessage: string;
   providerReady: boolean;
+  /**
+   * What a traveller can do when compilation cannot run.
+   *
+   * Empty when nothing is blocked. Never empty when something is — see
+   * `providerReadiness`, where the shape of this field is the whole point.
+   */
+  providerNextActions: { label: string; href: string; kind: 'primary' | 'secondary' }[];
+  /** Configuration variable names, for whoever deployed this. Never values. */
+  providerMissing: string[];
 }
 
 export function PlanFlow(props: PlanFlowProps) {
@@ -231,7 +242,15 @@ export function PlanFlow(props: PlanFlowProps) {
 function headingFor(props: PlanFlowProps): string {
   switch (props.step) {
     case 'destination':
-      return `Looking up “${props.destinationQuery}”`;
+      /*
+       * The heading has to agree with the panel underneath it. It said
+       * "Looking up X" over a message explaining that nothing was being looked
+       * up, which is how a blocked state reads as a slow one and a traveller
+       * waits for something that is never going to happen.
+       */
+      return props.providerReady
+        ? `Looking up “${props.destinationQuery}”`
+        : `We cannot research “${props.destinationQuery}” on this build`;
     case 'interpretation':
       return `More than one place is called “${props.destinationQuery}”`;
     case 'not_a_place':
@@ -272,6 +291,8 @@ function DestinationStep({
   onRun,
   providerReady,
   providerMessage,
+  providerNextActions,
+  providerMissing,
 }: StepProps) {
   const fired = useRef(false);
 
@@ -281,16 +302,73 @@ function DestinationStep({
     onRun(() => resolveDestinationAction(tripId), 'We could not look that up.');
   }, [tripId, providerReady, onRun]);
 
+  /**
+   * THE STATE THAT USED TO BE A TRAP.
+   *
+   * A founder finished the composer, arrived here, and read one amber sentence
+   * about compilation being switched off — under a heading that still said
+   * "Looking up …", with no control anywhere on the screen. The trip row
+   * existed, so every refresh returned to the same place. That is the exact
+   * shape section 18.1 forbids: an earlier answer the traveller cannot get back
+   * behind.
+   *
+   * Three things changed. The heading now says what is true rather than what
+   * would have been happening. The traveller gets real routes out — one that
+   * plans a destination this deployment *can* build today, and one that returns
+   * them to their own answers with the trip intact. And the setup detail is
+   * addressed to whoever deployed this, in a disclosure, in their language,
+   * naming variables and never values.
+   */
   if (!providerReady) {
     return (
-      <>
-        <Panel className="border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
+      <div data-testid="compile-unavailable">
+        <p className="measure text-ink-muted">
+          You asked for <strong className="font-medium text-ink">{destinationQuery}</strong>. This
+          deployment cannot research somewhere new right now, so we are not going to leave you
+          waiting on a build that will not start.
+        </p>
+
+        <Panel className="mt-5 border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
           {providerMessage}
         </Panel>
-        <p className="mt-4 text-sm text-ink-muted">
-          You typed <strong className="font-medium text-ink">{destinationQuery}</strong>.
-        </p>
-      </>
+
+        {providerNextActions.length > 0 ? (
+          <div className="mt-5 flex flex-wrap gap-3">
+            {providerNextActions.map((action) => (
+              <Link
+                key={action.href}
+                href={action.href === 'edit' ? `/trips/${tripId}/edit` : action.href}
+                className={buttonClass(action.kind === 'primary' ? 'primary' : 'ghost')}
+              >
+                {action.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+
+        {providerMissing.length > 0 ? (
+          <details className="mt-6 text-sm text-ink-muted">
+            <summary className={cx('cursor-pointer', FOCUS_RING)}>
+              Setting this up (for whoever deployed Sidequest)
+            </summary>
+            <p className="mt-2">
+              Compilation needs the following configured. These are variable names — no value is
+              ever read or shown here.
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {providerMissing.map((name) => (
+                <li key={name}>
+                  <code className="text-ink">{name}</code>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              <code className="text-ink">npm run doctor</code> reports the same thing from a
+              terminal, before anybody starts a questionnaire.
+            </p>
+          </details>
+        ) : null}
+      </div>
     );
   }
 
@@ -405,7 +483,7 @@ function ambiguityCopy(reason: string): string | null {
   return (AMBIGUITY_REASON_COPY as Record<string, string | undefined>)[reason] ?? null;
 }
 
-function NotAPlaceStep({ destinationQuery }: PlanFlowProps) {
+function NotAPlaceStep({ tripId, destinationQuery }: PlanFlowProps) {
   return (
     <>
       <p className="measure text-ink-muted">
@@ -416,10 +494,18 @@ function NotAPlaceStep({ destinationQuery }: PlanFlowProps) {
         We would rather ask than guess. Picking the nearest thing with a similar name is how a trip
         to a region becomes a trip to a lake that happens to share a word with it.
       </Panel>
-      <div className="mt-8">
-        <a className={buttonClass('primary')} href="/trips/new">
-          Start again with a place
-        </a>
+      <div className="mt-8 flex flex-wrap gap-3">
+        {/*
+          Edit rather than restart. What the traveller typed was not a place, but
+          everything else they said — dates, party, budget, must-dos — still is,
+          and sending them to a blank form throws all of it away to fix one box.
+        */}
+        <Link className={buttonClass('primary')} href={`/trips/${tripId}/edit`}>
+          Name a place instead
+        </Link>
+        <Link className={buttonClass('ghost')} href="/trips/new">
+          Start a different trip
+        </Link>
       </div>
     </>
   );
@@ -662,9 +748,15 @@ function PreflightStep({ tripId, preflight, destinationName, pending, onRun }: S
         >
           {pending ? 'Working…' : 'Go and research this'}
         </button>
-        <a className={buttonClass('ghost')} href="/trips/new">
+        {/*
+          This sat next to the primary "go and research this" and destroyed the
+          trip when pressed — the most dangerous adjacency in the product, since
+          the two are one tab apart and the destructive one was unlabelled as
+          such. It edits now, and nothing on this screen discards anything.
+        */}
+        <Link className={buttonClass('ghost')} href={`/trips/${tripId}/edit`}>
           Change the trip
-        </a>
+        </Link>
       </div>
     </div>
   );
@@ -832,12 +924,29 @@ function ClarificationStep({ tripId, questions, answers, pending, onRun }: StepP
   return (
     <>
       <p className="measure text-ink-muted">
-        These change the answer, so we would rather ask than guess.
+        These change the answer, so we would rather ask than guess. There are{' '}
+        {questions.length === 1 ? 'one of them' : `${questions.length} of them`}, and each one is
+        here because of something we found while reading this region.
       </p>
 
       <div className="mt-8 space-y-8">
         {questions.map((question) => (
           <Fieldset key={question.id} legend={question.question} hint={question.whyItMatters}>
+            {/*
+              WHAT MADE US ASK, SHOWN RATHER THAN LOGGED.
+
+              A question that can point at the evidence behind it is a question a
+              traveller can judge — and a question that cannot is a form field
+              however conversationally it is worded. This is also the fastest way
+              to notice a bad rule: an evidence line that reads as a non-sequitur
+              is a rule firing when it should not.
+            */}
+            {question.evidenceThatTriggeredIt && question.evidenceThatTriggeredIt.length > 0 ? (
+              <p className="mb-3 rounded-lg border border-dashed border-rule bg-paper-sunk px-3 py-2 text-sm text-ink-muted">
+                <span className="font-medium text-ink">What made us ask: </span>
+                {question.evidenceThatTriggeredIt.map((entry) => entry.detail).join(' ')}
+              </p>
+            ) : null}
             <div className="grid gap-2 sm:grid-cols-2">
               {question.options.map((option) => (
                 <Choice
@@ -868,25 +977,54 @@ function ClarificationStep({ tripId, questions, answers, pending, onRun }: StepP
         ))}
       </div>
 
-      <div className="mt-10 flex items-center justify-between gap-3 border-t border-rule pt-6">
-        <span className="text-xs text-ink-faint">Saved as you go</span>
+      {/*
+        WHAT EACH ANSWER WOULD DO, WHERE THE RULE SAID.
+
+        Rendered under the options rather than as a tooltip, because "why does
+        this matter" is answered per option and not once per question — and
+        because a rule whose options all produce the same sentence is a question
+        that should never have been asked, which is visible here and nowhere
+        else.
+      */}
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-6">
+        {/*
+          BACK, WHICH THIS STEP DID NOT HAVE.
+
+          Section 18.1 requires it on every step, and this was one of two that
+          offered no way at all to revisit an earlier answer — the traveller's
+          only route back was the browser. It returns to the region preview,
+          which is the step before this one, with every answer already saved.
+        */}
         <button
           type="button"
-          className={buttonClass('primary')}
-          disabled={pending || missing.length > 0}
+          className={buttonClass('ghost')}
+          disabled={pending}
           onClick={() =>
-            onRun(async () => {
-              const saved = await saveClarificationAnswersAction(
-                tripId,
-                Object.entries(given).map(([questionId, values]) => ({ questionId, values })),
-              );
-              if (!saved.ok) return saved;
-              return proposeScopeAction(tripId);
-            }, 'We could not save those answers.')
+            onRun(() => reopenPreflightAction(tripId), 'We could not go back just then.')
           }
         >
-          {pending ? 'Saving…' : 'Continue'}
+          Back to the region
         </button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-ink-faint">Saved as you go</span>
+          <button
+            type="button"
+            className={buttonClass('primary')}
+            disabled={pending || missing.length > 0}
+            onClick={() =>
+              onRun(async () => {
+                const saved = await saveClarificationAnswersAction(
+                  tripId,
+                  Object.entries(given).map(([questionId, values]) => ({ questionId, values })),
+                );
+                if (!saved.ok) return saved;
+                return proposeScopeAction(tripId);
+              }, 'We could not save those answers.')
+            }
+          >
+            {pending ? 'Saving…' : 'Continue'}
+          </button>
+        </div>
       </div>
     </>
   );
@@ -1130,9 +1268,9 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
           </button>
         ) : null}
         {failed ? (
-          <a className={buttonClass('secondary')} href="/trips/new">
+          <Link className={buttonClass('secondary')} href={`/trips/${tripId}/edit`}>
             Change the trip
-          </a>
+          </Link>
         ) : (
           <button
             type="button"

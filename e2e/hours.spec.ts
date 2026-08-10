@@ -217,9 +217,17 @@ test('changing the dates recalculates availability rather than reusing it', asyn
   await reachBoard(page, MIDWEEK);
   await build(page);
 
-  // The plan is different and the conflict is stated, not silently dropped.
-  await expect(page.getByText('2026-08-11')).toBeVisible();
-  await expect(page.getByText('2026-08-15')).toHaveCount(0);
+  /*
+   * The plan is different and the conflict is stated, not silently dropped.
+   *
+   * Asserted on the *rendered* date rather than the ISO string it is built
+   * from. Day headings used to read "Day 1" followed by "2026-08-12" with no
+   * separator — an accessible name of "Day 12026-08-12" — and now read
+   * "Day 1 · Wed 12 Aug". The claim here is unchanged: the rebuilt plan covers
+   * the new span and none of the old one.
+   */
+  await expect(page.getByText('Tue 11 Aug').first()).toBeVisible();
+  await expect(page.getByText('Sat 15 Aug')).toHaveCount(0);
 });
 
 test('a manual pick that cannot be scheduled stays visible with a way out', async ({ page }) => {
@@ -237,8 +245,12 @@ test('a manual pick that cannot be scheduled stays visible with a way out', asyn
     await expect(page.getByRole('link', { name: 'Change what is on the board' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Change how you are getting around' })).toBeVisible();
   } else {
-    // Scheduled — then it must be on a Friday to Monday.
-    await expect(page.getByText(/2026-08-14|2026-08-15/).first()).toBeVisible();
+    /*
+     * Scheduled — then it must be on a Friday to Monday. Matched on the
+     * rendered day heading rather than the ISO date it is built from, for the
+     * same reason as the specification above: day headings are human dates now.
+     */
+    await expect(page.getByText(/Fri 14 Aug|Sat 15 Aug/).first()).toBeVisible();
   }
 });
 

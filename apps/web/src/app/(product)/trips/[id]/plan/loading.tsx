@@ -8,7 +8,7 @@ import { Panel } from '@/components/ui';
  */
 export default function PlanLoading() {
   return (
-    <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
+    <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14" data-loading="true">
       <h1 className="font-display text-3xl leading-tight text-ink">Opening your trip</h1>
       <p className="mt-3 text-ink-muted">Reading where you got to.</p>
       <Panel className="mt-8 p-6">

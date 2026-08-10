@@ -136,6 +136,137 @@ test('a winter trip is told plainly what is shut rather than shown a broken plan
   await expect(page.getByRole('heading', { name: 'Convict Lake', exact: true })).toBeVisible();
 });
 
+test('a card opens for the detail and closes again, keeping the decision made on it', async ({
+  page,
+}) => {
+  /**
+   * The board was 13,930px tall at 1440 and 25,270px at 390 because every card
+   * printed its description, its weather caveat and its whole argument at once.
+   * The argument is now one disclosure away — which is only acceptable if it is
+   * genuinely still there, and if opening it is not a decision about the place.
+   */
+  await createTrip(page, AUGUST_TRIP);
+  await completeQuestionnaire(page);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await expect(page).toHaveURL(/\/discover$/);
+
+  const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
+  const details = convict.locator('details', { hasText: 'Why this fits you' }).first();
+  const reasons = details.getByRole('listitem');
+
+  // Collapsed on arrival: the argument is available, not imposed.
+  expect(await details.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(false);
+  await expect(reasons.first()).toBeHidden();
+
+  // Mark it, then open it. The mark must be untouched by the disclosure.
+  await convict.getByRole('button', { name: 'Maybe' }).click();
+  await expect(convict.getByRole('button', { name: 'Maybe' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+
+  await convict.getByText('Why this fits you').click();
+  await expect(details).toHaveAttribute('open', '');
+  await expect(reasons.first()).toBeVisible();
+
+  await convict.getByText('Why this fits you').click();
+  expect(await details.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(false);
+  await expect(convict.getByRole('button', { name: 'Maybe' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+
+  // And the decision-critical facts never went behind the disclosure at all.
+  await expect(convict.getByText('From base')).toBeVisible();
+  await expect(convict.getByText('Effort')).toBeVisible();
+});
+
+test('filters narrow the board and give every card back', async ({ page }) => {
+  await createTrip(page, AUGUST_TRIP);
+  await completeQuestionnaire(page);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await expect(page).toHaveURL(/\/discover$/);
+
+  const board = page.getByTestId('discovery-board');
+  const cards = board.getByRole('article');
+  // `count()` does not wait for anything, so the board has to be asserted
+  // present before it is counted — otherwise this measures an empty document.
+  await expect(cards.first()).toBeVisible();
+  const before = await cards.count();
+  expect(before, 'the board should have cards to filter').toBeGreaterThan(1);
+
+  // Something the traveller has decided on, so we can prove a filter is a view
+  // rather than an edit.
+  const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
+  await convict.getByRole('button', { name: 'Maybe' }).click();
+  await expect(convict.getByRole('button', { name: 'Maybe' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+
+  const rail = page.getByTestId('board-filters');
+  await expect(rail).toBeVisible();
+
+  // The narrowest distance step this board offers.
+  const nearest = rail.getByRole('radio').nth(1);
+  await nearest.check();
+  await expect(nearest).toBeChecked();
+
+  const narrowed = await cards.count();
+  expect(narrowed, 'the filter should remove something').toBeLessThan(before);
+  expect(narrowed, 'the filter should keep something').toBeGreaterThan(0);
+  await expect(page.getByTestId('board-filter-count')).toContainText(
+    `Showing ${narrowed} of ${before}`,
+  );
+
+  // Reversible, and the mark survived being filtered out and back in.
+  await page.getByTestId('board-filter-clear').click();
+  await expect(cards).toHaveCount(before);
+  await expect(
+    page
+      .getByRole('article')
+      .filter({ hasText: 'Convict Lake' })
+      .first()
+      .getByRole('button', { name: 'Maybe' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('things to skip are one line each, and can still be put back', async ({ page }) => {
+  /**
+   * Six full-size cards arguing for places we have just explained are wrong for
+   * this trip is about two thousand pixels of the board. The group is still
+   * complete and still explained — it is simply a list.
+   */
+  await createTrip(page, JANUARY_TRIP);
+  await completeQuestionnaire(page);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+
+  const list = page.getByTestId('skip-list');
+  await expect(list).toBeVisible();
+
+  const rows = list.getByRole('article');
+  await expect(rows.first()).toBeVisible();
+  const count = await rows.count();
+  expect(count, 'the January board should have things to skip').toBeGreaterThan(0);
+
+  // Compact: a row is a fraction of the height of a card in a normal group.
+  const card = page
+    .getByRole('article')
+    .filter({ hasText: 'Convict Lake' })
+    .first();
+  const cardBox = await card.boundingBox();
+  const rowBox = await rows.first().boundingBox();
+  expect(cardBox, 'a normal card should have a box').not.toBeNull();
+  expect(rowBox, 'a skip row should have a box').not.toBeNull();
+  expect(rowBox!.height).toBeLessThan(cardBox!.height);
+
+  // Still says why, and still lets the traveller disagree with us.
+  await expect(rows.first().getByText(/Why this will not work|Why we would skip it/)).toBeVisible();
+  const maybe = rows.first().getByRole('button', { name: 'Maybe' });
+  await maybe.click();
+  await expect(maybe).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('the questionnaire adapts and refuses to continue on an empty profile', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
 
@@ -182,6 +313,22 @@ test('questionnaire progress survives a refresh mid-flow', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
 
   await page.reload();
+
+  /*
+   * BOTH HALVES OF "PROGRESS", NOW THAT BOTH ARE KEPT.
+   *
+   * This used to assert only that the answer survived — and it could only do
+   * that because a refresh dumped the traveller back on step one, where the
+   * radio happened to be on screen. The position was React state while the
+   * answers were saved, so a refresh on step seven of nine restarted at step
+   * one with everything intact and nothing to say which answers had been
+   * reached deliberately, under a header reading "Saved as you go".
+   *
+   * Progress is the step *and* the answers. So: they come back where they were,
+   * and the answer is still there when they step back to it.
+   */
+  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('radio', { name: 'Stargazing: Core' })).toBeChecked();
 });
 

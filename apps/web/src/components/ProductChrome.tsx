@@ -32,7 +32,17 @@ export function ProductChrome({ children }: { children: React.ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-30 border-b border-rule bg-paper/85 backdrop-blur-sm">
+      {/*
+        OPAQUE, NOT FROSTED.
+
+        `bg-paper/85 backdrop-blur-sm` let card text ghost through the bar as it
+        scrolled under: a blur that small does not dissolve 14px type, it smears
+        it, so the wordmark sat on top of a legible-but-wrong second line of text
+        on every long page in the product — the Discovery Board and the itinerary
+        being the two longest. A solid ground costs nothing and is the only way a
+        sticky header over dense editorial content stays readable.
+      */}
+      <header className="sticky top-0 z-30 border-b border-rule bg-paper">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3.5 sm:px-8">
           <Link
             href="/"

@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import {
+  applyComposer,
   applyInterpretation,
   applyThemes,
+  composerAnsweredFields,
   countTripDays,
   defaultAnswers,
   normalizeAnswers,
@@ -9,7 +11,7 @@ import {
 } from '@sidequest/core';
 import { QuestionnaireWizard } from '@/components/QuestionnaireWizard';
 import { InterpretationPanel } from '@/components/InterpretationPanel';
-import { getAnswers, getTrip } from '@/lib/db/repository';
+import { getAnswers, getDraftStep, getTrip } from '@/lib/db/repository';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { resolveTripRegion } from '@/lib/region';
 
@@ -80,11 +82,36 @@ export default async function QuestionnairePage({
    * arrived at a board ranked on hiking, nature walks and viewpoints — the
    * defaults — with no sign anywhere that their answers had stopped mattering.
    */
+  /*
+   * `applyComposer` runs *before* the themes and the chips, and that ordering
+   * matters as much as its presence.
+   *
+   * It carries the five things the composer asked outright — transport, pace,
+   * budget, crowds, outdoor intensity — which were being collected, stored, and
+   * then silently replaced by `defaultAnswers`. The worst of them was
+   * `willDrive: true`: somebody who chose trains and buses on the first screen
+   * reached this one with "You will have a car" already ticked.
+   *
+   * It goes first so that themes and interpreted chips, which only ever *raise*
+   * interests, still layer over a truthful base rather than over a fiction.
+   */
   const seeded =
     saved ??
-    applyInterpretation(applyThemes(defaultAnswers(context), intent?.composer?.themes), interpretation)
-      .answers;
+    applyInterpretation(
+      applyThemes(applyComposer(defaultAnswers(context), intent?.composer), intent?.composer?.themes),
+      interpretation,
+    ).answers;
   const initialAnswers = normalizeAnswers(seeded, context);
+
+  /*
+   * Which of those five the composer actually answered, so the wizard can show
+   * them as confirmable assumptions instead of asking a second time. Computed
+   * from the same conditions `applyComposer` uses, so a field can never be both
+   * prefilled and re-asked.
+   */
+  const alreadyAnswered = saved
+    ? []
+    : composerAnsweredFields(intent?.composer, initialAnswers.mobilityLimited);
 
   /*
    * A KNOWN HEADING-ORDER DEFECT, LEFT IN PLACE AND RECORDED.
@@ -117,7 +144,13 @@ export default async function QuestionnairePage({
           avoid={intent?.composer?.avoid ?? ''}
         />
       ) : null}
-      <QuestionnaireWizard tripId={id} context={context} initialAnswers={initialAnswers} />
+      <QuestionnaireWizard
+        tripId={id}
+        context={context}
+        initialAnswers={initialAnswers}
+        initialStep={getDraftStep(id)}
+        prefilled={alreadyAnswered}
+      />
     </>
   );
 }

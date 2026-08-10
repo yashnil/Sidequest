@@ -267,7 +267,24 @@ describe('scope derivation', () => {
       },
       center: { lat: 38.72, lng: -9.14 },
     };
-    const scope = deriveScope({
+    /*
+     * A CAR-FREE TRAVELLER'S REACH DEPENDS ON WHETHER WE CAN MEASURE TRANSIT.
+     *
+     * The original form of this test answered the car question `no` and
+     * asserted a *walking* clip, which was right while every car-free traveller
+     * was mapped onto walking reach. Phase 15 separated those two questions —
+     * "will you have a car" and "how will you get around without one" — and the
+     * first attempt at the separation widened the reach unconditionally. That
+     * had a consequence worse than the narrowness it fixed: above twelve
+     * kilometres `matrixModeFor` switches to the road network, so every leg a
+     * car-free traveller saw would have become a *driving* duration presented
+     * as their travel time.
+     *
+     * So reach is now gated on `transitMeasurable`, and this asserts both sides
+     * of that gate rather than one behaviour. Nothing configures a transit
+     * provider today, which is why the first case is the one that ships.
+     */
+    const withoutCar = deriveScope({
       candidate: wide,
       clarifications: {
         schemaVersion: CLARIFICATION_SET_VERSION,
@@ -277,15 +294,36 @@ describe('scope derivation', () => {
       nights: 4,
       revision: 1,
     });
+    expect(withoutCar.transport.carAvailable).toBe(false);
 
-    expect(scope.shape.kind).toBe('bounds');
-    if (scope.shape.kind !== 'bounds') return;
-    const latSpanKm = (scope.shape.bounds.northEast.lat - scope.shape.bounds.southWest.lat) * 111;
-    // Four walking nights reach about twelve kilometres, not fifty.
+    expect(withoutCar.shape.kind).toBe('bounds');
+    if (withoutCar.shape.kind !== 'bounds') return;
+    const latSpanKm =
+      (withoutCar.shape.bounds.northEast.lat - withoutCar.shape.bounds.southWest.lat) * 111;
+    // Four nights without a measurable transit network reach about twelve
+    // kilometres, not fifty — the original claim, unchanged.
     expect(latSpanKm).toBeLessThan(30);
     // And the scope's own bounds agree with its shape, because everything
     // downstream reads one of the two and they must not disagree.
-    expect(scope.bounds).toEqual(scope.shape.bounds);
+    expect(withoutCar.bounds).toEqual(withoutCar.shape.bounds);
+
+    /*
+     * The day a transit provider exists, the same traveller reaches further —
+     * and only then, because only then is there something honest to measure the
+     * journey with.
+     */
+    const withTransit = deriveScope({
+      candidate: wide,
+      clarifications: {
+        schemaVersion: CLARIFICATION_SET_VERSION,
+        questions: [],
+        answers: [{ questionId: QUESTION_IDS.carAvailable, values: ['no'], answeredAt: 'x' }],
+      },
+      nights: 4,
+      revision: 1,
+      transitMeasurable: true,
+    });
+    expect(withTransit.reachRadiusKm!).toBeGreaterThan(withoutCar.reachRadiusKm!);
   });
 
   it('leaves a boundary alone when the trip can genuinely cross it', () => {

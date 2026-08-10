@@ -154,7 +154,17 @@ export function InterpretationPanel({
                   {!alreadyConfirmed ? (
                     <button
                       type="button"
-                      className={buttonClass('ghost', 'sm')}
+                      /*
+                       * A real touch target, not a small ghost button.
+                       *
+                       * WCAG 2.5.5's forty-four pixels, and this is the control
+                       * that most needs them: dismissing a reading we got wrong
+                       * is the traveller's only way to correct their own words
+                       * before anything is built on them. At the previous size
+                       * a browser suite lost presses to it on a phone — which
+                       * is the measurable version of a person tapping twice.
+                       */
+                      className={cx(buttonClass('ghost', 'sm'), 'min-h-11 shrink-0')}
                       onClick={() =>
                         setDropped((current) => {
                           const next = new Set(current);

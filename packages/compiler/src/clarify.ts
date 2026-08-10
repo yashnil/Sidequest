@@ -269,7 +269,25 @@ export function rebuildClarificationSet(
   input: ClarificationInput,
   previous?: ClarificationSet,
 ): ClarificationSet {
-  const questions = deriveClarificationQuestions(input);
+  const derived = deriveClarificationQuestions(input);
+  const owned = new Set<string>(Object.values(QUESTION_IDS));
+
+  /*
+   * QUESTIONS THIS BANK DID NOT WRITE ARE NOT THIS BANK'S TO DELETE.
+   *
+   * Rebuilding used to replace the question list wholesale, which was correct
+   * while this file was the only thing producing questions. It is not any more:
+   * `deriveAdaptiveQuestions` reads the preliminary scan and adds questions
+   * about *this* trip, and a rebuild triggered by an unrelated edit — a changed
+   * date, a chosen interpretation — would have deleted them along with whatever
+   * the traveller had answered.
+   *
+   * Ownership is by id rather than by a flag, because the ids are already the
+   * thing that has to be stable for an answer to keep matching its question.
+   */
+  const carried = (previous?.questions ?? []).filter((question) => !owned.has(question.id));
+  const questions = [...derived, ...carried];
+
   const live = new Set(questions.map((question) => question.id));
   const answers = (previous?.answers ?? []).filter((answer) => live.has(answer.questionId));
   return { schemaVersion: CLARIFICATION_SET_VERSION, questions, answers };

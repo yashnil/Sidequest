@@ -2,6 +2,17 @@ import type { PlaceEvidence } from '../schemas/evidence';
 import type { Place } from '../schemas/place';
 
 /**
+ * The standing model reaches consumers through the quality module's one door.
+ *
+ * `significance.ts` decides what prominence, local significance, hiddenness and
+ * crowd *are*, and this file decides what a candidate is worth given them —
+ * inputs and verdict, one module, one entry point. Anything that assesses a
+ * candidate needs both, and a second barrel entry would let a caller take the
+ * scores while skipping the rules below that say what may be ranked on.
+ */
+export * from './significance';
+
+/**
  * IS THIS WORTH A TRAVELLER'S TIME?
  *
  * The question the compiler could not answer before this module existed, and the
@@ -365,7 +376,17 @@ function decideOutcome(
     return 'scenic_detour';
   }
   if (signals.scale === 'micro') return 'support_stop';
-  if (signals.officialCorroboration && input.fitScore >= 0.6 && input.place.hiddenGemScore < 0.5) {
+  /**
+   * A classic is officially corroborated, a strong fit, and not a find.
+   *
+   * `hiddenness` where it was established, the legacy read where it was not.
+   * What is deliberately absent from this condition is `evidenceRichness`: a
+   * source filling in six attributes must never promote a place into the
+   * classics, and under the old model — where popularity *was* the attribute
+   * count — that is precisely what it did.
+   */
+  const hidden = input.place.hiddenness ?? input.place.hiddenGemScore;
+  if (signals.officialCorroboration && input.fitScore >= 0.6 && hidden < 0.5) {
     return 'must_see_classic';
   }
   if (input.fitScore >= 0.55) return 'high_fit_discovery';

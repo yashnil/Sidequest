@@ -31,9 +31,27 @@ import {
   type ClosureEvidence,
   type SafetyEvidence,
 } from '@sidequest/core';
-import { Badge, ErrorNote, FitMeter, Panel, PlacePlate, buttonClass, cx, type BadgeTone } from './ui';
+import {
+  Badge,
+  ErrorNote,
+  FitMeter,
+  FitMeterLegend,
+  Panel,
+  PlacePlate,
+  buttonClass,
+  cx,
+  type BadgeTone,
+} from './ui';
+import {
+  BoardFilterRail,
+  NO_FILTERS,
+  anyFilterActive,
+  facetsFor,
+  filterCandidates,
+  type BoardFilterState,
+} from './BoardFilters';
 import { DestinationImage } from './DestinationImage';
-import { BuildTripButton } from './BuildTripButton';
+import { BuildTripButton, PlannerReadinessPanel } from './BuildTripButton';
 import { formatCost, formatDistance, formatIntensity, formatMinutes } from '@/lib/format';
 import { autoPickAction, setSelectionAction } from '@/app/(product)/trips/[id]/discover/actions';
 
@@ -168,6 +186,26 @@ export function DiscoveryBoardView({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [onlyIncluded, setOnlyIncluded] = useState(false);
+  /*
+   * Filters are view state and nothing else.
+   *
+   * Held here, beside the marks rather than inside them, because hiding a card
+   * must never look like a decision about it. `filterCandidates` returns a
+   * subset; clearing a filter brings every card back marked exactly as it was.
+   */
+  const [filters, setFilters] = useState<BoardFilterState>(NO_FILTERS);
+  /*
+   * WHY THE LAST BUILD REFUSED, HELD HERE RATHER THAN INSIDE THE BUTTON.
+   *
+   * Seeded from the database so a refusal survives a refresh — a finding that
+   * does not outlive a reload is not much of one — and held at board level so
+   * the panel can render in the flow rather than inside the bar that is pinned
+   * to the top of the viewport. A `ready` reading is not a finding and shows
+   * nothing.
+   */
+  const [readiness, setReadiness] = useState<PlannerReadiness | null>(
+    storedReadiness && storedReadiness.level !== 'ready' ? storedReadiness : null,
+  );
 
   /*
    * Counted over the cards on screen, not over the keys of the mark map.
@@ -221,19 +259,66 @@ export function DiscoveryBoardView({
     });
   }
 
+  const allCandidates = groups.flatMap((entry) => entry.candidates);
+  const facets = facetsFor(allCandidates);
   const visibleGroups = groups
     .map((entry) => ({
       ...entry,
-      candidates: onlyIncluded
-        ? entry.candidates.filter((candidate) => optimistic[candidate.place.id] === 'included')
-        : entry.candidates,
+      candidates: filterCandidates(
+        onlyIncluded
+          ? entry.candidates.filter((candidate) => optimistic[candidate.place.id] === 'included')
+          : entry.candidates,
+        filters,
+      ),
     }))
     .filter((entry) => entry.candidates.length > 0);
   const visibleCardCount = visibleGroups.reduce((total, entry) => total + entry.candidates.length, 0);
+  const filtered = anyFilterActive(filters) || onlyIncluded;
+
+  /*
+   * THE WEATHER SENTENCE THAT BELONGS TO THE BOARD, NOT TO A CARD.
+   *
+   * Seventeen cards carried the identical thirty-word paragraph "We could not
+   * reach a weather source for your dates…" — about five hundred words of the
+   * same sentence, repeated down a page whose job is to let somebody compare
+   * seventeen different places. A fact that is true of the whole board is a
+   * property of the board.
+   */
+  const boardWeather = sharedWeatherNote(allCandidates);
 
   return (
     <div data-testid="discovery-board" data-board-version={boardVersion}>
-      <Panel className="sm:sticky sm:top-[var(--chrome-height)] z-20 mb-8 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
+      {/*
+        THE ACTION BAR: STICKY AT THE TOP ON A DESKTOP, PINNED TO THE BOTTOM ON A PHONE.
+
+        One element, two positions. It was `sm:sticky`, which means *not* sticky
+        at the one width where it matters: on a 390px screen the board is some
+        twenty-five thousand pixels tall, and the count and the primary action
+        scrolled away after the first card and never came back. A traveller
+        marking their ninth place had no way of knowing how many they had, and no
+        way to build without scrolling to the top of a page thirty screens long.
+
+        Deliberately not a second copy of the toolbar. Two "Build my trip"
+        buttons would be two things the traveller has to reconcile — and, more
+        practically, an ambiguous target for anything that goes looking for the
+        button by name.
+
+        Only the count and the build action live here. Auto-pick and the filters
+        sit in the flow below, because they are things you do once while reading
+        rather than things you reach for from the bottom of the screen.
+      */}
+      <Panel
+        className={cx(
+          // Below the product header (`z-30`), above the cards. Equal z-indexes
+          // made the two sticky bars fight over which one painted on top.
+          'z-20 flex flex-wrap items-center gap-x-5 gap-y-3 p-4',
+          'sm:sticky sm:top-[var(--chrome-height)] sm:mb-6',
+          'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:max-h-[70vh]',
+          'max-sm:overflow-y-auto max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0',
+          'max-sm:shadow-panel print:hidden',
+        )}
+        testId="board-action-bar"
+      >
         {/*
           The count and the version it describes, from one object.
 
@@ -247,36 +332,71 @@ export function DiscoveryBoardView({
           <span className="text-ink-faint"> · we suggested {targetCount}</span>
         </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <label
-            className={cx(
-              'flex cursor-pointer items-center gap-2 px-1 text-sm text-ink-muted',
-              MIN_TARGET,
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={onlyIncluded}
-              onChange={(event) => setOnlyIncluded(event.target.checked)}
-              className="h-5 w-5 accent-[var(--color-pine)]"
-            />
-            Only what I picked
-          </label>
-          <button
-            type="button"
-            onClick={autoPick}
-            disabled={pending}
-            className={cx(buttonClass('secondary', 'sm'), MIN_TARGET)}
-          >
-            {pending ? 'Working…' : 'Auto-pick the best mix for me'}
-          </button>
           <BuildTripButton
             tripId={tripId}
             hasItinerary={hasItinerary}
             includedCount={includedCount}
-            storedReadiness={storedReadiness ?? null}
+            onReadiness={setReadiness}
           />
         </div>
       </Panel>
+
+      {/* Below the bar, in the flow, where a long explanation may be long. */}
+      {readiness ? <PlannerReadinessPanel readiness={readiness} /> : null}
+
+      {/*
+        The things you do once, in the flow, where they do not compete with the
+        primary action for the bottom of a phone screen.
+      */}
+      <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 print:hidden">
+        <label
+          className={cx(
+            'flex cursor-pointer items-center gap-2 px-1 text-sm text-ink-muted',
+            MIN_TARGET,
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={onlyIncluded}
+            onChange={(event) => setOnlyIncluded(event.target.checked)}
+            className="h-5 w-5 accent-[var(--color-pine)]"
+          />
+          Only what I picked
+        </label>
+        <button
+          type="button"
+          onClick={autoPick}
+          disabled={pending}
+          className={cx(buttonClass('secondary', 'sm'), MIN_TARGET)}
+        >
+          {pending ? 'Working…' : 'Auto-pick the best mix for me'}
+        </button>
+        <FitMeterLegend className="basis-full" />
+      </div>
+
+      <BoardFilterRail
+        facets={facets}
+        filters={filters}
+        onChange={setFilters}
+        showing={visibleCardCount}
+        total={allCandidates.length}
+      />
+
+      {/*
+        The board-level weather statement, once.
+
+        The cards it covers say nothing about the weather at all; a card whose
+        situation differs from this one still carries its own sentence and its own
+        badge, which is the only way the difference is legible.
+      */}
+      {boardWeather ? (
+        <p
+          className="mb-8 rounded-md bg-paper-sunk p-3 text-sm leading-relaxed text-ink-muted"
+          data-testid="board-weather-note"
+        >
+          {boardWeather}
+        </p>
+      ) : null}
 
       {/*
         A polite status line, and the only thing on this board that speaks.
@@ -344,11 +464,11 @@ export function DiscoveryBoardView({
       {visibleGroups.length === 0 ? (
         <Panel className="p-8 text-center">
           <p className="font-display text-lg text-ink">
-            {onlyIncluded ? 'Nothing picked yet' : 'Nothing here fits this trip'}
+            {filtered ? 'Nothing matches what you asked for' : 'Nothing here fits this trip'}
           </p>
           <p className="mt-2 text-sm text-ink-muted">
-            {onlyIncluded
-              ? 'Untick the filter to see everything we found, or use auto-pick for a starting set.'
+            {filtered
+              ? 'Every card is still on the board — clear the filters above to see them again, or use auto-pick for a starting set.'
               : 'Try widening how far you will travel, or moving your dates — some of what we found here is only reachable for part of the year.'}
           </p>
         </Panel>
@@ -365,17 +485,42 @@ export function DiscoveryBoardView({
               <p className="mt-1 max-w-2xl text-sm text-ink-muted">
                 {BOARD_GROUP_COPY[entry.group].blurb}
               </p>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {entry.candidates.map((candidate) => (
-                  <PlaceCard
-                    key={candidate.place.id}
-                    candidate={candidate}
-                    image={anchorImage(images, candidate)}
-                    status={optimistic[candidate.place.id]}
-                    onChoose={choose}
-                  />
-                ))}
-              </div>
+              {/*
+                THINGS TO SKIP DO NOT GET THE SAME SPACE AS THINGS TO DO.
+
+                Six full cards — image, description, fit panel, evidence — is
+                about two thousand pixels arguing for places we have just
+                explained are wrong for this trip, laid out identically to the
+                places we are recommending. The group is still complete, still
+                explained and still re-includable; it is simply a list, because
+                the decision it asks for is "no, unless" rather than "yes or no".
+              */}
+              {entry.group === 'weak_fit' ? (
+                <ul className="mt-5 space-y-2" data-testid="skip-list">
+                  {entry.candidates.map((candidate) => (
+                    <li key={candidate.place.id}>
+                      <SkipRow
+                        candidate={candidate}
+                        status={optimistic[candidate.place.id]}
+                        onChoose={choose}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {entry.candidates.map((candidate) => (
+                    <PlaceCard
+                      key={candidate.place.id}
+                      candidate={candidate}
+                      image={anchorImage(images, candidate)}
+                      status={optimistic[candidate.place.id]}
+                      onChoose={choose}
+                      {...(boardWeather ? { boardWeatherNote: boardWeather } : {})}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           ))}
 
@@ -409,6 +554,53 @@ function marksFingerprint(selections: SelectionMap): string {
       .flat(),
   );
 }
+
+/**
+ * THE WEATHER SENTENCE EVERY CARD WAS CARRYING A COPY OF.
+ *
+ * Returns the note that is true of the board as a whole, or null when the cards
+ * genuinely differ. The threshold is deliberately high: a note has to be on most
+ * of the cards *and* on at least three of them before it is treated as a
+ * board-level fact, because hoisting a sentence that applies to two of seventeen
+ * places would be the opposite mistake — a claim about the board made from a
+ * minority of it.
+ *
+ * Nothing is dropped. A card whose note differs still prints its own, and the
+ * per-card weather badges are untouched.
+ */
+function sharedWeatherNote(candidates: readonly DiscoveryCandidate[]): string | null {
+  const notes = candidates.map((candidate) => candidate.weather.note).filter(Boolean) as string[];
+  if (notes.length < 3) return null;
+  const counts = new Map<string, number>();
+  for (const note of notes) counts.set(note, (counts.get(note) ?? 0) + 1);
+  let best: { note: string; count: number } | null = null;
+  for (const [note, count] of counts) {
+    if (!best || count > best.count) best = { note, count };
+  }
+  if (!best) return null;
+  return best.count >= 3 && best.count >= candidates.length * 0.6 ? best.note : null;
+}
+
+/**
+ * THE PART A PLACE PLAYS IN THE TRIP, ON THE CARD.
+ *
+ * The board already sorts every candidate into exactly one group, and the group
+ * *is* the role — classic, hidden gem, side quest, rainy-day backup. That was
+ * legible only from the section heading, which is off-screen the moment you have
+ * scrolled two rows, so a card in isolation could not say whether it was a famous
+ * stop or a quiet find. This reads `candidate.group` and nothing else: no score
+ * is invented and no threshold is applied here.
+ */
+const ROLE_BADGE: Record<BoardGroup, { label: string; tone: BadgeTone } | null> = {
+  must_see_classics: { label: 'Classic', tone: 'neutral' },
+  hidden_gems: { label: 'Hidden gem', tone: 'amber' },
+  nearby_side_quests: { label: 'Side quest', tone: 'blue' },
+  scenic_detours: { label: 'Scenic detour', tone: 'blue' },
+  low_effort_backups: { label: 'Rainy-day backup', tone: 'blue' },
+  needs_verification: { label: 'Check first', tone: 'amber' },
+  // The skip list says what it is in its own heading and needs no chip.
+  weak_fit: null,
+};
 
 /**
  * Which access facts earn a badge, in the order they matter to a decision.
@@ -724,26 +916,78 @@ function anchorImage(
   return candidate.place.relationship === 'base' || candidate.fit.band === 'top_pick' ? image : null;
 }
 
+/**
+ * WHAT A CARD SHOWS BEFORE YOU ASK IT ANYTHING.
+ *
+ * The board was 13,930px tall at 1440 and 25,270px at 390 — about thirty phone
+ * screens for seventeen decisions, because every card printed everything it knew
+ * at once: a five-line description, a four-line weather caveat, an eight-line
+ * "why this fits you" panel, two disclosures and a source line. A comparison
+ * tool that cannot be compared is not doing its job.
+ *
+ * So the card now leads with the eight things a decision is actually made on —
+ * what it looks like, what it is called, where it is, how well it fits, how far,
+ * how long, how hard, what it costs — plus the badges that change what the
+ * traveller has to *do*, and the three buttons. The argument, the description and
+ * the cautions are one disclosure away, and the disclosure is labelled with the
+ * question it answers rather than with a chevron.
+ *
+ * Nothing is deleted. Every sentence that used to be on the card is still on the
+ * card; the difference is whether you have to read it to see the next place.
+ */
 function PlaceCard({
   candidate,
   image,
   status,
   onChoose,
+  boardWeatherNote,
 }: {
   candidate: DiscoveryCandidate;
   /** Null on most cards, by design. See `anchorImage`. */
   image: ImageRecord | null;
   status: SelectionStatus | undefined;
   onChoose: (placeId: string, status: SelectionStatus) => void;
+  /**
+   * The sentence the board has already said for every card. Where this card's
+   * own note is the same sentence, the card says nothing and the board's notice
+   * stands for it; where it differs, the card's own note is what renders.
+   */
+  boardWeatherNote?: string;
 }) {
   const { place, fit, season, access, operating, weather } = candidate;
   const blocked = fit.band === 'not_workable';
+  const role = ROLE_BADGE[candidate.group];
+  const ownWeatherNote = weather.note && weather.note !== boardWeatherNote ? weather.note : null;
+  /*
+   * The disclosure is named for what is inside it.
+   *
+   * "Why this fits you" is the product's whole argument, so it stays a phrase a
+   * traveller recognises rather than becoming a chevron. Where there is no
+   * argument to make — a card with no reasons — it does not pretend to have one.
+   */
+  const detailLabel =
+    fit.blockers.length > 0
+      ? 'Why this will not work'
+      : fit.reasons.length > 0
+        ? 'Why this fits you'
+        : 'More about this place';
 
   return (
     <Panel
       as="article"
       className={cx(
-        'flex flex-col overflow-hidden transition-colors',
+        // `h-full` so every card in a row is the same height, which is what makes
+        // `mt-auto` on the action block put every row of buttons on one line.
+        // Without it a short card ended ninety pixels above its neighbours and
+        // the eye had to hunt for each set of controls.
+        //
+        // `scroll-mt` is the other half of a sticky toolbar. Two bars are pinned
+        // to the top of this page — the product header and the board's own
+        // action bar — so anything the browser scrolls to the top edge (a
+        // keyboard focus, an anchor, `scrollIntoView`) lands *underneath* about
+        // 133px of chrome. Stating the margin here means a card scrolled to is a
+        // card you can see and press.
+        'flex h-full scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-col overflow-hidden transition-colors',
         status === 'included' && 'border-pine',
         status === 'excluded' && 'opacity-60',
       )}
@@ -765,13 +1009,27 @@ function PlaceCard({
               coordinates: place.coordinates,
             })}
             ratio="16 / 7"
+            category={place.category}
           />
         ) : (
-          <PlacePlate placeId={place.id} category={place.category} className="h-24" />
+          <PlacePlate category={place.category} className="h-24" />
         )}
         <span className="absolute top-2 left-2 rounded-full bg-paper-raised/90 px-2 py-0.5 text-[11px] font-medium text-ink">
           {PLACE_CATEGORY_LABELS[place.category]}
         </span>
+        {/*
+          The role, opposite the category. Two different questions — "what kind of
+          thing is it" and "what part does it play in this trip" — and the second
+          one used to be readable only from a section heading three rows up.
+        */}
+        {role ? (
+          <span
+            className="absolute top-2 right-2 rounded-full bg-paper-raised/90 px-2 py-0.5 text-[11px] font-medium text-ink"
+            data-testid="card-role"
+          >
+            {role.label}
+          </span>
+        ) : null}
       </div>
 
       <div className="flex flex-1 flex-col p-4">
@@ -796,20 +1054,7 @@ function PlaceCard({
           <FitMeter band={fit.band} label={FIT_BAND_LABELS[fit.band]} meter={FIT_BAND_METER[fit.band]} />
         </div>
 
-        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{place.shortDescription}</p>
-
-        {/*
-          One sentence, and only when the weather over these dates would change
-          the decision. The verb has to match the evidence: "looks like the day
-          for this one" is sayable about a forecast and not about ten past
-          Augusts, so the sentence is built where the evidence is known rather
-          than assembled here from parts.
-        */}
-        {weather.note ? (
-          <p className="mt-2 text-xs leading-relaxed text-ink-faint">{weather.note}</p>
-        ) : null}
-
-        <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
           <Stat label="From base">
             {candidate.detourClass === 'base'
               ? 'At your base'
@@ -822,7 +1067,13 @@ function PlaceCard({
 
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Badge tone={blocked ? 'clay' : 'neutral'}>{WORTH_DETOUR_COPY[candidate.worthDetour]}</Badge>
-          {place.hiddenGemScore >= 0.6 ? <Badge tone="amber">Hidden gem</Badge> : null}
+          {/*
+            The role chip already says "Hidden gem" on the plate above, so the
+            score-derived badge would be the same word twice on one card.
+          */}
+          {place.hiddenGemScore >= 0.6 && role?.label !== 'Hidden gem' ? (
+            <Badge tone="amber">Hidden gem</Badge>
+          ) : null}
           {season.status === 'partially_open' ? <Badge tone="amber">Part of your dates</Badge> : null}
           {season.status === 'closed' ? <Badge tone="clay">Closed on your dates</Badge> : null}
           {/*
@@ -834,18 +1085,43 @@ function PlaceCard({
               {ACCESS_BADGE_LABELS[badge]}
             </Badge>
           ))}
-          {OPERATING_BADGE_ORDER.filter((badge) => operating.badges.includes(badge)).map((badge) => (
+          {/*
+            "Recheck hours" is dropped where the card already carries the
+            paragraph that says the same thing at length and names the source.
+            One card was wearing "Hours unconfirmed", "Recheck hours" and a
+            three-line "Check its hours" note — one fact, told three times,
+            which is how a reader learns that none of the three is worth reading.
+          */}
+          {OPERATING_BADGE_ORDER.filter(
+            (badge) =>
+              operating.badges.includes(badge) &&
+              !(badge === 'verify_hours' && operating.requiresVerification && operating.verifyNote),
+          ).map((badge) => (
             <Badge key={badge} tone={OPERATING_BADGE_TONE[badge]}>
               {OPERATING_BADGE_LABELS[badge]}
             </Badge>
           ))}
-          {candidate.weather.badges.map((badge) => (
-            <Badge key={badge} tone={WEATHER_BADGE_TONE[badge]}>
-              {badge === 'best_on_a_day' && candidate.weather.bestDate
-                ? `Best on ${shortDay(candidate.weather.bestDate)}`
-                : PLACE_WEATHER_BADGE_LABELS[badge]}
-            </Badge>
-          ))}
+          {/*
+            The two weather badges that state the *board's* situation rather
+            than this place's are dropped where the board has already said it,
+            once, in a sentence: "No weather data" and "Seasonal pattern" were
+            true of every card, so they distinguished nothing and cost a line
+            each. The badges that discriminate — needs a clear day, holds up in
+            bad weather, best on a particular day — are untouched, which is the
+            whole point of clearing the others out of their way.
+          */}
+          {candidate.weather.badges
+            .filter(
+              (badge) =>
+                !(boardWeatherNote && (badge === 'weather_unknown' || badge === 'seasonal_pattern')),
+            )
+            .map((badge) => (
+              <Badge key={badge} tone={WEATHER_BADGE_TONE[badge]}>
+                {badge === 'best_on_a_day' && candidate.weather.bestDate
+                  ? `Best on ${shortDay(candidate.weather.bestDate)}`
+                  : PLACE_WEATHER_BADGE_LABELS[badge]}
+              </Badge>
+            ))}
         </div>
 
         {access.status === 'partial' ? (
@@ -889,38 +1165,71 @@ function PlaceCard({
           </p>
         ) : null}
 
-        {fit.blockers.length > 0 ? (
-          <div className="mt-4 rounded-lg bg-clay-soft p-3">
-            <p className="text-xs font-medium text-clay">Why this will not work</p>
-            <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
-              {fit.blockers.map((blocker) => (
-                <li key={blocker.code}>{blocker.message}</li>
-              ))}
-            </ul>
-          </div>
-        ) : fit.reasons.length > 0 ? (
-          <div className="mt-4 rounded-lg bg-paper-sunk p-3">
-            <p className="text-xs font-medium text-ink">Why this fits you</p>
-            <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
-              {fit.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        {/*
+          THE ARGUMENT, ONE CLICK AWAY.
 
-        {fit.cautions.length > 0 ? (
-          <details className="mt-3 text-xs">
-            <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-ink-faint hover:text-ink')}>
-              Worth knowing ({fit.cautions.length})
-            </summary>
-            <ul className="mt-2 space-y-1 leading-relaxed text-ink-muted">
-              {fit.cautions.map((caution) => (
-                <li key={caution}>{caution}</li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
+          Everything that used to run down the card unprompted — the description,
+          the weather sentence, the reasons or the blockers, and the cautions —
+          in one disclosure named for the question it answers. `open` when the
+          place will not work, because a card that has just been marked
+          impossible owes its reason immediately rather than on request.
+
+          Independent per card rather than an accordion: comparing two places
+          means having both open, and a control that closes the card you were
+          reading in order to open the next one is a comparison tool that
+          forbids comparison.
+        */}
+        <details className="mt-3" open={blocked}>
+          <summary
+            className={cx(
+              MIN_TARGET_SUMMARY,
+              'cursor-pointer text-xs font-medium',
+              blocked ? 'text-clay' : 'text-ink hover:text-pine',
+            )}
+          >
+            {detailLabel}
+          </summary>
+          <div className="mt-2 space-y-2">
+            <p className="text-sm leading-relaxed text-ink-muted">{place.shortDescription}</p>
+
+            {/*
+              One sentence, and only when the weather over these dates would
+              change the decision, and only when it is not the sentence the board
+              has already made for every card. The verb has to match the
+              evidence: "looks like the day for this one" is sayable about a
+              forecast and not about ten past Augusts, so the sentence is built
+              where the evidence is known rather than assembled here from parts.
+            */}
+            {ownWeatherNote ? (
+              <p className="text-xs leading-relaxed text-ink-faint">{ownWeatherNote}</p>
+            ) : null}
+
+            {fit.blockers.length > 0 ? (
+              <ul className="rounded-lg bg-clay-soft p-3 text-xs leading-relaxed text-ink-muted">
+                {fit.blockers.map((blocker) => (
+                  <li key={blocker.code}>{blocker.message}</li>
+                ))}
+              </ul>
+            ) : fit.reasons.length > 0 ? (
+              <ul className="space-y-1 rounded-lg bg-paper-sunk p-3 text-xs leading-relaxed text-ink-muted">
+                {fit.reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            {fit.cautions.length > 0 ? (
+              <div className="text-xs">
+                <p className="font-medium text-ink">Worth knowing ({fit.cautions.length})</p>
+                <ul className="mt-1 space-y-1 leading-relaxed text-ink-muted">
+                  {fit.cautions.map((caution) => (
+                    <li key={caution}>{caution}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </details>
 
         <EvidencePanel candidate={candidate} />
 
@@ -969,23 +1278,237 @@ function PlaceCard({
               );
             })}
           </div>
-          <p className="mt-2 text-[11px] text-ink-faint">
+          <p className="mt-2 text-[11px] text-ink-muted">
             Source: {place.source.name}
             {place.source.url ? (
               <>
                 {' · '}
-                <a
-                  href={place.source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 hover:text-ink"
-                >
-                  check current conditions
-                </a>
+                <SourceLink url={place.source.url} />
               </>
             ) : null}
           </p>
         </div>
+      </div>
+    </Panel>
+  );
+}
+
+/**
+ * THE ONE LINK ON EVERY CARD, AT A SIZE A THUMB CAN HIT.
+ *
+ * Measured at 130x13 px, roughly twenty times per board — under a third of
+ * WCAG 2.5.5's 44 px in the axis that matters, and it is the link that takes
+ * somebody to the official page to check a closure. `inline-flex` with a minimum
+ * height grows the target without moving the text or breaking the sentence it
+ * sits in; the floor is lifted on touch widths only, because on a desktop the
+ * pointer is precise and a 44px tall line inside 11px type would look broken.
+ *
+ * The colour moves from `ink-faint` to `ink-muted` for the same reason: a link
+ * set in the product's faintest ink is legible by the letter of the contrast
+ * rule and unfindable in practice.
+ */
+function SourceLink({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex min-h-11 items-center underline underline-offset-2 hover:text-ink sm:min-h-0"
+    >
+      check current conditions
+    </a>
+  );
+}
+
+/**
+ * A PLACE WE ARE RECOMMENDING AGAINST, AT THE SIZE OF THAT RECOMMENDATION.
+ *
+ * One row rather than a card: name, how badly it fits, the badges that say what
+ * is wrong with it, the reason in a sentence, and the same three buttons every
+ * other card has — because "probably skip" is our opinion and the traveller is
+ * allowed to disagree with it. Include stays disabled only where the place is
+ * genuinely impossible, and the button then carries the constraint as its title,
+ * exactly as on a full card.
+ *
+ * The detail that a full card would show is behind the row's own disclosure, so
+ * nothing is lost: somebody who wants to argue with the verdict can read
+ * everything it was made from.
+ */
+function SkipRow({
+  candidate,
+  status,
+  onChoose,
+}: {
+  candidate: DiscoveryCandidate;
+  status: SelectionStatus | undefined;
+  onChoose: (placeId: string, status: SelectionStatus) => void;
+}) {
+  const { place, fit, season, access, operating } = candidate;
+  const blocked = fit.band === 'not_workable';
+  // The blocker where there is one — it is the specific, actionable answer — and
+  // the quality layer's own sentence otherwise, which is always present.
+  const headline = fit.blockers[0]?.message ?? candidate.quality.reason;
+
+  return (
+    <Panel
+      as="article"
+      className={cx(
+        'flex scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-wrap items-start gap-x-4 gap-y-3 p-3 transition-colors',
+        status === 'included' && 'border-pine',
+        status === 'excluded' && 'opacity-60',
+      )}
+    >
+      {/*
+        One line on a desktop, two on a phone.
+
+        `flex-1` alone left the text a hundred and thirty pixels wide beside
+        three buttons that will not shrink, so every badge wrapped onto its own
+        line and the "row" became taller than the card it replaced. Below `sm`
+        the text takes the full width and the controls sit under it.
+      */}
+      <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <h3 className="font-display text-base leading-snug text-ink">{place.name}</h3>
+          <span className="text-xs text-ink-faint">{place.locality}</span>
+          {/*
+            WHICH SITE THIS BELONGS TO, KEPT ON THE COMPACT ROW.
+
+            Dropped when the skip group collapsed to one line per place, and it
+            is exactly the line that stops two halves of one site — a visitor
+            centre and the grounds around it — reading as a duplicate record we
+            failed to merge. The full card has always carried it; a shorter row
+            is not a reason to make the board look wrong.
+          */}
+          {place.accessGroup ? (
+            <span className="text-xs text-ink-faint" title={place.accessGroup.note}>
+              Part of {place.accessGroup.label}
+            </span>
+          ) : null}
+          <Badge tone={blocked ? 'clay' : 'neutral'}>{FIT_BAND_LABELS[fit.band]}</Badge>
+          {season.status === 'closed' ? <Badge tone="clay">Closed on your dates</Badge> : null}
+          {season.status === 'partially_open' ? (
+            <Badge tone="amber">Part of your dates</Badge>
+          ) : null}
+          {ACCESS_BADGE_ORDER.filter((badge) => access.badges.includes(badge)).map((badge) => (
+            <Badge key={badge} tone={ACCESS_BADGE_TONE[badge]}>
+              {ACCESS_BADGE_LABELS[badge]}
+            </Badge>
+          ))}
+          {OPERATING_BADGE_ORDER.filter((badge) => operating.badges.includes(badge)).map((badge) => (
+            <Badge key={badge} tone={OPERATING_BADGE_TONE[badge]}>
+              {OPERATING_BADGE_LABELS[badge]}
+            </Badge>
+          ))}
+        </div>
+
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+          <span className={cx('font-medium', blocked ? 'text-clay' : 'text-ink')}>
+            {blocked ? 'Why this will not work' : 'Why we would skip it'}
+          </span>{' '}
+          — {headline}
+        </p>
+
+        {/*
+          THE DATE FACT SURVIVES THE COMPACT ROW.
+
+          Collapsing the skip group to one line per place dropped this sentence,
+          and it is the one sentence on the row a traveller most needs: "shut on
+          every day of your trip" is not a nuance, it is the whole answer. A
+          browser suite caught it — four specifications that had asserted this
+          text for phases went red — but the defect is a product one, and it is
+          the same shape as a reviewer's separate finding that a disabled
+          Include button explained itself only through a `title` attribute
+          nobody on a phone can read.
+
+          Rendered as text rather than as a badge because a badge saying
+          "Closed" and a sentence saying which days are shut are different
+          claims, and the row already carries the badge.
+        */}
+        {operating.status === 'closed_throughout' ? (
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+            Shut on every day of your trip.
+          </p>
+        ) : operating.status === 'open_some_days' ? (
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+            Open on {operating.openDates.length} of your {operating.byDate.length} days
+            {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''}.
+          </p>
+        ) : null}
+
+        {/*
+          The choice stays visible as a conflict rather than being flipped for
+          them. Same rule as the full card, and for the same reason.
+        */}
+        {blocked && status === 'included' ? (
+          <p className="mt-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
+            You picked this, and it no longer works on these dates. We have kept your choice —
+            change your dates, your transport answers, or skip it.
+          </p>
+        ) : null}
+
+        <details className="mt-1">
+          <summary
+            className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-xs text-ink-muted hover:text-ink')}
+          >
+            What it is, and everything we checked
+          </summary>
+          <div className="mt-2 space-y-2">
+            <p className="text-xs leading-relaxed text-ink-muted">{place.shortDescription}</p>
+            {fit.blockers.length > 1 ? (
+              <ul className="space-y-1 text-xs leading-relaxed text-ink-muted">
+                {fit.blockers.slice(1).map((blocker) => (
+                  <li key={blocker.code}>{blocker.message}</li>
+                ))}
+              </ul>
+            ) : null}
+            {fit.cautions.length > 0 ? (
+              <ul className="space-y-1 text-xs leading-relaxed text-ink-muted">
+                {fit.cautions.map((caution) => (
+                  <li key={caution}>{caution}</li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="text-[11px] text-ink-muted">
+              Source: {place.source.name}
+              {place.source.url ? (
+                <>
+                  {' · '}
+                  <SourceLink url={place.source.url} />
+                </>
+              ) : null}
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <div
+        className="flex shrink-0 gap-1.5 max-sm:w-full"
+        role="group"
+        aria-label={`Your decision on ${place.name}`}
+      >
+        {(['included', 'maybe', 'excluded'] as const).map((option) => {
+          const unavailable = blocked && option === 'included' && status !== 'included';
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onChoose(place.id, option)}
+              disabled={unavailable}
+              aria-pressed={status === option}
+              title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
+              className={cx(
+                'flex items-center justify-center rounded-md border px-3 text-xs font-medium whitespace-nowrap transition-colors max-sm:flex-1',
+                MIN_TARGET,
+                unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
+                !unavailable && status === option
+                  ? STATUS_STYLE[option]
+                  : !unavailable && 'border-rule text-ink-muted hover:border-ink-faint hover:text-ink',
+              )}
+            >
+              {SELECTION_STATUS_LABELS[option]}
+            </button>
+          );
+        })}
       </div>
     </Panel>
   );

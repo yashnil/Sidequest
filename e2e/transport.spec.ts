@@ -22,8 +22,31 @@ async function startTrip(page: Page, dates = AUGUST) {
   await page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' }).check();
 }
 
-/** Steps through to the transport step, leaving it on screen. */
+/**
+ * Steps through to the transport step, leaving it on screen.
+ *
+ * Resume-aware, and it has to be. The questionnaire now comes back to the step
+ * the traveller had reached rather than to step one — so somebody returning
+ * from the board through "Change my answers" lands on the review screen, which
+ * is the right place to land: it lists every answer with a control that jumps
+ * to the one they want. A helper that assumed "entering the questionnaire means
+ * step one" walked into a screen with no Continue on it and timed out.
+ *
+ * So: use the review screen's own jump control when it is there, and walk
+ * forward when it is not. That also exercises the affordance rather than
+ * routing around it.
+ */
 async function reachTransportStep(page: Page) {
+  const transport = page.getByRole('heading', { name: 'How are you getting around?' });
+  if (await transport.isVisible().catch(() => false)) return;
+
+  const jump = page.getByRole('button', { name: 'Change Getting around' });
+  if (await jump.isVisible().catch(() => false)) {
+    await jump.click();
+    await expect(transport).toBeVisible();
+    return;
+  }
+
   for (const heading of [
     'How should the days feel?',
     'What is the spending style?',
@@ -34,13 +57,15 @@ async function reachTransportStep(page: Page) {
     await expect(page.getByRole('heading', { name: heading })).toBeVisible();
   }
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'How are you getting around?' })).toBeVisible();
+  await expect(transport).toBeVisible();
 }
 
 async function finishFromTransport(page: Page) {
   for (const heading of ['How far from Mammoth Lakes?', 'Anything to steer around?', 'Your trip personality']) {
+    const already = page.getByRole('heading', { name: heading });
+    if (await already.isVisible().catch(() => false)) continue;
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+    await expect(already).toBeVisible();
   }
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);

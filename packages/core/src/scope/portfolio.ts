@@ -2,6 +2,15 @@ import { haversineKm } from '@sidequest/geo';
 import type { Coordinates } from '../schemas/common';
 import type { DestinationFeatureType, DestinationIndexEntry } from '../schemas/destination-index';
 import type { DurationCluster } from '../dates/duration';
+import {
+  chooseBaseStructure,
+  estimateTransferMinutes,
+  reachRadiusForStructure,
+  travelRegionGraph,
+  DAY_REACH_KM,
+  type BaseStructure,
+  type TravelRegionGraph,
+} from '../region/graph';
 
 /**
  * A COUNTRY IS NOT A CITY WITH A LARGER BOUNDING BOX.
@@ -28,32 +37,14 @@ import type { DurationCluster } from '../dates/duration';
  */
 
 /**
- * How far a traveller will go out and back in a day, by how they get around.
+ * Reach and transfer speed live in `region/graph`, and are imported rather than
+ * restated.
  *
- * This is what makes two records "the same cluster": not that they are near each
- * other on a map, but that one base serves both. A ferry-dependent archipelago
- * gets the transit figure, which is why islands do not merge.
+ * They used to be declared here, and the base decision that reads them lived
+ * somewhere else — which is exactly how a preview came to use a forty-kilometre
+ * day reach while the compilation that followed used a twelve-kilometre one for
+ * the same traveller. One definition, one importer, no drift.
  */
-const DAY_REACH_KM: Record<'drive' | 'transit' | 'walk', number> = {
-  drive: 70,
-  transit: 40,
-  walk: 12,
-};
-
-/**
- * Average door-to-door speed for an inter-cluster transfer, km/h.
- *
- * Deliberately pessimistic against a motorway figure: a transfer between two
- * regions of a mountainous country is not driven at motorway speed, and a
- * duration model built on one would recommend trips that do not fit. Straight-
- * line distance is also shorter than road distance, so the two errors work in
- * the same direction and the speed compensates for both.
- */
-const TRANSFER_SPEED_KMH: Record<'drive' | 'transit' | 'walk', number> = {
-  drive: 55,
-  transit: 40,
-  walk: 4.5,
-};
 
 /** Feature types that can anchor a cluster — somewhere you could actually sleep. */
 const BASE_CAPABLE: readonly DestinationFeatureType[] = ['city', 'town', 'district'];
@@ -79,6 +70,31 @@ export interface RegionPortfolio {
   gateway: { name: string; center: Coordinates } | null;
   /** Clusters that fit the trip, in route order from the gateway. */
   route: RegionCluster[];
+  /**
+   * WHY EACH BASE, IN THE TRAVELLER'S OWN TERMS.
+   *
+   * One entry per member of `route`, same order, and the type says `string`
+   * rather than `string | undefined` on purpose: a proposed base with no
+   * traveller-facing reason is precisely the failure this pass exists to remove.
+   * A screen that lists bases without printing these is showing a decision it
+   * cannot defend.
+   */
+  baseReasons: {
+    clusterId: string;
+    reason: string;
+    /** Nights this base is expected to hold. */
+    nights: number;
+    /** Estimated minutes from the previous base. Zero for the first. */
+    transferMinutes: number;
+  }[];
+  /**
+   * Clusters a base can reach and return from inside one day.
+   *
+   * These are the places a rank-ordered model used to propose as *second bases*
+   * — the whole "you will move hotel to get there" mistake — when the honest
+   * answer was that you can go and come back before dinner.
+   */
+  satellites: { cluster: RegionCluster; baseId: string; transferMinutes: number }[];
   /** Clusters we found and are not proposing, each with the reason. */
   excluded: { cluster: RegionCluster; reason: string }[];
   /** Everything found, before the trip length was applied. */
@@ -87,8 +103,18 @@ export interface RegionPortfolio {
   /** Whole days the route spends moving. Estimated. */
   transferDays: number;
   mode: 'drive' | 'transit' | 'walk';
+  /**
+   * How far out this structure actually reaches, in kilometres.
+   *
+   * The number a compilation should use for its own scope. Carrying it here is
+   * what stops one screen proposing bases a hundred kilometres apart while the
+   * next describes the same trip as a dozen kilometres across.
+   */
+  reachRadiusKm: number;
   /** One sentence a traveller can check against the numbers above. */
   rationale: string;
+  /** The same decision as a graph, for anything that draws or audits it. */
+  graph: TravelRegionGraph;
 }
 
 export interface BuildPortfolioInput {
@@ -187,14 +213,7 @@ export function clusterEntries(input: {
   return clusters;
 }
 
-export function estimateTransferMinutes(
-  a: Coordinates,
-  b: Coordinates,
-  mode: 'drive' | 'transit' | 'walk',
-): number {
-  const km = distanceKm(a, b);
-  return Math.round((km / TRANSFER_SPEED_KMH[mode]) * 60);
-}
+export { estimateTransferMinutes };
 
 /**
  * Turn a set of indexed features into a proposed trip structure.
@@ -209,15 +228,20 @@ export function buildRegionPortfolio(input: BuildPortfolioInput): RegionPortfoli
   const all = clusterEntries({ entries: input.entries, mode: input.mode, maxClusters });
 
   if (all.length === 0) {
+    const empty: BaseStructure = { bases: [], rejected: [], transferDays: 0, reach: input.mode };
     return {
       gateway: null,
       route: [],
+      baseReasons: [],
+      satellites: [],
       excluded: [],
       allClusters: [],
       basesProposed: 0,
       transferDays: 0,
       mode: input.mode,
+      reachRadiusKm: reachRadiusForStructure(empty),
       rationale: `We could not find anywhere in ${input.destinationName} we would base a trip from.`,
+      graph: travelRegionGraph({ destinationName: input.destinationName, structure: empty }),
     };
   }
 
@@ -228,56 +252,40 @@ export function buildRegionPortfolio(input: BuildPortfolioInput): RegionPortfoli
   }
 
   /*
-   * How many bases this trip can hold.
+   * WHICH CLUSTERS ARE BASES — DECIDED ON TRAVEL, NOT ON POPULATION.
    *
-   * Nights decide the ceiling, not the destination: an eleven-night trip can
-   * support three bases at roughly three nights each and still leave time to
-   * move; a four-night trip cannot support two without the second being a night
-   * spent arriving. When nobody has said how long, every cluster is shown and
-   * the trip-length recommendation is what narrows it.
+   * This used to be `all.slice(0, basesAllowed)`: take the highest-ranked
+   * clusters, order them nearest-next, and use the distances only to write the
+   * sentence explaining what had already been decided. The consequence found in
+   * a founder test was a six-night city trip proposing a second base a hundred
+   * kilometres out — a genuinely prominent place, genuinely inside the
+   * destination, and a hotel change nobody had any reason to make — while the
+   * next screen described the same trip as a dozen kilometres across.
+   *
+   * `chooseBaseStructure` replaces the slice with four tests, in the order that
+   * makes the *first* failure the truest explanation: can a day trip reach it,
+   * are there days left, is there enough there, and does moving save more travel
+   * than it costs. Anything a day trip reaches becomes a **satellite** of the
+   * base it hangs off rather than a base of its own, which is both the honest
+   * answer and the one that keeps the place on the board.
+   *
+   * Ordering is still nearest-next, and still a separate decision from
+   * selection: a route that zig-zags is a bad route even when every stop on it
+   * belongs.
    */
-  const byNights =
-    input.nights === undefined || input.nights === null
-      ? all.length
-      : Math.max(1, Math.floor(input.nights / 3));
-  const byPreference = input.maxBaseChanges === undefined ? all.length : input.maxBaseChanges + 1;
-  const basesAllowed = Math.max(1, Math.min(all.length, byNights, byPreference));
+  const structure = chooseBaseStructure({
+    clusters: all,
+    reach: input.mode,
+    nights: input.nights ?? null,
+    maxBaseChanges: input.maxBaseChanges ?? null,
+  });
 
-  /*
-   * Which limit is actually doing the cutting.
-   *
-   * Not "whichever we check first". A traveller who said they would move base
-   * once, on a fourteen-night trip, was being told that fourteen nights cannot
-   * hold three bases — which is both wrong and unfixable by them, since the
-   * thing to change was the answer they gave, not the length of their holiday.
-   * The binding constraint is the smallest one, and the sentence has to name it.
-   */
-  const binding: 'preference' | 'nights' | 'geography' =
-    byPreference <= byNights && byPreference < all.length
-      ? 'preference'
-      : byNights < all.length
-        ? 'nights'
-        : 'geography';
+  const byId = new Map(all.map((cluster) => [cluster.id, cluster]));
+  const chosen = structure.bases.map((base) => byId.get(base.cluster.id) ?? gateway);
 
-  /*
-   * WHICH clusters, then in WHAT ORDER — two decisions, and conflating them was
-   * a real defect.
-   *
-   * The first version chose by nearest-next from the gateway, which meant a
-   * country trip took the three clusters closest to the capital and never left
-   * the valley it sits in — while the strategy list beside it named the three
-   * most significant ones. The map and the text described different trips.
-   *
-   * So: **selection is by rank** (the clusters most worth going to, which is the
-   * same order the strategies use), and **ordering is nearest-next** (so the
-   * route does not zig-zag across the country). One answer, two properties.
-   */
-  const selected = all.slice(0, basesAllowed);
-  const remaining = all.slice(basesAllowed);
-
-  const route: RegionCluster[] = [gateway];
-  const toOrder = selected.filter((cluster) => cluster.id !== gateway.id);
-  let cursor = gateway;
+  const route: RegionCluster[] = [chosen[0] ?? gateway];
+  const toOrder = chosen.slice(1);
+  let cursor = route[0]!;
   while (toOrder.length > 0) {
     toOrder.sort(
       (a, b) =>
@@ -289,32 +297,73 @@ export function buildRegionPortfolio(input: BuildPortfolioInput): RegionPortfoli
     cursor = next;
   }
 
-  let transferMinutes = 0;
-  for (let index = 1; index < route.length; index += 1) {
-    transferMinutes += estimateTransferMinutes(route[index - 1]!.center, route[index]!.center, input.mode);
-  }
-  const transferDays = Math.round((transferMinutes / 240) * 10) / 10;
+  const reasonById = new Map(
+    structure.bases.map((base) => [base.cluster.id, { reason: base.reason, nights: base.nights }]),
+  );
+  const baseReasons = route.map((cluster, index) => {
+    const found = reasonById.get(cluster.id);
+    return {
+      clusterId: cluster.id,
+      reason: found?.reason ?? 'The densest part of the region.',
+      nights: found?.nights ?? 0,
+      transferMinutes:
+        index === 0
+          ? 0
+          : estimateTransferMinutes(route[index - 1]!.center, cluster.center, input.mode),
+    };
+  });
 
-  const excluded = remaining.map((cluster) => ({
-    cluster,
-    reason:
-      binding === 'preference'
-        ? `You said you would rather not move base again — this would be base ${route.length + 1}.`
-        : binding === 'nights'
-          ? `Adding it would mean another base, and ${input.nights} nights does not hold ${route.length + 1}.`
-          : `About ${cluster.transferMinutesFromGateway} minutes from ${gateway.name} by our estimate — too far to fold into this route.`,
+  const satellites = structure.bases.flatMap((base) =>
+    base.satellites.map((satellite) => ({
+      cluster: byId.get(satellite.cluster.id) ?? satellite.cluster,
+      baseId: base.cluster.id,
+      transferMinutes: satellite.transferMinutes,
+    })),
+  ) as RegionPortfolio['satellites'];
+
+  const transferDays =
+    Math.round((baseReasons.reduce((total, entry) => total + entry.transferMinutes, 0) / 240) * 10) /
+    10;
+
+  const excluded = structure.rejected.map((entry) => ({
+    cluster: byId.get(entry.cluster.id) ?? (entry.cluster as RegionCluster),
+    reason: entry.reason,
   }));
 
   return {
     gateway: { name: gateway.name, center: gateway.center },
     route,
+    baseReasons,
+    satellites,
     excluded,
     allClusters: all,
     basesProposed: route.length,
     transferDays,
     mode: input.mode,
-    rationale: `${all.length} distinct area${all.length === 1 ? '' : 's'} found in ${input.destinationName}; this route uses ${route.length} of them.`,
+    reachRadiusKm: reachRadiusForStructure(structure),
+    rationale: describePortfolio(input.destinationName, all.length, route.length, satellites.length),
+    graph: travelRegionGraph({
+      destinationName: input.destinationName,
+      structure,
+      gateway: { id: `${gateway.id}:gateway`, name: gateway.name, center: gateway.center },
+    }),
   };
+}
+
+function describePortfolio(
+  destinationName: string,
+  found: number,
+  bases: number,
+  satellites: number,
+): string {
+  const areas = `${found} distinct area${found === 1 ? '' : 's'} found in ${destinationName}`;
+  const structure =
+    bases === 1
+      ? satellites > 0
+        ? `one base, with ${satellites} of them reachable and back in a day`
+        : 'one base'
+      : `${bases} bases${satellites > 0 ? `, plus ${satellites} reachable and back in a day` : ''}`;
+  return `${areas}; this route uses ${structure}.`;
 }
 
 /** The duration model's view of a portfolio. */
@@ -391,9 +440,32 @@ export function scopeStrategiesFor(input: {
 
   for (const shape of shapes) {
     if (shape.bases > clusters.length) continue;
-    const covers = clusters.slice(0, shape.bases).map((cluster) => cluster.name);
+    /*
+     * What this strategy would actually cover, from the same decision the map
+     * draws — not `clusters.slice(0, bases)` in rank order.
+     *
+     * The old form promised the traveller the three most prominent areas, while
+     * the portfolio beside it was choosing on travel logic. Two lists, one
+     * choice, and no way to tell which one the build would honour. Asking the
+     * structure with this strategy's own base allowance is the only form that
+     * cannot drift, and it names the satellites too — because "one area, in
+     * depth" that quietly reaches four more places is a better offer than the
+     * one the old text made.
+     */
+    const structure = chooseBaseStructure({
+      clusters,
+      reach: portfolio.mode,
+      nights,
+      maxBaseChanges: shape.bases - 1,
+    });
+    const covers = structure.bases.flatMap((base) => [
+      base.cluster.name,
+      ...base.satellites.map((satellite) => satellite.cluster.name),
+    ]);
     const required = nightsFor(shape.bases);
-    const available = nights === null || nights >= required;
+    const shortOfNights = nights !== null && nights < required;
+    const shortOfGround = structure.bases.length < shape.bases;
+    const available = !shortOfNights && !shortOfGround;
     strategies.push({
       id: shape.id,
       label: shape.label,
@@ -401,11 +473,25 @@ export function scopeStrategiesFor(input: {
       bases: shape.bases,
       covers,
       available,
+      /*
+       * Which of the two limits is doing the cutting, named separately.
+       *
+       * "Needs about nine nights; you have four" is actionable. Printing it at a
+       * traveller whose destination simply has nowhere else worth sleeping — a
+       * compact region where everything is a day trip from one place — is a
+       * sentence they cannot act on, because the thing to change is not the
+       * length of their holiday.
+       */
       ...(available
         ? {}
-        : {
-            unavailableReason: `Needs about ${required} nights; you have ${nights}.`,
-          }),
+        : shortOfNights
+          ? { unavailableReason: `Needs about ${required} nights; you have ${nights}.` }
+          : {
+              unavailableReason:
+                structure.rejected.length > 0
+                  ? `Everything else here is either close enough to reach and come back in a day, or too far to be worth the move.`
+                  : `Everything worth staying in is close enough to work from one base.`,
+            }),
     });
   }
 

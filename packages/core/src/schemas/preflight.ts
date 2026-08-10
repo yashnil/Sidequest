@@ -36,12 +36,47 @@ export type PreflightCluster = z.infer<typeof preflightClusterSchema>;
 export const preflightPortfolioSchema = z.object({
   gateway: z.object({ name: z.string().min(1), center: coordinatesSchema }).nullable(),
   route: z.array(preflightClusterSchema).default([]),
+  /**
+   * WHY EACH BASE, PERSISTED WITH THE BASE.
+   *
+   * `.default([])` rather than required, because a preflight written before this
+   * field existed must still parse — the artifact is stored as one blob and a
+   * required field would strand every trip mid-flow. A reader that finds it
+   * empty shows no reasons, which is the old behaviour, rather than crashing.
+   */
+  baseReasons: z
+    .array(
+      z.object({
+        clusterId: z.string().min(1),
+        reason: z.string().min(1),
+        nights: z.number().int().nonnegative(),
+        transferMinutes: z.number().nonnegative(),
+      }),
+    )
+    .default([]),
+  /** Areas a base reaches and returns from inside a day. Never a second base. */
+  satellites: z
+    .array(
+      z.object({
+        cluster: preflightClusterSchema,
+        baseId: z.string().min(1),
+        transferMinutes: z.number().nonnegative(),
+      }),
+    )
+    .default([]),
   excluded: z
     .array(z.object({ cluster: preflightClusterSchema, reason: z.string().min(1) }))
     .default([]),
   basesProposed: z.number().int().nonnegative(),
   transferDays: z.number().nonnegative(),
   mode: z.enum(['drive', 'transit', 'walk']),
+  /**
+   * How far this structure reaches, so the compilation can use the same number.
+   *
+   * Optional for the same backward-compatibility reason as `baseReasons`. A
+   * compilation that finds it absent derives its own reach exactly as before.
+   */
+  reachRadiusKm: z.number().positive().optional(),
   rationale: z.string().min(1),
   /** Present so nothing downstream can mistake these figures for measurements. */
   estimated: z.literal(true),

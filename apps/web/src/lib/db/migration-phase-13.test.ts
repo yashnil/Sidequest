@@ -201,12 +201,35 @@ describe('a Phase 12 database upgraded to Phase 13', () => {
 
     const after = new Database(path);
     expect(after.prepare('SELECT * FROM trips WHERE id = ?').get('trip-1')).toEqual(tripBefore);
-    expect(
-      after.prepare('SELECT * FROM traveler_profiles WHERE trip_id = ?').get('trip-1'),
-    ).toEqual(profileBefore);
     expect(after.prepare('SELECT * FROM itineraries WHERE trip_id = ?').get('trip-1')).toEqual(
       itineraryBefore,
     );
+
+    /*
+     * ADDITIVE COLUMNS ARE THE ONE THING THAT MAY DIFFER — AND ONLY AT THEIR
+     * DECLARED DEFAULT.
+     *
+     * A whole-row `toEqual` cannot express that, and the difference matters:
+     * this test exists to catch a migration *rewriting* stored data, and an
+     * assertion that also fails whenever a column is added would have to be
+     * relaxed every time one is, until nobody trusts it. So the claim is stated
+     * precisely instead. Every column that existed before is byte-identical;
+     * every column that did not is present at exactly the default
+     * `COLUMN_MIGRATIONS` declares for it, which is what makes a row written by
+     * an older build still parse.
+     */
+    const profileAfter = after
+      .prepare('SELECT * FROM traveler_profiles WHERE trip_id = ?')
+      .get('trip-1') as Record<string, unknown>;
+    for (const [column, value] of Object.entries(profileBefore as Record<string, unknown>)) {
+      expect(profileAfter[column], `${column} was rewritten by the migration`).toEqual(value);
+    }
+    const added = Object.keys(profileAfter).filter(
+      (column) => !(column in (profileBefore as Record<string, unknown>)),
+    );
+    expect(added).toEqual(['draft_step']);
+    /* Nobody recorded a position for a row written before the column existed. */
+    expect(profileAfter.draft_step).toBe(0);
     after.close();
   });
 

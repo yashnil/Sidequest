@@ -58,7 +58,7 @@ import { mustDoCoverageFrom, resolveMustDos, type MustDoSearchSpace } from './mu
 import {
   assessResearchReadiness,
   MAX_RECOVERY_PASSES,
-  recoveryAdjustment,
+  recoveryActionFor,
   unmeasurableModesFor,
 } from './research-readiness';
 import {
@@ -2520,7 +2520,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         const repair: ResearchRepair | undefined = reading.repairs.find(
           (candidate) =>
             !attempted.has(candidate) &&
-            (candidate === 'targeted_subject_query' || recoveryAdjustment(candidate, pass) !== null),
+            (candidate === 'targeted_subject_query' || recoveryActionFor(candidate, pass) !== null),
         );
         if (!repair) break;
         attempted.add(repair);
@@ -2607,14 +2607,78 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           continue;
         }
 
-        const adjustment = recoveryAdjustment(repair, pass)!;
+        /**
+         * RESELECT OR ACQUIRE — AND THE DIFFERENCE IS WHAT IT COSTS.
+         *
+         * Until this branch existed, every executable repair re-selected from
+         * records already bought, which is why the loop could honestly say it
+         * spent nothing. That was also its ceiling: a board short on museums
+         * because the ground holds few of them cannot be repaired by widening a
+         * ceiling over the same records, and no amount of re-selection invents
+         * one. Section 7 asks for recovery that can *acquire* evidence, and this
+         * is it.
+         *
+         * The safety argument changes shape rather than disappearing. A paid
+         * attempt is bounded to two queries, charged to the compilation's own
+         * ledger, refused outright when the budget is gone, and tried only after
+         * the free repair for the same deficit has been and not helped — because
+         * `repairsFor` pushes them in that order and the loop takes the first it
+         * has not attempted.
+         */
+        const action = recoveryActionFor(repair, pass)!;
+        const attemptStartedMs = Date.now();
+        let attemptKind: 'reselect' | 'acquire' = 'reselect';
+        let providerCalls = 0;
+        let budgetRefused = false;
+
         const recovered = await runStage('recovering_supply', async () => {
+          if (action.kind === 'acquire') {
+            attemptKind = 'acquire';
+            /*
+             * The ledger decides, not this loop. `remaining` is the same
+             * accounting every other stage is charged against, so a recovery
+             * that would push a compilation over its own ceiling is refused
+             * here rather than discovered as an overspend afterwards.
+             */
+            const affordable = Math.min(
+              action.maxQueries,
+              Math.max(0, ledger.remaining('maxRecoveryQueries')),
+            );
+            if (affordable === 0) {
+              budgetRefused = true;
+              return {
+                value: { candidates: [], gaps: [], calls: 0 } as DiscoveryResult,
+                outcome: 'no budget left to search again',
+              };
+            }
+            const queries: DiscoveryQuery[] = action.intents
+              .slice(0, affordable)
+              .map((intent, index) => ({
+                id: `recovery-${repair}-${pass}-${index}`,
+                intent,
+                text: `${intent.replace(/_/g, ' ')} in ${input.scope.destinationName}`,
+                limit: action.maxPerQuery,
+              }));
+            const value = await input.providers.places.discover({
+              scope: input.scope,
+              queries,
+              ...(input.profile ? { profile: input.profile } : {}),
+              pack,
+            });
+            providerCalls = value.calls;
+            ledger.record('maxRecoveryQueries', queries.length);
+            return {
+              value,
+              outcome: `${value.candidates.length} candidates after searching for ${queries.length} kind${queries.length === 1 ? '' : 's'} of place we were short of`,
+            };
+          }
+
           const value = await input.providers.places.discover({
             scope: input.scope,
             queries: [],
             ...(input.profile ? { profile: input.profile } : {}),
             pack,
-            recovery: adjustment,
+            recovery: action.adjustment,
           });
           return {
             value,
@@ -2650,7 +2714,29 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
               visitableAfter: nextVisitable,
               detail: improved
                 ? `${RESEARCH_REPAIR_COPY[repair]} — ${nextVisitable - visitable} more things to do.`
-                : `${RESEARCH_REPAIR_COPY[repair]} — nothing further came back.`,
+                : budgetRefused
+                  ? `${RESEARCH_REPAIR_COPY[repair]} — there was no budget left to look again.`
+                  : `${RESEARCH_REPAIR_COPY[repair]} — nothing further came back.`,
+              /*
+               * WHAT THIS ATTEMPT COST, RECORDED ON THE ATTEMPT.
+               *
+               * Section 21 asks for recovery cost accounted for separately from
+               * compilation cost, and this is the only row that can carry it —
+               * a run-level total cannot say which attempt spent it. Recording
+               * it also makes "we paid and learnt nothing" a visible outcome
+               * rather than an invisible one, which is the failure mode a paid
+               * recovery loop actually has.
+               */
+              kind: attemptKind,
+              cost: { providerCalls, searches: 0, pages: 0, modelCalls: 0 },
+              latencyMs: Math.max(0, Date.now() - attemptStartedMs),
+              evidenceDelta: {
+                candidatesAdded: Math.max(0, nextVisitable - visitable),
+                categoriesAdded: Math.max(
+                  0,
+                  (nextFacts.categories ?? 0) - (facts.categories ?? 0),
+                ),
+              },
             },
           ],
         };

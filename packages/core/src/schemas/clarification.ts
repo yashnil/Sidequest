@@ -15,6 +15,53 @@ import { z } from 'zod';
  * the system does not know is not.
  */
 
+/**
+ * THE PLANNING DECISIONS A QUESTION CAN BE ABOUT.
+ *
+ * A question exists to resolve a decision. Naming the decision — rather than
+ * only the reason the question arose — is what makes the claim "this changes
+ * the plan" checkable: a question whose decision no stage consumes is a
+ * question nobody needed, and that is now findable rather than arguable.
+ *
+ * Deliberately a small closed list. Anything not on it is a preference, and
+ * preferences belong in the questionnaire where they can be answered once.
+ */
+export const PLANNING_DECISIONS = [
+  /** Whether the trip is planned around a car, scheduled transport, or feet. */
+  'transport_mode',
+  /** One base, two, or a circuit. Decides clustering and hotel moves. */
+  'base_structure',
+  /** How far outside the destination the trip is willing to reach. */
+  'region_extent',
+  /** Whether a named must-do is feasible at all, and on which dates. */
+  'must_do_feasibility',
+  /** Which way in and out, when more than one is plausible. */
+  'gateway',
+  /** Whether water or air transfers are on the table. */
+  'water_or_air_transfer',
+  /** Whether unpaved and remote roads are acceptable. */
+  'road_surface',
+  /** How much walking and climbing a day may contain. */
+  'effort_budget',
+  /** Whether the plan should stay flexible against weather or be locked in. */
+  'weather_flexibility',
+  /** Which dates, when the traveller has not fixed them. */
+  'trip_dates',
+] as const;
+export const planningDecisionSchema = z.enum(PLANNING_DECISIONS);
+export type PlanningDecision = z.infer<typeof planningDecisionSchema>;
+
+/**
+ * How much a question matters, in the only three grades that change behaviour.
+ *
+ * `blocking` stops compilation, `high` is asked, `moderate` is asked only if
+ * there is room in the budget. A numeric score would imply a precision the
+ * inputs do not have and would invite tuning instead of deciding.
+ */
+export const QUESTION_IMPORTANCES = ['blocking', 'high', 'moderate'] as const;
+export const questionImportanceSchema = z.enum(QUESTION_IMPORTANCES);
+export type QuestionImportance = z.infer<typeof questionImportanceSchema>;
+
 export const CLARIFICATION_REASONS = [
   /** Several places match the string and they are in different countries. */
   'destination_ambiguous',
@@ -82,6 +129,60 @@ export const clarificationQuestionSchema = z
     dependsOn: z
       .object({ questionId: z.string().min(1), whenAnswerIn: z.array(z.string().min(1)).min(1) })
       .optional(),
+
+    /* ---- Why this question exists, in a form that can be audited ---------
+     *
+     * All optional, because questions written before this metadata existed must
+     * still parse out of a stored clarification set — and because a question
+     * that genuinely has no evidence behind it should say so by omission rather
+     * than by an invented placeholder.
+     */
+
+    /** The planning decision this resolves. */
+    decisionAffected: planningDecisionSchema.optional(),
+    /**
+     * What in the destination's own evidence caused this to be asked.
+     *
+     * The field that separates an adaptive question from a static one. A
+     * question with a trigger can be traced back to a fact about *this* trip; a
+     * question without one is a form field, however conversational its wording.
+     */
+    evidenceThatTriggeredIt: z
+      .array(z.object({ kind: z.string().min(1), detail: z.string().min(1) }))
+      .optional(),
+    /**
+     * What each answer would change, keyed by option value.
+     *
+     * Typed as prose because it is shown to the traveller — "why does this
+     * matter" answered per option rather than once for the question. A question
+     * whose answers all produce the same sentence is a question that should not
+     * have been asked, and this makes that visible while writing it.
+     */
+    planChangeByAnswer: z.record(z.string(), z.string()).optional(),
+    importance: questionImportanceSchema.optional(),
+    /**
+     * Whether this could have been inferred instead of asked.
+     *
+     * Recorded even when the answer is "yes, and we asked anyway" — for a
+     * safety or accessibility question that is the correct outcome, and the
+     * record is what lets an unnecessary-question rate be measured rather than
+     * asserted.
+     */
+    canInferWithoutAsking: z
+      .object({
+        possible: z.boolean(),
+        inferredValue: z.string().min(1).optional(),
+        confidence: z.number().min(0).max(1),
+      })
+      .optional(),
+    /**
+     * Whether "decide for me" is a real answer to this question.
+     *
+     * A distinct value rather than a midpoint. A midpoint still breaks ties;
+     * indifference has to free the optimiser instead, which it can only do if
+     * it is stored as its own thing.
+     */
+    allowIndifference: z.boolean().optional(),
   })
   .refine((value) => value.source === 'rule' || value.source === 'rule_with_model_phrasing' || !value.required, {
     message: 'A model-suggested question may not be required',

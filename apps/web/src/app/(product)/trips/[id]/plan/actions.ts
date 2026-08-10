@@ -12,9 +12,11 @@ import {
   countNights,
   datesInWindow,
   MAX_TRIP_NIGHTS,
+  nightsFrom,
   normalizeDestinationQuery,
   decideInterpretation,
   displayStages,
+  isAbandoned,
   isRetryable,
   isTerminal,
   unansweredRequired,
@@ -26,8 +28,16 @@ import {
   type SelectedDestination,
   type StageRecord,
   type TripComposerAnswers,
+  type TripPreflight,
 } from '@sidequest/core';
-import { deriveScope, QUESTION_IDS, rebuildClarificationSet, scopeFitsTrip } from '@sidequest/compiler';
+import {
+  deriveAdaptiveQuestions,
+  deriveScope,
+  QUESTION_IDS,
+  rebuildClarificationSet,
+  scopeFitsTrip,
+  withAdaptiveQuestions,
+} from '@sidequest/compiler';
 import { compilerProviders, providerReadiness } from '@/lib/compiler/providers';
 import { runCompilation, startCompilation } from '@/lib/compiler/runner';
 import {
@@ -221,6 +231,18 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
     ...(profile ? { profile } : {}),
     ...(intent.composer?.transport ? { composerTransport: intent.composer.transport } : {}),
     ...(intent.composer?.shape ? { composerShape: intent.composer.shape } : {}),
+    /*
+     * THE REACH THE TRAVELLER WAS SHOWN, HANDED TO THE THING THAT BUILDS.
+     *
+     * The preflight draws a structure and publishes the reach it implies; this
+     * is the only line that stops the compilation deriving a second, different
+     * number from its own table. Guarded on the destination key because a
+     * preflight for a *different* destination is not evidence about this one —
+     * the same guard `ensurePreflightAction` uses before reusing a stored one.
+     */
+    ...(preflightReachFor(intent, candidate.id) === undefined
+      ? {}
+      : { preflightReachKm: preflightReachFor(intent, candidate.id)! }),
     nights: countNights(trip.basics.startDate, trip.basics.endDate),
     revision: intent.scopeRevision + 1,
   });
@@ -285,7 +307,17 @@ export async function startCompilationAction(tripId: string): Promise<ActionResu
 /** Explicit, and only from a terminal state. A retry is never automatic. */
 export async function retryCompilationAction(tripId: string): Promise<ActionResult> {
   const job = getLatestJob(tripId);
-  if (job && !isTerminal(job.state)) {
+  /*
+   * An abandoned job is terminal for this purpose, and saying so here is what
+   * makes the unlock real.
+   *
+   * Without it the screen could report `failed` and offer "Try again" while
+   * this guard still read the row's own `running` and refused — a button that
+   * appears exactly when it cannot work, which is worse than no button. The
+   * same ninety-second threshold `startJob` already trusts enough to hand the
+   * work to a different request.
+   */
+  if (job && !isTerminal(job.state) && !isAbandoned(job, new Date())) {
     return { ok: false, error: 'That compilation is still running.' };
   }
   return startCompilationAction(tripId);
@@ -389,11 +421,38 @@ export async function compilationSnapshotAction(tripId: string): Promise<Compila
    */
   const provisionalBoardId = provisionalBoardIdFor(tripId);
 
+  /**
+   * A BUILD WHOSE PROCESS IS GONE IS FAILED, NOT RUNNING.
+   *
+   * `isAbandoned` existed and was consulted in exactly one place — `startJob`,
+   * deciding whether a *new* request could take over a stale row. The screen
+   * never asked. So if the server process died mid-build, the traveller watched
+   * a live-ticking elapsed clock, polling every 1.2 seconds, for ever: the state
+   * stayed `running`, "Try again" is gated on `failed`, and the retry action
+   * refuses while a job is non-terminal. Three correct-looking guards adding up
+   * to a screen that could never move.
+   *
+   * Reported rather than written. The row is left alone — a process that comes
+   * back and finishes should still be able to complete its own job — and what
+   * changes is only what this snapshot *says*, which is what the retry path
+   * reads. A ninety-second silence is already the threshold `startJob` trusts
+   * enough to hand the work to somebody else.
+   */
+  const abandoned = isAbandoned(job, new Date());
+  const state: CompilationState = abandoned ? 'failed' : job.state;
+
   return {
-    state: job.state,
+    state,
     stages,
-    ...(job.errorCode ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] } : {}),
-    retryable: job.errorCode ? isRetryable(job.errorCode) : job.state === 'failed',
+    ...(job.errorCode
+      ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] }
+      : abandoned
+        ? {
+            errorMessage:
+              'That build stopped without finishing — the server it was running on went away. Nothing was lost; starting it again picks up everything we had already read.',
+          }
+        : {}),
+    retryable: job.errorCode ? isRetryable(job.errorCode) : state === 'failed',
     ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
     startedAt: job.startedAt,
     ...(provisionalBoardId ? { provisionalBoardId } : {}),
@@ -453,6 +512,33 @@ function selectedDestinationFrom(candidate: DestinationCandidate): SelectedDesti
  * provenance than a geocoder guess, and `user_confirmed` says exactly that
  * without claiming corroboration nobody performed.
  */
+/**
+ * The reach the stored preflight published, but only if it is about *this*
+ * destination.
+ *
+ * The identity check is the whole of the function. A preflight for the previous
+ * thing the traveller typed is not evidence about the current one, and adopting
+ * its reach would compile a region shaped like a destination they abandoned.
+ *
+ * Two id forms have to be reconciled, and that is not incidental: a destination
+ * picked from the index carries the index entry id, while one resolved from
+ * free text is stored as `resolver:<candidate id>` by `selectedDestinationFrom`
+ * above. Comparing the raw strings matched the first and silently missed the
+ * second — which would have left exactly the arbitrary-destination journey
+ * without the fix, and that is the journey it was written for.
+ */
+function preflightReachFor(
+  intent: { preflight?: TripPreflight | null | undefined },
+  candidateId: string,
+): number | undefined {
+  const preflight = intent.preflight;
+  if (!preflight) return undefined;
+  const key = preflight.destinationKey;
+  if (key !== candidateId && key !== `resolver:${candidateId}`) return undefined;
+  const reach = preflight.portfolio?.reachRadiusKm;
+  return typeof reach === 'number' && reach > 0 ? reach : undefined;
+}
+
 function candidateFromSelected(destination: SelectedDestination): DestinationCandidate {
   const entityType = FEATURE_TYPE_ENTITY[destination.featureType];
   return {
@@ -571,6 +657,62 @@ export async function ensurePreflightAction(tripId: string): Promise<ActionResul
       now: new Date(),
     });
     savePreflight(tripId, preflight);
+
+    /*
+     * ADAPTIVE QUESTIONS ARE DERIVED HERE, AND NOWHERE EARLIER.
+     *
+     * They read the preliminary scan, which is the only thing that knows
+     * anything specific about *this* trip — how many areas there are, how far
+     * apart they sit, what the structure had to leave out, whether the season
+     * genuinely matters here. Deriving them before the scan would produce the
+     * trait-gated questions the bank next door already asks; deriving them
+     * after compilation would be asking about decisions already taken.
+     *
+     * Folded in additively, so nothing a traveller has already answered is
+     * disturbed by a question arriving beside it.
+     */
+    const withAdaptive = withAdaptiveQuestions(
+      getIntent(tripId)?.clarifications ?? intent.clarifications,
+      deriveAdaptiveQuestions({
+        preflight,
+        /*
+         * `nightsFrom`, not `duration.nights`.
+         *
+         * `duration.nights` is only set when the traveller typed a night count.
+         * The ordinary path — entering two dates — leaves it undefined, which
+         * made this `null` for most travellers and broke both directions at
+         * once: the hotel-move rule is gated on `nights >= 5` and never fired,
+         * while the date rule is gated on `nights === null` and asked somebody
+         * who had just entered exact dates whether they would move them.
+         * `nightsFrom` derives it from whichever the traveller actually gave.
+         */
+        nights: intent.composer ? nightsFrom(intent.composer) : null,
+        known: {
+          ...knownFrom(intent.composer),
+          ...(intent.composer?.shape ? { shape: intent.composer.shape } : {}),
+          ...(intent.composer?.mustDo ? { mustDo: intent.composer.mustDo } : {}),
+          /*
+           * How settled the dates are, from the mode the traveller chose rather
+           * than from whether a night count happens to be stored. `exact` and
+           * `flexible` mean they have dates; the other three mean they have not
+           * decided, which is the only state where offering to move them is a
+           * question rather than an insult.
+           */
+          ...(intent.composer
+            ? {
+                datesSettled:
+                  intent.composer.dates.mode === 'exact' ||
+                  intent.composer.dates.mode === 'flexible',
+                wantsDateAdvice: intent.composer.dates.wantsRecommendation,
+              }
+            : {}),
+        },
+        existingIds: (getIntent(tripId)?.clarifications ?? intent.clarifications).questions.map(
+          (question) => question.id,
+        ),
+      }),
+    );
+    saveClarifications(tripId, withAdaptive);
   } catch (error) {
     console.error('Preflight failed', { tripId, error });
     return { ok: false, error: 'We could not read that region just now. Try again.' };
@@ -831,4 +973,35 @@ const STRATEGY_CONSEQUENCES: Record<
 /** The stored board's id, when the cut has produced one for this trip. */
 function provisionalBoardIdFor(tripId: string): string | null {
   return getProvisionalBoard(tripId)?.id ?? null;
+}
+
+/**
+ * GO BACK TO THE REGION SCREEN FROM THE QUESTIONS.
+ *
+ * Section 18.1 requires Back on every step, and the clarification step had
+ * none — the traveller's only route back to the region preview was the
+ * browser's own button, which on a flow whose step is *derived from stored
+ * state* rather than from the URL does not go back at all.
+ *
+ * The step is derived, so "back" cannot be a link. It has to undo the thing
+ * that moved them forward, which is the scope strategy recorded on the
+ * composer. Clearing it is enough: `decideStep` returns `preflight` the moment
+ * `scopeStrategy` is absent.
+ *
+ * **Every answer is kept.** The clarification answers stay exactly where they
+ * are, so somebody who steps back to look at the region and then comes forward
+ * finds their questions still answered. Losing them would make Back a
+ * punishment, which is how a product teaches people not to check their work.
+ */
+export async function reopenPreflightAction(tripId: string): Promise<ActionResult> {
+  const intent = getIntent(tripId);
+  if (!intent) return { ok: false, error: 'We could not find that trip.' };
+  if (!intent.composer) {
+    return { ok: false, error: 'There is nothing to go back to on this trip.' };
+  }
+
+  const { scopeStrategy: _cleared, ...rest } = intent.composer;
+  saveComposerAnswers(tripId, { ...rest, updatedAt: new Date().toISOString() });
+  revalidatePath(`/trips/${tripId}/plan`);
+  return { ok: true };
 }

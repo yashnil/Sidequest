@@ -17,6 +17,7 @@ import type {
   WeatherDataset,
 } from '@sidequest/core';
 import type { TravelTimeMatrix } from '@sidequest/geo';
+import type { MustDoConflict } from './feasibility';
 
 export const PLANNER_VERSION = 1;
 
@@ -219,6 +220,18 @@ export type PlanFailureCode =
    * failure that owes the traveller a breakdown rather than a sentence.
    */
   | 'planner_coverage_insufficient'
+  /**
+   * The traveller's own hand-picks cannot all fit in the time they have.
+   *
+   * Its own code rather than a coverage failure, because it is the only one of
+   * these the *traveller* can resolve and the only one where refusing is the
+   * honest answer. Section 26.2: a set of must-dos too large for the trip must
+   * produce a stated conflict, not an itinerary that quietly drops whichever
+   * ones the packer reached last. See `assessMustDoFeasibility` for the
+   * arithmetic, which is deliberately conservative in the traveller's favour so
+   * that a conflict reported here is one no ordering could have fixed.
+   */
+  | 'must_do_conflict'
   | 'internal_error';
 
 export type PlanResult =
@@ -240,6 +253,14 @@ export type PlanResult =
       message: string;
       /** Present on `planner_coverage_insufficient`, and only there. */
       readiness?: PlannerReadiness;
+      /**
+       * The arithmetic behind a `must_do_conflict`, and only there.
+       *
+       * Carried rather than folded into `message` because the screen has to
+       * offer the traveller a choice between named places — which it cannot do
+       * from a sentence.
+       */
+      mustDoConflict?: MustDoConflict;
     };
 
 export function resolveConfig(overrides?: Partial<PlannerConfig>): PlannerConfig {

@@ -493,3 +493,132 @@ export function applyThemes(
   if (!changed) return base;
   return { ...base, interests: interests as QuestionnaireAnswers['interests'] };
 }
+
+/**
+ * THE COMPOSER'S ANSWERS, CARRIED INTO THE QUESTIONNAIRE INSTEAD OF DISCARDED.
+ *
+ * The defect this closes was the most expensive one in the intake, and it was
+ * invisible: the composer asks a traveller how they are getting around, how
+ * fast they want the days, what they will spend, how they feel about crowds and
+ * how hard the outdoor days should be — stores all five — and then the
+ * questionnaire seeded itself from `defaultAnswers`, which hard-codes
+ * `willDrive: true`. So somebody who chose "Trains, buses and transfers" on the
+ * first screen, and whose region was then scoped as a transit trip, arrived at
+ * a later screen with **"You will have a car" already ticked**, and had to
+ * notice and undo it. The product asked, ignored the answer, and then asserted
+ * the opposite back at them.
+ *
+ * Five duplicated questions is the smaller half. The larger half is that a
+ * traveller who *does not* revisit those steps is planned against a default
+ * that contradicts what they said.
+ *
+ * The contract mirrors `applyThemes` exactly, and for the same reasons:
+ *
+ * - It runs at **seed** time only. The moment the traveller edits anything,
+ *   their own answers are what persist and this is never consulted again.
+ * - It writes only where the composer actually holds an answer. `undecided`,
+ *   `unstated` and absent all mean "nobody said", and a default must not be
+ *   promoted into a statement.
+ * - It never invents precision. A coarse three-way composer band maps onto the
+ *   nearest questionnaire value and nothing finer.
+ */
+/**
+ * The composer fields the questionnaire seeds itself from.
+ *
+ * Structural rather than the whole `TripComposerAnswers`, so this module stays
+ * independent of the composer schema's shape and a field added there cannot
+ * silently start being carried across without somebody deciding it should be.
+ */
+export interface ComposerCarriedAnswers {
+  transport?: string | undefined;
+  pace?: string | undefined;
+  budget?: string | undefined;
+  crowdTolerance?: string | undefined;
+  outdoorIntensity?: string | undefined;
+}
+
+export function applyComposer(
+  base: QuestionnaireAnswers,
+  composer: ComposerCarriedAnswers | null | undefined,
+): QuestionnaireAnswers {
+  if (!composer) return base;
+  const next: QuestionnaireAnswers = { ...base };
+
+  /*
+   * Transport is the one that was actively wrong rather than merely unread.
+   * `mixed` deliberately leaves `willDrive` true — a traveller who said "some
+   * of both" has a car available — and `undecided` leaves the default alone,
+   * because the clarification step exists to ask it properly.
+   */
+  if (composer.transport === 'public_transport') {
+    next.willDrive = false;
+    next.willUseShuttles = true;
+  } else if (composer.transport === 'drive' || composer.transport === 'mixed') {
+    next.willDrive = true;
+  }
+
+  if (composer.pace === 'slow') next.pace = 'slow';
+  else if (composer.pace === 'balanced') next.pace = 'balanced';
+  else if (composer.pace === 'packed') next.pace = 'fast';
+
+  if (composer.budget === 'budget') next.budgetStyle = 'budget';
+  else if (composer.budget === 'mid_range') next.budgetStyle = 'midrange';
+  else if (composer.budget === 'premium') next.budgetStyle = 'premium';
+  else if (composer.budget === 'luxury') next.budgetStyle = 'luxury';
+
+  if (composer.crowdTolerance === 'avoid') next.crowdTolerance = 'avoid_crowds';
+  else if (composer.crowdTolerance === 'tolerate') next.crowdTolerance = 'mild';
+  else if (composer.crowdTolerance === 'unbothered') next.crowdTolerance = 'dont_mind';
+
+  /*
+   * Intensity never overrides the mobility floor. `defaultAnswers` forces
+   * `light` for a traveller who declared a mobility need, and a composer answer
+   * given before that need was known must not raise it back up — the scoring
+   * layer would override it anyway, and the screen would be making a promise
+   * the plan then breaks.
+   */
+  if (!base.mobilityLimited) {
+    if (composer.outdoorIntensity === 'gentle') next.dailyIntensity = 'light';
+    else if (composer.outdoorIntensity === 'moderate') next.dailyIntensity = 'moderate';
+    else if (composer.outdoorIntensity === 'strenuous') next.dailyIntensity = 'intense';
+  }
+
+  return next;
+}
+
+/**
+ * Which questionnaire fields the composer has already answered.
+ *
+ * Read by the wizard so a question the traveller has *already* answered is
+ * shown as a confirmable assumption rather than asked a second time. Derived
+ * from the same conditions `applyComposer` uses, in one place, so the two
+ * cannot drift into the state where a field is prefilled and still asked.
+ */
+export type ComposerAnsweredField =
+  | 'willDrive'
+  | 'pace'
+  | 'budgetStyle'
+  | 'crowdTolerance'
+  | 'dailyIntensity';
+
+export function composerAnsweredFields(
+  composer: ComposerCarriedAnswers | null | undefined,
+  mobilityLimited: boolean,
+): ComposerAnsweredField[] {
+  if (!composer) return [];
+  const fields: ComposerAnsweredField[] = [];
+  if (
+    composer.transport === 'public_transport' ||
+    composer.transport === 'drive' ||
+    composer.transport === 'mixed'
+  ) {
+    fields.push('willDrive');
+  }
+  if (composer.pace === 'slow' || composer.pace === 'balanced' || composer.pace === 'packed') {
+    fields.push('pace');
+  }
+  if (composer.budget !== undefined && composer.budget !== 'unstated') fields.push('budgetStyle');
+  if (composer.crowdTolerance !== undefined) fields.push('crowdTolerance');
+  if (composer.outdoorIntensity !== undefined && !mobilityLimited) fields.push('dailyIntensity');
+  return fields;
+}

@@ -1,5 +1,10 @@
-import type { CroppableImage, DestinationImage as ImageRecord, ImageryFallback } from '@sidequest/core';
-import { cx } from './ui';
+import type {
+  CroppableImage,
+  DestinationImage as ImageRecord,
+  ImageryFallback,
+  PlaceCategory,
+} from '@sidequest/core';
+import { PLATE_HUE, cx } from './ui';
 
 /**
  * A PHOTOGRAPH, OR THE THING THAT IS THERE INSTEAD OF ONE.
@@ -63,6 +68,20 @@ export type DestinationImageProps = {
   ratio?: string;
   /** Rendered above the graphic when there is no photograph. Off for small cards. */
   showLabel?: boolean;
+  /**
+   * What kind of place this is, where the caller knows.
+   *
+   * The generated graphic's hue comes from `ImageryFallback.hue`, which is
+   * derived from the subject's *identity* — so a row of three lakes came out
+   * orange, purple and green. A colour difference reads as a meaning difference,
+   * and identity is not a meaning anybody can act on. Where the caller knows the
+   * category, the hue is taken from the same `PLATE_HUE` table the category
+   * plates use, so a lake looks like a lake wherever it appears.
+   *
+   * Optional, because destinations and regions have no place category. Absent,
+   * the identity-derived hue is used exactly as before.
+   */
+  category?: PlaceCategory;
 } & (
   | {
       /** The frame is wider than the file, so the file gets cropped to fill it. */
@@ -83,6 +102,7 @@ export function DestinationImage({
   ratio = '16 / 9',
   crop = false,
   showLabel = false,
+  category,
 }: DestinationImageProps) {
   return (
     <figure className={cx('m-0', className)}>
@@ -101,6 +121,7 @@ export function DestinationImage({
           fallback={fallback}
           showLabel={showLabel && !image}
           decorative={image !== null}
+          {...(category ? { category } : {})}
         />
         {image ? (
           <img
@@ -200,13 +221,24 @@ function FallbackGraphic({
   fallback,
   showLabel,
   decorative,
+  category,
 }: {
   fallback: ImageryFallback;
   showLabel: boolean;
   /** True when a photograph sits on top of it, making this backdrop rather than content. */
   decorative: boolean;
+  /** See `DestinationImageProps.category`: a meaning for the hue, where there is one. */
+  category?: PlaceCategory;
 }) {
-  const { hue, horizon, drift, marks, kind } = fallback;
+  const { horizon, drift, marks, kind } = fallback;
+  /*
+   * Category first, identity second.
+   *
+   * The identity-derived hue is kept for subjects that have no category — a
+   * destination, a region, a shortlist entry — because two *destinations* that
+   * look different is useful and two lakes that look different is not.
+   */
+  const hue = category ? PLATE_HUE[category] : fallback.hue;
   const y = horizon * 100;
   const x = 12 + drift * 76;
 
@@ -217,7 +249,16 @@ function FallbackGraphic({
         ? { 'aria-hidden': true as const }
         : { role: 'img', 'aria-label': fallback.description })}
       style={{
-        background: `linear-gradient(${140 + Math.round(drift * 60)}deg, hsl(${hue} 32% 88%), hsl(${(hue + 40) % 360} 28% 76%))`,
+        /*
+         * Saturation held down and the second stop kept on the *same* hue.
+         *
+         * The old form rotated 40° between the two stops, which on a 96px card
+         * turned every plate into a two-colour object and made a row of them
+         * read as a paint chart. One hue, two lightnesses: the graphic reads as
+         * material rather than as a signal competing with the semantic colours
+         * on the same card.
+         */
+        background: `linear-gradient(${140 + Math.round(drift * 60)}deg, hsl(${hue} 24% 88%), hsl(${hue} 20% 74%))`,
       }}
     >
       <svg
@@ -229,12 +270,12 @@ function FallbackGraphic({
         {/* The horizon, from the latitude. */}
         <path
           d={`M0 ${(y * 0.6).toFixed(2)} Q 30 ${(y * 0.6 - 5).toFixed(2)} 55 ${(y * 0.6 + 2).toFixed(2)} T 100 ${(y * 0.6 - 2).toFixed(2)} L100 60 L0 60 Z`}
-          fill={`hsl(${hue} 30% 58%)`}
+          fill={`hsl(${hue} 22% 58%)`}
           opacity={0.55}
         />
         <path
           d={`M0 ${(y * 0.6 + 9).toFixed(2)} Q 40 ${(y * 0.6 + 3).toFixed(2)} 70 ${(y * 0.6 + 11).toFixed(2)} T 100 ${(y * 0.6 + 7).toFixed(2)} L100 60 L0 60 Z`}
-          fill={`hsl(${(hue + 20) % 360} 34% 44%)`}
+          fill={`hsl(${hue} 26% 44%)`}
           opacity={0.6}
         />
 
@@ -253,7 +294,7 @@ function FallbackGraphic({
                 cx={(((x + index * 17) % 84) + 8).toFixed(2)}
                 cy={(y * 0.6 - 6 + (index % 2) * 5).toFixed(2)}
                 r={1.8}
-                fill={`hsl(${hue} 45% 26%)`}
+                fill={`hsl(${hue} 34% 26%)`}
                 opacity={0.8}
               />
             ))
@@ -263,7 +304,7 @@ function FallbackGraphic({
                   cx={x.toFixed(2)}
                   cy={(y * 0.6 - 7).toFixed(2)}
                   r={2.4}
-                  fill={`hsl(${hue} 45% 26%)`}
+                  fill={`hsl(${hue} 34% 26%)`}
                   opacity={0.85}
                 />
               )

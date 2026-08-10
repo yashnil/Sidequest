@@ -20,50 +20,40 @@ export function BuildTripButton({
   tripId,
   hasItinerary,
   includedCount,
-  storedReadiness,
+  onReadiness,
 }: {
   tripId: string;
   hasItinerary: boolean;
   includedCount: number;
   /**
-   * Why the last attempt refused, read from the database by the page.
+   * WHERE THE REFUSAL IS RENDERED IS THE CALLER'S PROBLEM, NOT THIS BUTTON'S.
    *
-   * Without this the explanation lives only in a server action's return value,
-   * which a refresh throws away — leaving somebody looking at a board and a
-   * button that appears to do nothing. A refusal is a finding, and a finding
-   * that does not survive a reload is not much of one.
+   * This component used to own the explanation panel as well as the button, and
+   * that was fine until the board's toolbar became sticky: a seven-hundred-pixel
+   * panel inside a bar pinned to the top of the viewport covered half the board,
+   * on every scroll position, until the traveller acted on it. The panel is the
+   * most important thing on the screen when it exists and it still must not be
+   * the only thing on the screen.
+   *
+   * So the button reports the refusal upwards and the board decides where it
+   * goes — which is below the bar, in the flow, where a long explanation can be
+   * as long as it needs to be. `null` clears a previous refusal, which is what
+   * a fresh attempt means.
    */
-  storedReadiness?: PlannerReadiness | null;
+  onReadiness?: (readiness: PlannerReadiness | null) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
-  /**
-   * Show a stored refusal whenever there was one — not only when nothing was
-   * scheduled.
-   *
-   * `funnel.scheduled === 0` was the whole test, and it was the right test while
-   * the only refusal was "we could not place a single stop". The planner now
-   * also refuses a plan whose *days* do not work, and that refusal happens with
-   * every stop scheduled — so the explanation was discarded on reload and the
-   * traveller came back to an ordinary board and a button that had, as far as
-   * they could tell, silently done nothing.
-   *
-   * The condition is now the honest one: a readiness that is not `ready` is a
-   * finding, and a finding that does not survive a refresh is not much of one.
-   */
-  const [readiness, setReadiness] = useState<PlannerReadiness | null>(
-    storedReadiness && storedReadiness.level !== 'ready' ? storedReadiness : null,
-  );
   const [pending, startTransition] = useTransition();
 
   function build() {
     setError(null);
-    setReadiness(null);
+    onReadiness?.(null);
     startTransition(async () => {
       const result = await buildItineraryAction(tripId);
       // On success this redirects and never returns.
       if (!result.ok) {
         setError(result.error ?? 'We could not build your trip just then.');
-        setReadiness(result.readiness ?? null);
+        onReadiness?.(result.readiness ?? null);
       }
     });
   }
@@ -85,7 +75,6 @@ export function BuildTripButton({
         </p>
       ) : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}
-      {readiness ? <PlannerReadinessPanel readiness={readiness} /> : null}
     </div>
   );
 }
@@ -103,14 +92,24 @@ export function BuildTripButton({
  * none reachable" are different problems with different answers, and a single
  * sentence cannot tell them apart.
  */
-function PlannerReadinessPanel({ readiness }: { readiness: PlannerReadiness }) {
+export function PlannerReadinessPanel({ readiness }: { readiness: PlannerReadiness }) {
   const helps = suggestedRemedies(readiness);
   const ruledOut = ruledOutRemedies(readiness);
 
   return (
     <div data-testid="planner-readiness">
       <Panel className="mt-4 border-amber bg-amber-soft p-4 sm:p-5">
-      <h3 className="font-display text-lg text-ink">We did not build a plan</h3>
+      {/*
+        AN H2, BECAUSE THIS IS THE FIRST HEADING UNDER THE PAGE'S H1.
+
+        It was an `h3`, and it renders inside the board's toolbar — which sits
+        above every board group. So the Discovery Board's outline went h1 → h3 →
+        h2, a skipped level at exactly the moment a screen-reader user most needs
+        to navigate by heading: the build has just refused and the explanation is
+        the thing they are looking for. Nothing about the panel's visual weight
+        changes; `text-lg` is stated, not inherited from the tag.
+      */}
+      <h2 className="font-display text-lg text-ink">We did not build a plan</h2>
       <p className="text-xs uppercase tracking-[0.12em] text-ink-faint" data-testid="readiness-level">
         {PLANNER_READINESS_LEVEL_LABELS[readiness.level]}
       </p>

@@ -53,8 +53,19 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
   for (const dayNumber of [1, 2, 3, 4]) {
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
-  await expect(page.getByText('2026-08-12')).toBeVisible();
-  await expect(page.getByText('2026-08-15')).toBeVisible();
+  /*
+   * The date a traveller reads, and the date a machine reads, on the same
+   * element. The heading used to print the ISO string straight after the day
+   * number with nothing between them, so its accessible name was the single
+   * token "Day 12026-08-12".
+   */
+  const firstDate = page.locator('h2 time[datetime="2026-08-12"]');
+  await expect(firstDate).toBeVisible();
+  await expect(firstDate).toHaveText(/^\w{3} \d{1,2} \w{3}$/);
+  await expect(page.locator('h2 time[datetime="2026-08-15"]')).toBeVisible();
+  // The separator is real text, so the day number cannot run into the year.
+  const firstHeading = await page.getByRole('heading', { name: /^Day 1/ }).textContent();
+  expect(firstHeading).toMatch(/^Day 1\s*·/);
 
   // A plain validation state, never a fabricated score.
   await expect(page.getByText(/^(Ready|Ready, with cautions|Needs a decision)$/)).toBeVisible();
@@ -71,6 +82,42 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
   // Travel times are labelled as modelled, never presented as measured.
   await expect(page.getByText(/modelled travel time/).first()).toBeVisible();
   await expect(page.getByText(/not measured road data/).first()).toBeVisible();
+});
+
+test('the day rail jumps to a day on a page too long to scroll', async ({ page }) => {
+  /**
+   * An eight-thousand-pixel plan with no way through it.
+   *
+   * Reaching the last day meant scrolling past every day before it. The rail is
+   * anchors rather than script, so this asserts the two things an anchor is:
+   * the URL names the day, and the day's own heading ends up in the viewport.
+   */
+  await reachBoard(page);
+  await buildTrip(page);
+
+  const rail = page.getByTestId('day-rail');
+  await expect(rail).toBeVisible();
+
+  const last = rail.getByRole('link', { name: /^Day 4/ });
+  await expect(last).toBeVisible();
+  await last.click();
+
+  await expect(page).toHaveURL(/#day-4$/);
+
+  const heading = page.getByRole('heading', { name: /^Day 4/ });
+  await expect(heading).toBeInViewport();
+
+  /*
+   * And it clears the two sticky elements above it — the product chrome and the
+   * rail itself. A jump that lands the heading *underneath* the thing you
+   * clicked is the defect `scroll-mt` exists to prevent, and it is invisible to
+   * a plain visibility check.
+   */
+  const railBox = await rail.boundingBox();
+  const headingBox = await heading.boundingBox();
+  expect(railBox, 'the rail should have a box').not.toBeNull();
+  expect(headingBox, 'the day heading should have a box').not.toBeNull();
+  expect(headingBox!.y).toBeGreaterThanOrEqual(railBox!.y + railBox!.height - 1);
 });
 
 test('the itinerary survives a refresh', async ({ page }) => {

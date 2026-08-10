@@ -136,7 +136,12 @@ export function ResearchReadinessPanel({
           </Link>
         ) : null}
         {blocked ? (
-          <Link href="/trips/new" className={buttonClass('secondary', 'sm')}>
+          /*
+           * Editing, not restarting. A blocked reading means the *destination*
+           * is thin — it is not a reason to make the traveller re-enter their
+           * dates, their party and their must-dos, all of which are still true.
+           */
+          <Link href={`/trips/${tripId}/edit`} className={buttonClass('secondary', 'sm')}>
             Try somewhere else
           </Link>
         ) : null}

@@ -1,4 +1,5 @@
 import {
+  assessPlaceStanding,
   foldForMatch,
   licence,
   parseOsmOpeningHours,
@@ -17,6 +18,7 @@ import {
   VISITABLE_ROLES,
   placeInclusionTag,
   placeRoleTag,
+  standingFields,
 } from '@sidequest/core';
 import type { DiscoveredCandidate } from '../providers';
 import { assessRecordEligibility, type CandidateEligibility } from './eligibility';
@@ -386,6 +388,7 @@ export function buildInventory(input: {
 
   const superseded = supersededRecordIds(records, input.pack.links);
   const crossLayer = crossLayerCorroboration(records, input.pack.links);
+  const namesakes = regionNamesakes(input.pack);
 
   /*
    * ADMISSION, IN A FIXED ORDER, BEFORE ANYTHING IS BALANCED.
@@ -773,6 +776,7 @@ export function buildInventory(input: {
       crossLayerCorroborated: crossLayer.has(record.id),
       role: roleOf.get(record.id) ?? roleOfRecord(record),
       inclusion: inclusionOf.get(record.id) ?? 'membership_unknown',
+      namedInRegionRecords: namesakes.has(record.id),
     });
 
   /*
@@ -1165,6 +1169,44 @@ function crossLayerCorroboration(
   return corroborated;
 }
 
+/**
+ * Records the region's own geography is named for.
+ *
+ * A local-significance channel that no single record can see, and one that owes
+ * nothing to a knowledge base: when the administrative layer draws an area
+ * carrying a place's name, or a record's own containing locality or neighbourhood
+ * is called what the record is called, the place is what the surrounding ground
+ * is named after. That is somebody local having decided it matters, recorded in
+ * the geography rather than in a listing — which is exactly the evidence the old
+ * metadata-count model had no channel for.
+ *
+ * Fold-matched, so casing, accents and punctuation do not decide it.
+ */
+function regionNamesakes(pack: RegionPack): Set<string> {
+  const areaNames = new Set<string>();
+  for (const layer of pack.layers) {
+    if (layer.kind !== 'administrative_divisions') continue;
+    for (const record of layer.records) areaNames.add(foldForMatch(record.name));
+  }
+
+  const namesakes = new Set<string>();
+  for (const layer of pack.layers) {
+    if (layer.kind === 'administrative_divisions') continue;
+    for (const record of layer.records) {
+      const folded = foldForMatch(record.name);
+      if (folded.length === 0) continue;
+      const containers = [
+        record.containment.neighbourhoodName,
+        record.containment.localityName,
+      ].filter((name): name is string => name !== undefined);
+      if (areaNames.has(folded) || containers.some((name) => foldForMatch(name) === folded)) {
+        namesakes.add(record.id);
+      }
+    }
+  }
+  return namesakes;
+}
+
 // ---------------------------------------------------------------------------
 // Record → Place
 // ---------------------------------------------------------------------------
@@ -1177,6 +1219,14 @@ export function toCandidate(input: {
   role: PlanningRole;
   /** Why this record is here at all. Required, so an external one must justify itself. */
   inclusion: InclusionReason;
+  /**
+   * Local-significance evidence the *pack* holds and a single record cannot.
+   *
+   * Optional because a caller with one record in hand genuinely does not know
+   * it, and an absent channel has to stay absent rather than default to false
+   * dressed up as a fact — see `assessPlaceStanding`.
+   */
+  namedInRegionRecords?: boolean;
 }): DiscoveredCandidate {
   const { record, scope, crossLayerCorroborated, role, inclusion } = input;
   const taxonomy = classifySourceCategory({
@@ -1185,56 +1235,51 @@ export function toCandidate(input: {
   });
 
   /**
-   * TWO DIFFERENT THINGS THAT USED TO BE ONE NUMBER.
+   * FOUR DIFFERENT THINGS THAT USED TO BE ONE NUMBER.
    *
    * `popularity` was derived from *attribute count* — how many fields the source
-   * happened to fill in, plus websites, plus a Wikidata id, over six. The
-   * reasoning was that "a place many people care about carries a site, an
-   * operator, posted hours", and for a museum that is often true. For a chain
-   * café it is *always* true: a franchise publishes a website, an operator and
-   * posted hours as a matter of course, and scored 3 of the 6 before anyone
-   * looked at what it was. A significant shrine that nobody has tagged beyond
-   * its name scored 0. The board then ranked the café above the shrine, and
-   * `hiddenGemScore`, being `1 - popularity`, called the *shrine* the hidden gem
-   * — which is accidentally right and for entirely the wrong reason, and would
-   * have been wrong the moment somebody tagged it properly.
+   * happened to fill in, plus websites, plus a Wikidata id, over six — and then
+   * a later pass narrowed it to knowledge-base evidence but left three more
+   * fields reading off it: `hiddenGemScore = 1 − popularity`,
+   * `crowdLevel = popularity > 0.7`, and a `source.confidence` of `0.7` that was
+   * derived from nothing at all. One variable wearing four hats cannot let the
+   * board's "must-see classics" and "hidden gems" disagree, because they were
+   * the two ends of the same figure.
    *
-   * The two are separated here.
+   * `assessPlaceStanding` separates them. What is passed in here is *evidence*,
+   * never a score: the policy for turning any of it into a number lives in one
+   * module so that this producer and the live fallback cannot drift apart, as
+   * they had — the other one was computing popularity as `tagCount / 5`.
    *
-   * **Significance** is evidence that the wider world has taken note: an entry in
-   * an encyclopaedic knowledge base, names recorded in more than one language,
-   * and a second catalogue independently describing the same thing. None of
-   * these is a side effect of a business filling in its own listing.
+   * Two things worth naming about the arguments:
    *
-   * **Completeness** is how much a source recorded. It is real and useful — it is
-   * why the hours are known and the website is linkable — and it belongs to
-   * source confidence, not to how much a place matters. It is deliberately *not*
-   * an input to popularity any more.
+   * `crossLayerCorroborated`, not the count of `record.sources`. A conflated
+   * catalogue merges several contributors into one row and we did not watch it
+   * merge them; only two *layers* finding the same thing is agreement, which is
+   * the rule the confidence signals below are already held to.
+   *
+   * `attributes` reaches `evidenceRichness` and stops there. It is why the hours
+   * are known and the website is linkable, and it is not evidence that anybody
+   * cares about the place.
    */
-  const multilingual = record.alternateNames.length >= 2;
-  const corroborated = new Set(record.sources.map((entry) => entry.dataset)).size > 1;
-  const significance =
-    (record.wikidataId ? 0.5 : 0) + (multilingual ? 0.25 : 0) + (corroborated ? 0.25 : 0);
-
-  /**
-   * Still capped and still conservative. Without a rating or a review count
-   * anywhere in the open stack there is no popularity figure to be had, and this
-   * is an evidence-of-note score wearing the field's name — which is why nothing
-   * lets it outrank what the traveller said they came for.
-   */
-  const popularity = Math.min(0.9, 0.15 + significance * 0.75);
-
-  /*
-   * Completeness is deliberately *not* computed here.
-   *
-   * A first pass kept it as a local and discarded it with `void`, on the
-   * argument that a future source-confidence layer would want it. That is a
-   * value nothing reads, guarded by a statement whose only purpose is to silence
-   * a lint rule, beside a comment describing an intent the code does not carry
-   * out — three ways of saying the same thing is not there. When that layer
-   * exists it can derive the figure from `record.attributes` in one line, which
-   * is where the data already is.
-   */
+  const standing = assessPlaceStanding({
+    inKnowledgeBase: record.wikidataId !== undefined,
+    knowledgeBaseNameCount: record.alternateNames.length,
+    crossDatasetCorroboration: crossLayerCorroborated,
+    publishedSites: record.websiteCandidates,
+    classifyingValues: [record.sourceCategory, ...record.sourceCategoryPath],
+    ...(input.namedInRegionRecords !== undefined
+      ? { namedInRegionRecords: input.namedInRegionRecords }
+      : {}),
+    recordedAttributeCount: Object.keys(record.attributes).length,
+    /*
+     * The only crowd evidence a pack carries. A `seasonal` tag says a year's
+     * visitors arrive inside a short window; it says nothing about how many
+     * there are, which is why it lands on `moderate` and never on `busy`.
+     * Everything else stays absent rather than being guessed from prominence.
+     */
+    crowd: { seasonalConcentration: record.attributes.seasonal !== undefined },
+  });
 
   const place: Place = {
     id: record.id,
@@ -1279,7 +1324,15 @@ export function toCandidate(input: {
       name: sourceNameOf(record),
       kind: 'osm',
       ...(officialUrlOf(record) ? { url: officialUrlOf(record)! } : {}),
-      confidence: 0.7,
+      /*
+       * Computed, where this was the constant `0.7`.
+       *
+       * A hardcoded confidence is a claim that somebody measured our confidence,
+       * and it is listed in `provisional.ts` among the defensible defaults that
+       * become assertions the moment they reach a card. It now moves with how
+       * much the source actually recorded and whether a second catalogue agreed.
+       */
+      confidence: standing.sourceConfidence,
       lastVerified: (record.sources[0]?.updateTime ?? '').slice(0, 10) || '2026-01-01',
       element: {
         elementId: record.sourceId,
@@ -1295,9 +1348,12 @@ export function toCandidate(input: {
     typicalDurationMinutes: taxonomy.typicalDurationMinutes,
     costLevel: taxonomy.costLevel,
     physicalIntensity: taxonomy.physicalIntensity,
-    crowdLevel: popularity > 0.7 ? 'busy' : 'quiet',
-    popularityScore: popularity,
-    hiddenGemScore: Math.max(0.1, 1 - popularity - 0.1),
+    /*
+     * Popularity, hidden-gem and crowd are *reads* of the standing above, and
+     * the optional separated scores travel beside them. One spread rather than
+     * three assignments, so this producer cannot invent a fallback of its own.
+     */
+    ...standingFields(standing),
     weather: {
       exposure: taxonomy.exposure,
       precipitation: taxonomy.exposure === 'indoor' ? 'low' : 'high',

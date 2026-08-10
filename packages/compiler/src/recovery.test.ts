@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_RECOVERY_PASSES,
+  recoveryActionFor,
   recoveryAdjustment,
   repairsFor,
   assessResearchReadiness,
   type ReadinessInput,
 } from './research-readiness';
-import { geographicScopeSchema, shouldAttemptRecovery, type GeographicScope } from '@sidequest/core';
+import {
+  geographicScopeSchema,
+  RESEARCH_REPAIRS,
+  shouldAttemptRecovery,
+  type GeographicScope,
+} from '@sidequest/core';
 
 /**
  * THE LOOP'S SAFETY ARGUMENT, AS ASSERTIONS.
@@ -293,5 +299,52 @@ describe('repair selection is deficit-directed', () => {
     expect(repairsFor(['transport_routeability'], input({ unroutableModes: [] }))).toContain(
       'gateway_discovery',
     );
+  });
+});
+
+/**
+ * WHAT RECOVERY CAN AND CANNOT DO, STATED RATHER THAN IMPLIED.
+ *
+ * An acquiring repair was written for this pass and removed before it shipped.
+ * A review proved it could not work: every place provider short-circuits on the
+ * region pack *before* reading `queries`, so the call returned the identical
+ * inventory, reported zero provider calls, and booked ledger spend for work
+ * nobody did — while overwriting the provider's cached inventory with a
+ * narrower one, partially undoing the free repair that had just widened it.
+ *
+ * These assert the honest state that remains, because "recovery spends nothing"
+ * is a load-bearing claim and the moment it stops being true it has to be
+ * visible.
+ */
+describe('what recovery can and cannot do', () => {
+  it('types re-selection distinctly, so a paid action could not be mistaken for it', () => {
+    const reselect = recoveryActionFor('category_targeted_query', 0);
+    expect(reselect?.kind).toBe('reselect');
+    if (reselect?.kind === 'reselect') {
+      expect(reselect.adjustment.maxPerCategory).toBeGreaterThan(0);
+    }
+  });
+
+  it('offers no acquiring action at all, on any repair, at any pass', () => {
+    /*
+     * The claim that keeps "recovery is free" true. If a repair ever starts
+     * returning `acquire`, this fails — which is the point: the spending
+     * argument has to be re-made deliberately rather than acquired by a patch.
+     */
+    for (const repair of RESEARCH_REPAIRS) {
+      for (const pass of [0, 1]) {
+        expect(recoveryActionFor(repair, pass)?.kind).not.toBe('acquire');
+      }
+    }
+  });
+
+  it('still refuses the three repairs that need a stage the loop does not own', () => {
+    for (const repair of ['reresolve_identity', 'gateway_discovery', 'refresh_stale_pack'] as const) {
+      expect(recoveryActionFor(repair, 0)).toBeNull();
+    }
+  });
+
+  it('never returns an action for a repair with no deficit behind it', () => {
+    expect(recoveryActionFor('targeted_subject_query', 0)).toBeNull();
   });
 });
