@@ -157,7 +157,8 @@ describe('candidate quality', () => {
       evidence: { ...RICH_EVIDENCE, subjectId: 'far' },
     });
     expect(assessment.outcome).toBe('not_worth_detour');
-    expect(assessment.reason).toContain('140');
+    // As a person says it, not as an odometer reads: 140 minutes is 2 hr 20 min.
+    expect(assessment.reason).toContain('2 hr 20 min');
   });
 
   it('demotes a place that is closed on the dates, ahead of every other judgement', () => {

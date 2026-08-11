@@ -7,6 +7,8 @@ import { EASTERN_SIERRA_ACCESS } from '../data/access';
 import { EASTERN_SIERRA_HOURS } from '../data/hours';
 import { EASTERN_SIERRA_PLACES } from '../data/places';
 import { EASTERN_SIERRA } from '../data/regions';
+import { EASTERN_SIERRA_BASE_ID, easternSierraTravelMatrix } from '../data/travel-times';
+import { travelKnowledgeFor } from '../travel/reach';
 
 export const AUGUST_MONTHS = [8];
 export const JANUARY_MONTHS = [1];
@@ -18,7 +20,15 @@ export const JANUARY_MONTHS = [1];
 export const AUGUST_DATES = ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15'];
 export const JANUARY_DATES = ['2027-01-12', '2027-01-13', '2027-01-14', '2027-01-15'];
 
-/** Everything a board needs beyond the profile, with the real seed datasets. */
+/**
+ * Everything a board needs beyond the profile, with the real seed datasets.
+ *
+ * `travel` carries the authored region's own measured matrix and its base. The
+ * Eastern Sierra buys no timetables — a road region with none is the ordinary
+ * case — so `transit` is absent, and that absence is a fact about the fixture
+ * rather than a shortcut: it is what keeps the driving path tested unchanged
+ * while the transit fixtures exercise the other half.
+ */
 export function boardContext(dates: string[] = AUGUST_DATES) {
   return {
     region: EASTERN_SIERRA,
@@ -28,6 +38,20 @@ export function boardContext(dates: string[] = AUGUST_DATES) {
     months: [...new Set(dates.map((date) => Number(date.slice(5, 7))))],
     dates,
     travelerNeeds: [] as TravelerNeed[],
+    travel: { matrix: easternSierraTravelMatrix(), baseId: EASTERN_SIERRA_BASE_ID },
+  };
+}
+
+/**
+ * The same travel truth in the shape `expandRegion` takes.
+ *
+ * A separate helper rather than a second construction, so a test of the
+ * expansion and a test of the board cannot be measuring different worlds.
+ */
+export function expansionTravel(profileForTravel: TravelerProfile) {
+  return {
+    knowledge: travelKnowledgeFor(easternSierraTravelMatrix(), profileForTravel, null),
+    baseId: EASTERN_SIERRA_BASE_ID,
   };
 }
 
@@ -103,3 +127,5 @@ export const NEEDS: Record<string, TravelerNeed[]> = {
   kids: ['kids_under_12'],
   altitude: ['altitude_sensitive'],
 };
+
+export * from './transit-city';

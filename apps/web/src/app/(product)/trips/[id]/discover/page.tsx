@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import {
   autoSelect,
   countTripDays,
+  detourToleranceMinutesFor,
   mayShowDiscoveryBoard,
   readBoardIntegrity,
   settleMustDoCoverage,
@@ -201,7 +202,17 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
             {trip.basics.children > 0 ? `, ${trip.basics.children} children` : ''}
           </Fact>
           <Fact label="Region searched">
-            {formatMinutes(board.expansion.radiusMinutes)} from base
+            {/*
+              The radius in the mode this traveller actually moves in. The raw
+              `radiusMinutes` is a driving figure — for a car-free traveller it
+              is a constant twenty, and this header once said "20 min from base"
+              over cards legitimately reached by a 45-minute train two rows
+              below. One screen, two radii, and the smaller one was the
+              headline.
+            */}
+            {profile.transport.willDrive
+              ? `${formatMinutes(board.expansion.radiusMinutes)} from base`
+              : `Up to ${formatMinutes(detourToleranceMinutesFor(profile, 'rail'))} by public transport`}
           </Fact>
           {/*
             PUBLIC TRANSPORT, SAID PLAINLY OR NOT CLAIMED.
@@ -220,7 +231,18 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
             <Fact label="Public transport">{transitSummaryFor(compiled.transitEvidence)}</Fact>
           ) : null}
           <Fact label="Found">
-            {board.expansion.base.length} at base · {board.expansion.satellites.length} satellites
+            {/*
+              The two numbers must sum to the board the traveller is about to
+              scroll. The old line counted only `satellites`, so a card in the
+              beyond-radius or unmeasured buckets was on the board and missing
+              from its own headline — "13 satellites" over "Showing 14 of 14".
+              And "satellites" is our word, not a traveller's.
+            */}
+            {board.expansion.base.length} at your base ·{' '}
+            {board.expansion.satellites.length +
+              board.expansion.beyondRadius.length +
+              board.expansion.unmeasured.length}{' '}
+            further out
           </Fact>
         </dl>
 
@@ -360,7 +382,6 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
                * road minutes as walking minutes is the regression this names
                * its way out of.
                */
-              travelMode={compiled?.travelTimes.mode ?? 'car'}
               /*
                * The artifact these counts are counts *of*.
                *
@@ -453,7 +474,11 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
             already says it in one sentence and in the right place.
           */}
           {compiled?.transitEvidence && compiled.transitEvidence.measured > 0 ? (
-            <TransitPanel evidence={compiled.transitEvidence} places={compiled.places} />
+            <TransitPanel
+              evidence={compiled.transitEvidence}
+              places={compiled.places}
+              bases={compiled.bases}
+            />
           ) : null}
 
           <div>
@@ -547,13 +572,32 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
 function TransitPanel({
   evidence,
   places,
+  bases,
 }: {
   evidence: NonNullable<CompiledRegion['transitEvidence']>;
   places: CompiledRegion['places'];
+  bases: CompiledRegion['bases'];
 }) {
-  const nameOf = new Map(places.map((place) => [place.id, place.name] as const));
+  /*
+   * Both id spaces, because journeys are measured in both directions: the way
+   * home has `toId` = the base's routing id, which is not a place id — so half
+   * this panel used to read "Somewhere on the board", which is a placeholder
+   * wearing a fact's clothing on the exact panel meant to prove the transit
+   * claim. Outbound journeys only (a destination is what a traveller scans
+   * for), and a journey nothing can name is dropped rather than shrugged at.
+   */
+  const nameOf = new Map([
+    ...places.map((place) => [place.id, place.name] as const),
+    ...bases.map((base) => [base.routingId, base.name] as const),
+  ]);
+  const baseIds = new Set(bases.map((base) => base.routingId));
   const measured = evidence.journeys
-    .filter((journey) => journey.status === 'measured')
+    .filter(
+      (journey) =>
+        journey.status === 'measured' &&
+        !baseIds.has(journey.toId) &&
+        nameOf.has(journey.toId),
+    )
     .slice(0, 6);
   return (
     <Panel className="p-5" data-testid="transit-panel">
@@ -565,7 +609,7 @@ function TransitPanel({
       <ul className="mt-3 space-y-2 text-sm">
         {measured.map((journey) => (
           <li key={`${journey.fromId}-${journey.toId}`} className="text-ink">
-            <span className="text-ink-muted">{nameOf.get(journey.toId) ?? 'Somewhere on the board'}</span>
+            <span className="text-ink-muted">{nameOf.get(journey.toId)}</span>
             {' — '}
             {formatMinutes(journey.minutes ?? 0)}
             {typeof journey.transfers === 'number' ? (

@@ -712,7 +712,7 @@ describe('scenario 15 — a concrete fallback', () => {
     const itinerary = plan(WET);
     const backups = itinerary.days.flatMap((day) => day.weather.backups);
     for (const backup of backups) {
-      expect(backup.driveMinutesFromBase).toBeLessThanOrEqual(75);
+      expect(backup.travelMinutesFromBase).toBeLessThanOrEqual(75);
       expect(backup.openingSummary.length).toBeGreaterThan(0);
       expect(backup.why.length).toBeGreaterThan(0);
       expect(backup.trigger).toMatch(/forecast|season/i);

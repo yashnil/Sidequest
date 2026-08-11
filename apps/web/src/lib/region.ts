@@ -380,5 +380,40 @@ export function boardFor(
     // and every card then reads "we did not look" rather than "nothing to know".
     ...(context.compiled.evidence ? { evidence: context.compiled.evidence } : {}),
     travelerNeeds: trip.basics.travelerNeeds,
+    /*
+     * THE THREE FIELDS THIS FUNCTION ALWAYS HAD AND NEVER PASSED.
+     *
+     * `matrix`, `transit` and `baseId` were all in scope here — the context has
+     * carried them since the artifact did — and the board was built without
+     * them. So the board timed every journey off whichever single mode the
+     * matrix happened to be, while the planner two clicks later used the
+     * measured transit evidence sitting in the same object. A car-free
+     * traveller's board called a twenty-seven minute train ride a
+     * ninety-five-minute walk, filed it under "weak fit", and dropped it from
+     * auto-pick before the planner ever saw it.
+     */
+    travel: {
+      matrix: context.matrix,
+      transit: context.transit,
+      baseId: context.baseId,
+      /*
+       * Every base the trip sleeps at, so a multi-base board measures each
+       * place from the base it would actually be visited from. The compiler has
+       * written `travelFromBase` that way since the Bali regression; a board
+       * resolving everything from the primary base alone would hard-refuse a
+       * stop fifteen minutes from the third base for exceeding a day's travel
+       * from the first.
+       */
+      ...(context.basePortfolio && context.basePortfolio.bases.length > 1
+        ? {
+            baseIds: context.basePortfolio.bases
+              .map(
+                (assignment) =>
+                  context.compiled.bases.find((base) => base.id === assignment.baseId)?.routingId,
+              )
+              .filter((routingId): routingId is string => routingId !== undefined),
+          }
+        : {}),
+    },
   });
 }

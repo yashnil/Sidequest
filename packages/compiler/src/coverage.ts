@@ -41,6 +41,8 @@ export interface CoverageInput {
   /** What the research funnel resolved. Absent when it never ran. */
   evidence?: RegionEvidence;
   matrix: RoutingMatrixResult;
+  /** The network the matrix was measured on. `RoutingMatrixResult` has no mode of its own. */
+  matrixMode: 'car' | 'foot';
   facts: readonly SourceFact[];
   gaps: readonly ProviderGap[];
   ledger: BudgetLedger;
@@ -49,6 +51,16 @@ export interface CoverageInput {
   hasWaterOrRail: boolean;
   /** Whether the traveller will be walking between things. */
   walkingPlanned: boolean;
+  /**
+   * The measured public-transport journeys, when the compilation bought any.
+   *
+   * Without this, the transit row reused the road matrix's own sentence —
+   * "Measured road times across 15 points" printed under PUBLIC TRANSPORT, to a
+   * car-free traveller, two screens before a board header that says how many
+   * journeys were checked against timetables. The founder regression, in the
+   * evidence table.
+   */
+  transit?: { requested: number; measured: number } | null;
   now: Date;
 }
 
@@ -288,9 +300,15 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
   const totalPairs = Math.max(1, matrixSize * matrixSize - matrixSize);
   const failed = input.matrix.failedPairs.length;
   const routingLevel = levelFromRatio(totalPairs - failed, totalPairs);
+  /*
+   * The matrix has one network, and the sentence names it — a pedestrian matrix
+   * is walking times, not road times, and printing the wrong noun here is the
+   * same substitution the rest of this phase removes from the board.
+   */
+  const network = input.matrixMode === 'foot' ? 'walking' : 'road';
   const routingDetail =
     input.matrix.provenance.kind === 'measured'
-      ? `Measured road times across ${matrixSize} points${failed > 0 ? `, ${failed} pairs missing` : ''}.`
+      ? `Measured ${network} times across ${matrixSize} points${failed > 0 ? `, ${failed} pairs missing` : ''}.`
       : `${input.matrix.provenance.note}${failed > 0 ? ` ${failed} pairs are missing.` : ''}`;
 
   add(
@@ -318,13 +336,30 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
     input.walkingPlanned ? routingDetail : 'Nothing here is reached on foot from anywhere else.',
   );
 
+  /*
+   * Public transport is graded on its own evidence — the journeys a timetable
+   * provider actually answered — never on the matrix. The matrix cannot hold a
+   * transit answer, and its sentence used to be printed here verbatim.
+   */
+  const transitRequested = input.transit?.requested ?? 0;
+  const transitMeasured = input.transit?.measured ?? 0;
   add(
     'transit_routing',
-    input.drivingPlanned ? 'not_applicable' : routingLevel,
-    input.drivingPlanned ? ['not_relevant_to_region'] : ['partial_results_returned'],
+    input.drivingPlanned
+      ? 'not_applicable'
+      : transitRequested > 0
+        ? levelFromRatio(transitMeasured, transitRequested)
+        : 'unavailable',
+    input.drivingPlanned
+      ? ['not_relevant_to_region']
+      : transitRequested > 0
+        ? ['partial_results_returned']
+        : ['no_provider_configured'],
     input.drivingPlanned
       ? 'Planned around a car, so public transport is a fallback rather than the spine.'
-      : routingDetail,
+      : transitRequested > 0
+        ? `${transitMeasured} of ${transitRequested} journeys checked against published timetables.`
+        : 'No journey planner was available, so public transport here is unverified.',
   );
 
   add(

@@ -135,7 +135,11 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
     convenience: primaryMode === 'drive' ? 'high' : serviceDays > 0 ? 'moderate' : 'low',
     stress: assessStress(totals, profile, days),
     parkingSummary: parkingSummary(dataset, days, primaryMode),
-    transitSummary: transitSummary(services, primaryMode),
+    transitSummary: transitSummary(
+      services,
+      primaryMode,
+      days.some((day) => day.totals.transitMinutes > 0),
+    ),
     seasonalWarnings: [...new Set(seasonalWarnings)],
     verifyBeforeTravel,
     totals,
@@ -308,8 +312,21 @@ function parkingSummary(
 function transitSummary(
   services: readonly { label: string; operatingMonths: number[]; fareNote?: string }[],
   primary: TransportMode,
+  /** True when a day actually rides something — measured transit, not authored. */
+  ridesTransit: boolean,
 ): string {
   if (services.length === 0) {
+    /*
+     * `services` is the *authored* list — shuttles and buses a dataset names.
+     * Measured transit journeys arrive by a different door entirely, so a plan
+     * can board a train on every day of the trip while this list is empty —
+     * and this line then told that traveller "everything here is walkable"
+     * directly above a timeline of train legs. The days themselves are the
+     * truth about whether anything is ridden, so they are what is asked.
+     */
+    if (ridesTransit) {
+      return 'Public transport does the longer hops here, timed against published timetables.';
+    }
     return primary === 'drive'
       ? 'No scheduled service reaches anything on this plan. The vehicle is not a convenience, it is the access.'
       : 'Everything here is walkable from your base.';

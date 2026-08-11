@@ -75,6 +75,16 @@ export const WORTH_DETOUR_LABELS = [
   'only_if_nearby',
   'too_far_for_this_trip',
   'skip_for_your_style',
+  /**
+   * We could not establish the journey, so we will not pass a verdict on it.
+   *
+   * Added in Phase 15D beside `DetourClass.unknown`. Before it, a candidate
+   * whose route nobody could measure was labelled `too_far_for_this_trip` on the
+   * card — a confident sentence about the place, produced by a provider that
+   * did not answer. The traveller had no way to tell the two apart, and the
+   * remedy for each is entirely different.
+   */
+  'reach_unverified',
 ] as const;
 export const worthDetourLabelSchema = z.enum(WORTH_DETOUR_LABELS);
 export type WorthDetourLabel = z.infer<typeof worthDetourLabelSchema>;
@@ -86,4 +96,5 @@ export const WORTH_DETOUR_COPY: Record<WorthDetourLabel, string> = {
   only_if_nearby: 'Only if you are already nearby',
   too_far_for_this_trip: 'Too far for this trip',
   skip_for_your_style: 'Not your style',
+  reach_unverified: 'We could not check the journey',
 };

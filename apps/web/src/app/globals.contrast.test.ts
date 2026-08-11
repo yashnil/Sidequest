@@ -95,6 +95,35 @@ describe('text tokens clear the WCAG body-text floor', () => {
   }
 
   /**
+   * THE BADGE TONES, ON THE SOFT SURFACES THEY ARE SET ON.
+   *
+   * Phase 15D's reviewer measured the pairs a person cannot: every badge in the
+   * product renders its tone colour at 11px on the matching soft surface, and
+   * amber — the tone that carries the entire warning channel, "Booking needed",
+   * "Shut some of your days", "Recheck hours" — measured 4.20:1, the only
+   * failing tone. The ink-on-paper loop above never touched these pairs, so the
+   * failure was invisible to every test in the repository.
+   */
+  const TONES = [
+    ['pine', 'pine-soft'],
+    ['amber', 'amber-soft'],
+    ['slate-blue', 'slate-blue-soft'],
+    ['clay', 'clay-soft'],
+  ] as const;
+  for (const [theme, block] of Object.entries(themeBlocks())) {
+    for (const [tone, soft] of TONES) {
+      it(`${theme}: --color-${tone} on --color-${soft}`, () => {
+        const measured = ratio(tokenIn(block, tone), tokenIn(block, soft));
+        expect(
+          measured,
+          `--color-${tone} on --color-${soft} in ${theme} measures ${measured.toFixed(2)}:1; ` +
+            `badges render this pair at 11px, so ${BODY_TEXT_MINIMUM}:1 applies`,
+        ).toBeGreaterThanOrEqual(BODY_TEXT_MINIMUM);
+      });
+    }
+  }
+
+  /**
    * The token has a job as well as a floor.
    *
    * "Faint" that is no fainter than "muted" is not a fix, it is a flattening —

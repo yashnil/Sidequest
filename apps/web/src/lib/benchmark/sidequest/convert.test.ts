@@ -121,6 +121,7 @@ function realItinerary(): Itinerary {
     hours: EASTERN_SIERRA_HOURS,
     weather,
     travelerNeeds: [],
+    travel: { matrix: easternSierraTravelMatrix(), baseId: EASTERN_SIERRA_BASE_ID },
   });
   const selection = autoSelect({ candidates: board.candidates, profile, tripDays });
 

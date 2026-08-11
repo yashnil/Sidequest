@@ -14,7 +14,9 @@ import {
   PLACE_WEATHER_BADGE_LABELS,
   SELECTION_STATUSES,
   SELECTION_STATUS_LABELS,
+  REACH_MODE_PHRASE,
   WORTH_DETOUR_COPY,
+  describeReachFromBase,
   imageryFallbackFor,
   summariseSelections,
   summaryVersion,
@@ -30,6 +32,7 @@ import {
   type WeatherSnapshotState,
   type ClosureEvidence,
   type SafetyEvidence,
+  type TransportMode,
 } from '@sidequest/core';
 import {
   Badge,
@@ -89,16 +92,29 @@ const MIN_TARGET_SUMMARY = 'min-h-11 py-2.5';
  * though they were their own. Naming the network costs one word and makes the
  * number checkable.
  */
-const TRAVEL_MODE_STAT_LABEL: Record<'car' | 'foot' | 'transit', string> = {
-  car: 'Drive from base',
-  foot: 'Walk from base',
-  /*
-   * Named, not left blank. `'From base'` here would be the exact mode-blind
-   * string this table exists to remove — reintroduced through the one entry
-   * nothing currently reaches, which is how a latent hole becomes a live one.
-   */
-  transit: 'By transit from base',
+const TRAVEL_MODE_STAT_LABEL: Record<TransportMode, string> = {
+  drive: 'Drive from base',
+  walk: 'Walk from base',
+  rail: 'Train from base',
+  public_bus: 'Bus from base',
+  ferry: 'Ferry from base',
+  shuttle: 'Shuttle from base',
+  rideshare: 'Taxi from base',
+  private_transfer: 'Transfer from base',
+  bicycle: 'Ride from base',
+  unsupported: 'Getting there',
 };
+
+/**
+ * The heading when the journey did not resolve.
+ *
+ * Deliberately not one of the mode labels. A card that says "Drive from base"
+ * over the words "we could not check" has told the traveller two things, one of
+ * which is invented — and the invented one is the mode, which is precisely the
+ * assumption this whole pass exists to remove. Both the unmeasured case and the
+ * ruled-out case sit under the same neutral heading, because neither has a mode.
+ */
+const TRAVEL_UNRESOLVED_STAT_LABEL = 'Getting there';
 
 export function DiscoveryBoardView({
   tripId,
@@ -111,25 +127,9 @@ export function DiscoveryBoardView({
   weatherBackups,
   boardVersion: declaredVersion,
   weatherFreshness,
-  travelMode = 'car',
   images = {},
 }: {
   tripId: string;
-  /**
-   * WHICH NETWORK THE MINUTES ON THESE CARDS WERE MEASURED ON.
-   *
-   * Every "From base" figure here is a real measurement and none of them said
-   * what *kind*. That was harmless while a road matrix was the only thing that
-   * reached the board, and it stopped being harmless the moment a car-free
-   * traveller's trip started routing on the pedestrian network: forty-five
-   * minutes means very different things on foot and behind a wheel, and a card
-   * that will not say which is a card a traveller cannot plan a morning around.
-   *
-   * Defaulted rather than required so a caller written before this exists keeps
-   * its previous meaning, which was "driving" — the honest reading of what it
-   * used to show.
-   */
-  travelMode?: 'car' | 'foot' | 'transit';
   /**
    * How old the weather behind this board is, when the page knows.
    *
@@ -557,7 +557,6 @@ export function DiscoveryBoardView({
                 <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {entry.candidates.map((candidate) => (
                     <PlaceCard
-                      travelMode={travelMode}
                       key={candidate.place.id}
                       candidate={candidate}
                       image={anchorImage(images, candidate)}
@@ -805,7 +804,15 @@ function WeatherBackups({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-xs text-ink-faint">
-                  {backup.driveMinutes === 0 ? 'in town' : `${backup.driveMinutes} min`}
+                  {/*
+                    The mode, not just the number. This strip said "40 min" on
+                    every backup on every trip, and a backup is taken on a
+                    morning somebody has already lost their plan — "40 min on
+                    foot" and "40 min by train" are not the same rescue.
+                  */}
+                  {backup.travelMinutesFromBase === 0
+                    ? 'in town'
+                    : `${backup.travelMinutesFromBase} min ${REACH_MODE_PHRASE[backup.travelModeFromBase]}`}
                 </span>
                 <button
                   type="button"
@@ -988,11 +995,9 @@ function PlaceCard({
   status,
   onChoose,
   boardWeatherNote,
-  travelMode,
 }: {
   candidate: DiscoveryCandidate;
   /** Which network measured this card's travel time. See the board's own prop. */
-  travelMode: 'car' | 'foot' | 'transit';
   /** Null on most cards, by design. See `anchorImage`. */
   image: ImageRecord | null;
   status: SelectionStatus | undefined;
@@ -1105,11 +1110,7 @@ function PlaceCard({
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-          <Stat label={TRAVEL_MODE_STAT_LABEL[travelMode]}>
-            {candidate.detourClass === 'base'
-              ? 'At your base'
-              : `${formatMinutes(candidate.driveMinutes)} · ${formatDistance(candidate.distanceKm)}`}
-          </Stat>
+          <TravelStat candidate={candidate} />
           <Stat label="Time there">{formatMinutes(place.typicalDurationMinutes)}</Stat>
           <Stat label="Cost">{formatCost(place.costLevel)}</Stat>
           <Stat label="Effort">{formatIntensity(place.physicalIntensity)}</Stat>
@@ -1720,5 +1721,59 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
       <dt className="text-ink-faint">{label}</dt>
       <dd className="text-ink">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * HOW LONG IT TAKES TO GET THERE, AND BY WHAT.
+ *
+ * Both facts come off this card's own `reach`, which is the object the scorer,
+ * the detour classifier, the auto-selector and the planner all read. That is the
+ * property worth having: the number, the noun above it and the journey the
+ * itinerary will schedule cannot disagree without one of them being changed on
+ * purpose.
+ *
+ * What it replaces was subtler than a missing label. The board took its mode
+ * from `compiled.travelTimes.mode` — one word for the *whole board*, because a
+ * matrix has one mode — and stamped it on every card. So on a car-free trip
+ * every card read "Walk from base", which was a true statement about the matrix
+ * and a false one about the journey: the metro ride sitting in the same
+ * artifact's transit evidence was rendered as the walk nobody was going to take.
+ *
+ * Distance is shown only where the journey is one that covers ground on a road.
+ * A train's kilometres are not a fact a traveller uses, and `distanceKm` is
+ * `null` on a ride for that reason — printing "27 min · 14 km" beside a metro
+ * ride invites the reading that it is a drive.
+ */
+function TravelStat({ candidate }: { candidate: DiscoveryCandidate }) {
+  if (candidate.detourClass === 'base') {
+    return <Stat label="From base">At your base</Stat>;
+  }
+  if (candidate.reach.status !== 'measured') {
+    /*
+     * Which unresolved sentence depends on the *merged* verdict, not on the
+     * resolver alone. `conflict` means every measured option is one this
+     * traveller ruled out — but the access dataset is a second, independent
+     * source, and where it still holds a legal way in (an authored trolley, a
+     * scheduled bus), the board files the candidate under `unknown`. A card
+     * that said "No usable route from your base" over a town with four buses a
+     * day would be the confident-wrong sentence this pass exists to remove;
+     * "Journey not verified" is what we actually know.
+     */
+    return (
+      <Stat label={TRAVEL_UNRESOLVED_STAT_LABEL}>
+        {candidate.detourClass === 'unknown'
+          ? 'Journey not verified'
+          : describeReachFromBase(candidate.reach, formatMinutes)}
+      </Stat>
+    );
+  }
+  const { mode, travelMinutes, distanceKm } = candidate.reach;
+  return (
+    <Stat label={TRAVEL_MODE_STAT_LABEL[mode]}>
+      {distanceKm === null
+        ? formatMinutes(travelMinutes)
+        : `${formatMinutes(travelMinutes)} · ${formatDistance(distanceKm)}`}
+    </Stat>
   );
 }

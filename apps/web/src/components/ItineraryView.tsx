@@ -113,6 +113,18 @@ const CONVENIENCE_TONE: Record<TransportStrategy['convenience'], BadgeTone> = {
   high: 'pine',
 };
 
+const STRESS_LABELS: Record<TransportStrategy['stress'], string> = {
+  low: 'Easy-going days',
+  moderate: 'Some long legs',
+  high: 'Demanding days',
+};
+
+const CONVENIENCE_LABELS: Record<TransportStrategy['convenience'], string> = {
+  low: 'Hands-on logistics',
+  moderate: 'Some legwork',
+  high: 'Easy logistics',
+};
+
 const INTENSITY_TONE: Record<ItineraryDay['intensity'], BadgeTone> = {
   light: 'blue',
   moderate: 'pine',
@@ -549,9 +561,15 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
         ) : (
           <Badge>no practical alternative</Badge>
         )}
-        <Badge tone={STRESS_TONE[strategy.stress]}>{strategy.stress} stress</Badge>
+        {/*
+          Words, not enum values. "low stress" happened to read as English;
+          "low convenience" read as a verdict delivered in machine, about a plan
+          the traveller was just handed, with nothing to act on. Each label says
+          what the value means for their days.
+        */}
+        <Badge tone={STRESS_TONE[strategy.stress]}>{STRESS_LABELS[strategy.stress]}</Badge>
         <Badge tone={CONVENIENCE_TONE[strategy.convenience]}>
-          {strategy.convenience} convenience
+          {CONVENIENCE_LABELS[strategy.convenience]}
         </Badge>
       </div>
 

@@ -19,6 +19,7 @@ import type {
   OperatingHoursDataset,
   Place,
   QuestionnaireContext,
+  TransitEvidence,
   TravelerNeed,
   WeatherDataset,
 } from '@sidequest/core';
@@ -138,6 +139,14 @@ export interface ScenarioOptions {
   food?: FoodDataset | null;
   /** Venues the traveller asked for, or asked not to be sent to, on the board. */
   foodSelections?: readonly FoodSelection[];
+  /**
+   * Measured public-transport journeys, for a scenario that has any.
+   *
+   * The Eastern Sierra buys none — a road region with no timetables is the
+   * ordinary case and must stay tested — so this is absent by default and the
+   * board and planner both see exactly the road matrix they always did.
+   */
+  transit?: TransitEvidence;
 }
 
 export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
@@ -169,6 +178,15 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
       now,
     });
 
+  /*
+   * One matrix, built once, handed to the board *and* to the planner below.
+   * Two calls to `easternSierraTravelMatrix()` would be two equal objects and
+   * the scenario would still pass — but a fixture whose two halves are wired
+   * from one source cannot drift, and drift between the board's world and the
+   * planner's is the whole class of defect this file exists to catch.
+   */
+  const matrix = easternSierraTravelMatrix();
+
   const board = buildDiscoveryBoard({
     region: EASTERN_SIERRA,
     places: options.places ?? EASTERN_SIERRA_PLACES,
@@ -179,6 +197,11 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     hours: options.hours ?? EASTERN_SIERRA_HOURS,
     weather,
     travelerNeeds,
+    travel: {
+      matrix,
+      ...(options.transit === undefined ? {} : { transit: options.transit }),
+      baseId: EASTERN_SIERRA_BASE_ID,
+    },
   });
 
   let selections: DiscoverySelection[];
@@ -224,7 +247,8 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     region: EASTERN_SIERRA,
     candidates: board.candidates,
     selections,
-    matrix: easternSierraTravelMatrix(),
+    matrix,
+    ...(options.transit === undefined ? {} : { transit: options.transit }),
     access: options.access ?? EASTERN_SIERRA_ACCESS,
     hours: options.hours ?? EASTERN_SIERRA_HOURS,
     weather,

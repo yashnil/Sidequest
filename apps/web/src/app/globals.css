@@ -36,7 +36,13 @@
   --color-pine: #2f5d50;
   --color-pine-soft: #e3ede9;
   --color-pine-strong: #234a3f;
-  --color-amber: #a85c22;
+  /*
+   * 4.5:1 on --color-amber-soft is the floor, not a preference: the amber pair
+   * carries the entire warning channel — "Booking needed", "Shut some of your
+   * days", "Recheck hours" — at 11px, where WCAG AA demands 4.5. The previous
+   * #a85c22 measured 4.20 and was the only failing tone; this measures 5.04.
+   */
+  --color-amber: #96521c;
   --color-amber-soft: #f7ead9;
   --color-slate-blue: #3c5a77;
   --color-slate-blue-soft: #e4ebf2;

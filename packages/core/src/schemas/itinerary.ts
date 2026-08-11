@@ -32,6 +32,15 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * has since stopped being true. When in doubt, bump: a rebuild costs a click and
  * keeps every selection.
  *
+ * 8 — a weather backup names the mode it is reached in.
+ * `DayBackup.driveMinutesFromBase` became `travelMinutesFromBase` beside a new
+ * `travelModeFromBase`. The rename is not cosmetic: since version 7 the writer
+ * has been storing a *resolved* journey there — a walk, a train or a drive,
+ * whichever the evidence supported — under a field name that says driving, with
+ * the mode discarded. A version-7 plan therefore holds a number whose mode is
+ * unrecoverable, and there is nothing to migrate from: the fact was never
+ * written down. Rebuild, exactly as version 7 did for the same reason.
+ *
  * 7 — a travel leg may have no duration. `minutes` and `km` are nullable and
  * `provenance` gained `unmeasured`, so a pair nobody routed is an absence rather
  * than a number. Days carry `unmeasuredLegCount` and travel totals count only
@@ -76,7 +85,7 @@ export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay
  * split driving from riding, walking and waiting, and every day carries a
  * transport summary.
  */
-export const ITINERARY_VERSION = 7 as const;
+export const ITINERARY_VERSION = 8 as const;
 
 /** What a block of time on a day actually is. */
 export const ITINERARY_ITEM_KINDS = [
@@ -451,7 +460,35 @@ export const dayBackupSchema = z.object({
   accessSummary: z.string().min(1),
   /** When it is open on this date, in one clause. */
   openingSummary: z.string().min(1),
-  driveMinutesFromBase: z.number().int().min(0),
+  /**
+   * ONE WAY FROM THE BASE, IN THE MODE THAT WOULD ACTUALLY BE USED.
+   *
+   * This was `driveMinutesFromBase`, and the name was false by the time it was
+   * written. The value assigned to it is the backup candidate's
+   * `travelMinutesFromBase`, which is resolved through `resolveLeg` and is a
+   * walk, a train or a drive depending on the pair — so a stored plan could and
+   * did carry a walking figure under a field that says driving, with the mode
+   * dropped on the floor one line earlier.
+   *
+   * A field name is a contract with every future reader, and this one promised
+   * something the writer never delivered.
+   */
+  travelMinutesFromBase: z.number().int().min(0),
+  /**
+   * The mode those minutes are in.
+   *
+   * Persisted rather than re-derived, because a stored plan is read back and
+   * rendered without re-running the planner: there is nothing left at read time
+   * that could work out whether forty minutes was a walk or a train. Its absence
+   * is exactly why the old field could lie without anybody being able to tell.
+   *
+   * `unsupported` is excluded at the schema, not just at the writer. It means
+   * "we do not know how this journey is made", and a backup is a promise made
+   * for a morning with no slack — minutes whose mode is unknowable are the
+   * lying scalar back under a third name, so a plan carrying one is refused at
+   * the door rather than stored and rendered.
+   */
+  travelModeFromBase: transportModeSchema.exclude(['unsupported']),
   /** Anything about it that still needs checking. Never suppressed. */
   caution: z.string().min(1).optional(),
 });
@@ -979,10 +1016,14 @@ export function itineraryStructureFingerprint(itinerary: Itinerary): string {
       const anchor = day.availability.anchorPlaceId ?? '-';
       // Backups are structure: they are a commitment the plan makes about where
       // the traveller goes instead, and a narration layer must not be able to
-      // swap one for another it likes the sound of.
+      // swap one for another it likes the sound of. The mode is part of the
+      // commitment — this function's own charter names "quietly turning a
+      // shuttle ride into a drive" as the thing it exists to stop, and Phase
+      // 15D made the mode a persisted fact, so it is fingerprinted with the
+      // place it belongs to.
       const weather = [
         day.weather.evidence,
-        ...day.weather.backups.map((backup) => backup.placeId),
+        ...day.weather.backups.map((backup) => `${backup.placeId}/${backup.travelModeFromBase}`),
       ].join('+');
       return `${day.dayNumber}@${day.date}#${day.window.startMinute}-${day.window.endMinute}{${transport}}<${anchor}>(${weather})[${items}]`;
     })

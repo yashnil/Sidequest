@@ -11,6 +11,7 @@ import type { TravelerNeed } from '../schemas/trip';
 import type { SatelliteAssessment } from '../region/expansion';
 import { describeOpenSeason } from '../region/season';
 import type { AccessBlockerCode } from '../access/feasibility';
+import { detourToleranceMinutesFor, REACH_MODE_PHRASE } from '../travel/reach';
 
 /**
  * Transparent, deterministic fit scoring.
@@ -180,9 +181,18 @@ export function scorePlace(
   assessment: SatelliteAssessment,
   context: ScoringContext,
 ): FitAssessment {
-  const { place, season, detourClass, driveMinutes } = assessment;
+  const { place, season, detourClass, travelMinutesFromBase, travelModeFromBase } = assessment;
   const { profile, travelerNeeds } = context;
   const derived = profile.derived;
+  /*
+   * The journey, and the mode it is made in, from the shared resolver. Both may
+   * be absent — nothing was measured — and every use below has to say what it
+   * does about that rather than substituting a number.
+   */
+  const travelMinutes = travelMinutesFromBase;
+  const travelMode = travelModeFromBase;
+  /** True only where the traveller is the one at the wheel. */
+  const isDriving = travelMode === 'drive' && assessment.access.requiredModes.includes('drive');
 
   /**
    * HOW STRONGLY THEY SAID NO, WHERE "NO" WAS NOT A REFUSAL.
@@ -309,11 +319,35 @@ export function scorePlace(
       transportFit = Math.min(transportFit, 0.9);
     }
   }
-  if (assessment.travelBudgetShare > 1) {
-    blockers.push({
-      code: 'exceeds_daily_travel',
-      message: `${driveMinutes * 2} min of driving round trip is past the ${profile.transport.maxDailyDriveMinutes} min at the wheel you said you would accept in a day.`,
-    });
+  if (assessment.travelBudgetShare > 1 && assessment.reach.status === 'measured') {
+    /*
+     * A HARD BLOCKER ONLY FOR TIME AT A WHEEL THE TRAVELLER IS HOLDING.
+     *
+     * The driving cap is the traveller's own stated answer, so exceeding it is
+     * a fact they recognise and the sentence quotes them fairly. The transport
+     * cap for a non-driver is a product default — the question that would set
+     * it is never shown to them — and a hard refusal built on a number somebody
+     * never said, phrased as "you said", is a lie with a citation. Worse, it
+     * voided the whole fit assessment: a seventy-eight-minute measured train to
+     * a strong-fit candidate became `not_workable` and a skip-list row over a
+     * threshold three minutes wide.
+     *
+     * A non-driving journey past the transport budget is still marked: the
+     * detour classifier calls it `too_far` from the same arithmetic, the card
+     * says so, and auto-pick leaves it alone. What it is not is unworkable —
+     * the traveller may take it anyway, and the planner will lay the day out
+     * against the same caps and say honestly what fits.
+     */
+    if (isDriving) {
+      blockers.push({
+        code: 'exceeds_daily_travel',
+        message: `${assessment.reach.roundTripMinutes} min of driving round trip is past the ${profile.transport.maxDailyDriveMinutes} min at the wheel you said you would accept in a day.`,
+      });
+    } else {
+      cautions.push(
+        `Getting there and back is about ${assessment.reach.roundTripMinutes} min ${REACH_MODE_PHRASE[assessment.reach.mode]} — more than a day of this trip comfortably holds.`,
+      );
+    }
   }
 
   const roughRoad = place.access.roadSurface !== 'paved';
@@ -444,24 +478,62 @@ export function scorePlace(
   const hiddenGemAlignment = clamp01(1 - Math.abs(place.hiddenGemScore - derived.hiddenGemTarget));
 
   // --- Detour -------------------------------------------------------------
-  const radius = Math.max(derived.effectiveDetourMinutes, 1);
-  const ratio = driveMinutes / radius;
-  let detourFit =
-    detourClass === 'base' ? 1 : ratio <= 0.5 ? 1 : ratio <= 1 ? 0.85 : ratio <= 1.5 ? 0.45 : 0.15;
+  /*
+   * THE RADIUS IS A PROPERTY OF THE MODE, NOT OF THE TRAVELLER ALONE.
+   *
+   * `effectiveDetourMinutes` is a driving figure, and for anybody who said they
+   * would not drive it is replaced wholesale by a constant twenty. Dividing a
+   * measured twenty-seven-minute train ride by that gave a ratio of 1.35 and a
+   * `detourFit` of 0.45 — a ten-point penalty for taking the metro in a city
+   * with one, on evidence this product paid to measure.
+   *
+   * `detourToleranceMinutesFor` is the same function the detour classifier uses,
+   * so the score and the class cannot disagree about what "within tolerance"
+   * means.
+   */
+  const radius = Math.max(detourToleranceMinutesFor(profile, travelMode ?? 'drive'), 1);
+  /*
+   * An unresolved journey scores neutrally rather than badly. There is no ratio
+   * to compute, and defaulting the minutes to anything at all would turn a
+   * provider failure into a verdict about the place. 0.6 sits between "inside
+   * the radius" and "past it", which is exactly what "we do not know" means
+   * here.
+   */
+  let detourFit: number;
+  if (detourClass === 'base') detourFit = 1;
+  else if (travelMinutes === null) detourFit = 0.6;
+  else {
+    const ratio = travelMinutes / radius;
+    detourFit = ratio <= 0.5 ? 1 : ratio <= 1 ? 0.85 : ratio <= 1.5 ? 0.45 : 0.15;
+  }
   if (
+    isDriving &&
     place.travelFromBase.driveIsScenic &&
     LEVEL_WEIGHT[profile.interests.scenic_drives ?? 'low'] >= 0.6
   ) {
     detourFit = clamp01(detourFit + 0.1);
   }
-  if (driveMinutes > derived.effectiveDetourMinutes) {
+  /*
+   * "Long drives" is an answer about driving. Applied to a train it charged a
+   * car-free traveller for a preference they were never asked to hold, and the
+   * questionnaire never offers them the driving questions at all.
+   */
+  if (isDriving && travelMinutes !== null && travelMinutes > radius) {
     if (profile.avoidances.includes('long_drives')) detourFit = clamp01(detourFit - 0.2);
     else detourFit = clamp01(detourFit - refusal('avoidance:long_drives') * 0.4);
   }
 
   // --- Logistics ----------------------------------------------------------
+  /*
+   * Parking is a fact about arriving in a car. Charging it to somebody who will
+   * arrive on foot or by train is the same category of error as timing their
+   * journey off a road matrix: a real property of the place, applied to a
+   * journey nobody is making. It cost up to 3.3 points of 100 on every card of
+   * every car-free board, uniformly enough to look like a scoring baseline.
+   */
+  const parkingMatters = profile.transport.willDrive;
   let logisticsEase =
-    place.access.parkingDifficulty === 'easy'
+    !parkingMatters || place.access.parkingDifficulty === 'easy'
       ? 1
       : place.access.parkingDifficulty === 'moderate'
         ? 0.75
@@ -474,7 +546,7 @@ export function scorePlace(
   if (place.typicalDurationMinutes > 300 && profile.pace === 'slow') logisticsEase -= 0.1;
   logisticsEase = clamp01(logisticsEase);
 
-  if (place.access.parkingDifficulty === 'hard') {
+  if (parkingMatters && place.access.parkingDifficulty === 'hard') {
     cautions.push('Parking fills early — go first thing or expect to wait.');
   }
 
@@ -579,9 +651,16 @@ function buildReasons(input: ReasonInput): string[] {
 
   if (assessment.detourClass === 'base') {
     reasons.push('Minutes from where you are staying, so it fits any day.');
-  } else if (features.detourFit >= 0.85) {
+  } else if (features.detourFit >= 0.85 && assessment.reach.status === 'measured') {
+    /*
+     * The mode and the radius both come from the resolved journey. The sentence
+     * used to read "45 min out, inside the 20 min detour you were happy with" —
+     * a contradiction in its own clause — because the minutes were the walk and
+     * the radius was the car-free constant.
+     */
+    const mode = assessment.reach.mode;
     reasons.push(
-      `${assessment.driveMinutes} min out, inside the ${profile.derived.effectiveDetourMinutes} min detour you were happy with.`,
+      `${assessment.reach.travelMinutes} min ${REACH_MODE_PHRASE[mode]}, inside the ${detourToleranceMinutesFor(profile, mode)} min you were happy to travel.`,
     );
   }
 
@@ -598,6 +677,8 @@ function buildReasons(input: ReasonInput): string[] {
   }
 
   if (
+    assessment.travelModeFromBase === 'drive' &&
+    assessment.access.requiredModes.includes('drive') &&
     place.travelFromBase.driveIsScenic &&
     LEVEL_WEIGHT[profile.interests.scenic_drives ?? 'low'] >= 0.6
   ) {

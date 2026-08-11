@@ -1,5 +1,7 @@
+import type { TransportMode } from '../schemas/access';
 import type { PlaceEvidence } from '../schemas/evidence';
 import type { Place } from '../schemas/place';
+import { REACH_MODE_PHRASE } from '../travel/reach';
 
 /**
  * The standing model reaches consumers through the quality module's one door.
@@ -172,8 +174,25 @@ export interface QualityInput {
    * consumer having its own parameter.
    */
   fitScore: number;
-  /** Minutes one way from the base. */
-  detourMinutes: number;
+  /**
+   * Minutes one way from the base, **in the mode the traveller would use**.
+   *
+   * Absent when nothing usable was measured, and the absence is load-bearing: a
+   * `0` here reads as "no detour at all" and hands an unroutable place a perfect
+   * `routeFeasibility`, while any positive default invents a journey. Both are
+   * claims; nothing is the truth. `routeFeasibility` becomes neutral and no
+   * distance verdict is passed.
+   */
+  detourMinutes?: number;
+  /**
+   * The mode those minutes are in, for the one sentence that quotes them.
+   *
+   * The skip row renders no travel stat of its own, so this reason string is
+   * the only travel fact on it — and "96 minutes each way is past how far you
+   * said you would go" names no mode for a journey whose mode is the entire
+   * question. Optional alongside `detourMinutes`, absent when it is.
+   */
+  detourMode?: TransportMode;
   /** How many already-ranked candidates share this category. */
   categoryCount: number;
   /** True when something larger already covers this ground. */
@@ -288,7 +307,16 @@ export function assessCandidateQuality(input: QualityInput): QualityAssessment {
   const publicVisitation = hasPublicVisitationEvidence(place, evidence);
   const scale = featureScale(place);
   const tolerance = Math.max(15, input.detourToleranceMinutes);
-  const routeFeasibility = Math.max(0, Math.min(1, 1 - input.detourMinutes / (tolerance * 1.5)));
+  /*
+   * Neutral, not perfect and not zero, where the journey is unknown. A 1 would
+   * reward a place for being unroutable; a 0 would punish it for the same, and
+   * neither is a fact about the place. 0.5 is the honest middle, and it is
+   * `categorySaturation`'s treatment of an unknown too.
+   */
+  const routeFeasibility =
+    input.detourMinutes === undefined
+      ? 0.5
+      : Math.max(0, Math.min(1, 1 - input.detourMinutes / (tolerance * 1.5)));
   const categorySaturation = Math.min(1, input.categoryCount / 5);
 
   const signals: QualitySignals = {
@@ -360,7 +388,25 @@ function decideOutcome(
     return 'insufficient_evidence';
   }
 
-  if (input.detourMinutes > input.detourToleranceMinutes * 1.5) return 'not_worth_detour';
+  /*
+   * A distance verdict needs a distance. `undefined` skips the test entirely
+   * rather than comparing against a fabricated number — an unroutable place is
+   * `reach_unverified` on the card, and calling it "not worth the detour" would
+   * be a confident sentence about a journey nobody established.
+   *
+   * The tolerance is the caller's, and it is now mode-aware: the board passes
+   * `detourToleranceMinutesFor(profile, mode)`, so a train is judged against the
+   * traveller's transport budget rather than against a driving radius they were
+   * never asked about. It also cannot be zero any more — it used to be, whenever
+   * the detour question was hidden, which made this line read `> 0` and stamped
+   * `not_worth_detour` on every non-base place on the board.
+   */
+  if (
+    input.detourMinutes !== undefined &&
+    input.detourMinutes > input.detourToleranceMinutes * 1.5
+  ) {
+    return 'not_worth_detour';
+  }
   if (input.fitScore < 0.35 && score < 0.4) return 'not_worth_detour';
 
   if (signals.evidenceCompleteness < 0.34 && input.openingUncertain) return 'low_confidence';
@@ -393,6 +439,17 @@ function decideOutcome(
   return 'nearby_side_quest';
 }
 
+/**
+ * "96 minutes" is an odometer reading; "1 hr 36 min" is how a person says it.
+ * The same shape every other duration on the board already uses.
+ */
+function humaneMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
 function reasonFor(
   outcome: CandidateOutcome,
   input: QualityInput,
@@ -408,8 +465,9 @@ function reasonFor(
         ? 'A small mapped feature with nothing published about it — a nice thing to pass, not a stop to plan.'
         : 'Too little is published about this for us to plan a visit around it.';
     case 'not_worth_detour':
-      return input.detourMinutes > input.detourToleranceMinutes
-        ? `${Math.round(input.detourMinutes)} minutes each way is past how far you said you would go.`
+      return input.detourMinutes !== undefined &&
+        input.detourMinutes > input.detourToleranceMinutes
+        ? `${humaneMinutes(Math.round(input.detourMinutes))} each way${input.detourMode ? ` ${REACH_MODE_PHRASE[input.detourMode]}` : ''} is past how far you said you would go.`
         : 'It is a poor match for how you said you like to travel.';
     case 'low_confidence':
       return 'We could not confirm when this is open, so we would not build a day around it.';
@@ -426,6 +484,12 @@ function reasonFor(
     case 'food_or_market':
       return 'Somewhere to eat or browse, near where you will already be.';
     default:
-      return 'A short hop from your base and a reasonable match.';
+      /*
+       * No distance claim. This branch fires for candidates at any detour class,
+       * including too-far and unmeasured ones, and it used to assert "a short
+       * hop from your base" over all of them — a flat untruth on exactly the
+       * cards whose whole problem is the journey.
+       */
+      return 'A reasonable match for how you said you like to travel.';
   }
 }

@@ -4,6 +4,7 @@ import {
   type InterestLevel,
 } from '../schemas/common';
 import type { TravelerProfile } from '../schemas/profile';
+import { detourToleranceMinutesFor } from '../travel/reach';
 
 const LEVEL_WEIGHT: Record<InterestLevel, number> = {
   avoid: 0,
@@ -92,8 +93,31 @@ export function tripPersonality(profile: TravelerProfile, tripDays: number): Tri
         ? `Driving, up to ${profile.transport.maxDailyDriveMinutes} min at the wheel a day`
         : 'No car — shuttles, buses and walking',
     },
-    { label: 'Range', value: REGIONAL_EXPANSION_LABELS[profile.regionalExpansion] },
-    { label: 'Detour limit', value: `${profile.derived.effectiveDetourMinutes} min from base` },
+    /*
+     * One radius, in the mode the traveller actually moves in. This panel used
+     * to print two more numbers beside the board's own — "Range: anything
+     * within about 30 minutes" and "Detour limit: 20 min from base" — while
+     * the header above said "up to 1 hr 15 min by public transport" and a card
+     * below kept a 75-minute train. Four figures for one question, and the two
+     * printed here were the driving-era ones. For a driver the derived detour
+     * figure is their own negotiated answer and both facts stand; for a
+     * car-free traveller the range answer was never even offered, so only the
+     * ride radius is a fact about them.
+     */
+    ...(profile.transport.willDrive
+      ? [
+          { label: 'Range', value: REGIONAL_EXPANSION_LABELS[profile.regionalExpansion] },
+          {
+            label: 'Detour limit',
+            value: `${profile.derived.effectiveDetourMinutes} min from base`,
+          },
+        ]
+      : [
+          {
+            label: 'Range',
+            value: `Up to ${detourToleranceMinutesFor(profile, 'rail')} min by public transport`,
+          },
+        ]),
   ];
 
   if (profile.accessibility.mobilityLimited) {

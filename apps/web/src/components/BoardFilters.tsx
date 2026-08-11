@@ -41,7 +41,7 @@ export interface BoardFilterState {
    * minutes. `null` is "no limit" rather than zero, because zero is a real
    * answer here — a place at the base itself.
    */
-  maxDriveMinutes: number | null;
+  maxTravelMinutes: number | null;
   /** Empty means every level. A subset is a positive choice of those levels. */
   effort: readonly PhysicalIntensity[];
   cost: readonly CostLevel[];
@@ -51,7 +51,7 @@ export interface BoardFilterState {
 }
 
 export const NO_FILTERS: BoardFilterState = {
-  maxDriveMinutes: null,
+  maxTravelMinutes: null,
   effort: [],
   cost: [],
   hiddenGemsOnly: false,
@@ -60,7 +60,7 @@ export const NO_FILTERS: BoardFilterState = {
 
 export function anyFilterActive(filters: BoardFilterState): boolean {
   return (
-    filters.maxDriveMinutes !== null ||
+    filters.maxTravelMinutes !== null ||
     filters.effort.length > 0 ||
     filters.cost.length > 0 ||
     filters.hiddenGemsOnly ||
@@ -75,7 +75,7 @@ export function anyFilterActive(filters: BoardFilterState): boolean {
  * the language the traveller already answered in rather than inventing its own
  * buckets.
  */
-const DRIVE_STEPS = [15, 30, 60, 120] as const;
+const TRAVEL_STEPS = [15, 30, 60, 120] as const;
 
 const EFFORT_LABELS: Record<PhysicalIntensity, string> = {
   none: 'No effort',
@@ -116,8 +116,16 @@ export function filterCandidates(
   filters: BoardFilterState,
 ): DiscoveryCandidate[] {
   return candidates.filter((candidate) => {
-    if (filters.maxDriveMinutes !== null && candidate.driveMinutes > filters.maxDriveMinutes) {
-      return false;
+    if (filters.maxTravelMinutes !== null) {
+      /*
+       * A journey nobody could establish cannot satisfy "under thirty minutes",
+       * so a bounded step drops it. That is the honest reading of a filter: it
+       * is a positive claim about what is kept, and admitting an unknown would
+       * assert a duration we do not have. "Anywhere" — the default — keeps
+       * everything, which is where an unroutable card stays visible.
+       */
+      const minutes = candidate.travelMinutesFromBase;
+      if (minutes === null || minutes > filters.maxTravelMinutes) return false;
     }
     if (filters.effort.length > 0 && !filters.effort.includes(candidate.place.physicalIntensity)) {
       return false;
@@ -132,7 +140,7 @@ export function filterCandidates(
 }
 
 export interface BoardFacets {
-  driveSteps: readonly number[];
+  travelSteps: readonly number[];
   effort: readonly PhysicalIntensity[];
   cost: readonly CostLevel[];
   hiddenGems: boolean;
@@ -148,8 +156,11 @@ export interface BoardFacets {
  */
 export function facetsFor(candidates: readonly DiscoveryCandidate[]): BoardFacets {
   const total = candidates.length;
-  const driveSteps = DRIVE_STEPS.filter((minutes) => {
-    const kept = candidates.filter((candidate) => candidate.driveMinutes <= minutes).length;
+  const travelSteps = TRAVEL_STEPS.filter((minutes) => {
+    const kept = candidates.filter(
+      (candidate) =>
+        candidate.travelMinutesFromBase !== null && candidate.travelMinutesFromBase <= minutes,
+    ).length;
     return kept > 0 && kept < total;
   });
   const effort = PHYSICAL_INTENSITIES.filter((level) => {
@@ -163,7 +174,7 @@ export function facetsFor(candidates: readonly DiscoveryCandidate[]): BoardFacet
   const gems = candidates.filter((c) => c.place.hiddenGemScore >= 0.6).length;
   const open = candidates.filter(openThroughout).length;
   return {
-    driveSteps,
+    travelSteps,
     effort,
     cost,
     hiddenGems: gems > 0 && gems < total,
@@ -243,7 +254,7 @@ export function BoardFilterRail({
 }) {
   const active = anyFilterActive(filters);
   const nothing =
-    facets.driveSteps.length === 0 &&
+    facets.travelSteps.length === 0 &&
     facets.effort.length === 0 &&
     facets.cost.length === 0 &&
     !facets.hiddenGems &&
@@ -272,23 +283,23 @@ export function BoardFilterRail({
       </div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {facets.driveSteps.length > 0 ? (
+        {facets.travelSteps.length > 0 ? (
           <FacetRow legend="How far from base">
             <FilterChip
-              name="board-filter-drive"
+              name="board-filter-travel"
               type="radio"
-              checked={filters.maxDriveMinutes === null}
-              onChange={() => onChange({ ...filters, maxDriveMinutes: null })}
+              checked={filters.maxTravelMinutes === null}
+              onChange={() => onChange({ ...filters, maxTravelMinutes: null })}
             >
               Anywhere
             </FilterChip>
-            {facets.driveSteps.map((minutes) => (
+            {facets.travelSteps.map((minutes) => (
               <FilterChip
                 key={minutes}
-                name="board-filter-drive"
+                name="board-filter-travel"
                 type="radio"
-                checked={filters.maxDriveMinutes === minutes}
-                onChange={() => onChange({ ...filters, maxDriveMinutes: minutes })}
+                checked={filters.maxTravelMinutes === minutes}
+                onChange={() => onChange({ ...filters, maxTravelMinutes: minutes })}
               >
                 {minutes >= 60 ? `Under ${minutes / 60} hr` : `Under ${minutes} min`}
               </FilterChip>

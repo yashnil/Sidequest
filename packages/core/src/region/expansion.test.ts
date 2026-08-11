@@ -10,6 +10,7 @@ import {
   MAMMOTH_HIKER_ANSWERS,
   boardContext,
   context,
+  expansionTravel,
   profile,
 } from '../testing/fixtures';
 
@@ -27,6 +28,7 @@ const expand = (
     dates: shared.dates,
     access: shared.access,
     hours: shared.hours,
+    travel: expansionTravel(profile(overrides, ctx)),
   });
 };
 
@@ -49,8 +51,10 @@ describe('regional expansion', () => {
   });
 
   it('sorts satellites by how far out they are', () => {
-    const times = expand().satellites.map((item) => item.driveMinutes);
-    expect([...times].sort((a, b) => a - b)).toEqual(times);
+    const times = expand().satellites.map((item) => item.travelMinutesFromBase);
+    // Every satellite resolved: a null here would sort as a hole, not a time.
+    expect(times.every((value) => value !== null)).toBe(true);
+    expect([...times].sort((a, b) => a! - b!)).toEqual(times);
   });
 
   it('widens and narrows with the traveller’s stated radius', () => {

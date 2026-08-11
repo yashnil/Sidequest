@@ -45,6 +45,7 @@ import {
   MAMMOTH_HIKER_ANSWERS,
   answers as answersWith,
   boardContext,
+  expansionTravel,
 } from '../testing/fixtures';
 
 /**
@@ -579,6 +580,7 @@ describe('an ordinary dislike lowers the ranking and removes nothing', () => {
       dates: shared.dates,
       access: shared.access,
       hours: shared.hours,
+      travel: expansionTravel(profile),
     });
     return [...expansion.base, ...expansion.satellites].map((entry) =>
       scorePlace(entry, { profile, travelerNeeds: [] }),

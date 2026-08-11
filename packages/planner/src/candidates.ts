@@ -135,22 +135,12 @@ export function resolveCandidates(
     /**
      * HOW FAR OUT THIS IS, RESOLVED RATHER THAN READ OFF A MISNAMED FIELD.
      *
-     * `candidate.driveMinutes` is whatever mode the compilation's single matrix
-     * measured. Using it here is what let a stop be rejected before the
-     * scheduler had a chance to reach it: a museum twenty minutes away by a
-     * measured metro journey carried an eighty-five minute *walking* figure,
-     * and the round-trip test then compared that walk against
-     * `maxDailyDriveMinutes` — zero for a traveller with no car.
-     */
-    /**
-     * HOW FAR OUT THIS IS, RESOLVED RATHER THAN READ OFF A MISNAMED FIELD.
-     *
-     * `candidate.driveMinutes` is whatever mode the compilation's single matrix
-     * measured, under a name that says driving. Using it as the arrival bound is
-     * what let a stop be ruled out before the scheduler had a chance to reach
-     * it: a museum twenty minutes away by a measured metro journey carried an
-     * eighty-five minute *walking* figure, and `boundsFor` pushed its earliest
-     * arrival eighty-five minutes into the day.
+     * `place.travelFromBase.driveMinutes` is whatever mode the compilation's
+     * single matrix measured, under a name that says driving. Using it as the
+     * arrival bound is what let a stop be ruled out before the scheduler had a
+     * chance to reach it: a museum twenty minutes away by a measured metro
+     * journey carried an eighty-five minute *walking* figure, and `boundsFor`
+     * pushed its earliest arrival eighty-five minutes into the day.
      *
      * Nothing is *rejected* here. Whether a place can be reached at all is the
      * access layer's judgement and it has more to go on than this does — an
@@ -158,6 +148,14 @@ export function resolveCandidates(
      * refused them would delete stops the scheduler could plan. What this
      * changes is the number and the mode, so that every reader downstream is
      * measuring the right thing against the right budget.
+     *
+     * Since Phase 15D the board resolves the same relationship through the same
+     * function, so `candidate.travelMinutesFromBase` and `reached` are the same
+     * journey by construction rather than by two modules agreeing to be careful.
+     * This still resolves rather than reading the card, because the planner may
+     * be handed a base the board was not built against — a multi-base trip
+     * re-measures per day — and because a planner that trusts a number it was
+     * given cannot notice when the two disagree.
      */
     const reached = reach ? reachFromBase(reach.knowledge, reach.baseId, candidate.place.id) : null;
 
@@ -169,7 +167,26 @@ export function resolveCandidates(
       fitScore: candidate.fit.score,
       matchedInterests: candidate.fit.matchedInterests,
       durationMinutes: candidate.place.typicalDurationMinutes,
-      travelMinutesFromBase: reached?.ok ? reached.outMinutes : candidate.driveMinutes,
+      /*
+       * Three cases, and the middle one is the fix within the fix.
+       *
+       * Resolved: the measured journey. No knowledge at all (`reach` absent —
+       * only direct unit callers): the legacy scalar, exactly as before.
+       * Knowledge present and the journey *failed to resolve*: **zero**, not
+       * the scalar. The first version fell through `null ?? driveMinutes` and
+       * handed the road matrix's figure to a traveller with no car — so a
+       * card that honestly said "no usable route" was planned with an earliest
+       * arrival ninety-five minutes into the day, off the exact number the
+       * resolver had just declined to endorse. Zero claims nothing: the bounds
+       * do not delay it, and whether it can actually be reached is decided
+       * where it always was — the access rules and the scheduler's own leg
+       * resolution, which have more to go on than this does.
+       */
+      travelMinutesFromBase: reached?.ok
+        ? reached.outMinutes
+        : reach !== undefined
+          ? 0
+          : (candidate.travelMinutesFromBase ?? candidate.place.travelFromBase.driveMinutes),
       /*
        * `unsupported` when nothing resolved, which is the honest answer and the
        * safe one: it is the one mode no budget claims, so a figure taken off a

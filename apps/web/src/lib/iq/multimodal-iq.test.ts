@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTO_SELECT_EXCLUSIONS,
   autoSelect,
   buildDiscoveryBoard,
   buildTravelerProfile,
@@ -177,6 +178,17 @@ function planRegion(region: CompiledRegion, profile: TravelerProfile) {
     weather: unfetchedWeather(region),
     ...(region.evidence ? { evidence: region.evidence } : {}),
     travelerNeeds: [],
+    /*
+     * The same three the planner is given below. Handing the board less than the
+     * planner is exactly the gap Phase 15D closed, and a helper that did it here
+     * would let the suite prove agreement between two things it had rigged.
+     */
+    travel: {
+      matrix: region.travelTimes,
+      ...(region.transitEvidence ? { transit: region.transitEvidence } : {}),
+      baseId: (region.bases.find((base) => base.id === region.primaryBaseId) ?? region.bases[0]!)
+        .routingId,
+    },
   });
   const auto = autoSelect({
     candidates: board.candidates,
@@ -556,6 +568,12 @@ describe('IQ: a driving region is untouched by any of this', () => {
       weather: unfetchedWeather(region),
       ...(region.evidence ? { evidence: region.evidence } : {}),
       travelerNeeds: [],
+      travel: {
+        matrix: region.travelTimes,
+        ...(region.transitEvidence ? { transit: region.transitEvidence } : {}),
+        baseId: (region.bases.find((base) => base.id === region.primaryBaseId) ?? region.bases[0]!)
+          .routingId,
+      },
     });
     const auto = autoSelect({ candidates: board.candidates, profile, tripDays: context.tripDays });
     const primary = region.bases.find((base) => base.id === region.primaryBaseId) ?? region.bases[0]!;
@@ -810,6 +828,338 @@ describe('IQ: a stop is not ruled out before the scheduler can reach it', () => 
     for (const entry of result.itinerary.unscheduled) {
       expect(entry.reason).not.toMatch(/of driving/);
       expect(entry.suggestedRemedy ?? '').not.toMatch(/daily driving limit/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G — Phase 15D: the Discovery Board reasons from the same reach as the planner
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything above proves the *itinerary* is multimodal. These prove the Board
+ * in front of it is, which is the earlier and more damaging half: a candidate
+ * the Board drops for being "too far" never reaches the planner at all, so a
+ * perfectly multimodal scheduler cannot save it.
+ *
+ * All of it runs on the compiled artifact, through the ordinary board builder,
+ * against providers rather than hand-built numbers.
+ */
+
+/** The board a car-free traveller actually gets for a compiled region. */
+function boardOf(region: CompiledRegion, profile: TravelerProfile) {
+  return buildDiscoveryBoard({
+    region: region.region,
+    places: region.places,
+    profile,
+    months: MONTHS,
+    dates: DATES,
+    access: region.access,
+    hours: region.operatingHours,
+    weather: unfetchedWeather(region),
+    ...(region.evidence ? { evidence: region.evidence } : {}),
+    travelerNeeds: [],
+    travel: {
+      matrix: region.travelTimes,
+      ...(region.transitEvidence ? { transit: region.transitEvidence } : {}),
+      baseId: (region.bases.find((base) => base.id === region.primaryBaseId) ?? region.bases[0]!)
+        .routingId,
+    },
+  });
+}
+
+describe('IQ: the board a transit traveller sees is the world the planner plans in', () => {
+  it('reaches by rail exactly the stops the artifact measured a ride for', async () => {
+    const region = await compileWorld('transit_mixed', {
+      composerTransport: 'public_transport',
+      transitMeasurable: true,
+    });
+    const profile = carFreeProfile();
+    const board = boardOf(region, profile);
+
+    const measured = new Set(
+      (region.transitEvidence?.journeys ?? [])
+        .filter((journey) => journey.status === 'measured')
+        .map((journey) => `${journey.fromId}\u0000${journey.toId}`),
+    );
+    expect(measured.size, 'this world measured no transit, so it proves nothing').toBeGreaterThan(0);
+
+    const baseId = (region.bases.find((base) => base.id === region.primaryBaseId) ?? region.bases[0]!)
+      .routingId;
+    const ridden = board.candidates.filter(
+      (candidate) => candidate.travelModeFromBase !== null &&
+        candidate.travelModeFromBase !== 'walk' &&
+        candidate.travelModeFromBase !== 'drive',
+    );
+    expect(
+      ridden.length,
+      'no board card resolved to a ride, so the transit evidence did not reach the board',
+    ).toBeGreaterThan(0);
+    for (const candidate of ridden) {
+      /*
+       * The invariant: a card can only claim a ride for a pair somebody
+       * measured a ride on. Nothing may infer "this is a city, so it is a
+       * train" — which is the mirror of inferring "this is a road matrix, so it
+       * is a drive".
+       */
+      expect(
+        measured.has(`${baseId}\u0000${candidate.place.id}`),
+        `${candidate.place.name} is shown as a ride with no measured journey behind it`,
+      ).toBe(true);
+      expect(candidate.travelMinutesFromBase).toBe(
+        (region.transitEvidence?.journeys ?? []).find(
+          (journey) => journey.fromId === baseId && journey.toId === candidate.place.id,
+        )?.minutes,
+      );
+    }
+  });
+
+  it('agrees with the planner about the mode and the minutes of every scheduled stop', async () => {
+    const region = await compileWorld('transit_mixed', {
+      composerTransport: 'public_transport',
+      transitMeasurable: true,
+    });
+    const profile = carFreeProfile();
+    const board = boardOf(region, profile);
+    const result = planRegion(region, profile);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const baseId = (region.bases.find((base) => base.id === region.primaryBaseId) ?? region.bases[0]!)
+      .routingId;
+    const cards = new Map(board.candidates.map((candidate) => [candidate.place.id, candidate]));
+
+    /*
+     * Every leg the itinerary actually runs *from the base*. Only those are
+     * comparable: the board answers one question — "how do you get there from
+     * where you sleep" — and a mid-day hop between two stops is a different
+     * pair with a legitimately different answer.
+     */
+    const fromBase = legsOf(result.itinerary.days).filter(
+      (entry) => entry.travel.fromId === baseId && cards.has(entry.travel.toId),
+    );
+    expect(fromBase.length, 'no day leaves the base for a board place').toBeGreaterThan(0);
+
+    for (const { travel } of fromBase) {
+      const card = cards.get(travel.toId)!;
+      expect(
+        card.travelModeFromBase,
+        `${travel.toName}: the board says ${card.travelModeFromBase} and the day says ${travel.mode}`,
+      ).toBe(travel.mode);
+      expect(card.travelMinutesFromBase).toBe(travel.minutes);
+    }
+  });
+
+  it('does not thin the board by pre-selecting nothing it could reach', async () => {
+    const region = await compileWorld('transit_mixed', {
+      composerTransport: 'public_transport',
+      transitMeasurable: true,
+    });
+    const profile = carFreeProfile();
+    const board = boardOf(region, profile);
+    const auto = autoSelect({
+      candidates: board.candidates,
+      profile,
+      tripDays: countTripDays(BASICS.startDate, BASICS.endDate),
+    });
+
+    expect(auto.selectedIds.length).toBeGreaterThan(0);
+    /*
+     * And no pre-selection rests on an unverified journey. Both halves matter:
+     * an empty pre-selection is a thinned board, and one built out of stops we
+     * cannot route is a thinned board that has not admitted it yet.
+     */
+    for (const placeId of auto.selectedIds) {
+      const card = board.candidates.find((candidate) => candidate.place.id === placeId)!;
+      if (card.detourClass === 'base') continue;
+      expect(card.reach.status, `${card.place.name} was pre-selected unrouted`).toBe('measured');
+    }
+    /* Every exclusion carries a reason a traveller could be shown. */
+    for (const entry of auto.excluded) {
+      expect(AUTO_SELECT_EXCLUSIONS).toContain(entry.reason);
+    }
+  });
+
+  it('keeps a short walk a short walk, and does not board anything for it', async () => {
+    const region = await compileWorld('transit_mixed', {
+      composerTransport: 'public_transport',
+      transitMeasurable: true,
+    });
+    const profile = carFreeProfile();
+    const board = boardOf(region, profile);
+    const tolerance = profile.transport.maxAccessWalkMinutes;
+
+    const walked = board.candidates.filter((card) => card.travelModeFromBase === 'walk');
+    expect(walked.length, 'nothing on this board is walked to').toBeGreaterThan(0);
+    for (const card of walked) {
+      /*
+       * A walk is only ever chosen inside tolerance, or because it was the only
+       * thing measured. Both are legitimate; what would not be is a walk chosen
+       * over a quicker measured ride, which is the failure in reverse.
+       */
+      if (card.travelMinutesFromBase! > tolerance) {
+        const ride = (region.transitEvidence?.journeys ?? []).find(
+          (journey) =>
+            journey.toId === card.place.id &&
+            journey.status === 'measured' &&
+            journey.minutes! < card.travelMinutesFromBase!,
+        );
+        expect(ride, `${card.place.name} is a long walk with a quicker ride available`).toBeUndefined();
+      }
+    }
+  });
+
+  it('leaves a journey it cannot make explicitly unresolved, never near and never far-by-guess', async () => {
+    /*
+     * A ROAD WORLD, AND A TRAVELLER WITH NO CAR.
+     *
+     * This is the compiled shape that genuinely produces an unresolved card, and
+     * getting here took a correction worth recording. The first version of this
+     * scenario disabled the transit provider on `transit_mixed` and expected the
+     * cards to go unknown — they did not, and correctly so: the compiler
+     * guarantees every plannable place a matrix row, that matrix is a pedestrian
+     * one, and a walk this traveller may make *is* evidence. §10's own wording
+     * says as much — a provider failure leaves the journey unknown "unless other
+     * allowed evidence resolves it". A guard caught the vacuity; the scenario
+     * moved to the case that is real.
+     *
+     * Here the only measured network is a road and the traveller cannot drive on
+     * it. Every non-base card is therefore refused, and the whole point is which
+     * *kind* of refusal it is.
+     */
+    const region = await compileWorld('remote_road', { composerTransport: 'drive' });
+    const profile = carFreeProfile();
+    const board = boardOf(region, profile);
+
+    expect(region.travelTimes.mode).toBe('car');
+    const unresolved = board.candidates.filter(
+      (card) => card.detourClass !== 'base' && card.reach.status !== 'measured',
+    );
+    expect(
+      unresolved.length,
+      'every card resolved, so this traveller was given the road after all',
+    ).toBeGreaterThan(0);
+
+    for (const card of board.candidates) {
+      /*
+       * The one thing that must never happen: a number with no mode on it, or a
+       * mode with no number. Either is the old scalar coming back.
+       */
+      expect(
+        (card.travelMinutesFromBase === null) === (card.travelModeFromBase === null),
+        `${card.place.name} has minutes without a mode, or a mode without minutes`,
+      ).toBe(true);
+    }
+
+    for (const card of unresolved) {
+      /*
+       * No fabricated duration in either direction — not the road figure the
+       * artifact holds, and not a zero. The road minutes exist, they are real,
+       * and they are not this traveller's journey.
+       */
+      expect(card.travelMinutesFromBase).toBeNull();
+      expect(card.travelModeFromBase).toBeNull();
+      expect(['unknown', 'too_far']).toContain(card.detourClass);
+      /* And nothing is pre-selected on the strength of a journey nobody has. */
+      expect(card.reach.reachable).not.toBe(true);
+    }
+
+    const auto = autoSelect({
+      candidates: board.candidates,
+      profile,
+      tripDays: countTripDays(BASICS.startDate, BASICS.endDate),
+    });
+    for (const placeId of auto.selectedIds) {
+      const card = board.candidates.find((entry) => entry.place.id === placeId)!;
+      expect(card.detourClass, `${card.place.name} was pre-selected unrouted`).toBe('base');
+    }
+  });
+});
+
+describe('IQ: a driving region reaches its satellites exactly as it always did', () => {
+  it('classifies road detours from the road, and never from a timetable it does not have', async () => {
+    const region = await compileWorld('remote_road', { composerTransport: 'drive' });
+    const context = { travelerNeeds: [], tripDays: countTripDays(BASICS.startDate, BASICS.endDate) };
+    const profile = buildTravelerProfile(
+      { ...defaultAnswers(context), willDrive: true, maxDailyTravelMinutes: 240 },
+      context,
+    );
+    const board = boardOf(region, profile);
+
+    /* No timetables were bought, and none may be invented. */
+    expect(region.transitEvidence?.journeys ?? []).toEqual([]);
+    expect(region.travelTimes.mode).toBe('car');
+
+    const reached = board.candidates.filter((card) => card.reach.status === 'measured');
+    expect(reached.length, 'nothing on this road board resolved at all').toBeGreaterThan(0);
+    for (const card of reached) {
+      expect(card.travelModeFromBase, `${card.place.name} is not driven to`).toBe('drive');
+      /*
+       * And the number is the road matrix's own, which is what makes this a
+       * regression guard rather than a restatement: a driving trip's board must
+       * be byte-for-byte the world it was before any of this.
+       */
+      expect(card.travelMinutesFromBase).toBe(
+        Math.round(
+          region.travelTimes.minutes[region.travelTimes.ids.indexOf(card.reach.baseId)]![
+            region.travelTimes.ids.indexOf(card.place.id)
+          ]!,
+        ),
+      );
+    }
+    /* Satellites still exist as satellites, and some are a real detour. */
+    expect(board.expansion.satellites.length + board.expansion.beyondRadius.length).toBeGreaterThan(0);
+  });
+});
+
+describe('IQ: a region with no transit data does not grow any', () => {
+  it('leaves a thin world unknown rather than inventing a ride through it', async () => {
+    const region = await compileWorld('weak_data');
+    const context = { travelerNeeds: [], tripDays: countTripDays(BASICS.startDate, BASICS.endDate) };
+    const profile = buildTravelerProfile(
+      { ...defaultAnswers(context), willDrive: true },
+      context,
+    );
+    const board = boardOf(region, profile);
+
+    expect(region.transitEvidence?.journeys ?? []).toEqual([]);
+    expect(board.candidates.length, 'this world produced no board at all').toBeGreaterThan(0);
+    for (const card of board.candidates) {
+      /*
+       * Nothing may be a train here. There are no timetables, and the absence of
+       * timetables is not permission to assume the network is good — it is not
+       * information about the network at all.
+       */
+      expect(['drive', 'walk', null]).toContain(card.travelModeFromBase);
+    }
+  });
+});
+
+describe('IQ: what recovery finds is scored on the same reach as everything else', () => {
+  it('gives an acquired place a resolved journey or an honest unknown, never a stale scalar', async () => {
+    const region = await compileWorld('recovery_adversary', { composerTransport: 'drive' });
+    const context = { travelerNeeds: [], tripDays: countTripDays(BASICS.startDate, BASICS.endDate) };
+    const profile = buildTravelerProfile(
+      { ...defaultAnswers(context), willDrive: true },
+      context,
+    );
+    const board = boardOf(region, profile);
+    expect(board.candidates.length).toBeGreaterThan(0);
+
+    for (const card of board.candidates) {
+      if (card.detourClass === 'base') continue;
+      if (card.reach.status === 'measured') {
+        expect(card.travelMinutesFromBase).not.toBeNull();
+        expect(card.travelModeFromBase).not.toBeNull();
+      } else {
+        /*
+         * The specific way a recovered record used to go wrong: it arrived with
+         * `travelFromBase` at its compiled default and the board rendered that
+         * default as a journey. An unresolved card now carries no minutes at
+         * all, so there is nothing for a renderer to mistake for one.
+         */
+        expect(card.travelMinutesFromBase).toBeNull();
+      }
     }
   });
 });

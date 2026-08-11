@@ -56,12 +56,17 @@ export interface ChooseBackupsInput {
  * How far a fallback may be before it stops being one.
  *
  * A backup is used on the morning it is needed, by somebody who has already lost
- * their plan. Seventy-five minutes each way is two and a half hours of driving
- * before anything else happens, which is where a rescued afternoon turns into a
- * driving day. The ceiling is the traveller's own daily drive limit or this,
- * whichever is smaller.
+ * their plan. Seventy-five minutes each way is two and a half hours of getting
+ * about before anything else happens, which is where a rescued afternoon turns
+ * into a travelling day. The ceiling is the traveller's own daily cap for the
+ * mode that reaches the place, or this, whichever is smaller.
+ *
+ * Renamed off "drive" in Phase 15D, in step with the board-side twin
+ * (`MAX_BOARD_BACKUP_TRAVEL_MINUTES`): the number always bounded a journey in
+ * whatever mode reached it, and the drive-worded name described neither the
+ * value nor the trips it applied to.
  */
-export const MAX_BACKUP_DRIVE_MINUTES = 75;
+export const MAX_BACKUP_TRAVEL_MINUTES = 75;
 
 /** Never more than this on one day: a list of options is not a plan. */
 export const MAX_BACKUPS_PER_DAY = 2;
@@ -89,7 +94,7 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
     if (mode === 'unsupported') return 0;
     return Math.min(
       mode === 'drive' ? input.maxDriveMinutes : input.maxTransportMinutes,
-      MAX_BACKUP_DRIVE_MINUTES,
+      MAX_BACKUP_TRAVEL_MINUTES,
     );
   };
   const worst = [...input.atRisk].sort(
@@ -114,7 +119,13 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
     if (!entry.reachable) return false;
     // 4. Open on this date, for long enough to be worth the journey.
     if (!isOpenEnough(entry)) return false;
-    // 5. Close enough to be a rescue rather than a second trip.
+    // 5. Close enough to be a rescue rather than a second trip — and by a
+    //    journey somebody established. `unsupported` is refused by name, not by
+    //    arithmetic: its ceiling of zero happened to admit a zero-minute figure,
+    //    which is exactly the shape an unrouted place arrives in ({0, 0} from
+    //    the compiled default), and the card then read "In town — no real
+    //    journey to it" about a place nobody had routed at all.
+    if (entry.travelModeFromBase === 'unsupported') return false;
     if (entry.travelMinutesFromBase > ceilingFor(entry.travelModeFromBase)) return false;
     // 6. Genuinely better in *this* weather. An equally exposed alternative is
     //    not a backup, it is the same afternoon somewhere else.
@@ -132,7 +143,24 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
     replacesPlaceId: worst.candidate.place.id,
     accessSummary: accessSummaryFor(entry),
     openingSummary: openingSummaryFor(entry),
-    driveMinutesFromBase: entry.travelMinutesFromBase,
+    /*
+     * Rounded at the one writer, because the schema says integer and a provider
+     * is entitled to say 27.4: a measured journey passes through `resolveLeg`
+     * verbatim, and a float here failed the whole plan's parse after the build
+     * had finished — a generic error over a decimal.
+     */
+    travelMinutesFromBase: Math.round(entry.travelMinutesFromBase),
+    /*
+     * The mode, persisted beside the minutes. It was already known here — the
+     * ceiling above is chosen from it and the access sentence is written from it
+     * — and it was thrown away at exactly this line, which is what let the
+     * stored figure wear a driving name it had no right to.
+     */
+    /*
+     * The filter above refuses `unsupported` by name; the assertion restates
+     * that check for the schema's narrower type, which excludes it at the door.
+     */
+    travelModeFromBase: entry.travelModeFromBase as Exclude<TransportMode, 'unsupported'>,
     ...withCaution(entry),
   }));
 }

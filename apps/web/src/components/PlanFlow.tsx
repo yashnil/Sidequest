@@ -1587,7 +1587,7 @@ function ReadyStep({
             <Row label="Places" value={`${compiledSummary.placeCount} kept`} />
             <Row
               label="Nearby"
-              value={`${compiledSummary.satelliteCount} side trips across ${compiledSummary.subregionCount || 1} area${compiledSummary.subregionCount === 1 ? '' : 's'}`}
+              value={`${compiledSummary.satelliteCount} side trips across ${Math.max(1, compiledSummary.subregionCount)} area${Math.max(1, compiledSummary.subregionCount) === 1 ? '' : 's'}`}
             />
           </dl>
         </Panel>

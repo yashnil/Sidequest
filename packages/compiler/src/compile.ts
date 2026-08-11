@@ -94,7 +94,7 @@ import { claimCoverage, factsFromClaims, shareableResolution, toClaimRecords } f
 import type { RegionPackOutcome } from './backbone/pack';
 import { buildTripScopeOverlay, type TripScopeOverlay } from './backbone/overlay';
 import type { IncludedArea } from './backbone/containment';
-import { partitionScope, scopeBounds } from './backbone/partition';
+import { partitionScope } from './backbone/partition';
 import type {
   CompilerProviders,
   DiscoveryQuery,
@@ -3069,10 +3069,14 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         foodVenues: routableFood,
         evidence,
         matrix,
+        matrixMode: measuredMode,
         facts,
         gaps,
         ledger,
         drivingPlanned: input.scope.transport.primaryMode === 'drive',
+        transit: transitEvidence
+          ? { requested: transitEvidence.requested, measured: transitEvidence.measured }
+          : null,
         walkingPlanned: input.scope.transport.primaryMode !== 'drive',
         hasWaterOrRail: input.scope.transport.allowedModes.some(
           (mode) => mode === 'ferry' || mode === 'rail',
@@ -3909,21 +3913,6 @@ function wantedPathsFor(
 }
 
 /**
- * Which network the travel-time matrix is measured on.
- *
- * `foot` only when the traveller is walking **and** the ground is walkable. Every
- * other mode a scope allows — a bus, a train, a shuttle, a rideshare, a ferry
- * approach — moves along roads, so a road matrix is the closest honest
- * measurement of how long a leg takes. A walking matrix over a national park is
- * not a conservative answer; it is no answer, and a live evaluation had two
- * destinations fail outright on exactly that.
- *
- * The threshold is the same reach the scope derivation uses for a walking trip,
- * so the two cannot disagree about what "walkable" means.
- */
-const WALKABLE_SPAN_KM = 12;
-
-/**
  * WHAT THE BOARD IS SHORT OF, AS SOMETHING A SOURCE CAN BE ASKED FOR.
  *
  * The hinge of deficit-directed acquisition. A repair that always asked for the
@@ -4102,63 +4091,26 @@ export function matrixModeFor(scope: GeographicScope): 'car' | 'foot' {
   if (scope.transport.primaryMode === 'drive') return 'car';
 
   /**
-   * Measured against what the traveller can *reach*, not against the whole
-   * destination.
+   * THE BRANCH THAT USED TO HAND A WALKER A DRIVING MATRIX, NOW GONE ENTIRELY.
    *
-   * This read `scopeBounds(scope)`, which was fine while the shape was always
-   * clipped to the traveller's reach — the two were the same thing. They are not
-   * any more: a country keeps its full published extent so that its second
-   * island is not deleted before anything is read, and a country's span is
-   * always over twelve kilometres. So a car-free traveller asking for a region
-   * got a *car* matrix, `matrixCoversMode` then refused every walking approach,
-   * and the plan came back empty. One fix undid the other.
+   * There used to be a span computation here — reach radius against a walkable
+   * span — whose over-span branch returned `'car'` for any car-free scope of
+   * two nights or more. The mode fix of Phase 15C made both of its branches
+   * return `'foot'`, at which point the arithmetic was dead code wearing a
+   * decision's clothing: a future reader would reasonably re-wire the branch it
+   * appears to feed. So the computation is deleted rather than kept as
+   * decoration.
    *
-   * The reach is the right denominator and always was. A walking trip is
-   * walkable if the ground a walker can cover is walkable, which is a statement
-   * about them rather than about the size of the country they are in.
-   */
-  const reachKm = scope.reachRadiusKm ?? WALKABLE_SPAN_KM;
-  const bounds = scopeBounds(scope);
-  const latKm = Math.min((bounds.northEast.lat - bounds.southWest.lat) * 111, reachKm * 2);
-  const lngKm = Math.min(
-    (bounds.northEast.lng - bounds.southWest.lng) *
-      111 *
-      Math.max(0.1, Math.cos((scope.center.lat * Math.PI) / 180)),
-    reachKm * 2,
-  );
-  if (Math.max(latKm, lngKm) <= WALKABLE_SPAN_KM) return 'foot';
-
-  /**
-   * THE LINE THAT USED TO HAND A WALKER A DRIVING MATRIX.
-   *
-   * Above the walkable span this returned `'car'` unconditionally, and the
-   * comment above defended it: a walking matrix over a national park is no
-   * answer. That reasoning is sound for a *driver* and it was being applied to
-   * somebody who told us they have no car.
-   *
-   * The arithmetic is not marginal. A walking reach is three kilometres a night
-   * capped at twelve, and a radius scope spans twice its radius — so a one-night
-   * trip spans twelve kilometres and gets a pedestrian matrix, and **every
-   * car-free trip of two nights or more spans eighteen or more and got a road
-   * one**. Those minutes then reached the board with no mode on them, and
-   * `unmeasurableModesFor` reported no gap because it reads the reach cap and
-   * concluded the traveller was walking. Two modules, one traveller, opposite
-   * conclusions, and the number on the screen came from the wrong one.
-   *
-   * So: a scope whose traveller has no car never gets a road matrix from here.
-   * The pedestrian network is what a person without a car actually moves on
-   * between nearby stops, and the journeys it cannot cover are answered — where
-   * anything can answer them — by the transit stage, whose evidence is kept
-   * beside this matrix rather than inside it. `transitEvidence` and
-   * `travelTimes` are two measurements of two different things, and a matrix
-   * with one `mode` cannot hold both without one of them standing in for the
-   * other.
+   * The rule it leaves behind is one sentence: a scope whose traveller has no
+   * car never gets a road matrix from here. The pedestrian network is what a
+   * person without a car moves on between nearby stops, and the journeys it
+   * cannot cover are answered — where anything can answer them — by the transit
+   * stage, whose evidence is kept beside this matrix rather than inside it.
    *
    * The road network is still reachable from here, once, deliberately and
-   * loudly: the caller retries on `car` when the pedestrian graph returns almost
-   * nothing — which is a real condition across a national park or an island —
-   * and records both the substitution and a warning the traveller reads. What is
-   * gone is the silent version.
+   * loudly: the caller retries on `car` when the pedestrian graph returns
+   * almost nothing — a real condition across a national park or an island —
+   * and records both the substitution and a warning the traveller reads.
    */
   return 'foot';
 }

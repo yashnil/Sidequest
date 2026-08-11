@@ -1,4 +1,5 @@
 import type { DiscoveryCandidate } from '../discovery/board';
+import type { TransportMode } from '../schemas/access';
 import type { WeatherEvidenceKind } from '../schemas/weather';
 import { isLessWeatherSensitive } from './conditions';
 
@@ -31,7 +32,10 @@ export interface BoardWeatherBackup {
   name: string;
   /** Why this one copes, in one clause. */
   why: string;
-  driveMinutes: number;
+  /** One way from base, in the mode that would actually be used. */
+  travelMinutesFromBase: number;
+  /** The mode those minutes are in, so the strip cannot say "drive" for a train. */
+  travelModeFromBase: TransportMode;
   /** What its own primary group is, so the section is legible as a cross-cut. */
   category: string;
 }
@@ -53,10 +57,15 @@ export interface BoardWeatherBackups {
  *
  * The same reasoning as the planner's ceiling, and deliberately the same number:
  * a backup is taken on a morning somebody has already lost their plan, and
- * seventy-five minutes each way is two and a half hours of driving before
+ * seventy-five minutes each way is two and a half hours of getting about before
  * anything happens.
+ *
+ * Renamed off "drive" in Phase 15D. The number is a *journey* ceiling and always
+ * was — it was applied to `candidate.driveMinutes`, which on a car-free board
+ * held walking minutes — so the drive-worded name described neither the value it
+ * bounded nor the trips it bounded it on.
  */
-export const MAX_BOARD_BACKUP_DRIVE_MINUTES = 75;
+export const MAX_BOARD_BACKUP_TRAVEL_MINUTES = 75;
 
 /** More than this is a list to shop from rather than an answer. */
 export const MAX_BOARD_BACKUPS = 4;
@@ -111,7 +120,19 @@ export function boardWeatherBackups(
       // fallback is offered precisely when there is no slack left to absorb a
       // locked door, so unverified hours do not qualify here either.
       if (candidate.operating.status === 'unknown') return false;
-      if (candidate.driveMinutes > MAX_BOARD_BACKUP_DRIVE_MINUTES) return false;
+      /*
+       * A journey nobody could establish is not a promise anybody should make on
+       * a wet morning. `null` fails the ceiling rather than passing it as a zero,
+       * which is the one direction an unknown may be resolved in here: a backup
+       * is offered, and offering one we cannot route is worse than offering none.
+       */
+      if (
+        candidate.travelMinutesFromBase === null ||
+        candidate.travelModeFromBase === null ||
+        candidate.travelMinutesFromBase > MAX_BOARD_BACKUP_TRAVEL_MINUTES
+      ) {
+        return false;
+      }
       // And genuinely better against the thing that is going wrong — the one
       // shared rule, so a card can never offer what the planner would refuse.
       return isLessWeatherSensitive({
@@ -122,14 +143,24 @@ export function boardWeatherBackups(
     // Nearest first: a fallback's value is almost entirely in how little it
     // costs to take. `place.id` breaks ties so the section never reshuffles.
     .sort(
-      (a, b) => a.driveMinutes - b.driveMinutes || a.place.id.localeCompare(b.place.id),
+      (a, b) =>
+        (a.travelMinutesFromBase ?? 0) - (b.travelMinutesFromBase ?? 0) ||
+        a.place.id.localeCompare(b.place.id),
     )
     .slice(0, MAX_BOARD_BACKUPS)
     .map((candidate) => ({
       placeId: candidate.place.id,
       name: candidate.place.name,
       why: whyFor(candidate),
-      driveMinutes: candidate.driveMinutes,
+      /*
+       * Non-null by the filter above, which checks both fields by name. The
+       * assertions survive because TypeScript cannot carry the filter's
+       * narrowing across the intervening sort — but each one now restates a
+       * check the filter genuinely performs, rather than leaning on the other
+       * field's guard.
+       */
+      travelMinutesFromBase: candidate.travelMinutesFromBase!,
+      travelModeFromBase: candidate.travelModeFromBase!,
       category: candidate.group,
     }));
 

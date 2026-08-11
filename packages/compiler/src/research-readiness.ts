@@ -620,8 +620,17 @@ export function unmeasurableModesFor(
    * genuine transport gap still surfaces through the routeability ratio, which
    * measures what was actually connected.
    */
+  /*
+   * A walker covers the scope when the scope's reach is *small* — at or under
+   * the walkable span. The comparison shipped inverted (`>=`), which read a
+   * sixty-kilometre transit reach as walkable and a six-kilometre weekend as
+   * needing a timetable: a one-night car-free trip reported four missing
+   * transport providers while a rail-dependent fortnight reported none. The
+   * flip point sat at exactly three nights, which is why every fixture that
+   * happened to span three or more kept the suite green over it.
+   */
   const walkerCanCoverIt =
-    scope.reachRadiusKm === undefined || scope.reachRadiusKm >= WALKABLE_REACH_KM;
+    scope.reachRadiusKm === undefined || scope.reachRadiusKm <= WALKABLE_REACH_KM;
   const leansOn = scope.transport.carAvailable
     ? ['drive']
     : walkerCanCoverIt
@@ -641,6 +650,22 @@ export function unmeasurableModesFor(
    * transport gap.
    */
   missing.delete('walk');
+
+  /*
+   * A SCHEDULED-TRANSPORT TRIP NEEDS *ONE* MEASURABLE WAY TO RUN, NOT ALL OF THEM.
+   *
+   * `leansOn` for a non-walkable car-free trip is every scheduled mode the
+   * traveller would tolerate — a tolerance list, exactly the thing the comment
+   * above warns against reading as a dependency list. Requiring each of them
+   * meant a metro city with a working transit provider still reported "this
+   * trip needs ferry" because the traveller had not *ruled a ferry out*. The
+   * trip does not need a ferry; it needs to be able to move on a timetable,
+   * and a measured rail network is that. So when at least one leaned-on mode is
+   * measurable, the others are alternatives that happened to go unmeasured,
+   * not deficits. When none is, every one of them is honestly missing and the
+   * whole list is the right report.
+   */
+  if (leansOn.length > missing.size) return [];
   return [...missing].sort();
 }
 

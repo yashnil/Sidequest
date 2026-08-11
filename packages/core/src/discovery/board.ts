@@ -11,6 +11,14 @@ import { BOARD_GROUPS } from '../schemas/discovery';
 import type { Place } from '../schemas/place';
 import type { TravelerProfile } from '../schemas/profile';
 import type { Region, WorthDetourLabel } from '../schemas/region';
+import type { TransportMode } from '../schemas/access';
+import type { TravelTimeMatrix } from '@sidequest/geo';
+import type { TransitEvidence } from '../schemas/compiled-region';
+import {
+  detourToleranceMinutesFor,
+  travelKnowledgeFor,
+  type ReachFromBase,
+} from '../travel/reach';
 import type { TravelerNeed } from '../schemas/trip';
 import { isVisitableRole, PLANNING_ROLES, type PlanningRole } from '../schemas/region-pack';
 import type { PlaceCategory } from '../schemas/common';
@@ -40,8 +48,33 @@ export interface DiscoveryCandidate {
   /** Evidence-driven quality, and the sentence that explains the verdict. */
   quality: QualityAssessment;
   detourClass: DetourClass;
-  driveMinutes: number;
-  distanceKm: number;
+  /**
+   * ONE-WAY TIME FROM THE BASE, IN THE MODE THAT WOULD ACTUALLY BE USED.
+   *
+   * `null` when nothing usable was measured — never a zero, which the board has
+   * shipped before and which reads on a card as "no journey at all".
+   *
+   * This replaces `driveMinutes`, which was never a driving figure on a
+   * car-free trip: it came off `place.travelFromBase.driveMinutes`, filled by
+   * the compiler from whichever single mode the region's matrix happened to be.
+   * The card labelled it with the matrix's mode, so the *word* was usually
+   * right; the *journey* was a walk where the traveller would have taken a
+   * train, and every scorer downstream treated the walk's length as the
+   * distance to the place.
+   */
+  travelMinutesFromBase: number | null;
+  /** The mode that figure is in. `null` alongside an unresolved journey. */
+  travelModeFromBase: TransportMode | null;
+  /**
+   * The shared reach relationship, carried whole.
+   *
+   * The card, the scorer, the auto-selector and the planner all read this one
+   * object, which is what makes "the board and the planner agree" a structural
+   * property rather than a coincidence two modules maintain by hand.
+   */
+  reach: ReachFromBase;
+  /** Road distance, where the journey puts kilometres on a vehicle. */
+  distanceKm: number | null;
   season: SeasonAssessment;
   /** Date-aware transport feasibility, shown on the card and read by the planner. */
   access: PlaceAccessAssessment;
@@ -309,11 +342,51 @@ export interface BuildBoardInput {
   /** Resolved official evidence, where the region carries any. */
   evidence?: RegionEvidence;
   travelerNeeds: TravelerNeed[];
+  /**
+   * THE MEASURED TRAVEL THIS BOARD IS ALLOWED TO REASON FROM.
+   *
+   * Required. The board's whole failure mode was that this was *available* at
+   * the call site and not passed: `apps/web/src/lib/region.ts` held the matrix,
+   * the transit evidence and the base id in one scope and handed
+   * `buildDiscoveryBoard` none of them, so the board fell back to a scalar with
+   * no mode on it while the planner, two clicks later, used the real evidence.
+   *
+   * `transit` stays beside the matrix and is never folded into it: a matrix has
+   * one mode, and a transit answer is a property of two points *and an instant*.
+   * Absent transit is the ordinary case and means "no timetables were bought",
+   * which is a different claim from "there is no public transport here".
+   */
+  travel: {
+    matrix: TravelTimeMatrix;
+    transit?: TransitEvidence | null;
+    /** The primary base. Every candidate resolves from here on a one-base trip. */
+    baseId: string;
+    /** Every base the trip sleeps at, for a multi-base trip. See `ExpansionInput`. */
+    baseIds?: readonly string[];
+  };
 }
 
 export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
-  const { region, places, profile, months, dates, access, hours, weather, evidence, travelerNeeds } =
-    input;
+  const {
+    region,
+    places,
+    profile,
+    months,
+    dates,
+    access,
+    hours,
+    weather,
+    evidence,
+    travelerNeeds,
+    travel,
+  } = input;
+
+  /*
+   * Built once, here, from the same constructor the planner uses. The board does
+   * not decide which modes this traveller may board and does not read a
+   * timetable; it asks, and everything below reads the answer.
+   */
+  const knowledge = travelKnowledgeFor(travel.matrix, profile, travel.transit);
 
   /*
    * The role gate runs before the expansion, not after.
@@ -332,9 +405,40 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
     dates,
     access,
     hours,
+    travel: {
+      knowledge,
+      baseId: travel.baseId,
+      ...(travel.baseIds ? { baseIds: travel.baseIds } : {}),
+    },
   });
 
-  const assessments = [...expansion.base, ...expansion.satellites, ...expansion.beyondRadius];
+  /*
+   * `unmeasured` sits in this list beside the rest. A journey nobody could
+   * route is still a place a traveller may want, and hiding it would turn a gap
+   * in our evidence into a gap in the destination — the same conflation
+   * `DetourClass.unknown` exists to end. Its card says the journey is unverified
+   * and its quality assessment stops short of a distance verdict.
+   */
+  const assessments = [
+    ...expansion.base,
+    ...expansion.satellites,
+    ...expansion.beyondRadius,
+    ...expansion.unmeasured,
+  ]
+    /*
+     * Re-sorted by journey, not left in class order. The expansion sorted
+     * nearest-first for a reason this concatenation was silently defeating:
+     * category saturation is counted in iteration order, so with the classes
+     * concatenated, five unreachable museums were counted *before* the one
+     * eight minutes away — and an unroutable place was always counted last,
+     * taking a full saturation penalty on top of its honest unknown.
+     */
+    .sort(
+      (a, b) =>
+        (a.travelMinutesFromBase ?? Number.POSITIVE_INFINITY) -
+          (b.travelMinutesFromBase ?? Number.POSITIVE_INFINITY) ||
+        a.place.id.localeCompare(b.place.id),
+    );
 
   /**
    * Category saturation is counted over the whole board rather than per group,
@@ -351,15 +455,42 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
       const quality = assessCandidateQuality({
         place: assessment.place,
         ...(placeEvidence ? { evidence: placeEvidence } : {}),
-        fitScore: fit.score,
-        detourMinutes: assessment.driveMinutes,
+        /*
+         * `fit.score` is 0-100 and this parameter is documented 0-1. The two
+         * have disagreed since the quality layer landed, which made every
+         * `fitScore` branch inside `decideOutcome` a constant: `fitScore < 0.35`
+         * could not fire and the two `>= 0.5`-style gates always did. Normalised
+         * here, at the one call site, so the thresholds the quality layer states
+         * are the thresholds it applies.
+         */
+        fitScore: fit.score / 100,
+        /*
+         * The journey in the mode the traveller would make it in, against the
+         * tolerance for that mode. Both halves matter: passing a walk's length
+         * against a driving radius is how a transit-reachable place became
+         * `not_worth_detour`, which the board files under "weak fit" and
+         * auto-pick refuses outright.
+         *
+         * An unresolved journey passes no minutes at all. The quality layer
+         * treats that as "no distance verdict available" rather than as a zero,
+         * because a zero would make every unroutable place look adjacent.
+         */
+        ...(assessment.travelMinutesFromBase === null
+          ? {}
+          : { detourMinutes: assessment.travelMinutesFromBase }),
+        ...(assessment.travelModeFromBase === null
+          ? {}
+          : { detourMode: assessment.travelModeFromBase }),
         categoryCount: seen,
         supersededByParent: placeEvidence?.parentSubjectId !== undefined,
         duplicate: false,
         usableOnTripDates:
           assessment.season.status !== 'closed' && assessment.operating.status !== 'closed_throughout',
         openingUncertain: assessment.operating.badges.includes('hours_unknown'),
-        detourToleranceMinutes: profile.detourToleranceMinutes,
+        detourToleranceMinutes: detourToleranceMinutesFor(
+          profile,
+          assessment.travelModeFromBase ?? 'drive',
+        ),
       });
       return {
         place: assessment.place,
@@ -367,7 +498,9 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
         ...(placeEvidence ? { evidence: placeEvidence } : {}),
         quality,
         detourClass: assessment.detourClass,
-        driveMinutes: assessment.driveMinutes,
+        travelMinutesFromBase: assessment.travelMinutesFromBase,
+        travelModeFromBase: assessment.travelModeFromBase,
+        reach: assessment.reach,
         distanceKm: assessment.distanceKm,
         season: assessment.season,
         access: assessment.access,

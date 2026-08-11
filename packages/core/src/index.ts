@@ -88,6 +88,8 @@ export * from './weather/provider';
 export * from './weather/snapshot';
 export * from './weather/solar';
 
+export * from './travel/reach';
+
 export * from './region/season';
 export * from './region/expansion';
 export * from './region/graph';

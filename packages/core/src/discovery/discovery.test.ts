@@ -7,7 +7,10 @@ import {
   buildFixtureWeather,
   placeById,
 } from '../data/index';
-import { boardWeatherBackups } from '../weather/board-backups';
+import {
+  MAX_BOARD_BACKUP_TRAVEL_MINUTES,
+  boardWeatherBackups,
+} from '../weather/board-backups';
 import {
   WEATHER_DATASET_VERSION,
   weatherDatasetSchema,
@@ -311,7 +314,10 @@ describe('the derived bad-weather backup section', () => {
       expect(candidate.operating.status).not.toBe('closed_throughout');
       expect(candidate.operating.status).not.toBe('unknown');
       expect(candidate.fit.band).not.toBe('not_workable');
-      expect(candidate.driveMinutes).toBeLessThanOrEqual(75);
+      expect(candidate.travelMinutesFromBase).not.toBeNull();
+      expect(candidate.travelMinutesFromBase!).toBeLessThanOrEqual(
+        MAX_BOARD_BACKUP_TRAVEL_MINUTES,
+      );
     }
   });
 

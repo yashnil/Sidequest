@@ -1653,14 +1653,22 @@ function summarise(
   const parts = [
     `${scheduled} ${scheduled === 1 ? 'stop' : 'stops'} across ${activeDays} of ${days.length} days`,
   ];
-  if (driveMinutes > 0) parts.push(`about ${hours(driveMinutes)} hours of driving`);
-  if (otherMinutes > 0) parts.push(`${hours(otherMinutes)} hours riding and on foot to reach them`);
+  if (driveMinutes > 0) parts.push(`about ${spanOf(driveMinutes)} of driving`);
+  if (otherMinutes > 0) parts.push(`${spanOf(otherMinutes)} riding and on foot to reach them`);
   if (unscheduled > 0) parts.push(`${unscheduled} left off, each with a reason`);
   return `${parts.join(', ')}.`;
 }
 
-function hours(minutes: number): number {
-  return Math.round(minutes / 6) / 10;
+/**
+ * "3 hr 20 min", never "3.3 hours" — the one place on the plan that spoke in
+ * decimal hours while every other surface says hours and minutes.
+ */
+function spanOf(minutes: number): string {
+  const whole = Math.round(minutes);
+  if (whole < 60) return `${whole} min`;
+  const hrs = Math.floor(whole / 60);
+  const rest = whole % 60;
+  return rest === 0 ? `${hrs} hr` : `${hrs} hr ${rest} min`;
 }
 
 export { validateItinerary, statusFor } from './validate';

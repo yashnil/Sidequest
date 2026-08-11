@@ -77,7 +77,9 @@ export const BOARD_GROUP_COPY: Record<BoardGroup, { title: string; blurb: string
   },
   scenic_detours: {
     title: 'Scenic detours',
-    blurb: 'Drives and viewpoints where the route is the point.',
+    // Mode-neutral on purpose: this blurb sits above train-reached viewpoints
+    // on a car-free board, and "Drives and viewpoints" claimed a car for them.
+    blurb: 'Views and stretches of the way where getting there is the point.',
   },
   low_effort_backups: {
     title: 'Low-effort & bad-weather backups',
