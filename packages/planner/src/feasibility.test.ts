@@ -35,7 +35,8 @@ function candidate(
     fitScore: 80,
     matchedInterests: [],
     durationMinutes: minutes,
-    driveMinutesFromBase: 30,
+    travelMinutesFromBase: 30,
+    travelModeFromBase: 'drive',
   };
 }
 

@@ -819,6 +819,22 @@ export interface TransitRoutingProvider {
     timeZone: string;
     /** Hard ceiling on pairs. A provider that would exceed it answers fewer and says so. */
     maxPairs: number;
+    /**
+     * An absolute instant, past which the provider stops asking and reports what
+     * it has.
+     *
+     * A ceiling the *provider* observes rather than one the caller races it to.
+     * The caller's race was all-or-nothing: a stage that ran out of time threw
+     * away every journey it had already measured, so forty-seven answers were
+     * discarded because the forty-eighth was slow — and the calls behind them
+     * were billed and then recorded as zero spend, because the ledger is settled
+     * after the call returns. Both follow from the caller being unable to see a
+     * partial result. This lets it.
+     *
+     * Epoch milliseconds, like the acquisition seam's, not a duration. That
+     * distinction has been a defect here once already.
+     */
+    deadlineMs?: number;
   }): Promise<TransitRoutingResult>;
 }
 

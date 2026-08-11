@@ -144,6 +144,10 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
       candidates: board.candidates,
       selections,
       matrix: context.matrix,
+      // Beside the matrix, never inside it. Absent on the great majority of
+      // trips, which is the ordinary case: a trip planned around a car buys no
+      // timetables at all.
+      ...(context.transit ? { transit: context.transit } : {}),
       access: context.access,
       hours: context.hours,
       weather: context.weather,

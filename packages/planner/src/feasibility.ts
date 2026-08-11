@@ -1,4 +1,5 @@
 import { tryLeg, type TravelTimeMatrix } from '@sidequest/geo';
+import { resolveLeg, type TravelKnowledge } from './travel';
 import type { PlanningCandidate } from './types';
 
 /**
@@ -78,8 +79,43 @@ export interface MustDoConflict {
 export interface FeasibilityInput {
   candidates: readonly PlanningCandidate[];
   matrix: TravelTimeMatrix;
+  /**
+   * The multimodal evidence, when the caller has it.
+   *
+   * Optional only so that hand-built test inputs stay buildable; production
+   * always supplies it. Without it the bound falls back to the matrix, which is
+   * what it always was.
+   */
+  travel?: TravelKnowledge;
   /** Days the trip can actually plan into. Arrival and departure days count. */
   days: number;
+}
+
+/**
+ * The shortest measured way between two stops, in a mode this traveller may use.
+ *
+ * `resolveLeg` is asked with the matrix's own mode as the legal set, so it may
+ * answer with that mode or with a measured transit journey for the pair — and
+ * with nothing at all when the only thing measured is a mode the traveller
+ * ruled out, which is the honest zero that keeps this a lower bound.
+ */
+function pairMinutes(
+  matrix: TravelTimeMatrix,
+  knowledge: TravelKnowledge | undefined,
+  fromId: string,
+  toId: string,
+): number | null {
+  if (knowledge) {
+    const resolved = resolveLeg(
+      knowledge,
+      fromId,
+      toId,
+      matrix.mode === 'foot' ? 'walk' : 'drive',
+    );
+    return resolved.ok ? resolved.minutes : null;
+  }
+  const measured = tryLeg(matrix, fromId, toId);
+  return measured === null ? null : measured.minutes;
 }
 
 /**
@@ -98,7 +134,7 @@ export function assessMustDoFeasibility(input: FeasibilityInput): MustDoConflict
   if (manual.length < 3 || input.days < 1) return null;
 
   const onSite = manual.reduce((total, candidate) => total + candidate.durationMinutes, 0);
-  const travel = lowerBoundTravelMinutes(manual, input.matrix);
+  const travel = lowerBoundTravelMinutes(manual, input.matrix, input.travel);
   const minutesRequired = onSite + travel;
   const minutesAvailable = input.days * USABLE_MINUTES_PER_DAY;
 
@@ -120,7 +156,7 @@ export function assessMustDoFeasibility(input: FeasibilityInput): MustDoConflict
   while (remaining.length > 0) {
     const need =
       remaining.reduce((total, candidate) => total + candidate.durationMinutes, 0) +
-      lowerBoundTravelMinutes(remaining, input.matrix);
+      lowerBoundTravelMinutes(remaining, input.matrix, input.travel);
     if (need <= minutesAvailable) break;
     remaining = remaining.slice(1);
     fewestToDrop += 1;
@@ -160,9 +196,25 @@ export function assessMustDoFeasibility(input: FeasibilityInput): MustDoConflict
  * That keeps the bound a bound — an unmeasured leg makes the estimate smaller,
  * never larger, so an unmeasurable region can never manufacture a conflict.
  */
+/**
+ * A LOWER BOUND HAS TO BE MEASURED IN THE MODE THE TRAVELLER WOULD USE.
+ *
+ * This read the matrix directly, and on a car-free trip in a city the matrix is
+ * a pedestrian one — so the "bound" was a walking figure three to five times the
+ * measured metro journey between the same two points. The docstring above calls
+ * it conservative in the traveller's favour; read off the wrong network it is
+ * the opposite, and the consequence is not a warning but a refusal: a
+ * `must_do_conflict` is a hard `ok: false` that abandons the whole plan and asks
+ * the traveller to drop hand-picked places that would have fitted comfortably.
+ *
+ * Resolved through the same `resolveLeg` the scheduler uses, so the bound is
+ * taken in the mode the leg would actually be made in. Unmeasured pairs still
+ * contribute nothing, which is what keeps it a *lower* bound.
+ */
 function lowerBoundTravelMinutes(
   candidates: readonly PlanningCandidate[],
   matrix: TravelTimeMatrix,
+  knowledge: TravelKnowledge | undefined,
 ): number {
   if (candidates.length < 2) return 0;
   const ids = candidates.map((candidate) => candidate.place.id);
@@ -175,11 +227,11 @@ function lowerBoundTravelMinutes(
     let nearestMinutes = Number.POSITIVE_INFINITY;
     for (const id of ids) {
       if (visited.has(id)) continue;
-      const measured = tryLeg(matrix, cursor, id);
+      const minutes = pairMinutes(matrix, knowledge, cursor, id);
       /* Unmeasured pairs are skipped, which keeps this a lower bound. */
-      if (measured === null || !Number.isFinite(measured.minutes)) continue;
-      if (measured.minutes < nearestMinutes) {
-        nearestMinutes = measured.minutes;
+      if (minutes === null || !Number.isFinite(minutes)) continue;
+      if (minutes < nearestMinutes) {
+        nearestMinutes = minutes;
         nearest = id;
       }
     }

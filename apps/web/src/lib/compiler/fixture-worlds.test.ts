@@ -28,6 +28,7 @@ const NAME_FOR_WORLD: Record<keyof typeof SYNTHETIC_WORLDS, string> = {
   rail_corridor: 'The Northern Line',
   weak_data: 'Little-Known Valley',
   transit_metro: 'Grand Central Metro',
+  transit_mixed: 'Two Rivers',
   recovery_adversary: 'Thin Harbour',
   unclocked_valley: 'Unclocked Valley',
 };

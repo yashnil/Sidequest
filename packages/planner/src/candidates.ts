@@ -5,7 +5,22 @@ import type {
   UnscheduledReasonCode,
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
+import type { TransportMode } from '@sidequest/core';
+import { reachFromBase, type TravelKnowledge } from './travel';
 import type { PlanningCandidate } from './types';
+
+/**
+ * What the matrix in hand is entitled to answer for.
+ *
+ * `unsupported` once multimodal knowledge was available and still could not
+ * resolve the pair — because then the matrix's own mode is precisely the thing
+ * this traveller may not use, and naming it would hand a road figure to a
+ * driving budget belonging to somebody with no car.
+ */
+function matrixTravelMode(matrix: TravelTimeMatrix, resolverRan: boolean): TransportMode {
+  if (resolverRan) return 'unsupported';
+  return matrix.mode === 'foot' ? 'walk' : 'drive';
+}
 
 export interface ResolvedCandidates {
   eligible: PlanningCandidate[];
@@ -63,6 +78,15 @@ export function resolveCandidates(
   candidates: readonly DiscoveryCandidate[],
   selections: readonly DiscoverySelection[],
   matrix: TravelTimeMatrix,
+  /**
+   * The same evidence the scheduler resolves legs from, and the base it would
+   * resolve them against.
+   *
+   * Optional so that a caller with no multimodal knowledge — there are none in
+   * the product, but the tests build inputs by hand — still gets the old
+   * matrix-derived figure rather than nothing.
+   */
+  reach?: { knowledge: TravelKnowledge; baseId: string },
 ): ResolvedCandidates {
   const byPlaceId = new Map(selections.map((selection) => [selection.placeId, selection]));
   const candidateIds = new Set(candidates.map((candidate) => candidate.place.id));
@@ -108,6 +132,35 @@ export function resolveCandidates(
           ? PRIORITY_BASE.manual_included
           : PRIORITY_BASE.auto_included;
 
+    /**
+     * HOW FAR OUT THIS IS, RESOLVED RATHER THAN READ OFF A MISNAMED FIELD.
+     *
+     * `candidate.driveMinutes` is whatever mode the compilation's single matrix
+     * measured. Using it here is what let a stop be rejected before the
+     * scheduler had a chance to reach it: a museum twenty minutes away by a
+     * measured metro journey carried an eighty-five minute *walking* figure,
+     * and the round-trip test then compared that walk against
+     * `maxDailyDriveMinutes` — zero for a traveller with no car.
+     */
+    /**
+     * HOW FAR OUT THIS IS, RESOLVED RATHER THAN READ OFF A MISNAMED FIELD.
+     *
+     * `candidate.driveMinutes` is whatever mode the compilation's single matrix
+     * measured, under a name that says driving. Using it as the arrival bound is
+     * what let a stop be ruled out before the scheduler had a chance to reach
+     * it: a museum twenty minutes away by a measured metro journey carried an
+     * eighty-five minute *walking* figure, and `boundsFor` pushed its earliest
+     * arrival eighty-five minutes into the day.
+     *
+     * Nothing is *rejected* here. Whether a place can be reached at all is the
+     * access layer's judgement and it has more to go on than this does — an
+     * authored shuttle reaches places no matrix leg does, and a pre-filter that
+     * refused them would delete stops the scheduler could plan. What this
+     * changes is the number and the mode, so that every reader downstream is
+     * measuring the right thing against the right budget.
+     */
+    const reached = reach ? reachFromBase(reach.knowledge, reach.baseId, candidate.place.id) : null;
+
     eligible.push({
       place: candidate.place,
       priority: base + candidate.fit.score,
@@ -116,7 +169,14 @@ export function resolveCandidates(
       fitScore: candidate.fit.score,
       matchedInterests: candidate.fit.matchedInterests,
       durationMinutes: candidate.place.typicalDurationMinutes,
-      driveMinutesFromBase: candidate.driveMinutes,
+      travelMinutesFromBase: reached?.ok ? reached.outMinutes : candidate.driveMinutes,
+      /*
+       * `unsupported` when nothing resolved, which is the honest answer and the
+       * safe one: it is the one mode no budget claims, so a figure taken off a
+       * road matrix can never be charged to a driving cap for a traveller who
+       * told us they have no car.
+       */
+      travelModeFromBase: reached?.ok ? reached.mode : matrixTravelMode(matrix, reach !== undefined),
       ...(candidate.fit.primaryInterest ? { primaryInterest: candidate.fit.primaryInterest } : {}),
     });
   }

@@ -15,7 +15,7 @@ import { roundedDuration, roundedMinuteOfDay, travellerVoice } from './plan-lang
 describe('provider notices become traveller notices', () => {
   it('keeps "not measured" while dropping the instruction to swap providers', () => {
     const original =
-      'Driving times are modelled. Modelled from an authored US-395 corridor-and-spur topology, ' +
+      'Road times are modelled. Modelled from an authored US-395 corridor-and-spur topology, ' +
       'not measured road data. Replace with a routing provider before relying on exact times. ' +
       "Service times come from the operators' published timetables on the dates recorded against " +
       'each one, and are not checked live.';

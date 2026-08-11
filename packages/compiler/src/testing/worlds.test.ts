@@ -26,6 +26,7 @@ export const BROWSER_REACHABLE_WORLDS = [
   'rail_corridor',
   'weak_data',
   'transit_metro',
+  'transit_mixed',
   'recovery_adversary',
   'unclocked_valley',
 ] as const;
@@ -54,6 +55,12 @@ describe('synthetic worlds', () => {
        * loop to have something to do.
        */
       'measured public transport': 'transit_metro',
+      /*
+       * A day that no single network can answer. Distinct from the world above,
+       * which proves a journey can be measured at all: this one proves the
+       * planner picks between two measurements that disagree about the same day.
+       */
+      'a day that needs more than one mode': 'transit_mixed',
       'a packet that is not good enough': 'recovery_adversary',
       'a destination nobody published a clock for': 'unclocked_valley',
     };

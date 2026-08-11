@@ -2,6 +2,8 @@ import {
   accessRuleSchema,
   operatingCalendarSchema,
   packScopeHash,
+  placeRoleTag,
+  planningRoleForCategory,
   REGION_PACK_VERSION,
   type AccessRule,
   type GeographicScope,
@@ -111,6 +113,8 @@ const ACQUIRED_CATEGORY: Record<string, PlaceCategory> = {
   culture: 'museum',
   nature: 'lake',
 };
+
+
 
 export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope): RegionPack {
   const partition = partitionScope(scope);
@@ -484,6 +488,28 @@ export function packBackedProviders(
                 id: `${spec.id}-acquired-${intent}-${index}`,
                 name: `${spec.name} ${titleCase(intent)} ${index + 1}`,
                 category: ACQUIRED_CATEGORY[intent] ?? place.category,
+                /*
+                 * The part this plays in a trip, stamped like every pack record.
+                 *
+                 * Without it an acquired place reaches the board with no role at
+                 * all, and every count derived from roles — how many things a day
+                 * can be built around, how many are smaller finds — is silently
+                 * unable to see it. The funnel then described a population the
+                 * board no longer held, which is exactly the inconsistency this
+                 * pass exists to remove.
+                 */
+                /*
+                 * The *shared* rule, not a copy of it. A fixture that classified
+                 * acquired records by its own logic would make the recount's
+                 * tests assert a property of the fake — which is exactly what the
+                 * first version of this did, while production stamped nothing.
+                 */
+                tags: [
+                  ...place.tags,
+                  placeRoleTag(
+                    planningRoleForCategory(ACQUIRED_CATEGORY[intent] ?? place.category),
+                  ),
+                ],
               },
               providerRefs: [
                 { provider: 'synthetic-acquisition', externalId: `${intent}-${index}` },

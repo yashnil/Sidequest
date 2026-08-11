@@ -137,6 +137,25 @@ export interface SyntheticWorldSpec {
       transfers: number;
       walkingMinutes: number;
       legs: { mode: 'walk' | 'rail' | 'subway' | 'tram' | 'bus' | 'ferry'; minutes: number }[];
+      /**
+       * MINUTES ADDED PER STEP OF SEPARATION, SO NO TWO PAIRS SHARE A DURATION.
+       *
+       * Without this the fake wrote the *same object* to every measured journey,
+       * and the consequence was not a cosmetic one: reusing one pair's transit
+       * duration for another was the fixture's status quo, so no test could
+       * express — let alone catch — the defect. A suite cannot detect a
+       * substitution between two values that are equal by construction.
+       *
+       * Separation is read off the place-id suffix, which is also what the fake
+       * matrix scales on, so the two networks agree about which places are far
+       * apart while disagreeing about how long that takes. That disagreement is
+       * the whole point: it is what lets one day contain a short walk and a long
+       * ride and prefer the right one for each.
+       *
+       * Defaults to zero, so every world written before this keeps its constant
+       * and its recorded behaviour byte for byte.
+       */
+      minutesPerStep?: number;
     };
     /** Place-id suffixes for which the provider answers "no service runs". */
     noRouteFor?: readonly string[];
@@ -168,6 +187,30 @@ export interface SyntheticWorldSpec {
  * (e) Rail corridor: several cities, no car, two timezones.
  * (f) Weak-data region: good geography, almost no official coverage.
  */
+/**
+ * How far apart two synthetic points are, in places.
+ *
+ * The fake matrix scales its minutes on `|i - j|` over the place index, and this
+ * reads the same index off an id so the transit fake can scale on the same
+ * geography. A base has no place index and counts as the origin, which is what
+ * it is.
+ */
+function separationBetween(fromId: string, toId: string): number {
+  /*
+   * Both id shapes, because there are two. `fakeProviders` hands the compiler
+   * finished places named `<world>-place-N`; the pack-backed set builds them out
+   * of source records and they come through as `land:<world>-feature-N`. A
+   * regex that knew only the first silently scored every pack-backed pair as
+   * zero steps apart, which gave every journey in the world the same duration —
+   * the exact defect this scaling exists to remove, reintroduced by a suffix.
+   */
+  const indexOf = (id: string): number => {
+    const match = /-(?:place|feature)-(\d+)$/.exec(id);
+    return match?.[1] === undefined ? 0 : Number(match[1]);
+  };
+  return Math.abs(indexOf(toId) - indexOf(fromId));
+}
+
 export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
   transit_city: {
     id: 'transit-city',
@@ -385,6 +428,65 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
       /* Suffixes, matched against the end of a place id. */
       noRouteFor: ['-place-17', '-place-18'],
       providerErrorFor: ['-place-19'],
+    },
+  },
+  /**
+   * (i2) THE MIXED-MODE DAY, BUILT SO THAT ONE MODE CANNOT ANSWER IT.
+   *
+   * `transit_metro` proves that a journey can be measured. This world proves the
+   * planner *chooses* between measurements, which is a different claim and the
+   * one Phase 15C turns on.
+   *
+   * The two networks are deliberately shaped to disagree. Walking scales at nine
+   * minutes a step, so neighbours are a quarter of an hour apart and anything
+   * further is a slog. The metro scales at two, so it loses to the walk next
+   * door and wins by a distance across town. A day that contains both an
+   * adjacent pair and a distant one therefore *has* to come out as
+   * walk → ride → walk → ride, and any implementation that answers the whole day
+   * from one network gets one of the two badly wrong — a quarter-hour stroll
+   * rendered as a train, or a forty-minute walk standing in for an eighteen
+   * minute ride.
+   *
+   * `-place-11` publishes no service at all, so "we could not measure this" stays
+   * reachable and distinguishable from "there is nothing here".
+   */
+  transit_mixed: {
+    id: 'transit-mixed',
+    name: 'Two Rivers',
+    qualifiedName: 'Two Rivers, Testland',
+    countryCode: 'TL',
+    timeZone: 'Europe/Lisbon',
+    center: { lat: 38.72, lng: -9.14 },
+    entityType: 'city',
+    breadth: 'city',
+    placeCount: 12,
+    baseCount: 1,
+    subregionCount: 0,
+    primaryMode: 'walk',
+    hoursCoverage: 1,
+    accessCoverage: 1,
+    foodVenues: 8,
+    weatherPoints: 1,
+    routingKind: 'measured',
+    failedLegs: 0,
+    hasFerry: false,
+    legMinutes: 9,
+    timeZoneResolution: 'resolved',
+    transit: {
+      measured: {
+        minutes: 14,
+        transfers: 0,
+        walkingMinutes: 6,
+        /* Sums to `minutes`, and stays summing to it as the ride is scaled. */
+        legs: [
+          { mode: 'walk', minutes: 3 },
+          { mode: 'subway', minutes: 8 },
+          { mode: 'walk', minutes: 3 },
+        ],
+        minutesPerStep: 2,
+      },
+      /* Both id shapes; see `separationBetween`. */
+      noRouteFor: ['-place-11', '-feature-11'],
     },
   },
   /**
@@ -1062,13 +1164,28 @@ export function fakeProviders(
                     detail: 'No public transport runs between these two on this day.',
                   };
                 }
+                /*
+                 * Scaled to the pair, and the legs scaled with it — a journey's
+                 * total is the sum of its legs, and the transit suite's own
+                 * invariant checks exactly that. Adding minutes to the total
+                 * without adding them to a leg would fabricate a journey that
+                 * fails its own arithmetic.
+                 */
+                const extra = separationBetween(pair.fromId, pair.toId) * (measured.minutesPerStep ?? 0);
+                const legs = measured.legs.map((leg) => ({ ...leg }));
+                const longestRide = legs.reduce<(typeof legs)[number] | null>(
+                  (best, leg) =>
+                    leg.mode === 'walk' ? best : best === null || leg.minutes > best.minutes ? leg : best,
+                  null,
+                );
+                if (longestRide) longestRide.minutes += extra;
                 return {
                   ...base,
                   status: 'measured' as const,
-                  minutes: measured.minutes,
+                  minutes: measured.minutes + (longestRide ? extra : 0),
                   transfers: measured.transfers,
                   walkingMinutes: measured.walkingMinutes,
-                  legs: measured.legs.map((leg) => ({ ...leg })),
+                  legs,
                   detail: 'Measured against published timetables.',
                 };
               }),

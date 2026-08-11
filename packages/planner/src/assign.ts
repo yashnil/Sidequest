@@ -51,13 +51,19 @@ function buildUnits(
     .map(([key, members]) => {
       const sorted = [...members].sort(
         (a, b) =>
-          a.driveMinutesFromBase - b.driveMinutesFromBase || a.place.id.localeCompare(b.place.id),
+          a.travelMinutesFromBase - b.travelMinutesFromBase || a.place.id.localeCompare(b.place.id),
       );
       return {
         key,
         members: sorted,
         representativeId: sorted[0]!.place.id,
-        maxDriveMinutes: Math.max(...sorted.map((member) => member.driveMinutesFromBase)),
+        /*
+         * The furthest member, in whatever mode reaches it. Named `maxDrive`
+         * historically and read as a distance ordering rather than as a budget,
+         * which is why the rename below it is safe — nothing compares this to
+         * `maxDailyDriveMinutes`.
+         */
+        maxDriveMinutes: Math.max(...sorted.map((member) => member.travelMinutesFromBase)),
         topPriority: Math.max(...sorted.map((member) => member.priority)),
       };
     })

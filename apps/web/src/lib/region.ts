@@ -85,6 +85,16 @@ export interface RegionContext {
    */
   food: FoodDataset | null;
   matrix: TravelTimeMatrix;
+  /**
+   * Measured public-transport journeys, when the compilation bought any.
+   *
+   * Read straight off the artifact and handed to the planner beside the matrix,
+   * never folded into it. Until this line existed the evidence stopped at the
+   * Discovery Board: a compilation could measure a journey, show the traveller
+   * that it had, and then time the same journey off the pedestrian matrix on the
+   * itinerary — which is the gap this pass closes.
+   */
+  transit: CompiledRegion['transitEvidence'];
   baseId: string;
   /**
    * The multi-base structure, when the artifact carries one.
@@ -252,6 +262,7 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
       weatherScopeKey: scopeKey,
       food,
       matrix: compiled.travelTimes,
+      transit: compiled.transitEvidence,
       baseId: primaryBase.routingId,
       basePortfolio: compiled.basePortfolio,
       months,

@@ -12,6 +12,8 @@ import type {
   PlannerReadiness,
   Region,
   SelectionStatus,
+  TransitEvidence,
+  TransportMode,
   TravelerProfile,
   TripBasics,
   WeatherDataset,
@@ -39,7 +41,26 @@ export interface PlanningCandidate {
   matchedInterests: readonly Interest[];
   /** How long to allow on site. */
   durationMinutes: number;
-  driveMinutesFromBase: number;
+  /**
+   * ONE-WAY TIME FROM THE BASE, IN THE MODE THAT WOULD ACTUALLY BE USED.
+   *
+   * This was `driveMinutesFromBase` and it was not a driving figure. It came off
+   * `place.travelFromBase.driveMinutes`, which the compiler fills from *whatever
+   * mode the matrix was* — so on a car-free trip it held walking minutes under a
+   * name that says driving, and every reader treated it as time at the wheel.
+   * The consequences were not cosmetic: the arrival bound put a museum
+   * eighty-five minutes into the day when the metro takes twenty, the
+   * round-trip refusal compared a walk against `maxDailyDriveMinutes` — which is
+   * **zero** for a non-driver — and the backup ceiling, being the same zero,
+   * silently produced no weather backups on any car-free trip ever.
+   *
+   * It is now resolved through the same `resolveLeg` the scheduler uses, so a
+   * stop cannot be ruled out before the scheduler has had the chance to reach it
+   * the way the evidence says it would.
+   */
+  travelMinutesFromBase: number;
+  /** The mode that figure was measured in, so no reader has to assume. */
+  travelModeFromBase: TransportMode;
 }
 
 export interface PlannerConfig {
@@ -134,6 +155,25 @@ export interface PlannerInput {
   candidates: readonly DiscoveryCandidate[];
   selections: readonly DiscoverySelection[];
   matrix: TravelTimeMatrix;
+  /**
+   * Measured public-transport journeys, beside the matrix and never inside it.
+   *
+   * The separation is the safeguard, and it is the compiled artifact's own: a
+   * matrix has one mode, so folding transit into it would force a choice between
+   * measuring the walk and measuring the train, and whichever lost would be
+   * silently answered by the other.
+   *
+   * Optional, and absent on the overwhelming majority of trips — a trip planned
+   * around a car buys no timetables at all. Absent means the planner has no
+   * transit answer for any pair, which is a different statement from "there are
+   * no trains" and is why a leg with no usable mode stays unmeasured rather than
+   * borrowing the road.
+   *
+   * Sparse when present: journeys are bought for the pairs a trip turns on, not
+   * for the square of the board. A pair with no journey is not a pair with no
+   * service.
+   */
+  transit?: TransitEvidence;
   /**
    * Resolved and validated at the server boundary, exactly like the matrix. The
    * planner never asks a provider anything; it is handed the facts and stays a

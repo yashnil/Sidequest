@@ -36,6 +36,8 @@ import {
 } from '@sidequest/compiler';
 import {
   placeInclusionTag,
+  placeRoleTag,
+  planningRoleForCategory,
   runtimeTimeZoneDataVersion,
   singleTimeZone,
   type RegionPack,
@@ -971,6 +973,23 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             osm.primaryTag,
             ...Object.keys(osm.planningTags).map((key) => `attr:${key}`),
             placeInclusionTag(decision.relationship),
+            /*
+             * The part this plays in a trip, stamped like every pack record.
+             *
+             * Records built here reach the board without ever passing through
+             * the inventory's classifier, so they carried no role at all — and
+             * every count derived from roles was structurally unable to see
+             * them. After an acquisition the funnel reported a breakdown of the
+             * three places the pack held beside a total of eleven, because the
+             * eight new ones were in neither the anchors nor the discoveries.
+             *
+             * The rule lives in `@sidequest/core` beside `placeRoleTag` so that
+             * this path and the fixture path cannot answer it differently. They
+             * did once: the first version of this fix was written into the
+             * fixture only, so the test asserted a property of the fake and
+             * production shipped the inconsistency untouched.
+             */
+            placeRoleTag(planningRoleForCategory(entry.category)),
           ],
           source: {
             name: 'OpenStreetMap',
@@ -1642,7 +1661,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     supportsTransit() {
       return isTransitProviderEnabled();
     },
-    async routes({ pairs, departAt, timeZone, maxPairs }) {
+    async routes({ pairs, departAt, timeZone, maxPairs, deadlineMs }) {
       /**
        * ONE PRE-FLIGHT, BEFORE ANY PAIR IS BOUGHT.
        *
@@ -1690,7 +1709,11 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       const outcome = await measureTransitJourneys(
         pairs,
         { departAt, timeZone },
-        { maxPairs, cache: cacheFor<TransitJourney>('valhalla-transit', TTL.matrix) },
+        {
+          maxPairs,
+          ...(deadlineMs === undefined ? {} : { deadlineMs }),
+          cache: cacheFor<TransitJourney>('valhalla-transit', TTL.matrix),
+        },
       );
       diagnostics.transitCalls += outcome.calls;
       diagnostics.transitPairsRequested += outcome.journeys.length;

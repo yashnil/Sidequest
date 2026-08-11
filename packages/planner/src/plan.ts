@@ -51,6 +51,17 @@ import {
   type PackOptions,
 } from './schedule';
 import { buildTransportStrategy } from './strategy';
+import { reachFromBase, travelKnowledgeFor } from './travel';
+
+/**
+ * What one stop costs to reach and return from, split by which budget bounds it.
+ */
+interface RoundTrip {
+  minutes: number | null;
+  driveMinutes: number;
+  driveCap: number;
+  transportCap: number;
+}
 import { buildPlannerReadiness } from './readiness';
 import { statusFor, validateItinerary, validateStrategy } from './validate';
 import {
@@ -114,10 +125,21 @@ export function planTrip(input: PlannerInput): PlanResult {
     return { ok: false, code: 'matrix_unusable', message };
   }
 
+  /**
+   * Every way this traveller could make a given journey, resolved once.
+   *
+   * Built here rather than inside the day loop because it is a property of the
+   * trip — the matrix, the timetables that were bought, and what the traveller
+   * said they would and would not do — and rebuilding it per day would be the
+   * same answer computed five times.
+   */
+  const travelKnowledge = travelKnowledgeFor(input.matrix, input.profile, input.transit);
+
   const { eligible, rejected } = resolveCandidates(
     input.candidates,
     input.selections,
     input.matrix,
+    { knowledge: travelKnowledge, baseId: input.baseId },
   );
   const unscheduled: UnscheduledPlace[] = [...rejected];
 
@@ -149,6 +171,7 @@ export function planTrip(input: PlannerInput): PlanResult {
   const conflict = assessMustDoFeasibility({
     candidates: eligible,
     matrix: input.matrix,
+    travel: travelKnowledge,
     days: days.length,
   });
   if (conflict) {
@@ -178,6 +201,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     dataset: input.access,
     profile: input.profile,
     matrix: input.matrix,
+    travel: { knowledge: travelKnowledge, baseId: input.baseId },
   });
 
   /** The legal ways in available on one specific day, keyed by unit. */
@@ -263,7 +287,7 @@ export function planTrip(input: PlannerInput): PlanResult {
         // that no day can actually reach in time, and the traveller then gets
         // "there was no room" instead of "you cannot get there before it stops
         // letting people in" — the second of which names something they can act on.
-        day.window.startMinute + candidate.driveMinutesFromBase,
+        day.window.startMinute + candidate.travelMinutesFromBase,
         resolved.option.earliestActivityStart ?? Number.NEGATIVE_INFINITY,
       ),
       endMinute: Math.min(
@@ -448,6 +472,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     baseId: baseAt(day.date).id,
     baseName: baseAt(day.date).name,
     matrix: input.matrix,
+    travel: travelKnowledge,
     config,
     profile: input.profile,
     hours: hoursFor(day.date),
@@ -596,23 +621,44 @@ export function planTrip(input: PlannerInput): PlanResult {
   }
 
   /**
-   * The unavoidable driving for one stop: base out, and base back.
+   * The unavoidable travel for one stop: base out, and base back, in the mode
+   * that would actually make the journey.
+   *
+   * This read the matrix directly and compared the answer against
+   * `maxDailyDriveMinutes`. On a car-free trip the matrix is a pedestrian one
+   * and that cap is **zero**, so every unplaced stop was reported as "about N
+   * minutes of driving, and you said 0 was your limit" — to somebody with no
+   * car, about a walk. The reason code fed the remedy ranking, so the whole
+   * explanation downstream was built on it.
    *
    * `null` when either leg is unmeasured, which is a different failure with its
    * own code and must not be reported as a distance.
    */
-  const roundTripFromBase = (placeId: string): number | null => {
-    const out = tryLeg(input.matrix, input.baseId, placeId)?.minutes;
-    const back = tryLeg(input.matrix, placeId, input.baseId)?.minutes;
-    return out === undefined || back === undefined ? null : out + back;
+  const roundTripFromBase = (placeId: string): RoundTrip => {
+    const reached = reachFromBase(travelKnowledge, input.baseId, placeId);
+    const driveCap = input.profile.transport.maxDailyDriveMinutes;
+    const transportCap = input.profile.transport.maxDailyTransportMinutes;
+    if (!reached.ok) {
+      return { minutes: null, driveMinutes: 0, driveCap, transportCap };
+    }
+    return {
+      minutes: reached.roundTripMinutes,
+      driveMinutes: reached.driveMinutes,
+      driveCap,
+      transportCap,
+    };
   };
 
   for (const candidate of stillHomeless) {
     unscheduled.push(
-      unscheduledFor(candidate, days.length, accessByUnitDate, unitByPlaceId, dates, {
-        minutes: roundTripFromBase(candidate.place.id),
-        capMinutes: input.profile.transport.maxDailyDriveMinutes,
-      }),
+      unscheduledFor(
+        candidate,
+        days.length,
+        accessByUnitDate,
+        unitByPlaceId,
+        dates,
+        roundTripFromBase(candidate.place.id),
+      ),
     );
   }
 
@@ -867,7 +913,8 @@ export function planTrip(input: PlannerInput): PlanResult {
       .filter((candidate) => !scheduledPlaceIds.has(candidate.place.id))
       .map((candidate) => ({
         place: candidate.place,
-        driveMinutesFromBase: candidate.driveMinutesFromBase,
+        travelMinutesFromBase: candidate.travelMinutesFromBase,
+        travelModeFromBase: candidate.travelModeFromBase,
         selectionStatus: candidate.selectionStatus,
         reachable: feasibleDates.get(unitByPlaceId.get(candidate.place.id)?.key ?? '')?.has(plan.day.date) ?? false,
         hours: hoursByPlaceDate.get(hoursKey(candidate.place.id, plan.day.date)),
@@ -880,6 +927,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       atRisk,
       pool,
       maxDriveMinutes: input.profile.transport.maxDailyDriveMinutes,
+      maxTransportMinutes: input.profile.transport.maxDailyTransportMinutes,
     });
 
     return summariseDayWeather({
@@ -1486,7 +1534,7 @@ function unscheduledFor(
   resolved: ReadonlyMap<string, { available: boolean }>,
   unitByPlaceId: ReadonlyMap<string, AccessUnit>,
   dates: readonly string[],
-  roundTrip: { minutes: number | null; capMinutes: number },
+  roundTrip: RoundTrip,
 ): UnscheduledPlace {
   const unit = unitByPlaceId.get(candidate.place.id);
   const reachableDays = unit
@@ -1504,15 +1552,33 @@ function unscheduledFor(
    * against a 150-minute daily limit, on an empty day. No amount of freeing up
    * room would ever have helped.
    */
-  if (roundTrip.minutes !== null && roundTrip.minutes > roundTrip.capMinutes) {
+  /**
+   * TWO BUDGETS, TWO SENTENCES, AND NEITHER BORROWS THE OTHER'S QUANTITY.
+   *
+   * The driving cap bounds only the part spent at a wheel; the travelling cap
+   * bounds the whole journey. Charging a round trip to the driving cap because
+   * one of its two legs was a drive produced "about 70 minutes of driving, and
+   * you said 60 was your limit" for a journey containing twenty-five minutes of
+   * driving — a false quantity, and a remedy pointing at the wrong limit.
+   */
+  if (roundTrip.driveMinutes > roundTrip.driveCap) {
     return {
       placeId: candidate.place.id,
       name: candidate.place.name,
       wasManual: candidate.manual,
       reasonCode: 'exceeds_daily_travel',
-      reason: `Getting there and back is about ${Math.round(roundTrip.minutes)} minutes of driving, and you said ${roundTrip.capMinutes} was your limit for a day.`,
-      suggestedRemedy:
-        'Raise your daily driving limit, or base the trip somewhere nearer to it.',
+      reason: `Getting there and back is about ${Math.round(roundTrip.driveMinutes)} minutes of driving, and you said ${roundTrip.driveCap} was your limit for a day.`,
+      suggestedRemedy: 'Raise your daily driving limit, or base the trip somewhere nearer to it.',
+    };
+  }
+  if (roundTrip.minutes !== null && roundTrip.minutes > roundTrip.transportCap) {
+    return {
+      placeId: candidate.place.id,
+      name: candidate.place.name,
+      wasManual: candidate.manual,
+      reasonCode: 'exceeds_daily_travel',
+      reason: `Getting there and back is about ${Math.round(roundTrip.minutes)} minutes of travelling, and you said ${roundTrip.transportCap} was your limit for a day.`,
+      suggestedRemedy: 'Raise your daily travelling limit, or base the trip somewhere nearer to it.',
     };
   }
 

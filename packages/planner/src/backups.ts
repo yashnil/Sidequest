@@ -5,6 +5,7 @@ import {
   type DayBackup,
   type DayWeatherSummary,
   type Place,
+  type TransportMode,
 } from '@sidequest/core';
 import type { PlaceDayHours } from './hours';
 import type { PlaceDayWeather } from './weather';
@@ -27,7 +28,8 @@ import type { PlanningCandidate } from './types';
 
 export interface BackupCandidate {
   place: Place;
-  driveMinutesFromBase: number;
+  travelMinutesFromBase: number;
+  travelModeFromBase: TransportMode;
   /** From the board: 'included' | 'maybe' | 'excluded', or absent. */
   selectionStatus: string | undefined;
   /** Whether the traveller can legally reach it on this date. */
@@ -43,8 +45,10 @@ export interface ChooseBackupsInput {
   /** The stops on this day the weather is working against. */
   atRisk: readonly { candidate: PlanningCandidate; weather: PlaceDayWeather }[];
   pool: readonly BackupCandidate[];
-  /** The furthest a fallback may sensibly be from base. */
+  /** Minutes at the wheel a day may hold. Zero for a traveller with no car. */
   maxDriveMinutes: number;
+  /** Driving plus riding plus walking. The cap that bounds a car-free rescue. */
+  maxTransportMinutes: number;
   limit?: number;
 }
 
@@ -66,7 +70,28 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
   const limit = input.limit ?? MAX_BACKUPS_PER_DAY;
   if (input.atRisk.length === 0) return [];
 
-  const ceiling = Math.min(input.maxDriveMinutes, MAX_BACKUP_DRIVE_MINUTES);
+  /**
+   * HOW FAR A RESCUE MAY BE, IN THE MODE THAT WOULD REACH IT.
+   *
+   * This was `min(maxDriveMinutes, 75)`. `maxDailyDriveMinutes` is **zero** for
+   * every traveller without a car, so the ceiling was zero, every candidate
+   * failed `> ceiling`, and no car-free trip has ever been offered a weather
+   * backup — while the copy underneath went on saying nothing on the board was
+   * reachable, which was false. The cap is chosen per candidate by the mode that
+   * actually reaches it.
+   */
+  const ceilingFor = (mode: TransportMode): number => {
+    /*
+     * Nothing established the way there, so nothing establishes that it is close
+     * enough either. Judging an unresolved figure against the travelling budget
+     * would offer a rescue no measured mode reaches.
+     */
+    if (mode === 'unsupported') return 0;
+    return Math.min(
+      mode === 'drive' ? input.maxDriveMinutes : input.maxTransportMinutes,
+      MAX_BACKUP_DRIVE_MINUTES,
+    );
+  };
   const worst = [...input.atRisk].sort(
     (a, b) =>
       a.weather.assessment.score - b.weather.assessment.score ||
@@ -90,7 +115,7 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
     // 4. Open on this date, for long enough to be worth the journey.
     if (!isOpenEnough(entry)) return false;
     // 5. Close enough to be a rescue rather than a second trip.
-    if (entry.driveMinutesFromBase > ceiling) return false;
+    if (entry.travelMinutesFromBase > ceilingFor(entry.travelModeFromBase)) return false;
     // 6. Genuinely better in *this* weather. An equally exposed alternative is
     //    not a backup, it is the same afternoon somewhere else.
     if (!isLessExposed(entry, worst.weather)) return false;
@@ -105,14 +130,46 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
     trigger,
     why: whyFor(entry, worst.weather),
     replacesPlaceId: worst.candidate.place.id,
-    accessSummary:
-      entry.driveMinutesFromBase <= 5
-        ? 'In town — no real drive to it.'
-        : `About ${entry.driveMinutesFromBase} min out, on roads you are already using.`,
+    accessSummary: accessSummaryFor(entry),
     openingSummary: openingSummaryFor(entry),
-    driveMinutesFromBase: entry.driveMinutesFromBase,
+    driveMinutesFromBase: entry.travelMinutesFromBase,
     ...withCaution(entry),
   }));
+}
+
+/**
+ * How near a rescue is, said in the mode that reaches it.
+ *
+ * The old sentence read "About 40 min out, on roads you are already using" on
+ * every backup, including the ones a traveller with no car would reach on foot
+ * or by train — roads they are not using and a journey they are not driving.
+ */
+function accessSummaryFor(entry: BackupCandidate): string {
+  if (entry.travelMinutesFromBase <= 5) return 'In town — no real journey to it.';
+  switch (entry.travelModeFromBase) {
+    case 'drive':
+      return `About ${entry.travelMinutesFromBase} min out, on roads you are already using.`;
+    case 'walk':
+      return `About ${entry.travelMinutesFromBase} min out on foot.`;
+    case 'rail':
+    case 'public_bus':
+    case 'ferry':
+    case 'shuttle':
+      return `About ${entry.travelMinutesFromBase} min out on public transport.`;
+    default:
+      /**
+       * A DISTANCE WITHOUT A MODE, SAID AS ONE.
+       *
+       * `unsupported` is what the reach resolver leaves behind when nothing it
+       * could use answered for the pair — and the minutes then fall back to the
+       * raw matrix figure, which on a road matrix is a *car* number for a
+       * traveller who may have no car. An earlier version of this function let
+       * that case fall into the `public transport` branch, so a backup nobody
+       * had measured a journey to was described as a ride. Naming no mode is the
+       * only honest thing left to do with a number like that.
+       */
+      return `About ${entry.travelMinutesFromBase} min out; we have not established how you would get there.`;
+  }
 }
 
 /**
@@ -132,7 +189,7 @@ function rank(entry: BackupCandidate): number {
       : entry.place.weather.exposure === 'sheltered_outdoor'
         ? 100
         : 200;
-  return wasMaybe + exposure + entry.driveMinutesFromBase;
+  return wasMaybe + exposure + entry.travelMinutesFromBase;
 }
 
 function isOpenEnough(entry: BackupCandidate): boolean {

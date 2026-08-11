@@ -244,6 +244,15 @@ describe('the planner is unchanged by the existence of a benchmark', () => {
     'profile',
     'region',
     'selections',
+    /**
+     * Measured public-transport journeys, added deliberately in Phase 15C.
+     *
+     * The list is meant to cost an edit, and this is that edit. Both arms of the
+     * benchmark are handed the same compiled artifact, so both get whatever
+     * transit evidence the compilation bought — this widens what the planner may
+     * *read*, not what one arm is given.
+     */
+    'transit',
     'tripId',
     'weather',
   ];

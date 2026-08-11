@@ -15,6 +15,7 @@ import {
   type UnmeasuredTravelReason,
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
+import { resolveLeg, type TravelKnowledge } from './travel';
 import type { PlanningCandidate } from './types';
 
 /**
@@ -146,6 +147,20 @@ export interface ResolveAccessInput {
   dataset: AccessDataset;
   profile: TravelerProfile;
   matrix: TravelTimeMatrix;
+  /**
+   * The multimodal evidence, and the base every approach is measured from.
+   *
+   * Without it this layer sees one network. That was the sharpest remaining
+   * pre-scheduler defect: a car-free traveller in a city whose published bounds
+   * span more than the walkable threshold gets a **road** matrix and access
+   * rules that all say `approachMode: 'walk'` with no stated allowance — so the
+   * refusal below dropped every unit on every date and the plan came back empty,
+   * while measured base-to-place journeys sat unread in `PlannerInput.transit`.
+   *
+   * Optional so hand-built test inputs stay buildable; production always supplies
+   * it.
+   */
+  travel?: { knowledge: TravelKnowledge; baseId: string };
 }
 
 /**
@@ -230,6 +245,7 @@ function resolveUnitOnDate(
     service: best.service,
     dataset,
     matrix: input.matrix,
+    ...(input.travel ? { travel: input.travel } : {}),
   });
   if (!option) {
     return {
@@ -252,8 +268,9 @@ function buildOption(args: {
   service: TransportService | undefined;
   dataset: AccessDataset;
   matrix: TravelTimeMatrix;
+  travel?: { knowledge: TravelKnowledge; baseId: string };
 }): AccessOption | null {
-  const { unit, date, rule, service, dataset, matrix } = args;
+  const { unit, date, rule, service, dataset, matrix, travel } = args;
   /**
    * The gateway belongs to the service, not to the rule.
    *
@@ -287,8 +304,22 @@ function buildOption(args: {
    * appearing on it. The unit drops out here, the place becomes unplannable with
    * a reason, and readiness reports a transport gap rather than a plan.
    */
+  /*
+   * Before dropping the unit, ask whether anything else measured can get there.
+   *
+   * `matrixCoversMode` knows two networks and returns false for every scheduled
+   * mode, so on its own it cannot see a bought transit journey. Asking the
+   * resolver is what turns "the matrix does not measure walking here" into "and
+   * nothing else does either" — which is the only version of this refusal that
+   * is true.
+   */
+  const measurableAnotherWay =
+    travel !== undefined &&
+    resolveLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode).ok;
+
   if (
     !matrixCoversMode(matrix, rule.approachMode) &&
+    !measurableAnotherWay &&
     (rule.approachMinutes === null || rule.approachMinutes === undefined)
   ) {
     return null;
@@ -454,9 +485,17 @@ function buildOption(args: {
      * measurement and is now taken as one. What it never was, and never is, is a
      * conversion: a car's road time is not a slow walk.
      */
-    approachMinutes: matrixCoversMode(matrix, rule.approachMode)
-      ? null
-      : (rule.approachMinutes ?? 0),
+    /*
+     * `null` means "resolve this at schedule time, from wherever the day has
+     * got to". It now covers the case where the matrix cannot measure the mode
+     * but something else has measured the pair — otherwise the unit survived the
+     * refusal above only to be scheduled off an authored constant, with a
+     * measured journey for the same two points sitting unused.
+     */
+    approachMinutes:
+      matrixCoversMode(matrix, rule.approachMode) || measurableAnotherWay
+        ? null
+        : (rule.approachMinutes ?? 0),
     entryLegs,
     exitLegs,
     internalTransfer,
@@ -502,7 +541,7 @@ export function buildAccessUnits(
       // on the way in and the ordering inside it reads as a route.
       const sorted = [...members].sort(
         (a, b) =>
-          a.driveMinutesFromBase - b.driveMinutesFromBase || a.place.id.localeCompare(b.place.id),
+          a.travelMinutesFromBase - b.travelMinutesFromBase || a.place.id.localeCompare(b.place.id),
       );
       const gateway = findPoint(dataset, rule?.gatewayPointId);
       const gatewayRoutingId = gateway?.routingId ?? sorted[0]!.place.id;

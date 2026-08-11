@@ -143,6 +143,16 @@ export interface TransitLookupOptions {
     write: (key: string, value: TransitJourney) => void;
   };
   maxPairs: number;
+  /**
+   * An absolute instant, past which no further journey is asked for.
+   *
+   * Epoch milliseconds, never a duration — that unit confusion has already cost
+   * this repository one non-functional acquisition path. What it buys is a
+   * partial answer instead of no answer: the caller's outer race threw away
+   * every journey already measured when the last one ran long, and billed the
+   * calls behind them without recording the spend.
+   */
+  deadlineMs?: number;
 }
 
 /**
@@ -271,10 +281,17 @@ export async function measureTransitJourneys(
   }[],
   context: { departAt: Date; timeZone: string },
   options: TransitLookupOptions,
-): Promise<{ journeys: TransitJourney[]; calls: number; cacheHits: number }> {
+): Promise<{
+  journeys: TransitJourney[];
+  calls: number;
+  cacheHits: number;
+  /** Whether the deadline stopped this short of the pairs it was given. */
+  timedOut: boolean;
+}> {
   const journeys: TransitJourney[] = [];
   let calls = 0;
   let cacheHits = 0;
+  let timedOut = false;
 
   const requestBasis = {
     kind: 'depart_at' as const,
@@ -289,6 +306,15 @@ export async function measureTransitJourneys(
       cacheHits += 1;
       journeys.push({ ...cached, fromId: pair.fromId, toId: pair.toId });
       continue;
+    }
+
+    /*
+     * Stop asking, and report what we have. Checked before the call rather than
+     * after it so the deadline bounds the work rather than describing it.
+     */
+    if (options.deadlineMs !== undefined && Date.now() >= options.deadlineMs) {
+      timedOut = true;
+      break;
     }
 
     calls += 1;
@@ -309,7 +335,7 @@ export async function measureTransitJourneys(
     journeys.push(journey);
   }
 
-  return { journeys, calls, cacheHits };
+  return { journeys, calls, cacheHits, timedOut };
 }
 
 async function measureOne(

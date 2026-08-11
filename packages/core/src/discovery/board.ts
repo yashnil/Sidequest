@@ -13,6 +13,7 @@ import type { TravelerProfile } from '../schemas/profile';
 import type { Region, WorthDetourLabel } from '../schemas/region';
 import type { TravelerNeed } from '../schemas/trip';
 import { isVisitableRole, PLANNING_ROLES, type PlanningRole } from '../schemas/region-pack';
+import type { PlaceCategory } from '../schemas/common';
 import {
   expandRegion,
   worthDetourLabel,
@@ -88,6 +89,42 @@ export const PLACE_INCLUSION_TAG_PREFIX = 'included:';
 
 export function placeRoleTag(role: PlanningRole): string {
   return `${PLACE_ROLE_TAG_PREFIX}${role}`;
+}
+
+/**
+ * THE PART A PLACE PLAYS, WORKED OUT FROM WHAT KIND OF THING IT IS.
+ *
+ * The pack path derives a role from the source record's own catalogue category
+ * and stamps it (`backbone/inventory.ts`). Records that arrive by *acquisition*
+ * never went through that, so they reached the board carrying no role at all —
+ * and every count derived from roles was structurally unable to see them. The
+ * funnel then reported a breakdown of three beside a total of eleven.
+ *
+ * This is the rule for those records, and it lives here — beside `placeRoleTag`,
+ * in the package both the live provider and the fixture provider import — so
+ * that the two paths cannot answer it differently. They did: the first attempt
+ * at this fix was written into the fixture only, which made the test assert a
+ * property of the fake while production shipped the inconsistency untouched.
+ *
+ * A category is weaker evidence than a catalogue classification, and the mapping
+ * is deliberately conservative: everything a traveller goes somewhere *for* is
+ * an attraction or an outdoor, and nothing here ever produces `support`,
+ * `gateway` or `excluded`. A supply deficit only ever asks for the visitable
+ * kinds, so a car park is not something this path can be handed.
+ */
+export function planningRoleForCategory(category: PlaceCategory): PlanningRole {
+  switch (category) {
+    case 'day_hike':
+    case 'easy_walk':
+    case 'lake':
+    case 'wildlife_area':
+    case 'hot_spring':
+    case 'geothermal':
+    case 'scenic_drive':
+      return 'outdoor';
+    default:
+      return 'attraction';
+  }
 }
 
 export function placeInclusionTag(reason: string): string {

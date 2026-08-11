@@ -150,8 +150,40 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
      * driving times were measured, over a day whose every leg was a walk. The
      * matrix knows which network it measured and is the only thing that does.
      */
-    dataDisclosure: `${matrixMode === 'foot' ? 'Walking' : 'Driving'} times are ${matrixProvenance}. ${matrixNote} Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.`,
+    /*
+     * The *network* that was measured, not an activity the traveller may not be
+     * doing.
+     *
+     * "Driving times are measured" was printed on a plan whose own transport
+     * panel read "Without a car" two lines above it, because the sentence named
+     * the mode a road matrix implies rather than the thing that was actually
+     * measured. A road matrix is a legitimate and sometimes the only measurement
+     * for a car-free region — every non-walking mode travels on roads — so the
+     * honest sentence names the road and leaves the traveller's own transport to
+     * the panel that knows it.
+     */
+    dataDisclosure: `${matrixMode === 'foot' ? 'Walking' : 'Road'} times are ${matrixProvenance}. ${matrixNote}${measuredTransitLegs(days) > 0 ? ' Public-transport times were measured against published timetables for a weekday mid-morning departure, so an evening or a Sunday will differ.' : ''} Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.`,
   };
+}
+
+/**
+ * How many legs on this plan are journeys somebody read off a timetable.
+ *
+ * The disclosure had two branches, walking and driving, which was the whole
+ * truth while those were the only two networks anything measured. A plan whose
+ * days are held together by measured metro journeys was being described by a
+ * sentence about the pedestrian network — accurate about the walks and silent
+ * about everything else. This is what decides whether the third sentence is owed.
+ */
+function measuredTransitLegs(days: readonly ItineraryDay[]): number {
+  return days.reduce(
+    (count, day) =>
+      count +
+      day.items.filter(
+        (item) => item.travel?.provenance === 'official' && item.travel.role !== 'wait',
+      ).length,
+    0,
+  );
 }
 
 /** Modes in the order the trip first uses them, so the summary reads as a route. */
@@ -179,10 +211,43 @@ function pickPrimary(
 ): TransportMode {
   if (totals.driveMinutes >= totals.transitMinutes && totals.driveMinutes > 0) return 'drive';
   if (totals.transitMinutes > 0) {
-    return modesUsed.find((mode) => mode === 'shuttle' || mode === 'public_bus') ?? 'shuttle';
+    /**
+     * The vehicle the trip is actually spent on, and never one it is not.
+     *
+     * This looked for a shuttle or a bus and **fell back to `'shuttle'`** when it
+     * found neither. While every ride in the product came from an authored
+     * shuttle service that fallback was unreachable. It stopped being
+     * unreachable the moment a measured metro journey could reach a timeline:
+     * the trip rode `rail`, the search found no shuttle, and the strategy
+     * announced a shuttle no day contained — which the strategy validator
+     * catches as `strategy_mode_mismatch` and turns into a refusal to plan.
+     *
+     * A default that names a mode nobody is on is not a default, it is a guess
+     * with a fixed answer. If the trip rides something, that something is in
+     * `modesUsed`; if it somehow is not, falling through to the walking and
+     * driving branches below says something true instead.
+     */
+    const riding = modesUsed.find(
+      (mode) =>
+        mode === 'rail' ||
+        mode === 'public_bus' ||
+        mode === 'ferry' ||
+        mode === 'shuttle' ||
+        mode === 'rideshare' ||
+        mode === 'private_transfer',
+    );
+    if (riding) return riding;
   }
   if (totals.walkMinutes > 0) return 'walk';
-  return profile.transport.willDrive ? 'drive' : 'walk';
+  /*
+   * A last resort that still names something the trip contains.
+   *
+   * The bare `willDrive ? 'drive' : 'walk'` referred to nothing the days
+   * actually did, and `validateStrategy` refuses a plan whose headline mode no
+   * day uses — turning a trip with, say, only bicycle legs into a refusal over
+   * a fallback rather than over anything real.
+   */
+  return modesUsed.find((mode) => mode !== 'unsupported') ?? (profile.transport.willDrive ? 'drive' : 'walk');
 }
 
 function pickSecondary(

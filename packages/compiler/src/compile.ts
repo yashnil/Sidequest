@@ -57,6 +57,9 @@ import {
   type Subregion,
   type TravelerProfile,
   type WorkPlanEntry,
+  isVisitableRole,
+  planningRoleOfPlace,
+  roleCanAnchor,
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, type CompilerBudget } from './budget';
 import { buildCoverageReport } from './coverage';
@@ -1223,7 +1226,18 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
             [...discovered, ...recoveredCandidates].map((entry) => entry.place.id),
           );
           const fresh = result.candidates.filter((entry) => !known.has(entry.place.id));
-          if (result.portfolioFacts) facts = result.portfolioFacts;
+          /*
+           * Written back to the outer capture, not only to the loop-local copy.
+           *
+           * `facts` was declared inside this block, so a reselect that
+           * legitimately rebalanced the pools refreshed a variable that went out
+           * of scope a hundred lines later and never reached the reading that
+           * ships. The line looked like it did something and did nothing.
+           */
+          if (result.portfolioFacts) {
+            facts = result.portfolioFacts;
+            portfolioFacts = result.portfolioFacts;
+          }
           return {
             value: fresh,
             outcome: `${fresh.length} more after ${RESEARCH_REPAIR_COPY[repair].toLowerCase()}`,
@@ -2659,6 +2673,24 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * their board is ready.
      */
     const TRANSIT_STAGE_BUDGET_MS = 90_000;
+    /**
+     * How long one journey is allowed to take, for sizing the stage.
+     *
+     * The politeness gate between routing requests is 1.1 s and a multimodal
+     * route against a real instance takes a second or two on top, so two and a
+     * half seconds a pair is the honest figure. The flat ninety seconds above
+     * survives as the floor, so a small pair list still gets the slack it always
+     * had.
+     */
+    const TRANSIT_MS_PER_PAIR = 2_500;
+    /** A traveller's wait, whatever the arithmetic above says. */
+    const MAX_TRANSIT_STAGE_MS = 150_000;
+    /**
+     * Room for the request already in flight when the provider's deadline
+     * passes, so the ordinary slow case comes back as a partial answer rather
+     * than tripping the backstop and losing everything.
+     */
+    const TRANSIT_STAGE_GRACE_MS = 25_000;
     const transitEvidence = await runStage<TransitEvidence>('measuring_transit', async () => {
       const provider = input.providers.transit;
       /*
@@ -2733,25 +2765,118 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         if (place.relationship === 'base') return 1;
         return 2;
       };
-      const targets = [...plannable]
-        .sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))
-        .slice(0, Math.max(0, budget - Math.max(0, usableBases.length - 1)));
+      const ranked = [...plannable].sort(
+        (a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id),
+      );
 
-      const pairs = [
-        ...targets.map((place) => ({
-          fromId: primary.routingId,
-          toId: place.id,
-          from: primary.coordinates,
-          to: place.coordinates,
-        })),
-        /* Base to base decides whether a multi-base trip is possible at all. */
-        ...usableBases.slice(1).map((base) => ({
+      /**
+       * A STAR IS NOT A DAY.
+       *
+       * This asked for base → place and nothing else, which is exactly the shape
+       * a *board* needs: is this reachable, and roughly how far. A day is not
+       * that shape. A day leaves base, goes between two or three places, and
+       * comes back — so a star of outbound journeys leaves the planner with no
+       * measurement for the return and none for any hop between two stops, and
+       * the only thing it can do with those is fall back to the one mode the
+       * matrix holds. Which is the substitution this whole pass exists to remove.
+       *
+       * So the pairs are built in the order the contract's priority list gives:
+       * base out, base back, base to base, then the connectors between the
+       * highest-ranked places — which are the pairs a day is most likely to
+       * actually contain. Truncation still happens at the end, so a small budget
+       * still buys the journeys that decide whether the trip works at all.
+       *
+       * Directions are separate pairs on purpose. A timetable is not symmetric,
+       * and answering the way home with the way out is reusing one journey's
+       * duration for another.
+       */
+      const connectorDepth = 4;
+      const outbound = ranked.map((place) => ({
+        fromId: primary.routingId,
+        toId: place.id,
+        from: primary.coordinates,
+        to: place.coordinates,
+      }));
+      const inbound = ranked.map((place) => ({
+        fromId: place.id,
+        toId: primary.routingId,
+        from: place.coordinates,
+        to: primary.coordinates,
+      }));
+      /* Base to base decides whether a multi-base trip is possible at all. */
+      const betweenBases = usableBases.slice(1).flatMap((base) => [
+        {
           fromId: primary.routingId,
           toId: base.routingId,
           from: primary.coordinates,
           to: base.coordinates,
-        })),
-      ].slice(0, budget);
+        },
+        {
+          fromId: base.routingId,
+          toId: primary.routingId,
+          from: base.coordinates,
+          to: primary.coordinates,
+        },
+      ]);
+      const connectors = ranked.slice(0, connectorDepth).flatMap((from, index) =>
+        ranked.slice(0, connectorDepth).flatMap((to, otherIndex) =>
+          index === otherIndex
+            ? []
+            : [{ fromId: from.id, toId: to.id, from: from.coordinates, to: to.coordinates }],
+        ),
+      );
+
+      /*
+       * Interleaved out-and-back rather than every outbound then every return,
+       * so a budget that runs out leaves whole journeys measured in both
+       * directions rather than a list of one-way trips nobody can come home from.
+       */
+      const roundTrips = ranked.flatMap((_, index) =>
+        [outbound[index], inbound[index]].filter((pair) => pair !== undefined),
+      );
+      /*
+       * RESERVED, NOT APPENDED.
+       *
+       * The old code reserved room for base-to-base by shortening the target
+       * list before concatenating. This concatenated everything and truncated
+       * once at the end — and `roundTrips` is two pairs per plannable place and
+       * unbounded, so on any region with twenty-four or more of them the round
+       * trips ate the whole budget and the base-to-base journeys were the *first*
+       * thing dropped. On a multi-base trip those are the pairs that decide
+       * whether the trip is possible at all, which is what the comment above them
+       * says and what the ordering had stopped doing.
+       *
+       * So each tier takes its reservation off the top and the round trips get
+       * what is left. `connectors` is capped rather than reserved: it is the tier
+       * that improves a day rather than the tier that decides one.
+       */
+      type TransitPair = (typeof roundTrips)[number];
+      const dedupe = (pairs: readonly TransitPair[]): TransitPair[] => {
+        const seen = new Set<string>();
+        return pairs.filter((pair) => {
+          const key = `${pair.fromId}\u0000${pair.toId}`;
+          if (pair.fromId === pair.toId || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      };
+      const reservedBases = dedupe(betweenBases).slice(0, budget);
+      const connectorBudget = Math.min(
+        connectorDepth * (connectorDepth - 1),
+        Math.max(0, Math.floor((budget - reservedBases.length) / 4)),
+      );
+      const reservedConnectors = dedupe([...reservedBases, ...connectors])
+        .slice(reservedBases.length)
+        .slice(0, connectorBudget);
+      const roomForRoundTrips = Math.max(
+        0,
+        budget - reservedBases.length - reservedConnectors.length,
+      );
+      const pairs = dedupe([
+        ...dedupe(roundTrips).slice(0, roomForRoundTrips),
+        ...reservedBases,
+        ...reservedConnectors,
+      ]).slice(0, budget);
 
       if (pairs.length === 0) {
         return {
@@ -2799,12 +2924,46 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
        * rest is unverified, which is a far better outcome than a traveller
        * watching a progress screen for eight minutes.
        */
+      /**
+       * THE CEILING IS NOW THE PROVIDER'S, AND THE RACE IS ONLY A BACKSTOP.
+       *
+       * The race alone was all-or-nothing: it rejected the whole call, so a
+       * stage that ran long threw away every journey it had already measured and
+       * the ledger — settled after the call returns — recorded the calls behind
+       * them as zero spend. Both are consequences of the caller being unable to
+       * see a partial answer.
+       *
+       * So the deadline travels *into* the provider, which stops asking and
+       * returns what it has. The race stays as the backstop for a provider that
+       * ignores it or for one request that hangs past its own timeout, and it is
+       * given a margin over the provider's deadline so the ordinary slow case
+       * resolves as a partial answer rather than as a refusal.
+       *
+       * The wall clock also scales with the work now. It was a flat ninety
+       * seconds chosen against a budget of twenty-four pairs; at forty-eight,
+       * with a politeness gate of 1.1 s and a real provider taking a second or
+       * two to answer, ninety seconds stopped being slack and became the binding
+       * constraint — which is the opposite of what a ceiling is for.
+       */
+      const stageBudgetMs = Math.min(
+        MAX_TRANSIT_STAGE_MS,
+        Math.max(TRANSIT_STAGE_BUDGET_MS, pairs.length * TRANSIT_MS_PER_PAIR),
+      );
       let result: Awaited<ReturnType<NonNullable<typeof provider>['routes']>>;
       try {
         result = await Promise.race([
-          provider.routes({ pairs, departAt, timeZone: zone, maxPairs: budget }),
+          provider.routes({
+            pairs,
+            departAt,
+            timeZone: zone,
+            maxPairs: budget,
+            deadlineMs: Date.now() + stageBudgetMs,
+          }),
           new Promise<never>((_resolve, reject) =>
-            setTimeout(() => reject(new Error('transit_stage_timeout')), TRANSIT_STAGE_BUDGET_MS),
+            setTimeout(
+              () => reject(new Error('transit_stage_timeout')),
+              stageBudgetMs + TRANSIT_STAGE_GRACE_MS,
+            ),
           ),
         ]);
       } catch {
@@ -3224,9 +3383,28 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * failed repair that disappears from the diagnostics is how a loop comes to
      * look like it never ran.
      */
-    let researchReadiness: DestinationResearchReadiness | undefined = portfolioFacts
+    /**
+     * THE FUNNEL, RECOUNTED OVER THE INVENTORY THAT SURVIVED.
+     *
+     * `portfolioFacts` is captured once, in the discovery stage, hundreds of
+     * lines before recovery runs. `visitable` is `plannable.length`, taken here.
+     * So a compilation whose recovery went and bought eight more places reported
+     * eleven things to do beside a breakdown that still described three — and
+     * `category_diversity` compared a pre-recovery count of kinds against an
+     * expectation derived from the post-recovery total, which is two different
+     * populations on either side of one comparison.
+     *
+     * Recomputed here, at the one point where the final population exists and
+     * nothing expensive has to be bought again: this is pure arithmetic over
+     * `plannable` and the pack's own cells. No provider is asked anything.
+     */
+    const recountedFacts = portfolioFacts
+      ? factsAfterRecovery(portfolioFacts, plannable, pack)
+      : undefined;
+
+    let researchReadiness: DestinationResearchReadiness | undefined = recountedFacts
       ? {
-          ...readinessFrom(portfolioFacts, plannable.length, mustDoResolutions, [
+          ...readinessFrom(recountedFacts, plannable.length, mustDoResolutions, [
             ...supplyRepairsSpent,
           ]),
           /*
@@ -3309,7 +3487,7 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         const missingAfter = stillMissing(merged);
         const improved = missingAfter < missingBefore;
         if (improved) mustDoResolutions = merged;
-        const after = readinessFrom(portfolioFacts, plannable.length, mustDoResolutions, [
+        const after = readinessFrom(recountedFacts ?? portfolioFacts, plannable.length, mustDoResolutions, [
           ...supplyRepairsSpent,
           repair,
         ]);
@@ -3787,6 +3965,84 @@ const INTEREST_INTENT: Record<string, string> = {
   wildlife: 'nature',
   beaches: 'nature',
 };
+
+/**
+ * THE PORTFOLIO FACTS, RECOUNTED OVER THE FINAL INVENTORY.
+ *
+ * Only the fields whose population is unambiguously the set of things the
+ * traveller ends up with. Each of the others is left alone deliberately, and the
+ * reason matters more than the omission:
+ *
+ * - `packRecords`, `areasTotal`, `sourceCatalogues`, `packPartial` describe the
+ *   *ground*, which recovery does not move.
+ * - `food` counts the food dataset, not the board. The supply loop asks only for
+ *   landmark, culture and nature — the three visitable kinds — so it cannot add
+ *   a restaurant, and recounting it here would be recounting an untouched number
+ *   through a second code path.
+ * - `insideSelected`, `membershipDecided`, `divisionsAvailable`,
+ *   `scopeIdentityUnknown`, `membershipUnverified` and `anchorDemotions` are the
+ *   containment overlay's own verdicts. The acquire seam runs containment and
+ *   does not report the deltas back, so recomputing them here would mean
+ *   inventing them. They stay pre-recovery and understate.
+ *
+ * What *is* recounted is everything the funnel puts beside `visitable`, so the
+ * breakdown and the total finally describe the same eleven places.
+ */
+export function factsAfterRecovery(
+  facts: NonNullable<DiscoveryResult['portfolioFacts']>,
+  plannable: readonly Place[],
+  pack: RegionPack | undefined,
+): NonNullable<DiscoveryResult['portfolioFacts']> {
+  /*
+   * Which part of the ground each thing to do sits in — the same bucketing the
+   * producer performs, against the same cells, over the final set rather than
+   * the first one. A place outside every cell is left out of the tally entirely,
+   * because counting it produced "13 of 12 parts".
+   */
+  const areas = new Map<string, number>();
+  for (const place of plannable) {
+    const { lat, lng } = place.coordinates;
+    const cell = pack?.partition.cells.find(
+      (entry) =>
+        lat >= entry.bounds.southWest.lat &&
+        lat <= entry.bounds.northEast.lat &&
+        lng >= entry.bounds.southWest.lng &&
+        lng <= entry.bounds.northEast.lng,
+    );
+    if (!cell) continue;
+    areas.set(cell.id, (areas.get(cell.id) ?? 0) + 1);
+  }
+
+  /*
+   * The roles, read off the places themselves. `planningRoleOfPlace` returns
+   * `undefined` for a record nobody classified, and that is never defaulted to a
+   * role — an unclassified place is counted as neither an anchor nor a
+   * discovery, which is what "we do not know what part this plays" means.
+   */
+  let anchors = 0;
+  let discoveries = 0;
+  let support = 0;
+  let gateways = 0;
+  for (const place of plannable) {
+    const role = planningRoleOfPlace(place);
+    if (role === undefined) continue;
+    if (role === 'support') support += 1;
+    else if (role === 'gateway') gateways += 1;
+    else if (roleCanAnchor(role)) anchors += 1;
+    else if (isVisitableRole(role)) discoveries += 1;
+  }
+
+  return {
+    ...facts,
+    anchors,
+    discoveries,
+    support,
+    gateways,
+    categories: new Set(plannable.map((place) => place.category)).size,
+    areasWithVisitable: areas.size,
+    largestAreaVisitable: Math.max(0, ...areas.values()),
+  };
+}
 
 export function shortfallIntentsFor(
   profile: TravelerProfile | undefined,

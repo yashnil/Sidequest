@@ -128,6 +128,7 @@ const FIXTURE_DESTINATIONS: readonly {
    * interface has never been shown to handle.
    */
   { match: 'grand central metro', worlds: ['transit_metro'], isPlace: true },
+  { match: 'two rivers', worlds: ['transit_mixed'], isPlace: true },
   { match: 'thin harbour', worlds: ['recovery_adversary'], isPlace: true },
   { match: 'unclocked valley', worlds: ['unclocked_valley'], isPlace: true },
 ];

@@ -66,6 +66,21 @@ export interface CompilerBudget {
    * Small on purpose. Transit evidence is bought for the handful of pairs a trip
    * genuinely turns on — where you sleep against what you named — and a counter
    * big enough for an all-pairs matrix would be an invitation to build one.
+   *
+   * It doubled once, from 24, and the reason is worth stating because it is the
+   * only increase in this table. The stage used to ask for base → place and
+   * nothing else, which is what a *board* needs. A *day* needs the way back and
+   * the hops in between, and a timetable is not symmetric — so answering the
+   * return with the outbound is reusing one journey's duration for another. Two
+   * directions per destination is the same set of destinations, honestly
+   * covered, rather than twice as many questions.
+   *
+   * Still bounded three ways: this counter, the stage's own ninety-second wall
+   * clock, and the politeness gate between calls — 48 sequential journeys at
+   * 1.1 s is under a minute, so the ceiling remains the binding constraint on a
+   * slow provider rather than a number nobody checked against it. Cache hits
+   * settle at zero, because the ledger records calls made rather than pairs
+   * asked for.
    */
   maxTransitPairs: number;
   /**
@@ -115,7 +130,7 @@ export const DEFAULT_COMPILER_BUDGET: CompilerBudget = {
   maxEnrichmentMs: 120_000,
   maxModelCalls: 20,
   maxRouteElements: 3_600,
-  maxTransitPairs: 24,
+  maxTransitPairs: 48,
   maxTimeZoneLookups: 6,
   maxFoodVenues: 18,
   maxWeatherLocations: 8,

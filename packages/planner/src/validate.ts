@@ -15,6 +15,7 @@ import {
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
 import { isOpenOnDate } from './schedule';
+import { travelBucketFor } from './travel';
 import { validateDayFood, validateTripFood } from './validate-food';
 import { validateDayWeather } from './validate-weather';
 import type { PlannerConfig } from './types';
@@ -380,10 +381,12 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
 
   // 1. Totals must equal what is on the timeline, or every budget check above is
   //    checking a number nobody produced.
-  // Classified exactly as the layout classifies it — by mode, with waiting split
-  // out — because the whole point of this check is that the two agree. A leg
-  // counted as walking here and as riding there is how a budget silently stops
-  // being enforced.
+  // Classified by the *same function* the layout classifies with, rather than by
+  // a second copy of the same rule — because the whole point of this check is
+  // that the two agree, and two copies cannot check each other. They were two
+  // copies, and they had already drifted: a `drive` leg with a stated allowance
+  // went to riding in the layout and to driving here, so the day failed this
+  // check and, until it did, a driving cap was enforced against a zero.
   const summed = travelItems.reduce(
     (acc, item) => {
       const travel = item.travel!;
@@ -391,10 +394,7 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
       // null: a day's travel minutes are the minutes somebody stands behind, and
       // the count of what is missing rides beside them rather than inside them.
       if (travel.minutes === null) return acc;
-      if (travel.mode === 'drive') acc.drive += travel.minutes;
-      else if (travel.role === 'wait') acc.wait += travel.minutes;
-      else if (travel.mode === 'walk') acc.walk += travel.minutes;
-      else acc.transit += travel.minutes;
+      acc[travelBucketFor(travel.mode, travel.role)] += travel.minutes;
       return acc;
     },
     { drive: 0, transit: 0, walk: 0, wait: 0 },
