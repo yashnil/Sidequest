@@ -635,6 +635,22 @@ export const scheduledFoodSchema = z.object({
   dietaryUnverified: z.array(dietaryNeedSchema).default([]),
   hours: scheduledFoodHoursSchema.optional(),
   routeContext: foodRouteContextSchema,
+  /**
+   * The walk between the routing node and the door, one way.
+   *
+   * The meal *block* on the timeline starts when the traveller leaves the
+   * routing node, because that minute is spent on this meal and hiding it would
+   * put a walk inside somebody's lunch. The *service* starts `walk` minutes
+   * later, and it is the service that has to happen while the door is open.
+   *
+   * Recorded because the validator cannot otherwise tell the two apart: it read
+   * the block start against the opening minute and reported a venue opening at
+   * 11:30 as closed for a meal whose block began at 11:29 — a one-minute walk
+   * quoted back as a shut door. Optional because a plan stored before this
+   * existed genuinely does not know its walk, and assuming zero there would
+   * silently revive the same off-by-one in the other direction.
+   */
+  walkMinutesFromRouting: z.number().int().min(0).max(20).optional(),
   /** Extra minutes on the road this stop cost, over going straight on. */
   detourMinutes: z.number().int().min(0).default(0),
   /** On a grocery stop: which day the supplies are for. */
@@ -643,6 +659,29 @@ export const scheduledFoodSchema = z.object({
   preparedOnDayNumber: z.number().int().min(1).optional(),
   /** This trip's one special meal, when it is. */
   isSpecialMeal: z.boolean().default(false),
+  /**
+   * Which of §15's seven kinds of food stop this turned out to be.
+   *
+   * Derived from every field above it — see `food/quality.ts#mealCharacterOf` —
+   * and stored rather than recomputed so a rendered plan and the plan that was
+   * validated cannot disagree. Optional because a stored itinerary written
+   * before the distinction existed genuinely does not have one, and reading a
+   * default in would be inventing an answer for a decision nobody made.
+   *
+   * Typed as a plain enum here rather than importing the derivation, because
+   * schemas must not depend on the logic that fills them.
+   */
+  mealCharacter: z
+    .enum([
+      'special_occasion',
+      'destination_meal',
+      'local_speciality',
+      'route_convenient',
+      'quick_fuel',
+      'breakfast_coffee',
+      'grocery_snack',
+    ])
+    .optional(),
   /** The traveller asked for this venue on the board. */
   fromUserChoice: z.boolean().default(false),
   alternatives: z.array(foodAlternativeSchema).default([]),

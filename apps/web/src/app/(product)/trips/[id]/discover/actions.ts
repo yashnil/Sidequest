@@ -5,6 +5,7 @@ import {
   autoSelect,
   countTripDays,
   selectionStatusSchema,
+  type ImageSubject,
   type SelectionStatus,
 } from '@sidequest/core';
 import {
@@ -23,6 +24,8 @@ import {
   getReconciliation,
 } from '@/lib/db/provisional-repository';
 import { fetchWeatherSnapshot } from '@/lib/weather/refresh';
+import { imageryCache, unresolvedImagerySubjects } from '@/lib/db/imagery-repository';
+import { resolveImageryForSubjects } from '@/lib/providers/wikimedia';
 
 export interface ActionResult {
   ok: boolean;
@@ -120,6 +123,116 @@ export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
   } catch (error) {
     console.error('Failed to auto-pick', error);
     return { ok: false, error: 'We could not build a selection just then. Try again.' };
+  }
+}
+
+/**
+ * THE BOUNDED IMAGERY PASS THE BOARD NEVER HAD.
+ *
+ * The whole imagery pipeline was wired end to end except for one link: nothing
+ * anywhere resolved a `kind: 'candidate'` subject. The compiler resolves the
+ * *destination's* photograph, the shortlist resolves the eight destinations it
+ * offers, and the board — the screen with forty cards on it, the screen whose
+ * read path already looks images up — asked for nothing. Twelve live
+ * compilations left `destination_images` empty and every card wearing a grey
+ * plate.
+ *
+ * This is that link, and its shape is decided by three constraints:
+ *
+ *   - **Not at render.** The rule the whole imagery layer is built on. A render
+ *     that could resolve one would resolve forty, on every refresh, per visitor.
+ *     This is a server action; something has to ask for it.
+ *   - **Bounded, and it terminates.** `unresolvedImagerySubjects` filters to the
+ *     subjects nothing has ever looked for, so each call is strictly smaller
+ *     than the last and the board stops asking once every subject has an answer
+ *     — an acceptance or a refusal, both of which are written down.
+ *   - **Best cards first.** A board of forty gets its top picks resolved on the
+ *     first pass. Somebody who never scrolls past the second row still sees
+ *     photographs.
+ *
+ * Never fatal, and it changes nothing but a cache. A failed lookup costs a card
+ * its photograph and the traveller a graphic that was designed for the purpose.
+ */
+const BOARD_IMAGERY_PER_PASS = 10;
+
+/**
+ * WHETHER ASKING COULD PRODUCE A PICTURE THIS BOARD WOULD SHOW.
+ *
+ * Without an open identifier the resolution ladder's best available rung is
+ * `bounded_identity_search`, whose confidence is `weak` — and no surface in this
+ * product displays a weak match, because "a file whose name resembled the name
+ * of the place" is how a product ends up illustrating one town with a photograph
+ * of a different town that shares its name.
+ *
+ * So asking is not merely unlikely to help, it *cannot* help. And it is not free
+ * in an unusual way: a lookup that finds no lead at all is recorded as
+ * `provider_unavailable`, which the store deliberately does not persist — that
+ * refusal is a fact about one minute, not about the subject. Ask anyway and the
+ * board re-asks the same hopeless questions on every single visit, for ever.
+ * This is what makes the bounded pass converge.
+ */
+function isImageResolvable(place: { wikidataId?: string }): boolean {
+  return place.wikidataId !== undefined;
+}
+
+export interface BoardImageryResult extends ActionResult {
+  /** How many subjects got an answer this time. Zero means there was nothing left. */
+  resolved?: number;
+  /** How many of those produced a picture we may legally show. */
+  accepted?: number;
+}
+
+export async function fillBoardImageryAction(tripId: string): Promise<BoardImageryResult> {
+  try {
+    const trip = getTrip(tripId);
+    if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+    const profile = getProfile(tripId);
+    if (!profile) return { ok: false, error: 'Finish the questionnaire first.' };
+
+    const resolved = await resolveTripRegion(trip);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const board = boardFor(trip, profile, resolved.context);
+
+    /*
+     * Ordered by how much the card would gain from a photograph. A top pick is
+     * what a traveller looks at; the skip list is not, and spending a volunteer
+     * service's bandwidth illustrating something we are recommending against
+     * would be the wrong request to make.
+     */
+    const rank: Record<string, number> = { top_pick: 0, strong: 1, good: 2, optional: 3, weak: 5, not_workable: 6 };
+    const subjects: ImageSubject[] = [...board.candidates]
+      .filter((candidate) => candidate.fit.band !== 'weak' && candidate.fit.band !== 'not_workable')
+      .filter((candidate) => isImageResolvable(candidate.place))
+      .sort((a, b) => (rank[a.fit.band] ?? 4) - (rank[b.fit.band] ?? 4) || b.fit.score - a.fit.score)
+      .map((candidate) => ({
+        kind: 'candidate' as const,
+        id: candidate.place.id,
+        name: candidate.place.name,
+        ...(candidate.place.wikidataId ? { wikidataId: candidate.place.wikidataId } : {}),
+        ...(candidate.place.coordinates ? { coordinates: candidate.place.coordinates } : {}),
+        hierarchy: [candidate.place.locality, resolved.context.region.name].filter(
+          (part): part is string => Boolean(part),
+        ),
+      }));
+
+    const outstanding = unresolvedImagerySubjects(subjects);
+    if (outstanding.length === 0) return { ok: true, resolved: 0, accepted: 0 };
+
+    const outcome = await resolveImageryForSubjects(outstanding, {
+      cache: imageryCache(new Date()),
+      limit: BOARD_IMAGERY_PER_PASS,
+    });
+
+    revalidatePath(`/trips/${tripId}/discover`);
+    return { ok: true, resolved: outcome.resolved, accepted: outcome.accepted };
+  } catch (error) {
+    // The name only: a provider error routinely carries the request that made
+    // it, headers included, and a server log is not where that belongs.
+    console.error('Could not fill board imagery', {
+      tripId,
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+    return { ok: false, error: 'We could not fetch pictures just then.' };
   }
 }
 

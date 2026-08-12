@@ -27,6 +27,13 @@ import {
   interests,
   profile,
 } from '../testing/fixtures';
+import {
+  TRANSIT_CITY_IDENTITY,
+  transitCityBoardInput,
+  transitCityTraveler,
+} from '../testing/transit-city';
+import { MODELLED_WALK_KMH } from '../travel/reach';
+import type { TravelTimeMatrix } from '@sidequest/geo';
 
 function setup(
   overrides: Partial<QuestionnaireAnswers> = MAMMOTH_HIKER_ANSWERS,
@@ -58,8 +65,44 @@ describe('discovery board grouping', () => {
     const groupIds = board.groups.map((entry) => entry.group);
     expect(groupIds).toContain('must_see_classics');
     expect(groupIds).toContain('hidden_gems');
-    expect(groupIds).toContain('scenic_detours');
+    expect(groupIds).toContain('nearby_side_quests');
     expect(groupIds).toContain('weak_fit');
+  });
+
+  /**
+   * THE TWO GROUPS WHOSE HEADINGS TALK ABOUT DISTANCE ARE DECIDED BY DISTANCE.
+   *
+   * They were not, and this fixture is where the defect is easiest to see. Under
+   * the old rule `scenic_detours` was assigned on category alone, so this very
+   * board filed Minaret Vista — fifteen minutes from the bed, comfortably inside
+   * this traveller's own radius — under a heading reading "Worth the detour ·
+   * Further out, and the going is part of it", while `nearby_side_quests`, whose
+   * heading in both vocabularies says "short hops from your base", was the
+   * catch-all for whatever matched nothing else and duly collected long drives.
+   *
+   * A heading that asserts a fact its contents contradict is worse than no
+   * heading, because a traveller plans around it. So: nothing inside the
+   * traveller's radius may be filed as further out, and nothing beyond it may be
+   * filed as a short hop.
+   */
+  it('never files a short hop as a detour, or a long haul as a short hop', () => {
+    const { board } = setup();
+    const near = new Set(['base', 'in_tolerance', 'unknown']);
+    for (const candidate of board.candidates) {
+      if (candidate.group === 'scenic_detours') {
+        expect(
+          near.has(candidate.detourClass),
+          `${candidate.place.name} is ${candidate.travelMinutesFromBase} min out and filed under "further out"`,
+        ).toBe(false);
+      }
+      if (candidate.group === 'nearby_side_quests') {
+        expect(
+          candidate.detourClass,
+          `${candidate.place.name} is ${candidate.travelMinutesFromBase} min out and filed as a short hop`,
+        ).not.toBe('too_far');
+        expect(candidate.detourClass).not.toBe('stretch');
+      }
+    }
   });
 
   it('puts each candidate in exactly one group', () => {
@@ -126,6 +169,49 @@ describe('auto-selection', () => {
       (id) => board.candidates.find((c) => c.place.id === id)?.fit.primaryInterest === 'hiking',
     );
     expect(hikes.length).toBeLessThanOrEqual(built.derived.frequencyCaps.hiking);
+  });
+
+  /**
+   * THE BOARD AND THE PLAN HAVE TO BE COUNTING THE SAME THING.
+   *
+   * `frequencyCaps` is one number read by three modules: auto-pick refuses
+   * against it, the planner refuses against it, and the validator afterwards
+   * warns when a finished plan exceeded it. The last two count *stops* — an
+   * integer, one per place. Auto-pick used to spend fractions: a full unit of a
+   * place's primary interest and a half of everything else it happened to
+   * satisfy. So four lakeside walks could fill a two-stop lake allowance without
+   * a single lake-led stop being picked, and auto-pick would then decline a
+   * genuine lake against a ceiling that, counted the way every other reader
+   * counts it, was empty. The traveller sees the refusal in the notes and can
+   * find nothing on their board that explains it.
+   *
+   * Stated as the property rather than as a count of picks: every refusal on
+   * frequency must be a refusal against an allowance this selection has really
+   * filled, in whole stops.
+   */
+  it('refuses on frequency only against a ceiling its own picks have filled', () => {
+    const { board, selectedIds, excluded, profile: built } = pick();
+    const chargedTo = (id: string) => {
+      const candidate = board.candidates.find((entry) => entry.place.id === id);
+      return candidate?.fit.primaryInterest ?? candidate?.place.interests[0];
+    };
+
+    const spent = new Map<string, number>();
+    for (const id of selectedIds) {
+      const interest = chargedTo(id);
+      if (interest) spent.set(interest, (spent.get(interest) ?? 0) + 1);
+    }
+
+    const refusals = excluded.filter((entry) => entry.reason === 'frequency');
+    expect(refusals.length).toBeGreaterThan(0);
+    for (const refusal of refusals) {
+      const interest = chargedTo(refusal.placeId);
+      const cap = built.derived.frequencyCaps[interest as keyof typeof built.derived.frequencyCaps];
+      expect(
+        spent.get(interest as string) ?? 0,
+        `${refusal.placeId} was refused on frequency, but only ${spent.get(interest as string) ?? 0} of the ${cap} ${interest} stops are on the board`,
+      ).toBeGreaterThanOrEqual(cap ?? 0);
+    }
   });
 
   it('never pre-selects an interest the traveller asked to avoid', () => {
@@ -401,5 +487,127 @@ describe('the derived bad-weather backup section', () => {
     expect(new Set(first.suggestions.map((entry) => entry.placeId)).size).toBe(
       first.suggestions.length,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The board and the planner on one car-free trip handed a road matrix
+// ---------------------------------------------------------------------------
+
+/**
+ * WHAT THIS PROVES, AND WHY IT IS A BOARD TEST RATHER THAN A PLANNER ONE.
+ *
+ * The compiler is supposed to measure the network a trip is made on. A live
+ * Tokyo compilation stored a car-free scope against a `car` matrix, and the
+ * planner grew a narrow repair for it: when nothing measured can carry a leg and
+ * the road holds a short *distance*, the leg becomes a derived walk.
+ *
+ * That repair reached the planner and not the Discovery Board, which resolves
+ * reach through `resolveCandidateReach`. So the board refused — as a transport
+ * conflict — the very stops the planner would have walked to, scored them out,
+ * and left auto-pick with nothing to pre-select but the base. A traveller never
+ * got as far as the repair.
+ *
+ * Everything below runs the real board over a road matrix on which every
+ * candidate is a short walk from the bed. It asserts the four properties that
+ * failed together, and the negative that keeps the fix honest: a road distance
+ * nobody would walk is still a refusal, and the road *duration* never appears.
+ */
+describe('a car-free board handed a road matrix', () => {
+  const BASE = TRANSIT_CITY_IDENTITY.baseId;
+  const NEAR: readonly string[] = [
+    TRANSIT_CITY_IDENTITY.candidateA,
+    TRANSIT_CITY_IDENTITY.candidateB,
+    TRANSIT_CITY_IDENTITY.candidateC,
+  ];
+  /** 1.2 road-km: about sixteen minutes at the modelled pace, inside any answer. */
+  const NEAR_KM = 1.2;
+  /** The road minutes, which must never reach a traveller in any mode. */
+  const ROAD_MINUTES = 4;
+
+  /**
+   * A road network on which the whole board is walkable — the shape the broken
+   * compilation actually produced, rather than the one candidate the shared
+   * fixture's road matrix carries.
+   */
+  function roadMatrix(): TravelTimeMatrix {
+    const ids = [BASE, ...NEAR, TRANSIT_CITY_IDENTITY.candidateD];
+    const near = new Set(NEAR);
+    const value = (from: string, to: string, forNear: number, forFar: number): number => {
+      if (from === to) return 0;
+      const other = from === BASE ? to : from;
+      return near.has(other) ? forNear : forFar;
+    };
+    return {
+      mode: 'car',
+      ids,
+      minutes: ids.map((from) => ids.map((to) => value(from, to, ROAD_MINUTES, 22))),
+      km: ids.map((from) => ids.map((to) => value(from, to, NEAR_KM, 22))),
+      provenance: {
+        kind: 'measured',
+        note: 'Fixture road network, measured by construction.',
+        source: 'packages/core/src/discovery/discovery.test.ts',
+      },
+    };
+  }
+
+  function carFreeBoard(): DiscoveryBoard {
+    const traveller = transitCityTraveler();
+    const input = transitCityBoardInput(traveller);
+    return buildDiscoveryBoard({
+      ...input,
+      /* No timetable either: the point is a road matrix and nothing else. */
+      travel: { ...input.travel, matrix: roadMatrix(), transit: null },
+    });
+  }
+
+  function cardFor(board: DiscoveryBoard, id: string) {
+    const found = board.candidates.find((entry) => entry.place.id === id);
+    if (!found) throw new Error(`No card for ${id}`);
+    return found;
+  }
+
+  it('reaches the near stops on foot rather than calling them a transport conflict', () => {
+    const board = carFreeBoard();
+    const expected = Math.ceil((NEAR_KM * 60) / MODELLED_WALK_KMH);
+    for (const id of NEAR) {
+      const card = cardFor(board, id);
+      expect(card.reach.status, id).toBe('measured');
+      expect(card.travelModeFromBase, id).toBe('walk');
+      expect(card.travelMinutesFromBase, id).toBe(expected);
+      /*
+       * The provenance is the whole licence for showing the number: a derived
+       * walk that presented itself as a measurement would be the substitution
+       * this layer exists to stop.
+       */
+      expect(card.reach.status === 'measured' && card.reach.provenance, id).toBe('modelled');
+      expect(card.reach.status === 'measured' && card.reach.rule, id).toBe('modelled_walk');
+      /* And never the road's own duration, in any field. */
+      expect(card.travelMinutesFromBase, id).not.toBe(ROAD_MINUTES);
+    }
+  });
+
+  it('leaves auto-pick something to pre-select', () => {
+    const board = carFreeBoard();
+    const chosen = autoSelect({
+      candidates: board.candidates,
+      profile: transitCityTraveler(),
+      tripDays: 3,
+    });
+    const nearChosen = NEAR.filter((id) => chosen.selectedIds.includes(id));
+    expect(nearChosen.length).toBeGreaterThan(0);
+    for (const id of NEAR) {
+      expect(
+        chosen.excluded.find((entry) => entry.placeId === id)?.reason,
+        `${id} was excluded for an unverified journey`,
+      ).not.toBe('reach_unverified');
+    }
+  });
+
+  it('still refuses a road distance nobody would walk', () => {
+    const board = carFreeBoard();
+    const far = cardFor(board, TRANSIT_CITY_IDENTITY.candidateD);
+    expect(far.reach.status).not.toBe('measured');
+    expect(far.travelMinutesFromBase).toBeNull();
   });
 });

@@ -243,6 +243,34 @@ export function acceptedImagesFor(
 }
 
 /**
+ * WHICH SUBJECTS NOBODY HAS LOOKED FOR YET.
+ *
+ * The read that makes a bounded resolution pass terminate. Without it a caller
+ * has only `acceptedImagesFor`, which cannot distinguish "we looked and found
+ * nothing licensable" from "nobody has looked" — so a board that triggered a
+ * fill would trigger it again on every visit for ever, spending requests on
+ * answers already on disk.
+ *
+ * A refusal counts as looked-at, which is the entire reason refusals are stored.
+ * A record past its revalidation date counts as *not* looked at, so the
+ * thirty-day licence re-check happens as a side effect of somebody visiting the
+ * page rather than needing a scheduled job.
+ *
+ * Order is preserved from the caller's list, because the caller has already
+ * decided which subjects matter most and a bounded pass takes the first N.
+ */
+export function unresolvedImagerySubjects<T extends Pick<ImageSubject, 'kind' | 'id' | 'wikidataId'>>(
+  subjects: readonly T[],
+  now: Date = new Date(),
+): T[] {
+  const byKey = storedImageryFor(subjects.map(imagerySubjectKey), now);
+  return subjects.filter((subject) => {
+    const stored = byKey.get(imagerySubjectKey(subject));
+    return !stored || stored.dueForRevalidation;
+  });
+}
+
+/**
  * The cache interface the provider takes, backed by the table.
  *
  * The store *is* the cache — there is no second in-memory layer, because the

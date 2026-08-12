@@ -101,7 +101,8 @@ async function main(): Promise<void> {
     .catch(() => '');
 
   const outcome = await page
-    .getByRole('heading', { name: 'What this trip is built on' })
+    /* The finished plan's heading; see `REGION_READY_HEADING` in support/trip. */
+    .getByRole('heading', { name: /^We have been through / })
     .waitFor({ timeout: 900_000 })
     .then(() => 'ready')
     .catch(() => 'failed_or_timeout');
@@ -110,7 +111,17 @@ async function main(): Promise<void> {
   await page.screenshot({ path: `${OUT}/${slug}-ready.png`, fullPage: true });
   record.readyText = (await page.locator('#main').innerText()).slice(0, 2500);
 
-  // Open the technical panel so the funnel numbers are captured.
+  /*
+   * Open the build report, then the stage list inside it: on the finished plan
+   * the technical panel is nested in the "How this was built" disclosure, so a
+   * screenshot taken without opening the outer one shows a closed summary.
+   */
+  await page
+    .getByTestId('how-this-was-built')
+    .locator('summary')
+    .first()
+    .click()
+    .catch(() => undefined);
   await page
     .getByTestId('technical-stages')
     .locator('summary')

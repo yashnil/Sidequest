@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createTrip, reachScope, waitForLookup } from './support/trip';
+import { createTrip, reachScope, REGION_READY_HEADING, waitForLookup } from './support/trip';
 
 /**
  * THE COMPOSER, THE SHELL AND THE PROGRESS SCREEN.
@@ -165,7 +165,7 @@ test('the compilation progress groups stages and hides the technical list', asyn
     await expect(page.getByText(/Understanding your trip|Shaping the region|Finding the strongest/)).toBeVisible();
   }
 
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 90_000,
   });
 });

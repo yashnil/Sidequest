@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import type {
   CroppableImage,
   DestinationImage as ImageRecord,
@@ -9,24 +12,52 @@ import { PLATE_HUE, cx } from './ui';
 /**
  * A PHOTOGRAPH, OR THE THING THAT IS THERE INSTEAD OF ONE.
  *
- * Reads persisted metadata and renders it. No fetch, no effect, no client state
- * — the identity of the image was decided in a server action or during
- * compilation, written down, and this only draws it. A component that could
- * resolve an image is a component that resolves one per card, on every render,
- * on every back button.
+ * Reads persisted metadata and renders it. **No fetch** — the identity of the
+ * image was decided in a server action or during compilation, written down, and
+ * this only draws it. A component that could resolve an image is a component
+ * that resolves one per card, on every render, on every back button.
  *
  * ---
  *
  * THE FALLBACK IS ALWAYS DRAWN, EVEN WHEN THERE IS A PHOTOGRAPH.
  *
- * It sits *behind* the `<img>`, and that is the entire mechanism by which this
- * product never shows a broken-image icon. There is no `onError`, no state and
- * no client boundary: if the file fails to load — offline, blocked, deleted
- * upstream, a corporate proxy that eats third-party images — the browser draws
- * nothing over the graphic that was already there, and the card looks
- * *deliberate* rather than damaged. The `<img>` is `alt=""` because the
- * destination's name is always adjacent in the heading; an alt string here would
- * make every screen reader announce the same name twice.
+ * It sits *behind* the `<img>`, so a frame is never empty: a slot holds either a
+ * photograph over a graphic, or the graphic alone. The `<img>` is `alt=""`
+ * because the destination's name is always adjacent in the heading; an alt string
+ * here would make every screen reader announce the same name twice.
+ *
+ * ---
+ *
+ * A LAYER BEHIND THE `<img>` IS NOT ENOUGH, AND THIS WAS MEASURED.
+ *
+ * The graphic underneath was the whole mechanism, on the belief that a browser
+ * handed a failing `alt=""` image draws nothing. It does not. Chromium paints
+ * its broken-file glyph in the top-left of the frame — over the graphic, at every
+ * size — and it does so for **every** way a load can fail: an aborted request, an
+ * HTTP 404 that still carries an image content type, and a 200 whose bytes are
+ * not an image. All three were reproduced against this exact markup; all three
+ * produced the same 16px chip of grey paper with a torn corner, on a card that is
+ * otherwise a designed object.
+ *
+ * That is not a hypothetical. Wikimedia files are deleted after upload — a
+ * licence review, a deletion request, a re-upload under a new name — and when one
+ * is, every stored `thumbnailUrl` pointing at it starts answering 404 while the
+ * row in `destination_images` still says there is a picture. Board, itinerary and
+ * both shortlist layouts would all show the chip.
+ *
+ * So the element is *removed* when its file fails, which is the only thing that
+ * stops a browser drawing a placeholder for it, and the graphic that was already
+ * behind it becomes what the frame shows. Two triggers rather than one, because
+ * they cover different halves of the page's life:
+ *
+ * - `onError` catches a failure after this component is listening;
+ * - the ref catches one that already happened. The markup is server-rendered, so
+ *   an image can finish failing before React hydrates — and `error` does not
+ *   bubble and is not replayed, so a handler attached afterwards never hears it.
+ *   `complete && naturalWidth === 0` is the DOM's own record of that outcome.
+ *
+ * Keyed by URL rather than a boolean so that navigating a card to a different
+ * photograph clears the verdict about the previous one.
  *
  * ---
  *
@@ -64,8 +95,26 @@ import { PLATE_HUE, cx } from './ui';
 export type DestinationImageProps = {
   fallback: ImageryFallback;
   className?: string;
-  /** The aspect ratio of the frame, as a CSS `aspect-ratio` value. */
-  ratio?: string;
+  /**
+   * The aspect ratio of the frame, as a CSS `aspect-ratio` value, or
+   * `'natural'` to take the file's own.
+   *
+   * `'natural'` exists because a licensing rule had been implemented as a layout
+   * rule. Share-alike files must not be cropped, so the frame and the file were
+   * allowed to disagree by any amount — and on a real board that produced a
+   * photograph sitting as a letterboxed sliver in the middle of a coloured band,
+   * a different sliver in every card, which reads as a rendering fault rather
+   * than as a picture. Filling the frame is not the only way out of that: giving
+   * the frame the file's shape shows the whole unmodified file with no bands at
+   * all, and cropping never enters the question.
+   *
+   * Bounded, because a panorama would otherwise be six hundred pixels of sky in
+   * a card and a tall portrait would push everything under it off the screen.
+   * Outside the bounds the frame keeps its own shape and the file is letterboxed
+   * as before — which is the honest outcome for a file that genuinely is that
+   * shape.
+   */
+  ratio?: string | 'natural';
   /** Rendered above the graphic when there is no photograph. Off for small cards. */
   showLabel?: boolean;
   /**
@@ -82,6 +131,21 @@ export type DestinationImageProps = {
    * the identity-derived hue is used exactly as before.
    */
   category?: PlaceCategory;
+  /**
+   * Where the credit goes.
+   *
+   * `'below'` — under the frame, the default, and right for a hero where the
+   * picture is the subject. `'none'` — the caller renders `<ImageCredit>` itself
+   * somewhere further down.
+   *
+   * The second exists for one measured defect: on a board card the credit is two
+   * to four lines of dotted-underlined links sitting *above* the place's name,
+   * so the loudest text on a card about Sumida River was the name of a
+   * photographer. Attribution is an obligation to render those words reachably,
+   * not an instruction to lead with them, and a card that inverts its own
+   * hierarchy to comply has complied with the letter and broken the card.
+   */
+  credit?: 'below' | 'none';
 } & (
   | {
       /** The frame is wider than the file, so the file gets cropped to fill it. */
@@ -95,6 +159,25 @@ export type DestinationImageProps = {
     }
 );
 
+/**
+ * The shapes a card frame will take on.
+ *
+ * A landscape file wider than 16:9 is letterboxed rather than given the frame,
+ * because a 3:1 panorama across a card column is a strip nobody can read a
+ * subject out of. A portrait taller than 4:5 likewise: the card below it would
+ * start a screen further down than its neighbours.
+ */
+const MIN_NATURAL_RATIO = 4 / 5;
+const MAX_NATURAL_RATIO = 16 / 9;
+
+function frameRatio(ratio: string, image: ImageRecord | null): string {
+  if (ratio !== 'natural') return ratio;
+  if (!image || image.width <= 0 || image.height <= 0) return '16 / 9';
+  const natural = image.width / image.height;
+  if (natural < MIN_NATURAL_RATIO || natural > MAX_NATURAL_RATIO) return '16 / 9';
+  return `${image.width} / ${image.height}`;
+}
+
 export function DestinationImage({
   image,
   fallback,
@@ -103,12 +186,17 @@ export function DestinationImage({
   crop = false,
   showLabel = false,
   category,
+  credit = 'below',
 }: DestinationImageProps) {
+  /** The one file this frame has already watched fail. See the note at the top. */
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const loadable = image !== null && image.thumbnailUrl !== failedUrl;
+
   return (
     <figure className={cx('m-0', className)}>
       <div
         className="relative overflow-hidden rounded-[var(--radius-card)]"
-        style={{ aspectRatio: ratio }}
+        style={{ aspectRatio: frameRatio(ratio, image) }}
       >
         {/*
           When there is a photograph the graphic is scenery behind it and is
@@ -116,6 +204,12 @@ export function DestinationImage({
           graphic; no freely licensed photograph was available" on a card that is
           showing a photograph would be reading out a lie. When there is no
           photograph the graphic *is* the content, and carries the description.
+
+          Keyed on the *record*, not on whether its bytes arrived. A file that
+          404s does not make that sentence true — a freely licensed photograph of
+          this place was found, and the copy would be claiming otherwise — and a
+          transient network failure has no business changing what a screen reader
+          hears, when the name is in the heading beside it either way.
         */}
         <FallbackGraphic
           fallback={fallback}
@@ -123,7 +217,7 @@ export function DestinationImage({
           decorative={image !== null}
           {...(category ? { category } : {})}
         />
-        {image ? (
+        {image && loadable ? (
           <img
             src={image.thumbnailUrl}
             alt=""
@@ -138,6 +232,18 @@ export function DestinationImage({
              * a side effect of showing a picture.
              */
             referrerPolicy="no-referrer"
+            onError={() => setFailedUrl(image.thumbnailUrl)}
+            ref={(element) => {
+              /*
+               * The failure that happened before anybody was listening. Server
+               * markup starts loading immediately; `error` neither bubbles nor
+               * replays, so a load that finished failing before hydration is
+               * only visible as the state it left behind on the element.
+               */
+              if (element?.complete && element.naturalWidth === 0) {
+                setFailedUrl(image.thumbnailUrl);
+              }
+            }}
             className={cx(
               'absolute inset-0 h-full w-full',
               crop ? 'object-cover' : 'object-contain',
@@ -146,7 +252,17 @@ export function DestinationImage({
         ) : null}
       </div>
 
-      {image ? <Credit image={image} /> : null}
+      {/*
+        The credit follows the *record*, not the load.
+
+        Attribution is owed for the file this product chose to publish, and the
+        traveller's proxy dropping the bytes does not undo that choice — it also
+        does not tell us the file is gone, since offline, blocked and deleted look
+        identical from here. Dropping the credit on a failed load would take the
+        only reachable statement of the licence off the page on exactly the
+        connections least able to ask for it a second time.
+      */}
+      {image && credit === 'below' ? <ImageCredit image={image} as="figcaption" /> : null}
     </figure>
   );
 }
@@ -158,10 +274,23 @@ export function DestinationImage({
  * things: who made it, where the original lives, and which terms apply. Wrapping
  * the stored sentence in the file-page link is what makes the exact words and
  * the required link one element rather than two that can drift apart.
+ *
+ * Exported so a card can place it at its own foot — see `credit` above. `as`
+ * exists because a `<figcaption>` outside a `<figure>` is invalid markup, and
+ * the whole point of moving it is that it no longer sits inside the picture's
+ * figure.
  */
-function Credit({ image }: { image: ImageRecord }) {
+export function ImageCredit({
+  image,
+  as: Tag = 'p',
+  className,
+}: {
+  image: ImageRecord;
+  as?: 'figcaption' | 'p';
+  className?: string;
+}) {
   return (
-    <figcaption className="mt-1.5 text-[11px] leading-snug text-ink-faint">
+    <Tag className={cx('mt-1.5 text-[11px] leading-snug text-ink-faint', className)}>
       <a
         href={image.filePageUrl}
         target="_blank"
@@ -196,7 +325,7 @@ function Credit({ image }: { image: ImageRecord }) {
           </a>
         </>
       ) : null}
-    </figcaption>
+    </Tag>
   );
 }
 

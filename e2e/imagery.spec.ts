@@ -25,13 +25,25 @@ function isExternal(request: Request): boolean {
 }
 
 /**
- * Block the outside world and remember what tried to leave.
+ * How a blocked external request is answered.
  *
- * `abort` rather than `fulfill`, because a blocked image is the interesting
- * case: it is what a corporate proxy, an offline laptop and an upstream deletion
- * all look like, and the product has to survive all three identically.
+ * Three of them, because they are three *different* things to a browser and the
+ * product has to survive all three identically — which it did not. `abort` is an
+ * offline laptop or a proxy that drops third-party images; `not_found` is a
+ * Wikimedia file deleted after we stored its URL, which answers 404 with an image
+ * content type; `corrupt` is a 200 whose bytes are not a picture, which is what a
+ * captive portal or a truncated transfer produces.
+ *
+ * All three end at the same place: `HTMLImageElement.complete` with
+ * `naturalWidth === 0`, the state in which a browser draws its own broken-file
+ * glyph. That is the property `noBrokenImages` below asserts against.
  */
-async function sealOff(page: Page): Promise<{ external: string[] }> {
+type BlockMode = 'abort' | 'not_found' | 'corrupt';
+
+/**
+ * Block the outside world and remember what tried to leave.
+ */
+async function sealOff(page: Page, mode: BlockMode = 'abort'): Promise<{ external: string[] }> {
   const external: string[] = [];
   await page.route('**/*', async (route, request) => {
     if (!isExternal(request)) {
@@ -39,9 +51,39 @@ async function sealOff(page: Page): Promise<{ external: string[] }> {
       return;
     }
     external.push(request.url());
-    await route.abort();
+    if (mode === 'abort') {
+      await route.abort();
+      return;
+    }
+    /*
+     * A response, not a refusal. The status and the body differ; the content type
+     * is an image type in both, because that is what the real failures send and
+     * because a browser that was told "this is a JPEG" and handed something else
+     * is exactly the case a content-type check would miss.
+     */
+    await route.fulfill(
+      mode === 'not_found'
+        ? { status: 404, contentType: 'image/jpeg', body: 'No such file.' }
+        : { status: 200, contentType: 'image/jpeg', body: 'This is not a JPEG.' },
+    );
   });
   return { external };
+}
+
+/**
+ * Every image the browser is currently drawing its broken-file glyph for.
+ *
+ * `complete && naturalWidth === 0` is the DOM's own account of a failed load, and
+ * it is the same for all three modes above. Asserting on it rather than on a
+ * screenshot means the assertion says what it means and does not go stale when a
+ * colour changes.
+ */
+async function brokenImages(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    [...document.images]
+      .filter((image) => image.complete && image.naturalWidth === 0)
+      .map((image) => image.currentSrc || image.src),
+  );
 }
 
 async function rankedShortlist(page: Page): Promise<void> {
@@ -93,65 +135,113 @@ test('destination fallback renders as a designed graphic, never an absence', asy
 
   /*
    * The invariant, asserted over every frame rather than over a lucky one:
-   * **no image slot is ever empty.** A slot holds either a photograph — in which
-   * case the graphic behind it is decorative and hidden from assistive
-   * technology — or a described graphic that is the content in its own right.
-   * There is no third state, and that is what makes "we could not license a
-   * picture of this place" a design rather than a gap.
+   * **no image slot is ever empty, and nothing announces a photograph that is not
+   * there.** A slot draws either a photograph over the graphic — in which case
+   * the graphic is decorative and hidden from assistive technology — or the
+   * graphic alone.
+   *
+   * The emptiness half is a *rendered* check rather than an element count. It
+   * used to be `img + [role=img] > 0`, which was satisfied by an `<img>` the
+   * browser had already given up on: with every request refused, the count said
+   * "not empty" while the frame held the broken-file glyph. A box with height is
+   * the thing the traveller can actually see.
    */
   const figures = page.locator('figure');
   const total = await figures.count();
   expect(total).toBeGreaterThan(0);
 
+  let announced = 0;
+
   for (let index = 0; index < total; index += 1) {
     const figure = figures.nth(index);
+    const box = await figure.boundingBox();
+    expect(box?.height ?? 0, `frame ${index} drew nothing`).toBeGreaterThan(10);
+
     const photographs = await figure.locator('img').count();
     const graphics = await figure.locator('[role="img"]').count();
-    expect(photographs + graphics, `frame ${index} was empty`).toBeGreaterThan(0);
 
-    if (photographs === 0) {
+    if (graphics > 0) {
+      announced += 1;
       // The textual equivalent says what it is and names the place, so a screen
       // reader is never told there is a photograph here.
       const label = await figure.locator('[role="img"]').first().getAttribute('aria-label');
       expect(label).toMatch(/generated graphic/i);
       expect(label).toMatch(/no freely licensed photograph/i);
-    } else {
-      // A photograph is decorative; the destination's name is in the heading
-      // beside it, and the graphic behind it must not be announced as content.
-      expect(graphics, `frame ${index} announced its backdrop as content`).toBe(0);
+      /*
+       * And it is never said over a photograph. A candidate we *did* licence a
+       * file for keeps its graphic decorative whether or not the bytes arrived —
+       * "no freely licensed photograph was available" is false about it, and a
+       * network failure does not make it true.
+       */
+      expect(photographs, `frame ${index} announced its backdrop as content`).toBe(0);
     }
   }
-});
 
-test('an image that cannot load never becomes a broken rectangle', async ({ page }) => {
-  /**
-   * Every external request is aborted, so every photograph on this page fails to
-   * load — exactly what an offline laptop, a proxy that strips third-party
-   * images, or a file deleted upstream produces.
-   *
-   * There is no `onError` handler and no client state doing this. The generated
-   * graphic is drawn *behind* the `<img>`, always, so a failed load reveals a
-   * designed object rather than the browser's broken-image icon.
+  /*
+   * The fallback path has to be exercised for the rules above to mean anything.
+   * The fixture resolver refuses a share of its subjects on purpose, for exactly
+   * this reason.
    */
-  await sealOff(page);
-  await rankedShortlist(page);
-
-  const detail = page.locator('section[aria-labelledby="shortlist-detail-heading"]');
-  await expect(detail).toBeVisible();
-
-  const hero = detail.locator('figure').first();
-  await expect(hero).toBeVisible();
-  // The frame still occupies space and still has something drawn in it, with
-  // every byte of the photograph refused at the network layer.
-  const box = await hero.boundingBox();
-  expect(box?.height ?? 0).toBeGreaterThan(40);
-
-  // Any <img> that did render is decorative — the name is in the heading beside
-  // it, and an alt string here would have every screen reader say it twice.
-  for (const image of await page.locator('figure img').all()) {
-    expect(await image.getAttribute('alt')).toBe('');
-  }
+  expect(announced, 'no frame fell back, so the fallback rules asserted nothing').toBeGreaterThan(0);
 });
+
+/**
+ * THE THREE WAYS A PHOTOGRAPH FAILS, AND THE ONE THING THE TRAVELLER SEES.
+ *
+ * One body, three modes, because the modes are not interchangeable to a browser
+ * and this suite previously only ever exercised one of them. The graphic drawn
+ * *behind* the `<img>` was believed to be the whole mechanism; it is not. A
+ * browser handed a failing image paints its broken-file glyph over whatever is
+ * underneath, in all three modes, and the only thing that stops it is not having
+ * the element there — which is what `DestinationImage` now does on `error` and on
+ * a load that had already failed before hydration.
+ *
+ * `not_found` is not hypothetical. Wikimedia deletes files after upload, and when
+ * one goes every stored `thumbnailUrl` pointing at it answers 404 while the row
+ * in `destination_images` still says there is a picture.
+ */
+for (const mode of ['abort', 'not_found', 'corrupt'] as const) {
+  test(`an image that cannot load never becomes a broken rectangle (${mode})`, async ({ page }) => {
+    await sealOff(page, mode);
+    await rankedShortlist(page);
+
+    const detail = page.locator('section[aria-labelledby="shortlist-detail-heading"]');
+    await expect(detail).toBeVisible();
+
+    const hero = detail.locator('figure').first();
+    await expect(hero).toBeVisible();
+    // The frame still occupies space and still has something drawn in it, with
+    // every byte of the photograph refused at the network layer.
+    const box = await hero.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThan(40);
+
+    /*
+     * The assertion the old version of this test was missing. It checked that the
+     * frame had height and that any `<img>` was decorative — both of which are
+     * true of a frame displaying the browser's broken-file glyph, which is what
+     * this page was actually showing.
+     */
+    expect(
+      await brokenImages(page),
+      'the browser is drawing its broken-file glyph over the fallback graphic',
+    ).toEqual([]);
+
+    // Any <img> that did render is decorative — the name is in the heading beside
+    // it, and an alt string here would have every screen reader say it twice.
+    for (const image of await page.locator('figure img').all()) {
+      expect(await image.getAttribute('alt')).toBe('');
+    }
+
+    /*
+     * The credit survives the failure, because it follows the *record* rather
+     * than the load: attribution is owed for the file this product chose to
+     * publish, and a dropped connection is not a licence event. It is also what
+     * keeps the attribution assertions below testable at all, since every image
+     * in this suite fails by design.
+     */
+    await expect(page.getByRole('link', { name: /Wikimedia Commons/ }).first()).toBeVisible();
+  });
+}
 
 test('attribution is keyboard reachable, and names the licence', async ({ page }) => {
   await sealOff(page);

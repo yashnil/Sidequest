@@ -1,4 +1,5 @@
 import {
+  displayNameOf,
   formatMinuteOfDay,
   isLessWeatherSensitive,
   WEATHER_CONDITION_LABELS,
@@ -137,7 +138,7 @@ export function chooseBackups(input: ChooseBackupsInput): DayBackup[] {
 
   return ranked.slice(0, limit).map((entry) => ({
     placeId: entry.place.id,
-    name: entry.place.name,
+    name: displayNameOf(entry.place),
     trigger,
     why: whyFor(entry, worst.weather),
     replacesPlaceId: worst.candidate.place.id,
@@ -336,7 +337,7 @@ export function summariseDayWeather(input: {
   for (const entry of input.onDay) {
     const { assessment } = entry.weather;
     if (assessment.suitability === 'poor' || assessment.suitability === 'incompatible') {
-      cautions.push(`${entry.candidate.place.name}: ${lowerFirst(assessment.summary)}`);
+      cautions.push(`${displayNameOf(entry.candidate.place)}: ${lowerFirst(assessment.summary)}`);
     }
   }
 

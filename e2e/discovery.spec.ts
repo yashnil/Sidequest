@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire } from './support/trip';
+import { completeQuestionnaire, openBoardBackstage } from './support/trip';
 
 /**
  * The journey this slice promises: a traveller enters a Mammoth Lakes trip,
@@ -41,15 +41,31 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
   }
 
-  // Grouped the way the brief asks for.
-  await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Personalised hidden gems' })).toBeVisible();
+  /*
+    Grouped the way the brief asks for, in the words the board now uses. The
+    headings were renamed away from the internal taxonomy — "Must-see classics"
+    and "Personalised hidden gems" were the group *identifiers* with their
+    underscores taken out — and `BOARD_GROUP_HEADINGS` is where they live.
+  */
+  await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Quiet finds' })).toBeVisible();
 
-  // Cards carry fit, distance, effort and a profile-specific explanation.
+  /*
+    Cards carry fit, the journey, effort and a profile-specific explanation.
+
+    The argument is a paragraph on the face of the card now rather than a
+    disclosure headed "Why this fits you", and the journey is a clause on the
+    locality line rather than a "From base" definition-list entry — both moves
+    made for the same reason, which is that a card is a comparison surface and a
+    stack of labelled rows is not one. Asserted by their test hooks and by the
+    sentence they produce, so a card that renders the labels and no content
+    cannot pass.
+  */
   const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
   await expect(convict.getByText(/Top pick for you|Strong fit|Good fit/)).toBeVisible();
-  await expect(convict.getByText('Why this fits you')).toBeVisible();
-  await expect(convict.getByText('From base')).toBeVisible();
+  await expect(convict.getByTestId('card-why')).toBeVisible();
+  await expect(convict.getByTestId('card-why')).not.toBeEmpty();
+  await expect(convict.getByText(/from base|at your base/)).toBeVisible();
   await expect(convict.getByText('Effort')).toBeVisible();
 });
 
@@ -64,8 +80,8 @@ test('the board arrives pre-selected rather than empty', async ({ page }) => {
   // The visible counter by its own identity, not by a text shape. A text shape
   // matches whatever else happens to start the same way — the board's live
   // region did, and four specs failed at once for a reason none of them was
-  // about.
-  await expect(page.getByTestId('board-summary')).toContainText(/[1-9]\d* in/);
+  // about. The count reads "N chosen" now; "in" was shorthand nobody says.
+  await expect(page.getByTestId('board-summary')).toContainText(/[1-9]\d* chosen/);
 
   const card = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
   await expect(card.getByRole('button', { name: 'Include' })).toHaveAttribute(
@@ -80,8 +96,17 @@ test('a hand-made choice overrides the auto-pick and survives a refresh', async 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
+  /*
+   * A pass is two presses now: "Skip" asks why, and the reason is applied to
+   * this trip rather than filed away. The five reasons replace the three-way
+   * control in place, so the button this asserted on is gone between the two
+   * presses — which is why the old single click failed on "element not found"
+   * rather than on a wrong state.
+   */
   const card = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
   await card.getByRole('button', { name: 'Skip' }).click();
+  await expect(card.getByTestId('card-pass-reasons')).toBeVisible();
+  await card.getByRole('button', { name: 'Not my thing' }).click();
   await expect(card.getByRole('button', { name: 'Skip' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.reload();
@@ -96,22 +121,28 @@ test('a hand-made choice overrides the auto-pick and survives a refresh', async 
     'false',
   );
 
-  // Re-running auto-pick must not undo a decision the traveller made by hand.
-  await page.getByRole('button', { name: 'Auto-pick the best mix for me' }).click();
+  // Re-running the automatic choice must not undo a decision made by hand.
+  await page.getByTestId('board-auto-pick').click();
   await expect(afterReload.getByRole('button', { name: 'Skip' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
 });
 
-test('auto-pick counts persist across a reload', async ({ page }) => {
+test('the counts from "choose for me" persist across a reload', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
 
-  await page.getByRole('button', { name: 'Auto-pick the best mix for me' }).click();
+  await page.getByTestId('board-auto-pick').click();
   const counter = page.getByTestId('board-summary');
-  await expect(counter).toContainText(/[1-9]\d* in/);
+  await expect(counter).toContainText(/[1-9]\d* chosen/);
+  /*
+    And it says what it did, where it was pressed. The control used to change
+    some borders far down a very long page and say nothing at all, which read as
+    a button that did nothing.
+  */
+  await expect(page.getByTestId('board-auto-pick-notes')).toBeVisible();
 
   const before = await counter.textContent();
   await page.reload();
@@ -125,12 +156,39 @@ test('a winter trip is told plainly what is shut rather than shown a broken plan
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
 
+  /*
+   * The count of shut places is backstage now, with the readiness reading, the
+   * personality and the weather — the board leads with places rather than with
+   * an account of the research. Folded, not dropped: this opens the panel and
+   * asserts the sentence is still counted and still named.
+   */
+  await openBoardBackstage(page);
   await expect(page.getByText(/places are shut on your dates/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Probably skip' })).toBeVisible();
 
-  const postpile = page.getByRole('article').filter({ hasText: 'Devils Postpile' }).first();
-  await expect(postpile.getByText('Closed on your dates')).toBeVisible();
+  /*
+    By heading, not by text: `hasText: 'Devils Postpile'` also matches the
+    Rainbow Falls card, which names the monument in the corridor they share — so
+    this was asserting about a different place and would have passed or failed
+    for reasons unrelated to the one under test.
+  */
+  const postpile = page
+    .getByRole('article')
+    .filter({
+      has: page.getByRole('heading', { name: 'Devils Postpile National Monument', exact: true }),
+    })
+    .first();
+  /*
+    The date fact in the words the row uses. "Closed on your dates" was an
+    hours-badge chip, and the things-to-skip group is a compact list that carries
+    no chips — so the sentence itself is what has to survive the compaction. In
+    January what shuts this is the season on the road rather than an opening
+    timetable, so the row names the season and the consequence, which is the more
+    specific of the two statements.
+  */
   await expect(postpile.getByText('Why this will not work')).toBeVisible();
+  await expect(postpile.getByText(/Usually open June to October/)).toBeVisible();
+  await expect(postpile.getByText(/it will not be reachable on your dates/)).toBeVisible();
 
   // Year-round places are unaffected.
   await expect(page.getByRole('heading', { name: 'Convict Lake', exact: true })).toBeVisible();
@@ -151,12 +209,19 @@ test('a card opens for the detail and closes again, keeping the decision made on
   await expect(page).toHaveURL(/\/discover$/);
 
   const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
-  const details = convict.locator('details', { hasText: 'Why this fits you' }).first();
-  const reasons = details.getByRole('listitem');
+  const details = convict.locator('details', { hasText: 'More about this place' }).first();
+  const description = details.locator('p').first();
 
-  // Collapsed on arrival: the argument is available, not imposed.
+  /*
+    Collapsed on arrival, and it now holds the *detail* rather than the argument.
+    The disclosure and the paragraph swapped places: a product whose whole
+    differentiation is personal fit was hiding its case behind a summary and
+    leading with the disclaimers. So the argument is asserted on the face of the
+    card, and what is behind the door is the description and the provenance.
+  */
   expect(await details.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(false);
-  await expect(reasons.first()).toBeHidden();
+  await expect(description).toBeHidden();
+  await expect(convict.getByTestId('card-why')).toBeVisible();
 
   // Mark it, then open it. The mark must be untouched by the disclosure.
   await convict.getByRole('button', { name: 'Maybe' }).click();
@@ -165,11 +230,11 @@ test('a card opens for the detail and closes again, keeping the decision made on
     'true',
   );
 
-  await convict.getByText('Why this fits you').click();
+  await convict.getByText('More about this place').click();
   await expect(details).toHaveAttribute('open', '');
-  await expect(reasons.first()).toBeVisible();
+  await expect(description).toBeVisible();
 
-  await convict.getByText('Why this fits you').click();
+  await convict.getByText('More about this place').click();
   expect(await details.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(false);
   await expect(convict.getByRole('button', { name: 'Maybe' })).toHaveAttribute(
     'aria-pressed',
@@ -177,7 +242,7 @@ test('a card opens for the detail and closes again, keeping the decision made on
   );
 
   // And the decision-critical facts never went behind the disclosure at all.
-  await expect(convict.getByText('From base')).toBeVisible();
+  await expect(convict.getByText(/from base|at your base/)).toBeVisible();
   await expect(convict.getByText('Effort')).toBeVisible();
 });
 

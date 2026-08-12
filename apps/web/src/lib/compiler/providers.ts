@@ -11,6 +11,7 @@ import {
 } from '@sidequest/core';
 import { createOpenProviders, type LiveDiagnostics } from '../providers/live';
 import { withEvidenceStore } from './evidence';
+import { modelCallCeiling } from './limits';
 
 /**
  * The provider switch and the readiness message live in `./readiness`.
@@ -28,11 +29,11 @@ export {
   type ProviderReadiness,
 } from './readiness';
 
-/** How many model calls one compilation may make. */
-function maxModelCalls(): number {
-  const configured = Number(process.env.SIDEQUEST_COMPILER_MAX_AI_CALLS ?? '');
-  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 12;
-}
+/*
+ * The model-call ceiling comes from `./limits`, where the ledger's copy of the
+ * same number is also resolved — one figure governs the transport and the
+ * printed budget, which is the whole point of that file.
+ */
 
 /**
  * The provider set, and the counters it will fill in as it runs.
@@ -65,7 +66,7 @@ export function compilerProviders(candidateId?: string): ResolvedProviders {
     return { providers: wrapped.providers, live: null, evidence: wrapped.evidence };
   }
   if (choice === 'open') {
-    const resolved = createOpenProviders({ maxModelCalls: maxModelCalls() });
+    const resolved = createOpenProviders({ maxModelCalls: modelCallCeiling() });
     const wrapped = withEvidenceStore(resolved.providers);
     return {
       providers: wrapped.providers,

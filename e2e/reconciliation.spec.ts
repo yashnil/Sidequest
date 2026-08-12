@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire, createTrip, compileRegion } from './support/trip';
+import {
+  completeQuestionnaire,
+  createTrip,
+  compileRegion,
+  openBoardBackstage,
+} from './support/trip';
 
 /**
  * A CHOICE MADE AFTER THE BUILD FINISHED IS STILL ACCOUNTED FOR.
@@ -123,7 +128,15 @@ test('choices made after the build are accounted for, and the account reads on a
   await expect(record.getByTestId('reconciliation-history-stacked')).toBeVisible();
   await expect(record.locator('table')).toBeHidden();
 
-  // And the controls on this panel are pressable with a thumb (WCAG 2.5.5).
+  /*
+   * And the controls on this panel are pressable with a thumb (WCAG 2.5.5).
+   *
+   * The weather panel is backstage now — the board leads with places rather than
+   * with an account of its own research — so the control has to be uncovered
+   * before it has a box to measure. It is in the DOM either way, which is why
+   * this failed on visibility against a button the report showed resolving.
+   */
+  await openBoardBackstage(page);
   const refresh = page.getByTestId('weather-refresh');
   await expect(refresh).toBeVisible();
   const box = await refresh.boundingBox();

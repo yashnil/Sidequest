@@ -1,3 +1,4 @@
+import { evidencedInterests } from '@sidequest/core';
 import type {
   Interest,
   PhysicalIntensity,
@@ -126,6 +127,27 @@ export interface TaxonomyClassification {
   /** Which key matched, and how. Never a name. */
   match: TaxonomyMatch;
   category: PlaceCategory;
+  /**
+   * The type-truthful noun a card may print, where the archetype's is a lie.
+   *
+   * `category` is the *planning* vocabulary — thirteen persisted values that
+   * decide duration, weather exposure and scheduling — and a river genuinely
+   * plans like a lake. It does not *read* like one: a live board captioned the
+   * Sumida River "Lake" and a railway "Viewpoint", which tells the traveller
+   * the machine does not know what things are. So the display noun is carried
+   * separately, from the source's own leaf, and the archetype keeps doing the
+   * planning. Absent means the category label is already truthful.
+   */
+  displayKind?: string;
+  /**
+   * What a traveller can do here, and **not** simply what the rule wrote down.
+   *
+   * The rule's own list leads — it is the archetype's primary character, and
+   * `interests[0]` is read downstream as exactly that — and everything
+   * `INTEREST_EVIDENCE` recognises in the same three channels follows it. See
+   * `interestsFor`: this field is a *read* of the intake's table, because the
+   * alternative was two tables that disagreed.
+   */
   interests: Interest[];
   typicalDurationMinutes: number;
   physicalIntensity: PhysicalIntensity;
@@ -136,12 +158,62 @@ export interface TaxonomyClassification {
   costLevel: 0 | 1 | 2 | 3;
   /** True when a place of this kind normally has opening hours worth finding. */
   plausiblyGated: boolean;
+  /**
+   * How much a thing of this kind tends to matter as an *experience*, 0–1.
+   *
+   * A class weight, not a claim about any particular place: a museum, a temple
+   * or a major park is the reason somebody crosses a city; a pocket park or a
+   * named slope is not, however completely a mapper described it. This is one
+   * input to the significance model in `quality/significance.ts` — evidence
+   * about the *kind* — and it deliberately cannot be moved by metadata volume,
+   * which is the §8.3 failure it replaces.
+   */
+  significanceWeight: number;
+  /**
+   * True for kinds that are only travel candidates when something beyond the
+   * category vouches for them: a bridge, a cemetery. Most bridges are how a
+   * road crosses water; a few are why people visit a city. The category alone
+   * cannot tell them apart, so the inventory demands significance evidence —
+   * an open identifier, corroboration, a designation — before offering one.
+   */
+  requiresSignificanceEvidence: boolean;
+  /**
+   * True for kinds that enclose other mapped features behind one paid gate: a
+   * theme park, a zoo, an aquarium. A record *inside* such an enclosure is part
+   * of the attraction, not a free stop of its own — a live board offered an
+   * island inside a theme park as a free easy walk to a traveller who had
+   * excluded theme parks entirely.
+   */
+  paidEnclosure: boolean;
+  /**
+   * True for kinds whose claim is a large natural feature: a peak, a glacier.
+   * A point record claiming to be a mountain, with no extent and no identity
+   * evidence, is far more often a business named after one — the inventory
+   * checks the claim before believing the coordinates.
+   */
+  landscapeClaim: boolean;
 }
 
-type Rule = Omit<TaxonomyClassification, 'role' | 'subrole' | 'match'> & {
+type Rule = Omit<
+  TaxonomyClassification,
+  | 'role'
+  | 'subrole'
+  | 'match'
+  | 'displayKind'
+  | 'significanceWeight'
+  | 'requiresSignificanceEvidence'
+  | 'paidEnclosure'
+  | 'landscapeClaim'
+> & {
   role?: PlanningRole;
   /** Omitted where `subroleFor` derives the obvious answer from role + category. */
   subrole?: TaxonomySubrole;
+  displayKind?: string;
+  /** Omitted where the archetype default below is right. */
+  significanceWeight?: number;
+  requiresSignificanceEvidence?: boolean;
+  paidEnclosure?: boolean;
+  landscapeClaim?: boolean;
 };
 
 const OUTDOOR_VIEW: Rule = {
@@ -154,6 +226,7 @@ const OUTDOOR_VIEW: Rule = {
   visibilityDependent: true,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0.45,
   plausiblyGated: false,
 };
 
@@ -167,6 +240,7 @@ const WALK: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0.35,
   plausiblyGated: false,
 };
 
@@ -180,6 +254,7 @@ const HIKE: Rule = {
   visibilityDependent: true,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0.6,
   plausiblyGated: false,
 };
 
@@ -193,6 +268,7 @@ const WATER: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0.45,
   plausiblyGated: false,
 };
 
@@ -206,6 +282,7 @@ const MUSEUM: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 2,
+  significanceWeight: 0.85,
   plausiblyGated: true,
 };
 
@@ -219,6 +296,7 @@ const HISTORIC: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 1,
+  significanceWeight: 0.75,
   plausiblyGated: true,
 };
 
@@ -232,6 +310,7 @@ const TOWN: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 2,
+  significanceWeight: 0.55,
   plausiblyGated: true,
 };
 
@@ -245,6 +324,7 @@ const GEOTHERMAL: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0.55,
   plausiblyGated: false,
 };
 
@@ -258,6 +338,7 @@ const WILDLIFE: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 1,
+  significanceWeight: 0.6,
   plausiblyGated: true,
 };
 
@@ -271,6 +352,7 @@ const TRAM: Rule = {
   visibilityDependent: true,
   poorWeatherBackup: false,
   costLevel: 3,
+  significanceWeight: 0.7,
   plausiblyGated: true,
 };
 
@@ -284,6 +366,7 @@ const MONUMENT: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 1,
+  significanceWeight: 0.75,
   plausiblyGated: true,
 };
 
@@ -297,6 +380,7 @@ const HOT_SPRING: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 1,
+  significanceWeight: 0.6,
   plausiblyGated: false,
 };
 
@@ -310,6 +394,7 @@ const SCENIC_ROUTE: Rule = {
   visibilityDependent: true,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0.5,
   plausiblyGated: false,
 };
 
@@ -333,6 +418,7 @@ const MARKET: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 1,
+  significanceWeight: 0.6,
   plausiblyGated: true,
 };
 
@@ -354,6 +440,7 @@ const GATEWAY: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 1,
+  significanceWeight: 0.1,
   plausiblyGated: true,
 };
 
@@ -379,6 +466,7 @@ const INFRASTRUCTURE: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 0,
+  significanceWeight: 0,
   plausiblyGated: false,
 };
 
@@ -402,6 +490,7 @@ const TRANSPORT_SERVICE: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 2,
+  significanceWeight: 0,
   plausiblyGated: true,
 };
 
@@ -417,6 +506,7 @@ const SUPPORT: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 1,
+  significanceWeight: 0.1,
   plausiblyGated: true,
 };
 
@@ -431,6 +521,7 @@ const FOOD: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 2,
+  significanceWeight: 0.3,
   plausiblyGated: true,
 };
 
@@ -445,6 +536,7 @@ const LODGING: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: true,
   costLevel: 3,
+  significanceWeight: 0.1,
   plausiblyGated: true,
 };
 
@@ -459,6 +551,7 @@ const EXCLUDED: Rule = {
   visibilityDependent: false,
   poorWeatherBackup: false,
   costLevel: 1,
+  significanceWeight: 0,
   plausiblyGated: false,
 };
 
@@ -485,17 +578,17 @@ const BY_CATEGORY: Record<string, Rule> = {
   scenic_lookout: OUTDOOR_VIEW,
   observation_deck: { ...OUTDOOR_VIEW, exposure: 'mixed', costLevel: 2, plausiblyGated: true },
   scenic_point_of_interest: OUTDOOR_VIEW,
-  peak: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60 },
-  summit: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60 },
+  peak: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60, displayKind: 'Peak', significanceWeight: 0.5, landscapeClaim: true },
+  summit: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60, displayKind: 'Peak', significanceWeight: 0.5, landscapeClaim: true },
   saddle: OUTDOOR_VIEW,
   ridge: OUTDOOR_VIEW,
   cliff: OUTDOOR_VIEW,
-  volcano: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120 },
+  volcano: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, displayKind: 'Volcano', significanceWeight: 0.7, landscapeClaim: true },
 
   // Walking, hiking, parks
-  park: { ...WALK, category: 'easy_walk', typicalDurationMinutes: 90 },
-  national_park: { ...HIKE, typicalDurationMinutes: 240, plausiblyGated: true, costLevel: 1 },
-  state_park: { ...WALK, typicalDurationMinutes: 150, plausiblyGated: true, costLevel: 1 },
+  park: { ...WALK, category: 'easy_walk', typicalDurationMinutes: 90, significanceWeight: 0.4 },
+  national_park: { ...HIKE, typicalDurationMinutes: 240, plausiblyGated: true, costLevel: 1, significanceWeight: 1 },
+  state_park: { ...WALK, typicalDurationMinutes: 150, plausiblyGated: true, costLevel: 1, significanceWeight: 0.7 },
   nature_reserve: { ...WILDLIFE },
   nature_preserve: { ...WILDLIFE },
   protected_area: { ...WILDLIFE },
@@ -504,26 +597,58 @@ const BY_CATEGORY: Record<string, Rule> = {
   hiking_trail: HIKE,
   trail: HIKE,
   trailhead: { ...SUPPORT, subrole: 'visitor_information', category: 'day_hike', interests: ['hiking'], typicalDurationMinutes: 20 },
-  forest: WALK,
-  valley: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60 },
-  hill: OUTDOOR_VIEW,
-  mountain_range: OUTDOOR_VIEW,
+  forest: { ...WALK, displayKind: 'Forest', significanceWeight: 0.3 },
+  /**
+   * `wood` is a *land cover*, not a place somebody goes for a walk.
+   *
+   * It was folded into `forest`, and a live Tokyo board offered
+   * 寛永寺墓地 — Kan'ei-ji Cemetery — as an easy nature walk on the strength of
+   * it, which is §4's "a cemetery as an easy walk" verbatim. The cemetery leaf
+   * below carries a significance gate for exactly this class, and the gate was
+   * bypassed because the source published the land cover rather than the use.
+   * Any patch of trees a mapper outlined arrives here: a verge, a screen
+   * between two roads, the planting inside a burial ground. The ones worth
+   * walking in are the ones something outside the record vouches for.
+   */
+  wood: { ...WALK, displayKind: 'Woodland', significanceWeight: 0.2, requiresSignificanceEvidence: true },
+  valley: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60, significanceWeight: 0.35 },
+  hill: { ...OUTDOOR_VIEW, displayKind: 'Hill', significanceWeight: 0.2 },
+  mountain_range: { ...OUTDOOR_VIEW, significanceWeight: 0.5, landscapeClaim: true },
   dune: WALK,
   cave: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false, plausiblyGated: true, costLevel: 2 },
   cave_entrance: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false },
 
-  // Water
+  /**
+   * Water, and every entry says what it is.
+   *
+   * The archetype is `WATER` throughout — a river plans exactly like a lake:
+   * outdoor, free, weather-bound, an hour or two — but a card that captions the
+   * Sumida River "Lake" has told the traveller the machine cannot see. The
+   * display noun rides beside the archetype for every kind whose own name is
+   * not "lake".
+   */
   lake: WATER,
-  reservoir: WATER,
-  river: WATER,
-  pond: WATER,
-  lagoon: WATER,
-  bay: WATER,
-  fjord: { ...WATER, visibilityDependent: true },
-  waterfall: { ...WATER, category: 'lake', typicalDurationMinutes: 60 },
-  beach: { ...WATER, category: 'lake', typicalDurationMinutes: 150, interests: ['lakes_and_rivers', 'scenic_viewpoints'] },
-  glacier: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, interests: ['geology_and_geothermal', 'scenic_viewpoints'] },
-  spring: GEOTHERMAL,
+  reservoir: { ...WATER, displayKind: 'Reservoir', significanceWeight: 0.25 },
+  river: { ...WATER, displayKind: 'River' },
+  stream: { ...WATER, displayKind: 'Stream', significanceWeight: 0.15 },
+  canal: { ...WATER, displayKind: 'Canal', significanceWeight: 0.35 },
+  pond: { ...WATER, displayKind: 'Pond', significanceWeight: 0.2 },
+  lagoon: { ...WATER, displayKind: 'Lagoon' },
+  bay: { ...WATER, displayKind: 'Bay' },
+  fjord: { ...WATER, visibilityDependent: true, displayKind: 'Fjord' },
+  waterfall: { ...WATER, category: 'lake', typicalDurationMinutes: 60, displayKind: 'Waterfall', significanceWeight: 0.65 },
+  beach: { ...WATER, category: 'lake', typicalDurationMinutes: 150, interests: ['lakes_and_rivers', 'scenic_viewpoints'], displayKind: 'Beach', significanceWeight: 0.6 },
+  glacier: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, interests: ['geology_and_geothermal', 'scenic_viewpoints'], displayKind: 'Glacier', significanceWeight: 0.7, landscapeClaim: true },
+  /**
+   * A spring is where water comes out of the ground. Nothing about it is hot.
+   *
+   * It was mapped to the geothermal archetype, which stamped
+   * `geology_and_geothermal` on it — so a traveller who asked for geysers and
+   * lava fields was offered a suburban water spring as a match, and the card
+   * read "A geothermal." The heated kinds keep the geothermal archetype and say
+   * so in their own leaf; a plain spring is small water.
+   */
+  spring: { ...WATER, typicalDurationMinutes: 30, displayKind: 'Spring', significanceWeight: 0.25 },
   hot_spring: HOT_SPRING,
   geyser: GEOTHERMAL,
   fumarole: GEOTHERMAL,
@@ -535,21 +660,55 @@ const BY_CATEGORY: Record<string, Rule> = {
   science_museum: MUSEUM,
   art_gallery: { ...MUSEUM, typicalDurationMinutes: 75, costLevel: 1 },
   gallery: { ...MUSEUM, typicalDurationMinutes: 75, costLevel: 1 },
-  aquarium: { ...MUSEUM, interests: ['wildlife'], costLevel: 3 },
-  zoo: { ...WILDLIFE, exposure: 'mixed', costLevel: 3, typicalDurationMinutes: 180 },
+  aquarium: { ...MUSEUM, interests: ['wildlife'], costLevel: 3, displayKind: 'Aquarium', paidEnclosure: true },
+  zoo: { ...WILDLIFE, exposure: 'mixed', costLevel: 3, typicalDurationMinutes: 180, displayKind: 'Zoo', significanceWeight: 0.7, paidEnclosure: true },
   planetarium: MUSEUM,
-  library: { ...MUSEUM, costLevel: 0, typicalDurationMinutes: 45 },
+  /**
+   * A public library is a civic amenity that is *occasionally* a landmark.
+   *
+   * Filed as a museum it inherited "history and culture", two hours and a
+   * ticket price, and a live Tokyo board offered two municipal library counters
+   * — a returns desk inside a shopping centre — as things to do. The famous
+   * ones are famous for their building or their collection, and something
+   * outside the record always says so, which is what the gate reads.
+   */
+  library: { ...MUSEUM, costLevel: 0, typicalDurationMinutes: 45, displayKind: 'Library', significanceWeight: 0.4, requiresSignificanceEvidence: true },
   theatre: { ...MUSEUM, typicalDurationMinutes: 150, costLevel: 3 },
   concert_hall: { ...MUSEUM, typicalDurationMinutes: 150, costLevel: 3 },
-  historic_site: HISTORIC,
-  historical_landmark: HISTORIC,
+
+  /**
+   * THE STRUCTURAL CLAIM, AND WHY IT NEEDS A WITNESS.
+   *
+   * `historic_site` is not a kind of building. It is an *assertion about* a
+   * building, and it is the assertion an open catalogue is least able to check
+   * — every "former site of", every commemorative plaque, every named slope,
+   * every block of flats standing where something used to be, arrives under it.
+   * On a live Tokyo board the eighteen cards this leaf produced were six
+   * condominiums (Aristage, Park Haim, Court House, Livest House, Corpo,
+   * Crescent), a limited company's office, two roadside information signboards,
+   * two road slopes and a demolished university campus, each offered as a
+   * seventy-five-minute paid attraction.
+   *
+   * This is the same argument the bridge and the cemetery already carry, and it
+   * is the *stronger* case of it: most records a source tags "historic site"
+   * are a marker or a former use; a few are why people visit a city, and the
+   * category alone cannot tell them apart. So the assertion needs a witness —
+   * an encyclopaedic entry, a second catalogue, a public authority, a conferred
+   * designation, or the region's own geography carrying the name.
+   *
+   * The named building kinds beneath it keep their unconditional admission,
+   * because `castle`, `fort`, `ruins`, `monument` and `archaeological_site` all
+   * say what the thing *is*. A mis-tag there is rare; here it is the norm.
+   */
+  historic_site: { ...HISTORIC, requiresSignificanceEvidence: true },
+  historical_landmark: { ...HISTORIC, requiresSignificanceEvidence: true },
   archaeological_site: { ...HISTORIC, typicalDurationMinutes: 90, exposure: 'exposed_outdoor' },
   castle: { ...HISTORIC, typicalDurationMinutes: 120, costLevel: 2 },
   fort: HISTORIC,
   ruins: { ...HISTORIC, exposure: 'exposed_outdoor', costLevel: 0, plausiblyGated: false },
   monument: MONUMENT,
   memorial: { ...MONUMENT, typicalDurationMinutes: 40, plausiblyGated: false },
-  landmark_and_historical_building: HISTORIC,
+  landmark_and_historical_building: { ...HISTORIC, requiresSignificanceEvidence: true },
 
   /**
    * Somewhere to worship, and the distinction the live evaluation forced.
@@ -565,7 +724,7 @@ const BY_CATEGORY: Record<string, Rule> = {
    * make good sightseeing, and it holds in Bali and Bavaria alike.
    */
   place_of_worship: { ...SUPPORT, subrole: 'civic', typicalDurationMinutes: 40, exposure: 'indoor' },
-  church: { ...HISTORIC, typicalDurationMinutes: 45, exposure: 'indoor', poorWeatherBackup: true },
+  church: { ...HISTORIC, typicalDurationMinutes: 45, exposure: 'indoor', poorWeatherBackup: true, significanceWeight: 0.5 },
   cathedral: { ...HISTORIC, typicalDurationMinutes: 60, exposure: 'indoor', poorWeatherBackup: true },
   basilica: { ...HISTORIC, typicalDurationMinutes: 60, exposure: 'indoor', poorWeatherBackup: true },
   abbey: { ...HISTORIC, typicalDurationMinutes: 60 },
@@ -595,8 +754,8 @@ const BY_CATEGORY: Record<string, Rule> = {
   bazaar: MARKET,
   night_market: MARKET,
   flea_market: { ...MARKET, typicalDurationMinutes: 60 },
-  neighborhood: { ...TOWN, typicalDurationMinutes: 120 },
-  plaza: { ...TOWN, typicalDurationMinutes: 45, exposure: 'exposed_outdoor', poorWeatherBackup: false, plausiblyGated: false },
+  neighborhood: { ...TOWN, typicalDurationMinutes: 120, displayKind: 'Neighbourhood' },
+  plaza: { ...TOWN, typicalDurationMinutes: 45, exposure: 'exposed_outdoor', poorWeatherBackup: false, plausiblyGated: false, displayKind: 'Plaza', significanceWeight: 0.3 },
   /**
    * `pedestrian` is a container, not a destination.
    *
@@ -610,8 +769,66 @@ const BY_CATEGORY: Record<string, Rule> = {
   // Scenic routes
   scenic_drive: SCENIC_ROUTE,
   scenic_byway: SCENIC_ROUTE,
-  bridge: { ...OUTDOOR_VIEW, typicalDurationMinutes: 30 },
-  pier: { ...OUTDOOR_VIEW, typicalDurationMinutes: 45, visibilityDependent: false },
+  /**
+   * Linear transport infrastructure is a way across, not a place to be — until
+   * something vouches otherwise.
+   *
+   * A live board offered a working railway line as a "Viewpoint" because the
+   * infrastructure layer files viaducts and rail under a branch this table read
+   * as scenic. Most bridges are how a road crosses water; a few are why people
+   * visit a city, and the *category* cannot tell them apart. So a bridge or
+   * viaduct is a candidate only with significance evidence behind it — an open
+   * identifier, cross-layer corroboration, a designation — and rail lines are
+   * never candidates at all: a famous railway is a journey, not a stop.
+   */
+  bridge: { ...OUTDOOR_VIEW, typicalDurationMinutes: 30, displayKind: 'Bridge', significanceWeight: 0.5, requiresSignificanceEvidence: true },
+  viaduct: { ...OUTDOOR_VIEW, typicalDurationMinutes: 30, displayKind: 'Viaduct', significanceWeight: 0.3, requiresSignificanceEvidence: true },
+  railway: INFRASTRUCTURE,
+  railway_line: INFRASTRUCTURE,
+  rail_line: INFRASTRUCTURE,
+  rail: INFRASTRUCTURE,
+  subway_line: INFRASTRUCTURE,
+  tram_line: INFRASTRUCTURE,
+  level_crossing: INFRASTRUCTURE,
+  railway_yard: INFRASTRUCTURE,
+  pier: { ...OUTDOOR_VIEW, typicalDurationMinutes: 45, visibilityDependent: false, displayKind: 'Pier', significanceWeight: 0.4 },
+
+  /**
+   * A cemetery is a place of rest first and a sight second.
+   *
+   * A live board filed one under "Easy walk", which is both wrong in register
+   * and wrong in kind. The famous ones — the resting places people genuinely
+   * cross cities for — carry identity evidence, so the significance gate lets
+   * exactly those through as cultural sites and keeps every neighbourhood
+   * churchyard off the board.
+   */
+  cemetery: { ...HISTORIC, typicalDurationMinutes: 45, exposure: 'sheltered_outdoor', costLevel: 0, plausiblyGated: false, displayKind: 'Cemetery', significanceWeight: 0.45, requiresSignificanceEvidence: true },
+  graveyard: { ...HISTORIC, typicalDurationMinutes: 45, exposure: 'sheltered_outdoor', costLevel: 0, plausiblyGated: false, displayKind: 'Cemetery', significanceWeight: 0.45, requiresSignificanceEvidence: true },
+
+  /**
+   * Paid enclosures: one gate, one ticket, everything inside is the attraction.
+   *
+   * A live board offered an island *inside* a theme park as a free easy walk —
+   * to a traveller who had excluded theme parks. The enclosure kinds are named
+   * so the inventory can fold their interior features into them.
+   */
+  theme_park: { ...TOWN, typicalDurationMinutes: 420, costLevel: 3, displayKind: 'Theme park', significanceWeight: 0.8, paidEnclosure: true },
+  amusement_park: { ...TOWN, typicalDurationMinutes: 300, costLevel: 3, displayKind: 'Amusement park', significanceWeight: 0.7, paidEnclosure: true },
+  water_park: { ...TOWN, typicalDurationMinutes: 300, costLevel: 3, displayKind: 'Water park', significanceWeight: 0.6, paidEnclosure: true },
+
+  /**
+   * Records that are not places at all: people, brands and the desks they work
+   * from. A person and a private company both reached a live provisional board;
+   * each is a database row about an entity, not somewhere a traveller can go.
+   */
+  person: { ...EXCLUDED, subrole: 'commerce' },
+  company: { ...EXCLUDED, subrole: 'commerce' },
+  corporation: { ...EXCLUDED, subrole: 'commerce' },
+  office: { ...EXCLUDED, subrole: 'commerce' },
+  corporate_office: { ...EXCLUDED, subrole: 'commerce' },
+  headquarters: { ...EXCLUDED, subrole: 'commerce' },
+  corporate_headquarters: { ...EXCLUDED, subrole: 'commerce' },
+  coworking_space: { ...EXCLUDED, subrole: 'commerce' },
 
   /**
    * Somewhere to eat, by leaf.
@@ -781,14 +998,55 @@ const BY_CATEGORY: Record<string, Rule> = {
  * professional-services records without naming one of them.
  */
 
+/**
+ * A geographic feature whose own kind we do not recognise.
+ *
+ * The two geographic branches used to fall back to the *viewpoint* archetype,
+ * which stamped `scenic_viewpoints` and `photography_golden_hour` on anything
+ * underneath them and gave it the viewpoint's 0.45 class weight. A landfill
+ * lookout, a drainage channel, a spoil mound and a road embankment therefore
+ * all arrived as scenic highlights that satisfied a photography interest — and
+ * on a live Tokyo run the highest-ordered card on the whole board was a
+ * refuse-disposal site, because nothing had ever asked whether the view was a
+ * claim anybody had made.
+ *
+ * The file's own stated rule is that an unrecognised branch resolves to
+ * something honest rather than to an invention, and these two branches were
+ * inventing a viewpoint. So an unrecognised geographic feature is outdoor
+ * ground with no interest claim on it, a low class weight, and a requirement
+ * that something outside the record vouch for it before it is offered. The
+ * recognised leaves above — peak, lake, waterfall, beach, viewpoint — are
+ * unaffected, because they matched before the branch was consulted.
+ */
+const UNRECOGNISED_GEOGRAPHY: Rule = {
+  subrole: 'outdoor_nature',
+  category: 'easy_walk',
+  /*
+   * Not empty: `interests[0]` is read downstream as the archetype's primary
+   * character. `easy_nature_walks` is what "some outdoor ground" honestly
+   * offers, and it is the one claim that does not depend on the view, the
+   * geology or the water being anything in particular.
+   */
+  interests: ['easy_nature_walks'],
+  typicalDurationMinutes: 45,
+  physicalIntensity: 'easy',
+  exposure: 'exposed_outdoor',
+  visibilityDependent: false,
+  poorWeatherBackup: false,
+  costLevel: 0,
+  significanceWeight: 0.15,
+  plausiblyGated: false,
+  requiresSignificanceEvidence: true,
+};
+
 const BY_BRANCH: Record<string, Rule> = {
   attractions_and_activities: { ...HISTORIC, role: 'attraction' },
   arts_and_entertainment: { ...MUSEUM, role: 'attraction' },
   cultural_and_historic: { ...HISTORIC, role: 'attraction' },
-  geographic_entities: { ...OUTDOOR_VIEW, role: 'attraction' },
+  geographic_entities: { ...UNRECOGNISED_GEOGRAPHY, role: 'attraction' },
   sports_and_recreation: { ...WALK, role: 'attraction' },
   active_life: { ...WALK, role: 'attraction' },
-  natural_features: { ...OUTDOOR_VIEW, role: 'attraction' },
+  natural_features: { ...UNRECOGNISED_GEOGRAPHY, role: 'attraction' },
 
   /**
    * Sub-branches that would otherwise inherit the wrong parent.
@@ -860,7 +1118,7 @@ export function classifySourceCategory(input: {
 }): TaxonomyClassification {
   const leaf = normalise(input.category);
   const direct = BY_CATEGORY[leaf];
-  if (direct) return finalise(direct, { kind: 'source_leaf_category', key: leaf });
+  if (direct) return finalise(direct, { kind: 'source_leaf_category', key: leaf }, leaf);
 
   /**
    * Innermost branch first.
@@ -873,13 +1131,13 @@ export function classifySourceCategory(input: {
   for (let index = path.length - 1; index >= 0; index -= 1) {
     const segment = path[index]!;
     const bySegment = BY_CATEGORY[segment];
-    if (bySegment) return finalise(bySegment, { kind: 'source_category_path', key: segment });
+    if (bySegment) return finalise(bySegment, { kind: 'source_category_path', key: segment }, leaf);
     const byBranch = BY_BRANCH[segment];
-    if (byBranch) return finalise(byBranch, { kind: 'source_branch', key: segment });
+    if (byBranch) return finalise(byBranch, { kind: 'source_branch', key: segment }, leaf);
   }
 
   const branch = BY_BRANCH[leaf];
-  if (branch) return finalise(branch, { kind: 'source_branch', key: leaf });
+  if (branch) return finalise(branch, { kind: 'source_branch', key: leaf }, leaf);
 
   /**
    * Unknown, and therefore excluded rather than promoted.
@@ -888,7 +1146,7 @@ export function classifySourceCategory(input: {
    * later — but it does not enter the attraction inventory on the strength of
    * nobody knowing what it is.
    */
-  return finalise(EXCLUDED, { kind: 'no_recognised_category' });
+  return finalise(EXCLUDED, { kind: 'no_recognised_category' }, leaf);
 }
 
 /**
@@ -998,14 +1256,59 @@ const SCENIC_CATEGORIES: readonly PlaceCategory[] = [
   'gondola_or_tram',
 ];
 
-function finalise(rule: Rule, match: TaxonomyMatch): TaxonomyClassification {
+/**
+ * WHAT THIS KIND OF THING LETS A TRAVELLER DO — READ FROM THE INTAKE'S TABLE.
+ *
+ * This used to be `rule.interests` verbatim, and that is the §4 regression class
+ * wearing new clothes. Two tables answered "which interest does this kind of
+ * place serve": `INTEREST_EVIDENCE` in the core's intake decided which rows a
+ * destination is *offered*, and the hand-written column above decided what a
+ * place *claims*. Nothing held them together, and they came apart on the whole
+ * built-and-inhabited half of the vocabulary — every compiled region offered
+ * museums, architecture or markets as graded rows while not one of its places
+ * carried them. A traveller who marked museums `core` in a city full of museums
+ * had every museum scored as though they had answered "only if it is right
+ * there", and their frequency allowance for the thing they came for went unspent.
+ *
+ * So the stamper reads the offer's own table rather than restating it, over the
+ * same three channels a compiled place will later present to it: the planning
+ * category, the display noun, and the source's own leaf category — which the
+ * inventory writes as the place's first tag. Anything the intake would accept as
+ * evidence from that place is therefore stamped on it, and the two halves cannot
+ * drift apart again without `interest-parity.test.ts` failing.
+ *
+ * The rule's own list still leads. It is the archetype's primary character, and
+ * `interests[0]` is read as that by the planner's frequency ledger and by the
+ * board's fallback for a place whose fit named no interest.
+ */
+function interestsFor(rule: Rule, sourceCategory: string): Interest[] {
+  const evidenced = evidencedInterests({
+    category: rule.category,
+    ...(rule.displayKind === undefined ? {} : { displayKind: rule.displayKind }),
+    interests: rule.interests,
+    sourceCategories: [sourceCategory],
+  });
+  return [
+    ...rule.interests,
+    ...evidenced.filter((interest) => !rule.interests.includes(interest)),
+  ];
+}
+
+function finalise(
+  rule: Rule,
+  match: TaxonomyMatch,
+  /** The source's own leaf, normalised — the word the place will carry as a tag. */
+  sourceCategory: string,
+): TaxonomyClassification {
   const role = roleFor(rule);
+  const visitable = role === 'attraction' || role === 'outdoor' || role === 'side_quest' || role === 'market';
   return {
     role,
     subrole: subroleFor(rule, role),
     match,
     category: rule.category,
-    interests: [...rule.interests],
+    ...(rule.displayKind ? { displayKind: rule.displayKind } : {}),
+    interests: interestsFor(rule, sourceCategory),
     typicalDurationMinutes: rule.typicalDurationMinutes,
     physicalIntensity: rule.physicalIntensity,
     exposure: rule.exposure,
@@ -1013,6 +1316,15 @@ function finalise(rule: Rule, match: TaxonomyMatch): TaxonomyClassification {
     poorWeatherBackup: rule.poorWeatherBackup,
     costLevel: rule.costLevel,
     plausiblyGated: rule.plausiblyGated,
+    /*
+     * A visitable kind nobody weighted sits at 0.3 — real, minor. A utility
+     * kind sits at zero, because "how significant is this pylon as an
+     * experience" has one answer.
+     */
+    significanceWeight: rule.significanceWeight ?? (visitable ? 0.3 : 0),
+    requiresSignificanceEvidence: rule.requiresSignificanceEvidence ?? false,
+    paidEnclosure: rule.paidEnclosure ?? false,
+    landscapeClaim: rule.landscapeClaim ?? false,
   };
 }
 

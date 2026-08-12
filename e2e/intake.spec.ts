@@ -122,11 +122,17 @@ test.describe('traveller counts behave like numbers', () => {
 });
 
 test.describe('the questionnaire remembers where you were', () => {
+  /*
+   * The step titles are level-two headings now: the page grew a stable h1
+   * above the interpretation panel so the heading order stops reading inside
+   * out, and the step's own heading — the one that changes per step — was
+   * demoted with it. These selectors follow the step heading, not the page's.
+   */
   test('a refresh returns to the step the traveller had reached', async ({ page }) => {
     await createTrip(page, 'Mammoth Lakes');
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
 
-    const first = page.getByRole('heading', { level: 1 });
+    const first = page.getByRole('heading', { level: 2 });
     await expect(first).toBeVisible();
     const firstTitle = (await first.textContent())?.trim();
 
@@ -141,7 +147,7 @@ test.describe('the questionnaire remembers where you were', () => {
     await core.first().check();
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    const second = page.getByRole('heading', { level: 1 });
+    const second = page.getByRole('heading', { level: 2 });
     await expect(second).not.toHaveText(firstTitle ?? '');
     const secondTitle = (await second.textContent())?.trim();
 
@@ -152,7 +158,7 @@ test.describe('the questionnaire remembers where you were', () => {
      * which answers had been reached deliberately — under a header reading
      * "Saved as you go".
      */
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(secondTitle ?? '');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText(secondTitle ?? '');
   });
 
   test('going back and forward keeps an edit made on the way', async ({ page }) => {
@@ -203,9 +209,9 @@ test.describe('the questionnaire remembers where you were', () => {
     for (let step = 0; step < 15; step += 1) {
       const next = page.getByRole('button', { name: 'Continue' });
       if (!(await next.isVisible().catch(() => false))) break;
-      const before = (await page.getByRole('heading', { level: 1 }).textContent())?.trim() ?? '';
+      const before = (await page.getByRole('heading', { level: 2 }).textContent())?.trim() ?? '';
       await next.click();
-      await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(before);
+      await expect(page.getByRole('heading', { level: 2 })).not.toHaveText(before);
     }
     /* The last step is the review, and its button says so. */
     await expect(page.getByRole('button', { name: /Build my discovery board/i })).toBeVisible();
@@ -256,7 +262,7 @@ test.describe('the questionnaire is shorter, not just apologetic', () => {
 
     const headings: string[] = [];
     for (let step = 0; step < 15; step += 1) {
-      const heading = page.getByRole('heading', { level: 1 });
+      const heading = page.getByRole('heading', { level: 2 });
       headings.push(((await heading.textContent()) ?? '').trim());
       const next = page.getByRole('button', { name: 'Continue' });
       if (!(await next.isVisible().catch(() => false))) break;

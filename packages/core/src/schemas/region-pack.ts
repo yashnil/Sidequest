@@ -67,8 +67,32 @@ import { dataLicenceSchema, licenceIdSchema } from './licence';
  *
  * Old packs are not migrated or rewritten. They stop matching, and the next
  * build re-reads the ground under the new rules.
+ *
+ * ---
+ *
+ * **4** — Phase 16, and the same argument one step further.
+ *
+ * What a pack *is* changed twice over: the read is now budgeted in row groups
+ * rather than in a multiple of the retention cap, retention ranks by
+ * significance instead of keeping whichever rows decoded first, the overflow
+ * backfill round-robins across cells instead of handing the densest one what is
+ * left, and the destination's own division is pinned outside the budget. A pack
+ * built before any of that is not a stale copy of the same answer — it is a
+ * different answer, produced by rules the product no longer holds.
+ *
+ * The version had to move because nothing else would move it. The scope hash is
+ * version + candidate + bounds, and a repaired build of the same destination
+ * with the same bounds against the same catalogue release hashes identically,
+ * so `findRegionPack` returned the pre-fix pack and the repaired acquisition
+ * never ran. That was observed, not predicted: the first live compilation after
+ * the repair could not be run against the destination the repair was written
+ * for, because its pack hash was byte-identical to the one already stored.
+ *
+ * `forceRefresh` exists but has no production call site, and adding one would
+ * put the decision in a caller's hands trip by trip. The version is the honest
+ * lever: every pack older than the rules is refused once, everywhere.
  */
-export const REGION_PACK_VERSION = 3 as const;
+export const REGION_PACK_VERSION = 4 as const;
 
 // ---------------------------------------------------------------------------
 // Layers
@@ -543,6 +567,28 @@ export function isPackUsable(state: RegionPackState): boolean {
   return state === 'ready' || state === 'partial';
 }
 
+/**
+ * How much of the requested ground one layer's retained records actually span.
+ *
+ * The acceptance check for a failure that every other diagnostic was blind to:
+ * a scan that stopped on a budget after reading one corner of a metropolis
+ * produced a pack that was schema-valid, hash-stable and *ready* — with zero
+ * records north of the city centre. Span fractions compare the records' own
+ * extent against the scope's on each axis; `occupiedCellShare` is the fraction
+ * of partition cells holding at least one record. `lopsided` is the verdict,
+ * and a lopsided places layer marks the pack partial rather than ready —
+ * recorded and acted on, never silently accepted.
+ */
+export const packLayerCoverageSchema = z.object({
+  layerId: z.string().min(1),
+  recordCount: z.number().int().min(0),
+  latSpanFraction: z.number().min(0).max(1),
+  lngSpanFraction: z.number().min(0).max(1),
+  occupiedCellShare: z.number().min(0).max(1),
+  lopsided: z.boolean(),
+});
+export type PackLayerCoverage = z.infer<typeof packLayerCoverageSchema>;
+
 export const packDiagnosticsSchema = z.object({
   filesInspected: z.number().int().min(0),
   rowGroupsInspected: z.number().int().min(0),
@@ -555,6 +601,12 @@ export const packDiagnosticsSchema = z.object({
   budgetsExhausted: z.array(z.string().min(1)).default([]),
   /** Per-layer timings, so a slow layer can be named rather than guessed at. */
   layerTimings: z.array(z.object({ layerId: z.string().min(1), ms: z.number().int().min(0) })).default([]),
+  /**
+   * Per-layer spatial coverage. Optional and additive: packs written before the
+   * check exist and must keep parsing; absence means "not measured", never
+   * "covered".
+   */
+  spatialCoverage: z.array(packLayerCoverageSchema).optional(),
 });
 export type PackDiagnostics = z.infer<typeof packDiagnosticsSchema>;
 

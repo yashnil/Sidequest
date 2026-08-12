@@ -5,7 +5,10 @@ import {
   assessPlaceStanding,
   standingFields,
   DESTINATION_RESOLUTION_VERSION,
+  foodDistinctiveness,
+  foodNameCounts,
   licence,
+  matchesAcquisitionIntent,
   normalizeDestinationQuery,
   operatingCalendarSchema,
   parseOsmOpeningHours,
@@ -28,6 +31,7 @@ import {
   buildInventory,
   buildTripScopeOverlay,
   decisionFor,
+  DEFAULT_INVENTORY_LIMITS,
   foodVenueFromRecord,
   type IncludedArea,
   type InventoryResult,
@@ -1119,17 +1123,88 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
        */
       if (acquire) {
         if (!isPoiProviderEnabled()) {
+          /**
+           * NO SECOND SERVICE IS NOT THE SAME AS NOTHING LEFT TO LOOK AT.
+           *
+           * This used to be the whole answer: no live map service configured, so
+           * the deficit-directed look returned a gap and the traveller was told
+           * we had found nothing for the very thing they said the trip was for.
+           * In the deployment that shipped, that is *every* acquisition, because
+           * the live POI service is deliberately off.
+           *
+           * But a pack has already been fetched, and the broad read of it is
+           * lossy on purpose: `maxPerCategory` holds back a dense category so a
+           * board is not four hundred plaques, and `maxAreaShare` stops one
+           * district standing for a region. Those ceilings are correct for a
+           * general-purpose read and wrong for a directed one — when the deficit
+           * *is* culture, the twenty-third museum is exactly what was wanted.
+           *
+           * So a second pass runs over the same pack with the density ceilings
+           * lifted for the intents that were asked for. No network, no spend,
+           * and additive by construction: only records the broad read did not
+           * already return are kept, and neither the cached inventory nor the
+           * cached overlay is touched — both are what the food stage and the
+           * must-do resolver read, and replacing them with a narrow answer is
+           * how an earlier repair undid the repair before it.
+           */
+          if (!pack) {
+            return {
+              candidates: [],
+              gaps: [
+                {
+                  subjectId: scope.destinationCandidateId,
+                  reason: 'provider_error',
+                  detail:
+                    'There is no map service switched on that we could ask for the kinds of place this trip is missing.',
+                },
+              ],
+              calls: 0,
+            };
+          }
+
+          const alreadyHeld = new Set(
+            (packInventory?.candidates ?? []).map((candidate) => candidate.place.id),
+          );
+          const widened = buildInventory({
+            pack,
+            scope,
+            ...(packOverlay ? { overlay: packOverlay } : {}),
+            limits: {
+              /*
+               * Only the two density ceilings move, and only far enough to let a
+               * dense category through. Everything that decides whether a record
+               * is a *place* at all — containment, role, identity, closure — is
+               * untouched, because a directed look must widen the search and
+               * never lower the bar.
+               */
+              maxPerCategory: DEFAULT_INVENTORY_LIMITS.maxPerCategory * 4,
+              maxAreaShare: 1,
+              maxAttractions: DEFAULT_INVENTORY_LIMITS.maxAttractions * 2,
+            },
+          });
+          const found = widened.candidates.filter(
+            (candidate) =>
+              !alreadyHeld.has(candidate.place.id) &&
+              matchesAcquisitionIntent(candidate.place.category, acquire.intents),
+          );
+          const candidates = found.slice(0, acquire.maxRecords);
           return {
-            candidates: [],
-            gaps: [
-              {
-                subjectId: scope.destinationCandidateId,
-                reason: 'provider_error',
-                detail:
-                  'There is no map service switched on that we could ask for the kinds of place this trip is missing.',
-              },
-            ],
+            candidates,
+            gaps:
+              candidates.length > 0
+                ? []
+                : [
+                    {
+                      subjectId: scope.destinationCandidateId,
+                      reason: 'not_found',
+                      detail:
+                        'We looked through the regional place data a second time for the kinds of place this trip is missing, and there is nothing further in it.',
+                    },
+                  ],
+            // No network was reached, and saying otherwise would make the
+            // budget ledger a work of fiction in the expensive direction.
             calls: 0,
+            ...(candidates.length > 0 ? { licences: [OSM_LICENCE_PLACES, AUTHORED_LICENCE] } : {}),
           };
         }
         const acquireRadiusKm = scope.shape.kind === 'radius' ? scope.shape.radiusKm : 40;
@@ -1613,9 +1688,18 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           'The road router was asked for a public-transport journey. Transit is measured by the transit provider or reported as unavailable.',
         );
       }
+      /*
+       * One stored answer per ordered coordinate pair, not per request block.
+       *
+       * `cacheFor` is generic over the stored value, so the change is entirely
+       * in what the router asks it for — see `matrixPairCacheKey`. The block key
+       * it replaced named forty points in two fixed orders and therefore matched
+       * nothing a second build ever assembled, which is why two Tokyo
+       * compilations three days apart both reported `routeCacheHits=0`.
+       */
       const outcome = await valhallaMatrix([...points], costingFor(mode), {
         maxPairs: maxElements,
-        cache: cacheFor('valhalla', TTL.matrix),
+        cache: cacheFor<{ minutes: number; km: number }>('valhalla', TTL.matrix),
       });
       diagnostics.routeCalls += outcome.calls;
       diagnostics.routePairs += outcome.pairs;
@@ -1834,6 +1918,117 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
    * unknown-hours venue, which is correct. What this stage does is give the
    * funnel something to research; what turns a name into a meal is the page.
    */
+  /**
+   * A BOUNDED, TARGETED LOOK FOR SOMEWHERE TO EAT, AROUND WHERE THE TRAVELLER
+   * WILL ACTUALLY BE.
+   *
+   * Extracted from the fallback branch so that it can serve two callers: a
+   * region with no pack at all, and — the reason it moved — a region *with* a
+   * pack whose food supply came up short. Those used to be exclusive, and the
+   * exclusivity is what let a six-day trip stop at three restaurants.
+   *
+   * Three properties the callers depend on:
+   *
+   *   1. **Additive.** `exclude` carries the ids the caller already holds, so a
+   *      top-up can never return a narrower version of what it is topping up.
+   *   2. **Bounded.** One box per base, one call each, a stage deadline, and a
+   *      hard ceiling on what comes back.
+   *   3. **Honest about calls.** The count it reports is the count it made, so
+   *      the budget ledger stays a record rather than an estimate.
+   */
+  async function acquireFoodNearBases(input: {
+    scope: GeographicScope;
+    bases: readonly { id: string; coordinates: { lat: number; lng: number } }[];
+    maxVenues: number;
+    exclude: ReadonlySet<string>;
+  }): Promise<{ venues: FoodVenue[]; gaps: ProviderGap[]; calls: number }> {
+    const { scope, bases, maxVenues } = input;
+    const gaps: ProviderGap[] = [];
+    const venues: FoodVenue[] = [];
+    if (maxVenues <= 0) return { venues, gaps, calls: 0 };
+
+    const seen = new Set<string>();
+    const perBase = Math.max(6, Math.ceil(maxVenues / Math.max(1, bases.length)));
+    let calls = 0;
+
+    /*
+     * THE GATE, ON THE LIVE FOOD PATH.
+     *
+     * A meal is scheduled at a named venue, so a venue is a candidate the
+     * planner consumes — and this path fetches them from a box drawn around each
+     * base, which knows nothing about boundaries. A base that is itself only
+     * `membership_unknown` would otherwise carry its whole food box with it.
+     *
+     * The source publishes tags rather than addresses, so most venues here are
+     * honestly unplaceable and are admitted as such; what the gate removes is
+     * the venue a source puts in a different country, which a box drawn near a
+     * border will otherwise return.
+     */
+    let refusedFood = 0;
+    const foodOverlay = buildTripScopeOverlay({ scope, records: [], roleEligible });
+
+    for (const base of bases) {
+      if (venues.length >= maxVenues) break;
+      // A small box per base: dense enough for `way` geometry to be affordable,
+      // which is what lets a restaurant mapped as a building outline be found.
+      const box: BoundingBox = {
+        south: base.coordinates.lat - FOOD_BOX_DEGREES,
+        north: base.coordinates.lat + FOOD_BOX_DEGREES,
+        west: base.coordinates.lng - FOOD_BOX_DEGREES,
+        east: base.coordinates.lng + FOOD_BOX_DEGREES,
+      };
+      try {
+        const result = await fetchFoodPois(box, {
+          limit: perBase * 3,
+          retries: 0,
+          deadlineMs: Date.now() + FOOD_STAGE_BUDGET_MS,
+          cache: cacheFor('overpass-food', TTL.poi),
+        });
+        diagnostics.poiCalls += result.calls;
+        calls += result.calls;
+        if (result.cacheHit) diagnostics.poiCacheHits += 1;
+
+        for (const element of result.elements) {
+          if (venues.length >= maxVenues) break;
+          const normalized = normalizeElement(element);
+          if (!normalized || seen.has(normalized.elementId)) continue;
+          const venue = toFoodVenue(normalized, scope, base.id);
+          if (!venue || input.exclude.has(venue.id)) continue;
+          const decision = admitLateCandidate(foodOverlay, {
+            id: `food:${normalized.elementId}`,
+            coordinates: normalized.coordinates,
+            containment: { divisionIds: [] },
+            planningRole: 'food',
+            name: normalized.name,
+          });
+          if (!decision.eligibility.plannerEligible && decision.relationship === 'outside_scope') {
+            refusedFood += 1;
+            continue;
+          }
+          seen.add(normalized.elementId);
+          osmByVenueId.set(venue.id, normalized);
+          venues.push(venue);
+        }
+      } catch {
+        gaps.push({
+          subjectId: base.id,
+          reason: 'rate_limited',
+          detail: 'The map data service did not answer for food near one of the bases.',
+        });
+      }
+    }
+
+    if (refusedFood > 0) {
+      gaps.push({
+        subjectId: 'food',
+        reason: 'not_found',
+        detail: `${refusedFood} ${refusedFood === 1 ? 'place' : 'places'} to eat that the map data returned belong somewhere else, so they were left out.`,
+      });
+    }
+
+    return { venues, gaps, calls };
+  }
+
   const food: FoodDiscoveryProvider = {
     name: 'region-pack-food',
     async discover({ scope, bases, maxVenues, pack, places: knownPlaces }) {
@@ -1872,21 +2067,100 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           ...bases.map((base) => ({ id: base.id, coordinates: base.coordinates })),
           ...knownPlaces.map((place) => ({ id: place.id, coordinates: place.coordinates })),
         ];
+        /**
+         * EVERY CANDIDATE FIRST, THEN THE CEILING — and the order is the fix.
+         *
+         * This used to walk `foodRecords` in the inventory's own order and stop
+         * at `maxVenues`, so the eighteen venues a trip got were the first
+         * eighteen a general-purpose significance ranking happened to surface.
+         * A live six-day compilation in a city of extraordinary food came back
+         * with three, one of them a Domino's Pizza, because nothing between the
+         * pack and the plan could tell an outlet from somewhere people queue
+         * for.
+         *
+         * So the whole pool is built, scored for how particular each venue is to
+         * this region — see `foodDistinctiveness`, which reads repetition inside
+         * the region rather than a brand list — and only then cut. A franchise
+         * counter can still be kept; it can no longer displace a distinctive
+         * local kitchen merely by being read off disk first.
+         */
+        const pool: FoodVenue[] = [];
         for (const record of inventory.foodRecords) {
-          if (venues.length >= maxVenues) break;
           const nearest = nearestAnchor(anchors, record.coordinates);
           const venue = foodVenueFromRecord({
             record,
             scope,
             routingId: nearest?.id ?? bases[0]?.id ?? scope.destinationCandidateId,
           });
-          if (venue) venues.push(venue);
+          if (!venue) continue;
+          /*
+           * The open-knowledge identifier, carried onto the venue the same way
+           * the attraction side carries it. Without this the distinctiveness
+           * signal's evidence channel is inert on every compiled region, which
+           * is a signal that reads as absent rather than as negative.
+           */
+          pool.push(
+            record.wikidataId
+              ? { ...venue, tags: [...venue.tags, 'attr:wikidata'] }
+              : venue,
+          );
         }
+
+        const counts = foodNameCounts(pool);
+        const ranked = pool
+          .map((venue) => ({ venue, quality: foodDistinctiveness(venue, counts) }))
+          .sort(
+            (a, b) =>
+              b.quality.score - a.quality.score || a.venue.name.localeCompare(b.venue.name),
+          );
+        venues.push(...ranked.slice(0, Math.max(0, maxVenues)).map((entry) => entry.venue));
+
+        /**
+         * ---- THE PACK IS A FLOOR, NOT A CEILING --------------------------
+         *
+         * This branch used to `return` here, which made the pack the *only*
+         * source of food whenever one existed. A live six-day trip therefore
+         * ended with three venues and no further attempt, because the answer
+         * "the pack holds three restaurants" was treated as the answer to "where
+         * can this traveller eat".
+         *
+         * §8.1 says the opposite: if the portfolio is weak, keep researching
+         * within bounds. So the live map path below is now a **top-up** rather
+         * than an alternative — it runs only for the shortfall, only around the
+         * bases the traveller will actually be near, and only when a map service
+         * is switched on. When none is, the shortfall is reported honestly and
+         * the compiler turns that into a limitation the traveller can act on
+         * rather than a silent three-restaurant trip.
+         */
+        if (venues.length < maxVenues && isPoiProviderEnabled()) {
+          const topUp = await acquireFoodNearBases({
+            scope,
+            bases,
+            maxVenues: maxVenues - venues.length,
+            exclude: new Set(venues.map((venue) => venue.id)),
+          });
+          venues.push(...topUp.venues);
+          gaps.push(...topUp.gaps);
+          if (topUp.venues.length > 0) return { venues, gaps, calls: topUp.calls };
+        }
+
         if (venues.length === 0) {
           gaps.push({
             subjectId: 'food',
             reason: 'not_found',
             detail: 'The place data has nothing to eat recorded inside this region.',
+          });
+        } else if (venues.length < maxVenues && !isPoiProviderEnabled()) {
+          /*
+           * The honest half of §8.2. We looked, we found some, and there is no
+           * second source configured to look again — so the shortfall is stated
+           * as a fact about our sources rather than left to read as the region
+           * having nothing else.
+           */
+          gaps.push({
+            subjectId: 'food',
+            reason: 'no_official_source',
+            detail: `The place data holds ${venues.length} ${venues.length === 1 ? 'place' : 'places'} to eat inside this region, and there is no second map service switched on to look further.`,
           });
         }
         return { venues, gaps, calls: 0 };
@@ -1914,94 +2188,20 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         };
       }
 
-      const gaps: ProviderGap[] = [];
-      const venues: FoodVenue[] = [];
-      const seen = new Set<string>();
-      const perBase = Math.max(6, Math.ceil(maxVenues / Math.max(1, bases.length)));
-
-      /*
-       * THE GATE, ON THE FALLBACK FOOD PATH.
-       *
-       * A meal is scheduled at a named venue, so a venue is a candidate the
-       * planner consumes — and this branch fetched them from a box drawn around
-       * each base and turned them into venues with no containment verdict at
-       * all. A base that is itself only `membership_unknown` carried its whole
-       * food box with it.
-       *
-       * The fallback publishes tags rather than addresses, so most venues here
-       * are honestly unplaceable and are admitted as such; what the gate removes
-       * is the venue a source puts in a different country, which a box drawn
-       * near a border will otherwise return.
-       */
-      let refusedFood = 0;
-      const foodOverlay = buildTripScopeOverlay({ scope, records: [], roleEligible });
-
-      for (const base of bases) {
-        if (venues.length >= maxVenues) break;
-        // A small box per base: dense enough for `way` geometry to be affordable,
-        // which is what lets a restaurant mapped as a building outline be found.
-        const box: BoundingBox = {
-          south: base.coordinates.lat - FOOD_BOX_DEGREES,
-          north: base.coordinates.lat + FOOD_BOX_DEGREES,
-          west: base.coordinates.lng - FOOD_BOX_DEGREES,
-          east: base.coordinates.lng + FOOD_BOX_DEGREES,
-        };
-        try {
-          const result = await fetchFoodPois(box, {
-            limit: perBase * 3,
-            retries: 0,
-            deadlineMs: Date.now() + FOOD_STAGE_BUDGET_MS,
-            cache: cacheFor('overpass-food', TTL.poi),
-          });
-          diagnostics.poiCalls += result.calls;
-          if (result.cacheHit) diagnostics.poiCacheHits += 1;
-
-          for (const element of result.elements) {
-            if (venues.length >= maxVenues) break;
-            const normalized = normalizeElement(element);
-            if (!normalized || seen.has(normalized.elementId)) continue;
-            const venue = toFoodVenue(normalized, scope, base.id);
-            if (!venue) continue;
-            const decision = admitLateCandidate(foodOverlay, {
-              id: `food:${normalized.elementId}`,
-              coordinates: normalized.coordinates,
-              containment: { divisionIds: [] },
-              planningRole: 'food',
-              name: normalized.name,
-            });
-            if (!decision.eligibility.plannerEligible && decision.relationship === 'outside_scope') {
-              refusedFood += 1;
-              continue;
-            }
-            seen.add(normalized.elementId);
-            osmByVenueId.set(venue.id, normalized);
-            venues.push(venue);
-          }
-        } catch {
-          gaps.push({
-            subjectId: base.id,
-            reason: 'rate_limited',
-            detail: 'The map data service did not answer for food near one of the bases.',
-          });
-        }
-      }
-
-      if (refusedFood > 0) {
-        gaps.push({
-          subjectId: 'food',
-          reason: 'not_found',
-          detail: `${refusedFood} ${refusedFood === 1 ? 'place' : 'places'} to eat that the map data returned belong somewhere else, so they were left out.`,
-        });
-      }
-
-      if (venues.length === 0 && gaps.length === 0) {
-        gaps.push({
+      const acquired = await acquireFoodNearBases({
+        scope,
+        bases,
+        maxVenues,
+        exclude: new Set<string>(),
+      });
+      if (acquired.venues.length === 0 && acquired.gaps.length === 0) {
+        acquired.gaps.push({
           subjectId: 'food',
           reason: 'not_found',
           detail: 'The map data has no named places to eat near any of the bases we chose.',
         });
       }
-      return { venues, gaps, calls: diagnostics.poiCalls };
+      return { venues: acquired.venues, gaps: acquired.gaps, calls: acquired.calls };
     },
   };
 

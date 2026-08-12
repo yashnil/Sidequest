@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -12,7 +13,8 @@ import {
 } from '@sidequest/core';
 import { DiscoveryBoardView } from '@/components/DiscoveryBoardView';
 import { BoardIntegrityPanel } from '@/components/BoardIntegrityPanel';
-import { acceptedImagesFor } from '@/lib/db/imagery-repository';
+import { BoardBackstage } from '@/components/BoardBackstage';
+import { acceptedImagesFor, unresolvedImagerySubjects } from '@/lib/db/imagery-repository';
 
 import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
 import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
@@ -47,6 +49,33 @@ import { boardFor, compiledRegionFor, resolveTripRegion } from '@/lib/region';
 import { refreshWeatherFormAction } from './actions';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The tab says which trip and which step, not what the product is.
+ *
+ * Every trip route inherited the root layout's one marketing title, so a
+ * traveller with a plan, a board and a questionnaire open had three identical
+ * tabs, back-history entries that could not be told apart, and — the failure
+ * that makes this WCAG 2.4.2 rather than a nicety — a screen reader announcing
+ * the same sentence on arrival at every screen.
+ *
+ * Read from the stored trip, the same row this page renders, so the tab cannot
+ * claim a destination the page does not show. Where the row is missing the page
+ * itself 404s, and the step name alone is the honest title.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const trip = getTrip(id);
+  return {
+    title: trip
+      ? `${trip.basics.destinationInput} — Discovery board — Sidequest`
+      : 'Discovery board — Sidequest',
+  };
+}
 
 export default async function DiscoverPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -122,6 +151,47 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const workable = board.candidates.filter((candidate) => candidate.fit.band !== 'not_workable');
 
   /*
+   * The imagery subjects for this board, built once and used twice: to read what
+   * has already been resolved, and to count what nobody has looked for yet.
+   *
+   * The Wikidata id is what turns the lookup into an identifier relationship
+   * rather than a name search, and it is the difference between a card that gets
+   * a photograph and a card that never can — a bounded name search resolves at
+   * `weak` confidence, which no surface is allowed to display. An artifact
+   * compiled before the backbone carried the id has none, and gets the designed
+   * graphic instead.
+   */
+  const imagerySubjects = board.candidates.map((candidate) => ({
+    kind: 'candidate' as const,
+    id: candidate.place.id,
+    ...(candidate.place.wikidataId ? { wikidataId: candidate.place.wikidataId } : {}),
+  }));
+  /*
+   * The pending count is over the subjects the *action* will actually ask
+   * about, which is not every card.
+   *
+   * Two filters, and they have to be the same two the action applies or the
+   * loop never closes: the skip list is not illustrated, and a record with no
+   * open identifier cannot resolve above the confidence this board displays.
+   * Count a subject the action will never ask about and the board fires one
+   * futile round trip on every visit, for ever.
+   */
+  const imageryPending = unresolvedImagerySubjects(
+    board.candidates
+      .filter(
+        (candidate) =>
+          candidate.fit.band !== 'weak' &&
+          candidate.fit.band !== 'not_workable' &&
+          candidate.place.wikidataId !== undefined,
+      )
+      .map((candidate) => ({
+        kind: 'candidate' as const,
+        id: candidate.place.id,
+        ...(candidate.place.wikidataId ? { wikidataId: candidate.place.wikidataId } : {}),
+      })),
+  ).length;
+
+  /*
    * WHAT THIS BOARD IS, AS SOMETHING THE TRAVELLER CAN READ.
    *
    * `board.integrity` has been computed on every build since the role gate
@@ -173,89 +243,52 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
+    <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
       {/*
-       * Rendered whenever there is an account with anything in it, not only
-       * when something changed.
-       *
-       * `hasChanges` used to gate this, which meant a traveller who marked
-       * twelve places and got all twelve back saw nothing at all — and, more to
-       * the point, could not reach "the full record of what I told you", which
-       * is the one thing this panel promises unconditionally. A build where
-       * nothing was lost is a result worth stating rather than a reason to say
-       * nothing; the panel's own copy already adapts to it.
-       */}
-      <header className="border-b border-rule pb-8">
+        THE HEADER IS ONE LINE, BECAUSE THE PAGE IS ABOUT PLACES.
+
+        It was a five-item definition list plus a summary paragraph plus two
+        buttons — about two hundred and eighty pixels of trip metadata a
+        traveller had already typed, in front of the thing they came for. §10.1
+        is explicit that the primary experience is exciting places, not the
+        research engine's account of itself.
+
+        What is left is what somebody genuinely re-reads while choosing: when
+        they are going, where they are sleeping, and how far the board reaches.
+        Everything else — how much was found, how the region was searched, what
+        public transport could and could not be measured — is one press away at
+        the foot of the page.
+      */}
+      <header className="border-b border-rule pb-6">
         <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Discovery board</p>
-        <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-5xl">
-          {region.name}
-        </h1>
-        <p className="mt-3 max-w-2xl text-ink-muted">{region.summary}</p>
-
-        <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-          <Fact label="Dates">
-            {formatDateRange(trip.basics.startDate, trip.basics.endDate)} · {days} days
-          </Fact>
-          <Fact label="Base">{region.baseName}</Fact>
-          <Fact label="Travellers">
-            {trip.basics.adults} adult{trip.basics.adults === 1 ? '' : 's'}
-            {trip.basics.children > 0 ? `, ${trip.basics.children} children` : ''}
-          </Fact>
-          <Fact label="Region searched">
-            {/*
-              The radius in the mode this traveller actually moves in. The raw
-              `radiusMinutes` is a driving figure — for a car-free traveller it
-              is a constant twenty, and this header once said "20 min from base"
-              over cards legitimately reached by a 45-minute train two rows
-              below. One screen, two radii, and the smaller one was the
-              headline.
-            */}
-            {profile.transport.willDrive
-              ? `${formatMinutes(board.expansion.radiusMinutes)} from base`
-              : `Up to ${formatMinutes(detourToleranceMinutesFor(profile, 'rail'))} by public transport`}
-          </Fact>
-          {/*
-            PUBLIC TRANSPORT, SAID PLAINLY OR NOT CLAIMED.
-
-            The board is where a traveller decides what to include, and until now
-            it said nothing at all about whether the journeys between these
-            places had been measured on the network they will actually use. Four
-            different silences read identically on a screen — nothing can measure
-            it, nothing needed to, we hold no timetables here, we ran out of
-            budget — and each one leads somewhere different.
-
-            "Not verified" is the honest headline for all of them, and the
-            sentence beside it says which.
-          */}
-          {compiled?.transitEvidence ? (
-            <Fact label="Public transport">{transitSummaryFor(compiled.transitEvidence)}</Fact>
-          ) : null}
-          <Fact label="Found">
-            {/*
-              The two numbers must sum to the board the traveller is about to
-              scroll. The old line counted only `satellites`, so a card in the
-              beyond-radius or unmeasured buckets was on the board and missing
-              from its own headline — "13 satellites" over "Showing 14 of 14".
-              And "satellites" is our word, not a traveller's.
-            */}
-            {board.expansion.base.length} at your base ·{' '}
-            {board.expansion.satellites.length +
-              board.expansion.beyondRadius.length +
-              board.expansion.unmeasured.length}{' '}
-            further out
-          </Fact>
-        </dl>
-
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Link href={`/trips/${id}/questionnaire`} className={buttonClass('secondary', 'sm')}>
-            Change my answers
-          </Link>
-          {planned ? (
-            <Link href={`/trips/${id}/itinerary`} className={buttonClass('secondary', 'sm')}>
-              View the trip you built
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <h1 className="font-display text-3xl leading-tight text-ink sm:text-4xl">{region.name}</h1>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <Link href={`/trips/${id}/questionnaire`} className={buttonClass('secondary', 'sm')}>
+              Change my answers
             </Link>
-          ) : null}
+            {planned ? (
+              <Link href={`/trips/${id}/itinerary`} className={buttonClass('secondary', 'sm')}>
+                View the trip you built
+              </Link>
+            ) : null}
+          </div>
         </div>
+        <p className="mt-2 text-sm text-ink-muted" data-testid="trip-line">
+          {formatDateRange(trip.basics.startDate, trip.basics.endDate)} · {days} days ·{' '}
+          {trip.basics.adults} adult{trip.basics.adults === 1 ? '' : 's'}
+          {trip.basics.children > 0 ? `, ${trip.basics.children} children` : ''} · staying in{' '}
+          {region.baseName} ·{' '}
+          {/*
+            The radius in the mode this traveller actually moves in. The raw
+            `radiusMinutes` is a driving figure — for a car-free traveller it is
+            a constant twenty, and this header once said "20 min from base" over
+            cards legitimately reached by a 45-minute train two rows below.
+          */}
+          {profile.transport.willDrive
+            ? `up to ${formatMinutes(board.expansion.radiusMinutes)} out`
+            : `up to ${formatMinutes(detourToleranceMinutesFor(profile, 'rail'))} out by public transport`}
+        </p>
       </header>
 
       {/*
@@ -287,23 +320,6 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
       ) : null}
 
       {/*
-        WHAT THE RESEARCH READING ACTUALLY DOES.
-
-        The readiness contract was, for one pass, a value frozen onto an artifact
-        that nothing read — which is a diagnostic, not a product behaviour. This
-        is where it becomes load-bearing: `blocked` withholds the board entirely,
-        because a board that misrepresents a destination is worse than no board
-        and a traveller cannot tell the difference; `thin` shows the board with
-        the shortfall stated above it, so it can never be mistaken for a full
-        one; `recoverable` says the second look happened and what it bought.
-
-        An artifact compiled before the contract existed carries no reading, and
-        that is treated as unknown rather than as permission — the board renders
-        as it always did.
-      */}
-      {readiness ? <ResearchReadinessPanel tripId={id} readiness={readiness} /> : null}
-
-      {/*
         The named requests, above the board rather than inside it.
 
         A card that is not on the board cannot explain its own absence, which is
@@ -314,55 +330,10 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
       {settled.coverage ? <MustDoPanel tripId={id} coverage={settled.coverage} /> : null}
 
       {readiness && !mayShowDiscoveryBoard(readiness) ? null : (
-      /*
-        THE BOARD FIRST, AT EVERY WIDTH.
-
-        The board carried `order-2` and the rail `order-1`, so on a phone — the
-        only width where the two columns become one — a traveller landed on the
-        board page and scrolled past the integrity panel, the personality chart,
-        the weather panel and the closures list before reaching a single card.
-        That is roughly two screens of commentary in front of the thing the page
-        is named after. The desktop order was already board-then-rail; this
-        simply stops the small screen inverting it.
-
-        The rail is also wider. At 20rem the personality facts wrapped to four
-        lines each, which is what made the panel feel like filler rather than
-        like a summary.
-      */
-      <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_25rem]">
-        {/*
-          Room for the bar the board pins to the bottom of a phone screen.
-
-          Only where there is a board, because only a board renders that bar —
-          and padding under a panel that has no bar beneath it is just a gap.
-
-          THE CLEARANCE WAS ON THE WRONG ELEMENT, AND THE COST WAS A LICENCE.
-
-          It sat here, on the board column. On a phone the grid collapses and the
-          document order is board → rail → attribution → footer, so the padding
-          landed *between the board and the rail* and everything after it scrolled
-          under an opaque bar with no way to reach it: the integrity panel, the
-          weather panel, the "places that are shut" list, the site footer, and —
-          the part that is not merely a layout bug — the OpenStreetMap
-          attribution. ODbL's attribution obligation is met by rendering the
-          notice, and a notice nobody can scroll to is not rendered.
-
-          The clearance now goes on the page's own bottom, below everything, so
-          there is nothing left for the bar to cover. It is kept off the
-          board column so the rail does not gain a stray gap above it.
-        */}
-        <div className="order-1">
+        <div className="mt-6">
           {workable.length === 0 ? (
             /*
              * THE EMPTY BOARD, EXPLAINED BY THE THING THAT IS ACTUALLY BINDING.
-             *
-             * What was here named three causes at once — "closed for the season,
-             * past how far you will travel, or beyond the effort level you set"
-             * — and offered one link that could change two of them. On the one
-             * synthetic world that reaches this state every place is *inside* the
-             * radius and simply too far to get to and back from, so two of the
-             * three named causes were false and the remedy for the true one was
-             * not among the ones offered.
              *
              * The panel names the constraint that is stopping the most places,
              * counted off the board's own blockers, and offers only remedies
@@ -375,13 +346,6 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : (
             <DiscoveryBoardView
               tripId={id}
-              /*
-               * The network behind every travel time on the cards below. Read
-               * from the artifact rather than assumed, because a car-free
-               * traveller's board is measured on a different one and reading
-               * road minutes as walking minutes is the regression this names
-               * its way out of.
-               */
               /*
                * The artifact these counts are counts *of*.
                *
@@ -408,22 +372,23 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               /*
                * Photographs, read out of a local table.
                *
-               * A row lookup, never a resolution: identity was established when
-               * the region was compiled, and a page that could resolve one would
-               * do it per card, per refresh, per visitor. The board falls back to
-               * a coordinate-derived graphic for anything with no accepted row,
-               * so an empty table costs nothing.
+               * A row lookup, never a resolution: a render that could resolve one
+               * would do it per card, per refresh, per visitor. The identity is
+               * established by `fillBoardImageryAction`, which the board asks for
+               * once while `imageryPending` is non-zero.
                */
-              images={acceptedImagesFor(
-                board.candidates.map((candidate) => ({
-                  kind: 'candidate' as const,
-                  id: candidate.place.id,
-                })),
-              )}
+              images={acceptedImagesFor(imagerySubjects)}
+              imageryPending={imageryPending}
+              /*
+               * The thing every travel time on this board is measured from, so
+               * the map can draw it. Straight off the region rather than
+               * recomputed — a map whose base disagrees with the durations beside
+               * it would be worse than no map.
+               */
+              base={{ name: region.baseName, coordinates: region.baseCoordinates }}
               groups={board.groups}
               initialSelections={selections}
               autoPickNotes={suggestion.notes}
-              targetCount={suggestion.targetCount}
               hasItinerary={planned}
               weatherBackups={boardWeatherBackups(board.candidates)}
               storedReadiness={getReadiness(id)}
@@ -433,94 +398,122 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           {foodStops.length > 0 ? (
             <FoodStopsBoard tripId={id} entries={foodStops} initialChoices={foodChoices} />
           ) : null}
-        </div>
 
-        {/*
-          NO INNER SCROLLER.
-
-          `lg:max-h-… lg:overflow-y-auto` made the right third of the page its
-          own scroll container: a wheel gesture that happened to be over the rail
-          scrolled the rail to its end and then, only then, started scrolling the
-          page — and a trackpad flick that began over the rail moved nothing the
-          reader was looking at. It is the classic nested-scroll trap, and it was
-          introduced to stop a tall rail outrunning the viewport while pinned.
-
-          The honest fix for a rail that is too tall to pin is a rail that is
-          short enough to pin. It stays sticky, and the panels inside it are the
-          summary ones; anything long belongs in the board column, not here.
-        */}
-        <aside className="order-2 space-y-6 lg:sticky lg:top-[calc(var(--chrome-height)+1.5rem)]">
           {/*
-            Beside the board rather than above it when there *is* a board: the
-            question "how much is here" is context for the cards, not a warning
-            in front of them. When there is no board it takes the board's place
-            instead, which is the only time it is the whole answer.
+            HOW MUCH IS HERE — the one quality framework that stays in the open.
+
+            Below the board rather than in front of it. §33 asks for one
+            customer-facing quality framework on this screen and this is the one
+            that survives, because it is the only one of the four that answers a
+            question a traveller asked: is there enough here to plan a trip from?
+            Three lines and a remedy. Everything else it used to print — the
+            support-stop count, the expansion count, the withheld count — is
+            operational bookkeeping and no longer renders anywhere a traveller
+            reads. See `TRAVELLER_BOARD_FACTS`.
           */}
           {workable.length > 0 ? (
-            <BoardIntegrityPanel tripId={id} reading={integrity} />
+            <div className="mt-10">
+              <BoardIntegrityPanel tripId={id} reading={integrity} />
+            </div>
           ) : null}
 
           {/*
-            THE PUBLIC-TRANSPORT JOURNEYS, WHERE ANY WERE MEASURED.
+            EVERYTHING ELSE, BEHIND ONE DOOR.
 
-            The fact line above counts them; this is where a traveller can see
-            what was actually measured — a duration, how many changes, and how
-            much of it is on foot. Every number here comes from a journey the
-            provider returned; nothing is derived, nothing is averaged, and a
-            journey the provider could not answer for is not in this list at all.
-
-            Rendered only when something was measured. A panel that appeared to
-            say "we measured nothing" would compete with the fact line, which
-            already says it in one sentence and in the right place.
+            The research reading, the trip's own shape, what public transport
+            could be measured, the weather snapshot and the places that are shut.
+            All of it is true and useful; none of it is what somebody came to
+            this page to do, and stacked in front of the cards it pushed the
+            first place nine hundred pixels down a desktop screen.
           */}
-          {compiled?.transitEvidence && compiled.transitEvidence.measured > 0 ? (
-            <TransitPanel
-              evidence={compiled.transitEvidence}
-              places={compiled.places}
-              bases={compiled.bases}
-            />
-          ) : null}
+          <BoardBackstage className="mt-4">
+            {readiness ? <ResearchReadinessPanel tripId={id} readiness={readiness} /> : null}
 
-          <div>
-            <h2 className="font-display text-lg text-ink">Your trip personality</h2>
-            <p className="mt-1 text-sm text-ink-muted">
-              Everything on the board is ranked against this.
-            </p>
-            <div className="mt-3">
-              <TripPersonalityCard personality={personality} />
-            </div>
-          </div>
+            <div>
+              <h2 className="font-display text-lg text-ink">What we searched</h2>
+              <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+                <Fact label="Found">
+                  {/*
+                    The two numbers must sum to the board the traveller is about
+                    to scroll. The old line counted only `satellites`, so a card
+                    in the beyond-radius or unmeasured buckets was on the board
+                    and missing from its own headline.
+                  */}
+                  {board.expansion.base.length} at your base ·{' '}
+                  {board.expansion.satellites.length +
+                    board.expansion.beyondRadius.length +
+                    board.expansion.unmeasured.length}{' '}
+                  further out
+                </Fact>
+                {/*
+                  PUBLIC TRANSPORT, SAID PLAINLY OR NOT CLAIMED.
 
-          <WeatherPanel tripId={id} availability={resolved.context.weatherAvailability} />
-
-          {closed.length > 0 ? (
-            <Panel className="p-4">
-              <h3 className="text-sm font-medium text-ink">
-                {closed.length} {closed.length === 1 ? 'place is' : 'places are'} shut on your dates
-              </h3>
-              {/*
-               * The sentence here used to be "Snow closes most of this region
-               * for months at a time" — a claim about one mountain range,
-               * rendered on a page that now compiles anywhere on earth. It read
-               * as a fact and was a leftover from the days when the product knew
-               * one destination. The generic form says the same useful thing:
-               * these are shut, we are telling you rather than hiding them, and
-               * the per-place reason is on the card where it belongs.
-               */}
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-                Each of these is closed on your dates for a reason we can point at. They are listed
-                under “Probably skip” with that reason, rather than hidden.
+                  Four different silences read identically on a screen — nothing
+                  can measure it, nothing needed to, we hold no timetables here,
+                  we ran out of budget — and each one leads somewhere different.
+                */}
+                {compiled?.transitEvidence ? (
+                  <Fact label="Public transport">
+                    {transitSummaryFor(compiled.transitEvidence)}
+                  </Fact>
+                ) : null}
+              </dl>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
+                {region.summary}
               </p>
-              <ul className="mt-3 space-y-1 text-xs text-ink-faint">
-                {closed.slice(0, 5).map((candidate) => (
-                  <li key={candidate.place.id}>{candidate.place.name}</li>
-                ))}
-              </ul>
-            </Panel>
-          ) : null}
-        </aside>
-      </div>
+            </div>
 
+            {/*
+              THE PUBLIC-TRANSPORT JOURNEYS, WHERE ANY WERE MEASURED.
+
+              Every number here comes from a journey the provider returned;
+              nothing is derived, nothing is averaged, and a journey the provider
+              could not answer for is not in this list at all.
+            */}
+            {compiled?.transitEvidence && compiled.transitEvidence.measured > 0 ? (
+              <TransitPanel
+                evidence={compiled.transitEvidence}
+                places={compiled.places}
+                bases={compiled.bases}
+              />
+            ) : null}
+
+            <div>
+              <h2 className="font-display text-lg text-ink">Your trip personality</h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                Everything on the board is ranked against this.
+              </p>
+              <div className="mt-3">
+                <TripPersonalityCard personality={personality} />
+              </div>
+            </div>
+
+            <WeatherPanel tripId={id} availability={resolved.context.weatherAvailability} />
+
+            {closed.length > 0 ? (
+              <Panel className="p-4">
+                <h3 className="text-sm font-medium text-ink">
+                  {closed.length} {closed.length === 1 ? 'place is' : 'places are'} shut on your
+                  dates
+                </h3>
+                {/*
+                 * The sentence here used to be "Snow closes most of this region
+                 * for months at a time" — a claim about one mountain range,
+                 * rendered on a page that now compiles anywhere on earth.
+                 */}
+                <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                  Each of these is closed on your dates for a reason we can point at. They are
+                  listed under “Probably skip” with that reason, rather than hidden.
+                </p>
+                <ul className="mt-3 space-y-1 text-xs text-ink-faint">
+                  {closed.slice(0, 5).map((candidate) => (
+                    <li key={candidate.place.id}>{candidate.place.name}</li>
+                  ))}
+                </ul>
+              </Panel>
+            ) : null}
+          </BoardBackstage>
+        </div>
       )}
 
       {attributions.length > 0 ? (

@@ -65,19 +65,42 @@ test('says what it could not see rather than scoring it as zero', async ({ page 
   await answerAndRank(page);
   await shortlist(page);
 
-  await expect(page.getByRole('heading', { name: /cannot see/i })).toBeVisible();
-  const blindSpots = page.locator('section[aria-labelledby="blind-spots"]');
-  await expect(blindSpots).toContainText(/flight/i);
-  await expect(blindSpots).toContainText(/visa/i);
-  await expect(blindSpots).toContainText(/safety/i);
+  /*
+   * The caveats fold behind one summary line now, and the count in that line is
+   * itself part of the claim: three surfaces used to state their own, which on a
+   * tied ranking ran to eleven consecutive negative sentences directly under the
+   * results. Folded is not hidden — this knocks, and then asserts every one of
+   * them is still there.
+   */
+  const caveats = page
+    .locator('details')
+    /*
+     * The count in the summary, not the words alone. The per-destination
+     * breakdown's own preamble says "a few we could not check at all", so a bare
+     * phrase match resolves to that disclosure instead — which is a real panel
+     * with real content, so the mistake reads as a copy failure rather than as a
+     * locator one.
+     */
+    .filter({ hasText: /\d+ things? we could not check/ })
+    .first();
+  await expect(caveats).toBeVisible();
+  await caveats.locator(':scope > summary').click();
+  await expect(caveats).toContainText(/Flights —/);
+  await expect(caveats).toContainText(/Visas and entry rules —/);
+  await expect(caveats).toContainText(/Safety —/);
 
-  // Climate is off in this environment, so the page must say so rather than
-  // quietly ranking as though the weather had been checked.
-  await expect(page.locator('body')).toContainText(/climate records are switched off/i);
-
-  // And the per-destination breakdown distinguishes measured from not measured.
-  await page.getByText('What went into this, dimension by dimension').first().click();
-  await expect(page.getByText('not measured').first()).toBeVisible();
+  /*
+   * Climate is off in this environment, so a dimension that was not measured has
+   * to appear as unmeasured with the reason it was not measured — never as a
+   * zero. Asserted on the per-destination breakdown, which is where a traveller
+   * comparing two of them would look.
+   */
+  const breakdown = page
+    .locator('details')
+    .filter({ hasText: 'What we checked, one thing at a time' })
+    .first();
+  await breakdown.locator(':scope > summary').click();
+  await expect(breakdown.getByText('we could not check this').first()).toBeVisible();
 });
 
 test('a refresh loses nothing', async ({ page }) => {

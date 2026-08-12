@@ -47,6 +47,8 @@ interface TripRow {
   status: string;
   created_at: string;
   updated_at: string;
+  /** Null for a trip written before trips had an owner. See `listTrips`. */
+  owner_token: string | null;
 }
 
 interface ProfileRow {
@@ -84,7 +86,7 @@ function rowToTrip(row: TripRow): Trip {
   });
 }
 
-export function createTrip(basics: TripBasics): Trip {
+export function createTrip(basics: TripBasics, ownerToken?: string | null): Trip {
   const parsed = tripBasicsSchema.parse(basics);
   const now = new Date().toISOString();
   const id = randomUUID();
@@ -92,12 +94,15 @@ export function createTrip(basics: TripBasics): Trip {
   getDb()
     .prepare(
       `INSERT INTO trips (id, mode, destination_input, region_id, start_date, end_date,
-         arrival_time, departure_time, adults, children, traveler_needs, status, created_at, updated_at)
+         arrival_time, departure_time, adults, children, traveler_needs, status, created_at, updated_at,
+         owner_token)
        VALUES (@id, @mode, @destination_input, @region_id, @start_date, @end_date,
-         @arrival_time, @departure_time, @adults, @children, @traveler_needs, @status, @created_at, @updated_at)`,
+         @arrival_time, @departure_time, @adults, @children, @traveler_needs, @status, @created_at, @updated_at,
+         @owner_token)`,
     )
     .run({
       id,
+      owner_token: ownerToken ?? null,
       mode: parsed.mode,
       destination_input: parsed.destinationInput,
       region_id: parsed.regionId,
@@ -184,11 +189,68 @@ export function getTrip(id: string): Trip | null {
   return row ? rowToTrip(row) : null;
 }
 
-export function listTrips(): Trip[] {
+/**
+ * THE TRIPS THIS BROWSER MADE, AND NOBODY ELSE'S.
+ *
+ * This used to be `SELECT * FROM trips` with no predicate, and the homepage
+ * rendered the result under the heading "Your trips" with a Remove button on
+ * every row. On the live database that was one visitor looking at a hundred and
+ * eighty strangers' plans and holding a control that deletes them. §22 asks for
+ * trip ownership and no cross-user leakage; there was neither, because there
+ * was no owner.
+ *
+ * The owner is required rather than optional, and that is the point of the
+ * signature: an optional argument is one a future caller forgets, and the
+ * failure mode of forgetting is the defect coming back silently. A caller with
+ * nobody to ask for must pass null and gets nothing, which is the honest answer
+ * to "what are the trips belonging to no one".
+ *
+ * **A null owner token lists nothing.** Not everything: rows written before
+ * this column existed cannot be attributed to a browser, so showing them to
+ * whoever arrives next would be exactly the leak this closes. They are still
+ * reachable by their own unguessable URL, which is how a trip is shared.
+ */
+export function listTrips(ownerToken: string | null): Trip[] {
+  if (!ownerToken) return [];
   const rows = getDb()
-    .prepare('SELECT * FROM trips ORDER BY created_at DESC')
-    .all() as TripRow[];
+    .prepare('SELECT * FROM trips WHERE owner_token = ? ORDER BY created_at DESC')
+    .all(ownerToken) as TripRow[];
   return rows.map(rowToTrip);
+}
+
+/**
+ * Who made this trip, or null when nobody can be said to have.
+ *
+ * Separate from `getTrip` because reading a trip and *acting* on it are
+ * different questions. A trip is reachable by its unguessable id — that is the
+ * share link, and it is deliberate — while a destructive action has to know
+ * whose it is.
+ */
+export function tripOwnerToken(id: string): string | null {
+  const row = getDb().prepare('SELECT owner_token FROM trips WHERE id = ?').get(id) as
+    | { owner_token: string | null }
+    | undefined;
+  return row?.owner_token ?? null;
+}
+
+/**
+ * REMOVE A TRIP AND EVERYTHING HUNG OFF IT.
+ *
+ * One statement, because the schema does the rest: every table that references
+ * `trips(id)` declares `ON DELETE CASCADE` and `foreign_keys` is `ON` for every
+ * connection (see `db/client`), so removing the row removes the answers, the
+ * intent, the jobs, the compiled regions, the board selections, the locks and
+ * the itinerary with it. Spelling out the child deletes here would be a second,
+ * hand-maintained copy of the cascade that would silently fall behind the next
+ * migration.
+ *
+ * Deliberately unconditional and deliberately silent about whether a row was
+ * there. "Make this not exist" is satisfied by a trip that never existed, and
+ * the caller — which has to refuse the delete while a compilation is writing to
+ * the trip — is where the judgement about *when* it is safe belongs.
+ */
+export function deleteTrip(tripId: string): void {
+  getDb().prepare('DELETE FROM trips WHERE id = ?').run(tripId);
 }
 
 function setTripStatus(tripId: string, status: TripStatus): void {
@@ -686,6 +748,172 @@ export function hasItinerary(tripId: string): boolean {
     .prepare('SELECT 1 AS present FROM itineraries WHERE trip_id = ?')
     .get(tripId) as { present: number } | undefined;
   return Boolean(row);
+}
+
+/**
+ * A stale plan, read for display only.
+ *
+ * The version gate in `getItinerary` protects *claims*: a stored plan is
+ * rendered without re-validation, so a shape this build no longer stands
+ * behind must not be presented with a fresh plan's confidence. What the gate
+ * must not do — and did, for every stored itinerary across a version bump — is
+ * turn the whole artifact into a wall. The traveller's plan still exists, its
+ * days and times are still what they agreed to, and "you may not look at your
+ * own trip" is a worse outcome than "here it is, read-only, built by an
+ * earlier version, rebuild to refresh".
+ *
+ * So this reader is deliberately lenient and deliberately shallow. It never
+ * throws for a malformed field: every value is checked before it is kept, an
+ * item that will not parse is dropped rather than poisoning the day, and only
+ * plain display primitives come back — nothing here can be mistaken for a
+ * current, validated `Itinerary`, and nothing downstream can write it back.
+ * Writes stay gated exactly as before: `saveItinerary` parses against the
+ * current schema and always writes the current version.
+ */
+export interface StaleItineraryDisplay {
+  storedVersion: number;
+  /** When the plan was written, for the dated banner. Null if unrecorded. */
+  savedAt: string | null;
+  baseName: string;
+  startDate: string;
+  endDate: string;
+  summary: string;
+  days: StaleItineraryDisplayDay[];
+}
+
+export interface StaleItineraryDisplayDay {
+  dayNumber: number;
+  date: string;
+  theme: string | null;
+  items: {
+    kind: string;
+    title: string;
+    startMinute: number | null;
+    endMinute: number | null;
+    note: string | null;
+  }[];
+}
+
+export function getStaleItineraryDisplay(tripId: string): StaleItineraryDisplay | null {
+  const db = getDb();
+  const head = db.prepare('SELECT * FROM itineraries WHERE trip_id = ?').get(tripId) as
+    | (ItineraryRow & { created_at?: string })
+    | undefined;
+  if (!head) return null;
+
+  const asString = (value: unknown): string | null =>
+    typeof value === 'string' && value.length > 0 ? value : null;
+  const asMinute = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+
+  const dayRows = db
+    .prepare('SELECT * FROM itinerary_days WHERE trip_id = ? ORDER BY day_number')
+    .all(tripId) as ItineraryDayRow[];
+  const itemRows = db
+    .prepare('SELECT * FROM itinerary_items WHERE trip_id = ? ORDER BY day_number, position')
+    .all(tripId) as ItineraryItemRow[];
+
+  const itemsByDay = new Map<number, StaleItineraryDisplayDay['items']>();
+  for (const row of itemRows) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.item_json);
+    } catch {
+      continue; // One corrupt item must not take the day with it.
+    }
+    if (typeof parsed !== 'object' || parsed === null) continue;
+    const item = parsed as Record<string, unknown>;
+    const title = asString(item.title);
+    const kind = asString(item.kind);
+    if (!title || !kind) continue;
+    const bucket = itemsByDay.get(row.day_number) ?? [];
+    bucket.push({
+      kind,
+      title,
+      startMinute: asMinute(item.startMinute),
+      endMinute: asMinute(item.endMinute),
+      /*
+       * The one line of prose worth keeping per row. Older versions called it
+       * `reason`; keep whatever string is there, or nothing.
+       */
+      note: asString(item.reason),
+    });
+    itemsByDay.set(row.day_number, bucket);
+  }
+
+  return {
+    storedVersion: head.version,
+    savedAt: asString(head.created_at) ?? null,
+    baseName: asString(head.base_name) ?? 'your base',
+    startDate: asString(head.start_date) ?? '',
+    endDate: asString(head.end_date) ?? '',
+    summary: asString(head.summary) ?? '',
+    days: dayRows.map((row) => ({
+      dayNumber: row.day_number,
+      date: asString(row.date) ?? '',
+      theme: asString(row.theme),
+      items: itemsByDay.get(row.day_number) ?? [],
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Itinerary locks
+// ---------------------------------------------------------------------------
+
+/**
+ * A stop the traveller pinned to a day, surviving rebuilds.
+ *
+ * Trip-scoped state, like the selections beside it: a lock is this traveller's
+ * decision about this trip, never a fact about a place. The table is created
+ * lazily here rather than in the client's schema because the itinerary slice
+ * owns it end to end — everything that reads or writes a lock is in this
+ * section — and it must be safe to add against an existing database without a
+ * migration step.
+ */
+export interface StoredItineraryLock {
+  placeId: string;
+  dayNumber: number;
+}
+
+function ensureLockTable(): void {
+  getDb().exec(
+    `CREATE TABLE IF NOT EXISTS itinerary_locks (
+       trip_id TEXT NOT NULL,
+       place_id TEXT NOT NULL,
+       day_number INTEGER NOT NULL,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY (trip_id, place_id)
+     )`,
+  );
+}
+
+export function getItineraryLocks(tripId: string): StoredItineraryLock[] {
+  ensureLockTable();
+  const rows = getDb()
+    .prepare('SELECT place_id, day_number FROM itinerary_locks WHERE trip_id = ? ORDER BY place_id')
+    .all(tripId) as { place_id: string; day_number: number }[];
+  return rows.map((row) => ({ placeId: row.place_id, dayNumber: row.day_number }));
+}
+
+export function setItineraryLock(tripId: string, placeId: string, dayNumber: number): void {
+  ensureLockTable();
+  getDb()
+    .prepare(
+      `INSERT INTO itinerary_locks (trip_id, place_id, day_number, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(trip_id, place_id) DO UPDATE SET
+         day_number = excluded.day_number,
+         created_at = excluded.created_at`,
+    )
+    .run(tripId, placeId, dayNumber, new Date().toISOString());
+}
+
+export function clearItineraryLock(tripId: string, placeId: string): void {
+  ensureLockTable();
+  getDb()
+    .prepare('DELETE FROM itinerary_locks WHERE trip_id = ? AND place_id = ?')
+    .run(tripId, placeId);
 }
 
 // ---------------------------------------------------------------------------

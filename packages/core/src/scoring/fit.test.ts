@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { buildDiscoveryBoard, type DiscoveryCandidate } from '../discovery/board';
+import {
+  MAX_TOP_BAND_SHARE,
+  calibrateBandDistribution,
+  type FitAssessment,
+  type FitBand,
+} from './fit';
+import {
+  CROWD_TOLERANCES,
+  DISCOVERY_MIXES,
+  INTERESTS,
+  type CrowdTolerance,
+  type DiscoveryMix,
+  type Interest,
+  type InterestLevel,
+} from '../schemas/common';
+import {
+  assessPlaceStanding,
+  standingFields,
+  WIDELY_NOTED_PROMINENCE,
+} from '../quality/significance';
 import type { QuestionnaireAnswers } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 import {
@@ -260,6 +280,51 @@ describe('explanations', () => {
     expect(find(candidates, 'little-lakes-valley').fit.cautions.join(' ')).toMatch(/[Pp]arking/);
   });
 
+  /**
+   * A THRESHOLD ABOVE THE CEILING IS A BRANCH THAT NEVER RUNS.
+   *
+   * The tourist-trap penalty read `popularityScore >= 0.8`, and the highest
+   * prominence the standing model could produce was 0.81 — reachable only by a
+   * record holding an open identifier, a second catalogue *and* four translated
+   * names. Taking the alternate-name count out of prominence, which §8.3
+   * requires, would have dropped the ceiling under the bar and killed this
+   * branch in silence. So the bar is now the model's own constant, and this
+   * runs the branch on a place scored at the top of what the model can say.
+   */
+  it('docks the crowd score of the most-noted place for somebody avoiding tourist traps', () => {
+    const noted = standingFields(
+      assessPlaceStanding({
+        inKnowledgeBase: true,
+        encyclopaedicArticle: true,
+        crossDatasetCorroboration: true,
+      }),
+    );
+    expect(noted.popularityScore).toBeGreaterThanOrEqual(WIDELY_NOTED_PROMINENCE);
+    expect(noted.hiddenGemScore).toBeLessThanOrEqual(0.2);
+
+    /*
+     * One crowd-averse traveller, one place, two prominences — everything else
+     * held equal, `crowdLevel` included, so the only thing that can move the
+     * score is whether the bar was cleared.
+     */
+    const ctx = boardContext();
+    const crowdScoreAtProminence = (popularityScore: number) => {
+      const built = buildDiscoveryBoard({
+        ...ctx,
+        places: ctx.places.map((place) =>
+          place.id === 'mammoth-lakes-basin'
+            ? { ...place, popularityScore, hiddenGemScore: 0.1, crowdLevel: 'busy' as const }
+            : place,
+        ),
+        profile: profile(MAMMOTH_HIKER_ANSWERS, context({ travelerNeeds: [] })),
+      });
+      return find(built.candidates, 'mammoth-lakes-basin').fit.features.crowdComfort;
+    };
+    expect(crowdScoreAtProminence(noted.popularityScore)).toBeLessThan(
+      crowdScoreAtProminence(WIDELY_NOTED_PROMINENCE - 0.2),
+    );
+  });
+
   it('keeps every factor explainable and weighted to one', () => {
     const { candidates } = board();
     for (const candidate of candidates) {
@@ -374,5 +439,293 @@ describe('a preference that was not a refusal', () => {
     expect(after.quality.signals).toEqual(before.quality.signals);
     expect(after.quality.score).toBeLessThanOrEqual(before.quality.score);
     expect(after.fit.score).toBeLessThan(before.fit.score);
+  });
+});
+
+/**
+ * LABEL CALIBRATION — §9.1's "Top pick must mean something", as arithmetic.
+ *
+ * The audited board: 24 of 24 cards read "Strong fit" with "0 of 6 checked"
+ * underneath every one. Two mechanisms close it, tested separately: the
+ * evidence cap (a compiled place with zero established significance cannot
+ * exceed "Good fit"), and the distribution guard (no single top label may
+ * cover more than 60% of a board's workable cards).
+ */
+describe('recommendation labels are calibrated', () => {
+  const assessment = (placeId: string, score: number, band: FitBand): FitAssessment => ({
+    placeId,
+    score,
+    band,
+    factors: [],
+    features: {
+      interestMatch: 0,
+      detourFit: 0,
+      intensityFit: 0,
+      hiddenGemAlignment: 0,
+      crowdComfort: 0,
+      seasonFit: 0,
+      budgetFit: 0,
+      logisticsEase: 0,
+      transportFit: 0,
+    },
+    blockers: [],
+    reasons: [],
+    cautions: [],
+    matchedInterests: [],
+  });
+
+  it('demotes the overflow of an over-subscribed top band, lowest scores first', () => {
+    const uniform = Array.from({ length: 10 }, (_, index) =>
+      assessment(`p${index}`, 80 + index, 'strong'),
+    );
+    const calibrated = calibrateBandDistribution(uniform);
+    const strong = calibrated.filter((entry) => entry.band === 'strong');
+    const demoted = calibrated.filter((entry) => entry.band === 'good');
+    expect(strong.length).toBe(6);
+    expect(demoted.length).toBe(4);
+    /* The demotions land on the lowest scores, so the label still ranks. */
+    expect(demoted.map((entry) => entry.placeId).sort()).toEqual(['p0', 'p1', 'p2', 'p3']);
+  });
+
+  it('leaves a healthy distribution alone', () => {
+    const mixed = [
+      assessment('a', 90, 'top_pick'),
+      assessment('b', 80, 'strong'),
+      assessment('c', 70, 'good'),
+      assessment('d', 60, 'optional'),
+      assessment('e', 50, 'weak'),
+    ];
+    expect(calibrateBandDistribution(mixed)).toEqual(mixed);
+  });
+
+  it('never demotes below optional — fixing an overclaim must not manufacture skips', () => {
+    const allOptional = Array.from({ length: 10 }, (_, index) =>
+      assessment(`p${index}`, 55, 'optional'),
+    );
+    const calibrated = calibrateBandDistribution(allOptional);
+    expect(calibrated.every((entry) => entry.band === 'optional')).toBe(true);
+  });
+
+  it('is deterministic under equal scores', () => {
+    const tied = Array.from({ length: 8 }, (_, index) => assessment(`p${index}`, 80, 'strong'));
+    expect(calibrateBandDistribution(tied)).toEqual(calibrateBandDistribution(tied));
+  });
+
+  it('ignores unworkable candidates when computing the share', () => {
+    const entries = [
+      ...Array.from({ length: 4 }, (_, index) => assessment(`w${index}`, 80, 'strong')),
+      ...Array.from({ length: 20 }, (_, index) => assessment(`n${index}`, 0, 'not_workable')),
+    ];
+    const calibrated = calibrateBandDistribution(entries);
+    /* 4 of 4 workable in one band is over-share; demotion still applies. */
+    expect(calibrated.filter((entry) => entry.band === 'strong').length).toBeLessThan(4);
+  });
+});
+
+/**
+ * THE SAME GUARANTEE, MEASURED WHERE THE TRAVELLER MEETS IT.
+ *
+ * The block above exercises `calibrateBandDistribution` on hand-built
+ * assessments, and that is precisely why §30's mutation class 7 — "label every
+ * candidate Top pick" — survived: the function was tested, its *use* was not.
+ * Deleting the call inside `buildDiscoveryBoard` left every one of those unit
+ * tests green while the board reverted to the audited failure, every workable
+ * card carrying the same top label.
+ *
+ * So the property is asserted on real boards instead of on the helper, and as a
+ * *share* rather than a count, so a fixture gaining or losing a place does not
+ * rewrite the test.
+ */
+describe('no board is almost entirely one label', () => {
+  /** The most-used label among the cards a traveller could actually do. */
+  function dominantLabel(candidates: readonly DiscoveryCandidate[]) {
+    const workable = candidates.filter((candidate) => candidate.fit.band !== 'not_workable');
+    const counts = new Map<FitBand, number>();
+    for (const candidate of workable) {
+      counts.set(candidate.fit.band, (counts.get(candidate.fit.band) ?? 0) + 1);
+    }
+    const ranked = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const [band, count] = ranked[0] ?? ['good' as FitBand, 0];
+    return { band, count, workable: workable.length, share: count / workable.length };
+  }
+
+  /**
+   * A traveller who marked every single interest a core interest.
+   *
+   * In the Eastern Sierra that scores *every* workable candidate over the
+   * top-pick threshold — the exact population §9.1 was written about. The only
+   * thing standing between this profile and a board that says "Top pick for
+   * you" twenty-three times is the distribution guard, which makes it the
+   * board worth measuring.
+   */
+  const LOVES_EVERYTHING: Partial<QuestionnaireAnswers> = {
+    ...MAMMOTH_HIKER_ANSWERS,
+    interests: Object.fromEntries(
+      INTERESTS.map((interest) => [interest, 'core' as InterestLevel]),
+    ) as Record<Interest, InterestLevel>,
+    crowdTolerance: 'dont_mind',
+    avoidTouristTraps: false,
+    maxDailyTravelMinutes: 300,
+    detourToleranceMinutes: 180,
+    regionalExpansion: 'best_regional',
+  };
+
+  it('holds the top label under its share, including where every card scores into it', () => {
+    const variants: Partial<QuestionnaireAnswers>[] = [
+      MAMMOTH_HIKER_ANSWERS,
+      { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'deep_cuts' },
+      LOVES_EVERYTHING,
+    ];
+    for (const variant of variants) {
+      const dominant = dominantLabel(board(variant).candidates);
+      /* Below three workable cards a share says nothing, and the guard says so too. */
+      expect(dominant.workable).toBeGreaterThan(3);
+      expect({ band: dominant.band, over: dominant.share > MAX_TOP_BAND_SHARE }).toEqual({
+        band: dominant.band,
+        over: false,
+      });
+    }
+  });
+
+  /**
+   * THREE HAND-PICKED PROFILES WERE NOT ENOUGH, AND THAT IS THE WHOLE POINT.
+   *
+   * The three variants above all happen to concentrate in `top_pick`, which is
+   * the band the calibrator inspected first — so they passed while the
+   * calibrator's loop was terminating on the first band that was *within*
+   * budget and never reaching the one that was not. On `balanced` × `mild` ×
+   * every-interest-`occasional` the real Eastern Sierra board came back
+   * `top_pick 2 / strong 20 / good 1` over 23 workable cards: 87% of it under
+   * one label, twenty cards holding a label the product's own constant allows
+   * thirteen. A sweep is the only shape of test that could have caught that,
+   * because the defect was in *which* band the guard looked at, and any fixed
+   * set of profiles is a bet on which band a board concentrates in.
+   *
+   * So the property is swept over the questionnaire axes that move the score
+   * distribution — the classic/hidden mix, crowd tolerance, and a uniform
+   * interest level — across two seasons, and asserted for **every** band rather
+   * than the dominant one. Assertions carry the failing combination, because a
+   * sweep that fails anonymously costs an hour to diagnose.
+   */
+  it('holds every band under its share across the profile axes that move scores', () => {
+    const mixes: DiscoveryMix[] = [...DISCOVERY_MIXES];
+    const crowds: CrowdTolerance[] = [...CROWD_TOLERANCES];
+    const levels: InterestLevel[] = ['core', 'frequent', 'occasional'];
+    let boardsChecked = 0;
+
+    for (const dates of [AUGUST_DATES, JANUARY_DATES]) {
+      for (const discoveryMix of mixes) {
+        for (const crowdTolerance of crowds) {
+          for (const level of levels) {
+            const candidates = board(
+              {
+                ...MAMMOTH_HIKER_ANSWERS,
+                discoveryMix,
+                crowdTolerance,
+                interests: Object.fromEntries(
+                  INTERESTS.map((interest) => [interest, level]),
+                ) as Record<Interest, InterestLevel>,
+                maxDailyTravelMinutes: 300,
+                detourToleranceMinutes: 180,
+                regionalExpansion: 'best_regional',
+              },
+              dates,
+            ).candidates;
+
+            const workable = candidates.filter((c) => c.fit.band !== 'not_workable');
+            /* Below three cards a share says nothing, and the guard says so too. */
+            if (workable.length < 3) continue;
+            boardsChecked += 1;
+
+            const counts = new Map<FitBand, number>();
+            for (const candidate of workable) {
+              counts.set(candidate.fit.band, (counts.get(candidate.fit.band) ?? 0) + 1);
+            }
+            const over = [...counts]
+              .filter(([, held]) => held / workable.length > MAX_TOP_BAND_SHARE)
+              .map(([band, held]) => `${band} ${held}/${workable.length}`);
+            expect({
+              profile: `${dates === AUGUST_DATES ? 'august' : 'january'} ${discoveryMix} ${crowdTolerance} ${level}`,
+              over,
+            }).toEqual({
+              profile: `${dates === AUGUST_DATES ? 'august' : 'january'} ${discoveryMix} ${crowdTolerance} ${level}`,
+              over: [],
+            });
+          }
+        }
+      }
+    }
+
+    /* A sweep that swept nothing is a green test protecting nothing. */
+    expect(boardsChecked).toBeGreaterThanOrEqual(24);
+  });
+});
+
+describe('zero-verified-evidence candidates cannot overclaim', () => {
+  it('caps a compiled place with no established significance at "good"', () => {
+    const base = boardContext(AUGUST_DATES);
+    /*
+     * The same place, twice: once as the authored fixture (curation is
+     * evidence — exempt), once as a compiled record would arrive (standing
+     * assessed, nothing established). Only the second is capped.
+     */
+    const compiledLike = {
+      ...base,
+      places: base.places.map((place) => ({
+        ...place,
+        evidenceRichness: 0.9,
+        globalProminence: undefined,
+        localSignificance: undefined,
+      })),
+    };
+    const ctx = context({ travelerNeeds: [] });
+    const capped = buildDiscoveryBoard({
+      ...compiledLike,
+      profile: profile(MAMMOTH_HIKER_ANSWERS, ctx),
+      travelerNeeds: [],
+    });
+    for (const candidate of capped.candidates) {
+      expect(['top_pick', 'strong']).not.toContain(candidate.fit.band);
+      if (candidate.fit.band !== 'not_workable') {
+        expect(candidate.fit.evidenceLimited).toBe(true);
+      }
+    }
+
+    /* And the authored board keeps its top labels — the cap is evidence-scoped. */
+    const authored = board(MAMMOTH_HIKER_ANSWERS);
+    expect(
+      authored.candidates.some(
+        (candidate) => candidate.fit.band === 'top_pick' || candidate.fit.band === 'strong',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('"why this fits" is never a tautology', () => {
+  const TAUTOLOGY = /and that is what this delivers\.$/;
+
+  it('never shows the interest sentence alone, on any traveller variant', () => {
+    const variants: Partial<QuestionnaireAnswers>[] = [
+      MAMMOTH_HIKER_ANSWERS,
+      { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'deep_cuts', crowdTolerance: 'avoid_crowds' },
+      { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'mostly_classics', pace: 'fast' },
+    ];
+    for (const variant of variants) {
+      for (const candidate of board(variant).candidates) {
+        if (candidate.fit.reasons.length === 1) {
+          expect(candidate.fit.reasons[0]).not.toMatch(TAUTOLOGY);
+        }
+      }
+    }
+  });
+
+  it('still says it in company — the sentence is banned alone, not banned', () => {
+    const candidates = board(MAMMOTH_HIKER_ANSWERS).candidates;
+    const accompanied = candidates.filter(
+      (candidate) =>
+        candidate.fit.reasons.length >= 2 &&
+        candidate.fit.reasons.some((reason) => TAUTOLOGY.test(reason)),
+    );
+    expect(accompanied.length).toBeGreaterThan(0);
   });
 });

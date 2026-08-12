@@ -18,7 +18,26 @@
 export {
   countsTowardRoadDistance,
   dailyCapFor,
+  /**
+   * The modelled walk, from the same source as everything else here.
+   *
+   * The planner grew this repair first and kept its own copy of both the pace
+   * and the arithmetic after the rules moved. The two agreed numerically, which
+   * is exactly the state that reads as safe and is one edit from a plan and a
+   * board disagreeing about whether the same 1.2 km is walkable — the defect
+   * this module's own docstring says it exists to end. So the derivation has one
+   * address, and `modelled-walk.ts` calls it.
+   *
+   * The *cap* is deliberately not shared. Core's is `maxAccessWalkMinutes` —
+   * the furthest the traveller said they would walk to reach a place, which is
+   * the right ceiling for "can I get in at all". The planner's is their detour
+   * tolerance, which is the right ceiling for a leg taken mid-day between two
+   * stops they have already accepted. `modelled-walk.ts` documents how it passes
+   * its own.
+   */
+  deriveModelledWalk,
   detourToleranceMinutesFor,
+  MODELLED_WALK_KMH,
   permittedModesFor,
   reachFromBase,
   resolveCandidateReach,

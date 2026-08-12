@@ -17,9 +17,21 @@ import {
 } from '../schemas/profile';
 import {
   availableRegionalExpansions,
+  EXPANSION_CEILING_MINUTES,
   isQuestionVisible,
+  NO_CAR_DETOUR_MINUTES,
+  NO_CAR_TRANSPORT_MINUTES,
+  QUESTIONNAIRE_STEPS,
   type QuestionnaireContext,
 } from './definition';
+
+/*
+ * The car-free constants and the ring ceilings moved to `definition.ts`, where
+ * `carFreeReachMinutes` needs them without importing this module backwards.
+ * `@sidequest/core`'s surface is unchanged — the index star-exports definition —
+ * and re-exporting them here as well would make the two star exports ambiguous,
+ * which ESM resolves by silently dropping the symbol from the barrel.
+ */
 
 export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnswers {
   const interests = Object.fromEntries(
@@ -58,6 +70,12 @@ export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnsw
     willPackLunch: true,
     dietaryNeeds: [],
     dietaryStrict: false,
+    /*
+     * Nobody has handed us a step yet. Distinct from accepting a default: the
+     * values above are what silence looks like, and this list is what "you
+     * decide" looks like, and downstream may treat only the second as licence.
+     */
+    decideForMe: [],
   };
 }
 
@@ -76,9 +94,20 @@ export function normalizeAnswers(
   if (!isQuestionVisible('dailyIntensity', input)) {
     next.dailyIntensity = 'light';
   }
-  if (!isQuestionVisible('avoidTouristTraps', input)) {
-    next.avoidTouristTraps = false;
-  }
+  /*
+   * The tourist-trap warning is derived, not asked. It was a fourth surface
+   * collecting the one crowd preference — composer, graded control, a toggle,
+   * and an avoidance chip — and the graded control is now the only collection
+   * point. The derivation is the statement the traveller actually made: the
+   * warning fires for somebody who said crowds ruin it, or who hard-ruled
+   * crowds out in their own words, and not for "some is fine" — a shrug is not
+   * a request to police fame. This is also, deliberately, the same formula the
+   * benchmark request adapter writes, so its answers stay a fixed point of this
+   * function.
+   */
+  next.avoidTouristTraps =
+    next.crowdTolerance === 'avoid_crowds' ||
+    (next.crowdTolerance !== 'dont_mind' && next.avoidances.includes('crowds_and_tourist_traps'));
   if (!isQuestionVisible('roadComfort', input)) {
     next.comfortableMountainRoads = false;
     next.comfortableGravelRoads = false;
@@ -103,6 +132,29 @@ export function normalizeAnswers(
     if (!next.avoidances.includes('strenuous_activity')) {
       next.avoidances.push('strenuous_activity');
     }
+  }
+
+  /*
+   * "Early mornings" as a hard filter lands on the day-start window — the one
+   * field the planner actually reads for when a day begins. The avoidance was
+   * offered as a hard filter and consumed by nothing, which made it a placebo;
+   * the free-text path (`SOFT_REFUSAL` in `intent/apply.ts`) already maps a
+   * dislike of early starts onto `dayStart: 'relaxed'`, and a checked hard
+   * filter cannot honestly do less than a typed soft dislike.
+   */
+  if (next.avoidances.includes('early_mornings')) {
+    next.dayStart = 'relaxed';
+  }
+
+  /*
+   * Steps the traveller handed to us stop being handed over the moment they
+   * are not: the wizard removes a step id when its answers are edited, and
+   * this keeps the list canonical — deduplicated, in step order — so that two
+   * saves of the same state are byte-identical.
+   */
+  if (next.decideForMe !== undefined) {
+    const handed = new Set(next.decideForMe);
+    next.decideForMe = QUESTIONNAIRE_STEPS.filter((step) => handed.has(step));
   }
   next.dietaryNeeds = [...new Set(next.dietaryNeeds)].sort();
   // "These are strict" is a statement about a list. With nothing in the list it
@@ -179,17 +231,6 @@ export function deriveFoodPreferences(
   };
 }
 
-const EXPANSION_CEILING_MINUTES: Record<RegionalExpansion, number> = {
-  destination_only: 15,
-  nearby_30: 35,
-  nearby_60: 65,
-  nearby_120: 125,
-  best_regional: 165,
-};
-
-/** Without a car, only the base town and its trolley stops are realistically reachable. */
-const NO_CAR_DETOUR_MINUTES = 20;
-
 /**
  * How much riding and walking a day may hold on top of the driving budget.
  *
@@ -199,15 +240,6 @@ const NO_CAR_DETOUR_MINUTES = 20;
  * each end, which is what an access day actually costs.
  */
 export const ACCESS_TRAVEL_ALLOWANCE_MINUTES = 90;
-
-/**
- * Total transport budget for a traveller with no car.
- *
- * They never see the driving question, so there is nothing to add an allowance
- * to. This is what a day of shuttles, buses and walking can realistically hold
- * before it stops being a holiday.
- */
-export const NO_CAR_TRANSPORT_MINUTES = 150;
 
 const SLOTS_BY_PACE = { slow: 2, balanced: 3, fast: 4 } as const;
 const HIDDEN_GEM_TARGET = {
@@ -238,6 +270,16 @@ export function deriveProfileValues(
     maxPhysicalIntensity = minIntensity(maxPhysicalIntensity, 'moderate');
   }
   if (answers.avoidances.includes('long_hikes')) {
+    maxPhysicalIntensity = minIntensity(maxPhysicalIntensity, 'moderate');
+  }
+  /*
+   * Hard effort at altitude caps effort the same way the other two do. The
+   * place data does not carry elevations, so "strenuous, but only when high"
+   * is not a distinction anything downstream can honour yet — and an avoidance
+   * that was offered as a hard filter and read by nothing was a placebo. The
+   * intensity ceiling is the blunt-but-real consumer this vocabulary has.
+   */
+  if (answers.avoidances.includes('high_altitude_exertion')) {
     maxPhysicalIntensity = minIntensity(maxPhysicalIntensity, 'moderate');
   }
   if (answers.mobilityLimited || context.travelerNeeds.includes('mobility_limited')) {

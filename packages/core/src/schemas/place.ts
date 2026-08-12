@@ -13,6 +13,7 @@ import {
 } from './common';
 import { POI_BASE_FIELDS } from './poi';
 import { placeWeatherProfileSchema } from './weather';
+import { displayNameSchema } from '../naming/display-name';
 
 /**
  * When the place itself is reachable at all — the snow gate, not the shuttle.
@@ -85,6 +86,48 @@ export const placeSchema = z.object({
   /** Base = you sleep here / it is the anchor. Satellite = you travel out to it. */
   relationship: z.enum(['base', 'satellite']),
   category: placeCategorySchema,
+  /**
+   * The type-truthful noun a card should print, where the planning category's
+   * label would be a lie: "River", "Cemetery", "Theme park".
+   *
+   * `category` is a thirteen-value planning vocabulary and a river genuinely
+   * plans like a lake — but a live board captioning the Sumida River "Lake"
+   * told the traveller the machine cannot see. Optional and additive: absent
+   * means the category label is already truthful, and every stored place
+   * written before the field existed reads exactly as it did.
+   */
+  displayKind: z.string().min(1).optional(),
+  /**
+   * The traveller-facing name resolution: recognised English/romanised form
+   * leading, the native form beside it, the source's own name kept canonical.
+   * Optional for the same stale-artifact reason as everything else here —
+   * `displayNameOf` falls back to `name` when it is absent.
+   */
+  names: displayNameSchema.optional(),
+  /**
+   * 0–1 combined kind-and-evidence significance. See
+   * `quality/significance.ts#experienceSignificanceOf` for the exact model.
+   * Distinct from `popularityScore` (knowledge-base breadth alone) and barred,
+   * like every ranking input, from reading `evidenceRichness`.
+   */
+  experienceSignificance: z.number().min(0).max(1).optional(),
+  /**
+   * What kind of hours question this place can even have.
+   *
+   * `gated` — somebody opens and closes it, so unknown hours are a real gap to
+   * warn about. `open_ground` — a river, a slope, an unfenced park: "check its
+   * hours" is a category error, and a compiled build stamped exactly that on
+   * every geographic feature it shipped. Absent means nobody classified it,
+   * which consumers must read as `gated` (the cautious direction).
+   */
+  hoursExpectation: z.enum(['gated', 'open_ground']).optional(),
+  /**
+   * Where `typicalDurationMinutes` came from. `category_estimate` is the
+   * archetype's constant and must render as an estimate ("about 1½ h"), never
+   * as a measured fact — a live card printed "Time there: 1 hr 30 min" for a
+   * river. Absent on stored places from before the distinction existed.
+   */
+  durationBasis: z.enum(['category_estimate', 'source_stated']).optional(),
   /**
    * Interests this place genuinely satisfies, ordered by how central each one is
    * to the place itself. Order is load-bearing: the first entry the traveller

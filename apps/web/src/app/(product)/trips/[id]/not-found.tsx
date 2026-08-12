@@ -18,13 +18,26 @@ import { buttonClass } from '@/components/ui';
 export default function ProductNotFound() {
   return (
     <div className="mx-auto max-w-xl px-5 py-24 text-center sm:px-8">
-      <h1 className="font-display text-4xl text-ink">No such trip</h1>
-      <p className="mt-3 text-ink-muted">
-        That trip does not exist, or it was created against a database that has since been cleared.
+      <h1 className="font-display text-4xl text-ink">We cannot find that trip</h1>
+      {/*
+        "It was created against a database that has since been cleared" was the
+        second half of this sentence. It is our word for what happened, in our
+        vocabulary, about our infrastructure — and a traveller reading it can do
+        nothing with it except worry. What they need is whether their other
+        trips are affected, and a way on.
+      */}
+      <p className="mt-3 leading-relaxed text-ink-muted">
+        The link may be old, or the trip may have been removed. Anything else you have planned is
+        unaffected.
       </p>
-      <Link href="/trips/new" className={`${buttonClass('primary')} mt-8`}>
-        Start a new one
-      </Link>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <Link href="/" className={buttonClass('primary')}>
+          Your trips
+        </Link>
+        <Link href="/trips/new" className={buttonClass('secondary')}>
+          Start a new one
+        </Link>
+      </div>
     </div>
   );
 }

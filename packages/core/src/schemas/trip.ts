@@ -32,7 +32,26 @@ export const MAX_TRIP_NIGHTS = 30;
 export const tripBasicsSchema = z
   .object({
     mode: tripModeSchema,
-    destinationInput: z.string().trim().min(2, 'Tell us where you are going'),
+    /**
+     * A place name, and bounded like one.
+     *
+     * Every other identifier in this object is capped — the counts, the dates,
+     * the enums — and this was not, on the one field that is free text typed by
+     * a stranger and then carried to a geocoder, to a compiler and into a model
+     * prompt. Unbounded free text on that path is an amplifier: a megabyte of it
+     * costs a request per creation, tokens per creation, and a row that every
+     * later render reads back.
+     *
+     * 200 is not a guess. It is the same bound `destinationQuery` carries in
+     * `composer.ts` — the field this one is built from — so the two halves of
+     * the same string cannot disagree about what is acceptable. The longest
+     * real place names in the destination index are well inside it.
+     */
+    destinationInput: z
+      .string()
+      .trim()
+      .min(2, 'Tell us where you are going')
+      .max(200, 'That is longer than a place name'),
     regionId: z.string().min(1),
     startDate: isoDateSchema,
     endDate: isoDateSchema,

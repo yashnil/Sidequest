@@ -18,7 +18,7 @@ import {
   overpassCacheKey,
   type OverpassElement,
 } from './overpass';
-import { computeMatrix, costingFor, densify, isPlausibleLeg, matrixCacheKey } from './valhalla';
+import { computeMatrix, costingFor, densify, isPlausibleLeg, matrixPairCacheKey } from './valhalla';
 
 /**
  * Contract tests for the open-licensed provider stack.
@@ -338,10 +338,12 @@ describe('valhalla', () => {
     expect(dense.dropped.sort()).toEqual(['a', 'b', 'c']);
   });
 
-  it('keys the cache on the endpoint, costing and both point sets', () => {
-    const key = matrixCacheKey([points[0]!], [points[1]!], 'auto');
+  it('keys the cache on the endpoint, the costing and the ordered pair', () => {
+    const key = matrixPairCacheKey(points[0]!, points[1]!, 'auto');
     expect(key).toContain('valhalla');
     expect(key).toContain('auto');
-    expect(matrixCacheKey([points[0]!], [points[1]!], 'pedestrian')).not.toBe(key);
+    expect(matrixPairCacheKey(points[0]!, points[1]!, 'pedestrian')).not.toBe(key);
+    // Direction is part of the identity: a one-way street is not symmetric.
+    expect(matrixPairCacheKey(points[1]!, points[0]!, 'auto')).not.toBe(key);
   });
 });

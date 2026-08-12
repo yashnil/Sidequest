@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyComposer, composerAnsweredFields } from './apply';
+import { applyComposer, composerAnsweredFields, composerCarriedFields } from './apply';
 import { defaultAnswers } from '../questionnaire/transform';
 import type { QuestionnaireContext } from '../questionnaire/definition';
 
@@ -78,6 +78,51 @@ describe('the composer answers reach the questionnaire', () => {
     const base = defaultAnswers(CONTEXT);
     expect(applyComposer(base, undefined)).toEqual(base);
     expect(applyComposer(base, null)).toEqual(base);
+  });
+
+  /**
+   * PROVENANCE SURVIVES A SAVE.
+   *
+   * The page used to compute "which answers came from the composer" as
+   * `saved ? [] : composerAnsweredFields(…)` — so the first mid-flow save
+   * erased every "from your answers" badge and resurrected the budget step the
+   * composer had already answered. Carried-ness is a relationship between the
+   * composer and the current answers, and it has to be recomputed against
+   * whatever is stored, minus only the fields the traveller has overruled.
+   */
+  describe('carried fields against saved answers', () => {
+    const composer = {
+      transport: 'public_transport',
+      pace: 'slow',
+      budget: 'budget',
+    } as const;
+
+    it('keeps every undiverged field carried after a save', () => {
+      const saved = applyComposer(defaultAnswers(CONTEXT), composer);
+      expect(composerCarriedFields(composer, saved).sort()).toEqual(
+        ['budgetStyle', 'pace', 'willDrive'].sort(),
+      );
+    });
+
+    it('drops exactly the field the traveller overruled', () => {
+      const saved = { ...applyComposer(defaultAnswers(CONTEXT), composer), pace: 'fast' as const };
+      const carried = composerCarriedFields(composer, saved);
+      expect(carried).not.toContain('pace');
+      expect(carried).toContain('willDrive');
+      expect(carried).toContain('budgetStyle');
+    });
+
+    it('answers nothing for a trip with no composer', () => {
+      expect(composerCarriedFields(undefined, defaultAnswers(CONTEXT))).toEqual([]);
+      expect(composerCarriedFields(null, defaultAnswers(CONTEXT))).toEqual([]);
+    });
+
+    it('never reports intensity for a mobility-limited traveller', () => {
+      const saved = defaultAnswers(MOBILITY);
+      expect(
+        composerCarriedFields({ ...composer, outdoorIntensity: 'strenuous' }, saved),
+      ).not.toContain('dailyIntensity');
+    });
   });
 
   it('reports exactly the fields it wrote, so nothing is both prefilled and re-asked', () => {

@@ -17,7 +17,7 @@ import {
   dayStartSchema,
   discoveryMixSchema,
   INTERESTS,
-  interestLevelSchema,
+  interestLevelsSchema,
   interestSchema,
   paceSchema,
   physicalIntensitySchema,
@@ -25,12 +25,38 @@ import {
 } from './common';
 
 /**
+ * The questionnaire's step identities, declared here rather than in
+ * `questionnaire/definition` because the *answers* now reference them: a
+ * traveller can hand a whole step to us ("decide for me"), and that statement
+ * is part of the durable answer set. Schemas must not import from the
+ * questionnaire package — the dependency runs the other way — so the canonical
+ * list lives with the schema and `QUESTIONNAIRE_STEPS` re-exports it.
+ */
+export const QUESTIONNAIRE_STEP_IDS = [
+  'interests',
+  'rhythm',
+  'budget',
+  'food',
+  'discovery',
+  'transport',
+  'region',
+  'constraints',
+  'review',
+] as const;
+export const questionnaireStepIdSchema = z.enum(QUESTIONNAIRE_STEP_IDS);
+
+/**
  * Raw questionnaire output. Kept separate from the canonical profile so the form
  * can evolve (wording, ordering, extra questions) without breaking scoring, and
  * so the transform between the two is a single tested function.
  */
 export const questionnaireAnswersSchema = z.object({
-  interests: z.record(interestSchema, interestLevelSchema),
+  /*
+   * Keyed on the interests this traveller was actually offered. See
+   * `interestLevelsSchema` for why an exhaustive record could not survive the
+   * vocabulary growing, and why an absent grading reads as `low` everywhere.
+   */
+  interests: interestLevelsSchema,
   pace: paceSchema,
   dayStart: dayStartSchema,
   dailyIntensity: dailyIntensitySchema,
@@ -98,6 +124,22 @@ export const questionnaireAnswersSchema = z.object({
    * reason to look elsewhere, and makes a packed lunch the safer answer.
    */
   dietaryStrict: z.boolean().default(false),
+  /**
+   * Steps the traveller explicitly handed to us, as opposed to steps they
+   * accepted the defaults on.
+   *
+   * The two look identical in the answer values — a default is a value either
+   * way — and they are different statements: "balanced pace" chosen is a
+   * preference, "balanced pace" left alone is silence, and "you decide" is an
+   * instruction. Anything downstream that wants to know whether it may trade a
+   * defaulted answer away can read this; nothing is obliged to.
+   *
+   * Optional rather than defaulted so that every existing hand-built
+   * `QuestionnaireAnswers` literal — the benchmark adapter builds two — keeps
+   * compiling. Absent means the affordance predates the answers, which is the
+   * same claim as an empty list.
+   */
+  decideForMe: z.array(questionnaireStepIdSchema).optional(),
 });
 export type QuestionnaireAnswers = z.infer<typeof questionnaireAnswersSchema>;
 
@@ -154,7 +196,7 @@ export const TRAVELER_PROFILE_VERSION = 3 as const;
 
 export const travelerProfileSchema = z.object({
   version: z.literal(TRAVELER_PROFILE_VERSION),
-  interests: z.record(interestSchema, interestLevelSchema),
+  interests: interestLevelsSchema,
   pace: paceSchema,
   dayStart: dayStartSchema,
   dailyIntensity: dailyIntensitySchema,

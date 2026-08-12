@@ -146,13 +146,30 @@ test('no readiness copy leaks the machinery', async ({ page }) => {
   }
 });
 
-test('a destination nothing can reach is thin rather than pretending', async ({ page }) => {
+test('a destination nothing can reach reports on its research, not on its distances', async ({
+  page,
+}) => {
   /**
-   * The world whose every stop is further out than a day can reach. It compiles
-   * cleanly, so nothing upstream refuses it — and the honest reading is `thin`:
-   * there is real ground here and not much a trip can use, which is a different
-   * statement from "we found nothing" and from "this is fine".
+   * THE READING IS ABOUT WHAT WE COULD FIND OUT, NOT ABOUT WHETHER A TRIP FITS.
+   *
+   * This expected `thin` for the world whose every stop is further out than a day
+   * can reach. That conflates two different verdicts. `researchLevelFor` is a
+   * rule over evidence dimensions — hours, access, routing, food, weather — and
+   * this world publishes all of them completely; its problem is a three-and-a-
+   * half-hour drive, which no amount of further research would change. Reporting
+   * `thin` here would send a traveller to press "look again" at a number that
+   * cannot move.
+   *
+   * So the reading is `ready`, and a `ready` reading with nothing to report shows
+   * no panel at all. The refusal that *does* apply arrives where it can be acted
+   * on — the board comes out `blocked` and names the travel time as the binding
+   * constraint, asserted in `board-integrity.spec.ts` against this same world.
+   *
+   * Asserted here rather than deleted, because the distinction is the point: a
+   * panel that fired on distance would be a false alarm on every long-radius
+   * region, and this is the test that would catch it coming back.
    */
   await compileWorld(page, 'Faraway Reaches');
-  expect(await readinessLevel(page)).toBe('thin');
+  expect(await readinessLevel(page)).toBeNull();
+  await expect(page.getByRole('link', { name: /Tell us how you travel/i })).toBeVisible();
 });

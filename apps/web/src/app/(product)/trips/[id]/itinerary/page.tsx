@@ -1,20 +1,52 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ItineraryView } from '@/components/ItineraryView';
+import { ItineraryView, type StopRationale } from '@/components/ItineraryView';
+import { acceptedImagesFor } from '@/lib/db/imagery-repository';
+import { formatMinutes } from '@/lib/format';
 import { renderInstant } from '@/lib/clock';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange } from '@/lib/format';
-import { getItinerary, getTrip, StaleItineraryError } from '@/lib/db/repository';
 import {
+  getItinerary,
+  getItineraryLocks,
+  getProfile,
+  getSelections,
+  getStaleItineraryDisplay,
+  getTrip,
+  StaleItineraryError,
+} from '@/lib/db/repository';
+import { boardFor } from '@/lib/region';
+import { StaleItineraryView } from './StaleItineraryView';
+import {
+  REACH_MODE_PHRASE,
   buildPreparation,
+  displayNameOf,
   findOperatingCalendar,
   licence,
+  type DestinationImage as DestinationImageRecord,
+  type DiscoveryCandidate,
   type DisplayName,
   type PreparationItem,
 } from '@sidequest/core';
 import { resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
+
+/** Which trip this plan is for. See the discover route for why. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const trip = getTrip(id);
+  return {
+    title: trip
+      ? `${trip.basics.destinationInput} — Your trip — Sidequest`
+      : 'Your trip — Sidequest',
+  };
+}
 
 export default async function ItineraryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,16 +65,42 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * genuine corruption, and saying so plainly is better than implying a version
    * bump.
    */
+  /**
+   * A stale plan renders read-only rather than as a wall.
+   *
+   * The version gate still protects every *claim* this build makes — the
+   * read-only view shows the saved days under a dated banner and asserts
+   * nothing about weather, transport or validity — and it still protects every
+   * write: a rebuild goes through the current schema as always. What it no
+   * longer does is confiscate a trip the traveller already has. The previous
+   * copy here was a paragraph of engineering changelog about opening-hours
+   * checks and daylight computation; nobody planning a holiday needs it, and
+   * it stood between them and their own itinerary.
+   */
   let itinerary;
   try {
     itinerary = getItinerary(id);
   } catch (error) {
     if (error instanceof StaleItineraryError) {
+      const display = getStaleItineraryDisplay(id);
+      if (display && display.days.length > 0) {
+        const includedCount = getSelections(id).filter(
+          (selection) => selection.status !== 'excluded',
+        ).length;
+        return (
+          <StaleItineraryView
+            display={display}
+            tripId={id}
+            includedCount={includedCount}
+            dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
+          />
+        );
+      }
       return (
         <Recovery
           tripId={id}
-          title="This plan is from an earlier version of Sidequest"
-          body="Some of what it was built on has changed since — which opening hours we check, whether the weather and the daylight were worked out at all, whether the meals name anywhere or are simply gaps in the day, or whether a fallback says how you would actually get to it — so parts of it could now be out of date, and we will not show you that as though it were current. Head back to the board and press Rebuild; every choice you made is still there."
+          title="This plan was built by an earlier version of Sidequest"
+          body="We could not recover enough of it to show you, so it needs one rebuild. Every choice you made on the board is kept — head back and press Rebuild."
         />
       );
     }
@@ -124,9 +182,100 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * was built against.
    */
   const coordinates = new Map<string, { lat: number; lng: number }>();
+  /**
+   * The board's "probably skip" supply, for the packet's Worth Skipping
+   * section (§17). Derived from the same compiled region the plan drew on, so
+   * a skip is a claim about *this* trip's fit model, never a generic list.
+   * Empty whenever the board holds none — the section then does not render.
+   */
+  let worthSkipping: { name: string; reason: string }[] = [];
+  /**
+   * Lodging-area guidance renders only where the compiled region actually
+   * holds lodging evidence (§17: "budget/lodging where evidence supports
+   * it"). `lodgingEvidence` defaults to `unknown` and the honest treatment of
+   * unknown is omission — a base is a geographic recommendation, and claiming
+   * a town has places to stay because it is a town is the unsourced
+   * confidence the schema exists to prevent.
+   */
+  let lodgingAreas: { name: string; rationale: string; tradeoffs: readonly string[] }[] = [];
+  /**
+   * WHAT THE FIT MODEL SAID ABOUT EACH SCHEDULED STOP.
+   *
+   * The stored plan's per-stop reason is a template — `Matches your interest in
+   * X` — so a finished itinerary reads as eleven copies of one sentence, which
+   * is the product's stated differentiator rendered as boilerplate. The fit
+   * model computed a specific sentence for every one of these places on the
+   * board the traveller chose from, and this re-reads it from the same compiled
+   * region the plan was built against.
+   *
+   * Derived, never stored: a stored plan is immutable, and re-deriving here is
+   * what ties the sentence to the evidence rather than to whatever the region
+   * looked like on the day the plan was built. Empty whenever the region will
+   * not resolve, and the view then renders exactly what it rendered before.
+   */
+  const rationale: Record<string, StopRationale> = {};
+  /**
+   * Photographs for the day headers, read out of the local table.
+   *
+   * A row lookup, never a resolution — the identities were established while the
+   * traveller was on the board, and a page that could resolve one would do it
+   * per stop, per day, per refresh, for every visitor.
+   */
+  let images: Record<string, DestinationImageRecord> = {};
   try {
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
+      lodgingAreas = resolved.context.compiled.bases
+        .filter((entry) => entry.lodgingEvidence === 'sourced')
+        .map((entry) => ({
+          name: entry.names?.display ?? itinerary.baseName,
+          rationale: entry.rationale,
+          tradeoffs: entry.tradeoffs ?? [],
+        }));
+      const profile = getProfile(id);
+      if (profile) {
+        try {
+          const board = boardFor(trip, profile, resolved.context);
+          worthSkipping = (board.groups.find((group) => group.group === 'weak_fit')?.candidates ?? [])
+            .slice(0, 6)
+            .map((candidate) => ({
+              name: candidate.place.name,
+              reason:
+                candidate.fit.cautions[0] ??
+                candidate.fit.reasons[0] ??
+                'A poor match for how you said you travel.',
+            }));
+
+          /*
+           * One sentence per stop, and never the same sentence twice in a row.
+           *
+           * The fit model's reasons are ranked, so the obvious read — always
+           * take `reasons[0]` — reproduces the defect it is meant to fix
+           * whenever several stops fit for the same reason, which on a themed
+           * day is most of them. Taking the first reason nothing has used yet
+           * makes the plan say something different about each place while every
+           * sentence stays one the model actually computed about *that* place.
+           */
+          const used = new Set<string>();
+          for (const candidate of board.candidates) {
+            const why = candidate.fit.reasons.find((reason) => !used.has(reason))
+              ?? candidate.fit.reasons[0];
+            if (why) used.add(why);
+            rationale[candidate.place.id] = {
+              /*
+               * The name the board showed, so the plan and the board agree on
+               * what a place is called. See `StopRationale.name`.
+               */
+              name: displayNameOf(candidate.place),
+              ...(why ? { why } : {}),
+              category: candidate.place.category,
+              facets: stopFacets(candidate),
+            };
+          }
+        } catch (error) {
+          console.error('Worth-skipping supply could not be derived', error);
+        }
+      }
       const base = resolved.context.compiled.bases.find((entry) => entry.id === itinerary.baseId);
       baseNames = base?.names;
       timeZone = base?.timeZone;
@@ -167,6 +316,23 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
         namesById,
         unverifiedHoursSubjectIds: unverifiedHours,
       });
+
+      /*
+       * The subjects are the *scheduled* places only. Reading the whole region
+       * would be a query proportional to the destination on a page that shows
+       * one plan, and the Wikidata id is what turns the lookup into an identity
+       * relationship rather than a name search — a record without one has no row
+       * to find and gets no photograph, which is the honest outcome.
+       */
+      images = acceptedImagesFor(
+        resolved.context.compiled.places
+          .filter((place) => scheduled.has(place.id) && place.wikidataId !== undefined)
+          .map((place) => ({
+            kind: 'candidate' as const,
+            id: place.id,
+            ...(place.wikidataId ? { wikidataId: place.wikidataId } : {}),
+          })),
+      );
     }
   } catch (error) {
     console.error('Preparation list could not be derived', {
@@ -210,6 +376,11 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       {...(timeZone ? { timeZone } : {})}
       attributions={attributions}
       coordinates={Object.fromEntries(coordinates)}
+      lockedPlaceIds={getItineraryLocks(id).map((lock) => lock.placeId)}
+      worthSkipping={worthSkipping}
+      lodgingAreas={lodgingAreas}
+      images={images}
+      rationale={rationale}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a
@@ -217,6 +388,33 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       renderedAt={renderInstant()}
     />
   );
+}
+
+/**
+ * THE FACTS THAT TELL TWO STOPS APART WHEN THEY FIT FOR THE SAME REASON.
+ *
+ * Deliberately short and deliberately concrete: how far out it is, whether it is
+ * a quiet find, whether it holds up in bad weather, whether it asks something of
+ * the legs. Everything comes off the card the board already built, so nothing
+ * here can claim more than the board claimed, and a stop the region knows little
+ * about produces an empty list rather than filler.
+ */
+function stopFacets(candidate: DiscoveryCandidate): string[] {
+  const facets: string[] = [];
+  if (candidate.reach.status === 'measured' && candidate.reach.travelMinutes > 0) {
+    facets.push(
+      `${formatMinutes(candidate.reach.travelMinutes)} ${REACH_MODE_PHRASE[candidate.reach.mode]} from your base`,
+    );
+  }
+  if (candidate.place.hiddenGemScore >= 0.6) facets.push('a quiet find');
+  if (candidate.place.weather.poorWeatherBackup) facets.push('holds up in poor weather');
+  if (
+    candidate.place.physicalIntensity === 'strenuous' ||
+    candidate.place.physicalIntensity === 'moderate'
+  ) {
+    facets.push(`${candidate.place.physicalIntensity} going`);
+  }
+  return facets;
 }
 
 function Recovery({ tripId, title, body }: { tripId: string; title: string; body: string }) {

@@ -71,9 +71,24 @@ export const BOARD_GROUP_COPY: Record<BoardGroup, { title: string; blurb: string
     title: 'Personalised hidden gems',
     blurb: 'Quieter finds that match what you said you care about.',
   },
+  /**
+   * NEITHER DISTANCE HEADING MAY CLAIM MORE THAN ITS GROUP KNOWS.
+   *
+   * "Short hops from your base" was true while this group meant "near". It
+   * stopped being true when `groupFor` was corrected: `scenic_detours` now takes
+   * the `stretch` and `too_far` journeys, and everything else falls here —
+   * including the stops whose journey nobody could time. "Short hop" is not
+   * something we know about an unmeasured journey, and a heading that asserts a
+   * fact its contents contradict is worse than no heading, because the traveller
+   * acts on it.
+   *
+   * So the claim drops to what the grouping actually guarantees: this is not the
+   * further-out group, and these are stops a day absorbs rather than stops a day
+   * is built around.
+   */
   nearby_side_quests: {
     title: 'Nearby side quests',
-    blurb: 'Short hops from your base that are worth breaking up a day for.',
+    blurb: 'Smaller stops that slot into a day rather than reshaping it.',
   },
   scenic_detours: {
     title: 'Scenic detours',

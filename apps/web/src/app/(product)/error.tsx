@@ -57,17 +57,39 @@ export default function ProductError({
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-16 sm:px-8">
-      <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Something went wrong</p>
+      {/*
+        The eyebrow used to read "Something went wrong" — §21's own example of
+        the sentence to stop writing. It is not that the apology is wrong; it is
+        that it occupies the line above the heading with no information in it,
+        and then the heading says the same thing again. What goes there instead
+        is the fact the traveller needs before they read anything else: their
+        work is still here.
+      */}
+      <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Nothing was lost</p>
       <h1
         ref={heading}
         tabIndex={-1}
-        className="mt-3 font-display text-3xl leading-tight text-ink outline-none"
+        /*
+          `focus:`, not `outline-none`, and not `focus-visible:`.
+
+          This heading is a programmatic focus target: the boundary moves
+          focus here on mount so a screen-reader user is told what happened
+          instead of being left on a page that silently changed under them.
+          `outline-none` then removed the only thing that told a *sighted*
+          keyboard user where focus had gone — the same defect the benchmark
+          lock dialog fixed, in the same words, and never applied here.
+
+          `focus-visible:` would not do it: focus arrives from script rather
+          than from a key press, so the browser heuristic declines. See
+          `ReviewSurface.tsx` #lock-confirm-heading for the argument in full.
+        */
+        className="mt-3 rounded-sm font-display text-3xl leading-tight text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-2"
       >
         That page did not load
       </h1>
-      <p className="mt-4 text-ink-muted">
-        Your trip is safe — everything you have answered and chosen is stored, and none of it
-        depends on this page rendering. This is almost always temporary.
+      <p className="mt-4 leading-relaxed text-ink-muted">
+        Everything you have answered and chosen is stored, and none of it depends on this page
+        rendering. This is almost always temporary — trying again usually works.
       </p>
 
       <div className="mt-8 flex flex-wrap gap-3">

@@ -89,10 +89,15 @@ describe('a finding the planner resolved by removing its subject', () => {
            * short travel budget. That is the combination the revision loop exists
            * for: the meals no longer fit around the stops, so something has to
            * give and the loop has to say which.
+           *
+           * Seventy-five, not ninety: at ninety the bare-dinner path gaining the
+           * same evening overrun the venue path always had made the meals fit
+           * without a revision, and the self-check below caught the scenario
+           * going vacuous — which is exactly what it is for.
            */
           breakfastStyle: 'full',
           specialMealAppetite: 'often',
-          maxDailyTravelMinutes: 90,
+          maxDailyTravelMinutes: 75,
         },
       }),
     );

@@ -204,6 +204,93 @@ export function resolveDisplayName(input: ResolveDisplayNameInput): DisplayName 
 }
 
 /**
+ * Whether a name is written in Latin script — readable to the product's
+ * interface language even when nobody tagged its language.
+ *
+ * A *script* test, deliberately not a language test: source records carry
+ * alternates with no language tag at all, and asserting "this is English" about
+ * an untagged string would be an invention. What can be said honestly is that
+ * the letters are ones an English-interface reader can read, which is exactly
+ * the property the board needs. Counted over letters only, so digits,
+ * punctuation and spaces neither qualify nor disqualify a name, and mixed
+ * scripts fail: a name has to be *predominantly* readable, not merely contain
+ * one Latin character.
+ */
+export function isLatinScript(value: string): boolean {
+  let latin = 0;
+  let other = 0;
+  for (const char of value) {
+    if (/\p{Script=Latin}/u.test(char)) latin += 1;
+    else if (/\p{L}/u.test(char)) other += 1;
+  }
+  if (latin === 0) return false;
+  return other === 0;
+}
+
+export interface RecordNameInput {
+  /** The source's primary name, verbatim. */
+  name: string;
+  /** Other names the source publishes. Untagged — see `isLatinScript`. */
+  alternateNames: readonly string[];
+  /** Where the names came from, for provenance. */
+  source: string;
+}
+
+/**
+ * Resolve what a card calls a source record whose alternates carry no language
+ * tags.
+ *
+ * The defect this closes: a compiled board rendered every candidate under its
+ * primary local-script name while the records *held* romanised alternates —
+ * "Sumida River" verified present and unused — so an English-interface board
+ * was a wall of script the traveller could not read. Rule 2 of this file is
+ * untouched: nothing is transliterated or translated, only names the source
+ * published are chosen between.
+ *
+ * Selection: a Latin-script primary leads as-is. Otherwise the best
+ * Latin-script alternate leads — shortest first, then lexicographic, the same
+ * total order `pickAmong` uses for its final tiebreaks — and the primary stays
+ * beside it as the local name. No usable alternate means the primary leads,
+ * exactly as before this function existed.
+ */
+export function resolveRecordDisplayName(input: RecordNameInput): DisplayName {
+  const primary = sanitizePlaceText(input.name) || 'this place';
+  const alternates = input.alternateNames
+    .map((value) => sanitizePlaceText(value))
+    .filter((value) => value.length > 0);
+
+  if (isLatinScript(primary)) {
+    return {
+      schemaVersion: DISPLAY_NAME_VERSION,
+      display: primary,
+      canonical: primary,
+      sources: [input.source],
+    };
+  }
+
+  const latin = alternates
+    .filter((value) => isLatinScript(value))
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+  const chosen = latin[0];
+  if (!chosen || sameName(chosen, primary)) {
+    return {
+      schemaVersion: DISPLAY_NAME_VERSION,
+      display: primary,
+      canonical: primary,
+      sources: [input.source],
+    };
+  }
+
+  return {
+    schemaVersion: DISPLAY_NAME_VERSION,
+    display: chosen,
+    local: primary,
+    canonical: primary,
+    sources: [input.source],
+  };
+}
+
+/**
  * What to render, for an entity that may or may not carry a resolved name.
  *
  * The compatibility seam. Every artifact compiled before this existed has a bare

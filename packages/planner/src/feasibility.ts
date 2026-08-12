@@ -1,3 +1,4 @@
+import { displayNameOf } from '@sidequest/core';
 import { tryLeg, type TravelTimeMatrix } from '@sidequest/geo';
 import { resolveLeg, type TravelKnowledge } from './travel';
 import type { PlanningCandidate } from './types';
@@ -167,7 +168,7 @@ export function assessMustDoFeasibility(input: FeasibilityInput): MustDoConflict
   return {
     places: manual.map((candidate) => ({
       placeId: candidate.place.id,
-      name: candidate.place.name,
+      name: displayNameOf(candidate.place),
       minutesOnSite: candidate.durationMinutes,
     })),
     minutesRequired,

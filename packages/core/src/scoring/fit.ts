@@ -6,6 +6,7 @@ import {
   type PhysicalIntensity,
 } from '../schemas/common';
 import type { Place } from '../schemas/place';
+import { WIDELY_NOTED_PROMINENCE } from '../quality/significance';
 import type { TravelerProfile } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
 import type { SatelliteAssessment } from '../region/expansion';
@@ -146,6 +147,17 @@ export interface FitAssessment {
   /** 0-100. Never shown as a bare number in the UI; the band is what people see. */
   score: number;
   band: FitBand;
+  /**
+   * True when the band was capped because nothing establishes this place's
+   * significance — no knowledge base, no second catalogue, no authority.
+   *
+   * The live failure this encodes: twenty-four of twenty-four cards read
+   * "Strong fit" while every trust panel underneath said "0 of 6 checked". A
+   * fit score is a statement about *match*, and match against a place nobody
+   * has verified cannot honestly exceed "worth considering". The UI reads this
+   * to say so ("looks promising — not verified yet") instead of overclaiming.
+   */
+  evidenceLimited?: boolean;
   factors: FitFactor[];
   /** Flat numeric view of the same factors, for logging and future model training. */
   features: Record<FitFactorId, number>;
@@ -470,12 +482,27 @@ export function scorePlace(
     dont_mind: { quiet: 1, moderate: 1, busy: 0.9, very_busy: 0.85 },
   } as const;
   let crowdComfort: number = crowdTable[crowdTolerance][place.crowdLevel];
-  if (profile.avoidTouristTraps && place.popularityScore >= 0.8 && place.hiddenGemScore <= 0.2) {
+  /*
+   * A THRESHOLD THAT ONLY THE NAME COUNT KEPT ALIVE.
+   *
+   * This read `popularityScore >= 0.8`, and the highest prominence the standing
+   * model could reach was 0.81 — attainable only by a record that held an open
+   * identifier, a second catalogue *and* four translated names. Removing the
+   * name count from prominence would have taken this branch below the ceiling
+   * and killed it silently. The bar now comes from the model that produces the
+   * number, so a threshold nothing can clear cannot be written here again.
+   */
+  if (
+    profile.avoidTouristTraps &&
+    place.popularityScore >= WIDELY_NOTED_PROMINENCE &&
+    place.hiddenGemScore <= 0.2
+  ) {
     crowdComfort = clamp01(crowdComfort - 0.15);
   }
 
   // --- Famous vs. hidden --------------------------------------------------
   const hiddenGemAlignment = clamp01(1 - Math.abs(place.hiddenGemScore - derived.hiddenGemTarget));
+
 
   // --- Detour -------------------------------------------------------------
   /*
@@ -572,12 +599,32 @@ export function scorePlace(
 
   const raw = factors.reduce((total, factor) => total + factor.contribution, 0);
   const score = Math.round(raw * 100);
-  const band: FitBand = blockers.length > 0 ? 'not_workable' : bandFor(score);
+  const uncapped: FitBand = blockers.length > 0 ? 'not_workable' : bandFor(score);
+
+  /*
+   * ZERO VERIFIED SIGNIFICANCE CAPS THE LABEL, WHATEVER THE MATCH SAYS.
+   *
+   * The test is deliberately narrow. `evidenceRichness` defined means this is
+   * a compiled record whose standing was assessed; both significance channels
+   * absent means that assessment established nothing — no knowledge base, no
+   * corroborating catalogue, no authority, not even the region's own naming.
+   * An authored place carries none of these fields and is exempt: curation is
+   * itself the evidence there. The cap lands on `good` — "worth considering"
+   * — because excitement about an unverified place is allowed and a top label
+   * on one is a lie with a meter beside it.
+   */
+  const evidenceLimited =
+    place.evidenceRichness !== undefined &&
+    place.globalProminence === undefined &&
+    place.localSignificance === undefined;
+  const band: FitBand =
+    evidenceLimited && (uncapped === 'top_pick' || uncapped === 'strong') ? 'good' : uncapped;
 
   return {
     placeId: place.id,
     score,
     band,
+    ...(evidenceLimited ? { evidenceLimited } : {}),
     factors,
     features,
     blockers,
@@ -617,6 +664,15 @@ interface ReasonInput {
  * "Why this fits you" is generated from the same numbers that produced the score,
  * so the explanation cannot drift from the ranking. When a place does not fit,
  * this says that plainly instead of manufacturing enthusiasm.
+ *
+ * One rule with no exceptions: **the interest sentence never stands alone.**
+ * "You like viewpoints; this is a viewpoint" is a tautology wearing a
+ * personalisation badge — it restates the category match the score already
+ * counted and tells the traveller nothing they could not see from the card's
+ * own caption. So the interest reason is kept only when at least one *other*
+ * dimension (crowds, distance, effort, cost, weather resilience) has something
+ * concrete to say beside it; a card with only the tautology available says
+ * nothing, which is honest.
  */
 function buildReasons(input: ReasonInput): string[] {
   const { place, assessment, context, features, best, band } = input;
@@ -625,13 +681,12 @@ function buildReasons(input: ReasonInput): string[] {
 
   if (band === 'not_workable') return reasons;
 
-  if (best && LEVEL_WEIGHT[best.level] >= 0.6) {
-    reasons.push(
-      `You marked ${INTEREST_LABELS[best.interest].toLowerCase()} as "${INTEREST_LEVEL_LABELS[
-        best.level
-      ].toLowerCase()}", and that is what this delivers.`,
-    );
-  }
+  const interestReason =
+    best && LEVEL_WEIGHT[best.level] >= 0.6
+      ? `You marked ${INTEREST_LABELS[best.interest].toLowerCase()} as "${INTEREST_LEVEL_LABELS[
+          best.level
+        ].toLowerCase()}", and that is what this delivers.`
+      : undefined;
 
   if (features.crowdComfort >= 0.95 && profile.crowdTolerance === 'avoid_crowds') {
     reasons.push('Stays quiet even in season, which matters more to you than a famous name.');
@@ -641,7 +696,7 @@ function buildReasons(input: ReasonInput): string[] {
     reasons.push('Well off the standard loop — the kind of find you said you wanted.');
   } else if (
     features.hiddenGemAlignment >= 0.8 &&
-    place.popularityScore >= 0.7 &&
+    place.popularityScore >= WIDELY_NOTED_PROMINENCE &&
     profile.discoveryMix === 'mostly_classics'
   ) {
     reasons.push('One of the names people come here for, and you wanted the highlights.');
@@ -685,7 +740,72 @@ function buildReasons(input: ReasonInput): string[] {
     reasons.push('The drive there is part of the appeal, and you wanted scenic driving.');
   }
 
-  return dedupe(reasons).slice(0, 3);
+  /*
+   * The interest sentence joins only in company. On its own it is the §9.2
+   * tautology, and an empty list is the honest output for a candidate about
+   * which the only true personal statement is its own category.
+   */
+  const grounded = dedupe(reasons);
+  if (interestReason && grounded.length > 0) grounded.unshift(interestReason);
+  return grounded.slice(0, 3);
+}
+
+/**
+ * The largest share of a board any single label may hold before it stops
+ * meaning anything. §9.1's failure was 24 of 24 cards reading the same top
+ * label; past this share the label is a background, not a signal.
+ */
+export const MAX_TOP_BAND_SHARE = 0.6;
+
+/** The next band down, for recalibration. Stops at `optional` on purpose. */
+const DEMOTION: Partial<Record<FitBand, FitBand>> = {
+  top_pick: 'strong',
+  strong: 'good',
+  good: 'optional',
+};
+
+/**
+ * Recalibrate a board on which *any* label has stopped discriminating.
+ *
+ * When more than `MAX_TOP_BAND_SHARE` of the workable candidates share a band,
+ * the lowest-scoring members of that band are demoted one band until the share
+ * holds. Deterministic — score ascending, then id — and bounded: nothing is
+ * ever demoted past `optional`, because pushing cards into "probably skip" to
+ * fix a distribution would trade an overclaim for a lie in the other direction.
+ * Returns a new array; the inputs are not touched.
+ *
+ * EVERY BAND IN THE LADDER IS CHECKED, AND THE DEMOTIONS CASCADE.
+ *
+ * The loop used to `break` the moment it met a band that was *within* budget,
+ * and `break` again after its first demotion — so it only ever inspected the
+ * highest band present and only ever fixed that one. On a real Eastern Sierra
+ * board that terminated on `top_pick` holding 2 of 23 workable cards, which is
+ * inside the share, and the guard never reached `strong` holding 20 of 23:
+ * 87% of the board read "Strong fit" while the product's own constant says at
+ * most 60% of it may. Continuing also matters for the demotions themselves —
+ * a top band drained into the next one can push *that* band over its share,
+ * and re-reading the holders each turn is what lets the overflow keep falling.
+ */
+export function calibrateBandDistribution(
+  assessments: readonly FitAssessment[],
+): FitAssessment[] {
+  const result = assessments.map((assessment) => ({ ...assessment }));
+  const workable = result.filter((assessment) => assessment.band !== 'not_workable');
+  if (workable.length < 3) return result;
+
+  const ladder: FitBand[] = ['top_pick', 'strong', 'good'];
+  const allowed = Math.max(1, Math.floor(workable.length * MAX_TOP_BAND_SHARE));
+  for (const band of ladder) {
+    const holders = workable.filter((assessment) => assessment.band === band);
+    if (holders.length <= allowed) continue;
+    const demoteTo = DEMOTION[band];
+    if (!demoteTo) continue;
+    const demotions = holders
+      .sort((a, b) => a.score - b.score || a.placeId.localeCompare(b.placeId))
+      .slice(0, holders.length - allowed);
+    for (const assessment of demotions) assessment.band = demoteTo;
+  }
+  return result;
 }
 
 function clamp01(value: number): number {

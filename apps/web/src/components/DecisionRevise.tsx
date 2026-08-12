@@ -36,7 +36,13 @@ export function DecisionRevise({
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
-        className="text-sm text-ink-muted underline underline-offset-4 hover:text-pine"
+        /*
+         * 44 px, per WCAG 2.5.5. This was a bare line of 14 px text — about
+         * twenty pixels of target — and it is the only way to change the
+         * answers a whole shortlist is ranked against, which the honest-verdict
+         * headline above now points people at directly.
+         */
+        className="inline-flex min-h-11 items-center text-sm text-ink-muted underline underline-offset-4 hover:text-pine"
       >
         <span id="revise-heading">
           {open ? 'Leave my answers as they are' : 'Change what you told us'}

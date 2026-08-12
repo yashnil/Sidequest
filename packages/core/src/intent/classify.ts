@@ -47,6 +47,28 @@ import {
  * letting "we do not read your language" look like "you wrote nothing".
  */
 
+/**
+ * THE TABLE IN THE ORDER THE MATCHER MUST READ IT: LONGEST PHRASE FIRST.
+ *
+ * Enforced here rather than assumed of the declaration order, because the
+ * assumption failed in the way a comment always eventually does. `PHRASES`
+ * groups its entries by *topic* — interests first, avoidances after — so
+ * `hike` (an interest) sat two hundred lines above `long hike` (an avoidance),
+ * and the loop below read the file top to bottom. "No long hikes" therefore
+ * matched `hike` first, claimed the span, and became a confirmed hard refusal
+ * of the entire hiking interest: `frequencyCaps.hiking = 0`, every hike gone,
+ * from a sentence whose author was narrowing, not refusing. The claimed-span
+ * check was doing its job; it was fed the phrases in the wrong order.
+ *
+ * The sort is by length only and `Array.prototype.sort` is stable, so phrases
+ * of equal length keep their declaration order — nothing else about the table's
+ * priority is invented here. `phrase-order.test.ts` asserts the property this
+ * buys: no phrase in iteration order is preceded by one of its own substrings.
+ */
+export const PHRASES_LONGEST_FIRST: readonly (readonly [string, ChipTarget])[] = [...PHRASES].sort(
+  (a, b) => b[0].length - a[0].length,
+);
+
 /** Where a clause sits in the original string. Offsets index the stored text. */
 interface Clause {
   text: string;
@@ -261,7 +283,7 @@ export function classifyPreferences(input: ClassifyInput): InterpretationSet {
 
       let matched = false;
       const claimed: [number, number][] = [];
-      for (const [phrase, target] of PHRASES) {
+      for (const [phrase, target] of PHRASES_LONGEST_FIRST) {
         const at = lowered.indexOf(phrase);
         if (at === -1) continue;
         // Longest-first ordering means an earlier, longer phrase wins the span.

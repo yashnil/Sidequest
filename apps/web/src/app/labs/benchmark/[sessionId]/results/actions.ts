@@ -7,6 +7,7 @@ import {
   revealIdentities,
   savePostRevealAnswers,
 } from '@/lib/db/benchmark-review-repository';
+import { labsAccessGranted } from '@/lib/labs/access';
 
 /**
  * THE REVEAL, AND THE FOUR QUESTIONS THAT ONLY MAKE SENSE AFTER IT.
@@ -20,8 +21,13 @@ import {
  * Ordering is enforced in SQL — `revealIdentities` only moves a session that is
  * already `review_locked` — so a reviewer who guessed this URL before locking
  * gets a refusal rather than an answer.
+ *
+ * Both actions begin with `labsAccessGranted()`, because the `/labs` middleware
+ * only sees navigations and a server action is dispatched by id from any URL.
+ * See `lib/labs/access`.
  */
 export async function revealIdentitiesAction(sessionId: string): Promise<void> {
+  if (!(await labsAccessGranted())) return;
   revealIdentities(sessionId, new Date());
   revalidatePath(`/labs/benchmark/${sessionId}/results`);
 }
@@ -34,6 +40,7 @@ export async function revealIdentitiesAction(sessionId: string): Promise<void> {
  * answered it; inventing one would be inventing the finding.
  */
 export async function savePostRevealAction(sessionId: string, form: FormData): Promise<void> {
+  if (!(await labsAccessGranted())) return;
   if (!identitiesAreRevealed(sessionId)) return;
 
   const answers = postRevealAnswersSchema.safeParse({

@@ -1,4 +1,4 @@
-import { isMeaningfullyBetter } from '@sidequest/core';
+import { isMeaningfullyBetter, type TravelerProfile } from '@sidequest/core';
 import { clusterByTravelTime, type TravelTimeMatrix, tryLeg } from '@sidequest/geo';
 import type { AccessUnit } from './access';
 import type { PlannedDay } from './windows';
@@ -126,6 +126,23 @@ function preferByWeather(
 const MIN_PLANNABLE_MINUTES = 90;
 
 /**
+ * Does this traveller want their hard days kept apart?
+ *
+ * §9.3 lists "long hikes on consecutive days when pace says otherwise" beside
+ * "a museum every day" as things personalization must not do — and the planner
+ * had a per-day intensity ceiling and nothing at all between days.
+ *
+ * Two answers make somebody exempt, and both are the traveller saying so
+ * themselves: a fast pace is a request for a full week, and a preferred
+ * intensity of `strenuous` is a request for hard days. Everybody else — which is
+ * most people, including the balanced-pace hiker this exists for — gets a day's
+ * recovery between climbs where the trip can afford one.
+ */
+export function wantsStrenuousDaysApart(profile: TravelerProfile): boolean {
+  return profile.pace !== 'fast' && profile.derived.preferredPhysicalIntensity !== 'strenuous';
+}
+
+/**
  * Groups places geographically and hands each group to a day.
  *
  * Three decisions carry the quality here:
@@ -164,6 +181,12 @@ export function assignToDays(
    * only honest thing a fortnight of past Augusts can say about next Tuesday.
    */
   weatherPreferenceFor: (placeIds: readonly string[], date: string) => number | null = () => null,
+  /**
+   * Whether this traveller's hard days should be kept off each other's heels.
+   * See `wantsStrenuousDaysApart` — §9.3's "long hikes on consecutive days when
+   * pace says otherwise".
+   */
+  separateStrenuousDays = false,
 ): DayAssignment[] {
   const usableDays = days.filter((day) => day.capacityMinutes >= MIN_PLANNABLE_MINUTES);
   if (usableDays.length === 0 || eligible.length === 0) {
@@ -203,6 +226,10 @@ export function assignToDays(
       placeIds: members.flatMap((unit) => unit.members.map((member) => member.place.id)),
       weight: members.length > 0 ? Math.max(...members.map((unit) => unit.maxDriveMinutes)) : 0,
       topPriority: members.length > 0 ? Math.max(...members.map((unit) => unit.topPriority)) : 0,
+      /* One hard stop is enough to make the day a hard day. */
+      strenuous: members.some((unit) =>
+        unit.members.some((member) => member.place.physicalIntensity === 'strenuous'),
+      ),
     };
   });
 
@@ -259,6 +286,8 @@ export function assignToDays(
   // Fewest clusters so far wins, and `sort` is stable, so the capacity order
   // already baked into `orderedDays` breaks every tie. Fully deterministic.
   const clustersPerDay = new Map<number, number>();
+  /** Days already carrying a hard stop, so the next one can be kept off them. */
+  const strenuousDays = new Set<number>();
 
   for (const cluster of orderedClusters) {
     /*
@@ -269,13 +298,49 @@ export function assignToDays(
     const candidateDays = orderedDays.filter((day) => reachableFromDayBase(cluster, day.date));
     if (candidateDays.length === 0) continue;
     const best = Math.max(...candidateDays.map((day) => workableParts(cluster, day.date)));
-    const pool = candidateDays.filter((day) => workableParts(cluster, day.date) === best);
+    const workable = candidateDays.filter((day) => workableParts(cluster, day.date) === best);
+
+    /**
+     * SPACING HARD DAYS OUT — §9.3, "long hikes on consecutive days when pace
+     * says otherwise".
+     *
+     * `maxStrenuous` bounds effort *within* a day and nothing bounded it
+     * *between* days, so a balanced-pace traveller who likes hiking was
+     * perfectly likely to be handed three long climbs in a row: each day passed
+     * every check it was given, and the week was punishing. Composition is a
+     * property of the sequence, and nothing was looking at the sequence.
+     *
+     * A narrowing, not a score: days adjacent to one already carrying a hard
+     * stop drop out of contention, and everything downstream — load balancing,
+     * then weather — chooses among what is left, unchanged. It gives way the
+     * moment it would cost the traveller a stop: if nothing non-adjacent is
+     * workable, the original pool stands, because a spread-out trip that leaves
+     * a lake unvisited is not the trade anybody asked for.
+     */
+    const spaced =
+      separateStrenuousDays && cluster.strenuous
+        ? workable.filter(
+            (day) =>
+              /*
+               * The day itself as well as its neighbours: a traveller who wants
+               * hard days apart has `maxStrenuous` of one, so stacking two on
+               * one day is not spacing, it is one of them being dropped by the
+               * packer a few steps later.
+               */
+              !strenuousDays.has(day.dayNumber) &&
+              !strenuousDays.has(day.dayNumber - 1) &&
+              !strenuousDays.has(day.dayNumber + 1),
+          )
+        : workable;
+    const pool = spaced.length > 0 ? spaced : workable;
+
     const balanced = [...pool].sort(
       (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
     )[0];
     const day = preferByWeather(cluster, pool, balanced, weatherPreferenceFor);
     if (!day) continue;
     clustersPerDay.set(day.dayNumber, (clustersPerDay.get(day.dayNumber) ?? 0) + 1);
+    if (cluster.strenuous) strenuousDays.add(day.dayNumber);
     assignmentByDay.get(day.dayNumber)?.push(...cluster.candidates);
   }
 

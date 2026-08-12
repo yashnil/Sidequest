@@ -872,25 +872,37 @@ async function requestJson<T>(
 export type ImageryMode = 'off' | 'wikimedia' | 'fixture';
 
 /**
- * Live imagery is **opt-in**, and that is a decision rather than an oversight.
+ * Live imagery is **on** for a real deployment, and off for a fixture one.
  *
- * Two things are still unresolved and both of them are infrastructure rather
- * than code: where ingested bytes would live if we stopped pointing browsers at
- * `upload.wikimedia.org`, and whether to register for the authenticated request
- * tier before a cold-start seeding run. Until those are answered, a deployment
- * that has not said it wants live imagery gets deliberate fallbacks, which are
- * designed objects and not a degraded state.
+ * IT USED TO DEFAULT TO OFF, AND THAT WAS A PRODUCT BUG WEARING CAUTION'S
+ * CLOTHES. The whole pipeline existed — a licence allow-list, a subject-identity
+ * ladder, a persisted cache, an attribution contract, a designed fallback — and
+ * every screen that read from it read an empty table, because nothing outside a
+ * test had ever set the variable that switched it on. Twelve live compilations
+ * produced zero rows in `destination_images`. A product whose most differentiated
+ * surface is a wall of grey plates is not being cautious; it is shipping the
+ * degraded path as the only path.
  *
- * Unset, the mode follows the compiler: a deployment running its whole stack on
- * fixtures must not be the one deployment that reaches a live volunteer service.
- * That is what makes the browser suite offline without a second switch.
+ * The two things that were unresolved when it was written are still unresolved
+ * and neither of them blocks this: where ingested bytes would live if we stopped
+ * pointing browsers at `upload.wikimedia.org` is a hosting question, and the
+ * authenticated request tier only matters at a request rate a bounded per-board
+ * resolution does not reach. The provider is keyless, its terms are read at
+ * ingestion, and every file is refused unless its licence is on the allow-list —
+ * so "on" costs nothing but a small number of polite requests.
+ *
+ * The fixture rule is untouched and is the one that matters for the suites: a
+ * deployment running its stack on fixtures must not be the one deployment that
+ * reaches a live volunteer service. That is what keeps the browser suite offline
+ * without a second switch, and `off` remains available for a deployment that
+ * genuinely wants no imagery at all.
  */
 export function imageryMode(): ImageryMode {
   const explicit = process.env.SIDEQUEST_IMAGERY_PROVIDER?.trim().toLowerCase();
   if (explicit === 'wikimedia' || explicit === 'fixture' || explicit === 'off') return explicit;
   return process.env.SIDEQUEST_COMPILER_PROVIDER?.trim().toLowerCase() === 'fixture'
     ? 'fixture'
-    : 'off';
+    : 'wikimedia';
 }
 
 /**

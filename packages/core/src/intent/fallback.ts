@@ -674,3 +674,32 @@ export function canOfferModelPass(set: InterpretationSet | undefined): boolean {
   return spansForModel(set).refusal === null;
 }
 
+/**
+ * Outcomes that describe the *provider's* afternoon rather than the text.
+ *
+ * Everything else is terminal on purpose: an answer the schema could not use
+ * will not become usable by asking again, a spent budget is spent, and "there
+ * was nothing to read" needs no second opinion. But `provider_unavailable`
+ * means the traveller pressed the button, was promised one reading, and got
+ * nothing for it — and the screen then fell silent, with the avoidances still
+ * unmodelled and no way to try again. A failure the traveller can act on must
+ * stay actionable.
+ */
+export const RETRYABLE_MODEL_OUTCOMES: readonly ModelFallbackOutcome[] = ['provider_unavailable'];
+
+/**
+ * Whether the recorded pass is one the traveller may retry.
+ *
+ * The companion to `canOfferModelPass`, and mutually exclusive with it: that
+ * one is true only before any pass exists, this one only after a pass that
+ * failed for provider reasons. Both drive the button and only the button — the
+ * hard ceiling on attempts is the operation lease's, which stops handing out
+ * claims after its bounded budget and lands the trip on `budget_exhausted`,
+ * a terminal outcome this function refuses.
+ */
+export function canRetryModelPass(set: InterpretationSet | undefined): boolean {
+  if (!set || set.confirmedAt || !set.modelPass) return false;
+  if (!RETRYABLE_MODEL_OUTCOMES.includes(set.modelPass.outcome)) return false;
+  return spansForModel(set).refusal === null;
+}
+

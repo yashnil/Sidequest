@@ -79,6 +79,7 @@ export * from './hours/provider';
 
 export * from './food/availability';
 export * from './food/board';
+export * from './food/quality';
 export * from './food/provider';
 
 export * from './weather/board';
@@ -127,6 +128,12 @@ export * from './discovery/autoselect';
 export * from './discovery/reconcile';
 
 export * from './profile/personality';
+
+export * from './interests/vocabulary';
+export * from './interests/acquisition';
+export * from './interests/offer';
+export * from './interests/decisions';
+export * from './interests/schema';
 
 // Seed data is reachable at `@sidequest/core/data`, never from here. See the
 // note at the top of this file.

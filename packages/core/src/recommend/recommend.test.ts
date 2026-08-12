@@ -6,7 +6,15 @@ import type { DurationGuidance } from '../dates/duration';
 import type { SupplyAssessment } from '../schemas/supply';
 import { RANK_WEIGHTS } from '../schemas/shortlist';
 import { bandFor, exclusionsFor, rankDestination, type CandidateEvidence } from './rank';
-import { buildShortlist, ruledOut, shortlistInputKey } from './shortlist';
+import type { RankedDestination } from '../schemas/shortlist';
+import {
+  buildShortlist,
+  catalogueBlindSpot,
+  ruledOut,
+  shortlistInputKey,
+  shortlistLead,
+  shortlistSeparation,
+} from './shortlist';
 
 const NOW = new Date('2026-08-03T00:00:00Z');
 
@@ -88,7 +96,15 @@ function supply(level: SupplyAssessment['level'] = 'strong'): SupplyAssessment {
       baseCandidates: 3,
       tripDays: 7,
     },
-    summary: '120 mapped places across 4 areas.',
+    /*
+     * The sentence `assessSupply` actually produces, day clause and all.
+     *
+     * It read '120 mapped places across 4 areas.' — no day count — which made
+     * the test below that asserts the day count is dropped pass whether or not
+     * anything dropped it. A fixture that cannot exhibit the defect is not
+     * evidence about the fix.
+     */
+    summary: '120 mapped places across 4 areas — comfortably enough to build 8 days from.',
     shortfalls: [],
     actions: [],
     repairsAttempted: [],
@@ -453,5 +469,373 @@ describe('the shortlist', () => {
     expect(result.climateRequests).toBe(5);
     expect(result.elapsedMs).toBe(240);
     expect(result.considered).toBe(5);
+  });
+});
+
+/**
+ * THE SCREEN THAT SAID "WE COULD NOT TELL THESE APART" OVER EIGHT IDENTICAL CARDS.
+ *
+ * A fresh reviewer opened "Help me decide" — one of three doors on the homepage
+ * — and got eight administrative polygons under that headline, numbered 1 to 8,
+ * with a "why this one" panel beside the first. Reproduced against the live
+ * 109,853-entry index with the current tree, an ordinary set of answers scores
+ * `themeFit` at exactly 0.50 for **240 of 240** candidates and puts 38 of them
+ * in one tie at the top of the order.
+ *
+ * The two defects behind it are both here: a dimension that returned a number
+ * where it had no reading, and a screen that had no way to ask whether the order
+ * it was numbering was an order.
+ */
+describe('the ranking does not invent a reading it does not have', () => {
+  /**
+   * A region is a polygon drawn for governing. Its feature type says nothing
+   * about whether there are mountains in it, and 0.5 is not a middling fit — it
+   * is the starting value of a function that never found any evidence.
+   */
+  it('reports theme fit as unmeasured for an administrative unit', () => {
+    for (const featureType of ['region', 'county', 'town'] as const) {
+      const ranked = rankDestination({
+        candidate: candidate({ entry: entry({ featureType }) }),
+        answers: answers({ themes: ['outdoors'] }),
+        candidateMonths: [7],
+      });
+      const theme = ranked.factors.find((factor) => factor.id === 'themeFit')!;
+      expect(theme.measure.kind, `${featureType} carries no theme evidence`).toBe('unknown');
+      expect(theme.contribution).toBe(0);
+      expect(ranked.unknowns.join(' ')).toContain('Matches what you came for');
+    }
+  });
+
+  /** And still measures it where the feature type genuinely carries the signal. */
+  it('still measures theme fit where the index does say something', () => {
+    const wild = rankDestination({
+      candidate: candidate({ entry: entry({ featureType: 'national_park' }) }),
+      answers: answers({ themes: ['outdoors'] }),
+      candidateMonths: [7],
+    });
+    const urban = rankDestination({
+      candidate: candidate({ entry: entry({ featureType: 'city' }) }),
+      answers: answers({ themes: ['outdoors'] }),
+      candidateMonths: [7],
+    });
+    const wildTheme = wild.factors.find((factor) => factor.id === 'themeFit')!.measure;
+    const urbanTheme = urban.factors.find((factor) => factor.id === 'themeFit')!.measure;
+    expect(wildTheme.kind).toBe('measured');
+    expect(urbanTheme.kind).toBe('measured');
+    expect(wildTheme.kind === 'measured' && wildTheme.value).toBeGreaterThan(
+      urbanTheme.kind === 'measured' ? urbanTheme.value : 1,
+    );
+  });
+
+  /**
+   * The consequence the traveller sees: an unmeasured dimension must not buy
+   * confidence. Twelve hundredths of the nominal weight was being counted as
+   * measured for every candidate in the catalogue.
+   */
+  it('does not let the unmeasured dimension inflate coverage', () => {
+    const administrative = rankDestination({
+      candidate: candidate({ entry: entry({ featureType: 'region' }) }),
+      answers: answers({ themes: ['outdoors'] }),
+      candidateMonths: [7],
+    });
+    const wild = rankDestination({
+      candidate: candidate({ entry: entry({ featureType: 'national_park' }) }),
+      answers: answers({ themes: ['outdoors'] }),
+      candidateMonths: [7],
+    });
+    expect(wild.coverage - administrative.coverage).toBeCloseTo(RANK_WEIGHTS.themeFit, 10);
+  });
+
+  /**
+   * AND IT DOES NOT QUOTE A SENTENCE ABOUT A TRIP LENGTH NOBODY GAVE.
+   *
+   * `assessSupply` phrases its verdict against the days it was handed, the
+   * shortlist hands it a zero when the traveller has not said, and the result
+   * reached the screen as the first bullet of the lead recommendation: "182
+   * mapped places across 8 areas — comfortably enough to build 0 days from."
+   * The counts are true; the clause about days is not.
+   */
+  it('drops the day count from the supply sentence when no trip length was given', () => {
+    const open = rankDestination({
+      candidate: candidate(),
+      answers: answers({ duration: { mode: 'unknown', wantsRecommendation: false } }),
+      candidateMonths: [7],
+    });
+    const measure = open.factors.find((factor) => factor.id === 'supplyFit')!.measure;
+    expect(measure.kind).toBe('measured');
+    const basis = measure.kind === 'measured' ? measure.basis : '';
+    expect(basis).not.toContain('days');
+    expect(basis).toContain('120 mapped places across 4 areas');
+    expect(open.reasons.join(' ')).not.toContain('0 days');
+  });
+
+  it('keeps the sentence the assessment made once a trip length exists', () => {
+    const fixed = rankDestination({
+      candidate: candidate(),
+      answers: answers(),
+      candidateMonths: [7],
+    });
+    const measure = fixed.factors.find((factor) => factor.id === 'supplyFit')!.measure;
+    expect(measure.kind === 'measured' && measure.basis).toBe(
+      '120 mapped places across 4 areas — comfortably enough to build 8 days from.',
+    );
+  });
+});
+
+describe('a shortlist says whether its own order is an order', () => {
+  /** Eight picks that scored the same are eight picks in alphabetical order. */
+  function tied(count: number): RankedDestination[] {
+    return Array.from({ length: count }, (_, index) =>
+      rankDestination({
+        candidate: candidate({ entry: entry({ id: `cat:${index}`, displayName: `Place ${index}` }) }),
+        answers: answers(),
+        candidateMonths: [7],
+      }),
+    );
+  }
+
+  it('calls an all-equal list undifferentiated, and offers the answers that would break the tie', () => {
+    const verdict = shortlistSeparation(tied(8));
+    expect(verdict.undifferentiated).toBe(true);
+    expect(verdict.separates).toBe(false);
+    expect(verdict.tiedAtTop).toBe(8);
+    // Theme fit is unmeasured for every one of them, so it did not separate
+    // anything and must be named rather than counted.
+    expect(verdict.unmeasured.map((entry) => entry.id)).toContain('themeFit');
+    // And what *was* measured came back identical, which is the other half of
+    // the sentence the screen has to say.
+    expect(verdict.flat.map((entry) => entry.id)).toContain('supplyFit');
+  });
+
+  it('refuses to call a list ranked when any adjacent pair ties', () => {
+    const picks = tied(3);
+    // A leader, then two that tie with each other: the shape the live index
+    // actually produces, and the one the old band test called "ranked".
+    picks[0] = { ...picks[0]!, score: 91 };
+    const verdict = shortlistSeparation(picks);
+    expect(verdict.undifferentiated).toBe(false);
+    expect(verdict.tiedAtTop).toBe(1);
+    expect(verdict.separates).toBe(false);
+  });
+
+  it('calls a strictly descending list ranked', () => {
+    const picks = tied(3).map((pick, index) => ({ ...pick, score: 90 - index * 5 }));
+    const verdict = shortlistSeparation(picks);
+    expect(verdict.separates).toBe(true);
+    expect(verdict.undifferentiated).toBe(false);
+    expect(verdict.tiedAtTop).toBe(1);
+  });
+
+  it('prefers the reason a traveller can act on when the picks disagree about why', () => {
+    // Our gap first, so the ordering cannot be what makes this pass: this pick
+    // has a shape but no portfolio, so structure is unknown for `no_index_coverage`.
+    const ourGap = rankDestination({
+      candidate: candidate({ portfolio: undefined }),
+      answers: answers(),
+      candidateMonths: [7],
+    });
+    // This one has a portfolio and no stated shape: `traveller_did_not_say`.
+    const askable = rankDestination({
+      candidate: candidate(),
+      answers: answers({ shape: undefined }),
+      candidateMonths: [7],
+    });
+    const verdict = shortlistSeparation([ourGap, askable]);
+    const structure = verdict.unmeasured.find((entry) => entry.id === 'structureFit');
+    // Both picks are unknown on this dimension for different reasons. The
+    // actionable one wins, because it is the only one with a form behind it.
+    expect(structure?.reason).toBe('traveller_did_not_say');
+  });
+
+  it('says nothing about an order of one', () => {
+    const verdict = shortlistSeparation(tied(1));
+    expect(verdict.undifferentiated).toBe(false);
+    expect(verdict.separates).toBe(true);
+  });
+});
+
+/**
+ * WHAT THE CATALOGUE IS MADE OF, MEASURED RATHER THAN INFERRED.
+ *
+ * The index holds regions, counties, cities and towns and nothing else — the
+ * live release supplies 203 regions and 37 counties to the universe scan and not
+ * one island, park or protected area — so every shortlist the product can
+ * produce today is administrative geometry. A traveller reading "Akershus,
+ * Tirana County, Zagreb County" deserves to know that is the catalogue and not
+ * the answer.
+ *
+ * This used to be derived from the picks, and the derivation was unsound in the
+ * one case that matters: an index carrying five national parks, none of which
+ * reached the top eight, still produced "that is all our place index holds".
+ * The sentence is a claim about the release, so it is made from what the release
+ * returned.
+ */
+describe('a shortlist admits what kind of places it is made of', () => {
+  it('names the kinds the index could not supply', () => {
+    const spots = catalogueBlindSpot({
+      requested: ['region', 'county', 'island', 'national_park', 'protected_area'],
+      supplied: ['region', 'region', 'county'],
+    });
+    expect(spots.join(' ')).toContain('administrative region or county');
+    expect(spots.join(' ')).toContain('islands, national parks or protected areas');
+  });
+
+  it('says nothing of the sort once the index supplies a landscape kind', () => {
+    expect(
+      catalogueBlindSpot({
+        requested: ['region', 'county', 'island', 'national_park', 'protected_area'],
+        supplied: ['region', 'county', 'national_park'],
+      }),
+    ).toEqual([]);
+  });
+
+  /**
+   * The false inference, held out as a case rather than described in a comment.
+   *
+   * Two administrative picks on screen, and an index that did supply a national
+   * park to the scan. The old rule read the picks and would have announced that
+   * the catalogue holds no parks — a claim about our data derived from a scoring
+   * outcome, and false.
+   */
+  it('does not conclude the index is empty of parks from a list that has none', () => {
+    expect(
+      catalogueBlindSpot({
+        requested: ['region', 'county', 'national_park'],
+        supplied: ['region', 'county', 'national_park'],
+      }),
+    ).toEqual([]);
+
+    const result = buildShortlist({
+      candidates: [
+        candidate({ entry: entry({ id: 'cat:a', featureType: 'region' }) }),
+        candidate({ entry: entry({ id: 'cat:b', featureType: 'county', countryCode: 'BB' }) }),
+      ],
+      answers: answers(),
+      seasonMonths: [],
+      climateRequests: 0,
+      elapsedMs: 10,
+      now: NOW,
+    });
+    expect(
+      result.blindSpots.join(' '),
+      'buildShortlist must not invent a claim about the catalogue from its own output',
+    ).not.toContain('administrative region or county');
+  });
+
+  it('says nothing when the caller only ever asked for administrative kinds', () => {
+    expect(catalogueBlindSpot({ requested: ['region', 'county'], supplied: ['region'] })).toEqual([]);
+  });
+});
+
+/**
+ * A NO-CONFIDENCE RESULT IS STILL A SCREEN SOMEBODY HAS TO USE.
+ *
+ * `shortlistSeparation` established that the live list is not a ranking. On its
+ * own that produced a page headed "We could not tell these apart" over eight
+ * identical cards — the method's self-assessment served instead of an answer.
+ * `shortlistLead` is what turns the same verdict into one recommendation with a
+ * true account of why it is first.
+ */
+describe('a shortlist that cannot rank still leads with one', () => {
+  function scored(values: readonly { score: number; coverage: number }[]): RankedDestination[] {
+    return values.map((value, index) => ({
+      ...rankDestination({
+        candidate: candidate({ entry: entry({ id: `cat:${index}`, displayName: `Place ${index}` }) }),
+        answers: answers(),
+        candidateMonths: [7],
+      }),
+      ...value,
+    }));
+  }
+
+  it('claims a winner only where one outscored the rest', () => {
+    const picks = scored([{ score: 91, coverage: 0.6 }, { score: 80, coverage: 0.6 }]);
+    const lead = shortlistLead(picks, shortlistSeparation(picks));
+    expect(lead?.basis).toBe('outscored');
+    expect(lead?.entryId).toBe('cat:0');
+    expect(lead?.tiedWith).toBe(1);
+  });
+
+  /**
+   * The shape the live index produces: level on score, and one of them is the
+   * one we could actually check. That is not a claim that it fits better — it is
+   * a checkable reason to start there, which is what the screen says.
+   */
+  it('leads on evidence when the scores are level', () => {
+    const picks = scored([
+      { score: 95, coverage: 0.4 },
+      { score: 95, coverage: 0.8 },
+      { score: 95, coverage: 0.4 },
+    ]);
+    const lead = shortlistLead(picks, shortlistSeparation(picks));
+    expect(lead?.basis).toBe('best_evidenced');
+    expect(lead?.entryId).toBe('cat:1');
+    expect(lead?.tiedWith).toBe(3);
+  });
+
+  it('admits it when score and evidence are both level', () => {
+    const picks = scored([
+      { score: 100, coverage: 0.24 },
+      { score: 100, coverage: 0.24 },
+    ]);
+    const lead = shortlistLead(picks, shortlistSeparation(picks));
+    expect(lead?.basis).toBe('arbitrary');
+    expect(lead?.entryId).toBe('cat:0');
+    expect(lead?.tiedWith).toBe(2);
+  });
+
+  /**
+   * One question, and the one that pays.
+   *
+   * Trip length carries 0.18 of the nominal weight, what they came for 0.12, the
+   * number of bases 0.10 and getting around 0.04 — so a page with room for a
+   * single ask must ask about the nights. The page used to list all of them,
+   * which is a form.
+   *
+   * The assertion above the verdict is load-bearing: with one askable dimension
+   * in the fixture, `[0]` would pass however the list were ordered, and the
+   * test would be evidence of nothing.
+   */
+  it('asks for the heaviest answer the traveller could still give', () => {
+    /*
+     * Bases and what-you-came-for left open, and nothing else.
+     *
+     * The pair is chosen so that declaration order and weight order disagree:
+     * `RANK_DIMENSIONS` lists `structureFit` before `themeFit`, and the weights
+     * run the other way — 0.10 against 0.12. An earlier version of this test
+     * left trip length open too, and trip length is both the heaviest *and* the
+     * earliest, so deleting the sort entirely did not fail it. A fixture whose
+     * two orderings agree cannot be evidence about which one is used.
+     */
+    const picks = [
+      rankDestination({
+        candidate: candidate(),
+        answers: answers({ shape: undefined, themes: [] }),
+        candidateMonths: [7],
+      }),
+    ];
+    const separation = shortlistSeparation(picks);
+    const asked = separation.unmeasured.filter((entry) => entry.reason === 'traveller_did_not_say');
+    expect(
+      asked.map((entry) => entry.id),
+      'the fixture must ask in declaration order, or the sort proves nothing',
+    ).toEqual(['structureFit', 'themeFit']);
+    expect(RANK_WEIGHTS.themeFit).toBeGreaterThan(RANK_WEIGHTS.structureFit);
+
+    const lead = shortlistLead(picks, separation);
+    expect(lead?.nextQuestion?.id).toBe('themeFit');
+    expect(lead?.nextQuestion?.action).toContain('what you are going for');
+  });
+
+  it('asks nothing when every gap is ours rather than theirs', () => {
+    const picks = [
+      rankDestination({
+        candidate: candidate({ climate: undefined, climateAbsence: 'climate_provider_unavailable' }),
+        answers: answers(),
+        candidateMonths: [7],
+      }),
+    ];
+    const lead = shortlistLead(picks, shortlistSeparation(picks));
+    expect(lead?.nextQuestion).toBeUndefined();
   });
 });

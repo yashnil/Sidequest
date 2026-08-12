@@ -3,6 +3,7 @@ import {
   assessSupply,
   buildRegionPortfolio,
   buildShortlist,
+  catalogueBlindSpot,
   durationClustersFrom,
   monthsForSeason,
   nightsFrom,
@@ -70,6 +71,26 @@ const FEATURES_PER_CANDIDATE = 120;
  * breadth problem the scope layer already solves rather than a destination. A
  * traveller who wants a whole country types its name; this is for the ones who
  * do not know yet.
+ *
+ * **Three of these five have never once been supplied, and the list stays
+ * anyway.** Measured against the 2026-07-22 release: the universe scan returns
+ * 203 `region` and 37 `county` and nothing else, because the index is built from
+ * Overture's *divisions* theme, whose subtype vocabulary — country, dependency,
+ * region, county, localadmin, locality, macrohood, neighborhood, microhood — is
+ * administrative by construction. Islands, parks and coastlines live in the
+ * `base` theme, which this repository already reads elsewhere (`LAYERS` in
+ * `providers/overture/normalize.ts`) and whose rows carry no country, no
+ * population, no prominence and no parent — the four fields the index's pruning
+ * rank, its per-country universe bucket and its hierarchy labels are all built
+ * on. Supplying them is a second acquisition pipeline, not a filter change.
+ *
+ * So the list is kept honest at the *other* end rather than trimmed here. The
+ * ask is real — `buildIndexEntries` now classifies a park or an island, so a
+ * producer that supplied one would land it — and `catalogueBlindSpot` compares
+ * this list against what the scan actually returned and puts the shortfall on
+ * the screen. Trimming this to `['region', 'county']` would make the code
+ * consistent with the data by deleting the evidence that anything is missing,
+ * which is how a gap becomes a design.
  */
 const RECOMMENDABLE = ['region', 'county', 'island', 'national_park', 'protected_area'] as const;
 
@@ -265,6 +286,21 @@ export async function recommendDestinations(input: RecommendInput): Promise<Dest
         : 'This deployment has no destination index built, so there is nothing to rank. That is a gap in us, not a statement about the world.',
     );
   }
+  /*
+   * What the catalogue could actually offer, counted from the rows it returned.
+   *
+   * The sentence this produces used to be derived from the eight picks on
+   * screen, which made "our index holds no national parks" a conclusion drawn
+   * from a scoring outcome. It is measured here instead, one line above the
+   * ranking, from the same scan the candidates came out of — so it is a
+   * statement about the release and stays true whatever the ranker does with it.
+   */
+  blindSpots.push(
+    ...catalogueBlindSpot({
+      requested: RECOMMENDABLE,
+      supplied: universe.map((entry) => entry.featureType),
+    }),
+  );
   if (!isClimateEnabled()) {
     blindSpots.push('Climate records are switched off in this build, so nothing below is scored on the weather.');
   }

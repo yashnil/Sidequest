@@ -21,7 +21,7 @@ import {
 } from '@sidequest/core';
 import { capabilityRegistry } from '../capabilities';
 import { entriesInCountry } from '../db/destination-index-repository';
-import { readProviderCache, writeProviderCache } from '../db/compiler-repository';
+import { readCachedClimate, writeCachedClimate } from '../climate/cache';
 import { openMeteoClimateProvider, unavailableClimateProvider } from '../climate/openmeteo';
 
 /**
@@ -43,9 +43,6 @@ import { openMeteoClimateProvider, unavailableClimateProvider } from '../climate
  * cannot quietly promote an estimate into evidence.
  */
 
-/** A climate normal computed from twenty years does not move in a month. */
-const CLIMATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
 /** How many index features to cluster. A bound on the work, not a judgement. */
 const MAX_FEATURES = 400;
 
@@ -66,23 +63,23 @@ function climateProvider() {
 /**
  * A climate profile for a point, cached.
  *
- * Keyed on coordinates rounded to two decimals — about a kilometre — because
- * two bases in the same valley share a climate and paying twice for that would
- * be waste. Rounded rather than exact so the key is stable across a centroid
- * that shifts by metres between index releases.
+ * The key, the lifetime and the refusal of rows this build did not compute all
+ * live in `climate/cache.ts`, beside the arithmetic they describe. They used to
+ * live here, as a coordinate-only key with an unchecked cast, and the cost of
+ * that was that repairing the daylight column changed nothing a traveller saw:
+ * the corrected code kept reading rows the broken code had written.
  */
 export async function climateFor(
   center: { lat: number; lng: number },
   now: Date,
 ): Promise<ClimateProfile | null> {
-  const key = `climate|${center.lat.toFixed(2)}|${center.lng.toFixed(2)}`;
-  const cached = readProviderCache<ClimateProfile>(key, now);
+  const cached = readCachedClimate(center, now);
   if (cached) return cached;
 
   const result = await climateProvider().getProfile({ lat: center.lat, lng: center.lng, now });
   if (result.kind !== 'profile') return null;
 
-  writeProviderCache(key, 'open-meteo-climate', result.profile, CLIMATE_TTL_MS, now);
+  writeCachedClimate(center, result.profile, now);
   return result.profile;
 }
 

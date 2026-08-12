@@ -196,6 +196,15 @@ export function DecisionComposer(props: DecisionComposerProps) {
             <input
               id="decideNights"
               type="number"
+              /*
+               * A NUMBER FIELD THAT OPENS A NUMBER KEYBOARD.
+               *
+               * `type="number"` alone gets the *text* keypad on several Android
+               * browsers, so somebody entering "7 nights" on a phone hunts for
+               * the 123 key first. `inputMode` is the attribute that actually
+               * decides the soft keyboard, and it costs one line.
+               */
+              inputMode="numeric"
               min={1}
               max={30}
               value={nights}
@@ -337,6 +346,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
                   <input
                     id="decideAdults"
                     type="number"
+                    inputMode="numeric"
                     min={1}
                     max={12}
                     value={adults}
@@ -349,6 +359,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
                   <input
                     id="decideChildren"
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     max={12}
                     value={children}

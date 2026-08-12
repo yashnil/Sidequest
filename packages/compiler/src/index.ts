@@ -34,6 +34,7 @@ export * from './routing';
 export * from './scope';
 export * from './dedupe';
 export * from './coverage';
+export * from './food-supply';
 export * from './must-do';
 export * from './compile';
 export * from './provisional';

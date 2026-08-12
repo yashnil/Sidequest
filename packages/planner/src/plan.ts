@@ -1,5 +1,6 @@
 import {
   DAYLIGHT_END_BUFFER_MINUTES,
+  displayNameOf,
   FOOD_ISSUE_CODES,
   ITINERARY_VERSION,
   itinerarySchema,
@@ -24,7 +25,12 @@ import {
   type AccessOption,
   type AccessUnit,
 } from './access';
-import { assignToDays } from './assign';
+import { assignToDays, wantsStrenuousDaysApart } from './assign';
+import {
+  bindingInterestOf,
+  chargeFrequencyCost,
+  withinFrequencyCaps,
+} from './frequency';
 import { assessMustDoFeasibility } from './feasibility';
 import { resolveCandidates } from './candidates';
 import {
@@ -44,6 +50,7 @@ import { reviseDayPlans, type DayPlan } from './revise';
 import {
   buildDay,
   isOpenOnDate,
+  latestFinishFor,
   layoutBestOrder,
   packDay,
   type DayLayout,
@@ -51,6 +58,7 @@ import {
   type PackOptions,
 } from './schedule';
 import { buildTransportStrategy } from './strategy';
+import { modelledWalkCapMinutes, plannerReachResolves } from './modelled-walk';
 import { reachFromBase, travelKnowledgeFor } from './travel';
 
 /**
@@ -63,7 +71,7 @@ interface RoundTrip {
   transportCap: number;
 }
 import { buildPlannerReadiness } from './readiness';
-import { statusFor, validateItinerary, validateStrategy } from './validate';
+import { blockingIssues, statusFor, validateItinerary, validateStrategy } from './validate';
 import {
   narrowByDaylight,
   resolveWeather,
@@ -135,11 +143,26 @@ export function planTrip(input: PlannerInput): PlanResult {
    */
   const travelKnowledge = travelKnowledgeFor(input.matrix, input.profile, input.transit);
 
-  const { eligible, rejected } = resolveCandidates(
+  const resolved = resolveCandidates(
     input.candidates,
     input.selections,
     input.matrix,
     { knowledge: travelKnowledge, baseId: input.baseId },
+  );
+  const rejected = resolved.rejected;
+  /**
+   * Locks, applied where priority is decided.
+   *
+   * A locked stop is planned as if hand-picked — the traveller has said "keep
+   * this" and a rebuild that quietly drops it for an auto-pick has broken a
+   * promise. The day it is held to is enforced after assignment, below; here
+   * it only outranks.
+   */
+  const lockedDayByPlace = new Map((input.locks ?? []).map((lock) => [lock.placeId, lock.dayNumber]));
+  const eligible = resolved.eligible.map((candidate) =>
+    lockedDayByPlace.has(candidate.place.id)
+      ? { ...candidate, manual: true, priority: Math.max(candidate.priority, 10_000 + candidate.fitScore) }
+      : candidate,
   );
   const unscheduled: UnscheduledPlace[] = [...rejected];
 
@@ -235,6 +258,26 @@ export function planTrip(input: PlannerInput): PlanResult {
     unscheduled.push(accessBlocked(candidate, unit, accessByUnitDate, dates));
   }
 
+  /**
+   * THE FUNNEL'S "MEASURABLE" GATE, MADE MODE-AWARE.
+   *
+   * `eligible.length` was the old value, and eligibility only checks that the
+   * matrix *has a row* — so on a car-free trip handed a road matrix the refusal
+   * screen read "MEASURABLE 6" one line above "6 with no measured travel time".
+   * Both sentences were derived honestly from two different definitions of
+   * measurable, which is the defect: the funnel's definition now includes the
+   * access layer's judgement, so a place counts as measurable when a permitted
+   * journey (or an honest derived walk) resolves from the base, or when the
+   * access data itself established a way in.
+   */
+  const walkCap = modelledWalkCapMinutes(input.profile);
+  const reachableIds = new Set(reachable.map((candidate) => candidate.place.id));
+  const measurableCount = eligible.filter(
+    (candidate) =>
+      reachableIds.has(candidate.place.id) ||
+      plannerReachResolves(travelKnowledge, input.baseId, candidate.place.id, walkCap),
+  ).length;
+
   // --- Hours: which places are open, on which dates, within reach ----------
   const hoursByPlaceDate = resolveOperatingHours({
     placeIds: reachable.map((candidate) => candidate.place.id),
@@ -310,7 +353,7 @@ export function planTrip(input: PlannerInput): PlanResult {
           if (!hours || !bounds) return false;
           return couldVisitOnDate({
             hours,
-            placeName: candidate.place.name,
+            placeName: displayNameOf(candidate.place),
             durationMinutes: candidate.durationMinutes,
             bounds,
           });
@@ -516,6 +559,58 @@ export function planTrip(input: PlannerInput): PlanResult {
     unitByPlaceId,
   });
 
+  /**
+   * HOW MUCH OF A THING, APPLIED WHERE THE PLAN IS COMPOSED.
+   *
+   * `frequencyCaps` is the traveller's own answer to "how often do you want
+   * this", and until this existed it was read in exactly two places: the board's
+   * auto-pick, which chooses a set, and the validator, which afterwards notices
+   * the set was too big and writes a caution. Nothing in between refused to
+   * schedule anything — so `frequency_reached`, a reason code shipped with its
+   * own remedies and its own traveller-facing sentence, had no producer
+   * anywhere. §9.3's "personalization means composition, not just ranking" was
+   * true of the ranking and not of the composition.
+   *
+   * What a stop *costs* is `frequency.ts` and nothing else — see that module for
+   * why three layers charging three different ledgers is the defect it closes.
+   * The packer, the validator and (once reconciled) the board's auto-pick must
+   * all read the one function, or the product refuses a stop against one limit
+   * and then warns about another.
+   *
+   * **A hand-picked stop is never refused.** A cap derived from an answer must
+   * not overrule an instruction — somebody who ticked five viewpoints gets five
+   * viewpoints and the validator's caution, which is the honest response to a
+   * traveller contradicting their own questionnaire.
+   */
+  const frequencyCaps = input.profile.derived.frequencyCaps;
+  const interestSpend = new Map<string, number>();
+
+  const withinFrequencyBudget = (
+    candidate: PlanningCandidate,
+    provisional: ReadonlyMap<string, number>,
+  ): boolean => {
+    if (candidate.manual) return true;
+    const spent = new Map<string, number>(interestSpend);
+    for (const [interest, count] of provisional) {
+      spent.set(interest, (spent.get(interest) ?? 0) + count);
+    }
+    return withinFrequencyCaps(candidate.place, frequencyCaps, spent);
+  };
+
+  /** Charged only once a stop is really on a day, so an overflow costs nothing. */
+  const chargeFrequency = (candidates: readonly PlanningCandidate[]): void => {
+    for (const candidate of candidates) {
+      if (candidate.manual) continue;
+      chargeFrequencyCost(candidate.place, frequencyCaps, interestSpend);
+    }
+  };
+
+  /** Stops left out because the traveller asked for fewer of their kind. */
+  const overAllowance: PlanningCandidate[] = [];
+
+  /** No day-local tally: the spill pass reads the trip's spend as it stands. */
+  const EMPTY_SPEND: ReadonlyMap<string, number> = new Map();
+
   // --- First pass: geographic and access groups onto days -----------------
   const assignments = assignToDays(
     plannable,
@@ -526,7 +621,34 @@ export function planTrip(input: PlannerInput): PlanResult {
     feasibleDates,
     openDates,
     (placeIds, date) => weatherPreference(placeIds, date, weatherByPlaceDate),
+    wantsStrenuousDaysApart(input.profile),
   );
+
+  /**
+   * Locks bind *after* geography, by moving rather than by weighting.
+   *
+   * Clustering is free to disagree with a lock — it has no way to know one
+   * exists — so the locked stop is simply moved onto its day here. Moving
+   * after assignment rather than biasing the clusterer keeps the guarantee
+   * absolute: whatever geography preferred, the traveller's pin wins, and if
+   * the day then cannot hold it the packer reports it by name rather than
+   * relocating it.
+   */
+  if (lockedDayByPlace.size > 0) {
+    const byDayNumber = new Map(assignments.map((entry) => [entry.day.dayNumber, entry]));
+    for (const [placeId, dayNumber] of lockedDayByPlace) {
+      const target = byDayNumber.get(dayNumber);
+      if (!target) continue;
+      for (const assignment of assignments) {
+        if (assignment.day.dayNumber === dayNumber) continue;
+        const index = assignment.candidates.findIndex((entry) => entry.place.id === placeId);
+        if (index >= 0) target.candidates.push(...assignment.candidates.splice(index, 1));
+      }
+      target.candidates.sort(
+        (a, b) => b.priority - a.priority || a.place.id.localeCompare(b.place.id),
+      );
+    }
+  }
 
   /**
    * What geography alone would have done, kept so the finished plan can say
@@ -552,11 +674,34 @@ export function planTrip(input: PlannerInput): PlanResult {
   const overflow: PlanningCandidate[] = [];
 
   for (const assignment of assignments) {
+    /*
+     * The allowance is applied to what the day is *offered*, not to what it
+     * accepts, and the two are different on purpose. Filtering here means the
+     * packer never has to know about interests; charging below means a stop the
+     * packer could not fit costs the traveller nothing.
+     *
+     * The day's own tally is provisional so that one day cannot spend the whole
+     * trip's allowance on candidates it then rejects.
+     */
+    const provisional = new Map<string, number>();
+    const offered: PlanningCandidate[] = [];
+    for (const candidate of assignment.candidates) {
+      if (withinFrequencyBudget(candidate, provisional)) {
+        if (!candidate.manual) {
+          chargeFrequencyCost(candidate.place, frequencyCaps, provisional);
+        }
+        offered.push(candidate);
+      } else {
+        overAllowance.push(candidate);
+      }
+    }
+
     const packed = packDay(
       packingContextFor(assignment.day),
-      assignment.candidates,
+      offered,
       packOptionsFor(assignment.day),
     );
+    chargeFrequency(packed.accepted);
     dayPlans.push({ day: assignment.day, accepted: packed.accepted });
     overflow.push(...packed.overflow);
   }
@@ -565,10 +710,21 @@ export function planTrip(input: PlannerInput): PlanResult {
   const placed = new Set(dayPlans.flatMap((plan) => plan.accepted.map((c) => c.place.id)));
   const stillHomeless: PlanningCandidate[] = [];
 
-  for (const candidate of [...overflow].sort(
+  /*
+   * The stops held back on their own day get one more look here, because an
+   * allowance the packer never actually spent is still available. A day that was
+   * offered three viewpoints and fitted none of them leaves the allowance
+   * untouched, and refusing the other two on the strength of a spend that never
+   * happened would be the cap misreporting itself.
+   */
+  for (const candidate of [...overflow, ...overAllowance.splice(0)].sort(
     (a, b) => b.priority - a.priority || a.place.id.localeCompare(b.place.id),
   )) {
     if (placed.has(candidate.place.id)) continue;
+    if (!withinFrequencyBudget(candidate, EMPTY_SPEND)) {
+      overAllowance.push(candidate);
+      continue;
+    }
 
     let landed = false;
     // Prefer the day already going nearest to it, so a spill does not invent a
@@ -587,6 +743,10 @@ export function planTrip(input: PlannerInput): PlanResult {
       (a, b) => detourCost(a) - detourCost(b) || a.day.dayNumber - b.day.dayNumber,
     );
     for (const plan of ordered) {
+      // A locked stop may only spill onto the day it is locked to — landing it
+      // anywhere else would honour the pick while breaking the pin.
+      const lockedTo = lockedDayByPlace.get(candidate.place.id);
+      if (lockedTo !== undefined && plan.day.dayNumber !== lockedTo) continue;
       if (!isOpenOnDate(candidate.place, plan.day.date)) continue;
       // Never onto a day that separates it from the rest of its access group.
       //
@@ -613,11 +773,43 @@ export function planTrip(input: PlannerInput): PlanResult {
       if (trial.accepted.some((entry) => entry.place.id === candidate.place.id)) {
         plan.accepted = trial.accepted;
         placed.add(candidate.place.id);
+        chargeFrequency([candidate]);
         landed = true;
         break;
       }
     }
     if (!landed) stillHomeless.push(candidate);
+  }
+
+  /**
+   * The allowance refusals, reported by name and by the limit that caused them.
+   *
+   * Written here rather than left to `unscheduledFor`, which would call this
+   * "there was no day with the hours for it" — sending somebody to add days when
+   * the answer is that they asked for one of these and the board offered four.
+   */
+  for (const candidate of overAllowance) {
+    if (placed.has(candidate.place.id)) continue;
+    /*
+     * The ceiling that actually bound, not the place's headline interest. With
+     * a stop spending half a unit of everything else it delivers, the two come
+     * apart: a lakeside hike can be refused by the *lakes* allowance while its
+     * primary interest is hiking, and naming the wrong one sends the traveller
+     * to raise a limit that was never the problem.
+     */
+    const interest =
+      bindingInterestOf(candidate.place, frequencyCaps, interestSpend) ??
+      candidate.place.interests[0] ??
+      'this kind of thing';
+    unscheduled.push({
+      placeId: candidate.place.id,
+      name: displayNameOf(candidate.place),
+      wasManual: candidate.manual,
+      reasonCode: 'frequency_reached',
+      reason: `You asked for ${frequencyCaps[interest as keyof typeof frequencyCaps] ?? 0} of these on this trip, and the board offered more ${interest.replace(/_/g, ' ')} than that.`,
+      suggestedRemedy:
+        'Say you want more of this kind of thing, or pick this one by hand on the board.',
+    });
   }
 
   /**
@@ -658,6 +850,7 @@ export function planTrip(input: PlannerInput): PlanResult {
         unitByPlaceId,
         dates,
         roundTripFromBase(candidate.place.id),
+        openDates.get(candidate.place.id) ?? new Set(dates),
       ),
     );
   }
@@ -725,8 +918,26 @@ export function planTrip(input: PlannerInput): PlanResult {
    * stop at a time. What food may not do is cost a stop, break a cap, or invent
    * a new violation.
    */
-  const foodFits = (plain: DayLayout, withFood: DayLayout, date: string): boolean => {
+  const foodFits = (plain: DayLayout, withFood: DayLayout, day: DayPlan['day']): boolean => {
     if (withFood.violations.length > plain.violations.length) return false;
+    /**
+     * And the day still has to end when the day ends.
+     *
+     * The plain layout was proved against this ceiling by the packer; the
+     * food-bearing one is the only layout in the planner that is never packed,
+     * so until this test existed nothing measured it against the clock at all.
+     * A short departure day is where that showed: the packer settles a day that
+     * finishes on the window, breakfast shifts everything after it by the length
+     * of a coffee, and the return drive lands a minute past. `item_outside_window`
+     * is an error, the reviser has no move that shortens a meal, and the refusal
+     * gate throws the whole trip away — thirty-two of four hundred and five
+     * ordinary questionnaires got no itinerary at all, over a minute.
+     *
+     * Measured with `latestFinishFor` rather than `day.window.endMinute` so this
+     * agrees with the packer and the validator to the minute, including the
+     * evening-meal overrun all three of them grant.
+     */
+    if (withFood.endMinute > latestFinishFor(day, config, withFood)) return false;
     /**
      * The same stops, in the same order.
      *
@@ -743,8 +954,8 @@ export function planTrip(input: PlannerInput): PlanResult {
         .map((item) => item.placeId ?? '')
         .join('>');
     if (sequence(withFood) !== sequence(plain)) return false;
-    if (withFood.driveMinutes > driveCapOn(date)) return false;
-    if (withFood.travelMinutes > travelCapOn(date)) return false;
+    if (withFood.driveMinutes > driveCapOn(day.date)) return false;
+    if (withFood.travelMinutes > travelCapOn(day.date)) return false;
     /**
      * Every extra minute at the wheel has to be accounted for by a detour the
      * plan owns up to.
@@ -782,7 +993,7 @@ export function planTrip(input: PlannerInput): PlanResult {
         foodContext && !foodSuppressed.has(plan.day.dayNumber)
           ? layoutBestOrder(contextFor(plan.day), plan.accepted, options)
           : plain;
-      const keepFood = withFood !== plain && foodFits(plain.layout, withFood.layout, plan.day.date);
+      const keepFood = withFood !== plain && foodFits(plain.layout, withFood.layout, plan.day);
       const context = keepFood ? contextFor(plan.day) : packingContextFor(plan.day);
       const { scheduled, layout } = keepFood ? withFood : plain;
       // A day whose food was suppressed by the validator is already reported,
@@ -804,7 +1015,7 @@ export function planTrip(input: PlannerInput): PlanResult {
           candidate,
           message:
             violation?.message ??
-            `${candidate.place.name} could not be fitted into day ${plan.day.dayNumber} once the rest of it was laid out.`,
+            `${displayNameOf(candidate.place)} could not be fitted into day ${plan.day.dayNumber} once the rest of it was laid out.`,
         });
       }
 
@@ -891,6 +1102,10 @@ export function planTrip(input: PlannerInput): PlanResult {
       if (would === undefined || would === plan.day.dayNumber || !weather.assessment.rankable) {
         continue;
       }
+      // A locked stop sits on its day because the traveller pinned it there.
+      // Attributing that to the forecast would be a claim about a decision
+      // the weather never made.
+      if (lockedDayByPlace.has(candidate.place.id)) continue;
       /**
        * Two different sentences, because "moved here because the forecast is
        * better" printed above "thunderstorms forecast" reads as nonsense — and
@@ -904,8 +1119,8 @@ export function planTrip(input: PlannerInput): PlanResult {
         weather.assessment.suitability === 'incompatible';
       decisions.push(
         poor
-          ? `${candidate.place.name} moved off day ${would} — this was the least bad day for it in the forecast, not a good one. ${weather.assessment.summary}`
-          : `${candidate.place.name} is on this day rather than day ${would} because the forecast suits it better here. ${weather.assessment.summary}`,
+          ? `${displayNameOf(candidate.place)} moved off day ${would} — this was the least bad day for it in the forecast, not a good one. ${weather.assessment.summary}`
+          : `${displayNameOf(candidate.place)} is on this day rather than day ${would} because the forecast suits it better here. ${weather.assessment.summary}`,
       );
     }
 
@@ -1020,19 +1235,6 @@ export function planTrip(input: PlannerInput): PlanResult {
    * lost finding. These survive every subsequent pass by construction rather
    * than by each pass remembering to carry them.
    */
-  /**
-   * Errors that mean "we could not give you something you asked for", as
-   * distinct from "this plan does not work".
-   *
-   * Both are errors and both must be loud. Only the second invalidates the
-   * itinerary: the first is surfaced as a named conflict with its reason, which
-   * is the honest answer to a request nothing could satisfy.
-   */
-  const REQUEST_NOT_MET_CODES = new Set<ValidationIssue['code']>([
-    'must_include_unscheduled',
-    'food_choice_unscheduled',
-  ]);
-
   const carriedIssues: ValidationIssue[] = [];
   const revalidate = () => [...carriedIssues, ...validateItinerary(validationInput())];
 
@@ -1105,7 +1307,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     for (const { candidate, reason, code } of outcome.removed) {
       unscheduled.push({
         placeId: candidate.place.id,
-        name: candidate.place.name,
+        name: displayNameOf(candidate.place),
         wasManual: candidate.manual,
         reasonCode: code,
         reason: `Taken out because ${reason}`,
@@ -1129,7 +1331,7 @@ export function planTrip(input: PlannerInput): PlanResult {
   for (const { candidate, message } of build.dropped.values()) {
     unscheduled.push({
       placeId: candidate.place.id,
-      name: candidate.place.name,
+      name: displayNameOf(candidate.place),
       wasManual: candidate.manual,
       reasonCode: 'hours_do_not_fit',
       reason: message,
@@ -1169,7 +1371,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       funnel: {
         considered: input.candidates.length,
         selected: input.selections.filter((selection) => selection.status !== 'excluded').length,
-        eligible: eligible.length,
+        eligible: measurableCount,
         accessFeasible: reachable.length,
         hoursFeasible: plannable.length,
         feasible: plannable.length,
@@ -1271,9 +1473,7 @@ export function planTrip(input: PlannerInput): PlanResult {
    * were built are correct, the request is reported by name with the reason, and
    * refusing the whole trip over it would replace a good plan with no plan.
    */
-  const unresolved = issues.filter(
-    (issue) => issue.severity === 'error' && !REQUEST_NOT_MET_CODES.has(issue.code),
-  );
+  const unresolved = blockingIssues(issues);
   if (unresolved.length > 0) {
     /**
      * The readiness handed back has to describe *this* refusal.
@@ -1403,7 +1603,7 @@ function accessBlocked(
 
   return {
     placeId: candidate.place.id,
-    name: candidate.place.name,
+    name: displayNameOf(candidate.place),
     wasManual: candidate.manual,
     reasonCode: reasonCodeForAccess(first?.code),
     reason:
@@ -1439,13 +1639,13 @@ function hoursBlocked(
     const weekday = resolved.find((entry) => entry.closedReason === 'closed_weekday');
     const what = weekday?.periodLabel
       ? `its ${weekday.periodLabel.toLowerCase()}`
-      : candidate.place.name;
+      : displayNameOf(candidate.place);
     const reason = weekday
-      ? `${candidate.place.name} is shut on every day of the week your trip covers — ${what} does not open on any of them.`
-      : `${candidate.place.name} is closed for the season on your dates.`;
+      ? `${displayNameOf(candidate.place)} is shut on every day of the week your trip covers — ${what} does not open on any of them.`
+      : `${displayNameOf(candidate.place)} is closed for the season on your dates.`;
     return {
       placeId: candidate.place.id,
-      name: candidate.place.name,
+      name: displayNameOf(candidate.place),
       wasManual: candidate.manual,
       reasonCode: 'closed_on_trip_dates',
       reason,
@@ -1455,10 +1655,10 @@ function hoursBlocked(
 
   return {
     placeId: candidate.place.id,
-    name: candidate.place.name,
+    name: displayNameOf(candidate.place),
     wasManual: candidate.manual,
     reasonCode: 'hours_do_not_fit',
-    reason: `${candidate.place.name} is open on your dates, but never for long enough after you could get there — a ${candidate.durationMinutes} min visit does not fit inside its hours on any day of this trip.`,
+    reason: `${displayNameOf(candidate.place)} is open on your dates, but never for long enough after you could get there — a ${candidate.durationMinutes} min visit does not fit inside its hours on any day of this trip.`,
     suggestedRemedy:
       'Start the day earlier, or free up a day by dropping something else from the board.',
   };
@@ -1484,12 +1684,12 @@ function weatherBlocked(
 
   return {
     placeId: candidate.place.id,
-    name: candidate.place.name,
+    name: displayNameOf(candidate.place),
     wasManual: candidate.manual,
     reasonCode: 'weather_incompatible',
     reason: reason
-      ? `${candidate.place.name} is out on every day of this trip: ${reason.text}.`
-      : `${candidate.place.name} cannot be done in the weather forecast for any day of this trip.`,
+      ? `${displayNameOf(candidate.place)} is out on every day of this trip: ${reason.text}.`
+      : `${displayNameOf(candidate.place)} cannot be done in the weather forecast for any day of this trip.`,
     suggestedRemedy:
       'Move your dates, or keep it in mind and check the forecast again nearer the time.',
   };
@@ -1503,6 +1703,18 @@ function reasonCodeForAccess(code: string | undefined): UnscheduledPlace['reason
     case 'needs_private_vehicle':
     case 'shuttle_declined':
     case 'unsupported_mode':
+    case 'walk_too_long':
+      /*
+       * A walk past the traveller's own limit is a transport conflict, not an
+       * absence of data — the road was measured, the derived walk was computed,
+       * and the traveller's answers are what rule both out. Filing it under the
+       * default `access_unavailable` hid the one remedy that would actually
+       * change the outcome.
+       *
+       * The comment sits below the labels rather than between them: eslint's
+       * `no-fallthrough` reads anything between two case clauses as a statement
+       * and calls the grouping accidental.
+       */
       return 'transport_mode_unavailable';
     case 'no_access_data':
       return 'missing_travel_data';
@@ -1535,11 +1747,31 @@ function unscheduledFor(
   unitByPlaceId: ReadonlyMap<string, AccessUnit>,
   dates: readonly string[],
   roundTrip: RoundTrip,
+  /** The dates this place is open long enough for the visit, as the planner resolved them. */
+  openOn: ReadonlySet<string>,
 ): UnscheduledPlace {
   const unit = unitByPlaceId.get(candidate.place.id);
-  const reachableDays = unit
-    ? dates.filter((date) => resolved.get(accessKey(unit.key, date))?.available).length
-    : dates.length;
+  /**
+   * THE DAYS THIS COULD ACTUALLY HAVE GONE ON — BOTH HALVES OF THAT.
+   *
+   * A day could have held this stop only if there was a way in *and* the venue
+   * was open long enough for the visit. This counted the first and not the
+   * second, so a place open two days a week fell straight past the branch below
+   * and out of the generic bottom of the function as "there was no day in these
+   * 5 with the hours and the travel budget left for it" — printed, on a real
+   * plan, directly beside a completely empty mid-trip day with eight and a
+   * quarter hours free on it. A traveller reads that and goes looking for room
+   * they already have.
+   *
+   * `openOn` is the same per-date opening set the planner used to decide the
+   * stop was plannable at all, so the explanation and the decision cannot come
+   * to different conclusions about which days were ever available.
+   */
+  const reachableDates = unit
+    ? dates.filter((date) => resolved.get(accessKey(unit.key, date))?.available)
+    : [...dates];
+  const usableDates = reachableDates.filter((date) => openOn.has(date));
+  const reachableDays = usableDates.length;
 
   /**
    * Getting there and back, on its own, is further than they will drive in a day.
@@ -1564,7 +1796,7 @@ function unscheduledFor(
   if (roundTrip.driveMinutes > roundTrip.driveCap) {
     return {
       placeId: candidate.place.id,
-      name: candidate.place.name,
+      name: displayNameOf(candidate.place),
       wasManual: candidate.manual,
       reasonCode: 'exceeds_daily_travel',
       reason: `Getting there and back is about ${Math.round(roundTrip.driveMinutes)} minutes of driving, and you said ${roundTrip.driveCap} was your limit for a day.`,
@@ -1574,7 +1806,7 @@ function unscheduledFor(
   if (roundTrip.minutes !== null && roundTrip.minutes > roundTrip.transportCap) {
     return {
       placeId: candidate.place.id,
-      name: candidate.place.name,
+      name: displayNameOf(candidate.place),
       wasManual: candidate.manual,
       reasonCode: 'exceeds_daily_travel',
       reason: `Getting there and back is about ${Math.round(roundTrip.minutes)} minutes of travelling, and you said ${roundTrip.transportCap} was your limit for a day.`,
@@ -1583,22 +1815,29 @@ function unscheduledFor(
   }
 
   // Distinguishing "there was no room" from "there was room, but not on the days
-  // it runs" is the difference between a useful remedy and a shrug.
+  // it runs" is the difference between a useful remedy and a shrug. The two
+  // sentences below split that again, because "no way in on Tuesday" and "shut
+  // on Tuesday" send a traveller to change entirely different things.
   if (reachableDays > 0 && reachableDays < dayCount) {
+    const boundByHours = usableDates.length < reachableDates.length;
     return {
       placeId: candidate.place.id,
-      name: candidate.place.name,
+      name: displayNameOf(candidate.place),
       wasManual: candidate.manual,
-      reasonCode: 'service_not_operating',
-      reason: `Only ${reachableDays} of your ${dayCount} days can reach this, and those days were already full.`,
-      suggestedRemedy: 'Free up one of those days by dropping something else from the board.',
+      reasonCode: boundByHours ? 'hours_do_not_fit' : 'service_not_operating',
+      reason: boundByHours
+        ? `It is only open on ${reachableDays} of your ${dayCount} days, and those days were already full.`
+        : `Only ${reachableDays} of your ${dayCount} days can reach this, and those days were already full.`,
+      suggestedRemedy: boundByHours
+        ? 'Free up one of the days it opens by dropping something else from the board — a free day it is shut on will not help.'
+        : 'Free up one of those days by dropping something else from the board.',
     };
   }
 
   const optional = !candidate.manual && candidate.selectionStatus === 'maybe';
   return {
     placeId: candidate.place.id,
-    name: candidate.place.name,
+    name: displayNameOf(candidate.place),
     wasManual: candidate.manual,
     reasonCode: optional ? 'lower_priority' : 'no_time_left',
     reason: optional
@@ -1639,22 +1878,35 @@ function dedupeUnscheduled(entries: readonly UnscheduledPlace[]): UnscheduledPla
   );
 }
 
-function summarise(
+export function summarise(
   days: readonly ItineraryDay[],
   scheduled: number,
   unscheduled: number,
 ): string {
   const activeDays = days.filter((day) => day.totals.activityMinutes > 0).length;
   const driveMinutes = days.reduce((sum, day) => sum + day.totals.driveMinutes, 0);
-  const otherMinutes = days.reduce(
-    (sum, day) => sum + day.totals.transitMinutes + day.totals.walkMinutes + day.totals.waitMinutes,
+  /**
+   * Named by what the minutes actually are. The old sentence pooled riding,
+   * walking and waiting under "riding and on foot", so a trip whose transit
+   * total was zero still claimed hours of riding — a mode split the plan's own
+   * totals contradicted one screen further down.
+   */
+  const rideMinutes = days.reduce(
+    (sum, day) => sum + day.totals.transitMinutes + day.totals.waitMinutes,
     0,
   );
+  const walkMinutes = days.reduce((sum, day) => sum + day.totals.walkMinutes, 0);
   const parts = [
     `${scheduled} ${scheduled === 1 ? 'stop' : 'stops'} across ${activeDays} of ${days.length} days`,
   ];
   if (driveMinutes > 0) parts.push(`about ${spanOf(driveMinutes)} of driving`);
-  if (otherMinutes > 0) parts.push(`${spanOf(otherMinutes)} riding and on foot to reach them`);
+  if (rideMinutes > 0 && walkMinutes > 0) {
+    parts.push(`${spanOf(rideMinutes + walkMinutes)} riding and on foot to reach them`);
+  } else if (rideMinutes > 0) {
+    parts.push(`${spanOf(rideMinutes)} riding to reach them`);
+  } else if (walkMinutes > 0) {
+    parts.push(`${spanOf(walkMinutes)} on foot to reach them`);
+  }
   if (unscheduled > 0) parts.push(`${unscheduled} left off, each with a reason`);
   return `${parts.join(', ')}.`;
 }

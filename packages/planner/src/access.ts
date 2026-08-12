@@ -1,5 +1,6 @@
 import {
   capabilityFromProfile,
+  displayNameOf,
   evaluateRule,
   findPoint,
   rankOutcomes,
@@ -15,8 +16,31 @@ import {
   type UnmeasuredTravelReason,
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
-import { resolveLeg, type TravelKnowledge } from './travel';
+import type { TravelKnowledge } from './travel';
+import { modelledWalkCapMinutes, resolvePlannerLeg } from './modelled-walk';
+import {
+  corroboratingKm,
+  impossibleSpeed,
+  matrixMeasuresMode,
+  modePhrase,
+  roundKm,
+} from './speed';
 import type { PlanningCandidate } from './types';
+
+/**
+ * WHAT THIS FILE IS ALLOWED TO CALL A PLACE.
+ *
+ * `place.name` is whatever the source published, which for a Tokyo record is the
+ * local script. Every string below is read by a traveller — a refusal sentence,
+ * a leg endpoint on the timeline, the heading of an access unit — so every one
+ * of them resolves through §8.6's single answer instead. The five that did not
+ * put 隅田川 in the middle of an English sentence on a board the traveller had
+ * picked "Sumida River" from.
+ *
+ * The routing ids beside them are untouched: identity is `place.id`, and nothing
+ * that matches on identity may key off a name.
+ */
+const nameOf = displayNameOf;
 
 /**
  * Turning access rules into something a clock can be laid against.
@@ -68,19 +92,14 @@ export interface AccessLegPlan {
 /**
  * Does the measured matrix cover a leg travelled this way?
  *
- * The matrix is measured in exactly one mode per compilation. A walking approach
- * is a real measurement when the matrix was measured on foot, and is nothing at
- * all when it was measured by car — a car's road time is not a slow walk, and
- * multiplying one to get the other is how the product used to produce a
- * fabricated number that looked derived.
+ * The rule itself now lives in `speed.ts`, so that the validator — which must
+ * convict exactly the legs this layer refuses, and no others — reads the same
+ * definition without importing the scheduler. Kept exported here because it was,
+ * and because "does the matrix measure this approach" is a question access asks
+ * on every rule.
  */
 export function matrixCoversMode(matrix: TravelTimeMatrix, mode: TransportMode): boolean {
-  if (mode === 'drive' || mode === 'rideshare' || mode === 'private_transfer') {
-    return matrix.mode === 'car';
-  }
-  if (mode === 'walk') return matrix.mode === 'foot';
-  // Scheduled modes are never in a road or pedestrian matrix, whatever it says.
-  return false;
+  return matrixMeasuresMode(matrix, mode);
 }
 
 /**
@@ -173,11 +192,22 @@ export interface ResolveAccessInput {
  */
 export function resolveAccess(input: ResolveAccessInput): Map<string, UnitAccess> {
   const capability = capabilityFromProfile(input.profile);
+  /**
+   * The traveller's own walking radius, computed once for the whole resolution.
+   *
+   * This is what bounds a *derived* walk when the matrix measured the wrong
+   * network — see `modelled-walk.ts` for why a modelled long walk is refused
+   * where a measured one would be offered.
+   */
+  const walkCapMinutes = modelledWalkCapMinutes(input.profile);
   const resolved = new Map<string, UnitAccess>();
 
   for (const unit of input.units) {
     for (const date of input.dates) {
-      resolved.set(accessKey(unit.key, date), resolveUnitOnDate(unit, date, input, capability));
+      resolved.set(
+        accessKey(unit.key, date),
+        resolveUnitOnDate(unit, date, input, capability, walkCapMinutes),
+      );
     }
   }
   return resolved;
@@ -192,6 +222,7 @@ function resolveUnitOnDate(
   date: string,
   input: ResolveAccessInput,
   capability: AccessCapability,
+  walkCapMinutes: number,
 ): UnitAccess {
   const { dataset } = input;
   // Every member must be covered by the unit's rule, which is how the unit was
@@ -210,7 +241,7 @@ function resolveUnitOnDate(
       blockers: [
         {
           code: 'no_access_data',
-          message: `Nothing we have on record gets you to ${representative.place.name} on ${date}.`,
+          message: `Nothing we have on record gets you to ${nameOf(representative.place)} on ${date}.`,
         },
       ],
     };
@@ -245,18 +276,11 @@ function resolveUnitOnDate(
     service: best.service,
     dataset,
     matrix: input.matrix,
+    walkCapMinutes,
     ...(input.travel ? { travel: input.travel } : {}),
   });
-  if (!option) {
-    return {
-      available: false,
-      blockers: [
-        {
-          code: 'no_access_data',
-          message: `We have no travel data for the way in to ${representative.place.name}.`,
-        },
-      ],
-    };
+  if ('blocked' in option) {
+    return { available: false, blockers: [option.blocked] };
   }
   return { available: true, option };
 }
@@ -268,9 +292,10 @@ function buildOption(args: {
   service: TransportService | undefined;
   dataset: AccessDataset;
   matrix: TravelTimeMatrix;
+  walkCapMinutes: number;
   travel?: { knowledge: TravelKnowledge; baseId: string };
-}): AccessOption | null {
-  const { unit, date, rule, service, dataset, matrix, travel } = args;
+}): AccessOption | { blocked: AccessBlocker } {
+  const { unit, date, rule, service, dataset, matrix, walkCapMinutes, travel } = args;
   /**
    * The gateway belongs to the service, not to the rule.
    *
@@ -289,9 +314,19 @@ function buildOption(args: {
       ? rule.internalTransfer
       : { mode: 'drive' as const, minutes: 0 };
 
+  const firstMember = unit.members[0];
+  const memberName = firstMember ? nameOf(firstMember.place) : unit.gatewayName;
+
   // Refusing to plan on a point the matrix does not know is the same rule the
   // rest of the planner follows: a missing travel time is a failure, not a zero.
-  if (!hasPoint(matrix, gatewayRoutingId)) return null;
+  if (!hasPoint(matrix, gatewayRoutingId)) {
+    return {
+      blocked: {
+        code: 'no_access_data',
+        message: `We have no travel data for the way in to ${memberName}.`,
+      },
+    };
+  }
 
   /**
    * And refusing to plan an approach nobody can time is the same rule again.
@@ -313,16 +348,97 @@ function buildOption(args: {
    * nothing else does either" — which is the only version of this refusal that
    * is true.
    */
+  /*
+   * `resolvePlannerLeg`, not `resolveLeg`, and the difference is the whole
+   * car-free repair: when a car-free scope was compiled with a road matrix —
+   * a contract breach the compiler should not commit and did — every walking
+   * approach here failed the coverage test, had no measured alternative, and
+   * carried no authored allowance, so *every unit dropped on every date* and
+   * the traveller was told there was no legal way in to anything. The planner
+   * half of the contract now derives a walk from the road distance where the
+   * distance is honestly walkable, and refuses per-stop, by name, where it is
+   * not.
+   */
   const measurableAnotherWay =
     travel !== undefined &&
-    resolveLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode).ok;
+    resolvePlannerLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode, {
+      walkCapMinutes,
+    }).ok;
 
   if (
     !matrixCoversMode(matrix, rule.approachMode) &&
     !measurableAnotherWay &&
     (rule.approachMinutes === null || rule.approachMinutes === undefined)
   ) {
-    return null;
+    /*
+     * The specific sentence, not the generic one. A refusal that names the
+     * distance is one the traveller can weigh; "we have no travel data" sent
+     * them to retry something that would never go differently.
+     */
+    const refused =
+      travel !== undefined
+        ? resolvePlannerLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode, {
+            walkCapMinutes,
+          })
+        : null;
+    if (refused && !refused.ok && refused.conflict) {
+      return {
+        blocked: { code: 'walk_too_long', message: `${memberName}: ${refused.detail}` },
+      };
+    }
+    return {
+      blocked: {
+        code: 'no_access_data',
+        message: `We have no travel data for the way in to ${memberName}.`,
+      },
+    };
+  }
+
+  /**
+   * AN AUTHORED ALLOWANCE IS A CLAIM, AND THE MATRIX ALREADY HOLDS THE EVIDENCE.
+   *
+   * Surviving the refusal above only means *some* number exists. When that
+   * number is `rule.approachMinutes` — an authored constant, nothing measured —
+   * it used to be taken verbatim and scheduled, with the pack's own distance for
+   * the same two points sitting one lookup away. That is how "walk, 10 min" to a
+   * place the road matrix measures at 74.7 km entered a live plan: accepted
+   * here, laid against a clock, and only convicted at the very end by
+   * `travel_leg_speed_impossible` — by which time the revision loop had stripped
+   * every stop off the day trying to repair a leg that was never repairable.
+   *
+   * So the claim is checked where it enters, against the same arithmetic and the
+   * same cross-network discount the validator applies, so the two can never
+   * disagree about the same leg. Refusing here costs one stop and names the
+   * distance; accepting here cost the whole plan.
+   *
+   * The base is the pair used because it is the pair `resolvePlannerLeg` above
+   * already refused on, and because an approach that cannot be made from the
+   * base is not made shorter by starting the day somewhere else the traveller
+   * also had to reach.
+   */
+  const authoredApproachMinutes =
+    matrixCoversMode(matrix, rule.approachMode) || measurableAnotherWay
+      ? null
+      : (rule.approachMinutes ?? 0);
+  if (authoredApproachMinutes !== null && travel !== undefined) {
+    const distance = corroboratingKm(matrix, travel.baseId, gatewayRoutingId, rule.approachMode);
+    const verdict = distance
+      ? impossibleSpeed(rule.approachMode, distance.usableKm, authoredApproachMinutes)
+      : null;
+    if (verdict && distance) {
+      return {
+        blocked: {
+          code: rule.approachMode === 'walk' ? 'walk_too_long' : 'unsupported_mode',
+          message: `${memberName}: the way in is written down as ${authoredApproachMinutes} min ${modePhrase(
+            rule.approachMode,
+          )}, but we measure ${roundKm(distance.measuredKm)} km between there and ${
+            travel.knowledge.matrix.mode === 'car' ? 'your base by road' : 'your base'
+          } — about ${Math.round(
+            verdict.kmh,
+          )} km/h, which nobody can do. We will not build a day on a travel time we know to be wrong.`,
+        },
+      };
+    }
   }
 
   const entryLegs: AccessLegPlan[] = [];
@@ -340,7 +456,8 @@ function buildOption(args: {
   let latestActivityEnd: number | null = null;
 
   const gatewayName = gateway?.name ?? unit.gatewayName;
-  const firstMemberName = unit.members[0]?.place.name ?? unit.key;
+  const firstMember0 = unit.members[0];
+  const firstMemberName = firstMember0 ? nameOf(firstMember0.place) : unit.key;
 
   if (service) {
     const dropOff = findPoint(dataset, service.dropOffPointId);
@@ -423,6 +540,7 @@ function buildOption(args: {
   }
 
   if (walkFromDropOff > 0) {
+    const lastMember = unit.members[unit.members.length - 1];
     const walkFrom = service ? service.dropOffPointId : gatewayRoutingId;
     const walkFromName = service
       ? (findPoint(dataset, service.dropOffPointId)?.name ?? 'the drop-off')
@@ -443,7 +561,7 @@ function buildOption(args: {
       mode: 'walk',
       fromId: unit.members[unit.members.length - 1]?.place.id ?? unit.key,
       toId: walkFrom,
-      fromName: unit.members[unit.members.length - 1]?.place.name ?? unit.key,
+      fromName: lastMember ? nameOf(lastMember.place) : unit.key,
       toName: walkFromName,
       minutes: walkFromDropOff,
       km: 0,
@@ -492,10 +610,12 @@ function buildOption(args: {
      * refusal above only to be scheduled off an authored constant, with a
      * measured journey for the same two points sitting unused.
      */
-    approachMinutes:
-      matrixCoversMode(matrix, rule.approachMode) || measurableAnotherWay
-        ? null
-        : (rule.approachMinutes ?? 0),
+    /*
+     * Computed above rather than here, because the same value has to be checked
+     * against the matrix before the unit is allowed to exist — a number that
+     * reaches this line has already been weighed against the distance.
+     */
+    approachMinutes: authoredApproachMinutes,
     entryLegs,
     exitLegs,
     internalTransfer,
@@ -550,7 +670,7 @@ export function buildAccessUnits(
         ...(rule ? { ruleId: rule.id } : {}),
         members: sorted,
         gatewayRoutingId,
-        gatewayName: gateway?.name ?? sorted[0]!.place.name,
+        gatewayName: gateway?.name ?? nameOf(sorted[0]!.place),
         // With a service you come back out the way you went in; without one you
         // simply drive onward from the last stop.
         exitRoutingId: rule?.serviceId ? gatewayRoutingId : sorted[sorted.length - 1]!.place.id,

@@ -84,7 +84,16 @@ export type LegRule =
   /** The road, for a traveller who has a car and a road matrix that covers it. */
   | 'road_measured'
   /** The only permitted measured option there was. */
-  | 'sole_option';
+  | 'sole_option'
+  /**
+   * Nothing measured could carry this pair, and the road distance is short
+   * enough that a person would plainly walk it. See `deriveModelledWalk`.
+   *
+   * The one rule here that is not a measurement, which is why it carries
+   * `provenance: 'modelled'` and why every surface that prints a duration has to
+   * be able to say so.
+   */
+  | 'modelled_walk';
 
 /** A journey between two points that somebody actually measured. */
 export interface TravelOption {
@@ -432,6 +441,91 @@ export interface ReachUnresolved extends ReachIdentity {
   detail: string;
 }
 
+/**
+ * Deliberately slow. A road distance walked by somebody carrying a day bag, so
+ * the derived figure should err long: a number that understates a walk puts a
+ * traveller at a gate after it shut.
+ */
+export const MODELLED_WALK_KMH = 4.5;
+
+/**
+ * A WALK DERIVED FROM A ROAD DISTANCE, WHEN ONE CAN HONESTLY BE DERIVED.
+ *
+ * The contract says the compiler measures the network a trip is made on. When
+ * that contract breaks — a car-free scope stored with a `car` matrix, which a
+ * live Tokyo compilation actually produced — `resolveLeg` correctly refuses
+ * every pair: a road *duration* is not a walk, and the traveller may not drive.
+ * The refusal is right about every leg and wrong about the trip, because it
+ * turns "the matrix measured the wrong network" into "there is no legal way in
+ * to any of these places" over stops that are a fifteen-minute stroll from the
+ * hotel.
+ *
+ * WHY IT LIVES HERE. The planner grew this repair first, in its own module, and
+ * a fresh reviewer found the consequence on a real board: the planner walked to
+ * a stop 1.2 road-km away while the Discovery Board — which resolves reach
+ * through `resolveCandidateReach` and knew nothing about the derivation — called
+ * the same stop a transport conflict, scored it out and left auto-pick with
+ * nothing to select. Two modules answering one question two ways is the defect
+ * this whole module exists to end, so the derivation belongs beside the
+ * resolution rather than beside one of its callers.
+ *
+ * The three invariants it must never break:
+ *
+ *   - a road *time* never stands in for any other mode — only the distance is
+ *     read, and only to derive a walk;
+ *   - it never renders as transit — the mode is `walk`, always, and the
+ *     provenance is `modelled` so no surface can present it as a measurement;
+ *   - unknown stays unknown — no distance, or a distance past what this
+ *     traveller said they would walk, stays a refusal.
+ *
+ * Null whenever any part of that fails, including when the matrix is *not* a
+ * road matrix: a pedestrian matrix already measures walks, and second-guessing
+ * a measurement with a model would be the substitution this layer exists to
+ * stop.
+ *
+ * The cap is `knowledge.maxWalkMinutes` — the traveller's own answer to
+ * "furthest you would walk to reach a stop" — and nothing else. A modelled
+ * number is a guess stacked on a distance, so unlike a *measured* long walk,
+ * which `resolveLeg` offers and lets the traveller judge, a modelled long walk
+ * is refused outright.
+ */
+export function deriveModelledWalk(
+  knowledge: TravelKnowledge,
+  fromId: string,
+  toId: string,
+): (TravelOption & { mode: 'walk'; provenance: 'modelled' }) | null {
+  if (knowledge.matrix.mode !== 'car') return null;
+  const measured = tryLeg(knowledge.matrix, fromId, toId);
+  if (!measured || measured.km <= 0) return null;
+  const minutes = Math.ceil((measured.km * 60) / MODELLED_WALK_KMH);
+  if (minutes > knowledge.maxWalkMinutes) return null;
+  return {
+    mode: 'walk',
+    minutes,
+    /*
+     * The road distance, carried so the leg can be checked against the same
+     * speed bounds every other leg is. It is the basis of the model, not a
+     * claim about the footpath.
+     */
+    km: measured.km,
+    provenance: 'modelled',
+    source: 'derived from road distance at a conservative walking pace',
+  };
+}
+
+/** `resolveLeg`, then the modelled walk as the answer of last resort. */
+function resolveReachLeg(
+  knowledge: TravelKnowledge,
+  fromId: string,
+  toId: string,
+  legal: TransportMode,
+): ResolvedLeg {
+  const resolved = resolveLeg(knowledge, fromId, toId, legal);
+  if (resolved.ok) return resolved;
+  const walk = deriveModelledWalk(knowledge, fromId, toId);
+  return walk ? { ok: true, fromId, toId, rule: 'modelled_walk', ...walk } : resolved;
+}
+
 export function resolveCandidateReach(
   knowledge: TravelKnowledge,
   baseId: string,
@@ -463,14 +557,14 @@ export function resolveCandidateReach(
     detail: leg.detail,
   });
 
-  const out = resolveLeg(knowledge, baseId, candidateId, legal ?? 'unsupported');
+  const out = resolveReachLeg(knowledge, baseId, candidateId, legal ?? 'unsupported');
   if (!out.ok) return unresolved(out);
   /*
    * Both directions, and the way home is the one that fails. A car-free trip
    * out to a valley on the last morning bus is a trip that ends there; the
    * outbound measurement alone would have called it reachable.
    */
-  const back = resolveLeg(knowledge, candidateId, baseId, legal ?? 'unsupported');
+  const back = resolveReachLeg(knowledge, candidateId, baseId, legal ?? 'unsupported');
   if (!back.ok) return unresolved(back);
 
   return {

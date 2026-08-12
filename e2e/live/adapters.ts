@@ -637,6 +637,26 @@ export class PlaywrightJourneyDriver implements JourneyDriver {
           `no [data-testid="${PANELS[kind]}"] on ${this.page.url()}, so there was no text to read`,
         );
       }
+      /*
+       * OPEN WHATEVER DISCLOSURE THIS PANEL IS INSIDE, FIRST.
+       *
+       * The board's secondary panels — the readiness reading, the weather
+       * snapshot, what was searched — moved behind one `<details>` at the foot
+       * of the board this phase, and the children of a closed `<details>` are
+       * not rendered at all. So `innerText()` returned the empty string and a
+       * journey report recorded "the weather snapshot said nothing" for a panel
+       * that was on the page and full of text.
+       *
+       * Opened rather than switched to `textContent()`, because the two
+       * questions are different: this reader exists to record what a traveller
+       * could read, and a traveller opens the panel. Reading through a closed
+       * disclosure would report copy nobody can see.
+       */
+      await locator.evaluate((node) => {
+        for (let element = node.parentElement; element; element = element.parentElement) {
+          if (element instanceof HTMLDetailsElement) element.open = true;
+        }
+      });
       return measured((await locator.innerText()).slice(0, 600));
     } catch (error) {
       return notMeasured('probe_threw', `reading the ${kind} panel raised: ${describe(error)}`);

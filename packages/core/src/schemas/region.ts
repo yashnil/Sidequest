@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { coordinatesSchema, regionalExpansionSchema } from './common';
+import { regionDecisionQuestionSchema, regionInterestOfferSchema } from '../interests/schema';
 
 /**
  * The sentences only this region can write.
@@ -65,6 +66,23 @@ export const regionSchema = z.object({
   seasonalRoadSummary: z.string().min(1).optional(),
   /** Region-owned wording for the questionnaire. Absent falls back to generic. */
   questionnaireCopy: regionQuestionnaireCopySchema.optional(),
+  /**
+   * Which interests this region can honestly be graded on, and the follow-ups
+   * its own geography justifies asking.
+   *
+   * The counterpart to `questionnaireCopy` for the two things that are not
+   * wording: *which questions exist* and *which extra ones are worth an
+   * interruption*. Both are derived from what the compilation actually found —
+   * see `interests/offer.ts` and `interests/decisions.ts` — so a region with no
+   * thermal ground in it never asks about hot springs, and a region nobody can
+   * cross without a car asks about one.
+   *
+   * Optional, like everything added to this model after it shipped: an artifact
+   * compiled before these existed parses and plans exactly as it did, and the
+   * intake falls back to the whole vocabulary with no follow-ups.
+   */
+  interestOffer: regionInterestOfferSchema.optional(),
+  decisionQuestions: z.array(regionDecisionQuestionSchema).max(3).optional(),
 });
 export type Region = z.infer<typeof regionSchema>;
 

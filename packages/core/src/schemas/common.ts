@@ -82,7 +82,30 @@ export const httpUrlSchema = z
     'Only http(s) links without an embedded username or password are allowed',
   );
 
-/** What a traveller can care about. Seed place tags are drawn from this same list. */
+/**
+ * WHAT A TRAVELLER CAN CARE ABOUT — THE WHOLE VOCABULARY, NOT THE OFFER.
+ *
+ * This list is the union of everything Sidequest can rank a place against. It
+ * is deliberately *not* the set of rows a traveller is shown: which of these a
+ * given destination can honestly serve is decided per region, from that
+ * region's own evidence, by `interests/offer.ts`.
+ *
+ * The distinction is the fix for a shipped defect. The list was one hard-coded
+ * outdoor taxonomy served verbatim to every destination, so a traveller
+ * planning a dense city was asked to grade scenic drives, geothermal ground,
+ * hot springs and stargazing, and had no row at all for museums, temples,
+ * neighbourhoods or the coast. It was simultaneously a questionnaire failure
+ * and a research failure: the graded answers steer candidate acquisition, so
+ * the pipeline went looking for mountain-town material in a metropolis.
+ *
+ * ADDITIVE ONLY. Every id here has been valid since it was introduced and stays
+ * valid, because stored traveller profiles are keyed on these strings and a
+ * removed id would silently drop a preference somebody stated. Labels may be
+ * corrected — a label is copy — and `food_and_towns` was, because "Food &
+ * mountain towns" is a sentence about one valley.
+ *
+ * Seed place tags are drawn from this same list.
+ */
 export const INTERESTS = [
   'hiking',
   'easy_nature_walks',
@@ -96,6 +119,20 @@ export const INTERESTS = [
   'food_and_towns',
   'photography_golden_hour',
   'stargazing',
+  /**
+   * The built and inhabited half of the vocabulary, added in Phase 16.
+   *
+   * Each one exists because a real destination could not be described without
+   * it, and each one is gated on evidence: a region with no museum in it never
+   * offers `museums_and_galleries`, exactly as a region with no thermal ground
+   * never offers `geology_and_geothermal`. Nothing here is offered to a
+   * traveller on the strength of the vocabulary alone.
+   */
+  'museums_and_galleries',
+  'architecture_and_landmarks',
+  'neighbourhoods_and_local_life',
+  'markets_and_street_food',
+  'beaches_and_swimming',
 ] as const;
 export const interestSchema = z.enum(INTERESTS);
 export type Interest = z.infer<typeof interestSchema>;
@@ -110,10 +147,18 @@ export const INTEREST_LABELS: Record<Interest, string> = {
   geology_and_geothermal: 'Geology & geothermal',
   hot_springs: 'Hot springs',
   history_and_culture: 'History & culture',
-  food_and_towns: 'Food & mountain towns',
+  // Was "Food & mountain towns". The mountains were a fact about one region,
+  // printed on the only food row every destination in the product had.
+  food_and_towns: 'Food & local eating',
   photography_golden_hour: 'Sunrise & sunset photography',
   stargazing: 'Stargazing',
+  museums_and_galleries: 'Museums & galleries',
+  architecture_and_landmarks: 'Architecture & landmarks',
+  neighbourhoods_and_local_life: 'Neighbourhoods & local life',
+  markets_and_street_food: 'Markets & street food',
+  beaches_and_swimming: 'Beaches & swimming',
 };
+
 
 /**
  * How often the traveller wants a category, not merely whether they like it.
@@ -131,6 +176,25 @@ export const INTEREST_LEVEL_LABELS: Record<InterestLevel, string> = {
   frequent: 'A few times',
   core: 'Build the trip around it',
 };
+
+/**
+ * A traveller's grading, keyed on interests they were actually offered.
+ *
+ * Partial, and that is the point rather than a looseness. `z.record` over an
+ * enum is exhaustive in the Zod this repository pins, so every stored answer
+ * set had to name every interest that existed when it was written — which meant
+ * that the moment the vocabulary grew, a completed questionnaire stopped
+ * parsing and the traveller lost it. Since the offer is now per-destination, a
+ * complete grading is not even a thing an honest wizard can produce: a city
+ * traveller is never asked about hot springs, and recording `low` for a
+ * question nobody put to them would be an answer we invented.
+ *
+ * Every reader already resolves an absent level to `low` at the point of use —
+ * the same value an untouched row carries — so absence and "only if it is
+ * right there" behave identically, which is the truth in both cases.
+ */
+export const interestLevelsSchema = z.partialRecord(interestSchema, interestLevelSchema);
+export type InterestLevels = z.infer<typeof interestLevelsSchema>;
 
 export const AVOIDANCES = [
   'crowds_and_tourist_traps',

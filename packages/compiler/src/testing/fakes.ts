@@ -1021,7 +1021,7 @@ export function fakeProviders(
        */
       return ['car', 'foot'];
     },
-    async matrix({ points, maxElements }) {
+    async matrix({ points, mode, maxElements }) {
       // Truncated rather than silently short: a provider that would exceed the
       // budget drops points from the end and the compiler sees a smaller matrix.
       const capacity = Math.max(2, Math.floor(Math.sqrt(Math.max(1, maxElements))));
@@ -1031,7 +1031,24 @@ export function fakeProviders(
       const minutes = used.map((from, i) =>
         used.map((to, j) => (i === j ? 0 : 6 + Math.abs(i - j) * step)),
       );
-      const km = minutes.map((row) => row.map((value) => value * 0.9));
+      /**
+       * Distance derived from the duration **at a speed the mode can reach**.
+       *
+       * This was one constant — `minutes * 0.9`, or 54 km/h — for every mode,
+       * which for a foot matrix meant every fixture leg claimed a 13.5 km walk
+       * in a quarter of an hour. Harmless while nothing compared the two, and
+       * a live defect the moment the plan validator began checking a leg's own
+       * arithmetic: the synthetic worlds started producing "impossible speed"
+       * errors that were the fixture's fault rather than the planner's, and
+       * the revision pass dutifully removed real stops to satisfy them.
+       *
+       * A test double that publishes numbers no walker could produce cannot
+       * prove anything about walking, so the speeds here are ordinary ones.
+       */
+      const kmPerMinute = mode === 'foot' ? 4.5 / 60 : 54 / 60;
+      const km = minutes.map((row) =>
+        row.map((value) => Math.round(value * kmPerMinute * 100) / 100),
+      );
       const failedPairs = Array.from({ length: Math.min(spec.failedLegs, ids.length - 1) }, (_, index) => ({
         from: ids[0] ?? '',
         to: ids[index + 1] ?? '',

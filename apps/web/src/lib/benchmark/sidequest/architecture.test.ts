@@ -239,6 +239,16 @@ describe('the planner is unchanged by the existence of a benchmark', () => {
     'foodSelections',
     'generatedAt',
     'hours',
+    /**
+     * Stops the traveller pinned to a day, added deliberately in Phase 16.
+     *
+     * The list is meant to cost an edit, and this is that edit. A lock is a
+     * *traveller* decision the planner must honour on a rebuild, and it reaches
+     * both arms the same way every other preference does — the benchmark
+     * traveller opens no board and pins nothing, so this list is empty in a
+     * benchmark session and neither arm is handed anything the other was not.
+     */
+    'locks',
     'matrix',
     'now',
     'profile',

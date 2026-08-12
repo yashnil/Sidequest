@@ -9,6 +9,7 @@ import {
   PREFERENCE_VALENCE,
   SUGGESTED_QUESTION_COPY,
   canOfferModelPass,
+  canRetryModelPass,
   chipLabel,
   type InterpretationSet,
 } from '@sidequest/core';
@@ -57,11 +58,22 @@ export function InterpretationPanel({
   interpretation,
   mustDo,
   avoid,
+  collapsed = false,
+  onExpand,
 }: {
   tripId: string;
   interpretation: InterpretationSet;
   mustDo: string;
   avoid: string;
+  /**
+   * Render as a one-line bar with an expand affordance instead of the full
+   * panel. The wizard owns the decision: the panel is shown in full once, on
+   * arrival, and collapses after the first advance — a mobile audit measured
+   * it pushing the wizard 1.4 viewports down on *every* visit, including a
+   * resume to step seven where the chips had long been dealt with.
+   */
+  collapsed?: boolean;
+  onExpand?: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -91,6 +103,38 @@ export function InterpretationPanel({
   const outsideLocale = interpretation.unresolved.some(
     (entry) => entry.clarificationReason === 'outside_the_locale_we_read',
   );
+
+  /*
+   * Two offers, mutually exclusive by construction: the first reading before
+   * any pass exists, a retry only after a pass that failed for provider
+   * reasons. Every terminal outcome renders its sentence and no button.
+   */
+  const offersReading = canOfferModelPass(interpretation);
+  const offersRetry = canRetryModelPass(interpretation);
+
+  if (collapsed) {
+    const summary = alreadyConfirmed
+      ? 'applied to your answers below'
+      : `${kept.length} reading${kept.length === 1 ? '' : 's'} waiting for your say-so`;
+    return (
+      <div className="mx-auto max-w-3xl px-5 pt-4 sm:px-8">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-rule bg-paper-sunk px-4 py-1.5">
+          <p className="min-w-0 truncate text-sm text-ink-muted">
+            <span className="font-medium text-ink">What we made of what you wrote</span>
+            {' — '}
+            {summary}
+          </p>
+          <button
+            type="button"
+            className={cx(buttonClass('ghost', 'sm'), 'min-h-11 shrink-0')}
+            onClick={onExpand}
+          >
+            Show
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-5 pt-10 sm:px-8">
@@ -232,14 +276,26 @@ export function InterpretationPanel({
               </p>
             ) : null}
 
+            {interpretation.modelPass ? (
+              <p className="mt-3 border-t border-rule pt-3 text-xs text-ink-faint">
+                {MODEL_FALLBACK_OUTCOME_COPY[interpretation.modelPass.outcome]}
+              </p>
+            ) : null}
+
             {/*
-              * One reading, offered rather than taken.
+              * One reading, offered rather than taken — and a retry only when
+              * the provider is what failed.
               *
-              * `canOfferModelPass` is false once a reading has been spent, once
-              * the interpretation is confirmed, and whenever there is nothing
-              * eligible to send — so the button disappears rather than failing.
+              * `canOfferModelPass` is false once any pass is recorded; the
+              * outcome sentence above then said "the reader did not answer"
+              * and the screen fell silent, which turned a provider's bad
+              * afternoon into a permanent property of the trip. A failure the
+              * traveller can act on stays actionable: `canRetryModelPass`
+              * re-offers the button for provider failures only, and the
+              * operation lease bounds the total attempts server-side, so this
+              * cannot become a bill.
               */}
-            {!alreadyConfirmed && canOfferModelPass(interpretation) ? (
+            {!alreadyConfirmed && (offersReading || offersRetry) ? (
               <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-rule pt-3">
                 <button
                   type="button"
@@ -254,19 +310,14 @@ export function InterpretationPanel({
                     });
                   }}
                 >
-                  {reading ? 'Reading…' : 'Have a go at the rest'}
+                  {reading ? 'Reading…' : offersRetry ? 'Try the reader again' : 'Have a go at the rest'}
                 </button>
                 <span className="text-xs text-ink-faint">
-                  One attempt, on these words only. Anything it finds is a suggestion you still
-                  have to accept.
+                  {offersRetry
+                    ? 'A few tries at most, then we stop. Anything it finds is still only a suggestion.'
+                    : 'One attempt, on these words only. Anything it finds is a suggestion you still have to accept.'}
                 </span>
               </div>
-            ) : null}
-
-            {interpretation.modelPass ? (
-              <p className="mt-3 border-t border-rule pt-3 text-xs text-ink-faint">
-                {MODEL_FALLBACK_OUTCOME_COPY[interpretation.modelPass.outcome]}
-              </p>
             ) : null}
           </div>
         ) : null}

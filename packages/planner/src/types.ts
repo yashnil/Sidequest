@@ -23,6 +23,12 @@ import type { MustDoConflict } from './feasibility';
 
 export const PLANNER_VERSION = 1;
 
+/** A stop the traveller pinned to a day. Persisted by the app, honoured here. */
+export interface ItineraryLock {
+  placeId: string;
+  dayNumber: number;
+}
+
 /**
  * Trip-specific feasibility — the third of the four kinds of state this domain
  * keeps apart. It joins a canonical `Place` (never mutated), the traveller's
@@ -237,6 +243,16 @@ export interface PlannerInput {
       transferIsWholeDay: boolean;
     }[];
   };
+  /**
+   * Stops the traveller has pinned to a day.
+   *
+   * A lock is the traveller's own decision surviving a rebuild: the place is
+   * planned as if hand-picked, and it is held to the day it was locked on
+   * rather than wherever clustering would put it this time. A lock that
+   * cannot be honoured — the place no longer fits its day — surfaces as a
+   * named conflict, never as a silent move.
+   */
+  locks?: readonly ItineraryLock[];
   config?: Partial<PlannerConfig>;
   /** Injected so output is reproducible in tests. */
   generatedAt?: string;

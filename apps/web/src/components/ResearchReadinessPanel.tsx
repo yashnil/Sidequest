@@ -4,6 +4,8 @@ import {
   RESEARCH_REPAIR_COPY,
   reportableDeficits,
   type DestinationResearchReadiness,
+  type ResearchDimensionReport,
+  type ResearchFunnel,
 } from '@sidequest/core';
 import { Panel, buttonClass } from './ui';
 
@@ -55,6 +57,56 @@ function attemptSentence(entry: DestinationResearchReadiness['repairsAttempted']
   );
 }
 
+/**
+ * WHAT THE SHORTFALL MEANS FOR THE TRIP, RATHER THAN WHAT IT COUNTED.
+ *
+ * `detail` is written next to the arithmetic that produced it and reads like it.
+ * A live Tokyo board printed three of them in a row:
+ *
+ *   We know the opening times for 0 of 23.
+ *   23 to build days around and 0 smaller finds.
+ *   0 quieter finds.
+ *
+ * Every one is a true measurement, and not one is a sentence a traveller can do
+ * anything with — it is §26's "Why we trust this: 0 of 6 checked" three times
+ * over, and the middle one does not even name what the numbers count.
+ *
+ * Three dimensions are rewritten because those three are what a compiled region
+ * reports on almost every trip. The rest keep the compiler's sentence, which for
+ * them is already a statement about the destination rather than about our
+ * instrument.
+ *
+ * Rewritten at the screen and not at the source deliberately: the same reading
+ * feeds the build record and the operator view, where the raw count is the
+ * useful form. This is the surface that owes a traveller meaning.
+ */
+export function deficitSentence(entry: ResearchDimensionReport, funnel: ResearchFunnel): string {
+  switch (entry.dimension) {
+    case 'hours_evidence': {
+      const known = entry.observed ?? 0;
+      return known === 0
+        ? 'Nobody publishes opening times for any of these, so we have not built a day around anything that might be shut. Check before you set out.'
+        : `Opening times are published for only ${known} of them, so we have planned the rest cautiously.`;
+    }
+    case 'role_diversity': {
+      if (funnel.visitable === 0) return entry.detail;
+      if (funnel.discoveries === 0) {
+        return 'Everything here is a headline sight — nothing smaller turned up to fill the gaps between them.';
+      }
+      if (funnel.anchors === 0) {
+        return 'Plenty of small finds, but nothing big enough to build a day around.';
+      }
+      return entry.detail;
+    }
+    case 'hidden_gem_coverage':
+      return funnel.discoveries === 0
+        ? 'None of this reads as a quiet local find. What we have is the well-known ones.'
+        : entry.detail;
+    default:
+      return entry.detail;
+  }
+}
+
 export function ResearchReadinessPanel({
   tripId,
   readiness,
@@ -101,7 +153,16 @@ export function ResearchReadinessPanel({
   }
 
   const copy = RESEARCH_READINESS_COPY[readiness.level];
-  const deficits = reportableDeficits(readiness).slice(0, 4);
+  /*
+   * The summary is one of the deficit sentences, chosen by the assessor as the
+   * headline. Printing it again three lines down under "Worth knowing before you
+   * plan" said the same thing twice on one panel — which reads as two problems
+   * and is one.
+   */
+  const deficits = reportableDeficits(readiness)
+    .map((entry) => ({ entry, sentence: deficitSentence(entry, readiness.funnel) }))
+    .filter(({ sentence }) => sentence !== readiness.summary)
+    .slice(0, 4);
   const attempted = readiness.repairsAttempted;
   const blocked = readiness.level === 'blocked';
 
@@ -163,8 +224,8 @@ export function ResearchReadinessPanel({
             {blocked ? 'What is missing' : 'Worth knowing before you plan'}
           </h3>
           <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink-muted">
-            {deficits.map((entry) => (
-              <li key={entry.dimension}>{entry.detail}</li>
+            {deficits.map(({ entry, sentence }) => (
+              <li key={entry.dimension}>{sentence}</li>
             ))}
           </ul>
         </div>

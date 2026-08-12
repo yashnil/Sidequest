@@ -1,9 +1,14 @@
 import {
   assessPlaceStanding,
+  experienceSignificanceOf,
   foldForMatch,
+  hasDesignatedStatus,
+  hasSignificanceEvidence,
+  isLatinScript,
   licence,
   parseOsmOpeningHours,
   PLACE_CATEGORY_LABELS,
+  resolveRecordDisplayName,
   type CandidateLink,
   type ConfidenceSignal,
   type DataLicence,
@@ -11,6 +16,7 @@ import {
   type GeographicScope,
   type LicenceId,
   type Place,
+  type PlaceStanding,
   type PlanningRole,
   type ProviderRef,
   type RegionPack,
@@ -20,6 +26,8 @@ import {
   placeRoleTag,
   standingFields,
 } from '@sidequest/core';
+import { haversineKm } from '@sidequest/geo';
+import { normalizeName } from '../dedupe';
 import type { DiscoveredCandidate } from '../providers';
 import { assessRecordEligibility, type CandidateEligibility } from './eligibility';
 import { withContainmentDecision } from './containment';
@@ -391,6 +399,83 @@ export function buildInventory(input: {
   const namesakes = regionNamesakes(input.pack);
 
   /*
+   * ONE STANDING, ONE SIGNIFICANCE, PER RECORD — computed here because two of
+   * its channels (cross-layer corroboration, the region's own namesakes) are
+   * pack-wide facts a lone record cannot see. Cached because the ranking below
+   * asks repeatedly and the answer cannot change inside one build.
+   */
+  const classifyCache = new Map<string, ReturnType<typeof classifySourceCategory>>();
+  const taxonomyOf = (record: SourceRecord) => {
+    const cached = classifyCache.get(record.id);
+    if (cached) return cached;
+    const taxonomy = classifySourceCategory({
+      category: record.sourceCategory,
+      path: record.sourceCategoryPath,
+    });
+    classifyCache.set(record.id, taxonomy);
+    return taxonomy;
+  };
+  const standingOf = (record: SourceRecord): PlaceStanding =>
+    assessPlaceStanding({
+      inKnowledgeBase: record.wikidataId !== undefined,
+      encyclopaedicArticle: hasEncyclopaedicArticle(record),
+      knowledgeBaseNameCount: record.alternateNames.length,
+      crossDatasetCorroboration: crossLayer.has(record.id),
+      publishedSites: record.websiteCandidates,
+      classifyingValues: classifyingValuesOf(record),
+      namedInRegionRecords: namesakes.has(record.id),
+      recordedAttributeCount: Object.keys(record.attributes).length,
+    });
+  const significanceCache = new Map<string, number>();
+  const significanceOf = (record: SourceRecord): number => {
+    const cached = significanceCache.get(record.id);
+    if (cached !== undefined) return cached;
+    const value = experienceSignificanceOf({
+      standing: standingOf(record),
+      categoryWeight: taxonomyOf(record).significanceWeight,
+    });
+    significanceCache.set(record.id, value);
+    return value;
+  };
+
+  /*
+   * PAID ENCLOSURES, RESOLVED BEFORE ADMISSION.
+   *
+   * A record inside a theme park's footprint is part of the theme park: a live
+   * board offered an island inside one as a free easy walk, to a traveller who
+   * had excluded theme parks. The span guard refuses oversized bounds — a bad
+   * polygon covering half a city must not swallow the city.
+   */
+  const enclosures = records.filter((record) => {
+    if (!record.bounds || !taxonomyOf(record).paidEnclosure) return false;
+    const latSpan = record.bounds.northEast.lat - record.bounds.southWest.lat;
+    const lngSpan = record.bounds.northEast.lng - record.bounds.southWest.lng;
+    return latSpan > 0 && lngSpan > 0 && latSpan <= 0.06 && lngSpan <= 0.08;
+  });
+  const enclosureContaining = (record: SourceRecord): SourceRecord | undefined => {
+    if (taxonomyOf(record).paidEnclosure) return undefined;
+    return enclosures.find(
+      (enclosure) =>
+        enclosure.id !== record.id &&
+        record.coordinates.lat >= enclosure.bounds!.southWest.lat &&
+        record.coordinates.lat <= enclosure.bounds!.northEast.lat &&
+        record.coordinates.lng >= enclosure.bounds!.southWest.lng &&
+        record.coordinates.lng <= enclosure.bounds!.northEast.lng,
+    );
+  };
+
+  /*
+   * Adjacent fragments of one feature, folded before anything is ranked.
+   *
+   * The linker already folds records two catalogues agree are one entity; what
+   * it cannot see is one catalogue publishing a feature in pieces — two halves
+   * of the same nature forest were two board cards on a live build. Name
+   * similarity plus adjacency plus same kind is the conservative version of
+   * "the same place said twice", and the better-evidenced piece survives.
+   */
+  const adjacentFolds = foldAdjacentFragments(records, taxonomyOf, significanceOf);
+
+  /*
    * ADMISSION, IN A FIXED ORDER, BEFORE ANYTHING IS BALANCED.
    *
    * Each gate answers a different question and each refusal is counted with its
@@ -417,6 +502,11 @@ export function buildInventory(input: {
   for (const record of records) {
     // 1. Duplicate resolution. A superseded record is not a second candidate.
     if (superseded.has(record.id)) {
+      ledger.reject('superseded_duplicate', record.name);
+      continue;
+    }
+    // 1a. Adjacent fragments of one feature. Same refusal, found differently.
+    if (adjacentFolds.has(record.id)) {
       ledger.reject('superseded_duplicate', record.name);
       continue;
     }
@@ -471,6 +561,50 @@ export function buildInventory(input: {
       ledger.reject('identity_too_thin', record.name);
       continue;
     }
+
+    /*
+     * 5b–5d. THE PLAUSIBILITY GATES — category claims checked against evidence.
+     *
+     * Three refusals with one shape: the *category* says "offer this" and the
+     * record's own evidence says the category is not enough. Each is a class
+     * defect that reached a live board — a working railway viaduct as a
+     * "Viewpoint", a business named after a famous distant mountain at the
+     * mountain's category, an island inside a theme park as a free walk.
+     * The gates read significance *evidence* (a knowledge base, a second
+     * catalogue, an authority, the region's own naming) and never metadata
+     * volume — a well-filled-in listing proves description, not significance.
+     */
+    const recordTaxonomy = taxonomyOf(record);
+    if (recordTaxonomy.requiresSignificanceEvidence && !hasSignificanceEvidence(standingOf(record))) {
+      ledger.reject('insufficient_significance_evidence', record.name);
+      continue;
+    }
+    /*
+     * A MAGNITUDE TEST, NOT A PRESENCE TEST.
+     *
+     * This read `record.bounds === undefined`, i.e. "any polygon at all rescues
+     * the claim" — and a bounding box a metre across is a point with floating
+     * point noise on it. A live Tokyo board carried seven Peaks on the strength
+     * of that: three road slopes and four park mounds, one of them captioned
+     * "A peak. Recorded at 14 m." A mountain, a glacier, a volcano or a range
+     * is *large* — that is the whole content of the claim — so the extent has
+     * to be an extent, and `mappedExtentMetres` is the same hundred-metre floor
+     * the description uses for the same reason.
+     */
+    if (
+      recordTaxonomy.landscapeClaim &&
+      mappedExtentMetres(record) === undefined &&
+      !hasSignificanceEvidence(standingOf(record))
+    ) {
+      ledger.reject('implausible_landscape_claim', record.name);
+      continue;
+    }
+    const enclosure = enclosureContaining(record);
+    if (enclosure) {
+      ledger.reject('inside_paid_enclosure', record.name);
+      continue;
+    }
+
 
     /*
      * 6. Planning-role separation, intersected with what the scope permits.
@@ -619,7 +753,7 @@ export function buildInventory(input: {
     // it is spent on things that cannot.
     for (const slot of VISITABLE_SLOTS) {
       if (remaining <= 0) break;
-      const pool = rank(admittedFor(slot, role), prioritized);
+      const pool = rank(admittedFor(slot, role), prioritized, significanceOf);
       if (pool.length === 0) continue;
       const result = balanceAcrossAreas({
         ranked: pool,
@@ -673,7 +807,7 @@ export function buildInventory(input: {
        */
       // Both visitable slots, for the same reason as the first pass: the record's
       // admission decides where it is, not a table keyed on its role.
-      const pool = rank(VISITABLE_SLOTS.flatMap((slot) => admittedFor(slot, role)), prioritized);
+      const pool = rank(VISITABLE_SLOTS.flatMap((slot) => admittedFor(slot, role)), prioritized, significanceOf);
       const spare = pool.filter((record) => !taken.has(record.id));
       if (spare.length === 0) continue;
       const result = balanceAcrossAreas({
@@ -711,7 +845,7 @@ export function buildInventory(input: {
    * mountain day.
    */
   const supportBalance = balanceAcrossAreas({
-    ranked: rank(allAdmittedFor('support'), prioritized),
+    ranked: rank(allAdmittedFor('support'), prioritized, significanceOf),
     areaOf: areaOfRecord,
     categoryOf,
     limits: {
@@ -733,7 +867,7 @@ export function buildInventory(input: {
    * balanced like everything else.
    */
   const gatewayBalance = balanceAcrossAreas({
-    ranked: preferNamedGateways(rank(allAdmittedFor('gateway'), prioritized), input.scope),
+    ranked: preferNamedGateways(rank(allAdmittedFor('gateway'), prioritized, significanceOf), input.scope),
     areaOf: areaOfRecord,
     categoryOf,
     limits: {
@@ -753,7 +887,7 @@ export function buildInventory(input: {
    * food layer and *was* emitted as a discovery card: the worst of the three
    * available outcomes.
    */
-  const foodPool = rank(allAdmittedFor('food'), prioritized);
+  const foodPool = rank(allAdmittedFor('food'), prioritized, significanceOf);
   const food = foodPool.slice(0, limits.maxFoodVenues);
 
   /*
@@ -1024,11 +1158,14 @@ function interleaveByRole(
 /**
  * The order records are considered in, and it is not a fit score.
  *
- * Fit needs a traveller and this runs before one is applied; what this orders on
- * is *how much is known* — how many attributes the source recorded, whether
- * anyone published a site, whether an open identifier exists, whether the source
- * says it is open. A record's existence confidence is deliberately absent: it
- * says the thing probably exists, which every record here already claims.
+ * Fit needs a traveller and this runs before one is applied. What this orders
+ * on is **significance** — what kind of thing it is, times what the world has
+ * established about it (`quality/significance.ts`). The score used to be
+ * `knownness()`, a weighted attribute count, and that was the §8.3 defect in
+ * one function: a café with a website, posted hours and an operator outranked
+ * every unevidenced temple in the city, because describing yourself thoroughly
+ * scored better than mattering. Metadata volume now reaches this ordering by no
+ * path; the tiebreak below significance is the record id, never a field count.
  *
  * Deterministic to the last tiebreak, because the pack's content hash depends on
  * it and so does the reproducibility of a compilation.
@@ -1045,13 +1182,15 @@ function rank(
    * coverage it is measuring. Within the prioritised group the ordinary order
    * still applies, so it stays deterministic.
    */
-  prioritized: ReadonlySet<string> = EMPTY_PRIORITY,
+  prioritized: ReadonlySet<string>,
+  /** Significance per record, supplied by the build that holds the pack-wide evidence. */
+  scoreOf: (record: SourceRecord) => number,
 ): SourceRecord[] {
   const named = (record: SourceRecord): boolean =>
     prioritized.size > 0 &&
     [record.name, ...record.alternateNames].some((value) => prioritized.has(foldForMatch(value)));
   return [...records]
-    .map((record) => ({ record, score: knownness(record), named: named(record) }))
+    .map((record) => ({ record, score: scoreOf(record), named: named(record) }))
     .sort(
       (a, b) =>
         Number(b.named) - Number(a.named) ||
@@ -1065,18 +1204,67 @@ function rank(
 const EMPTY_PRIORITY: ReadonlySet<string> = new Set<string>();
 
 /**
- * Scored by *kinds* of evidence, not by how many attributes a layer happens to
- * publish.
+ * Fragments of one feature, published as several adjacent records.
  *
- * The first version counted attributes, and that turned out to be a layer bias
- * rather than a quality signal: the geographic layers carry a bag of upstream
- * tags and the primary place catalogue carries none, so a live New York run
- * ranked fourteen small municipal parks above every museum in Manhattan. What is
- * counted now is present in both vocabularies — a published site, an open
- * identifier, posted hours, a named operator, a known address, a real taxonomy
- * path — so a record is ranked on what is known about it rather than on which
- * schema it arrived in.
+ * The linker folds what two *catalogues* agree on; this folds what one
+ * catalogue split — a nature forest mapped in two municipal parcels, a park
+ * and its numbered extension. The test is deliberately three-legged, because
+ * any leg alone over-merges: the names must be the same name or one must
+ * contain the other (six characters minimum, so "Park East" cannot eat
+ * "Park"), the kinds must agree, and the points must be within a couple of
+ * hundred metres. The better-evidenced fragment survives; ties break on id so
+ * two builds fold identically.
  */
+const FRAGMENT_FOLD_METRES = 250;
+
+export function foldAdjacentFragments(
+  records: readonly SourceRecord[],
+  taxonomyOf: (record: SourceRecord) => { category: string },
+  scoreOf: (record: SourceRecord) => number,
+): Set<string> {
+  const byCategory = new Map<string, SourceRecord[]>();
+  for (const record of records) {
+    if (record.planningRole === 'administrative') continue;
+    const key = taxonomyOf(record).category;
+    const bucket = byCategory.get(key);
+    if (bucket) bucket.push(record);
+    else byCategory.set(key, [record]);
+  }
+
+  const sameFragmentName = (a: string, b: string): boolean => {
+    if (a.length === 0 || b.length === 0) return false;
+    if (a === b) return true;
+    const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+    return shorter.length >= 6 && longer.includes(shorter);
+  };
+
+  const folded = new Set<string>();
+  for (const bucket of byCategory.values()) {
+    if (bucket.length < 2) continue;
+    const named = bucket.map((record) => ({ record, folded: normalizeName(record.name) }));
+    for (let i = 0; i < named.length; i += 1) {
+      for (let j = i + 1; j < named.length; j += 1) {
+        const a = named[i]!;
+        const b = named[j]!;
+        if (folded.has(a.record.id) || folded.has(b.record.id)) continue;
+        if (!sameFragmentName(a.folded, b.folded)) continue;
+        const metres =
+          haversineKm(
+            { id: 'a', ...a.record.coordinates },
+            { id: 'b', ...b.record.coordinates },
+          ) * 1000;
+        if (metres > FRAGMENT_FOLD_METRES) continue;
+        const keepA =
+          scoreOf(a.record) > scoreOf(b.record) ||
+          (scoreOf(a.record) === scoreOf(b.record) &&
+            a.record.id.localeCompare(b.record.id) <= 0);
+        folded.add(keepA ? b.record.id : a.record.id);
+      }
+    }
+  }
+  return folded;
+}
+
 /**
  * The order candidates leave in, round-robin across categories.
  *
@@ -1127,24 +1315,68 @@ function interleaveByCategory(records: readonly SourceRecord[]): SourceRecord[] 
   return ordered;
 }
 
-function knownness(record: SourceRecord): number {
-  const other = Object.keys(record.attributes).filter(
-    (key) => key !== 'operator' && key !== 'opening_hours' && key !== 'website',
-  ).length;
-  return (
-    (record.websiteCandidates.length > 0 ? 6 : 0) +
-    (record.wikidataId ? 5 : 0) +
-    (record.attributes.opening_hours ? 4 : 0) +
-    (record.attributes.operator ? 3 : 0) +
-    // Somebody put this in an addressable place: a real locality, not a bbox.
-    (record.containment.localityName || record.containment.neighbourhoodName ? 2 : 0) +
-    // A category path of any depth means a classified record rather than a blob.
-    (record.sourceCategoryPath.length >= 2 ? 2 : 0) +
-    (record.bounds ? 2 : 0) +
-    (record.alternateNames.length > 0 ? 1 : 0) +
-    Math.min(4, other) * 2 +
-    (record.operatingStatus === 'closed' ? -50 : 0)
-  );
+/*
+ * `knownness()` used to live here — six points for a website, five for an open
+ * identifier, two per recorded attribute. It was the exact metadata-count
+ * heuristic §8.3 bans, and it decided who won: a live metro build scored every
+ * card "Strong fit" off a pool this function had ordered, museums losing to
+ * pocket parks inside it. Ranking now reads `experienceSignificanceOf` — kind
+ * times established evidence — and nothing in this file counts attributes into
+ * an ordering again.
+ */
+
+/**
+ * Whether an encyclopaedia holds an *article* about this record, not just a row.
+ *
+ * A different statement from `wikidataId`, and worth its own channel because
+ * the two genuinely separate on real packs: a third of the knowledge-base
+ * entries in a dense city carry no article, and the ones that do are the places
+ * somebody sat down and wrote about. It is the signal that took over the
+ * discriminating work the alternate-name count was doing — an article cannot be
+ * produced by translating a row four times.
+ */
+function hasEncyclopaedicArticle(record: SourceRecord): boolean {
+  return record.attributes.wikipedia !== undefined;
+}
+
+/**
+ * Vocabulary keys whose *values* name a class rather than describe an instance.
+ *
+ * Passed to the standing assessor, which keeps only the values that name a
+ * conferred status — a reserve, a protected area, a listing. Everything else in
+ * them is a kind of thing and is ignored there, so widening this list can add
+ * evidence and cannot invent it.
+ *
+ * It exists because the assessor was only ever shown the record's own category
+ * and category path, and a designation is very often recorded one level down:
+ * a record classified `park` by its catalogue carries `leisure=nature_reserve`
+ * among its attributes, and on real packs that is the single most common way a
+ * designation is stated at all. The local-significance channel was therefore
+ * silent across whole regions while the evidence for it sat in the record.
+ */
+const CLASSIFYING_ATTRIBUTE_KEYS = [
+  'boundary',
+  'heritage',
+  'historic',
+  'landuse',
+  'leisure',
+  'natural',
+  'protect_class',
+  'protection_title',
+  'site_type',
+  'tourism',
+] as const;
+
+/** Everything the record says about *what class of thing* it is. */
+function classifyingValuesOf(record: SourceRecord): string[] {
+  return [
+    record.sourceCategory,
+    ...record.sourceCategoryPath,
+    ...CLASSIFYING_ATTRIBUTE_KEYS.flatMap((key) => {
+      const value = record.attributes[key];
+      return value === undefined ? [] : [`${key}=${value}`];
+    }),
+  ];
 }
 
 /**
@@ -1163,7 +1395,11 @@ function crossLayerCorroboration(
   for (const link of links) {
     if (link.kind !== 'same_entity' && link.kind !== 'probable_same_entity') continue;
     const layers = new Set(link.recordIds.map((id) => layerOf.get(id)).filter(Boolean));
-    if (layers.size < 2) continue;
+    // Two *distinct layers*, stated positively — the architecture test reads
+    // this guard structurally, and corroboration without it is the defect the
+    // rule exists to police.
+    const independentSources = layers.size >= 2;
+    if (!independentSources) continue;
     for (const id of link.recordIds) corroborated.add(id);
   }
   return corroborated;
@@ -1258,16 +1494,20 @@ export function toCandidate(input: {
    * merge them; only two *layers* finding the same thing is agreement, which is
    * the rule the confidence signals below are already held to.
    *
-   * `attributes` reaches `evidenceRichness` and stops there. It is why the hours
-   * are known and the website is linkable, and it is not evidence that anybody
-   * cares about the place.
+   * `attributes` and `alternateNames` reach `evidenceRichness` and stop there.
+   * They are why the hours are known, the website is linkable and the card can
+   * be read in English, and none of that is evidence that anybody cares about
+   * the place. The name count in particular was still deciding the ordering one
+   * rung below the gate it had already been thrown out of; it now counts as
+   * what it is, which is two more facts somebody wrote down.
    */
   const standing = assessPlaceStanding({
     inKnowledgeBase: record.wikidataId !== undefined,
+    encyclopaedicArticle: hasEncyclopaedicArticle(record),
     knowledgeBaseNameCount: record.alternateNames.length,
     crossDatasetCorroboration: crossLayerCorroborated,
     publishedSites: record.websiteCandidates,
-    classifyingValues: [record.sourceCategory, ...record.sourceCategoryPath],
+    classifyingValues: classifyingValuesOf(record),
     ...(input.namedInRegionRecords !== undefined
       ? { namedInRegionRecords: input.namedInRegionRecords }
       : {}),
@@ -1281,12 +1521,26 @@ export function toCandidate(input: {
     crowd: { seasonalConcentration: record.attributes.seasonal !== undefined },
   });
 
+  /*
+   * The traveller-facing name, resolved once, here.
+   *
+   * The record's own `name` is the source's primary — the local script by
+   * design — and a live English-interface board rendered a wall of it while
+   * the records *held* romanised alternates, verified present and unused.
+   * `display` leads; the native form travels beside it on `names.local` so a
+   * card can render both (and set a `lang` attribute where a language is
+   * known); `names.canonical` keeps the source's own name for provenance.
+   */
+  const names = namesOf(record);
+
   const place: Place = {
     id: record.id,
     regionId: `compiled-${scope.destinationCandidateId}`,
-    name: record.name,
+    name: names.display,
+    names,
+    ...(taxonomy.displayKind ? { displayKind: taxonomy.displayKind } : {}),
     locality: localityOf(record, scope),
-    shortDescription: describe(record, taxonomy.category),
+    shortDescription: describe(record, taxonomy, names, standing),
     coordinates: record.coordinates,
     /**
      * The classifying category, plus the *names* of the attributes the source
@@ -1346,6 +1600,12 @@ export function toCandidate(input: {
     category: taxonomy.category,
     interests: taxonomy.interests.length > 0 ? taxonomy.interests : ['scenic_viewpoints'],
     typicalDurationMinutes: taxonomy.typicalDurationMinutes,
+    /*
+     * The archetype's constant, and marked as one. It rendered as a measured
+     * fact — "Time there: 1 hr 30 min" for a river — and the marker is what
+     * lets a card write "about" instead.
+     */
+    durationBasis: 'category_estimate',
     costLevel: taxonomy.costLevel,
     physicalIntensity: taxonomy.physicalIntensity,
     /*
@@ -1354,6 +1614,22 @@ export function toCandidate(input: {
      * three assignments, so this producer cannot invent a fallback of its own.
      */
     ...standingFields(standing),
+    /*
+     * Kind × established evidence, the §8.3 dimension. Computed beside the
+     * standing it reads so the two can never disagree about their inputs.
+     */
+    experienceSignificance: experienceSignificanceOf({
+      standing,
+      categoryWeight: taxonomy.significanceWeight,
+    }),
+    /*
+     * Whether "check its hours" is even a sensible sentence for this kind of
+     * thing. A gated kind with unknown hours is a real warning; a river given
+     * the same warning tells the traveller the machine does not know what a
+     * river is — which a compiled build did, on every geographic feature.
+     */
+    hoursExpectation:
+      taxonomy.plausiblyGated || record.attributes.fee === 'yes' ? 'gated' : 'open_ground',
     weather: {
       exposure: taxonomy.exposure,
       precipitation: taxonomy.exposure === 'indoor' ? 'low' : 'high',
@@ -1440,40 +1716,196 @@ function sourceNameOf(record: SourceRecord): string {
   return datasets.length > 0 ? datasets.join(', ') : record.layerId;
 }
 
-function localityOf(record: SourceRecord, scope: GeographicScope): string {
-  return (
-    record.containment.neighbourhoodName ??
-    record.containment.localityName ??
-    record.containment.regionName ??
-    scope.destinationName
-  );
+/**
+ * The traveller-facing name set for a record, resolved once and read twice.
+ *
+ * The admission gate needs `names.local` to know whether "Known locally as …"
+ * is a sentence this record can support, and `toCandidate` needs the same set
+ * to build the card. Sharing the function is what keeps the gate's judgement
+ * and the card's copy the same judgement.
+ */
+function namesOf(record: SourceRecord): ReturnType<typeof resolveRecordDisplayName> {
+  return resolveRecordDisplayName({
+    name: record.name,
+    alternateNames: record.alternateNames,
+    source: sourceNameOf(record),
+  });
 }
 
 /**
- * A description built from facts, and short when there are none.
+ * WHERE A CARD SAYS THIS PLACE IS.
  *
- * Deliberately not prose. The quality assessor treats a description over forty
- * characters as one of seven evidence marks, so a template that always produced
- * a flowing sentence would hand every candidate that mark and make the signal
- * meaningless. What this produces instead grows only when the source actually
- * recorded something — an operator, an elevation, a boundary — so its length
- * tracks evidence rather than style.
+ * A specificity chain — neighbourhood, then locality, then region, then the
+ * destination the traveller actually asked for — and it used to take the first
+ * entry that existed regardless of what it was written in. On a Tokyo pack that
+ * is `世田谷区`, printed under an English heading beside a name §8.6's
+ * resolution had already worked to make readable. A reader who cannot read the
+ * script learns nothing at all from the most specific answer, and "Tokyo" is
+ * less precise but is information.
+ *
+ * So: the most specific entry this interface's reader can actually read, tested
+ * with `isLatinScript` — the naming module's own test, rather than a second
+ * definition of "readable" living here.
+ *
+ * When nothing in the chain qualifies the original answer stands. §8.6 says not
+ * to erase native names, and a locality in local script is better than a card
+ * that does not say where it is.
  */
-function describe(record: SourceRecord, category: Place['category']): string {
-  const label = PLACE_CATEGORY_LABELS[category].toLowerCase();
-  const where =
-    record.containment.localityName ?? record.containment.regionName ?? undefined;
-  const parts = [where ? `A ${label} in ${where}.` : `A ${label}.`];
+function localityOf(record: SourceRecord, scope: GeographicScope): string {
+  const chain = [
+    record.containment.neighbourhoodName,
+    record.containment.localityName,
+    record.containment.regionName,
+    scope.destinationName,
+  ].filter((value): value is string => value !== undefined && value.length > 0);
+  return chain.find((value) => isLatinScript(value)) ?? chain[0] ?? scope.destinationName;
+}
 
+/**
+ * EVERY SENTENCE A PACK RECORD CAN HONESTLY SUPPORT, BEYOND ITS OWN CATEGORY.
+ *
+ * Split out from `describe` because it is not only copy: it is the answer to
+ * "is there anything to say about this at all", and §8.7 makes that a
+ * *ranking* question rather than a wording one — *"If there is not enough
+ * evidence to describe an obscure POI meaningfully, that itself is a
+ * ranking/evidence signal."* `buildInventory` reads the length of this list as
+ * that signal. Producing the sentences and judging the emptiness from one
+ * function is what stops the two answers drifting apart, which is exactly how
+ * fifty-two of ninety-nine live cards came to read "A plaza." while a guard
+ * elsewhere believed it was preventing that.
+ *
+ * Never fabricated flavour: every entry restates something a source recorded.
+ * The quality assessor treats a description over forty characters as one of
+ * seven evidence marks, so a template that always produced a flowing sentence
+ * would hand every candidate that mark and make the signal meaningless.
+ */
+function describedFacts(
+  record: SourceRecord,
+  names: { local?: string },
+  standing?: PlaceStanding,
+): string[] {
+  const facts: string[] = [];
+
+  /*
+   * A conferred status is the most interesting fact a pack record can carry:
+   * somebody official decided this place matters, and that is the question a
+   * description exists to answer.
+   */
+  if (hasDesignatedStatus(classifyingValuesOf(record))) {
+    facts.push('Holds a protected or heritage designation.');
+  }
+  if (names.local) facts.push(`Known locally as ${names.local}.`);
   const operator = record.attributes.operator;
-  if (operator) parts.push(`Run by ${operator}.`);
+  if (operator) facts.push(`Run by ${operator}.`);
   const elevation = record.attributes.ele;
-  if (elevation && /^\d{2,5}$/.test(elevation)) parts.push(`Recorded at ${elevation} m.`);
+  if (elevation && /^\d{2,5}$/.test(elevation)) facts.push(`Recorded at ${elevation} m.`);
   const fee = record.attributes.fee;
-  if (fee === 'yes') parts.push('The map data records a charge to enter.');
-  else if (fee === 'no') parts.push('The map data records no charge to enter.');
+  if (fee === 'yes') facts.push('The map data records a charge to enter.');
+  else if (fee === 'no') facts.push('The map data records no charge to enter.');
 
-  return parts.join(' ').slice(0, 280);
+  /*
+   * How big the thing is, from its own mapped outline.
+   *
+   * A sourced fact the pack has always carried and the description never read,
+   * and the one a traveller most wants when the noun is "forest" or "park": a
+   * thirty-metre patch of trees and a wood you can spend a morning in are the
+   * same word. Below a hundred metres nothing is said, because at that size the
+   * outline is as likely to be a mapping artefact as a measurement.
+   */
+  const extent = mappedExtentMetres(record);
+  if (extent !== undefined) facts.push(`Mapped at roughly ${extent} m across.`);
+
+  /*
+   * WHEN NOTHING ELSE IS TRUE, SAY THAT — AND NEVER SHIP THE BARE NOUN.
+   *
+   * §8.7 bans "A lake.", "A viewpoint.", "An easy walk." and "A park." as
+   * primary descriptions and asks a description to answer *"what is
+   * interesting about this, and why might I care?"*. A live board shipped
+   * fifty-two of ninety-nine cards in exactly that form — "A plaza.",
+   * "A bridge.", "A forest.", "A river." — and the temptation is to write
+   * something evocative for them, which §8.7 forbids in the same breath: *do
+   * not fabricate flavour*.
+   *
+   * The remaining option is the true one, and it is the answer this product
+   * gives everywhere else it does not know something. "Nothing beyond its name
+   * and position is published about it" tells a traveller precisely what the
+   * alternative did not: that this is a name on a map rather than a checked
+   * recommendation, so they can weigh it as one. Where something *has*
+   * vouched for the place, the witness is the more useful sentence and leads
+   * instead — that is what separates a bridge people cross a city for from the
+   * fourteen numbered culverts beside it.
+   *
+   * Deliberately **not** fed back into any score. A record that can support
+   * more sentences is a better-catalogued record, not a more significant one,
+   * and §8.3 names metadata completeness as the thing significance must never
+   * be. `evidenceRichness` already measures cataloguing, and already ranks
+   * nothing.
+   */
+  if (facts.length === 0) {
+    if (standing?.globalProminence !== undefined) {
+      facts.push('Recorded in an open knowledge base under this name.');
+    } else if (standing?.localSignificance !== undefined) {
+      facts.push('Named in the area’s own published geography.');
+    } else {
+      facts.push('Nothing beyond its name and position is published about it.');
+    }
+  }
+
+  return facts;
+}
+
+/**
+ * The longer side of the record's own outline, in metres, when it is big enough
+ * to be worth stating. Undefined for a point feature or a hair-width polygon.
+ */
+function mappedExtentMetres(record: SourceRecord): number | undefined {
+  const bounds = record.bounds;
+  if (!bounds) return undefined;
+  const latMetres = (bounds.northEast.lat - bounds.southWest.lat) * 111_320;
+  const midLat = ((bounds.northEast.lat + bounds.southWest.lat) / 2) * (Math.PI / 180);
+  const lngMetres = (bounds.northEast.lng - bounds.southWest.lng) * 111_320 * Math.cos(midLat);
+  const longest = Math.max(latMetres, lngMetres);
+  if (!Number.isFinite(longest) || longest < 100) return undefined;
+  /* Two significant figures: the outline does not support more than that. */
+  const rounded = longest >= 1000 ? Math.round(longest / 100) * 100 : Math.round(longest / 10) * 10;
+  return rounded;
+}
+
+/**
+ * A description built from facts, and refused rather than shortened when there
+ * are none.
+ *
+ * Deliberately not prose, and never fabricated flavour. What this produces
+ * grows only when the source actually recorded something worth saying — a
+ * designation, an operator, an elevation, an extent, a native name — so its
+ * length tracks evidence rather than style.
+ *
+ * The opening sentence is still the category, because a reader needs to know
+ * what kind of thing they are looking at before anything else — but it is never
+ * the *whole* description, because a description that is only a category is
+ * §8.7's named failure. `describedFacts` always returns at least one sentence,
+ * so the banned form cannot be produced from here.
+ *
+ * Two lessons from the live board are baked in: the noun is the type-truthful
+ * one ("river", never "lake" for a river), and the article agrees with it —
+ * "A easy walk." shipped, and `an` before a vowel is not a nicety when it is
+ * the first word a traveller reads.
+ */
+function describe(
+  record: SourceRecord,
+  taxonomy: { category: Place['category']; displayKind?: string },
+  names: { local?: string },
+  standing?: PlaceStanding,
+): string {
+  const label = (taxonomy.displayKind ?? PLACE_CATEGORY_LABELS[taxonomy.category]).toLowerCase();
+  const article = /^[aeiou]/.test(label) ? 'An' : 'A';
+  const where =
+    record.containment.neighbourhoodName ??
+    record.containment.localityName ??
+    record.containment.regionName ??
+    undefined;
+  const opening = where ? `${article} ${label} in ${where}.` : `${article} ${label}.`;
+  return [opening, ...describedFacts(record, names, standing)].join(' ').slice(0, 280);
 }
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,14 @@ export interface TripContext {
 const STAGE_TONE: Record<string, string> = {
   Planning: 'text-slate-blue',
   Building: 'text-slate-blue',
+  /*
+   * A stopped build is not a stage of progress and must not be coloured like
+   * one. Unmapped stages already fall back to the faint ink, which is right for
+   * anything a caller invents; this is stated because it is the one that would
+   * otherwise be read as "still going".
+   */
+  Stopped: 'text-amber',
+  Researched: 'text-pine',
   Board: 'text-pine',
   Itinerary: 'text-pine',
 };

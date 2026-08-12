@@ -61,12 +61,32 @@ export function ProductChrome({ children }: { children: React.ReactNode }) {
             destination-specific claim in the first place.
           */}
           <span className="flex-1" />
-          <Link href="/trips/new" className="shrink-0 text-sm text-ink-muted hover:text-pine">
+          {/*
+            44 px of target, not 20.
+
+            WCAG 2.5.5. This was a bare line of 14 px text — about twenty pixels
+            tall — and it is the only global navigation control in the product,
+            sitting in the top corner where a thumb is least accurate. The
+            padding does it; the type size and the visual weight are unchanged.
+          */}
+          <Link
+            href="/trips/new"
+            className="inline-flex min-h-11 shrink-0 items-center px-2 text-sm text-ink-muted hover:text-pine"
+          >
             New trip
           </Link>
         </div>
       </header>
-      <main id="main" className="flex-1">
+      {/*
+        `tabIndex={-1}`, which is what makes the skip link work.
+
+        Without it the anchor moves the *scroll* to the main landmark and leaves
+        keyboard focus exactly where it was — in the header — so the next Tab
+        goes back to "New trip" and the skip has skipped nothing. A `main` is
+        not focusable by default; this makes it a programmatic focus target
+        without putting it in the tab order.
+      */}
+      <main id="main" tabIndex={-1} className="flex-1 outline-none">
         {children}
       </main>
       <footer className="mt-16 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))] border-t border-rule">

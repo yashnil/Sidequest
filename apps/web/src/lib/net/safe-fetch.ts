@@ -703,6 +703,72 @@ export function isAllowedByRobots(robotsTxt: string, path: string, agent = 'Side
   return verdict;
 }
 
+// ---------------------------------------------------------------------------
+// Why pages were refused — counted, never logged
+// ---------------------------------------------------------------------------
+
+/**
+ * The coarse causes a per-job diagnostic can name.
+ *
+ * The live diagnostics count `pagesRejected` as one number, which answers "how
+ * many" and not "why" — and the *why* decides what an operator does next: a
+ * robots refusal is politeness working, a policy refusal is the SSRF guard
+ * working, and a pile of transient refusals is a publisher or a network having
+ * a bad day. Five buckets rather than the eleven error codes, because the
+ * per-job histogram is for triage and the precise code stays on the thrown
+ * error for anyone holding it.
+ */
+export type FetchRefusalCause = 'robots' | 'policy' | 'size' | 'content_type' | 'transient';
+
+export function refusalCauseFor(error: unknown): FetchRefusalCause {
+  if (!(error instanceof UnsafeUrlError)) return 'transient';
+  switch (error.code) {
+    case 'robots_disallowed':
+      return 'robots';
+    case 'response_too_large':
+      return 'size';
+    case 'content_type_not_allowed':
+      return 'content_type';
+    case 'request_failed':
+      return 'transient';
+    default:
+      // bad_url, scheme_not_allowed, credentials_in_url, hostname_blocked,
+      // address_blocked, port_not_allowed, too_many_redirects: all decisions
+      // this layer took about what it is willing to touch.
+      return 'policy';
+  }
+}
+
+/**
+ * Counts only. No URL, no hostname, no body — a histogram that named hosts
+ * would be a retrieval log, and the retrieval log deliberately lives elsewhere.
+ *
+ * Module-level state is safe here because the compilation worker is one
+ * process per job: the runner snapshots and resets around each run, and two
+ * concurrent compilations are two processes with two of these.
+ */
+const refusalCounts = new Map<FetchRefusalCause, number>();
+
+function recordRefusal(error: unknown): void {
+  const cause = refusalCauseFor(error);
+  refusalCounts.set(cause, (refusalCounts.get(cause) ?? 0) + 1);
+}
+
+/** A snapshot for the per-job diagnostics. Absent causes read as zero. */
+export function fetchRefusalCounts(): Record<FetchRefusalCause, number> {
+  return {
+    robots: refusalCounts.get('robots') ?? 0,
+    policy: refusalCounts.get('policy') ?? 0,
+    size: refusalCounts.get('size') ?? 0,
+    content_type: refusalCounts.get('content_type') ?? 0,
+    transient: refusalCounts.get('transient') ?? 0,
+  };
+}
+
+export function resetFetchRefusalCounts(): void {
+  refusalCounts.clear();
+}
+
 /**
  * Fetch a page only if its host's robots.txt permits it.
  *
@@ -710,8 +776,26 @@ export function isAllowedByRobots(robotsTxt: string, path: string, agent = 'Side
  * the standard says and what every well-behaved client does — a missing file is
  * the normal case for most of the web. A robots.txt that *is* fetched and says
  * no is final.
+ *
+ * Every refusal that escapes this function is counted by cause, here and
+ * nowhere deeper: this is the one entry point retrieval uses, so the histogram
+ * matches the `pagesRejected` counter one-for-one, and instrumenting the inner
+ * layers would double-count the robots probe's own failures — which are
+ * swallowed, and are not page refusals.
  */
 export async function fetchIfAllowed(
+  raw: string,
+  options: SafeFetchOptions = {},
+): Promise<SafeFetchResult & { robotsAllowed: boolean }> {
+  try {
+    return await fetchIfAllowedInner(raw, options);
+  } catch (error) {
+    recordRefusal(error);
+    throw error;
+  }
+}
+
+async function fetchIfAllowedInner(
   raw: string,
   options: SafeFetchOptions = {},
 ): Promise<SafeFetchResult & { robotsAllowed: boolean }> {

@@ -542,6 +542,23 @@ export const PORTFOLIO_REJECTIONS = [
   'permanently_closed',
   /** A row whose name is its own category. Not an identity. */
   'identity_too_thin',
+  /**
+   * An evidence-demanding kind — a bridge, a cemetery — that nothing vouches
+   * for. Real geography, not an offering: most bridges are how a road crosses
+   * water, and the few worth crossing a city for carry identity evidence.
+   */
+  'insufficient_significance_evidence',
+  /**
+   * A point claiming to be a mountain-scale feature with no extent and no
+   * identity evidence — far more often a business named after a famous distant
+   * thing than the thing itself.
+   */
+  'implausible_landscape_claim',
+  /**
+   * Inside a paid enclosure's footprint. The enclosure is the attraction; its
+   * interior features are not free stops of their own.
+   */
+  'inside_paid_enclosure',
   'over_role_quota',
   'over_category_cap',
   'over_area_share',

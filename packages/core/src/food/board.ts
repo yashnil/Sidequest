@@ -1,4 +1,5 @@
 import { venueHoursOn } from './availability';
+import { foodDistinctiveness, foodNameCounts, type FoodDistinctiveness } from './quality';
 import {
   FOOD_SERVICE_TYPE_LABELS,
   PRICE_BAND_ORDER,
@@ -54,11 +55,23 @@ export function foodBoardFor(input: {
   const { dataset, profile, dates } = input;
   const everyday = PRICE_BAND_ORDER[profile.food.everydayPriceBand];
 
+  /*
+   * Distinctiveness is computed over the whole dataset once, because "is this an
+   * outlet of something" is a fact about the region's venue list rather than
+   * about the record. See `food/quality.ts`.
+   */
+  const counts = foodNameCounts(dataset.venues);
   const scored = dataset.venues
-    .map((venue) => ({ venue, ...reasonFor(venue, profile, everyday) }))
+    .map((venue) => {
+      const quality = foodDistinctiveness(venue, counts);
+      return { venue, quality, ...reasonFor(venue, profile, everyday, quality) };
+    })
     .filter((entry) => entry.weight > 0)
     .sort(
-      (a, b) => b.weight - a.weight || a.venue.name.localeCompare(b.venue.name),
+      (a, b) =>
+        b.weight - a.weight ||
+        b.quality.score - a.quality.score ||
+        a.venue.name.localeCompare(b.venue.name),
     )
     .slice(0, MAX_ENTRIES);
 
@@ -94,6 +107,7 @@ function reasonFor(
   venue: FoodVenue,
   profile: TravelerProfile,
   everyday: number,
+  quality: FoodDistinctiveness,
 ): { weight: number; why: string } {
   const band = PRICE_BAND_ORDER[venue.priceBand];
 
@@ -119,5 +133,53 @@ function reasonFor(
     };
   }
 
+  /**
+   * THE COMPILED REGION'S ROWS, WHICH USED TO BE NONE.
+   *
+   * Every one of the four rules above reads a field that only an *authored*
+   * region has ever filled in. A compiled venue arrives with `moderate`,
+   * `format_inferred`, no local speciality and no provisioning, so every branch
+   * above returned zero and a live six-day trip in a food-first destination
+   * showed the traveller not one food card — while the plan quietly went ahead
+   * and picked their meals for them.
+   *
+   * What is surfaced instead is the handful where an opinion genuinely changes
+   * the trip, in the vocabulary §15 asks for: a market is a thing to do as well
+   * as somewhere to eat, and a venue that is particular to this place is worth
+   * asking about in a way an outlet of a chain is not. Everything else is still
+   * left to the planner, because a board that lists every restaurant is a form.
+   */
+  if (venue.serviceType === 'market' || venue.serviceType === 'food_hall') {
+    return {
+      weight: 55,
+      why: 'A market as much as a meal — worth an hour in its own right if you want one.',
+    };
+  }
+
+  if (foodMattersTo(profile) && !quality.chainOutlet && quality.score >= 0.6) {
+    return {
+      weight: 40 + Math.round(quality.score * 10),
+      why: venue.cuisines[0]
+        ? `${venue.cuisines[0]} and particular to here rather than an outlet of something.`
+        : 'Particular to here rather than an outlet of something.',
+    };
+  }
+
   return { weight: 0, why: '' };
+}
+
+/**
+ * Whether this traveller's opinion about food is worth interrupting them for.
+ *
+ * Someone eating to keep going does not want six restaurant cards; someone who
+ * came for the food does. `style` is the answer they gave, and `destination`
+ * and `local_casual` are the two that mean the meals are part of the point.
+ */
+function foodMattersTo(profile: TravelerProfile): boolean {
+  return (
+    profile.food.style === 'destination' ||
+    profile.food.style === 'local_casual' ||
+    profile.interests.food_and_towns === 'frequent' ||
+    profile.interests.food_and_towns === 'core'
+  );
 }

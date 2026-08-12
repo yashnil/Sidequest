@@ -32,6 +32,7 @@ import {
 } from '@/lib/db/compiler-repository';
 import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
+import { sessionToken } from '@/lib/net/caller';
 
 /**
  * TURNING A COMPOSER INTO A TRIP.
@@ -292,7 +293,13 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
 
   let tripId: string;
   try {
-    tripId = createTrip(basics).id;
+    /*
+     * Stamped with the browser that made it, which is the only thing standing
+     * between this deployment and a homepage that lists strangers' trips as
+     * "your trips". Minted here if there is none yet: an action may set a
+     * cookie, and this is the first moment there is anything to own.
+     */
+    tripId = createTrip(basics, await sessionToken({ mint: true })).id;
     saveComposerAnswers(tripId, answers);
     if (!region) {
       saveDestinationQuery(tripId, 'known_destination', input.destinationText);

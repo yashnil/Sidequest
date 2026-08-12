@@ -1,3 +1,4 @@
+import { displayNameOf } from '@sidequest/core';
 import type {
   DiscoveryCandidate,
   DiscoverySelection,
@@ -105,7 +106,7 @@ export function resolveCandidates(
       const blocker = candidate.fit.blockers[0];
       rejected.push({
         placeId: candidate.place.id,
-        name: candidate.place.name,
+        name: displayNameOf(candidate.place),
         wasManual: manual,
         reasonCode: reasonCodeForBlocker(blocker?.code),
         reason: blocker?.message ?? 'This one will not work on your dates or with your answers.',
@@ -117,7 +118,7 @@ export function resolveCandidates(
     if (!hasPoint(matrix, candidate.place.id)) {
       rejected.push({
         placeId: candidate.place.id,
-        name: candidate.place.name,
+        name: displayNameOf(candidate.place),
         wasManual: manual,
         reasonCode: 'missing_travel_data',
         reason: 'We have no travel time recorded to this place, so we cannot fit it into a day honestly.',

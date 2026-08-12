@@ -11,6 +11,7 @@ import {
   startRun,
 } from '@/lib/db/benchmark-repository';
 import { prepareBenchmarkSession, runBenchmarkSession } from '@/lib/benchmark/orchestrate';
+import { labsAccessGranted } from '@/lib/labs/access';
 import { questionHandle, type RunSnapshot } from '@/components/benchmark/neutral-dto';
 import { buildRunSnapshot } from './snapshot';
 
@@ -28,10 +29,16 @@ import { buildRunSnapshot } from './snapshot';
  * second says the answers are in and asks for the plans. Collapsing them, which
  * is what this file used to do, meant the questions were produced and discarded
  * in the same breath.
+ *
+ * All four begin with `labsAccessGranted()`. Two of them spend, and the other
+ * two describe an experiment that did — and none of them is protected by the
+ * `/labs` middleware, because Next dispatches a server action by its id rather
+ * than by the URL it was POSTed to. See `lib/labs/access`.
  */
 
 /** Read-only. Called on a timer, so it must stay that way. */
 export async function runSnapshotAction(sessionId: string): Promise<RunSnapshot | null> {
+  if (!(await labsAccessGranted())) return null;
   return buildRunSnapshot(sessionId, new Date());
 }
 
@@ -60,6 +67,10 @@ export async function runSnapshotAction(sessionId: string): Promise<RunSnapshot 
  * ran the arms was a unit test.
  */
 export async function startBothRunsAction(sessionId: string): Promise<void> {
+  // The billed press. First statement, before the reclaim, because a refused
+  // caller must not be able to move another operator's session either.
+  if (!(await labsAccessGranted())) return;
+
   /*
    * A claim whose holder stopped breathing is returned before anything is read.
    *
@@ -128,6 +139,9 @@ export async function startBothRunsAction(sessionId: string): Promise<void> {
  * poorer plan honestly produced rather than a plan built from guesses.
  */
 export async function planBothRunsAction(sessionId: string): Promise<void> {
+  // The second billed press; the same gate, for the same reason.
+  if (!(await labsAccessGranted())) return;
+
   // See `startBothRunsAction`: a stalled claim is released before it is read.
   reclaimStalledSession(sessionId, new Date());
 
@@ -181,6 +195,8 @@ export async function answerPooledQuestionAction(
   handle: string,
   values: string[],
 ): Promise<AnswerResult> {
+  if (!(await labsAccessGranted())) return { ok: false };
+
   /*
    * `filter`, not `find`.
    *

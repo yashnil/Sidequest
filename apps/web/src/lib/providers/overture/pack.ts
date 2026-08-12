@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   assemblePack,
+  classifySourceCategory,
   failedPack,
   partitionScope,
   scopeBounds,
@@ -9,10 +10,13 @@ import {
   type RegionPackProvider,
 } from '@sidequest/compiler';
 import {
+  assessPlaceStanding,
+  experienceSignificanceOf,
   type GeoBounds,
   type GeographicScope,
   type PackCell,
   type PackLayer,
+  type PlanningRole,
   type RecordContainment,
   type SourceRecord,
   type SourceRelease,
@@ -71,6 +75,18 @@ export interface PackProviderOptions {
   /** Injected so a test can build a pack without a clock or a network. */
   now?: () => Date;
   idFor?: (scope: GeographicScope, release: SourceRelease) => string;
+  /**
+   * The columnar reader, injected.
+   *
+   * The catalogue side of this provider has always been drivable offline
+   * through `fetchOptions.fetchImpl`, and the *acquisition* side never was — so
+   * the budgeting and retention decisions that turned a metropolis into one
+   * corner of itself had no test that could see them, and the unit tests around
+   * the pure helpers stayed green while the wiring between them was the defect.
+   * A seam here costs one parameter and makes the whole path assertable with no
+   * network and no parquet.
+   */
+  scanImpl?: typeof scanFile;
 }
 
 const DEFAULT_BUDGET: ExtractionBudget = {
@@ -98,6 +114,266 @@ const LAYER_SHARE: Record<string, number> = {
   land_use: 0.12,
   infrastructure: 0.08,
 };
+
+/**
+ * WHAT A CELL'S RETENTION IS SPENT ON, BY WHAT THE RECORD IS FOR.
+ *
+ * A cell's share used to be spent first-come: whichever records the reader
+ * happened to decode first filled it, in parquet row order. On a dense city
+ * that is a lottery weighted by commercial mapping density, and the live
+ * result was a metropolitan pack of 1,840 places holding 726 records the
+ * planner can never use — cash machines, dental clinics, package lockers — and
+ * 103 attractions, none of which was one of the city's landmarks.
+ *
+ * §12.2 says the raw search may be broad and the kept set must be *deliberately
+ * bounded*, so the boundary is drawn here, by purpose. Every family is
+ * represented because a pack is ground rather than a board — a day still needs
+ * a meal, a station and a shop — and unspent share flows to whoever can use it,
+ * so a coast with no restaurants reads more coast rather than holding empty
+ * seats for restaurants that do not exist.
+ *
+ * The residual family is the one that matters most and is easiest to miss.
+ * A record whose role is `excluded` can never become a candidate — the
+ * inventory's `roleOfRecord` honours a stored refusal permanently — so every
+ * seat it takes is a seat no traveller will ever see. It keeps a small share
+ * rather than none because the linker reads across layers and a pack is
+ * evidence as well as inventory.
+ */
+const RECALL_FAMILY_SHARE: Record<RecallFamily, number> = {
+  visitable: 0.5,
+  food: 0.2,
+  practical: 0.2,
+  residual: 0.1,
+};
+
+type RecallFamily = 'visitable' | 'food' | 'practical' | 'residual';
+
+function recallFamilyOf(role: PlanningRole): RecallFamily {
+  switch (role) {
+    case 'attraction':
+    case 'outdoor':
+    case 'side_quest':
+    case 'market':
+      return 'visitable';
+    case 'food':
+      return 'food';
+    case 'support':
+    case 'gateway':
+    case 'lodging':
+      return 'practical';
+    default:
+      return 'residual';
+  }
+}
+
+/**
+ * HOW MUCH A RECORD WOULD COST US TO LOSE, FROM WHAT THE ROW ITSELF CARRIES.
+ *
+ * The ordering the retention pass never had. Records were kept first-N-per-cell
+ * in parquet row order, and the overflow backfill was `overflow.slice(0, n)`
+ * under a comment claiming "whatever is left over by rank" while doing no
+ * ranking at all — so a condominium that happened to sit in an earlier row
+ * group evicted whatever came later, which in a dense city is most of the city.
+ *
+ * This is deliberately the *same* model the compiler ranks candidates with —
+ * `experienceSignificanceOf` over `assessPlaceStanding` — restricted to the
+ * channels a single normalised row can answer for itself: what kind of thing
+ * the source says it is, and whether a knowledge base or a public authority has
+ * taken note of it. The pack-wide channels (cross-layer corroboration, the
+ * region's own namesakes) genuinely cannot be known here, and an absent channel
+ * is absent rather than guessed.
+ *
+ * Sharing the model matters more than the numbers. A separate hand-rolled score
+ * here would be a second opinion about significance that nothing holds to the
+ * first, which is precisely how "significance" became a count of alternate
+ * names one layer down. Note in particular what is *not* read: the number of
+ * attributes, websites or translated names a mapper filled in. §8.3 names
+ * metadata completeness as the thing significance must never be, and a
+ * retention pass that ranked on it would re-import the whole defect at the one
+ * layer no downstream fix can reach.
+ */
+export function recallPriorityOf(record: SourceRecord): number {
+  const taxonomy = classifySourceCategory({
+    category: record.sourceCategory,
+    path: record.sourceCategoryPath,
+  });
+  const standing = assessPlaceStanding({
+    inKnowledgeBase: record.wikidataId !== undefined || record.attributes.wikipedia !== undefined,
+    publishedSites: record.websiteCandidates,
+    classifyingValues: [record.sourceCategory, ...record.sourceCategoryPath],
+  });
+  return experienceSignificanceOf({ standing, categoryWeight: taxonomy.significanceWeight });
+}
+
+/**
+ * The records a layer keeps: every cell served, every family represented, and
+ * significance first inside each of them.
+ *
+ * Three passes, and each one repairs a distinct half of the live failure:
+ *
+ * 1. **Per family, per cell, by priority.** A cell's seats are divided by what
+ *    the records are *for* and then filled best-first, so a landmark cannot be
+ *    evicted by a cash machine that decoded earlier.
+ * 2. **Unspent share redistributed inside the cell**, so a family with nothing
+ *    to offer does not hold seats empty while another queue is full.
+ * 3. **Backfill round-robin across cells, by priority.** This is the pass that
+ *    produced the corner: it was a flat `slice`, and because the row-group
+ *    budget only ever reached one part of the box, 1,430 of 1,840 records —
+ *    78% of a metropolis — were backfilled from a single grid cell while seven
+ *    others, including the one containing the traveller's own base, held none.
+ *    Taking one cell at a time means a backfill can never do that again, even
+ *    when the read *was* lopsided.
+ *
+ * Exported so the property can be measured against real pack records rather
+ * than only inferred from a live build nobody can afford to run in a test.
+ */
+export function retainAcrossCells(input: {
+  records: readonly SourceRecord[];
+  retentionCap: number;
+  perCellCap: number;
+  priorityOf?: (record: SourceRecord) => number;
+  /**
+   * Record ids that are kept before any budget applies.
+   *
+   * Not a priority boost — an exemption. Everything else in this function is
+   * about which of many comparable records deserve a scarce seat, and the
+   * destination's own administrative record is not one of many: it is the thing
+   * the pack is *about*, and it is the only evidence from which "does this
+   * record belong to the traveller's destination" can be answered at all. A
+   * stored Tokyo build proved what ranking it costs — the scan read the division
+   * record sitting at the exact scope centre, retention ranked it against 800
+   * neighbourhood polygons on the same significance model every place is ranked
+   * on, and dropped it. Nothing downstream could recover it, and 3,767 of 3,787
+   * records came back with no membership verdict.
+   *
+   * Kept outside the cap rather than inside it, so admitting the destination
+   * cannot silently evict a record somebody would have seen.
+   */
+  pinned?: ReadonlySet<string>;
+}): { kept: SourceRecord[]; dropped: number } {
+  const priorityOf = input.priorityOf ?? recallPriorityOf;
+  const cap = Math.max(0, Math.trunc(input.retentionCap));
+  const perCellCap = Math.max(1, Math.trunc(input.perCellCap));
+
+  const pinnedIds = input.pinned ?? new Set<string>();
+  const pinnedRecords =
+    pinnedIds.size === 0 ? [] : input.records.filter((record) => pinnedIds.has(record.id));
+  const contested =
+    pinnedIds.size === 0 ? input.records : input.records.filter((record) => !pinnedIds.has(record.id));
+
+  /* Ranked once. Ties broken by id so a pack's bytes do not depend on I/O order. */
+  const ranked = new Map<string, number>();
+  for (const record of contested) ranked.set(record.id, priorityOf(record));
+  const byRank = (a: SourceRecord, b: SourceRecord): number =>
+    (ranked.get(b.id) ?? 0) - (ranked.get(a.id) ?? 0) || a.id.localeCompare(b.id);
+
+  const cells = new Map<string, Map<RecallFamily, SourceRecord[]>>();
+  for (const record of contested) {
+    const families = cells.get(record.cellId) ?? new Map<RecallFamily, SourceRecord[]>();
+    const family = recallFamilyOf(record.planningRole);
+    const queue = families.get(family) ?? [];
+    queue.push(record);
+    families.set(family, queue);
+    cells.set(record.cellId, families);
+  }
+
+  const kept: SourceRecord[] = [];
+  const spare: SourceRecord[] = [];
+  const cellIds = [...cells.keys()].sort();
+  for (const cellId of cellIds) {
+    const families = cells.get(cellId)!;
+    for (const queue of families.values()) queue.sort(byRank);
+
+    let takenInCell = 0;
+    /* Fixed family order, so two runs over the same records agree exactly. */
+    const order: RecallFamily[] = ['visitable', 'food', 'practical', 'residual'];
+    for (const family of order) {
+      const queue = families.get(family) ?? [];
+      const share = Math.max(1, Math.round(perCellCap * RECALL_FAMILY_SHARE[family]));
+      const take = Math.min(queue.length, share, Math.max(0, perCellCap - takenInCell));
+      kept.push(...queue.slice(0, take));
+      takenInCell += take;
+      families.set(family, queue.slice(take));
+    }
+    /* Whatever the shares left unspent, to whoever is still queued, best first. */
+    const leftover = [...families.values()].flat().sort(byRank);
+    const remaining = Math.max(0, perCellCap - takenInCell);
+    kept.push(...leftover.slice(0, remaining));
+    spare.push(...leftover.slice(remaining).map((record) => record));
+  }
+
+  /*
+   * The backfill, one cell at a time. `spare` is grouped again rather than
+   * sorted globally: a global sort by priority would hand the whole backfill to
+   * whichever cell the reader happened to cover, which is the corner bias in a
+   * more respectable coat.
+   */
+  const spareByCell = new Map<string, SourceRecord[]>();
+  for (const record of spare) {
+    const queue = spareByCell.get(record.cellId) ?? [];
+    queue.push(record);
+    spareByCell.set(record.cellId, queue);
+  }
+  for (const queue of spareByCell.values()) queue.sort(byRank);
+  const rotation = [...spareByCell.keys()].sort();
+  let backfilled = 0;
+  for (let round = 0; kept.length < cap; round += 1) {
+    let progressed = false;
+    for (const cellId of rotation) {
+      if (kept.length >= cap) break;
+      const next = spareByCell.get(cellId)![round];
+      if (!next) continue;
+      kept.push(next);
+      backfilled += 1;
+      progressed = true;
+    }
+    if (!progressed) break;
+  }
+
+  return {
+    kept: [...pinnedRecords, ...kept.slice(0, cap)],
+    dropped: Math.max(0, spare.length - backfilled),
+  };
+}
+
+/**
+ * THE DESTINATION'S OWN ADMINISTRATIVE RECORDS, AND THE ANCESTRY THEY NEED.
+ *
+ * Two kinds of record, and the second is the one that is easy to miss.
+ *
+ * The first is the destination itself: a record whose catalogue identifier is
+ * one the scope declares. That is a division which *is* the destination rather
+ * than one competing to describe it.
+ *
+ * The second is its published ancestry. A division is recognised through the
+ * chain it publishes — the directory keys an entry by the last identifier in its
+ * own chain — so a ward, a county or a first-level division named in the
+ * destination's chain is the evidence by which a record near the edge is placed
+ * inside it at all. Those are read from the destination's own published chain
+ * rather than assumed from position, and only records the scan already returned
+ * are pinned: nothing here manufactures a division the source did not hand us.
+ */
+export function destinationDivisionRecordIds(
+  records: readonly SourceRecord[],
+  identifiers: ReadonlySet<string>,
+): Set<string> {
+  if (identifiers.size === 0) return new Set();
+  const own = records.filter(
+    (record) => record.planningRole === 'administrative' && identifiers.has(record.sourceId),
+  );
+  if (own.length === 0) return new Set();
+
+  const ancestry = new Set(own.flatMap((record) => record.containment.divisionIds));
+  return new Set(
+    records
+      .filter(
+        (record) =>
+          record.planningRole === 'administrative' &&
+          (identifiers.has(record.sourceId) || ancestry.has(record.sourceId)),
+      )
+      .map((record) => record.id),
+  );
+}
 
 export function createOverturePackProvider(
   options: PackProviderOptions = {},
@@ -178,6 +454,15 @@ export function createOverturePackProvider(
           deadlineMs,
           fetchOptions: options.fetchOptions ?? {},
           containment,
+          scan: options.scanImpl ?? scanFile,
+          /*
+           * What the traveller's own destination is, in catalogue identifiers.
+           *
+           * Carried into the extraction so retention can tell "the thing this
+           * pack is about" from "another candidate for a seat". Empty for a
+           * geocoded destination, which retains exactly as it did before.
+           */
+          destinationDivisionIds: new Set(input.scope.administrative?.divisionIds ?? []),
           ...(input.signal ? { signal: input.signal } : {}),
         });
 
@@ -258,6 +543,9 @@ async function extractLayer(input: {
   deadlineMs: number;
   fetchOptions: FetchOptions;
   containment: ContainmentIndex;
+  scan: typeof scanFile;
+  /** Catalogue identifiers of the division(s) the destination is. See the pin below. */
+  destinationDivisionIds: ReadonlySet<string>;
   signal?: AbortSignal;
 }): Promise<LayerExtraction> {
   const { definition, cells, counters, budget } = input;
@@ -296,27 +584,41 @@ async function extractLayer(input: {
     };
   }
 
-  const kept = new Map<string, SourceRecord[]>();
-  const overflow: SourceRecord[] = [];
+  const collected: SourceRecord[] = [];
   const seen = new Set<string>();
   let featuresRead = 0;
   let filesInspected = 0;
 
+  /**
+   * HOW FAR TO READ, WHICH IS NOT THE SAME QUESTION AS HOW MUCH TO KEEP.
+   *
+   * These were the same number — the scan stopped at `retentionCap * 2.5` rows
+   * — and on a dense destination that single line is the acquisition failure.
+   * A metropolis's places layer has about two thousand in-box rows per row
+   * group, so 1,840 × 2.5 = 4,600 rows is **two row groups**: the reader
+   * stopped inside the first corner the stratified order reached, having
+   * inspected 1,920 groups and read 20 of them across all six layers, with a
+   * budget for 40 and a hundred-second clock it finished in eleven seconds.
+   * Every landmark outside that corner was never in the room, so no amount of
+   * ranking, significance or balancing downstream could have found it.
+   *
+   * So the read is bounded by what reading actually costs — row groups, bytes,
+   * time — and the retention cap is spent afterwards, on ranked records
+   * (`retainAcrossCells`). §12.2 in one sentence: the raw search may be broad,
+   * and the kept set is deliberately bounded.
+   *
+   * `maxFeaturesRetained` survives as a *memory* ceiling rather than a policy:
+   * a layer holding a hundred thousand normalised rows before ranking them is
+   * a heap problem, and the ceiling is the point at which we would rather stop
+   * than swap. It is far above any cap a real destination reaches through the
+   * row-group budget.
+   */
+  const rowGroupAllowance = rowGroupAllowanceFor(definition.id, budget);
   const scanBudget: ScanBudget = {
-    maxRowGroups: budget.maxRowGroups,
+    maxRowGroups: rowGroupAllowance,
     maxBytes: budget.maxBytes,
     maxFeaturesRead: budget.maxFeaturesRead,
-    /**
-     * Read somewhat past the layer's own cap, and not far past it.
-     *
-     * Overshoot is what gives the per-cell distribution and the overflow pass
-     * something to choose from, so a dense corner does not simply arrive first
-     * and win. It is also the dominant cost: decoding a row group is about two
-     * seconds, and a six-fold overshoot had a live New York build reading
-     * twenty-seven row groups and taking fifty-five seconds to keep four
-     * thousand records. Two and a half is enough to have a choice.
-     */
-    maxFeaturesRetained: Math.ceil(retentionCap * 2.5),
+    maxFeaturesRetained: RECALL_MEMORY_CEILING,
     deadlineMs: input.deadlineMs,
   };
 
@@ -325,7 +627,7 @@ async function extractLayer(input: {
       budgetsExhausted.push('cancelled');
       break;
     }
-    if (counters.rowGroupsRead >= budget.maxRowGroups) {
+    if (counters.rowGroupsRead >= rowGroupAllowance) {
       budgetsExhausted.push('row_groups');
       break;
     }
@@ -340,7 +642,7 @@ async function extractLayer(input: {
 
     filesInspected += 1;
     try {
-      const result = await scanFile<SourceRecord>({
+      const result = await input.scan<SourceRecord>({
         url: file.url,
         box,
         columns: definition.columns,
@@ -393,15 +695,27 @@ async function extractLayer(input: {
         },
       });
 
-      for (const record of result.rows) {
-        const bucket = kept.get(record.cellId) ?? [];
-        if (bucket.length < perCellCap) {
-          bucket.push(record);
-          kept.set(record.cellId, bucket);
-        } else {
-          overflow.push(record);
-        }
-      }
+      /*
+       * A LOOP, NOT A SPREAD, AND THE DIFFERENCE IS THE WHOLE LAYER.
+       *
+       * `collected.push(...result.rows)` passes every row as a separate
+       * *argument*, and V8 refuses past ~109,832 of them with a RangeError —
+       * measured on this runtime by bisection: 109,831 pushes, 109,832 throws.
+       * `RECALL_MEMORY_CEILING` is 120,000, so the scan is allowed to return a
+       * quantity the very next statement cannot accept, and the denser the
+       * destination the more certainly it does.
+       *
+       * The failure was invisible offline because it needs a real metropolis to
+       * reach the ceiling: the first live compilation of one read 122,627 place
+       * features and retained **zero**, because the RangeError landed in the
+       * catch below, which had no branch for it and filed every cell under the
+       * generic `provider_error`. A board with no places, reported as a
+       * provider being unreachable.
+       *
+       * There is no budget question here and nothing to tune — the rows are
+       * already bounded by the ceiling. It is only ever how they are appended.
+       */
+      for (const row of result.rows) collected.push(row);
 
       if (result.stoppedBecause !== 'complete') {
         budgetsExhausted.push(result.stoppedBecause);
@@ -424,22 +738,51 @@ async function extractLayer(input: {
       for (const cell of cells) {
         if (!failedCellIds.includes(cell.id)) failedCellIds.push(cell.id);
       }
-      budgetsExhausted.push(error instanceof ScanError ? error.code : 'provider_error');
+      /*
+       * `provider_error` is a claim about somebody else's service, and it was
+       * being made about our own arithmetic. The first live compilation of a
+       * metropolis reported exactly that while the provider had answered
+       * perfectly and handed us 122,627 features we then failed to append.
+       *
+       * A fault on this side is named as one, so the next person reading a
+       * diagnostic is not sent to check a volunteer endpoint that was never
+       * the problem.
+       */
+      const code =
+        error instanceof ScanError
+          ? error.code
+          : error instanceof RangeError
+            ? 'internal_limit'
+            : 'provider_error';
+      budgetsExhausted.push(code);
     }
   }
 
   /**
-   * Per-cell shares first, then whatever is left over by rank.
+   * Per-cell shares first, then the backfill by rank across cells.
    *
-   * The first pass is what stops a dense corner eating a region's allowance; the
-   * second is what stops a sparse region being held to an even share of nothing.
-   * Sorted at the end so the layer's record order — and therefore the pack's
-   * content hash — does not depend on which file answered first.
+   * The first pass is what stops a dense corner eating a region's allowance;
+   * the second is what stops a sparse region being held to an even share of
+   * nothing — and, unlike the flat `slice` it replaces, it cannot hand the
+   * whole backfill back to that same dense corner. Sorted at the end so the
+   * layer's record order — and therefore the pack's content hash — does not
+   * depend on which file answered first.
    */
-  const records = [...kept.values()].flat();
-  const remaining = Math.max(0, retentionCap - records.length);
-  records.push(...overflow.slice(0, remaining));
-  if (overflow.length > remaining) budgetsExhausted.push('retained');
+  /*
+   * And before any of it, the destination itself.
+   *
+   * A division that *is* the destination is not competing for a seat: it is the
+   * only record from which membership can be decided, so it is kept outside the
+   * budget rather than ranked against the ground it defines.
+   */
+  const retention = retainAcrossCells({
+    records: collected,
+    retentionCap,
+    perCellCap,
+    pinned: destinationDivisionRecordIds(collected, input.destinationDivisionIds),
+  });
+  const records = retention.kept;
+  if (retention.dropped > 0) budgetsExhausted.push('retained');
   records.sort((a, b) => a.id.localeCompare(b.id));
 
   const failed = records.length === 0 ? cells.map((cell) => cell.id) : failedCellIds;
@@ -462,6 +805,55 @@ async function extractLayer(input: {
     filesInspected,
     budgetsExhausted,
   };
+}
+
+/**
+ * A ceiling on how many normalised rows one layer holds before it ranks them.
+ *
+ * A memory guard, not a policy. The row-group, byte and time budgets are what
+ * bound the read; this is the point at which holding the result in a Node heap
+ * stops being reasonable, and it sits an order of magnitude above what a dense
+ * metropolis reaches through those budgets. It exists so a pathological file —
+ * one row group of a million rows, all in the box — degrades into a truncated
+ * read that says so, rather than into an out-of-memory crash.
+ */
+const RECALL_MEMORY_CEILING = 120_000;
+
+/**
+ * HOW MANY ROW GROUPS THIS LAYER MAY READ, GIVEN THE LAYERS STILL TO COME.
+ *
+ * The budget's `maxRowGroups` is a *global* figure shared by every layer, and
+ * it used to be consumed first-come. Two things follow from that, and both were
+ * observed: a layer that stops early leaves the allowance unspent and no later
+ * layer can use it (a live metropolitan build read 20 of 40), and a layer that
+ * could read forever would take all 40 and leave the geographic layers — which
+ * are where a national park's entire inventory lives — with none.
+ *
+ * So each layer may spend everything still unspent, *minus* what the layers
+ * after it are owed by their share. That is a floor for them and a ceiling for
+ * this one, it lets a quiet layer's leftovers flow forward, and it keeps the
+ * global figure the only cost anybody has to reason about.
+ */
+export function rowGroupAllowanceFor(
+  layerId: string,
+  budget: Pick<ExtractionBudget, 'maxRowGroups'>,
+): number {
+  const order = LAYERS.map((layer) => layer.id);
+  const index = order.indexOf(layerId);
+  const laterShare = order
+    .slice(index + 1)
+    .reduce((sum, id) => sum + (LAYER_SHARE[id] ?? 0.1), 0);
+  const reservedForLater = Math.floor(budget.maxRowGroups * laterShare);
+  /*
+   * The answer is a ceiling on the *shared* running count, not a fresh
+   * per-layer allowance — a layer arriving with the budget partly spent gets
+   * what is left of its ceiling. Nothing is added as a floor: the reservation
+   * is itself the guarantee that a later layer has something to spend, and a
+   * floor expressed against the running count would let six layers between them
+   * exceed the global figure, which is the one number the cost of a build can
+   * be reasoned about from.
+   */
+  return Math.max(0, Math.min(budget.maxRowGroups, budget.maxRowGroups - reservedForLater));
 }
 
 function emptyLayer(

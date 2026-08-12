@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire, createTrip, reachScope } from './support/trip';
+import {
+  completeQuestionnaire,
+  createTrip,
+  reachScope,
+  REGION_READY_HEADING,
+} from './support/trip';
 
 /**
  * WHAT THE BOARD IS, SAID OUT LOUD.
@@ -133,7 +138,7 @@ test('an empty board names the binding constraint rather than three plausible on
   const id = await createTrip(page, 'Faraway Reaches');
   await reachScope(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 90_000,
   });
 

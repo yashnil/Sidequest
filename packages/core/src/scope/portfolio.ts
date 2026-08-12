@@ -63,6 +63,17 @@ export interface RegionCluster {
   /** Estimated, not routed. The distinction is carried into the UI. */
   transferMinutesFromGateway: number;
   memberNames: string[];
+  /**
+   * The seed entry's resolved parent chain, carried straight through from the
+   * index.
+   *
+   * Carried rather than derived, because `chooseBaseStructure` needs it to tell
+   * a division of the destination from a competing area — and without it that
+   * test can never fire on a real build. A live metropolis reported its own
+   * wards as rejected satellite areas for exactly this reason: the containment
+   * evidence existed on the index entry and stopped at this boundary.
+   */
+  hierarchy?: readonly string[];
 }
 
 export interface RegionPortfolio {
@@ -207,6 +218,7 @@ export function clusterEntries(input: {
         .slice(0, 6)
         .map((member) => member.displayName)
         .filter((name) => name !== entry.displayName),
+      ...(entry.hierarchy.length > 0 ? { hierarchy: entry.hierarchy } : {}),
     });
   }
 
@@ -278,6 +290,7 @@ export function buildRegionPortfolio(input: BuildPortfolioInput): RegionPortfoli
     reach: input.mode,
     nights: input.nights ?? null,
     maxBaseChanges: input.maxBaseChanges ?? null,
+    destinationName: input.destinationName,
   });
 
   const byId = new Map(all.map((cluster) => [cluster.id, cluster]));
@@ -457,6 +470,7 @@ export function scopeStrategiesFor(input: {
       reach: portfolio.mode,
       nights,
       maxBaseChanges: shape.bases - 1,
+      destinationName: input.destinationName,
     });
     const covers = structure.bases.flatMap((base) => [
       base.cluster.name,

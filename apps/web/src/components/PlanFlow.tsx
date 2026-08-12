@@ -13,6 +13,7 @@ import {
   classifyObservedSpan,
   confidenceExplanation,
   describeTimeZone,
+  displayNameOf,
   stageLabel,
   summaryVersion,
   type ClarificationQuestion,
@@ -48,6 +49,9 @@ import {
 } from './ui';
 import { CompilationProgress, StageDisclosure } from './CompilationProgress';
 import { ScopePreview } from './ScopePreview';
+import { coverageHeadline, reconcileRouting, type RoutingTruth } from '@/lib/format/coverage';
+import { formatDay } from '@/lib/format/dates';
+import { formatElapsed } from '@/lib/format/elapsed';
 import {
   adoptDateWindowAction,
   adoptTripLengthAction,
@@ -98,6 +102,24 @@ import {
  * in the product to have been the smallest.
  */
 const MIN_TARGET = 'min-h-11';
+
+/**
+ * A DISCLOSURE IS A CONTROL, AND EVERY ONE OF THESE WAS TWENTY PIXELS TALL.
+ *
+ * Six `<summary>` elements on this screen — the areas left out, what the dates
+ * do not tell you, the regional data, how travel times were measured, what the
+ * build reused, and now the one that holds all of it — were a single line of
+ * 14 px text. WCAG 2.5.5 asks 44. They are also the *only* way to the content
+ * behind them, which makes them the least appropriate controls in the product
+ * to have been the smallest.
+ *
+ * Padding rather than a flex box or a min-height on the summary alone: a
+ * summary is a `display: list-item`, and making it flex removes the disclosure
+ * triangle in every WebKit-derived browser. A 44 px target that no longer looks
+ * like a control is not a fix.
+ */
+const SUMMARY_TARGET =
+  'min-h-11 py-3 cursor-pointer text-sm text-ink-muted underline underline-offset-4';
 
 export type PlanStep =
   | 'destination'
@@ -167,6 +189,14 @@ export interface PlanFlowProps {
   } | null;
   /** How the trip is structured across bases. Null for a single-base region. */
   basePortfolio: StoredBasePortfolio | null;
+  /**
+   * What the artifact's own matrix and transit evidence actually measured.
+   *
+   * Used to refuse any stored routing grade the artifact cannot support — see
+   * `reconcileRouting`, and the plan page's note on why a stored coverage
+   * report has to be checked rather than trusted. Null before compilation.
+   */
+  routingTruth: RoutingTruth | null;
   /** What routing cost, for the technical panel. Never mixed into coverage. */
   routingDiagnostics: RoutingDiagnostics | null;
   workPlan: { step: string; decision: string; reason: string; items?: number }[] | null;
@@ -263,9 +293,20 @@ function headingFor(props: PlanFlowProps): string {
     case 'scope':
       return 'Here is what we are about to do';
     case 'compiling':
-      return `Building ${props.destinationName}`;
+      /*
+       * A present participle over a build that stopped days ago is the same
+       * defect as the "Working" badge underneath it. One boolean, both places.
+       */
+      return props.snapshot.state === 'queued' || props.snapshot.state === 'running'
+        ? `Building ${props.destinationName}`
+        : `${props.destinationName} — this build stopped`;
     case 'ready':
-      return 'What this trip is built on';
+      /*
+       * "What this trip is built on" was an accurate title for a build report
+       * and the wrong title for this screen. What has happened, from the
+       * traveller's side, is that we went and looked.
+       */
+      return `We have been through ${props.destinationName}`;
   }
 }
 
@@ -349,7 +390,7 @@ function DestinationStep({
 
         {providerMissing.length > 0 ? (
           <details className="mt-6 text-sm text-ink-muted">
-            <summary className={cx('cursor-pointer', FOCUS_RING)}>
+            <summary className={cx(SUMMARY_TARGET, FOCUS_RING)}>
               Setting this up (for whoever deployed Sidequest)
             </summary>
             <p className="mt-2">
@@ -695,7 +736,7 @@ function PreflightStep({ tripId, preflight, destinationName, pending, onRun }: S
             </dl>
             {portfolio.excluded.length > 0 ? (
               <details className="mt-4">
-                <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+                <summary className={SUMMARY_TARGET}>
                   {portfolio.excluded.length} area
                   {portfolio.excluded.length === 1 ? '' : 's'} left out
                 </summary>
@@ -898,7 +939,7 @@ function DatesPanel({
       </ul>
 
       <details className="mt-3">
-        <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+        <summary className={SUMMARY_TARGET}>
           What this does not tell you
         </summary>
         <ul className="mt-2 space-y-1 text-sm text-ink-muted">
@@ -1196,23 +1237,76 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
     setAdopted((current) => ({ key: current.key, value: next }));
 
   const [polls, setPolls] = useState(0);
+  /**
+   * Consecutive failed polls, and why this counter exists.
+   *
+   * A long build produced **737 unhandled promise rejections** in the browser
+   * console. Every one of them was this interval: a server action call with no
+   * `catch`, fired every 1.2 seconds for minutes, against a dev server that
+   * restarts, a route that redeploys and a laptop that sleeps. Each failure
+   * rejected into nothing, and because the interval was never cleared on the
+   * error path it kept firing — an unbounded retry loop with no backoff, whose
+   * only visible symptom was a console full of red on the screen a traveller
+   * stares at longest.
+   *
+   * Three things changed: the call is wrapped, failures are counted, and after
+   * a run of them the poll stops and says so rather than hammering. A build is
+   * server-side and durable, so stopping the poll costs nothing but a reload.
+   */
+  const [pollErrors, setPollErrors] = useState(0);
+
+  /** How many consecutive failures before we stop asking and say so. */
+  const POLL_FAILURE_LIMIT = 5;
 
   useEffect(() => {
     const running = live.state === 'queued' || live.state === 'running';
     const settling = live.state === 'none' && polls < 5;
     if (!running && !settling) return;
+    if (pollErrors >= POLL_FAILURE_LIMIT) return;
 
-    const timer = setInterval(async () => {
-      const next = await compilationSnapshotAction(tripId);
-      setPolls((count) => count + 1);
-      setLive(next);
-      if (next.state === 'ready' || next.state === 'partial') router.refresh();
+    /*
+     * Cancelled on unmount as well as cleared, so a response that lands after
+     * the traveller has navigated away cannot call `setState` on a component
+     * that no longer exists — the other half of what made these rejections
+     * unhandled rather than merely logged.
+     */
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void compilationSnapshotAction(tripId)
+        .then((next) => {
+          if (cancelled) return;
+          setPolls((count) => count + 1);
+          setPollErrors(0);
+          setLive(next);
+          if (next.state === 'ready' || next.state === 'partial') router.refresh();
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          // Named fields only, and counted rather than surfaced: one dropped
+          // poll during a redeploy is not something to interrupt somebody with.
+          console.warn('Could not read build progress', {
+            message: error instanceof Error ? error.message : 'unknown',
+          });
+          setPollErrors((count) => count + 1);
+        });
     }, 1200);
-    return () => clearInterval(timer);
-  }, [tripId, live.state, polls, router]);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [tripId, live.state, polls, pollErrors, router]);
 
   const failed = live.state === 'failed' || live.state === 'cancelled';
   const notStarted = live.state === 'none';
+  /**
+   * Whether anything is working on this right now.
+   *
+   * The server render folds abandonment into the state before it gets here (see
+   * the plan page), and so does the poll — so `running` at this point means a
+   * process with a live heartbeat. Everything about tense, motion and the clock
+   * hangs off this one boolean.
+   */
+  const buildIsLive = live.state === 'queued' || live.state === 'running';
 
   return (
     <div className="max-w-3xl">
@@ -1222,9 +1316,36 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
         </Panel>
       ) : null}
 
+      {/*
+        THE BUILD THAT STOPPED, SAID PLAINLY AND WITH A WAY OUT.
+
+        A trip whose worker died rendered "Working · 12458m 52s" with four phase
+        cards breathing at it — nine days after the last heartbeat, with a Stop
+        button as the only control. This is the state, not a variant of the
+        running one.
+      */}
+      {!buildIsLive && !notStarted && !failed ? (
+        <Panel className="mb-5 border-amber bg-amber-soft p-4">
+          <p className="text-sm leading-relaxed text-ink">
+            This build finished with gaps rather than running to the end. What it did find is
+            below, and starting it again picks up everything already read.
+          </p>
+        </Panel>
+      ) : null}
+
+      {pollErrors >= POLL_FAILURE_LIMIT ? (
+        <Panel className="mb-5 border-dashed p-4">
+          <p className="text-sm leading-relaxed text-ink-muted">
+            We have lost touch with this page — the build itself is unaffected and carries on
+            server-side. Reload to pick the progress back up.
+          </p>
+        </Panel>
+      ) : null}
+
       <CompilationProgress
         stages={live.stages}
         failed={failed}
+        live={buildIsLive}
         {...(live.startedAt ? { startedAt: live.startedAt } : {})}
         estimate={live.estimate ?? null}
         {...(live.reusedSummary ? { reusedSummary: live.reusedSummary } : {})}
@@ -1268,41 +1389,67 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
         </Panel>
       ) : null}
 
+      {/*
+        THE CONTROLS FOLLOW THE STATE, WHICH THEY DID NOT.
+
+        There were three states here and two of them shared a control bar. A
+        finished-with-gaps build offered "Stop" — the one thing it could not do
+        — and no way to start it again; the traveller's only exit was the
+        browser. The four cases are now four cases.
+      */}
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        {notStarted ? (
-          <button
-            type="button"
-            className={buttonClass('primary')}
-            disabled={pending}
-            onClick={() => onRun(() => startCompilationAction(tripId), 'That did not start.')}
-          >
-            {pending ? 'Starting…' : 'Start building'}
-          </button>
-        ) : null}
-        {failed && live.retryable ? (
-          <button
-            type="button"
-            className={buttonClass('primary')}
-            disabled={pending}
-            onClick={() => onRun(() => retryCompilationAction(tripId), 'That did not start.')}
-          >
-            {pending ? 'Starting…' : 'Try again'}
-          </button>
-        ) : null}
-        {failed ? (
-          <Link className={buttonClass('secondary')} href={`/trips/${tripId}/edit`}>
-            Change the trip
-          </Link>
-        ) : (
+        {buildIsLive ? (
           <button
             type="button"
             className={buttonClass('ghost')}
             disabled={pending}
             onClick={() => onRun(() => cancelCompilationAction(tripId), 'We could not stop that.')}
           >
-            Stop
+            Stop this build
           </button>
-        )}
+        ) : null}
+
+        {notStarted ? (
+          <>
+            <button
+              type="button"
+              className={buttonClass('primary')}
+              disabled={pending}
+              onClick={() => onRun(() => startCompilationAction(tripId), 'That did not start.')}
+            >
+              {pending ? 'Starting…' : 'Start researching'}
+            </button>
+            {/*
+              What the button costs, next to the button.
+
+              It sat unlabelled on a bare screen a refresh could land on, and
+              researching a region is the one action in the product that spends
+              real money and several minutes. Somebody should not press it
+              without knowing that.
+            */}
+            <span className="text-sm text-ink-faint">
+              This is the step that takes minutes and looks things up — everything before it was
+              free.
+            </span>
+          </>
+        ) : null}
+
+        {!buildIsLive && !notStarted && (failed ? live.retryable : true) ? (
+          <button
+            type="button"
+            className={buttonClass('primary')}
+            disabled={pending}
+            onClick={() => onRun(() => retryCompilationAction(tripId), 'That did not start.')}
+          >
+            {pending ? 'Starting…' : failed ? 'Try again' : 'Pick it up again'}
+          </button>
+        ) : null}
+
+        {!buildIsLive && !notStarted ? (
+          <Link className={buttonClass('secondary')} href={`/trips/${tripId}/edit`}>
+            Change the trip
+          </Link>
+        ) : null}
       </div>
     </div>
   );
@@ -1312,7 +1459,7 @@ function RegionDataPanel({ data }: { data: NonNullable<PlanFlowProps['regionData
   const built = data.builtAt.slice(0, 10);
   return (
     <details className="mt-6" data-testid="region-data">
-      <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+      <summary className={SUMMARY_TARGET}>
         Regional place data — {data.catalog} release {data.releaseId}
       </summary>
       <Panel className="mt-3 p-4">
@@ -1346,7 +1493,7 @@ function WorkPlanPanel({ entries }: { entries: NonNullable<PlanFlowProps['workPl
   if (entries.length === 0) return null;
   return (
     <details className="mt-4" data-testid="work-plan">
-      <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+      <summary className={SUMMARY_TARGET}>
         What this build reused
       </summary>
       <Panel className="mt-3 p-4">
@@ -1444,7 +1591,7 @@ function BasePortfolioPanel({ portfolio }: { portfolio: StoredBasePortfolio }) {
 
       {notFitting.length > 0 ? (
         <details className="mt-3">
-          <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+          <summary className={SUMMARY_TARGET}>
             {notFitting.length} area{notFitting.length === 1 ? '' : 's'} left out
           </summary>
           <ul className="mt-2 space-y-1 text-sm text-ink-muted">
@@ -1471,7 +1618,7 @@ function RoutingPanel({ diagnostics }: { diagnostics: RoutingDiagnostics }) {
   const saved = diagnostics.flatPairs - diagnostics.plannedPairs;
   return (
     <details className="mt-4" data-testid="routing-diagnostics">
-      <summary className="cursor-pointer text-sm text-ink-muted underline underline-offset-4">
+      <summary className={SUMMARY_TARGET}>
         How travel times were measured
       </summary>
       <Panel className="mt-3 p-4">
@@ -1536,6 +1683,27 @@ function decisionLabel(decision: string): string | null {
   return (WORK_PLAN_DECISION_LABELS as Record<string, string | undefined>)[decision] ?? null;
 }
 
+/**
+ * WHAT A TRAVELLER IS TOLD ONCE THE RESEARCH IS DONE.
+ *
+ * This screen sat between the destination and the questionnaire and was about
+ * three and a half thousand pixels of build report: twenty-three graded coverage
+ * rows, the weak ones repeated underneath as "What we could not do", a
+ * catalogue release id, a pack hash (`pack-relation/1543125-2026-07-22.0 —
+ * 4a455778455e6e80`), per-record identifiers with "last edited" dates, routing
+ * accounting ("LEGS MEASURED 676 across 4 requests, SKIPPED 3640 pairs"), and
+ * the only way forward at the very bottom of all of it.
+ *
+ * Every one of those facts is true and none of them is what somebody wants at
+ * this moment. What they want is: did you find enough, is there anything about
+ * this that will change how I plan, and what happens next.
+ *
+ * So the default view is two or three sentences and the control. Everything
+ * else — unchanged, none of it deleted — is behind one disclosure, because the
+ * argument was never about whether to keep it. `coverageHeadline` decides what
+ * leads and `reconcileRouting` decides whether a stored routing grade may be
+ * rendered at all.
+ */
 function ReadyStep({
   tripId,
   researchReadiness,
@@ -1548,245 +1716,272 @@ function ReadyStep({
   regionData,
   workPlan,
   basePortfolio,
+  routingTruth,
   routingDiagnostics,
 }: PlanFlowProps) {
   if (!coverage || !compiledSummary) return null;
-  const weak = coverage.dimensions.filter(
-    (entry) => entry.level === 'weak' || entry.level === 'unavailable',
-  );
+
+  /*
+   * The stored rows, with any routing grade the artifact cannot support
+   * replaced. Done once, here, so the headline, the table and the gap list all
+   * read the same corrected set — three readings of the raw report is how
+   * "PUBLIC TRANSPORT · Good · Measured road times" and "DRIVING TIMES · Not
+   * relevant here" ended up three rows apart on one screen.
+   */
+  const dimensions = routingTruth
+    ? reconcileRouting(coverage.dimensions, routingTruth)
+    : [...coverage.dimensions];
+
+  const headline = coverageHeadline({
+    dimensions,
+    placeCount: compiledSummary.placeCount,
+    areaCount: compiledSummary.subregionCount,
+    baseName: displayNameOf({
+      name: compiledSummary.baseName,
+      ...(compiledSummary.baseNames ? { names: compiledSummary.baseNames } : {}),
+    }),
+  });
+
   const buildDuration = classifyObservedSpan(observedSpanMs(snapshot.stages));
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-      <div>
-        <p className="measure text-ink-muted">
-          Everything below is a claim with a source. Where there is no source, we say that instead of
-          filling the gap.
-        </p>
+    <div className="max-w-3xl">
+      {/* ---- What we found, and what it costs you to know ---------------- */}
+      <p className="text-lg leading-relaxed text-ink">{headline.found}</p>
 
-        {snapshot.state === 'partial' ? (
-          <Panel className="mt-6 border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
-            This came back incomplete. It is usable, and the gaps are listed below rather than
-            hidden.
-          </Panel>
-        ) : null}
-
-        <Panel className="mt-6 p-5 sm:p-6">
-          <dl className="space-y-4 text-sm">
-            <RowNode
-              label="Base"
-              value={
-                <PlaceName
-                  entity={{
-                    name: compiledSummary.baseName,
-                    ...(compiledSummary.baseNames ? { names: compiledSummary.baseNames } : {}),
-                  }}
-                />
-              }
-            />
-            <Row label="Places" value={`${compiledSummary.placeCount} kept`} />
-            <Row
-              label="Nearby"
-              value={`${compiledSummary.satelliteCount} side trips across ${Math.max(1, compiledSummary.subregionCount)} area${Math.max(1, compiledSummary.subregionCount) === 1 ? '' : 's'}`}
-            />
-          </dl>
-        </Panel>
-
-        {basePortfolio && basePortfolio.bases.length > 1 ? (
-          <BasePortfolioPanel portfolio={basePortfolio} />
-        ) : null}
-
-        <section className="mt-10 border-t border-rule pt-8" aria-labelledby="coverage-heading">
-          <h2 id="coverage-heading" className="font-display text-2xl text-ink">
-            What this is built on
-          </h2>
-          <p className="mt-2 text-sm text-ink-muted">{coverage.summary}</p>
-
-          <dl className="mt-6 divide-y divide-rule">
-            {coverage.dimensions.map((entry) => (
-              <div key={entry.dimension} className="py-3 sm:flex sm:gap-4">
-                <dt className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-ink-faint sm:w-44 sm:shrink-0">
-                  {COVERAGE_DIMENSION_LABELS[entry.dimension]}
-                </dt>
-                <dd className="mt-1 min-w-0 flex-1 sm:mt-0">
-                  <Badge
-                    tone={
-                      entry.level === 'high'
-                        ? 'pine'
-                        : entry.level === 'usable_with_cautions'
-                          ? 'amber'
-                          : entry.level === 'not_applicable'
-                            ? 'neutral'
-                            : 'clay'
-                    }
-                  >
-                    {COVERAGE_LEVEL_LABELS[entry.level]}
-                  </Badge>
-                  <span className="mt-1 block text-sm text-ink-muted">{entry.detail}</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
-
-          {weak.length > 0 ? (
-            <Panel className="mt-6 border-dashed p-4">
-              <p className="text-sm font-medium text-ink">What we could not do</p>
-              <ul className="mt-2 space-y-1 text-sm text-ink-muted">
-                {weak.map((entry) => (
-                  <li key={entry.dimension}>
-                    {COVERAGE_DIMENSION_LABELS[entry.dimension]}: {entry.detail}
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          ) : null}
-        </section>
-
-        {/*
-          One route on, and it is the one that works.
-
-          There used to be a "Skip to the board" button beside this, and it could
-          not skip anything: `/discover` redirects to the questionnaire whenever
-          the trip has no profile, and a profile is written *only* by finishing
-          the questionnaire. So the control offered a shortcut, and every press
-          of it landed on the screen it promised to bypass. No test ever clicked
-          it.
-
-          The honest fix is not to seed a placeholder profile so the board has
-          something to rank against — a board ranked on answers nobody gave is
-          worse than no board. It is to say what the next step actually is, and
-          how long it takes.
-        */}
-        {researchReadiness ? (
-          <ResearchReadinessPanel tripId={tripId} readiness={researchReadiness} />
-        ) : null}
-
-        {/*
-          The named requests, before the questionnaire rather than after it.
-
-          Same argument as the reading above: somebody who named a place we could
-          not find should hear about it now, while changing the destination or
-          dropping the request is still cheap, and not from a finished plan.
-        */}
-        {mustDoCoverage ? <MustDoPanel tripId={tripId} coverage={mustDoCoverage} /> : null}
-
-        <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-rule pt-6">
-          <a className={buttonClass('primary')} href={`/trips/${tripId}/questionnaire`}>
-            Tell us how you travel
-          </a>
-          <p className="text-sm text-ink-muted">
-            A few questions about pace, budget and what you like. The board is ranked against your
-            answers, so this is the step that makes it yours.
-          </p>
-        </div>
-      </div>
-
-      <aside aria-labelledby="sources-heading">
-        <h2 id="sources-heading" className="font-display text-xl text-ink">
-          Sources
-        </h2>
-        <ul className="mt-3 space-y-2 text-sm text-ink-muted">
-          {licences.map((entry) => (
-            <li key={entry.id}>
-              <span className="text-ink">{entry.attribution}</span>
-              <span className="text-ink-faint">
-                {' '}
-                — {entry.name}
-                {entry.appliesTo.length > 0 ? ` (${entry.appliesTo.join(', ')})` : ''}
-                {entry.shareAlike ? ', share-alike' : ''}
+      {headline.gaps.length > 0 ? (
+        <ul className="mt-4 space-y-2" data-testid="planning-gaps">
+          {headline.gaps.map((gap) => (
+            <li key={gap} className="flex gap-2.5 text-ink-muted">
+              <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber" />
+              <span className="leading-relaxed">
+                {gap.charAt(0).toUpperCase()}
+                {gap.slice(1)}.
               </span>
-              {entry.url ? (
-                <a
-                  href={entry.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-1 underline underline-offset-2"
-                >
-                  licence
-                </a>
-              ) : null}
             </li>
           ))}
         </ul>
+      ) : null}
 
-        {compiledSummary.sourceTimestamps.length > 0 ? (
-          <ul className="mt-4 space-y-1 text-[11px] leading-relaxed text-ink-faint">
-            {compiledSummary.sourceTimestamps.slice(0, 4).map((entry) => (
-              <li key={entry.label}>
-                {entry.url ? (
-                  <a
-                    href={entry.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline underline-offset-2"
-                  >
-                    {entry.label}
-                  </a>
-                ) : (
-                  entry.label
-                )}
-                {entry.at ? ` — last edited ${entry.at.slice(0, 10)}` : ''}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+      {snapshot.state === 'partial' ? (
+        <Panel className="mt-5 border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
+          The research stopped short of the end, so this is what it had rather than everything it
+          would have found. It is enough to plan on, and the gaps above are the ones that matter.
+        </Panel>
+      ) : null}
 
-        <p className="mt-4 text-[11px] leading-relaxed text-ink-faint" data-testid="attribution-line">
-          {attributions.join(' · ')}. Conditions change; we have not checked today.
+      {/*
+        The reading of the destination and the named requests, both of which are
+        about *this* traveller's trip rather than about the build. They stay
+        above the fold for the reason they were moved here in the first place:
+        somebody should hear that the ground is thin, or that we could not find
+        the one place they asked for, before they answer nine questions.
+      */}
+      {researchReadiness ? (
+        <div className="mt-8">
+          <ResearchReadinessPanel tripId={tripId} readiness={researchReadiness} />
+        </div>
+      ) : null}
+
+      {mustDoCoverage ? <MustDoPanel tripId={tripId} coverage={mustDoCoverage} /> : null}
+
+      {/* ---- The one control, where somebody will find it ---------------- */}
+      <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-rule pt-6">
+        <a className={buttonClass('primary')} href={`/trips/${tripId}/questionnaire`}>
+          Tell us how you travel
+        </a>
+        <p className="text-sm text-ink-muted">
+          A few questions about pace, budget and what you like. The board is ranked against your
+          answers, so this is the step that makes it yours.
         </p>
+      </div>
 
-        {regionData ? <RegionDataPanel data={regionData} /> : null}
-        {routingDiagnostics ? <RoutingPanel diagnostics={routingDiagnostics} /> : null}
-        {workPlan ? <WorkPlanPanel entries={workPlan} /> : null}
+      {/* ---- Everything else, once, behind one door ---------------------- */}
+      <details className="mt-10 border-t border-rule pt-6" data-testid="how-this-was-built">
+        <summary className={cx(SUMMARY_TARGET, FOCUS_RING)}>
+          How this was built — sources, checks and what we could not do
+        </summary>
 
-        {/*
-          WHAT THE BUILD ACTUALLY DID, AFTER IT IS OVER.
-
-          The progress screen carried this and then took it away with it. A
-          fixture build finishes in about a second and a real one in minutes, and
-          in both cases the question "why did that take as long as it did" is one
-          people ask *afterwards* — so a record that only exists while you are
-          waiting for it is not a record.
-
-          Real measured durations, from the job row's observed clock. Stages with
-          no observed pair show no figure rather than showing zero.
-        */}
-        {snapshot.stages.length > 0 ? (
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-ink">How this build went</h3>
-            {/*
-              THE WORD DOING THE DAMAGE WAS `MEASURED`.
-
-              Two figures reached this line that were not durations. A job
-              reclaimed hours after it stopped rendered "312m in total,
-              measured", which reads as a pipeline five hours slow; a synthetic
-              build that really took 800 ms rendered "0s in total, measured",
-              which is the same family of sentence as "roughly 0s–0s to go".
-              `classifyObservedSpan` states both bounds, and above the ceiling
-              this says what the timestamps are rather than pretending they are a
-              measurement.
-            */}
-            {buildDuration.kind === 'measured' ? (
-              <p className="mt-1 text-xs text-ink-faint" data-testid="build-duration">
-                {formatBuildDuration(buildDuration.ms)} in total, measured.
-              </p>
-            ) : buildDuration.kind === 'under_a_second' ? (
-              <p className="mt-1 text-xs text-ink-faint" data-testid="build-duration">
-                Under a second in total, measured.
-              </p>
-            ) : buildDuration.kind === 'not_a_measurement' ? (
-              <p className="mt-1 text-xs text-ink-faint" data-testid="build-span-implausible">
-                The first and last stamps on this build are further apart than a build runs
-                for, so they are a record of when it happened rather than of how long it took.
-                No total here.
-              </p>
-            ) : null}
-            <div className="mt-2">
-              <StageDisclosure stages={snapshot.stages} />
-            </div>
+        <div className="mt-4 space-y-10">
+          <div>
+            <Panel className="p-5 sm:p-6">
+              <dl className="space-y-4 text-sm">
+                <RowNode
+                  label="Base"
+                  value={
+                    <PlaceName
+                      entity={{
+                        name: compiledSummary.baseName,
+                        ...(compiledSummary.baseNames ? { names: compiledSummary.baseNames } : {}),
+                      }}
+                    />
+                  }
+                />
+                <Row label="Places" value={`${compiledSummary.placeCount} kept`} />
+                <Row
+                  label="Nearby"
+                  value={`${compiledSummary.satelliteCount} side trips across ${Math.max(1, compiledSummary.subregionCount)} area${Math.max(1, compiledSummary.subregionCount) === 1 ? '' : 's'}`}
+                />
+              </dl>
+            </Panel>
           </div>
-        ) : null}
-      </aside>
+
+          {basePortfolio && basePortfolio.bases.length > 1 ? (
+            <BasePortfolioPanel portfolio={basePortfolio} />
+          ) : null}
+
+          <section aria-labelledby="coverage-heading">
+            <h2 id="coverage-heading" className="font-display text-xl text-ink">
+              Layer by layer
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">{coverage.summary}</p>
+
+            {/*
+              THE TABLE, AND NOT A SECOND COPY OF IT.
+
+              Underneath this there used to be a panel headed "What we could not
+              do" repeating every weak row verbatim — the same eight sentences,
+              a screen apart, with the dimension name prefixed. Two renderings of
+              one list is one list too many; the level badge already says which
+              rows are the gaps, and the two that change planning are stated at
+              the top of the page in consequences rather than grades.
+            */}
+            <dl className="mt-5 divide-y divide-rule">
+              {dimensions.map((entry) => (
+                <div key={entry.dimension} className="py-3 sm:flex sm:gap-4">
+                  <dt className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-ink-faint sm:w-44 sm:shrink-0">
+                    {COVERAGE_DIMENSION_LABELS[entry.dimension]}
+                  </dt>
+                  <dd className="mt-1 min-w-0 flex-1 sm:mt-0">
+                    <Badge
+                      tone={
+                        entry.level === 'high'
+                          ? 'pine'
+                          : entry.level === 'usable_with_cautions'
+                            ? 'amber'
+                            : entry.level === 'not_applicable'
+                              ? 'neutral'
+                              : 'clay'
+                      }
+                    >
+                      {COVERAGE_LEVEL_LABELS[entry.level]}
+                    </Badge>
+                    <span className="mt-1 block text-sm text-ink-muted">{entry.detail}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section aria-labelledby="sources-heading">
+            <h2 id="sources-heading" className="font-display text-xl text-ink">
+              Sources
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm text-ink-muted">
+              {licences.map((entry) => (
+                <li key={entry.id}>
+                  <span className="text-ink">{entry.attribution}</span>
+                  <span className="text-ink-faint">
+                    {' '}
+                    — {entry.name}
+                    {entry.appliesTo.length > 0 ? ` (${entry.appliesTo.join(', ')})` : ''}
+                    {entry.shareAlike ? ', share-alike' : ''}
+                  </span>
+                  {entry.url ? (
+                    <a
+                      href={entry.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-1 underline underline-offset-2"
+                    >
+                      licence
+                    </a>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+
+            {compiledSummary.sourceTimestamps.length > 0 ? (
+              <ul className="mt-4 space-y-1 text-[11px] leading-relaxed text-ink-faint">
+                {compiledSummary.sourceTimestamps.slice(0, 4).map((entry) => (
+                  <li key={entry.label}>
+                    {entry.url ? (
+                      <a
+                        href={entry.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2"
+                      >
+                        {entry.label}
+                      </a>
+                    ) : (
+                      entry.label
+                    )}
+                    {entry.at ? ` — last edited ${formatDay(entry.at.slice(0, 10))}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <p
+              className="mt-4 text-[11px] leading-relaxed text-ink-faint"
+              data-testid="attribution-line"
+            >
+              {attributions.join(' · ')}. Conditions change; we have not checked today.
+            </p>
+          </section>
+
+          <div className="space-y-3">
+            {regionData ? <RegionDataPanel data={regionData} /> : null}
+            {routingDiagnostics ? <RoutingPanel diagnostics={routingDiagnostics} /> : null}
+            {workPlan ? <WorkPlanPanel entries={workPlan} /> : null}
+
+            {/*
+              WHAT THE BUILD ACTUALLY DID, AFTER IT IS OVER.
+
+              The progress screen carried this and then took it away with it. A
+              fixture build finishes in about a second and a real one in minutes,
+              and in both cases the question "why did that take as long as it
+              did" is one people ask *afterwards* — so a record that only exists
+              while you are waiting for it is not a record.
+            */}
+            {snapshot.stages.length > 0 ? (
+              <div className="pt-3">
+                <h3 className="text-sm font-medium text-ink">How this build went</h3>
+                {/*
+                  THE WORD DOING THE DAMAGE WAS `MEASURED`.
+
+                  Two figures reached this line that were not durations. A job
+                  reclaimed hours after it stopped rendered "312m in total,
+                  measured", which reads as a pipeline five hours slow; a
+                  synthetic build that really took 800 ms rendered "0s in total,
+                  measured". `classifyObservedSpan` states both bounds, and above
+                  the ceiling this says what the timestamps are rather than
+                  pretending they are a measurement.
+                */}
+                {buildDuration.kind === 'measured' ? (
+                  <p className="mt-1 text-xs text-ink-faint" data-testid="build-duration">
+                    {formatElapsed(Math.round(buildDuration.ms / 1000))} in total, measured.
+                  </p>
+                ) : buildDuration.kind === 'under_a_second' ? (
+                  <p className="mt-1 text-xs text-ink-faint" data-testid="build-duration">
+                    Under a second in total, measured.
+                  </p>
+                ) : buildDuration.kind === 'not_a_measurement' ? (
+                  <p className="mt-1 text-xs text-ink-faint" data-testid="build-span-implausible">
+                    The first and last stamps on this build are further apart than a build runs
+                    for, so they are a record of when it happened rather than of how long it took.
+                    No total here.
+                  </p>
+                ) : null}
+                <div className="mt-2">
+                  <StageDisclosure stages={snapshot.stages} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
@@ -1819,12 +2014,4 @@ function observedSpanMs(stages: StageRecord[]): number | null {
   if (starts.length === 0 || ends.length === 0) return null;
   const span = Math.max(...ends) - Math.min(...starts);
   return span >= 0 ? span : null;
-}
-
-function formatBuildDuration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`;
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createTrip } from './support/trip';
+import { createTrip, openBoardBackstage } from './support/trip';
 
 /**
  * A PAGE RENDER STARTS NO EXTERNAL WORK.
@@ -82,6 +82,14 @@ async function reachBoard(page: Page): Promise<string> {
 test('the board arrives with no weather, and reloading never fetches any', async ({ page }) => {
   await reachBoard(page);
 
+  /*
+   * The forecast panel moved behind the board's one disclosure, so it is knocked
+   * on rather than read off the page. A `<details>` does not remember it was
+   * open across a navigation, so the reload loop below has to knock again each
+   * time — which is a truthful description of what a traveller does, and keeps
+   * the assertion where it was rather than softening it to a DOM-text check.
+   */
+  await openBoardBackstage(page);
   const panel = page.getByTestId('weather-snapshot');
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Weather: not fetched' })).toBeVisible();
@@ -95,6 +103,7 @@ test('the board arrives with no weather, and reloading never fetches any', async
    */
   for (let reload = 0; reload < 5; reload += 1) {
     await page.reload();
+    await openBoardBackstage(page);
     await expect(
       page.getByTestId('weather-snapshot').getByRole('heading', { name: 'Weather: not fetched' }),
     ).toBeVisible();
@@ -106,6 +115,7 @@ test('the weather arrives only when it is asked for, and stays put afterwards', 
 }) => {
   await reachBoard(page);
 
+  await openBoardBackstage(page);
   const panel = page.getByTestId('weather-snapshot');
   await panel.getByTestId('weather-refresh').click();
 
@@ -136,6 +146,7 @@ test('the weather arrives only when it is asked for, and stays put afterwards', 
    */
   await page.reload();
   await page.waitForTimeout(1_500);
+  await openBoardBackstage(page);
   await expect(page.getByTestId('weather-snapshot').locator('time')).toHaveAttribute(
     'datetime',
     stamp!,
@@ -150,6 +161,7 @@ test('the weather arrives only when it is asked for, and stays put afterwards', 
 test('the refresh is a keyboard-operable button', async ({ page }) => {
   await reachBoard(page);
 
+  await openBoardBackstage(page);
   const button = page.getByTestId('weather-refresh');
   await expect(button).toHaveRole('button');
   await button.focus();

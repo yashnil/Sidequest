@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { TRAVELER_PROFILE_VERSION } from '../schemas/profile';
 import {
   availableRegionalExpansions,
+  carFreeReachMinutes,
+  EXPANSION_CEILING_MINUTES,
   isQuestionVisible,
   type QuestionnaireContext,
 } from './definition';
 import { buildTravelerProfile, defaultAnswers, normalizeAnswers } from './transform';
 import { validatedQuestionnaireAnswersSchema } from '../schemas/profile';
+import { detourToleranceMinutesFor } from '../travel/reach';
 import { answers, context, interests, MAMMOTH_HIKER_ANSWERS } from '../testing/fixtures';
 
 const ctx = (overrides: Partial<QuestionnaireContext> = {}) => context(overrides);
@@ -25,19 +28,27 @@ describe('adaptive questionnaire', () => {
     ).toBe(false);
   });
 
-  it('only asks about tourist traps when crowds already bother the traveller', () => {
+  /**
+   * The toggle is gone from the screen; the warning is derived from the graded
+   * crowd control. "Crowds ruin it" turns it on, a written hard refusal of
+   * crowds turns it on, and a shrug does not — the same formula the benchmark
+   * request adapter writes, so its answers stay a fixed point of
+   * `normalizeAnswers`. The visibility rule survives for that adapter's
+   * representability maths.
+   */
+  it('derives the tourist-trap warning from the crowd answer instead of asking', () => {
+    const derived = (overrides: Parameters<typeof answers>[0]) =>
+      normalizeAnswers(answers(overrides), ctx()).avoidTouristTraps;
+    expect(derived({ crowdTolerance: 'avoid_crowds', avoidTouristTraps: false })).toBe(true);
+    expect(derived({ crowdTolerance: 'mild', avoidTouristTraps: true })).toBe(false);
     expect(
-      isQuestionVisible('avoidTouristTraps', {
-        answers: answers({ crowdTolerance: 'avoid_crowds' }),
-        context: ctx(),
+      derived({
+        crowdTolerance: 'mild',
+        avoidTouristTraps: false,
+        avoidances: ['crowds_and_tourist_traps'],
       }),
     ).toBe(true);
-    expect(
-      isQuestionVisible('avoidTouristTraps', {
-        answers: answers({ crowdTolerance: 'dont_mind' }),
-        context: ctx(),
-      }),
-    ).toBe(false);
+    expect(derived({ crowdTolerance: 'dont_mind', avoidTouristTraps: true })).toBe(false);
   });
 
   it('hides driving questions when there is no car', () => {
@@ -56,9 +67,53 @@ describe('adaptive questionnaire', () => {
     ).toBe(false);
   });
 
-  it('does not offer a regional radius a car-less traveller cannot reach', () => {
+  /**
+   * The car-free offer is derived from the traveller's own ride budget, not
+   * hard-capped at thirty minutes for every compiled destination. The review
+   * card was printing "up to 75 min by public transport" while this function
+   * refused to offer anything past half an hour — two derivations of one
+   * answer, disagreeing on the screen where it decides what is reachable.
+   */
+  it('offers a car-free traveller every ring their ride budget covers', () => {
     expect(availableRegionalExpansions(true)).toHaveLength(5);
-    expect(availableRegionalExpansions(false)).toEqual(['destination_only', 'nearby_30']);
+    const offered = availableRegionalExpansions(false);
+    expect(offered).toEqual(['destination_only', 'nearby_30', 'nearby_60']);
+    for (const ring of offered) {
+      expect(EXPANSION_CEILING_MINUTES[ring]).toBeLessThanOrEqual(carFreeReachMinutes());
+    }
+  });
+
+  /** A region that has authored its car-free reach is believed outright. */
+  it('lets an authored region narrow the car-free offer below the derived one', () => {
+    const authored = ctx({
+      region: {
+        baseName: 'Mammoth Lakes',
+        copy: {
+          proseName: 'the Eastern Sierra',
+          destinationOnlyLabel: 'Mammoth Lakes itself',
+          expansionExamples: {},
+          carFreeExpansions: ['destination_only', 'nearby_30'],
+          regionStepIntro: 'One valley, one trolley.',
+          discoveryIntro: 'Both exist here.',
+          transportIntro: 'The trolley runs in season.',
+        },
+      },
+    });
+    expect(availableRegionalExpansions(false, authored)).toEqual([
+      'destination_only',
+      'nearby_30',
+    ]);
+  });
+
+  /**
+   * The region step and the review card must be one derivation. The card reads
+   * `detourToleranceMinutesFor(profile, 'rail')`; the step reads
+   * `carFreeReachMinutes()`. This is the pin that stops them drifting apart —
+   * it failed before the fix, when the step said 30 and the card said 75.
+   */
+  it('agrees with the reach function the review card prints', () => {
+    const carFree = buildTravelerProfile(answers({ willDrive: false }), ctx());
+    expect(carFreeReachMinutes()).toBe(detourToleranceMinutesFor(carFree, 'rail'));
   });
 });
 
@@ -84,7 +139,30 @@ describe('answer normalisation', () => {
       answers({ regionalExpansion: 'best_regional', willDrive: false }),
       ctx(),
     );
-    expect(normalized.regionalExpansion).toBe('nearby_30');
+    // The widest ring the ride budget still covers — an hour, not half of one.
+    expect(normalized.regionalExpansion).toBe('nearby_60');
+  });
+
+  it('lands a hard early-mornings filter on the day-start window', () => {
+    const normalized = normalizeAnswers(
+      answers({ avoidances: ['early_mornings'], dayStart: 'early' }),
+      ctx(),
+    );
+    expect(normalized.dayStart).toBe('relaxed');
+    // Without the avoidance, the stated start survives untouched.
+    expect(normalizeAnswers(answers({ dayStart: 'early' }), ctx()).dayStart).toBe('early');
+  });
+
+  it('keeps the handed-over step list canonical', () => {
+    const normalized = normalizeAnswers(
+      answers({ decideForMe: ['food', 'rhythm', 'food'] }),
+      ctx(),
+    );
+    expect(normalized.decideForMe).toEqual(['rhythm', 'food']);
+    // Absent stays absent: an old draft is not retroactively a statement.
+    const legacy = answers();
+    delete (legacy as Partial<typeof legacy>).decideForMe;
+    expect(normalizeAnswers(legacy, ctx()).decideForMe).toBeUndefined();
   });
 
   it('zeroes detour tolerance when the traveller stays in town', () => {
@@ -179,6 +257,17 @@ describe('profile transformation', () => {
         ctx({ travelerNeeds: ['mobility_limited'] }),
       ).derived.maxPhysicalIntensity,
     ).toBe('easy');
+
+    /*
+     * Altitude effort caps like the other two. It was offered as a hard filter
+     * and consumed by nothing — the placebo class PR-QUES-10 exists to close.
+     */
+    expect(
+      buildTravelerProfile(
+        answers({ ...MAMMOTH_HIKER_ANSWERS, avoidances: ['high_altitude_exertion'] }),
+        ctx(),
+      ).derived.maxPhysicalIntensity,
+    ).toBe('moderate');
   });
 
   it('takes the tightest of the radius, the stated tolerance and the daily drive budget', () => {

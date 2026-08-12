@@ -17,6 +17,7 @@ import {
   getRegionPack,
   listRegionPacks,
   pruneRegionPacks,
+  readScopeGround,
   saveRegionPack,
 } from './pack-repository';
 
@@ -254,5 +255,97 @@ describe('region pack storage', () => {
       findRegionPack({ scopeHash: other.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' })
         ?.id,
     ).toBe('pack-shared');
+  });
+
+  /**
+   * THE REBUILD THAT PAID FOR THE SAME CITY TWICE.
+   *
+   * A live pair of Tokyo builds re-fetched 3,787 records for ground already on
+   * disk. The scope hash carries the *derived* bounding box, and that box is a
+   * function of the traveller — nights, pace, whether they will drive — so two
+   * trips to the same city routinely produce two different hashes for one piece
+   * of ground and the second one missed everything.
+   *
+   * The rule these pin: same ground identity, same release, and a stored extent
+   * that already contains what is being asked for, is a hit. More ground answers
+   * a request for less. Less never answers a request for more.
+   */
+  it('answers a tighter scope from a pack that already covers the ground', () => {
+    const wide = scopeFor({
+      shape: {
+        kind: 'bounds',
+        bounds: { southWest: { lat: 40.5, lng: -74.2 }, northEast: { lat: 40.9, lng: -73.8 } },
+      },
+    });
+    const stored = packFor({ id: 'pack-wide', releaseId: '2026-07-22.0', scope: wide });
+    saveRegionPack(stored);
+
+    const tighter = packFor({ id: 'pack-tight', releaseId: '2026-07-22.0', scope: scopeFor() });
+    // Precondition: the two really are different keys, or this proves nothing.
+    expect(tighter.scopeHash).not.toBe(stored.scopeHash);
+
+    expect(
+      findRegionPack({
+        scopeHash: tighter.scopeHash,
+        catalog: 'overture',
+        releaseId: '2026-07-22.0',
+      })?.id,
+    ).toBe('pack-wide');
+  });
+
+  it('does not answer a wider scope from a pack that covers less ground', () => {
+    const narrow = packFor({ id: 'pack-narrow', releaseId: '2026-07-22.0', scope: scopeFor() });
+    saveRegionPack(narrow);
+
+    const wider = packFor({
+      id: 'pack-wider',
+      releaseId: '2026-07-22.0',
+      scope: scopeFor({
+        shape: {
+          kind: 'bounds',
+          bounds: { southWest: { lat: 40.4, lng: -74.3 }, northEast: { lat: 41.0, lng: -73.7 } },
+        },
+      }),
+    });
+
+    /*
+     * The half that keeps this a cache rather than a lie: reusing the smaller
+     * pack would silently plan a bigger region from data that never covered it,
+     * and every place beyond the stored extent would simply not exist.
+     */
+    expect(
+      findRegionPack({ scopeHash: wider.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' }),
+    ).toBeNull();
+  });
+
+  it('never crosses from one piece of ground to another', () => {
+    saveRegionPack(packFor({ id: 'pack-here', releaseId: '2026-07-22.0' }));
+
+    const elsewhere = packFor({
+      id: 'pack-elsewhere',
+      releaseId: '2026-07-22.0',
+      scope: scopeFor({ destinationCandidateId: 'relation/2', destinationName: 'Otherville' }),
+    });
+
+    expect(
+      findRegionPack({
+        scopeHash: elsewhere.scopeHash,
+        catalog: 'overture',
+        releaseId: '2026-07-22.0',
+      }),
+    ).toBeNull();
+  });
+
+  it('reads a ground identity that contains slashes of its own', () => {
+    /*
+     * `relation/1` is the ordinary shape of an OSM identifier, so the bounds are
+     * read off the end of the key rather than by counting from the front. A
+     * split that counted forwards mis-parsed every live scope hash while passing
+     * against a fixture id with no slash in it.
+     */
+    const ground = readScopeGround('v9/relation/1/40.6000/-74.1000/40.8000/-73.9000');
+    expect(ground?.identity).toBe('v9/relation/1');
+    expect(ground?.bounds).toEqual({ swLat: 40.6, swLng: -74.1, neLat: 40.8, neLng: -73.9 });
+    expect(readScopeGround('nonsense')).toBeNull();
   });
 });

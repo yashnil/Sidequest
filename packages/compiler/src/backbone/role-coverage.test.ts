@@ -157,6 +157,10 @@ const GATED_SHORT_URBAN: TaxonomyClassification = {
   poorWeatherBackup: true,
   costLevel: 2,
   plausiblyGated: true,
+  significanceWeight: 0.5,
+  requiresSignificanceEvidence: false,
+  paidEnclosure: false,
+  landscapeClaim: false,
 };
 
 /** The same, ungated: real, worth going to, and nobody sells a ticket for it. */
@@ -1094,6 +1098,10 @@ describe('a utility role floors a visitable archetype', () => {
     poorWeatherBackup: false,
     costLevel: 0,
     plausiblyGated: true,
+    significanceWeight: 0.5,
+    requiresSignificanceEvidence: false,
+    paidEnclosure: false,
+    landscapeClaim: false,
     ...overrides,
   });
 

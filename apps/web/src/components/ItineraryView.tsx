@@ -23,13 +23,28 @@ import {
   type TravelSegment,
   PREPARATION_KIND_COPY,
   groupPreparation,
+  imageryFallbackFor,
+  type DestinationImage as ImageRecord,
+  type PlaceCategory,
   type PreparationItem,
   type DisplayName,
 } from '@sidequest/core';
-import { Badge, Panel, buttonClass, cx, type BadgeTone, PlaceName } from './ui';
+import { Badge, PLATE_HUE, Panel, buttonClass, cx, type BadgeTone, PlaceName } from './ui';
+import { DestinationImage, ImageCredit } from './DestinationImage';
+import { DayMap } from './DayMap';
 import { formatMinutes } from '@/lib/format';
 import { dayRouteLinks, mapModeFor } from '@/lib/maps';
 import { PrintButton } from './PrintButton';
+/*
+ * The editing controls live beside the server actions they call, in the
+ * itinerary route directory, rather than in the shared component folder: they
+ * are meaningless anywhere but on this page.
+ */
+import {
+  EaseDayButton,
+  PrintExpand,
+  StopEditMenu,
+} from '@/app/(product)/trips/[id]/itinerary/edit-controls';
 import {
   roundedDuration,
   roundedMinuteOfDay,
@@ -125,6 +140,55 @@ const CONVENIENCE_LABELS: Record<TransportStrategy['convenience'], string> = {
   high: 'Easy logistics',
 };
 
+/**
+ * When "on foot" is worth a chip.
+ *
+ * Under half an hour it is the walk between a car park and a gate, which is not
+ * a property of the day. Over it, it is the day.
+ */
+const WALKING_DAY_MINUTES = 30;
+
+/**
+ * WHAT THE PAGE KNOWS ABOUT A SCHEDULED STOP THAT THE STORED PLAN DOES NOT.
+ *
+ * A stored itinerary is immutable and records what to do and when. Everything
+ * here is re-derived at render time from the compiled region the plan was built
+ * against — the same board the traveller chose from — and it exists because the
+ * plan's own per-stop `reason` is one template with an interest name substituted
+ * into it, so eleven stops on a real plan read "Matches your interest in X" and
+ * the product's stated differentiator is invisible on its only deliverable.
+ *
+ * Nothing here is invented and nothing overrides the plan: where the region no
+ * longer holds a card for a stop, the row falls back to the plan's own sentence
+ * exactly as before.
+ */
+export interface StopRationale {
+  /**
+   * The place's name as the board showed it — English or romanised where a
+   * source published one, with the native form beside it.
+   *
+   * The planner materialises `ItineraryItem.title` as a plain string at plan
+   * time, so the naming work that landed on the board never reached the plan:
+   * a traveller picked "Sumida River" on the board and the document they take
+   * on holiday said 隅田川, on a page declaring `lang="en"`. Re-resolved here
+   * because a stored plan is immutable and rewriting one to fix a heading would
+   * be editing somebody's trip.
+   *
+   * Presentation only, and only for the *place* rows. A travel leg's title is a
+   * composed sentence and stays exactly as the planner wrote it.
+   */
+  name?: string;
+  /** The fit model's own sentence about this place, in the traveller's words. */
+  why?: string;
+  /** What kind of place it is. Sets the day's colour and nothing else. */
+  category?: PlaceCategory;
+  /**
+   * Short facts that differ between stops — "quiet find", "sheltered if it
+   * rains", "18 min from your base". At most two are rendered.
+   */
+  facets?: readonly string[];
+}
+
 const INTENSITY_TONE: Record<ItineraryDay['intensity'], BadgeTone> = {
   light: 'blue',
   moderate: 'pine',
@@ -141,6 +205,11 @@ export function ItineraryView({
   timeZone,
   attributions = [],
   coordinates = {},
+  lockedPlaceIds = [],
+  worthSkipping = [],
+  lodgingAreas = [],
+  images = {},
+  rationale = {},
 }: {
   itinerary: Itinerary;
   /**
@@ -199,6 +268,39 @@ export function ItineraryView({
    * local-looking time in somebody else's day.
    */
   timeZone?: string;
+  /**
+   * Stops the traveller has pinned to their day. Display state only — the
+   * pins themselves live in the database and are read by the rebuild.
+   */
+  lockedPlaceIds?: readonly string[];
+  /**
+   * Board supply the fit model marked "probably skip", from the same compiled
+   * region this plan drew on. Empty when the board holds none, and the
+   * section then simply does not render — never fabricated to fill space.
+   */
+  worthSkipping?: readonly { name: string; reason: string }[];
+  /**
+   * Where to stay, and why — but only for bases whose lodging is *sourced*.
+   *
+   * The caller filters on that, and the filter is the point: a base is a
+   * geographic recommendation, and a region that knows a town exists does not
+   * thereby know anybody rents rooms in it. Omitting the section is the honest
+   * treatment of unknown; an empty list renders nothing rather than a heading
+   * over a shrug.
+   */
+  lodgingAreas?: readonly { name: string; rationale: string; tradeoffs: readonly string[] }[];
+  /**
+   * Licensed photographs by place id, read from the same table the board reads.
+   *
+   * A row lookup and never a resolution: the identity of every one of these was
+   * established while the traveller was choosing on the board, and this page
+   * only draws what is already on disk. Empty is the ordinary state for a
+   * destination nothing licensable was found for, and the day headers then carry
+   * no photograph rather than a stand-in.
+   */
+  images?: Record<string, ImageRecord>;
+  /** What the fit model says about each scheduled stop. See `StopRationale`. */
+  rationale?: Record<string, StopRationale>;
 }) {
   const baseEntity = {
     name: itinerary.baseName,
@@ -230,10 +332,23 @@ export function ItineraryView({
 
         <div className="mt-6 flex flex-wrap gap-2 print:hidden">
           <PrintButton />
+          {/*
+            A plain download link, not an action: the route builds the file on
+            request and the browser saves it. Calendar apps open .ics natively.
+          */}
+          <a
+            href={`/trips/${tripId}/itinerary/calendar`}
+            download
+            className={buttonClass('secondary', 'sm')}
+          >
+            Calendar file (.ics)
+          </a>
           <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
             Back to the board
           </Link>
         </div>
+        {/* Opens every collapsed disclosure for print, closes them after. */}
+        <PrintExpand />
       </header>
 
       <BeforeYouGo items={preparation} />
@@ -282,10 +397,62 @@ export function ItineraryView({
       <ol className="space-y-12">
         {itinerary.days.map((day) => (
           <li key={day.dayNumber} className="break-inside-avoid">
-            <DayCard day={day} renderedAt={renderedAt} coordinates={coordinates} />
+            <DayCard
+              day={day}
+              renderedAt={renderedAt}
+              coordinates={coordinates}
+              tripId={tripId}
+              lockedPlaceIds={new Set(lockedPlaceIds)}
+              images={images}
+              rationale={rationale}
+              isFirst={day.dayNumber === itinerary.days[0]?.dayNumber}
+              isLast={day.dayNumber === itinerary.days[itinerary.days.length - 1]?.dayNumber}
+            />
           </li>
         ))}
       </ol>
+
+      <KeepFlexible itinerary={itinerary} />
+
+      {worthSkipping.length > 0 ? (
+        <section className="mt-14 border-t border-rule pt-8">
+          <h2 className="font-display text-xl text-ink">Worth skipping</h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Popular or nearby, and still a poor match for how you said you travel. Skipping them
+            is a decision, not an oversight.
+          </p>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {worthSkipping.map((entry) => (
+              <li key={entry.name} className="rounded-lg border border-rule p-3 text-sm">
+                <span className="font-medium text-ink">{entry.name}</span>
+                <span className="mt-0.5 block text-ink-muted">{entry.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {lodgingAreas.length > 0 ? (
+        <section className="mt-14 border-t border-rule pt-8">
+          <h2 className="font-display text-xl text-ink">Where to stay</h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Areas, not hotels. Which part of the map puts you closest to the days above.
+          </p>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {lodgingAreas.map((area) => (
+              <li key={area.name} className="rounded-lg border border-rule p-3 text-sm">
+                <span className="font-medium text-ink">{area.name}</span>
+                <span className="mt-0.5 block text-ink-muted">{area.rationale}</span>
+                {area.tradeoffs.length > 0 ? (
+                  <span className="mt-1.5 block text-ink-muted">
+                    {area.tradeoffs.join(' · ')}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {dropped.length > 0 ? (
         <section className="mt-14 border-t border-rule pt-8">
@@ -441,7 +608,29 @@ function DayRail({ days }: { days: readonly ItineraryDay[] }) {
 function WeatherPlan({ itinerary, timeZone }: { itinerary: Itinerary; timeZone?: string }) {
   const days = itinerary.days;
   const kinds = [...new Set(days.map((day) => day.weather.evidence))];
-  const attribution = days.find((day) => day.weather.attribution)?.weather.attribution;
+  /*
+   * AN ATTRIBUTION BELONGS TO A SOURCE, NOT TO A DAY.
+   *
+   * This took the first day carrying *any* attribution, which on almost every
+   * trip is day 1 — the arrival day, usually `evidence: 'unavailable'`, whose
+   * attribution is the sentence "nothing here has been checked against the
+   * weather". So a plan that had just listed three things the forecast moved
+   * printed "Nothing here has been checked against the weather" directly
+   * underneath them.
+   *
+   * The distinct attributions of the days that were actually checked, joined;
+   * and the not-checked sentence only when no day was checked at all, which is
+   * the one case where it is true.
+   */
+  const checked = days.filter((day) => day.weather.evidence !== 'unavailable');
+  const attributions = [
+    ...new Set(
+      (checked.length > 0 ? checked : days)
+        .map((day) => day.weather.attribution)
+        .filter((entry): entry is string => Boolean(entry)),
+    ),
+  ];
+  const attribution = attributions.length > 0 ? attributions.join(' · ') : undefined;
   const points = [
     ...new Set(days.map((day) => day.weather.locationLabel).filter(Boolean)),
   ] as string[];
@@ -997,10 +1186,25 @@ function DayCard({
   day,
   renderedAt,
   coordinates,
+  tripId,
+  lockedPlaceIds,
+  images,
+  rationale,
+  isFirst,
+  isLast,
 }: {
   day: ItineraryDay;
   renderedAt: number;
   coordinates: Record<string, { lat: number; lng: number }>;
+  tripId: string;
+  lockedPlaceIds: ReadonlySet<string>;
+  /** Licensed photographs by place id, read from a table by the page. */
+  images: Record<string, ImageRecord>;
+  /** What the fit model said about each stop, by place id. See `StopRationale`. */
+  rationale: Record<string, StopRationale>;
+  /** Whether this is the arrival or the departure day, for the empty-day copy. */
+  isFirst: boolean;
+  isLast: boolean;
 }) {
   const isEmpty = day.totals.activityMinutes === 0;
 
@@ -1016,14 +1220,64 @@ function DayCard({
     .filter((item) => item.kind === 'activity' && item.placeId !== undefined)
     .map((item) => {
       const point = coordinates[item.placeId!];
-      return point ? { id: item.placeId!, name: item.title, ...point } : null;
+      /*
+       * The resolved name in the map link too. A link labelled in a script the
+       * traveller cannot read is a link they cannot check.
+       */
+      const name = rationale[item.placeId!]?.name ?? item.title;
+      return point ? { id: item.placeId!, name, ...point } : null;
     })
     .filter((stop): stop is { id: string; name: string; lat: number; lng: number } => stop !== null);
 
   const links = dayRouteLinks(stops, mapModeFor(day.transport.modes));
 
+  /*
+   * Everything the day needs in order to look like itself rather than like the
+   * day above it. All of it derived from what is already scheduled — nothing is
+   * fetched, nothing is invented, and a day with none of it renders none of it.
+   */
+  const identity = dayIdentity(day, images, rationale);
+  const placedStops = stops.map((stop) => ({
+    id: stop.id,
+    name: stop.name,
+    coordinates: { lat: stop.lat, lng: stop.lng },
+  }));
+  const scheduledStopCount = day.items.filter(
+    (item) => item.kind === 'activity' && item.placeId !== undefined,
+  ).length;
+  /*
+   * The number on the map, by place. Numbered over the *placed* stops rather
+   * than over every activity, because a drawing that skips a stop it cannot
+   * position must not also skip a number — "1, 2, 4" on a map is a reader
+   * hunting for a mark that was never drawn.
+   */
+  const mapNumbers: Record<string, number> = {};
+  placedStops.forEach((stop, index) => {
+    mapNumbers[stop.id] = index + 1;
+  });
+
   return (
     <Panel className="overflow-hidden">
+      {/*
+        THE DAY'S OWN COLOUR, ACROSS THE TOP OF IT.
+
+        Eight days of identical cream panels is the §18 pattern applied to the
+        one artifact a traveller actually carries. The hue is not decoration and
+        is not a hash: it is `PLATE_HUE` for whatever kind of place the day is
+        mostly made of, the same table the board's plates use — so a day of lakes
+        is the colour lakes are on the board, and two days that are genuinely the
+        same kind of day look the same on purpose. A day with nothing scheduled
+        has no dominant anything and gets the rule colour.
+      */}
+      <div
+        aria-hidden="true"
+        className="h-1.5 w-full"
+        style={
+          identity.hue === null
+            ? { background: 'var(--color-rule)' }
+            : { background: `linear-gradient(90deg, hsl(${identity.hue} 30% 42%), hsl(${identity.hue} 24% 66%))` }
+        }
+      />
       {/*
         The anchor the day rail jumps to, with room above it for the two sticky
         elements — the product chrome and the rail itself — so a jump lands on
@@ -1061,7 +1315,25 @@ function DayCard({
             {clock(day.window.startMinute, 'later')} – {clock(day.window.endMinute, 'earlier')}
           </span>
         </div>
-        <p className="mt-1 text-ink-muted">{day.theme}</p>
+        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          {/*
+            The theme *and where you are sleeping*. On a multi-base trip the base
+            is the single most consequential fact about a day and it appeared
+            nowhere on the day — only in the trip header, which claims one base
+            for the whole plan.
+          */}
+          <p className="text-ink-muted">
+            {day.theme}
+            <span className="text-ink-faint"> · based in {day.baseName}</span>
+          </p>
+          {/*
+            One honest verb, only on days it can act on. A light day offered
+            "make this easier" is a button that can only apologise.
+          */}
+          {day.intensity !== 'light' && day.totals.activityMinutes > 0 ? (
+            <EaseDayButton tripId={tripId} dayNumber={day.dayNumber} />
+          ) : null}
+        </div>
 
         {/*
           TWO FACTS PROMOTED, THE REST DEMOTED.
@@ -1080,6 +1352,16 @@ function DayCard({
           <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity} day</Badge>
           {day.totals.travelMinutes > 0 ? (
             <Badge tone="blue">{span(day.totals.travelMinutes)} travelling</Badge>
+          ) : null}
+          {/*
+            The one chip that differs between two days of the same shape: how
+            much of this one is on your feet. Eight days badged only "moderate
+            day · 1 hr travelling" are eight days a reader cannot tell apart, and
+            walking is the fact somebody with a knee, a pushchair or a long
+            flight behind them is actually scanning for.
+          */}
+          {day.totals.walkMinutes >= WALKING_DAY_MINUTES ? (
+            <Badge tone="neutral">{span(day.totals.walkMinutes)} on foot</Badge>
           ) : null}
         </div>
 
@@ -1102,17 +1384,92 @@ function DayCard({
         {day.window.note ? (
           <p className="mt-3 text-sm text-ink-faint">{day.window.note}</p>
         ) : null}
+
+        {/*
+          THE PICTURE AND THE MAP, SIDE BY SIDE AT THE HEAD OF THE DAY.
+
+          A fresh designer's summary of this page was "1440x6280 of 11px gray
+          text: no photograph, no map, no day hero". Both halves of that are
+          fixed from material the product already had and was not using — a
+          licensed photograph of one of the day's own stops, read from the same
+          table the board reads, and a drawing built from the coordinates that
+          were already threaded into this component to make a Google Maps link.
+
+          Neither is decoration and neither is fabricated: the photograph is of a
+          place on this day or there is no photograph, and the map draws only
+          stops whose position a source published.
+        */}
+        {identity.hero || placedStops.length > 0 ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {identity.hero ? (
+              <div>
+                <DestinationImage
+                  image={identity.hero.image}
+                  fallback={imageryFallbackFor({
+                    kind: 'candidate',
+                    id: identity.hero.placeId,
+                    name: identity.hero.name,
+                  })}
+                  ratio="natural"
+                  credit="none"
+                  {...(identity.hero.category ? { category: identity.hero.category } : {})}
+                />
+                <p className="mt-1.5 text-[11px] leading-snug text-ink-faint">
+                  {identity.hero.name}, on this day. <ImageCredit image={identity.hero.image} as="p" className="mt-0 inline" />
+                </p>
+              </div>
+            ) : null}
+            {placedStops.length > 0 ? (
+              <DayMap
+                base={coordinates[day.baseId] ?? null}
+                stops={placedStops}
+                omitted={scheduledStopCount - placedStops.length}
+              />
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {isEmpty ? (
+        /*
+          AN EMPTY DAY IS EXPLAINED BY WHICH DAY IT IS.
+
+          This sentence was unconditional, so a completely blank Saturday in the
+          middle of a five-day trip was captioned "on an arrival or departure day
+          that is usually the honest answer" — a false statement about the day it
+          was printed on, directly under a `window.note` that already gives the
+          true arrival/departure sentence when it applies. A mid-trip blank is a
+          different fact and deserves a different sentence, and the one thing it
+          must not do is claim to be something it is not.
+        */
         <p className="p-5 text-sm text-ink-muted">
-          Nothing scheduled. On an arrival or departure day that is usually the honest answer.
+          {isFirst || isLast
+            ? 'Nothing scheduled. On an arrival or departure day that is usually the honest answer.'
+            : 'Nothing scheduled, and this is not an arrival or departure day. Everything you picked fitted better on another day or could not be reached on this one — the hours are yours. What was left off, and why, is at the foot of this plan.'}
         </p>
       ) : (
         <ol className="divide-y divide-rule">
           {day.items.map((item) => (
             <li key={item.id}>
-              <TimelineRow item={item} window={day.window} />
+              <TimelineRow
+                item={item}
+                window={day.window}
+                stopNumber={item.placeId ? (mapNumbers[item.placeId] ?? null) : null}
+                {...(item.placeId && rationale[item.placeId]
+                  ? { rationale: rationale[item.placeId]! }
+                  : {})}
+                menu={
+                  item.kind === 'activity' && item.placeId ? (
+                    <StopEditMenu
+                      tripId={tripId}
+                      dayNumber={day.dayNumber}
+                      placeId={item.placeId}
+                      title={item.title}
+                      locked={lockedPlaceIds.has(item.placeId)}
+                    />
+                  ) : undefined
+                }
+              />
             </li>
           ))}
         </ol>
@@ -1151,6 +1508,67 @@ function DayCard({
       ) : null}
     </Panel>
   );
+}
+
+/**
+ * WHAT MAKES ONE DAY LOOK LIKE ITSELF.
+ *
+ * Two things, both read off what is already scheduled:
+ *
+ *   - the **hue**, from the kind of place the day is mostly made of, taken from
+ *     the same `PLATE_HUE` table the board's plates use so a lakes day is the
+ *     colour lakes are throughout the product;
+ *   - the **hero**, the first stop on the day for which a licensed photograph
+ *     has already been resolved and stored. First rather than best: the day runs
+ *     in an order and the morning is what a reader is looking at.
+ *
+ * Both are null on a day that has neither, and the header then simply renders
+ * neither. A generated stand-in for a day would be a picture of nowhere.
+ */
+function dayIdentity(
+  day: ItineraryDay,
+  images: Record<string, ImageRecord>,
+  rationale: Record<string, StopRationale>,
+): {
+  hue: number | null;
+  hero: { placeId: string; name: string; image: ImageRecord; category?: PlaceCategory } | null;
+} {
+  const stops = day.items.filter((item) => item.kind === 'activity' && item.placeId !== undefined);
+
+  const counts = new Map<PlaceCategory, number>();
+  for (const stop of stops) {
+    const category = rationale[stop.placeId!]?.category;
+    if (category) counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  let hue: number | null = null;
+  let best = 0;
+  for (const [category, count] of counts) {
+    if (count > best) {
+      best = count;
+      hue = PLATE_HUE[category];
+    }
+  }
+
+  let hero: ReturnType<typeof dayIdentity>['hero'] = null;
+  for (const stop of stops) {
+    const image = images[stop.placeId!];
+    /*
+     * The same gate the board applies: a `weak` subject match is a file found by
+     * searching a name, and a picture of a different waterfall in the same
+     * valley is a claim, and it is wrong.
+     */
+    if (!image || image.subjectConfidence === 'weak') continue;
+    const category = rationale[stop.placeId!]?.category;
+    hero = {
+      placeId: stop.placeId!,
+      name: rationale[stop.placeId!]?.name ?? stop.title,
+      image,
+      ...(category ? { category } : {}),
+    };
+    break;
+  }
+
+  return { hue, hero };
 }
 
 /**
@@ -1411,7 +1829,22 @@ function FoodPlanPanel({ plan }: { plan: FoodPlan }) {
   );
 }
 
-function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindow }) {
+function TimelineRow({
+  item,
+  window,
+  menu,
+  stopNumber = null,
+  rationale,
+}: {
+  item: ItineraryItem;
+  window: DailyWindow;
+  /** The quiet per-stop edit control, supplied only where editing applies. */
+  menu?: React.ReactNode;
+  /** Which mark on the day's map this row is. Null on anything not drawn. */
+  stopNumber?: number | null;
+  /** What the fit model says about this stop. See `StopRationale`. */
+  rationale?: StopRationale;
+}) {
   const style = KIND_STYLE[item.kind];
   /**
    * Hours are shown only when they bear on this day. A site posted 06:00 to
@@ -1437,7 +1870,23 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
         </span>
       </div>
 
-      <span aria-hidden="true" className={cx('mt-1.5 w-1 shrink-0 rounded-full', style.rail)} />
+      {/*
+        The rail, or the map's own number where this row is drawn on it.
+
+        Two surfaces showing the same day have to be tied together or they are
+        two documents about one thing: a numbered mark on the drawing above
+        answers "where is that" only if the row says which number it is.
+      */}
+      {stopNumber === null ? (
+        <span aria-hidden="true" className={cx('mt-1.5 w-1 shrink-0 rounded-full', style.rail)} />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-pine text-[11px] font-semibold text-paper"
+        >
+          {stopNumber}
+        </span>
+      )}
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -1447,7 +1896,10 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
               item.kind === 'activity' ? 'font-display text-lg' : 'text-sm font-medium',
             )}
           >
-            {item.title}
+            {/* See `StopRationale.name`: the plan stores a string, so the name
+                is re-resolved at render for place rows and left alone for the
+                composed titles of travel and food blocks. */}
+            {rationale?.name ?? item.title}
           </h3>
           {item.travel ? (
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
@@ -1501,7 +1953,45 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
           </p>
         ) : null}
 
-        <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.reason}</p>
+        {/*
+          WHY THIS STOP IS ON THIS DAY.
+
+          The plan stores one sentence per stop and it is a template with an
+          interest name substituted in, so a real itinerary read "Matches your
+          interest in food & mountain towns" under eleven consecutive rows — and
+          under a car wash, on the only finished plan in the database. That is
+          the product's stated differentiator rendered as boilerplate.
+
+          The fit model already computed a specific sentence for every one of
+          these places, on the board the traveller chose from, and the page
+          re-reads it. Where it has one, it leads; the plan's own sentence stays
+          underneath, in the smaller voice, because it says something the fit
+          sentence does not — which interest this stop was scheduled *against*.
+          Where the region no longer holds a card, nothing changes at all.
+        */}
+        {rationale?.why ? (
+          <p className="mt-1 text-sm leading-relaxed text-ink-muted" data-testid="stop-why">
+            {rationale.why}
+          </p>
+        ) : null}
+        <p
+          className={cx(
+            'mt-1 leading-relaxed',
+            rationale?.why ? 'text-xs text-ink-faint' : 'text-sm text-ink-muted',
+          )}
+        >
+          {item.reason}
+        </p>
+        {/*
+          The facts that differ between two stops that fit for the same reason:
+          how far out it is, whether it is a quiet find, whether it holds up in
+          bad weather. Two at most — a row wearing five is a row nobody reads.
+        */}
+        {rationale?.facets && rationale.facets.length > 0 ? (
+          <p className="mt-1 text-xs text-ink-faint" data-testid="stop-facets">
+            {rationale.facets.slice(0, 2).join(' · ')}
+          </p>
+        ) : null}
 
         {item.food ? <FoodDetail food={item.food} /> : null}
 
@@ -1585,10 +2075,63 @@ function TimelineRow({ item, window }: { item: ItineraryItem; window: DailyWindo
           </p>
         ) : null}
       </div>
+
+      {menu ? <div className="shrink-0 self-start">{menu}</div> : null}
     </div>
   );
 }
 
+
+/**
+ * WHAT TO KEEP FLEXIBLE (§17), DERIVED FROM THE PLAN'S OWN EVIDENCE.
+ *
+ * Nothing is invented for this list: a stop appears because the plan itself
+ * records a reason to hold it loosely — the weather bears on it, its details
+ * change without notice, or somebody still has to book it. A plan with nothing
+ * volatile in it renders no section, which is the honest empty state.
+ */
+function KeepFlexible({ itinerary }: { itinerary: Itinerary }) {
+  const entries: { key: string; name: string; day: number; why: string }[] = [];
+  for (const day of itinerary.days) {
+    for (const item of day.items) {
+      if (item.kind !== 'activity' || !item.placeId) continue;
+      const why = item.weatherSensitive
+        ? 'the weather on that day works against it — have the backup in mind'
+        : item.verifyBeforeTravel
+          ? `check before travel: ${item.verifyBeforeTravel}`
+          : item.booking
+            ? 'it needs a booking you have to make yourself'
+            : null;
+      if (!why) continue;
+      entries.push({
+        key: `${day.dayNumber}-${item.placeId}`,
+        name: item.title,
+        day: day.dayNumber,
+        why,
+      });
+    }
+  }
+  if (entries.length === 0) return null;
+
+  return (
+    <section className="mt-14 border-t border-rule pt-8">
+      <h2 className="font-display text-xl text-ink">Keep these flexible</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Each of these carries something the plan cannot promise — weather, unverified details, or
+        a booking still in your hands. Hold them loosely and the trip bends instead of breaking.
+      </p>
+      <ul className="mt-4 space-y-2">
+        {entries.map((entry) => (
+          <li key={entry.key} className="text-sm">
+            <span className="font-medium text-ink">{entry.name}</span>
+            <span className="text-ink-faint"> · day {entry.day} — </span>
+            <span className="text-ink-muted">{entry.why}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /**
  * BEFORE YOU GO.

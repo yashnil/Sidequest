@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { TripComposer } from '@/components/TripComposer';
@@ -23,6 +24,21 @@ import { buttonClass } from '@/components/ui';
  * else.
  */
 export const dynamic = 'force-dynamic';
+
+/** Which trip is being corrected. See the discover route for why. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const trip = getTrip(id);
+  return {
+    title: trip
+      ? `${trip.basics.destinationInput} — Change this trip — Sidequest`
+      : 'Change this trip — Sidequest',
+  };
+}
 
 export default async function EditTripPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

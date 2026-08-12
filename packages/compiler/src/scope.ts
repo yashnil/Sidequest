@@ -88,6 +88,61 @@ export interface ScopeInput {
    * that is what the capability registry is for, and it lives one layer up.
    */
   transitMeasurable?: boolean;
+  /**
+   * Every catalogue identifier the destination is published under.
+   *
+   * The candidate carries the one identifier the traveller's own selection was
+   * minted from, and `divisionIdentityFor` below reads it without being told.
+   * This exists for the case that identifier alone cannot express: a catalogue
+   * that publishes the same place **twice**, at two administrative levels, where
+   * the reading the index happened to pick is not the reading every other record
+   * in the destination refers to.
+   *
+   * Resolved by the caller because resolving it needs the destination index, and
+   * this package has no database. Unioned rather than preferred — the candidate's
+   * own identifier is a fact about what the traveller chose and is never dropped.
+   */
+  divisionIds?: readonly string[];
+}
+
+/**
+ * THE IDENTITY OF THE DIVISION THE DESTINATION **IS**, THREADED NOT REDERIVED.
+ *
+ * This used to be a hardcoded empty array, and the cost was measured on a stored
+ * Tokyo pack: the scope reached the compiler knowing its country and its ISO
+ * 3166-2 code and nothing that could be compared against a record's *parent
+ * chain*, so the trip-scope overlay had to rediscover the destination by looking
+ * its centre back up in a divisions layer that a retention budget had already
+ * capped to 320 leaf neighbourhoods. It failed. 3,767 of 3,787 records came back
+ * `membership_unknown`, all 56 attractions were demoted out of the anchor slot,
+ * and a board for a world city said "64 things to do, 0 of which could hold a
+ * morning".
+ *
+ * The answer was never missing. The traveller picked a row out of a place index,
+ * that row *is* a catalogue division record, and its identifier travelled all the
+ * way here on `providerRefs` while this line wrote `[]`.
+ *
+ * Which reference counts as the destination's own catalogue record is not
+ * guessed and not hardcoded to a catalogue name: it is the one that reconstructs
+ * the candidate's own id, since a candidate minted from an index row is
+ * identified as `<catalog>:<sourceId>` by construction. A candidate that came
+ * from a geocoder instead reconstructs nothing, contributes nothing, and is left
+ * exactly as it was — an OSM element id compared against a chain of catalogue
+ * identifiers would be an identity claim that can never be true.
+ */
+function divisionIdentityFor(
+  candidate: DestinationCandidate,
+  supplied: readonly string[] | undefined,
+): string[] {
+  const catalogue = candidate.providerRefs.find(
+    (ref) => `${ref.provider}:${ref.externalId}` === candidate.id,
+  )?.provider;
+  const own = catalogue
+    ? candidate.providerRefs
+        .filter((ref) => ref.provider === catalogue)
+        .map((ref) => ref.externalId)
+    : [];
+  return [...new Set([...own, ...(supplied ?? [])])];
 }
 
 /**
@@ -484,7 +539,11 @@ export function deriveScope(input: ScopeInput): GeographicScope {
       /* Other spellings of *this entity*, compared only at its own level. */
       aliases: [...candidate.aliases],
       hierarchy: [...candidate.administrativeAreas],
-      divisionIds: [],
+      /*
+       * The identifiers, which are the only half of this that a record's parent
+       * chain can be compared against. See `divisionIdentityFor`.
+       */
+      divisionIds: divisionIdentityFor(candidate, input.divisionIds),
     },
     /**
      * The scope's own bounds, never the geocoder's unclipped ones.

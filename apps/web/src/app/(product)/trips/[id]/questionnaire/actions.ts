@@ -7,14 +7,18 @@ import {
   autoSelect,
   buildTravelerProfile,
   cacheKeyForSpans,
+  canRetryModelPass,
   countTripDays,
   mergeModelProposals,
   questionnaireAnswersSchema,
   recordModelPass,
   spansForModel,
+  stepOrdinal,
   validatedQuestionnaireAnswersSchema,
+  QUESTIONNAIRE_STEPS,
   type ModelFallbackOutcome,
   type QuestionnaireAnswers,
+  type QuestionnaireStepId,
 } from '@sidequest/core';
 import {
   clearItinerary,
@@ -47,6 +51,8 @@ import {
   type StructuredModel,
 } from '@/lib/providers/interpretation-model';
 import { boardFor, resolveTripRegion } from '@/lib/region';
+import { callerKey, chargeAction, checkAction } from '@/lib/net/caller';
+import { dailySpendGate, recordDailySpend } from '@/lib/compiler/daily-ceiling';
 
 export interface SaveResult {
   ok: boolean;
@@ -68,16 +74,29 @@ export async function saveDraftAction(
    * forwards, which is the half that was missing: `goBack` never saved, so an
    * edit made on a step and then stepped away from was lost until the traveller
    * happened to come forward through it again.
+   *
+   * Preferably a **step id**, stored as its ordinal in the canonical
+   * `QUESTIONNAIRE_STEPS` order. A raw number is still accepted for
+   * compatibility, and it is the shape that went stale: it was an index into
+   * the *visible* step list, which changes length whenever a composer-answered
+   * step is dropped, so a stored position could point one step off — or past
+   * the end — after an edit elsewhere changed which steps exist.
    */
-  step?: number,
+  step?: number | QuestionnaireStepId,
 ): Promise<SaveResult> {
   const parsed = questionnaireAnswersSchema.safeParse(answers);
   if (!parsed.success) {
     return { ok: false, error: 'Those answers did not look right, so we did not save them.' };
   }
+  const ordinal =
+    typeof step === 'string'
+      ? QUESTIONNAIRE_STEPS.includes(step)
+        ? stepOrdinal(step)
+        : undefined
+      : step;
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
-    saveAnswers(tripId, parsed.data, step);
+    saveAnswers(tripId, parsed.data, ordinal);
     return { ok: true };
   } catch (error) {
     console.error('Failed to save questionnaire draft', error);
@@ -290,6 +309,32 @@ export interface ReadRestResult {
  * dies its lease expires and somebody else may try — a bounded number of times.
  */
 export async function readUnresolvedTextAction(tripId: string): Promise<ReadRestResult> {
+  /**
+   * THE TWO COST CONTROLS, BOTH OF WHICH THIS ACTION WAS OUTSIDE OF.
+   *
+   * A review found this was the second of two normal-journey actions making
+   * billed model calls that nothing aggregate bounded: the daily ledger counted
+   * only what a *compilation* spent, and this action had no rate limit at all.
+   * Its own guards are per *trip* — one reading each, three attempts — and
+   * trips are free and unlimited to create, so the loop "make a trip, press
+   * read" was an unbounded bill for an unauthenticated caller.
+   *
+   * The limiter is **checked** here and **charged** further down, on the one
+   * path that reaches the provider. That split is not fussiness: fifty
+   * concurrent presses buy one call and forty-nine free replays, so a token per
+   * press would refuse travellers to protect a spend that was never going to
+   * happen. Checking costs nothing and still turns a serial abuser away before
+   * the lease is touched.
+   *
+   * Both awaits happen before `getIntent`, deliberately: everything from there
+   * to `claimModelOperation` is one synchronous prefix, and an `await` inserted
+   * in the middle of it would weaken the argument the lease's own docblock
+   * makes.
+   */
+  const limited = await checkAction('interpret_text');
+  if (limited) return { ok: false, error: limited };
+  const caller = await callerKey();
+
   const intent = getIntent(tripId);
   const composer = intent?.composer;
   const interpretation = composer?.interpretation;
@@ -299,7 +344,20 @@ export async function readUnresolvedTextAction(tripId: string): Promise<ReadRest
   if (interpretation.confirmedAt) {
     return { ok: false, error: 'This interpretation has already been accepted.' };
   }
-  if (interpretation.modelPass && interpretation.modelPass.calls > 0) {
+  /*
+   * Spent is spent — unless the spend bought nothing because the *provider*
+   * failed. "The reader did not answer" used to be terminal here, which turned
+   * an outage into a permanent property of the trip: the traveller pressed the
+   * button, paid a call for silence, and the screen offered no way to try
+   * again. `canRetryModelPass` re-admits exactly the provider-failure outcomes;
+   * the operation lease below still bounds total attempts, so a flapping
+   * provider lands the trip on `budget_exhausted` rather than on a bill.
+   */
+  if (
+    interpretation.modelPass &&
+    interpretation.modelPass.calls > 0 &&
+    !canRetryModelPass(interpretation)
+  ) {
     return { ok: false, error: 'We have already read the rest of this once.' };
   }
 
@@ -379,6 +437,19 @@ export async function readUnresolvedTextAction(tripId: string): Promise<ReadRest
    */
   supersedeModelOperations({ tripId, kind: MODEL_OPERATION_KIND, keepCacheKey: cacheKey, now });
 
+  /**
+   * THE DAY'S ALLOWANCE, ASKED BEFORE THE LEASE IS TAKEN.
+   *
+   * Read-only here, and charged below just before the call. Refusing before the
+   * claim is what keeps a full ledger from costing the trip one of its three
+   * attempts: a ceiling is not a failure of the reading, and a traveller who
+   * comes back tomorrow should find their reading still available.
+   *
+   * Synchronous, so the prefix argument above is untouched.
+   */
+  const allowance = dailySpendGate(now, caller);
+  if (!allowance.allowed) return { ok: false, error: allowance.message };
+
   const claim = claimModelOperation({
     tripId,
     kind: MODEL_OPERATION_KIND,
@@ -437,6 +508,17 @@ export async function readUnresolvedTextAction(tripId: string): Promise<ReadRest
   );
   // Never hold the process open for a heartbeat.
   heartbeat.unref?.();
+
+  /*
+   * Charged before the call, not after it. The winner of the claim is the only
+   * invocation that reaches this line, and it is about to spend whether or not
+   * the provider answers — a ledger written from the *result* would miss every
+   * call that timed out, which is the shape of spend a runaway produces. The
+   * rate-limit token is taken here for the same reason and at the same moment:
+   * this is the invocation that pays, and it is the only one that should.
+   */
+  recordDailySpend('model_calls', 1, now, caller);
+  await chargeAction('interpret_text');
 
   try {
     const model = createInterpretationModel();

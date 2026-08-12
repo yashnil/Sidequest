@@ -1,4 +1,4 @@
-import { FOOD_ISSUE_CODES } from '@sidequest/core';
+import { displayNameOf, FOOD_ISSUE_CODES } from '@sidequest/core';
 import type {
   RevisionAction,
   UnscheduledReasonCode,
@@ -72,6 +72,39 @@ export function reviseDayPlans(
     const victim = chooseVictim(plan, issue);
     if (!victim) continue;
 
+    /**
+     * THE FLOOR. A REMOVAL HAS TO BE A REPAIR, NOT JUST A SUBTRACTION.
+     *
+     * There was none, and the arithmetic of the loop that drives this made that
+     * fatal: one fix per day per pass, three passes, so six stops across two
+     * days were ground to zero and the traveller — on a weak-data destination
+     * that genuinely had feasible stops — was handed `planner_coverage_insufficient`
+     * with nothing in it. Every pass looked locally reasonable and the sequence
+     * destroyed the plan.
+     *
+     * A blunt sacrifice is a guess: the issue named a day, not a place, so the
+     * lowest-priority stop is taken in the hope that a smaller day is a legal
+     * one. Guessing is fine while there is something left to guess with. Taking
+     * a day's *last* stop on a guess is not a repair at all — it is deleting the
+     * day and calling the silence a fix. So it stops here, the day keeps its one
+     * stop, the finding survives into the refusal that names it, and the
+     * traveller gets a cause instead of an empty plan.
+     *
+     * An issue that names the place is a different act entirely: that stop is
+     * the thing that does not work, taking it out is the repair, and emptying
+     * the day is the honest consequence — the rest of the trip survives.
+     */
+    const wouldEmptyTheDay = plan.accepted.length === 1;
+    if (wouldEmptyTheDay && issue.placeId !== victim.place.id) {
+      actions.push({
+        code: 'left_unresolved',
+        description: `Day ${issue.dayNumber} still has a problem we could not solve by taking things off it: ${issue.message} Removing ${displayNameOf(victim.place)} would only have left the day empty, so we stopped.`,
+        dayNumber: issue.dayNumber,
+      });
+      handledDays.add(issue.dayNumber);
+      continue;
+    }
+
     plan.accepted = plan.accepted.filter((candidate) => candidate.place.id !== victim.place.id);
     handledDays.add(issue.dayNumber);
     removed.push({
@@ -81,7 +114,7 @@ export function reviseDayPlans(
     });
     actions.push({
       code: actionCodeFor(issue),
-      description: `Took ${victim.place.name} off day ${issue.dayNumber}: ${reasonForRemoval(issue)}`,
+      description: `Took ${displayNameOf(victim.place)} off day ${issue.dayNumber}: ${reasonForRemoval(issue)}`,
       dayNumber: issue.dayNumber,
       placeId: victim.place.id,
     });
@@ -180,6 +213,14 @@ function unscheduledCodeFor(issue: ValidationIssue): UnscheduledReasonCode {
     case 'road_surface_incompatible':
     case 'remote_area_incompatible':
       return 'not_feasible';
+    /*
+     * The travel time on the way in is contradicted by the distance, so nothing
+     * about this stop can be trusted enough to schedule. It fell to the default
+     * `no_time_left` — "no day had room" — which sent travellers to add days
+     * against a defect no number of days would change.
+     */
+    case 'travel_leg_speed_impossible':
+      return 'transport_mode_unavailable';
     default:
       return 'no_time_left';
   }
@@ -224,6 +265,8 @@ function reasonForRemoval(issue: ValidationIssue): string {
     case 'items_overlap':
     case 'item_outside_window':
       return 'the day would have run past the hours available.';
+    case 'travel_leg_speed_impossible':
+      return 'the travel time on the way there is contradicted by the distance, so we could not schedule around it.';
     default:
       return 'the day did not fit otherwise.';
   }

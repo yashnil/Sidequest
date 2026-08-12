@@ -40,7 +40,15 @@ async function reachTransportStep(page: Page) {
   const transport = page.getByRole('heading', { name: 'How are you getting around?' });
   if (await transport.isVisible().catch(() => false)) return;
 
-  const jump = page.getByRole('button', { name: 'Change Getting around' });
+  /*
+   * "Change how you get around". Every review row now carries a hand-written
+   * phrase for the second half of the control's accessible name, because the
+   * generated form pasted the row's label after the verb and announced itself as
+   * "Change Steering around". Under the old name this branch never matched, so
+   * the helper fell through to walking forward from a review screen that has no
+   * Continue on it, and two specs spent a minute each waiting for one.
+   */
+  const jump = page.getByRole('button', { name: 'Change how you get around' });
   if (await jump.isVisible().catch(() => false)) {
     await jump.click();
     await expect(transport).toBeVisible();
@@ -101,13 +109,33 @@ test('the board shows transport feasibility before anything is built', async ({ 
   await reachTransportStep(page);
   await finishFromTransport(page);
 
-  const postpile = page.getByRole('article').filter({ hasText: 'Devils Postpile' }).first();
+  /*
+   * By heading, not by text: `hasText: 'Devils Postpile'` also matches the
+   * Rainbow Falls card, which names the monument in the corridor they share.
+   */
+  const postpile = page
+    .getByRole('article')
+    .filter({
+      has: page.getByRole('heading', { name: 'Devils Postpile National Monument', exact: true }),
+    })
+    .first();
   await expect(postpile).toBeVisible();
   await expect(postpile.getByText('Shuttle only')).toBeVisible();
-  await expect(postpile.getByText('Check before you go')).toBeVisible();
+  /*
+   * "Check before you go" was the `verify_conditions` chip. The card wears two
+   * chips at most now and spends both on the things that gate the visit — the
+   * car and the shuttle — so the verification instruction is stated in the
+   * disclosure, in words that name what to check rather than telling somebody to
+   * check something unspecified.
+   */
+  await postpile.locator('summary').first().click();
+  await expect(postpile.getByText(/Check all three before you fix a date/)).toBeVisible();
 
   // A drive-up lake carries no shuttle badge — the badges mean something.
-  const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
+  const convict = page
+    .getByRole('article')
+    .filter({ has: page.getByRole('heading', { name: 'Convict Lake', exact: true }) })
+    .first();
   await expect(convict.getByText('Shuttle only')).toHaveCount(0);
 });
 

@@ -70,26 +70,43 @@ export function validateDayFood(
     const food = item.food;
     if (!food) continue;
 
-    // --- The door was open ------------------------------------------------
+    /*
+     * --- The door was open ------------------------------------------------
+     *
+     * Against the SERVICE, not the block. The timeline block deliberately opens
+     * `walkMinutesFromRouting` before the meal and closes the same walk after
+     * it, because that time is spent on this stop and hiding it would put a
+     * walk inside somebody's lunch. Reading the block's own ends against the
+     * opening hours therefore convicts every venue with a walk in front of it
+     * by exactly that walk: a cafe opening at 11:30 was reported shut for a
+     * meal whose block began at 11:29, one minute away on foot.
+     *
+     * Absent on plans stored before the walk was recorded, and zero is the
+     * right reading there — those blocks were built without backing the walk
+     * off, so their ends already are the service.
+     */
+    const walkIn = food.walkMinutesFromRouting ?? 0;
+    const serviceStart = item.startMinute + walkIn;
+    const serviceEnd = item.endMinute - walkIn;
     if (food.hours) {
-      if (item.startMinute < food.hours.openMinute) {
+      if (serviceStart < food.hours.openMinute) {
         issues.push({
           code: 'food_venue_closed_on_date',
           severity: 'error',
           message: `${food.venueName ?? item.title} is scheduled at ${formatMinuteOfDay(
-            item.startMinute,
+            serviceStart,
           )} on day ${day.dayNumber} and does not open until ${formatMinuteOfDay(
             food.hours.openMinute,
           )}.`,
           dayNumber: day.dayNumber,
         });
       }
-      if (item.endMinute > food.hours.closeMinute) {
+      if (serviceEnd > food.hours.closeMinute) {
         issues.push({
           code: 'meal_ends_after_venue_closes',
           severity: 'error',
           message: `${food.venueName ?? item.title} on day ${day.dayNumber} runs to ${formatMinuteOfDay(
-            item.endMinute,
+            serviceEnd,
           )}, past the ${formatMinuteOfDay(food.hours.closeMinute)} we have for it.`,
           dayNumber: day.dayNumber,
         });

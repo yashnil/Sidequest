@@ -176,25 +176,53 @@ export type SpendGate =
   | { kind: 'allowed' }
   | { kind: 'refused'; reason: string };
 
+/**
+ * Whether the compiler is on the billable open stack, from the same literal
+ * env reads `middleware.ts` and `compilerProviderChoice()` make. Duplicated
+ * here rather than imported so this module keeps taking an `env` parameter —
+ * the switches read `process.env` at call time and this gate's tests inject
+ * environments.
+ */
+function compilerIsOpen(env: NodeJS.ProcessEnv): boolean {
+  const set = (name: string): boolean => (env[name]?.trim() ?? '').length > 0;
+  const equals = (name: string, value: string): boolean =>
+    env[name]?.trim().toLowerCase() === value;
+
+  const configured = env.SIDEQUEST_COMPILER_PROVIDER?.trim().toLowerCase();
+  if (configured === 'open') return true;
+  if (configured === 'fixture' || configured === 'off') return false;
+  return (
+    equals('SIDEQUEST_GEOCODER_PROVIDER', 'nominatim') &&
+    (equals('SIDEQUEST_PLACE_BACKBONE', 'overture') ||
+      equals('SIDEQUEST_POI_PROVIDER', 'overpass')) &&
+    equals('SIDEQUEST_ROUTES_PROVIDER', 'valhalla') &&
+    equals('SIDEQUEST_RESEARCH_PROVIDER', 'anthropic') &&
+    set('ANTHROPIC_API_KEY')
+  );
+}
+
 export function gateSpend(
   operation: keyof typeof SPEND_ESTIMATES_MICRO_USD,
   env: NodeJS.ProcessEnv = process.env,
 ): SpendGate {
   /*
-   * Off the hook entirely when the benchmark is not in live mode.
+   * Off the hook when the benchmark is not in live mode — **and** the compiler
+   * cannot spend either.
    *
-   * Not an oversight and not a loophole: outside live mode nothing in this
-   * harness is authorised to reach a provider at all, so there is no spend for a
-   * ceiling to bound. The gate would otherwise refuse every offline
+   * The first half is not an oversight and not a loophole: outside live mode
+   * this harness's own model calls do not happen, so there is no spend for a
+   * ceiling to bound, and the gate would otherwise refuse every offline
    * demonstration — the one thing the acceptance criteria require a reviewer to
-   * be able to run locally — on the grounds that no budget was configured for
-   * money nobody was going to spend.
+   * be able to run locally.
    *
-   * What governs an offline run is the switch that was already governing it:
-   * `baselineCapabilities()` for the model, and the compiler's own provider
-   * switch for everything else.
+   * The second half closes the gap the first half opened: the sidequest arm
+   * compiles a REAL region whenever the compiler is open, whatever
+   * `SIDEQUEST_BENCHMARK_MODE` says — the compiler has no idea it is in a
+   * benchmark, which is by design. So an open compiler puts every operation
+   * back under the ceiling, and a deployment that opens the compiler without
+   * configuring a benchmark budget gets a refusal rather than a bill.
    */
-  if (!benchmarkModeIsLive(env)) return { kind: 'allowed' };
+  if (!benchmarkModeIsLive(env) && !compilerIsOpen(env)) return { kind: 'allowed' };
 
   const decision = maySpend(SPEND_ESTIMATES_MICRO_USD[operation]);
   if (decision.kind === 'allowed') return { kind: 'allowed' };

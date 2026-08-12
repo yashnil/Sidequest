@@ -30,6 +30,7 @@ import {
   buttonClass,
   cx,
 } from './ui';
+import { formatDayRange } from '@/lib/format/dates';
 import {
   createTripFromComposer,
   updateTripFromComposer,
@@ -69,6 +70,7 @@ type Draft = Partial<TripComposerAnswers> & {
 export function TripComposer({
   defaults,
   editing,
+  intent = 'new',
 }: {
   defaults: { startDate: string; endDate: string };
   /**
@@ -81,6 +83,17 @@ export function TripComposer({
    * party, the must-dos, the questionnaire and any research already paid for.
    */
   editing?: { tripId: string; answers: TripComposerAnswers };
+  /**
+   * Which door the traveller came through.
+   *
+   * `has_plan` is the homepage's third intent — somebody who is not starting
+   * from nothing. It changes exactly one thing: the list of places they already
+   * have is asked for as the second question rather than buried at the bottom
+   * of an optional disclosure. It is the same field, going to the same place,
+   * because the must-do pipeline is what genuinely acts on it — the alternative
+   * would be a second text box that reads better and does less.
+   */
+  intent?: 'new' | 'has_plan';
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -225,6 +238,35 @@ export function TripComposer({
             onTextChange={(text) => patch({ destinationText: text })}
           />
           {fieldErrors.destination ? <ErrorNote>{fieldErrors.destination}</ErrorNote> : null}
+
+          {/*
+            THE PLACES A PLAN ALREADY HAS, ASKED FOR WHERE THEY MATTER.
+
+            Same field, same pipeline, promoted. For somebody arriving from "I
+            already have a plan" this is the whole reason they came, and leaving
+            it at the bottom of an optional disclosure two sections down would
+            make the intent a label on a link rather than a difference in the
+            product.
+          */}
+          {intent === 'has_plan' && hasDestination ? (
+            <div className="mt-6">
+              <FieldLabel htmlFor="mustDo">Which places does your plan already have?</FieldLabel>
+              <textarea
+                id="mustDo"
+                rows={4}
+                maxLength={600}
+                value={draft.mustDo ?? ''}
+                onChange={(event) => patch({ mustDo: event.target.value })}
+                className={cx(inputClass, 'resize-y')}
+                placeholder="One per line, or however you have them written down."
+              />
+              <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                We look each one up on the map and show you what we made of it before it changes
+                anything. Anything we cannot find, cannot reach, or cannot fit into your dates is
+                named with the reason rather than dropped quietly.
+              </p>
+            </div>
+          ) : null}
         </Section>
 
         {/* ---- 2. When -------------------------------------------------- */}
@@ -340,6 +382,9 @@ export function TripComposer({
                 <span className="sr-only">Nights</span>
                 <input
                   type="number"
+                  // `type="number"` alone still opens the text keypad on
+                  // several Android browsers; `inputMode` is what decides it.
+                  inputMode="numeric"
                   min={1}
                   max={30}
                   value={nights}
@@ -597,18 +642,26 @@ export function TripComposer({
                   ))}
                 </ChoiceGroup>
 
-                <div>
-                  <FieldLabel htmlFor="mustDo">Anything you would regret missing?</FieldLabel>
-                  <textarea
-                    id="mustDo"
-                    rows={2}
-                    maxLength={600}
-                    value={draft.mustDo ?? ''}
-                    onChange={(event) => patch({ mustDo: event.target.value })}
-                    className={cx(inputClass, 'resize-y')}
-                    placeholder="Free text. We will show you what we made of it before it changes anything."
-                  />
-                </div>
+                {/*
+                  Asked once. Somebody who came through "I already have a plan"
+                  answered this in the first section, and two boxes with the same
+                  `id` writing to the same field is an invalid document that
+                  silently loses whichever one they typed into second.
+                */}
+                {intent === 'has_plan' ? null : (
+                  <div>
+                    <FieldLabel htmlFor="mustDo">Anything you would regret missing?</FieldLabel>
+                    <textarea
+                      id="mustDo"
+                      rows={2}
+                      maxLength={600}
+                      value={draft.mustDo ?? ''}
+                      onChange={(event) => patch({ mustDo: event.target.value })}
+                      className={cx(inputClass, 'resize-y')}
+                      placeholder="Free text. We will show you what we made of it before it changes anything."
+                    />
+                  </div>
+                )}
                 <div>
                   <FieldLabel htmlFor="avoid">Anything you would rather not do?</FieldLabel>
                   <textarea
@@ -658,7 +711,13 @@ export function TripComposer({
                     : dateMode === 'season'
                       ? season[0]!.toUpperCase() + season.slice(1)
                       : startDate && endDate
-                        ? `${startDate} → ${endDate}${dateMode === 'flexible' ? ` (± ${flexDays}d)` : ''}`
+                        ? /*
+                           * `2026-10-12 → 2026-10-18` was the database's format
+                           * on the panel a traveller checks their own answers
+                           * against. One formatter, shared with the homepage and
+                           * the context bar — see `lib/format/dates`.
+                           */
+                          `${formatDayRange(startDate, endDate)}${dateMode === 'flexible' ? ` (± ${flexDays} days)` : ''}`
                         : '—'
               }
             />

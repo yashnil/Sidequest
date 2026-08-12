@@ -877,7 +877,15 @@ describe('candidate inventory', () => {
     const attractions = [
       { id: 'm1', name: 'Harbour Museum', category: 'museum', path: ['arts_and_entertainment', 'museum'] },
       { id: 'm2', name: 'Textile Museum', category: 'museum', path: ['arts_and_entertainment', 'museum'] },
-      { id: 'h1', name: 'Old Water Palace', category: 'historic_site', path: ['cultural_and_historic', 'historic_site'] },
+      /*
+       * The water palace carries an open identifier, because `historic_site` is
+       * an *assertion about* a building rather than a kind of building and now
+       * needs a witness — see the taxonomy's note on the leaf. A real palace has
+       * one; the six condominiums a live board offered under the same leaf did
+       * not. Without it this fixture would be asserting that a role separation
+       * kept a record the significance gate had already removed.
+       */
+      { id: 'h1', name: 'Old Water Palace', category: 'historic_site', path: ['cultural_and_historic', 'historic_site'], wikidataId: 'Q4242' },
       { id: 'w1', name: 'North Ridge Falls', category: 'waterfall', path: ['natural_features', 'waterfall'] },
       { id: 'w2', name: 'Cliffside Falls', category: 'waterfall', path: ['natural_features', 'waterfall'] },
       { id: 'v1', name: 'Terrace Lookout', category: 'viewpoint', path: ['geographic_entities', 'viewpoint'] },
@@ -890,6 +898,7 @@ describe('candidate inventory', () => {
         sourceCategoryPath: entry.path,
         coordinates: { lat: 40.7 + index * 0.01, lng: -74 + index * 0.01 },
         cellId: index % 2 === 0 ? 'g-0-0' : 'g-1-0',
+        ...(entry.wikidataId ? { wikidataId: entry.wikidataId } : {}),
       }),
     );
 

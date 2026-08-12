@@ -69,11 +69,11 @@ test('captures the journey and stays free of console errors and overflow', async
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
-  await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
   await shot('09-board');
 
-  await page.getByRole('button', { name: 'Auto-pick the best mix for me' }).click();
-  await expect(page.getByTestId('board-summary')).toContainText(/[1-9]\d* in/);
+  await page.getByTestId('board-auto-pick').click();
+  await expect(page.getByTestId('board-summary')).toContainText(/[1-9]\d* chosen/);
   await shot('10-board-autopicked');
 
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();

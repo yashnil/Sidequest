@@ -1,20 +1,26 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
   VIEWPORTS,
   expectNoHorizontalOverflow,
   expectNoRuntimeProblems,
   watchForRuntimeProblems,
 } from './support/viewports';
-import { DEFAULT_DATES, completeQuestionnaire, waitUntilInteractive } from './support/trip';
+import {
+  DEFAULT_DATES,
+  compileRegion,
+  completeQuestionnaire,
+  createTrip,
+  waitUntilInteractive,
+} from './support/trip';
 
 /**
- * THREE VIEWPORTS, STATED IN THE TEST RATHER THAN INFERRED FROM THE CONFIG.
+ * EVERY VIEWPORT, STATED IN THE TEST RATHER THAN INFERRED FROM THE CONFIG.
  *
  * The suite's other specs run under whatever viewport their project declares, so
  * "which sizes are covered" was a question you could only answer by reading a
  * device descriptor in a node_modules package. This spec answers it in the one
- * place a reader looks: it names each size and sets it, so a reviewer can see
- * 1440x900, 1024x768 and 390x844 without leaving the file.
+ * place a reader looks: it iterates `VIEWPORTS` and sets each size, so a size
+ * added to that list is walked here without anybody remembering to add it.
  *
  * ONE PROJECT ONLY. `playwright.config.ts` gives this file to the `tablet`
  * project and hides it from the other three, because a spec that sets its own
@@ -88,65 +94,202 @@ for (const viewport of VIEWPORTS) {
 }
 
 /**
- * THE TWO LONG SURFACES, AT THE ONE WIDTH THAT BREAKS THEM.
+ * THE TWO LONG SURFACES, AT EVERY WIDTH A PHONE ACTUALLY HAS.
  *
  * The sweep above deliberately stops at the personality screen, because building
- * a board compiles a region and paying for that three times buys three copies of
- * the same signal. But the board and the itinerary are the two densest layouts
- * in the product and the two that changed most in this pass — a three-up card
- * grid that collapses to one column, a filter rail of chips, an action bar
- * pinned to the bottom of the viewport, and a horizontally scrolling day rail.
- * Every one of those is a way to make a document scroll sideways.
+ * a board compiles a region and paying for that at four widths buys four copies
+ * of the same signal. But the board and the itinerary are the two densest
+ * layouts in the product — a three-up card grid that collapses to one column, a
+ * filter rail of chips, an action bar pinned to the bottom of the viewport, and
+ * a horizontally scrolling day rail. Every one of those is a way to make a
+ * document scroll sideways.
  *
- * So: one journey, at 390x844 only, ending on a built itinerary.
+ * Every phone width rather than one. This ran at 390 only, and the homepage was
+ * overflowing at every width below 383 the whole time — seven pixels of margin
+ * between the one width tested and the threshold. Narrower is not merely "more
+ * likely to break": it is a different set of breakpoints, so it is walked rather
+ * than argued about.
  */
-test('the board and the itinerary do not scroll sideways on a phone', async ({ page }) => {
-  const mobile = VIEWPORTS.find((entry) => entry.name === 'mobile');
-  expect(mobile, 'the suite must declare a mobile viewport').toBeTruthy();
-  const problems = watchForRuntimeProblems(page);
-  await page.setViewportSize({ width: mobile!.width, height: mobile!.height });
+const PHONES = VIEWPORTS.filter((entry) => entry.width <= 420);
 
-  await page.goto('/trips/new');
-  const destination = page.getByLabel('Destination');
-  await waitUntilInteractive(destination);
-  await destination.fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-  await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
-  await completeQuestionnaire(page);
+for (const phone of PHONES) {
+  test(`the board and the itinerary do not scroll sideways at ${phone.name} (${phone.width}x${phone.height})`, async ({
+    page,
+  }) => {
+    const problems = watchForRuntimeProblems(page);
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    const where = `${phone.width}x${phone.height}`;
 
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
-  await expect(page).toHaveURL(/\/discover$/);
-  await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
-  await expectNoHorizontalOverflow(page, 'discovery board at 390x844');
+    await page.goto('/trips/new');
+    const destination = page.getByLabel('Destination');
+    await waitUntilInteractive(destination);
+    await destination.fill('Mammoth Lakes');
+    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
+    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
+    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
+    await completeQuestionnaire(page);
 
-  /*
-   * The board first, the commentary after. On a phone the two columns become
-   * one, and the rail used to be laid out ahead of the cards — so the traveller
-   * scrolled past four analysis panels to reach the thing the page is named
-   * after. Measured rather than asserted on class names.
-   */
-  const firstCard = page.getByTestId('discovery-board').getByRole('article').first();
-  const personality = page.getByRole('heading', { name: 'Your trip personality' });
-  const cardBox = await firstCard.boundingBox();
-  const railBox = await personality.boundingBox();
-  expect(cardBox, 'the board should have a card').not.toBeNull();
-  expect(railBox, 'the rail should carry the personality heading').not.toBeNull();
-  expect(cardBox!.y, 'the first card must come before the analysis rail').toBeLessThan(railBox!.y);
+    await page.getByRole('button', { name: 'Build my discovery board' }).click();
+    await expect(page).toHaveURL(/\/discover$/);
+    await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
+    await expectNoHorizontalOverflow(page, `discovery board at ${where}`);
 
-  /*
-   * And the action bar is pinned to the bottom of the viewport rather than
-   * having scrolled away with the top of a thirty-screen page.
-   */
-  const bar = page.getByTestId('board-action-bar');
-  await page.mouse.wheel(0, 4000);
-  await expect(bar).toBeInViewport();
+    /*
+     * The board first, the commentary after. On a phone the two columns become
+     * one, and the rail used to be laid out ahead of the cards — so the traveller
+     * scrolled past four analysis panels to reach the thing the page is named
+     * after. Measured rather than asserted on class names.
+     *
+     * Against the backstage toggle rather than against the personality heading:
+     * the rail's panels are inside a closed disclosure now, and a heading inside
+     * a closed `<details>` has no box at all — `boundingBox()` returns null and
+     * the comparison it was written for cannot be made. The toggle is the rail's
+     * first rendered element, which is the thing the ordering claim is about.
+     */
+    const firstCard = page.getByTestId('discovery-board').getByRole('article').first();
+    const rail = page.getByTestId('board-backstage-toggle');
+    const cardBox = await firstCard.boundingBox();
+    const railBox = await rail.boundingBox();
+    expect(cardBox, 'the board should have a card').not.toBeNull();
+    expect(railBox, 'the rail should carry the backstage toggle').not.toBeNull();
+    expect(cardBox!.y, 'the first card must come before the analysis rail').toBeLessThan(railBox!.y);
 
-  await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
-  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
-  await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
-  await expectNoHorizontalOverflow(page, 'itinerary at 390x844');
+    /*
+     * And the action bar is pinned to the bottom of the viewport rather than
+     * having scrolled away with the top of a thirty-screen page.
+     */
+    const bar = page.getByTestId('board-action-bar');
+    await page.mouse.wheel(0, 4000);
+    await expect(bar).toBeInViewport();
 
-  expectNoRuntimeProblems(problems, 'Runtime problems at 390x844');
+    await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
+    await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
+    await expectNoHorizontalOverflow(page, `itinerary at ${where}`);
+
+    expectNoRuntimeProblems(problems, `Runtime problems at ${where}`);
+  });
+}
+
+/**
+ * EVERY NORMAL ROUTE, AT EVERY DECLARED VIEWPORT.
+ *
+ * §39's stability gate asks for two properties by name — "zero console errors on
+ * normal routes" and "no horizontal overflow" — and neither was true of *every*
+ * route. What existed checked the surfaces a journey passes through: the sweep
+ * above walks the composer and the questionnaire, `visual.spec.ts` walks the
+ * journey to a built itinerary at three project configurations, `compile.spec`
+ * checks the plan flow once. Nothing ever loaded `/decide/<id>`, the edit screen
+ * or the screen a stale trip link lands on, and nothing checked any of them at
+ * the tablet or the narrow-phone width.
+ *
+ * The expensive part — a real trip, a compiled region, a shortlist — is paid for
+ * once in `beforeAll` against a context the tests share, and each test then
+ * re-loads the finished routes at its own width. Sharing a context is what makes
+ * the homepage worth loading at all: the trip list is scoped to the browser that
+ * made the trips, so a fresh context would render the empty state, and the empty
+ * state is not where the homepage's overflow was.
+ *
+ * Loaded per width rather than resized between reads. A resize reflows, which
+ * catches most things, but a layout that measures on mount and never listens
+ * would pass a resize and fail a fresh load — and a fresh load is what a
+ * traveller does.
+ */
+test.describe('every normal route', () => {
+  let context: BrowserContext;
+  let shared: Page;
+  /** The authored-region journey: questionnaire, board, itinerary, edit. */
+  let planned: string;
+  /** A dynamic destination, because only that flow has a plan screen of its own. */
+  let compiled: string;
+  /** A shortlist, so `/decide/<id>` is a screen rather than a redirect. */
+  let decided: string;
+
+  test.beforeAll(async ({ browser }, workerInfo) => {
+    /*
+     * `baseURL` restated, because a hand-made context does not get it.
+     *
+     * The `page` fixture is built from the project's `use` block; anything
+     * created through `browser.newContext()` starts from Playwright's defaults,
+     * and a relative `goto('/trips/new')` against a context with no base throws
+     * "Invalid URL" rather than failing as a missing page. Read from the project
+     * rather than restated, so the one canonical port stays canonical.
+     */
+    context = await browser.newContext({ baseURL: workerInfo.project.use.baseURL });
+    shared = await context.newPage();
+
+    planned = await createTrip(shared, 'Mammoth Lakes');
+    await completeQuestionnaire(shared);
+    await shared.getByRole('button', { name: 'Build my discovery board' }).click();
+    await expect(shared).toHaveURL(/\/discover$/);
+    await shared.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
+    await expect(shared).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+
+    compiled = await createTrip(shared, 'Harbour City');
+    await compileRegion(shared);
+
+    await shared.goto('/decide');
+    await shared.getByRole('radio', { name: 'Some time in a month' }).check();
+    await shared.getByLabel('Which month?').selectOption('7');
+    await shared.getByLabel('How many nights?').fill('9');
+    await shared.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
+    await shared.getByRole('radio', { name: 'Two bases, split the trip' }).check();
+    await shared.getByRole('radio', { name: 'Drive', exact: true }).check();
+    await shared.getByRole('button', { name: 'Show me where to go' }).click();
+    await shared.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
+    decided = new URL(shared.url()).pathname.split('/').pop()!;
+  });
+
+  test.afterAll(async () => {
+    await context?.close();
+  });
+
+  for (const viewport of VIEWPORTS) {
+    test(`renders without console errors or sideways scroll at ${viewport.name}`, async () => {
+      const problems = watchForRuntimeProblems(shared);
+      await shared.setViewportSize({ width: viewport.width, height: viewport.height });
+
+      const routes = [
+        '/',
+        '/trips/new',
+        '/decide',
+        `/decide/${decided}`,
+        `/trips/${compiled}/plan`,
+        `/trips/${planned}/questionnaire`,
+        `/trips/${planned}/discover`,
+        `/trips/${planned}/itinerary`,
+        `/trips/${planned}/edit`,
+        /*
+         * The screen a stale link lands on. It is a normal route — every
+         * traveller who bookmarks a trip and later removes it arrives here — and
+         * it renders through the same chrome as everything above.
+         */
+        '/trips/no-such-trip/plan',
+      ];
+
+      for (const route of routes) {
+        await shared.goto(route);
+        /*
+         * The skeleton gone and the screen's own heading up: a readiness
+         * condition rather than a wait, and the thing that makes an overflow
+         * measurement a measurement of the page rather than of its placeholder.
+         */
+        await expect(shared.locator('[data-loading]')).toHaveCount(0, { timeout: 30_000 });
+        /*
+         * `.first()` so that a route with two level-one headings fails on its
+         * own accessibility spec rather than here, on a strict-mode violation
+         * that says nothing about layout. What is being established is that the
+         * screen rendered, not that it has exactly one title.
+         */
+        await expect(
+          shared.getByRole('heading', { level: 1 }).first(),
+          `${route} rendered no heading at ${viewport.name}`,
+        ).toBeVisible({ timeout: 30_000 });
+        await expectNoHorizontalOverflow(shared, `${route} at ${viewport.name}`);
+      }
+
+      expectNoRuntimeProblems(problems, `Runtime problems at ${viewport.name}`);
+    });
+  }
 });

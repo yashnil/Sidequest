@@ -5,6 +5,8 @@ import {
   TRIP_SCOPE_CONTRACT_VERSION,
   eligibilityFor,
   mergeGeographicEvidence,
+  normaliseGeographicName,
+  typedEvidenceFrom,
   type ContainmentDecision,
   type GeographicEvidence,
   type GeographicScope,
@@ -179,20 +181,169 @@ function resolveScopeEvidence(
     .reduce(mergeGeographicEvidence, { ...EMPTY_GEOGRAPHIC_EVIDENCE });
 }
 
+/**
+ * The divisions a pack **names** but never published as records of their own.
+ *
+ * ---
+ *
+ * A pack's divisions layer is capped, and what a cap keeps is the leaves: on the
+ * Tokyo pack stored on this machine it is 269 neighbourhoods and 47 microhoods,
+ * one locality and three counties, out of 800 features read. Not one of the
+ * wards those neighbourhoods sit in is a record, and neither is the destination.
+ *
+ * But every one of those 320 records publishes the ward it sits in — 68 of them
+ * say `世田谷区` — **and** the division chain that ward sits in. So the pack
+ * holds the ward's identity 68 times over and `DivisionDirectory`, which indexes
+ * a division only under its *own* name, reads none of it. Measured: of 3,787
+ * records, exactly 100 could resolve their published locality through the
+ * directory, and **none of the 103 attractions could**. Every museum, temple and
+ * park in the destination was therefore `membership_unknown`, and `inventory.ts`
+ * demoted all 56 of them out of the anchor slot — a board for a world city with
+ * nothing on it that could hold a morning.
+ *
+ * What this recovers is not an inference. A record inside `世田谷区` publishes a
+ * chain that runs through `世田谷区`; siblings in different neighbourhoods of the
+ * same ward publish chains that agree exactly as far as the ward and diverge
+ * after it. So the **longest common prefix** of the chains published by
+ * everything that names a locality *is* that locality's ancestry, exactly, with
+ * no threshold and no positional assumption about what sits at which depth. A
+ * lone contributor pins it too, once its own identifier — the last element of
+ * its own chain, by the directory's own rule — is dropped from the end.
+ *
+ * Deliberately `divisionIds` and nothing else. Identifiers are read in the
+ * positive direction only (`selectedDivisionIds` membership); no level of this
+ * reaches the comparison that *refuses*. A recovered ancestry can therefore
+ * place a record inside the destination and can never place one outside it,
+ * which is the same asymmetry geometry already has here and for the same reason:
+ * over-matching under-excludes, and that is the safe direction.
+ */
+export function namedDivisionChains(
+  records: readonly SourceRecord[],
+): ReadonlyMap<string, readonly string[]> {
+  const contributors = new Map<string, SourceRecord[]>();
+  for (const record of records) {
+    if (record.planningRole !== 'administrative') continue;
+    const locality = record.containment.localityName;
+    if (!locality || record.containment.divisionIds.length === 0) continue;
+    const key = normaliseGeographicName(locality);
+    if (key.length === 0) continue;
+    const bucket = contributors.get(key);
+    if (bucket) bucket.push(record);
+    else contributors.set(key, [record]);
+  }
+
+  const chains = new Map<string, readonly string[]>();
+  for (const [key, bucket] of contributors) {
+    const first = bucket[0]!.containment.divisionIds;
+    let shared = first.length;
+    for (const record of bucket) {
+      const chain = record.containment.divisionIds;
+      let common = 0;
+      while (common < shared && common < chain.length && chain[common] === first[common]) {
+        common += 1;
+      }
+      shared = common;
+    }
+    /*
+     * A contributor is *inside* the locality, so its own identifier can never be
+     * part of the locality's ancestry — and with one contributor the prefix is
+     * its whole chain, own identifier included. Trimming from the end is what
+     * makes a single retained division as usable as sixty-eight.
+     */
+    const own = new Set(
+      bucket.map((record) => record.containment.divisionIds.at(-1)).filter(Boolean) as string[],
+    );
+    let end = shared;
+    while (end > 0 && own.has(first[end - 1]!)) end -= 1;
+    if (end > 0) chains.set(key, first.slice(0, end));
+  }
+  return chains;
+}
+
+/**
+ * A DESTINATION PUBLISHED AT TWO LEVELS IS BOTH OF THEM.
+ *
+ * §12.1's "a city being reduced to an arbitrary suburb", as it actually arrives.
+ * A catalogue routinely holds a metropolis twice: once as the first-level
+ * division it *is* and once as a locality inside its own historic core. Overture
+ * publishes `東京都 / Tokyo` as a `region` whose parent is Japan **and** as a
+ * `locality` whose parent is Chiyoda ward; New York, Berlin, Seoul and Bangkok
+ * all have the same pair. The destination index picks one of them — the locality,
+ * on population — and `selectDivisions` then prefers whichever match sits at the
+ * level the *breadth* guessed. So "Tokyo" resolves to a point inside one ward,
+ * and every other ward of Tokyo is, on published evidence, somewhere else.
+ *
+ * The union is deliberately narrow, and the narrowness is what keeps it from
+ * being the homonym trap `selectDivisions` is so careful about: a same-named
+ * division only counts when it is **in the selected division's own published
+ * chain**. Tokyo-the-region is an ancestor of Tokyo-the-locality, so it joins; a
+ * same-named village in the same province is not an ancestor of anything, so it
+ * does not. No radius, no level assumption, no place list — the destination's own
+ * name matched against published names, filtered by published ancestry.
+ */
+function sameNamedAncestors(
+  scope: GeographicScope,
+  directory: DivisionDirectory,
+  selected: readonly string[],
+): string[] {
+  if (selected.length === 0) return [];
+  const ancestry = new Set(
+    selected.flatMap((id) => [...(directory.entry(id)?.chain ?? [])]),
+  );
+  if (ancestry.size === 0) return [];
+  return [scope.destinationName, ...(scope.administrative?.aliases ?? [])]
+    .flatMap((name) => directory.named(name))
+    .filter((entry) => !selected.includes(entry.id) && ancestry.has(entry.id))
+    .map((entry) => entry.id);
+}
+
 export function buildTripScopeOverlay(input: BuildOverlayInput): TripScopeOverlay {
   const directory = DivisionDirectory.from(input.records);
+  const chains = namedDivisionChains(input.records);
   const resolved = resolveScopeEvidence(input.scope, directory);
   const scopeEvidence = input.scopeEvidence
     ? mergeGeographicEvidence(resolved, { ...EMPTY_GEOGRAPHIC_EVIDENCE, ...input.scopeEvidence })
     : resolved;
 
-  const context = scopeContainmentContext({
+  const resolvedContext = scopeContainmentContext({
     scope: input.scope,
     evidence: scopeEvidence,
     directory,
     ...(input.includedAreas ? { includedAreas: input.includedAreas } : {}),
     ...(input.boundaryEvidence ? { boundaryEvidence: input.boundaryEvidence } : {}),
   });
+
+  /*
+   * The destination's own division identity, where the scope was told it.
+   *
+   * `selectedDivisionIds` is "the identifiers of the division the destination
+   * **is**", and `scope.administrative.divisionIds` is that same fact as the
+   * destination index published it — the one source that does not have to
+   * rediscover the destination from a pack that may not have retained it.
+   * `selectDivisions` derives its answer from the directory alone and never
+   * looks at the declared value, so a scope that knows exactly which division it
+   * is was being made to prove it again from a capped divisions layer, and
+   * failing.
+   *
+   * Unioned rather than preferred: both are statements about the same
+   * destination, and a catalogue publishing a metropolis at two levels means
+   * neither reading is the whole of it.
+   */
+  const declared = input.scope.administrative?.divisionIds ?? [];
+  const identity = [
+    ...new Set([
+      ...resolvedContext.selectedDivisionIds,
+      ...declared,
+      ...sameNamedAncestors(input.scope, directory, [
+        ...resolvedContext.selectedDivisionIds,
+        ...declared,
+      ]),
+    ]),
+  ];
+  const context =
+    identity.length === resolvedContext.selectedDivisionIds.length
+      ? resolvedContext
+      : { ...resolvedContext, selectedDivisionIds: identity };
 
   /*
    * The role factor, resolved once per record rather than searched per subject.
@@ -206,7 +357,7 @@ export function buildTripScopeOverlay(input: BuildOverlayInput): TripScopeOverla
     : undefined;
 
   const partition = partitionByContainment(
-    input.records.map(subjectFor),
+    input.records.map((record) => subjectFor(record, chains)),
     context,
     roleByRecordId
       ? { roleEligible: (subject) => roleByRecordId.get(subject.id) ?? true }
@@ -250,14 +401,32 @@ export function buildTripScopeOverlay(input: BuildOverlayInput): TripScopeOverla
  * Typed evidence is preferred where the record carries it, and the flat
  * `containment` shape is the fallback — which is what makes a pack written
  * before typed evidence existed usable without a migration.
+ *
+ * `chains` is the ancestry the pack's own divisions publish for the locality
+ * this record gives as its address (see `namedDivisionChains`). A place record
+ * from a commercial catalogue carries an address and no identifiers at all —
+ * 3,467 of the Tokyo pack's 3,787 records publish an empty chain — so without
+ * this the strongest membership rung there is has nothing to compare and the
+ * record falls to `membership_unknown` however well the destination is known.
  */
-export function subjectFor(record: SourceRecord): MembershipSubject & { id: string } {
+export function subjectFor(
+  record: SourceRecord,
+  chains?: ReadonlyMap<string, readonly string[]>,
+): MembershipSubject & { id: string } {
   const typed = (record as SourceRecord & { geography?: GeographicEvidence }).geography;
+  const locality = record.containment.localityName;
+  const recovered = locality ? chains?.get(normaliseGeographicName(locality)) : undefined;
+  const evidence = recovered
+    ? mergeGeographicEvidence(typed ?? typedEvidenceFrom({ ...record.containment }), {
+        ...EMPTY_GEOGRAPHIC_EVIDENCE,
+        divisionIds: [...recovered],
+      })
+    : typed;
   return {
     id: record.id,
     coordinates: record.coordinates,
     ...(record.bounds ? { bounds: record.bounds } : {}),
-    ...(typed ? { evidence: typed } : {}),
+    ...(evidence ? { evidence } : {}),
     containment: record.containment,
     planningRole: record.planningRole,
     name: record.name,

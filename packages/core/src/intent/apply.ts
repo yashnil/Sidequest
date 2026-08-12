@@ -622,3 +622,35 @@ export function composerAnsweredFields(
   if (composer.outdoorIntensity !== undefined && !mobilityLimited) fields.push('dailyIntensity');
   return fields;
 }
+
+/**
+ * Which composer answers still stand *in a particular answer set* — the
+ * provenance the badges and the dropped-budget-step rule actually need.
+ *
+ * `composerAnsweredFields` answers "what did the composer say"; this answers
+ * "what did the composer say that the traveller has not since overruled". The
+ * page used to collapse the second question into "were any answers saved":
+ * `alreadyAnswered = saved ? [] : composerAnsweredFields(…)`. So the first
+ * mid-questionnaire save — which happens on the first Continue — erased every
+ * "from your answers" badge, resurrected the budget step the composer had
+ * already answered, and a refresh demoted carried answers to anonymous
+ * defaults. Provenance is a relationship between two artefacts, not a flag on
+ * one of them.
+ *
+ * Divergence is judged by *re-applying* the composer over the saved answers
+ * and seeing what moves: `applyComposer` is the one mapping table, so a field
+ * counts as carried exactly when the composer's value and the stored value
+ * agree by the same rules that seeded it. A field the traveller edited to a
+ * different value diverges and loses its badge; edited back to the same value
+ * it reads as agreeing, which is the right call for a screen — the value on it
+ * is the value the composer was told either way.
+ */
+export function composerCarriedFields(
+  composer: ComposerCarriedAnswers | null | undefined,
+  answers: QuestionnaireAnswers,
+): ComposerAnsweredField[] {
+  const fields = composerAnsweredFields(composer, answers.mobilityLimited);
+  if (fields.length === 0) return [];
+  const reapplied = applyComposer(answers, composer);
+  return fields.filter((field) => reapplied[field] === answers[field]);
+}

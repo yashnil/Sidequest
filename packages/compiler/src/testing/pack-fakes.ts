@@ -172,7 +172,22 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
       sourceCategory: twin ? twin.sourceCategory : category,
       sourceCategoryPath: [],
       planningRole: 'attraction',
-      websiteCandidates: [],
+      /**
+       * A feature this cycle files under `historic_site` publishes an
+       * authority page, and that is a correction rather than convenience.
+       *
+       * That leaf is an *assertion about* a place rather than a kind of place,
+       * and on real data it is where the condominiums, the company offices and
+       * the roadside signboards arrive — so the inventory requires a witness
+       * before offering one. A named historic site with nothing whatever behind
+       * it models a record the product deliberately refuses, and a scenario
+       * built on one would be asserting against a population no board sees.
+       * The heritage authority that lists it is the witness a real one has.
+       */
+      websiteCandidates:
+        !twin && category === 'historic_site'
+          ? [`https://heritage.example.gov/${spec.id}/${index}`]
+          : [],
       // The shared identifier is what makes the link identity rather than a
       // guess, and it is the case a real build hits constantly.
       ...(twin?.wikidataId ? { wikidataId: twin.wikidataId } : index === 0 ? { wikidataId: 'Q1000' } : {}),
@@ -683,8 +698,23 @@ export function packBackedProviders(
    */
   const constraints: ConstraintResearchProvider = {
     name: 'synthetic-pack-constraints',
-    async research({ places: subjects, maxSubjects }) {
+    async research({ scope, places: subjects, maxSubjects }) {
       const allowed = subjects.slice(0, maxSubjects);
+      /**
+       * The approach is described in the mode the *trip* travels in, not the
+       * mode the world was shaped around.
+       *
+       * These two used to be the same thing by accident. Reading the world's
+       * `primaryMode` meant a pedestrian world researched for a driving
+       * traveller published walking approach rules, while the compiler bought
+       * a road matrix for the same trip — so nothing could measure the
+       * approach and the authored allowance was all the planner had. A
+       * managing authority describes the way in that the visitor will use;
+       * this reads the same field the routing mode is chosen from, so the
+       * matrix and the rule can never disagree about which network the way in
+       * is on.
+       */
+      const approachMode = scope.transport.primaryMode === 'drive' ? 'drive' : 'walk';
       const rules: AccessRule[] = [];
       const calendars: OperatingCalendar[] = [];
       const gaps: ProviderGap[] = [];
@@ -710,8 +740,27 @@ export function packBackedProviders(
             label: `Access to ${place.name}`,
             placeIds: [place.id],
             months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-            approachMode: spec.primaryMode === 'walk' ? 'walk' : 'drive',
-            ...(spec.primaryMode === 'walk' ? { approachMinutes: 10 } : {}),
+            approachMode,
+            /**
+             * `null`, not ten.
+             *
+             * This fixture used to author `approachMinutes: 10` for every place
+             * in every walk-shaped world — the exact constant `accessRuleSchema`
+             * calls "the product's worst factual defect" three files away, where
+             * a live provider with no source for a walking allowance wrote ten
+             * for every place on earth. A test double that ships the defect it
+             * exists to detect proves the wrong thing: the plan validator's new
+             * speed bound flagged these legs as impossible (ten minutes across
+             * distances the same fixture's matrix puts kilometres apart) and it
+             * was right to.
+             *
+             * `null` is the schema's own way for a producer to say it has no
+             * source. The planner then measures the approach off the matrix
+             * where the matrix covers walking — which is every walk-shaped
+             * world compiled for a walking traveller — and refuses honestly by
+             * name where it does not.
+             */
+            ...(approachMode === 'walk' ? { approachMinutes: null } : {}),
             privateVehicle: 'allowed',
             serviceRequirement: 'none',
             provenance: {

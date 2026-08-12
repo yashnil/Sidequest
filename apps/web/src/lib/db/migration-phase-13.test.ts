@@ -200,10 +200,33 @@ describe('a Phase 12 database upgraded to Phase 13', () => {
     migrate(path);
 
     const after = new Database(path);
-    expect(after.prepare('SELECT * FROM trips WHERE id = ?').get('trip-1')).toEqual(tripBefore);
     expect(after.prepare('SELECT * FROM itineraries WHERE trip_id = ?').get('trip-1')).toEqual(
       itineraryBefore,
     );
+
+    /*
+     * `trips` gained `owner_token`, so it is asserted the same precise way
+     * `traveler_profiles` is below rather than by whole-row equality. Same
+     * claim, stated so that it keeps meaning something: nothing that existed
+     * was rewritten, and the new column arrived at its declared default.
+     *
+     * Null is that default, and it is load-bearing. A trip written before
+     * trips had an owner belongs to nobody, and `listTrips` shows it to
+     * nobody — defaulting it to anything else would hand every legacy row to
+     * whichever browser visited next.
+     */
+    const tripAfter = after.prepare('SELECT * FROM trips WHERE id = ?').get('trip-1') as Record<
+      string,
+      unknown
+    >;
+    for (const [column, value] of Object.entries(tripBefore as Record<string, unknown>)) {
+      expect(tripAfter[column], `${column} was rewritten by the migration`).toEqual(value);
+    }
+    const addedToTrips = Object.keys(tripAfter).filter(
+      (column) => !(column in (tripBefore as Record<string, unknown>)),
+    );
+    expect(addedToTrips).toEqual(['owner_token']);
+    expect(tripAfter.owner_token).toBeNull();
 
     /*
      * ADDITIVE COLUMNS ARE THE ONE THING THAT MAY DIFFER — AND ONLY AT THEIR

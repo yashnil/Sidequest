@@ -30,9 +30,11 @@ beforeEach(() => {
   releaseDatabase();
   // Cleared here as well as afterwards: the environment is process-wide, and a
   // test asserting "no ceiling was configured" must not inherit one from
-  // whatever ran before it in this worker.
+  // whatever ran before it in this worker — nor a compiler switch from the
+  // developer's shell, now that an open compiler puts the gate back on duty.
   delete process.env.SIDEQUEST_BENCHMARK_BUDGET_USD;
   delete process.env.SIDEQUEST_BENCHMARK_MODE;
+  delete process.env.SIDEQUEST_COMPILER_PROVIDER;
   dir = mkdtempSync(join(tmpdir(), 'sidequest-benchmark-budget-'));
   process.env.SIDEQUEST_DB_PATH = join(dir, 'test.db');
 });
@@ -42,6 +44,7 @@ afterEach(() => {
   delete process.env.SIDEQUEST_DB_PATH;
   delete process.env.SIDEQUEST_BENCHMARK_BUDGET_USD;
   delete process.env.SIDEQUEST_BENCHMARK_MODE;
+  delete process.env.SIDEQUEST_COMPILER_PROVIDER;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -172,5 +175,36 @@ describe('the spending gate', () => {
     // The measured live figures: a generation billed $1.22, a compilation $1.72.
     expect(SPEND_ESTIMATES_MICRO_USD.generation).toBeGreaterThan(1_220_000);
     expect(SPEND_ESTIMATES_MICRO_USD.compilation).toBeGreaterThan(1_720_000);
+  });
+
+  it('does NOT stand aside when the compiler is open, whatever the benchmark mode', async () => {
+    /*
+     * The gap the early-allow opened: the sidequest arm compiles a REAL region
+     * whenever the compiler is open — the compiler has no idea it is in a
+     * benchmark, by design — so `fixture` benchmark mode was spending real
+     * money past a gate that had stood aside. An open compiler with no
+     * configured ceiling now refuses rather than bills.
+     */
+    process.env.SIDEQUEST_COMPILER_PROVIDER = 'open';
+    const { gateSpend } = await import('./budget');
+    const gate = gateSpend('compilation');
+    expect(gate.kind).toBe('refused');
+    if (gate.kind === 'refused') expect(gate.reason).toContain('No spending ceiling');
+  });
+
+  it('an open compiler with a live budget spends under the same ceiling as everything else', async () => {
+    process.env.SIDEQUEST_COMPILER_PROVIDER = 'open';
+    process.env.SIDEQUEST_BENCHMARK_MODE = 'live';
+    process.env.SIDEQUEST_BENCHMARK_BUDGET_USD = '15';
+    const { gateSpend } = await import('./budget');
+    expect(gateSpend('compilation').kind).toBe('allowed');
+    await billOnce(14_000_000);
+    expect(gateSpend('compilation').kind).toBe('refused');
+  });
+
+  it('a fixture-pinned compiler leaves the offline demonstration alone', async () => {
+    process.env.SIDEQUEST_COMPILER_PROVIDER = 'fixture';
+    const { gateSpend } = await import('./budget');
+    expect(gateSpend('compilation').kind).toBe('allowed');
   });
 });

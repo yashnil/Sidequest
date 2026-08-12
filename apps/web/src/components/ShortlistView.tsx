@@ -5,15 +5,21 @@ import { useRouter } from 'next/navigation';
 import {
   MEASURE_BAND_LABELS,
   RANK_BAND_LABELS,
+  UNKNOWN_REASON_COPY,
   croppable,
   imageryFallbackFor,
   measureBand,
+  shortlistLead,
+  shortlistSeparation,
   type DestinationImage as ImageRecord,
   type DestinationShortlist,
+  type RankDimension,
   type RankedDestination,
+  type ShortlistLead,
+  type UnknownReason,
 } from '@sidequest/core';
 import { Badge, ErrorNote, Panel, buttonClass, cx } from './ui';
-import { DestinationImage } from './DestinationImage';
+import { DestinationImage, ImageCredit } from './DestinationImage';
 import { adoptDestinationAction, buildShortlistAction } from '@/app/(product)/decide/actions';
 
 /**
@@ -44,6 +50,17 @@ import { adoptDestinationAction, buildShortlistAction } from '@/app/(product)/de
  * there is no branch here that can produce an empty frame — and no card that
  * looks broken because nobody has photographed a valley under a licence a
  * commercial product may use.
+ *
+ * **Two layouts, because a tie is a different screen from a ranking.** The
+ * comparison layout above assumes the ranking separates. When it does not — the
+ * ordinary case on this index, where eight regions score within five points of
+ * each other — the same layout put eight equal cards in a column under a
+ * headline admitting we could not tell them apart, and the reviewer who opened
+ * it got a page whose entire content was our own uncertainty. So a shortlist
+ * that does not rank collapses to *one* recommendation with its picture and its
+ * argument, the rest as a short secondary list underneath, and every caveat
+ * behind a single disclosure. Which one leads, and what may be claimed for it,
+ * is `shortlistLead`'s decision, not this file's.
  */
 
 /**
@@ -88,7 +105,15 @@ export function ShortlistView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(shortlist?.picks[0]?.entryId ?? null);
+  /*
+   * Nothing chosen yet, rather than the first row chosen.
+   *
+   * The default is resolved below, after the lead is known — because when the
+   * ranking does not separate the lead is not necessarily `picks[0]`, and a
+   * state initialiser that reached for the first row would select one
+   * destination while the page argued for another.
+   */
+  const [selected, setSelected] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   /*
@@ -119,19 +144,72 @@ export function ShortlistView({
   }, [shortlist, sessionId, router]);
 
   if (!shortlist) {
+    /*
+     * THE ONLY THING BETWEEN THE ANSWERS AND THE LIST, SO IT HAS TO BE TRUE.
+     *
+     * "Ranking the world against your trip" described a global search this does
+     * not run — it scores a bounded set of indexed places — and set an
+     * expectation the results then had to survive. Short and literal instead:
+     * three named checks and roughly how long they take.
+     */
     return (
       <Panel className="p-8 text-center">
-        <p className="breathing font-display text-xl text-ink">Ranking the world against your trip</p>
+        <p className="breathing font-display text-xl text-ink">Putting a shortlist together</p>
         <p className="measure mx-auto mt-3 text-sm leading-relaxed text-ink-muted">
-          Climate records, how much ground each place covers, and what is actually there. A few
-          seconds, and nothing is bought.
+          Checking the weather each place gets at that time of year, how much there is to do, and
+          how far apart it all is. A few seconds.
         </p>
         {error ? <ErrorNote>{error}</ErrorNote> : null}
       </Panel>
     );
   }
 
-  const current = shortlist.picks.find((pick) => pick.entryId === selected) ?? shortlist.picks[0];
+  /**
+   * WHEN THE ORDER MEANS NOTHING, THE PAGE MUST NOT NUMBER IT.
+   *
+   * A live run produced eight administrative polygons and the page headed them
+   * "We could not tell these apart" — above a list numbered 1 to 8. The numbers
+   * are a stronger claim than the headline is a disclaimer: somebody acts on the
+   * first row.
+   *
+   * So they are dropped rather than dimmed. A greyer 1 is still a 1, and the
+   * only honest rendering of a rank we do not stand behind is no rank at all.
+   *
+   * The test used to be `band === 'thin_evidence'` on every pick, and it let the
+   * numbers straight back in the moment the traveller answered enough questions
+   * to lift the band: measured over the live index, a fully answered composer
+   * produces eight picks scored 87, 87, 87, 87, 87, 87, 87 and 91 — all
+   * `worth_a_look`, seven of them indistinguishable, numbered 1 to 8. An ordinal
+   * is a claim about *this row against the next one*, so the condition has to be
+   * too: numbers appear only where every adjacent pair actually differs.
+   * `shortlistSeparation` is the one definition, shared with the page.
+   */
+  const separation = shortlistSeparation(shortlist.picks);
+  const orderIsMeaningless = !separation.separates;
+  const lead = shortlistLead(shortlist.picks, separation);
+  /** Said once, at list scope, in `Caveats`. The panels do not repeat these. */
+  const alreadySaid = new Set(separation.unmeasured.map((entry) => entry.id));
+
+  /*
+   * The lead first, then everything else in the order the ranker produced.
+   *
+   * Only reorders when the ranking does not separate — where the sequence is a
+   * tiebreak over catalogue ids and moving one row costs nothing true. It buys
+   * the property the whole screen rests on: the destination the page argues for,
+   * the destination selected in the panel and the first row of the list are the
+   * same destination. They were not, briefly, and the version where they
+   * disagreed is the one that plans a trip to somewhere the page never
+   * recommended.
+   */
+  const ordered =
+    orderIsMeaningless && lead
+      ? [
+          shortlist.picks.find((pick) => pick.entryId === lead.entryId)!,
+          ...shortlist.picks.filter((pick) => pick.entryId !== lead.entryId),
+        ]
+      : shortlist.picks;
+
+  const current = ordered.find((pick) => pick.entryId === selected) ?? ordered[0];
 
   if (shortlist.picks.length === 0) {
     return (
@@ -142,7 +220,9 @@ export function ShortlistView({
             ? 'We had nothing to rank — see below for why. That is about us, not about anywhere.'
             : `We scored ${shortlist.considered} places and none of them cleared the bar for this trip. Widening your dates or your nights is the change that usually helps most.`}
         </p>
-        <BlindSpots shortlist={shortlist} />
+        <div className="mt-6">
+          <Caveats shortlist={shortlist} separation={separation} />
+        </div>
       </Panel>
     );
   }
@@ -164,101 +244,240 @@ export function ShortlistView({
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-10">
-        <ol className="space-y-3" aria-label="Suggested destinations">
-          {shortlist.picks.map((pick, index) => (
-            <li key={pick.entryId}>
-              {/*
-                THE CARD IS A DIV AND THE SELECTOR IS A BUTTON INSIDE IT.
+      {/*
+        THE COMPARISON LAYOUT, OR THE ONE-RECOMMENDATION LAYOUT.
 
-                It used to be one button wrapping everything, and it cannot be
-                any more: the image carries an attribution link, and an anchor
-                inside a button is invalid markup that browsers resolve
-                inconsistently — the credit becomes unclickable, the row
-                sometimes stops responding to Enter, and screen readers announce
-                a control containing a control. Splitting them keeps the whole
-                text area as one large click target and leaves the credit
-                separately reachable, which is what the licence requires anyway.
-              */}
-              <div
-                className={cx(
-                  'overflow-hidden rounded-[var(--radius-card)] border transition-colors',
-                  current?.entryId === pick.entryId
-                    ? 'border-pine bg-pine-soft'
-                    : 'border-rule bg-paper-raised hover:border-ink-faint',
-                )}
-              >
+        Not a variant of the same grid. When the scores separate, the product is
+        the comparison and the list deserves half the screen; when they do not,
+        eight equal cards in a column is the screen a reviewer described as
+        "eight identical abstract cards" and it is the wrong object entirely.
+        The second layout puts the argument first at every width, which also
+        settles the mobile order — the detail used to stack below all eight rows,
+        so a phone reached the reasoning two viewports down.
+      */}
+      {orderIsMeaningless ? (
+        <div className="space-y-8">
+          {current ? (
+            <Detail
+              sessionId={sessionId}
+              pick={current}
+              image={images[current.entryId] ?? null}
+              pending={pending}
+              onError={setError}
+              /*
+                A leader with a tie behind it still leads.
+
+                The live shape on a fully answered composer is one at 100 and
+                seven at 95: the list below the first row is not ranked, so this
+                layout is right, and the first row genuinely outscored the rest,
+                so "why this one" is true of it. Withholding the claim here
+                would be as inaccurate as the numbering was.
+              */
+              leads={lead?.basis === 'outscored' && current.entryId === lead.entryId}
+              alreadySaid={alreadySaid}
+              lead={lead && current.entryId === lead.entryId ? lead : null}
+            />
+          ) : null}
+
+          <section aria-labelledby="shortlist-others">
+            <h2 id="shortlist-others" className="eyebrow">
+              {ordered.length === 1
+                ? 'The one place we found'
+                : `The other ${ordered.length - 1}, and how they compare`}
+            </h2>
+            <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
+              {separation.undifferentiated
+                ? 'All of these came out level with each other. Open one to see what we know about it.'
+                : 'These scored the same as each other, so they are in no particular order. Open one to see what we know about it.'}
+            </p>
+            <ol
+              className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+              aria-label="Suggested destinations"
+            >
+              {ordered.map((pick) => {
+                const image = images[pick.entryId] ?? null;
+                return (
+                  <li key={pick.entryId}>
+                    {/*
+                      THESE CARDS CARRY THE PICTURES, AND THAT IS A LICENCE
+                      DECISION AS MUCH AS A DESIGN ONE.
+
+                      This list was eight text buttons for one release, and the
+                      screen it produced showed *no photograph at all* — while six
+                      licensed, credited, stored files sat in `destination_images`
+                      for the destinations on it. The browser suite caught it as a
+                      missing attribution link, which is the right alarm: an
+                      obligation to credit is only ever discharged where a picture
+                      is actually shown, so a screen that silently stops showing
+                      them is a screen that has quietly stopped being the one the
+                      licence terms were checked against.
+
+                      It is also where these particular files *belong*. A
+                      `verified_commons_category` match is `moderate`, and the
+                      schema says of that band, in these words, "good enough to sit
+                      beside a name, not good enough to headline a page" — so the
+                      hero above stays strong-only and the moderate matches sit
+                      here, beside a name, which is the one placement the
+                      confidence ladder actually licenses.
+
+                      The card is a div with a button inside it, for the reason the
+                      comparison layout gives below: the credit is an anchor, and
+                      an anchor inside a button is markup browsers resolve
+                      inconsistently.
+                    */}
+                    <div
+                      className={cx(
+                        'flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border pb-4 transition-colors',
+                        current?.entryId === pick.entryId
+                          ? 'border-pine bg-pine-soft'
+                          : 'border-rule bg-paper-raised hover:border-ink-faint',
+                      )}
+                    >
+                      {/*
+                        The same treatment the comparison layout gives its rows,
+                        deliberately: one uniform frame, never cropped, the whole
+                        file over the tinted graphic. Two layouts of one screen
+                        that present a destination differently is how a traveller
+                        comes to think they are looking at two different products —
+                        and a grid of eight frames each taking its own file's shape
+                        reads as a rendering fault rather than as a set of pictures.
+                      */}
+                      <DestinationImage
+                        image={image}
+                        fallback={fallbackFor(pick)}
+                        credit="none"
+                        className="px-4 pt-4"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSelected(pick.entryId)}
+                        aria-current={current?.entryId === pick.entryId}
+                        className={cx(MIN_TARGET, 'w-full px-4 pt-3 text-left')}
+                      >
+                        <span className="block font-display text-base leading-tight text-ink">
+                          {pick.displayName}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-ink-muted">
+                          {pick.qualifiedName}
+                        </span>
+                      </button>
+                      {/*
+                        At the foot, not under the picture. Two to four lines of
+                        dotted-underlined attribution directly above a place's name
+                        makes the photographer the loudest text on a card about a
+                        valley — the defect the board card already fixed this way.
+                        `mt-auto` holds the credits on one line across a row of
+                        cards whose names wrap to different depths.
+                      */}
+                      {image ? <ImageCredit image={image} className="mt-auto px-4" /> : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        </div>
+      ) : (
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-10">
+          <ol className="order-2 space-y-3 lg:order-1" aria-label="Suggested destinations">
+            {ordered.map((pick, index) => (
+              <li key={pick.entryId}>
                 {/*
-                  The row image never crops, whatever its licence permits.
+                  THE CARD IS A DIV AND THE SELECTOR IS A BUTTON INSIDE IT.
 
-                  A 16:9 strip is not so much narrower than a photograph that
-                  cropping buys anything worth a licence question, and letting
-                  the whole file sit over the tinted graphic makes a card with a
-                  photograph and one without read as the same kind of object.
+                  It used to be one button wrapping everything, and it cannot be
+                  any more: the image carries an attribution link, and an anchor
+                  inside a button is invalid markup that browsers resolve
+                  inconsistently — the credit becomes unclickable, the row
+                  sometimes stops responding to Enter, and screen readers announce
+                  a control containing a control. Splitting them keeps the whole
+                  text area as one large click target and leaves the credit
+                  separately reachable, which is what the licence requires anyway.
                 */}
-                <DestinationImage
-                  image={images[pick.entryId] ?? null}
-                  fallback={fallbackFor(pick)}
-                  className="px-4 pt-4"
-                />
-                <button
-                  type="button"
-                  onClick={() => setSelected(pick.entryId)}
-                  aria-current={current?.entryId === pick.entryId}
-                  className="w-full px-4 pt-3 pb-4 text-left"
+                <div
+                  className={cx(
+                    'overflow-hidden rounded-[var(--radius-card)] border transition-colors',
+                    current?.entryId === pick.entryId
+                      ? 'border-pine bg-pine-soft'
+                      : 'border-rule bg-paper-raised hover:border-ink-faint',
+                  )}
                 >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="font-display text-lg leading-tight text-ink">
-                      {pick.displayName}
-                    </span>
-                    <span aria-hidden="true" className="text-xs text-ink-faint">
-                      {index + 1}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-ink-muted">{pick.qualifiedName}</p>
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                    <Badge tone={BAND_TONE[pick.band]}>{RANK_BAND_LABELS[pick.band]}</Badge>
-                    <Badge>{coverageWord(pick.coverage)}</Badge>
-                  </div>
-                </button>
-              </div>
-            </li>
-          ))}
-        </ol>
+                  {/*
+                    The row image never crops, whatever its licence permits.
 
-        {current ? (
-          <Detail
-            sessionId={sessionId}
-            pick={current}
-            image={images[current.entryId] ?? null}
-            pending={pending}
-            onError={setError}
-          />
-        ) : null}
-      </div>
-
-      {shortlist.diversityNote ? (
-        <Panel className="bg-paper-sunk p-4">
-          <p className="text-sm leading-relaxed text-ink-muted">{shortlist.diversityNote}</p>
-        </Panel>
-      ) : null}
-
-      {shortlist.excluded.length > 0 ? (
-        <details className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-5">
-          <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-sm font-medium text-ink')}>
-            {shortlist.excluded.length} we took off the list
-          </summary>
-          <ul className="mt-3 space-y-2 text-sm text-ink-muted">
-            {shortlist.excluded.map((entry) => (
-              <li key={entry.entryId}>
-                <span className="text-ink">{entry.displayName}</span> — {entry.exclusion.message}
+                    A 16:9 strip is not so much narrower than a photograph that
+                    cropping buys anything worth a licence question, and letting
+                    the whole file sit over the tinted graphic makes a card with a
+                    photograph and one without read as the same kind of object.
+                  */}
+                  <DestinationImage
+                    image={images[pick.entryId] ?? null}
+                    fallback={fallbackFor(pick)}
+                    className="px-4 pt-4"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelected(pick.entryId)}
+                    aria-current={current?.entryId === pick.entryId}
+                    className="w-full px-4 pt-3 pb-4 text-left"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-display text-lg leading-tight text-ink">
+                        {pick.displayName}
+                      </span>
+                      <span aria-hidden="true" className="text-xs text-ink-faint">
+                        {index + 1}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-ink-muted">{pick.qualifiedName}</p>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      <Badge tone={BAND_TONE[pick.band]}>{RANK_BAND_LABELS[pick.band]}</Badge>
+                      <Badge>{coverageWord(pick.coverage)}</Badge>
+                    </div>
+                  </button>
+                </div>
               </li>
             ))}
-          </ul>
-        </details>
-      ) : null}
+          </ol>
 
-      <BlindSpots shortlist={shortlist} />
+          {current ? (
+            /*
+              `order-1` below `lg`: the argument for the selected destination
+              comes before the eight rows on a phone, not after them.
+            */
+            <div className="order-1 lg:order-2">
+              <Detail
+                sessionId={sessionId}
+                pick={current}
+                image={images[current.entryId] ?? null}
+                pending={pending}
+                onError={setError}
+                /*
+                  "Why this one" is a promise that this one was chosen. It may be
+                  said only about a pick that actually outscored the rest — with
+                  eight equal scores it is the page asserting a recommendation the
+                  ranking never made.
+                */
+                leads={separation.tiedAtTop === 1 && current.entryId === ordered[0]?.entryId}
+                alreadySaid={alreadySaid}
+                lead={null}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/*
+        EVERY CAVEAT BEHIND ONE DISCLOSURE.
+
+        Three surfaces used to state their own: a diversity note in its own
+        panel, a removals disclosure, and an always-open list of six things the
+        ranking cannot see — which on the tied case ran to eleven consecutive
+        negative sentences under the results. One summary line, with the count in
+        it, is the §26 shape: the material is still one click away and reachable,
+        and it has stopped being the loudest thing on the page.
+      */}
+      <Caveats shortlist={shortlist} separation={separation} />
     </div>
   );
 }
@@ -269,12 +488,32 @@ function Detail({
   image,
   pending,
   onError,
+  leads,
+  alreadySaid,
+  lead,
 }: {
   sessionId: string;
   pick: RankedDestination;
   image: ImageRecord | null;
   pending: boolean;
   onError: (message: string | null) => void;
+  /** Whether this pick outscored every other. Decides what the panel may claim. */
+  leads: boolean;
+  /**
+   * Dimensions already named once at list scope, so this panel does not repeat
+   * them. See the note above the per-destination unknowns below.
+   */
+  alreadySaid: ReadonlySet<RankDimension>;
+  /**
+   * The lead verdict, when this panel is showing the destination it named.
+   *
+   * Separate from `leads` because they answer different questions. `leads` is
+   * "did this outscore everything", which is the only licence for the words
+   * "why this one". `lead` covers the case where nothing outscored anything and
+   * the panel still has to head a recommendation — where the honest eyebrow is
+   * a description of *how* it came to be first.
+   */
+  lead: ShortlistLead | null;
 }) {
   const [adopting, startAdopt] = useTransition();
 
@@ -305,6 +544,24 @@ function Detail({
   const cropSafe = strongEnoughForHero ? croppable(strongEnoughForHero) : null;
   const fallback = fallbackFor(pick);
 
+  /**
+   * What this panel is allowed to call itself.
+   *
+   * Three sentences for three different truths, and the difference between them
+   * is the whole point of `shortlistLead`. "Why this one" is a claim that a
+   * choice was made; it survives only where one destination actually outscored
+   * the rest. The other two say what did happen — we knew most about this one,
+   * or nothing separated them and somebody had to be first — which is more use
+   * to a traveller than either a false claim or a blank refusal to lead.
+   */
+  const eyebrow = leads
+    ? 'Why this one'
+    : lead?.basis === 'best_evidenced'
+      ? 'Where we would start'
+      : lead?.basis === 'arbitrary'
+        ? 'Somewhere to start'
+        : 'What we know about it';
+
   return (
     <Panel className="self-start p-6" as="section" labelledBy="shortlist-detail-heading">
       {cropSafe ? (
@@ -319,11 +576,28 @@ function Detail({
         />
       )}
 
-      <p className="eyebrow">Why this one</p>
+      <p className="eyebrow">{eyebrow}</p>
       <h2 id="shortlist-detail-heading" className="mt-2 font-display text-3xl text-ink">
         {pick.displayName}
       </h2>
       <p className="mt-1 text-sm text-ink-muted">{pick.qualifiedName}</p>
+
+      {/*
+        WHY IT IS FIRST, IN ONE SENTENCE, WHERE IT IS FIRST.
+
+        Only on the lead, only when nothing outscored anything, and never
+        implying a verdict the ranking did not reach. `best_evidenced` is a claim
+        about how much we could check — which is checkable — and `arbitrary` says
+        outright that this one was not chosen, because the alternative is a page
+        that quietly lets somebody act on a tiebreak over catalogue ids.
+      */}
+      {lead && lead.basis !== 'outscored' ? (
+        <p className="measure mt-4 text-sm leading-relaxed text-ink-muted">
+          {lead.basis === 'best_evidenced'
+            ? `${lead.tiedWith} of these fit your answers equally well. This is the one we could check the most of, so it is the one to look at first.`
+            : `${lead.tiedWith} of these fit your answers equally well and nothing we can measure tells them apart. We have put this one first so you have somewhere to start — not because it won.`}
+        </p>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Badge tone={BAND_TONE[pick.band]}>{RANK_BAND_LABELS[pick.band]}</Badge>
@@ -379,16 +653,41 @@ function Detail({
         </ul>
       ) : null}
 
-      {pick.unknowns.length > 0 ? (
-        <div className="mt-5">
-          <p className="eyebrow">What we could not see</p>
-          <ul className="mt-2.5 space-y-1.5 text-sm leading-relaxed text-ink-muted">
-            {pick.unknowns.map((unknown) => (
-              <li key={unknown}>{unknown}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      {/*
+        ONLY WHAT IS TRUE OF *THIS* ONE.
+
+        This listed every dimension the pick was missing, and on the live index
+        that is six identical lines under the recommendation — because a
+        dimension nobody could measure for any candidate is missing from all of
+        them. The reviewer's phrase for the same pattern on the board was "a wall
+        of what the product could not do".
+
+        A caveat that is true of the whole list belongs to the whole list, and it
+        is stated once in `Caveats`. What stays here is the difference: a
+        dimension we could read for the others and not for this one, which is
+        genuinely a fact about this destination. Filtered on the factor ids
+        rather than on the rendered sentences — matching prose would break the
+        moment somebody rewords a reason.
+      */}
+      {(() => {
+        const own = pick.factors.filter(
+          (factor) => factor.measure.kind === 'unknown' && !alreadySaid.has(factor.id),
+        );
+        if (own.length === 0) return null;
+        return (
+          <div className="mt-5">
+            <p className="eyebrow">What we could not see about this one</p>
+            <ul className="mt-2.5 space-y-1.5 text-sm leading-relaxed text-ink-muted">
+              {own.map((factor) => (
+                <li key={factor.id}>
+                  {factor.label} —{' '}
+                  {UNKNOWN_REASON_COPY[(factor.measure as { reason: UnknownReason }).reason]}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
 
       {/*
         THE COMPONENT'S OWN RULE, APPLIED HERE TOO.
@@ -404,13 +703,21 @@ function Detail({
         summary says what the disclosure contains rather than promising numbers
         it should not be giving.
       */}
+      {/*
+        And said in the traveller's language, which is a separate fix from the
+        one above it. This paragraph read "the weights differ and several
+        dimensions are unmeasured, so two of these are not comparable as
+        numbers" — a sentence about our scoring model, on the screen where
+        somebody is choosing where to spend a holiday. §26: translate system
+        state into traveller meaning.
+      */}
       <details className="mt-6 border-t border-rule pt-4">
         <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-sm text-ink-muted')}>
-          What went into this, dimension by dimension
+          What we checked, one thing at a time
         </summary>
         <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-          Each dimension as a band rather than a score. The weights differ and several
-          dimensions are unmeasured, so two of these are not comparable as numbers.
+          A rough read on each, not a score out of ten — some of these matter more than others,
+          and a few we could not check at all. Worth skimming; not worth adding up.
         </p>
         <dl className="mt-3 space-y-2 text-sm">
           {pick.factors.map((factor) => (
@@ -423,7 +730,7 @@ function Detail({
                     <span className="ml-2 text-xs text-ink-faint">{factor.measure.basis}</span>
                   </>
                 ) : (
-                  <span className="text-ink-faint">not measured</span>
+                  <span className="text-ink-faint">we could not check this</span>
                 )}
               </dd>
             </div>
@@ -454,19 +761,70 @@ function Detail({
   );
 }
 
-function BlindSpots({ shortlist }: { shortlist: DestinationShortlist }) {
-  if (shortlist.blindSpots.length === 0) return null;
+/**
+ * ONE PLACE FOR EVERYTHING WE COULD NOT DO.
+ *
+ * Four separate confessions used to sit under the results — a diversity note, a
+ * removals list, the blind spots and, on the page above, the unmeasured
+ * dimensions — each correct, each in its own container, adding up to a screen
+ * whose loudest content was our own limitations. §26's rule is one statement per
+ * unknown at the highest scope that is true, and §21's is that the caveat must
+ * still be reachable. A single disclosure with the count in its summary line
+ * satisfies both, and the count is what makes it worth opening.
+ *
+ * `separation` comes in rather than being recomputed: the flat and unmeasured
+ * lists are facts about the ranking that the page and this component both read,
+ * and two derivations of the same fact is how they come to disagree.
+ */
+function Caveats({
+  shortlist,
+  separation,
+}: {
+  shortlist: DestinationShortlist;
+  separation: ReturnType<typeof shortlistSeparation>;
+}) {
+  const lines: string[] = [];
+  if (separation.flat.length > 0) {
+    lines.push(
+      `What we could measure came back the same for all of them: ${separation.flat
+        .map((entry) => entry.label.toLowerCase())
+        .join(', ')}. So none of it separated one from another.`,
+    );
+  }
+  for (const entry of separation.unmeasured) {
+    lines.push(`${entry.label} — ${UNKNOWN_REASON_COPY[entry.reason]}`);
+  }
+  lines.push(...shortlist.blindSpots);
+  if (shortlist.diversityNote) lines.push(shortlist.diversityNote);
+
+  const removed = shortlist.excluded.length;
+  if (lines.length === 0 && removed === 0) return null;
+
   return (
-    <section aria-labelledby="blind-spots" className="border-t border-rule pt-6">
-      <h2 id="blind-spots" className="eyebrow">
-        What this ranking cannot see
-      </h2>
-      <ul className="measure mt-3 space-y-1.5 text-sm leading-relaxed text-ink-muted">
-        {shortlist.blindSpots.map((spot) => (
-          <li key={spot}>{spot}</li>
-        ))}
-      </ul>
-    </section>
+    <details className="rounded-[var(--radius-card)] border border-rule bg-paper-sunk p-5">
+      <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-sm font-medium text-ink')}>
+        {lines.length > 0
+          ? `${lines.length} thing${lines.length === 1 ? '' : 's'} we could not check`
+          : 'What we took off the list'}
+        {removed > 0 ? `, and ${removed} we took off the list` : ''}
+      </summary>
+      {lines.length > 0 ? (
+        <ul className="measure mt-3 space-y-1.5 text-sm leading-relaxed text-ink-muted">
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+      {removed > 0 ? (
+        <ul className="mt-3 space-y-2 border-t border-rule pt-3 text-sm text-ink-muted">
+          {shortlist.excluded.map((entry) => (
+            <li key={entry.entryId}>
+              <span className="text-ink">{entry.displayName}</span> — {entry.exclusion.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </details>
   );
 }
 

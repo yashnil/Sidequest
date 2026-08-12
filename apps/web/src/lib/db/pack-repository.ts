@@ -49,13 +49,83 @@ function parseRow(row: PackRow): RegionPack | null {
   }
 }
 
-/** A usable pack for this ground built from this release, newest first. */
+/**
+ * A scope hash, split into the two things it actually says.
+ *
+ * `packScopeHash` composes `v{n}/{candidateId}/{swLat}/{swLng}/{neLat}/{neLng}`.
+ * The candidate id is a provider identifier and may itself contain slashes, so
+ * the bounds are read off the *end* rather than by counting from the front — a
+ * naive split silently mis-parsed every OSM-style `relation/12345` id.
+ *
+ * Returns `null` for anything it cannot read, and every caller treats that as
+ * "no widening", which keeps an unparseable key exactly as strict as it is now.
+ */
+interface ScopeGround {
+  /** Version and candidate id: the piece of ground, independent of any radius. */
+  identity: string;
+  bounds: { swLat: number; swLng: number; neLat: number; neLng: number };
+}
+
+export function readScopeGround(scopeHash: string): ScopeGround | null {
+  const parts = scopeHash.split('/');
+  if (parts.length < 6) return null;
+  const numbers = parts.slice(-4).map(Number);
+  if (numbers.some((value) => !Number.isFinite(value))) return null;
+  const [swLat, swLng, neLat, neLng] = numbers as [number, number, number, number];
+  return {
+    identity: parts.slice(0, -4).join('/'),
+    bounds: { swLat, swLng, neLat, neLng },
+  };
+}
+
+/**
+ * Whether a stored pack's ground contains the ground being asked for.
+ *
+ * The epsilon is a hair over the 4-decimal rounding `packScopeHash` applies
+ * (about 11 m), so two derivations of the same boundary that differ only in the
+ * last digit count as the same ground rather than as a miss.
+ */
+const BOUNDS_EPSILON = 0.0002;
+
+function covers(stored: ScopeGround['bounds'], wanted: ScopeGround['bounds']): boolean {
+  return (
+    stored.swLat <= wanted.swLat + BOUNDS_EPSILON &&
+    stored.swLng <= wanted.swLng + BOUNDS_EPSILON &&
+    stored.neLat >= wanted.neLat - BOUNDS_EPSILON &&
+    stored.neLng >= wanted.neLng - BOUNDS_EPSILON
+  );
+}
+
+/** Escapes the two wildcards SQLite's LIKE recognises. */
+function likePrefix(identity: string): string {
+  return `${identity.replace(/[\\%_]/g, (char) => `\\${char}`)}/%`;
+}
+
+/**
+ * A usable pack for this ground built from this release, newest first.
+ *
+ * TWO LOOKUPS, AND THE SECOND ONE IS THE POINT.
+ *
+ * The exact-hash query is unchanged and still runs first, so nothing that hits
+ * today behaves differently. What it could not do is recognise the same ground
+ * arriving under a different boundary: the hash carries the derived bounding
+ * box, and the box is a function of the *traveller* — nights, pace, whether
+ * they will drive — rather than of the destination. So a second Tokyo trip with
+ * a slightly different radius missed a stored pack covering the same city and
+ * re-fetched 3,787 records to learn what was already on disk.
+ *
+ * The widening asks the question the cache was always meant to answer: is there
+ * a pack for *this piece of ground*, from *this release*, whose extent already
+ * contains what is being asked for? A pack covering more ground answers a
+ * request for less; the reverse never does, and is not offered.
+ */
 export function findRegionPack(input: {
   scopeHash: string;
   catalog: string;
   releaseId: string;
 }): RegionPack | null {
-  const rows = getDb()
+  const db = getDb();
+  const rows = db
     .prepare(
       `SELECT * FROM region_packs
         WHERE scope_hash = ? AND catalog = ? AND release_id = ?
@@ -66,6 +136,26 @@ export function findRegionPack(input: {
     .all(input.scopeHash, input.catalog, input.releaseId) as PackRow[];
 
   for (const row of rows) {
+    const pack = parseRow(row);
+    if (pack && isPackUsable(pack.state)) return pack;
+  }
+
+  const wanted = readScopeGround(input.scopeHash);
+  if (!wanted) return null;
+
+  const nearby = db
+    .prepare(
+      `SELECT * FROM region_packs
+        WHERE scope_hash LIKE ? ESCAPE '\\' AND catalog = ? AND release_id = ?
+          AND state IN ('ready', 'partial')
+        ORDER BY created_at DESC
+        LIMIT 10`,
+    )
+    .all(likePrefix(wanted.identity), input.catalog, input.releaseId) as PackRow[];
+
+  for (const row of nearby) {
+    const stored = readScopeGround(row.scope_hash);
+    if (!stored || !covers(stored.bounds, wanted.bounds)) continue;
     const pack = parseRow(row);
     if (pack && isPackUsable(pack.state)) return pack;
   }

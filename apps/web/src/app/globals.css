@@ -83,11 +83,24 @@
    * value at each site would have fixed it until somebody changed the header's
    * padding.
    *
-   * The `+ 1px` is the bottom rule: `py-3.5` (28px) plus a `text-xl` line box
-   * (28px) plus `border-b` is 57, and 3.5rem alone left a one-pixel sliver of
-   * the sticky content riding under the header edge.
+   * The arithmetic, and the reason it was wrong for two waves.
+   *
+   * It used to read `calc(3.5rem + 1px)` = 57px, derived as "`py-3.5` (28px)
+   * plus a `text-xl` line box (28px) plus `border-b`". That was true when it
+   * was written and stopped being true the moment a *different* accessibility
+   * fix gave the "New trip" link `min-h-11` — 44 px of target, WCAG 2.5.5,
+   * `ProductChrome.tsx`. The flex row is `items-center`, so its height is the
+   * tallest child: max(28, 44) = 44, and the header measures **73px** at every
+   * viewport. One accessibility fix silently invalidated the other, and the
+   * token feeds six sticky and scroll-margin sites — the itinerary's day rail
+   * and the board's action bar were both being sliced 16px along their tops.
+   *
+   * So: 2.75rem (the 44px target) + 1.75rem (`py-3.5`, top and bottom) + 1px
+   * (`border-b`). `globals.chrome.test.ts` derives the same three numbers from
+   * `ProductChrome.tsx`'s own classes and fails if they drift apart again,
+   * which is the only reason this comment can be trusted.
    */
-  --chrome-height: calc(3.5rem + 1px);
+  --chrome-height: calc(2.75rem + 1.75rem + 1px);
 
   --radius-card: 0.875rem;
   --radius-panel: 1.125rem;
@@ -137,6 +150,36 @@
 @layer base {
   html {
     color-scheme: light dark;
+
+    /*
+     * WHERE A FOCUSED CONTROL COMES TO REST — WCAG 2.2 SC 2.4.11.
+     *
+     * The browser scrolls a focused element to the edge of the *layout*
+     * viewport, and this product has fixed chrome at both edges. Measured by a
+     * reviewer at 390x664: **30 of 107** focusable controls on the Discovery
+     * Board — including every per-card Include/Maybe/Skip radio — were 100%
+     * covered by the bottom action bar at the moment they received focus, and
+     * every ⋯ stop-edit button on the itinerary landed behind the header and
+     * the day rail. A keyboard user tabbing that page sees nothing move.
+     *
+     * `scroll-padding` on the scrolling root is the one place this can be said
+     * once for every route, rather than as a `scroll-margin` on each of the
+     * hundred controls that would need one.
+     *
+     * The top is exactly the header, because that is the only chrome that is
+     * fixed on *every* route; surfaces with a second sticky band beneath it
+     * (the itinerary's day rail) still need their own `scroll-margin-top`, and
+     * that belongs with the component that knows its height.
+     *
+     * The bottom is the board's pinned action bar, which is `max-sm:fixed` and
+     * about 121px tall, plus the safe-area inset the bar itself already pays
+     * for. Stated unconditionally rather than inside a media query: on a wide
+     * viewport it costs a little extra scroll and nothing else, and a rule that
+     * only applies below a breakpoint is a rule that stops applying when
+     * somebody changes the breakpoint.
+     */
+    scroll-padding-top: var(--chrome-height);
+    scroll-padding-bottom: calc(8rem + env(safe-area-inset-bottom));
   }
 
   body {

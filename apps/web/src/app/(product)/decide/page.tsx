@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DecisionComposer } from '@/components/DecisionComposer';
 import { destinationIndexRelease } from '@/lib/db/destination-index-repository';
@@ -6,6 +7,10 @@ import { seedDestinationIndexIfRequested } from '@/lib/destinations/seed';
 import { Panel } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Help me decide where to go — Sidequest',
+};
 
 /**
  * WHERE SHOULD I GO.

@@ -686,6 +686,15 @@ export const VALIDATION_ISSUE_CODES = [
   'transport_leg_without_endpoint',
   'inconsistent_transport_totals',
   'strategy_mode_mismatch',
+  /**
+   * A leg's stated minutes are physically impossible for its mode against the
+   * distance on record — a ten-minute "walk" to a place the pack itself puts
+   * 16.4 road-km away, which a stored Tokyo plan actually contained. An error,
+   * not a caution: an itinerary stating impossible transport as fact is the
+   * exact artifact the §16 validator class exists to refuse, and it guards the
+   * rebuild path against packs poisoned with authored constants.
+   */
+  'travel_leg_speed_impossible',
   // --- Attraction operating hours ---------------------------------------
   // Deliberately separate from the access codes above. A place can be
   // reachable and shut, or open and unreachable, and a traveller told "this
@@ -716,6 +725,13 @@ export const VALIDATION_ISSUE_CODES = [
   // is an opinion and blocking a plan on one would be overreach.
   /** A signed daylight-only visit is scheduled outside the computed daylight. */
   'scheduled_outside_daylight',
+  /**
+   * An outdoor visit that runs past the day's own recorded sunset, without a
+   * daylight-only sign. A caution, not an error — plenty of outdoor places are
+   * lit or best after dark — but a pond visited entirely at night is a plan
+   * the traveller deserves a sentence about, and a stored plan contained one.
+   */
+  'scheduled_after_dark',
   /** A typed weather requirement of the place is contradicted on its day. */
   'weather_incompatible_scheduled',
   /** Scheduled on a day the weather works against, with no better day free. */
@@ -858,6 +874,13 @@ export const REVISION_ACTION_CODES = [
   'attached_backup',
   /** Swapped a meal for one that fits the route, the clock or the budget. */
   'changed_meal',
+  /**
+   * The traveller changed the plan themselves — removed a stop, swapped one,
+   * asked for an easier day. Its own code because it is the one revision the
+   * planner did not decide, and a surface that lists "what we adjusted" must
+   * not claim the traveller's edits as its own judgement.
+   */
+  'traveller_edit',
   'left_unresolved',
 ] as const;
 export const revisionActionCodeSchema = z.enum(REVISION_ACTION_CODES);

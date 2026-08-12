@@ -56,6 +56,7 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   trail: 'outdoor',
   trailhead: 'support_stop',
   forest: 'outdoor',
+  wood: 'outdoor',
   valley: 'scenic',
   hill: 'scenic',
   mountain_range: 'scenic',
@@ -65,6 +66,8 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   lake: 'outdoor',
   reservoir: 'outdoor',
   river: 'outdoor',
+  stream: 'outdoor',
+  canal: 'outdoor',
   pond: 'outdoor',
   lagoon: 'outdoor',
   bay: 'outdoor',
@@ -129,7 +132,30 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   pedestrian: 'insufficient_travel_value',
   scenic_drive: 'scenic',
   scenic_byway: 'scenic',
+  // Evidence-gated in the inventory: the role alone no longer reaches a board.
   bridge: 'scenic',
+  viaduct: 'scenic',
+  railway: 'infrastructure',
+  railway_line: 'infrastructure',
+  rail_line: 'infrastructure',
+  rail: 'infrastructure',
+  subway_line: 'infrastructure',
+  tram_line: 'infrastructure',
+  level_crossing: 'infrastructure',
+  railway_yard: 'infrastructure',
+  cemetery: 'side_quest',
+  graveyard: 'side_quest',
+  theme_park: 'itinerary_anchor',
+  amusement_park: 'itinerary_anchor',
+  water_park: 'itinerary_anchor',
+  person: 'generic_commercial',
+  company: 'generic_commercial',
+  corporation: 'generic_commercial',
+  office: 'generic_commercial',
+  corporate_office: 'generic_commercial',
+  headquarters: 'generic_commercial',
+  corporate_headquarters: 'generic_commercial',
+  coworking_space: 'generic_commercial',
   pier: 'scenic',
   restaurant: 'food',
   cafe: 'food',
@@ -342,7 +368,7 @@ describe('role eligibility over the complete category vocabulary', () => {
   const everyKey = [...leaves, ...branches];
 
   it('covers every key the taxonomy knows, and nothing it does not', () => {
-    expect(everyKey.length).toBe(214);
+    expect(everyKey.length).toBe(239);
     expect([...everyKey].sort()).toEqual(Object.keys(EXPECTED_ROLE).sort());
   });
 

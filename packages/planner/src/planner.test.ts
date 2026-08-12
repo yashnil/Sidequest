@@ -7,6 +7,7 @@ import {
   type Itinerary,
   type ItineraryDay,
   type TravelerProfile,
+  type ValidationIssue,
 } from '@sidequest/core';
 import { planTrip } from './plan';
 import { buildDailyWindows, eachDate } from './windows';
@@ -15,7 +16,12 @@ import { reviseDayPlans } from './revise';
 import { validateItinerary } from './validate';
 import { isOpenOnDate } from './schedule';
 import { buildFoodPlan } from './food-plan';
-import { DEFAULT_PLANNER_CONFIG, resolveConfig, type PlannerInput } from './types';
+import {
+  DEFAULT_PLANNER_CONFIG,
+  resolveConfig,
+  type PlannerInput,
+  type PlanningCandidate,
+} from './types';
 import { buildScenario, type ScenarioOptions } from './testing/scenario';
 import {
   EASTERN_SIERRA_ACCESS,
@@ -460,6 +466,110 @@ describe('reviser', () => {
     ]);
     expect(outcome.actions[0]?.code).toBe('left_unresolved');
     expect(outcome.changed).toBe(false);
+  });
+
+  /**
+   * THE LOOP THAT SUBTRACTED UNTIL THERE WAS NOTHING LEFT.
+   *
+   * `planTrip` runs this reviser up to `maxRevisionPasses` times, and the
+   * reviser takes at most one stop off each offending day per pass. Three
+   * passes, two days, six stops — and a day-scoped finding that a smaller day
+   * does not fix — arithmetically reaches zero. The traveller was then handed
+   * `planner_coverage_insufficient` with an empty funnel and no cause, on a
+   * weak-data destination whose stops were individually fine.
+   *
+   * Driven here exactly as `planTrip` drives it, because the defect is in the
+   * sequence rather than in any one pass: every pass in isolation looked like a
+   * reasonable sacrifice.
+   */
+  function runLoop(
+    seed: readonly { dayNumber: number; accepted: PlanningCandidate[] }[],
+    issueFor: (dayNumber: number) => ValidationIssue,
+    maxRevisionPasses = resolveConfig().maxRevisionPasses,
+  ) {
+    let plans = seed.map((entry) => ({
+      day: days[entry.dayNumber - 1]!,
+      accepted: entry.accepted,
+    }));
+    const actions = [];
+    for (let pass = 0; pass < maxRevisionPasses; pass += 1) {
+      const live = plans.filter((plan) => plan.accepted.length > 0).map((plan) => plan.day.dayNumber);
+      if (live.length === 0) break;
+      const outcome = reviseDayPlans(plans, live.map(issueFor));
+      actions.push(...outcome.actions);
+      if (!outcome.changed) break;
+      plans = outcome.dayPlans;
+    }
+    return {
+      stops: plans.reduce((sum, plan) => sum + plan.accepted.length, 0),
+      actions,
+    };
+  }
+
+  it('keeps a day alive when the removal would be deletion rather than a repair', () => {
+    const seed = [
+      { dayNumber: 2, accepted: eligible.slice(0, 3) },
+      { dayNumber: 3, accepted: eligible.slice(3, 6) },
+    ];
+    expect(seed[0]!.accepted.length + seed[1]!.accepted.length).toBe(6);
+
+    const outcome = runLoop(seed, (dayNumber) => ({
+      code: 'travel_leg_speed_impossible',
+      severity: 'error',
+      message: `Day ${dayNumber} states a travel time its distance contradicts.`,
+      dayNumber,
+    }));
+
+    /*
+     * Two stops — one per day — rather than none. Every day the inputs could
+     * legally hold something still holds something, which is the difference
+     * between a partial plan and a refusal with nothing in it.
+     */
+    expect(outcome.stops, 'the revision loop ground the plan to nothing').toBeGreaterThan(0);
+    expect(outcome.stops).toBe(2);
+    /* And the reason the loop stopped is on the record rather than implied. */
+    const stopped = outcome.actions.filter((action) => action.code === 'left_unresolved');
+    expect(stopped.length).toBeGreaterThan(0);
+    expect(stopped[0]!.description).toContain('states a travel time its distance contradicts');
+  });
+
+  it('still empties a day when the finding names the one stop on it', () => {
+    /*
+     * The floor is about blind sacrifices, not about targeted ones. A stop that
+     * is itself shut on the date has to come off even if it is the only thing
+     * there — the rest of the trip survives, and the day is honestly empty
+     * rather than dishonestly full.
+     */
+    const only = eligible[0]!;
+    const outcome = reviseDayPlans([{ day: days[1]!, accepted: [only] }], [
+      {
+        code: 'attraction_closed_on_date',
+        severity: 'error',
+        message: 'shut that day',
+        dayNumber: 2,
+        placeId: only.place.id,
+      },
+    ]);
+    expect(outcome.dayPlans[0]!.accepted).toHaveLength(0);
+    expect(outcome.removed).toHaveLength(1);
+  });
+
+  it('names the cause when an impossible travel time costs a stop', () => {
+    /*
+     * It fell to the default — "the day did not fit otherwise", filed as
+     * `no_time_left` — which sends a traveller to add days against a defect no
+     * number of days would change.
+     */
+    const outcome = reviseDayPlans([{ day: days[1]!, accepted: eligible.slice(0, 2) }], [
+      {
+        code: 'travel_leg_speed_impossible',
+        severity: 'error',
+        message: 'impossible leg',
+        dayNumber: 2,
+      },
+    ]);
+    expect(outcome.removed[0]!.code).toBe('transport_mode_unavailable');
+    expect(outcome.removed[0]!.reason).toContain('contradicted by the distance');
   });
 });
 

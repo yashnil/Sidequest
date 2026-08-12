@@ -2,6 +2,7 @@
 
 import { after } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import {
   DESTINATION_RESOLUTION_VERSION,
   FEATURE_TYPE_BREADTH,
@@ -39,11 +40,12 @@ import {
   withAdaptiveQuestions,
 } from '@sidequest/compiler';
 import { capabilityRegistry } from '@/lib/capabilities';
-import { compilerProviders, providerReadiness } from '@/lib/compiler/providers';
-import { runCompilation, startCompilation } from '@/lib/compiler/runner';
+import { compilerProviderChoice, compilerProviders, providerReadiness } from '@/lib/compiler/providers';
+import { activeJobFor, runCompilation, startCompilation } from '@/lib/compiler/runner';
 import {
   getIntent,
   getLatestJob,
+  reclaimAbandonedJob,
   requestCancel,
   saveClarifications,
   saveComposerAnswers,
@@ -53,7 +55,11 @@ import {
   saveSelectedCandidate,
   saveSelectedDestination,
 } from '@/lib/db/compiler-repository';
+import { compilerIsolationMode, launchCompilationWorker } from '@/lib/compiler/worker/launch';
+import { callerKey, guardAction } from '@/lib/net/caller';
+import { reserveModelCalls } from '@/lib/compiler/daily-ceiling';
 import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
+import { destinationDivisionIds } from '@/lib/destinations/identity';
 import { runPreflight } from '@/lib/destinations/preflight';
 import { getProvisionalBoard } from '@/lib/db/provisional-repository';
 import { estimateRemainingForRun, runBucket } from '@/lib/db/timing-repository';
@@ -72,6 +78,49 @@ export interface ActionResult {
 }
 
 /**
+ * REQUEST-SIZE BOUNDS ON WHAT THE BROWSER SENDS.
+ *
+ * Server actions deserialize whatever arrives, and every id here ends up in a
+ * SQL parameter, a log line or a provider call. None of them has any business
+ * being longer than the identifiers this codebase mints — a UUID, a resolver
+ * candidate id, a strategy key — so anything larger is refused before it
+ * touches storage. The message is deliberately generic: a bounds refusal is
+ * for scripts, and a script does not need a diagnosis.
+ */
+const tripIdSchema = z.string().trim().min(1).max(64);
+const candidateIdSchema = z.string().trim().min(1).max(256);
+const strategyIdSchema = z.string().trim().max(64);
+const clarificationAnswersSchema = z
+  .array(
+    z.object({
+      questionId: z.string().trim().min(1).max(128),
+      values: z.array(z.string().max(500)).max(24),
+    }),
+  )
+  .max(64);
+
+const MALFORMED_REQUEST: ActionResult = {
+  ok: false,
+  error: 'That request did not look right, so we did not run it.',
+};
+
+/**
+ * The limiter, as one line per guarded action.
+ *
+ * Both the identities and the fences live in `lib/net/caller` and
+ * `lib/net/rate-limit` now, rather than here. That move is the fix for a real
+ * defect rather than tidying: the identity derivation this file used to own
+ * read the *leftmost* `x-forwarded-for` element, which is by definition what
+ * the client sent, so two header lines bought a virgin bucket. The shared
+ * module refuses to derive an address it cannot stand behind and adds a fence
+ * that takes no identity at all — and being shared is what let the
+ * questionnaire's billed action be guarded by the same thing.
+ */
+async function rateGuard(kind: Parameters<typeof guardAction>[0]): Promise<string | null> {
+  return guardAction(kind);
+}
+
+/**
  * Ask the resolver what the typed string might mean.
  *
  * Run once, on a button press, and stored — the geocoder's usage policy forbids
@@ -79,6 +128,7 @@ export interface ActionResult {
  * extra steps.
  */
 export async function resolveDestinationAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
 
@@ -88,6 +138,30 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
 
   const readiness = providerReadiness();
   if (!readiness.ready) return { ok: false, error: readiness.message };
+
+  // After the free checks, before the geocoder round-trip: a refused request
+  // must not have cost the provider anything to refuse.
+  const limited = await rateGuard('destination_resolve');
+  if (limited) return { ok: false, error: limited };
+
+  /**
+   * THE MODEL CALL HIDING INSIDE "LOOK UP A DESTINATION".
+   *
+   * `resolver.resolve` does not only geocode: on the open stack it also asks
+   * the billed model whether the typed string is a place at all, once per
+   * invocation and uncached. That spend was invisible to the daily ceiling,
+   * which only ever counted what a *compilation* reported — so the one control
+   * that bounds the aggregate bill was blind to an action any visitor can fire
+   * on any trip. Booked here, before the call, because a reservation taken
+   * afterwards is a ceiling discovered by crossing it.
+   *
+   * Only on the open stack: the fixture resolver reaches no model, and a gate
+   * that refused a free lookup would be a cost control with no cost behind it.
+   */
+  if (compilerProviderChoice() === 'open') {
+    const spend = reserveModelCalls(1, { caller: await callerKey() });
+    if (!spend.allowed) return { ok: false, error: spend.message };
+  }
 
   try {
     const { providers } = compilerProviders();
@@ -149,6 +223,12 @@ export async function selectInterpretationAction(
   tripId: string,
   candidateId: string,
 ): Promise<ActionResult> {
+  if (
+    !tripIdSchema.safeParse(tripId).success ||
+    !candidateIdSchema.safeParse(candidateId).success
+  ) {
+    return MALFORMED_REQUEST;
+  }
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
 
@@ -182,6 +262,12 @@ export async function saveClarificationAnswersAction(
   tripId: string,
   answers: { questionId: string; values: string[] }[],
 ): Promise<ActionResult> {
+  if (
+    !tripIdSchema.safeParse(tripId).success ||
+    !clarificationAnswersSchema.safeParse(answers).success
+  ) {
+    return MALFORMED_REQUEST;
+  }
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
 
@@ -212,6 +298,7 @@ export async function saveClarificationAnswersAction(
  * back cannot silently adopt the artifact compiled from the previous answer.
  */
 export async function proposeScopeAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
 
@@ -229,6 +316,20 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
   const scope = deriveScope({
     candidate,
     clarifications: intent.clarifications,
+    /*
+     * WHICH CATALOGUE DIVISION THE DESTINATION IS, RESOLVED WHERE THE INDEX IS.
+     *
+     * `deriveScope` reads the identifier the candidate was minted from without
+     * being told. What it cannot see from here is a catalogue that publishes the
+     * same place twice, at two administrative levels — and for a metropolis that
+     * is the normal case, with every record in the destination referring to the
+     * reading the index did *not* hand the traveller. Resolving that needs the
+     * destination index, which lives on this side of the package boundary.
+     *
+     * The whole candidate rather than its id, because a geocoded destination
+     * has no catalogue row and the only bridge to one is a code it carries.
+     */
+    divisionIds: destinationDivisionIds(candidate),
     ...(profile ? { profile } : {}),
     ...(intent.composer?.transport ? { composerTransport: intent.composer.transport } : {}),
     ...(intent.composer?.shape ? { composerShape: intent.composer.shape } : {}),
@@ -264,6 +365,7 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
 }
 
 export async function confirmScopeAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const intent = getIntent(tripId);
   if (!intent?.scope) return { ok: false, error: 'There is no region to confirm yet.' };
 
@@ -281,17 +383,49 @@ export async function confirmScopeAction(tripId: string): Promise<ActionResult> 
 }
 
 /**
- * Start the job, then do the work after the response has gone.
+ * Start the job, then hand the work to a dedicated process.
  *
- * `after()` is what lets the browser get an answer immediately while the
- * compilation continues — and the job row is what makes that survivable, because
- * the browser reads state from the database rather than from this promise.
+ * The job row is what makes this survivable in every direction: the browser
+ * reads state from the database rather than from any promise, the worker
+ * writes to the database rather than to any pipe, and either side can die
+ * without taking the other's truth with it.
+ *
+ * The work runs in a spawned compile worker by default — a compilation used to
+ * run on this process's event loop and froze every route for the length of the
+ * build. `after()` remains only as the inline fallback, for environments that
+ * cannot spawn and for `SIDEQUEST_COMPILER_ISOLATION=inline`.
  */
 export async function startCompilationAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
 
-  const outcome = startCompilation(trip);
+  /*
+   * Adoption before the limiter, because adoption is free. A second click on a
+   * build that is already going must show the traveller that build — charging
+   * a token for it (or refusing it) would make the limiter punish exactly the
+   * double-click the job index already absorbs. An *abandoned* job does not
+   * count: that click is asking for a restart, which is a real start and pays
+   * like one.
+   */
+  const running = activeJobFor(tripId);
+  if (running && !isAbandoned(running, new Date())) {
+    revalidatePath(`/trips/${tripId}/plan`);
+    return { ok: true };
+  }
+
+  // Before `startCompilation`, which is the thing that can create a billable
+  // job: a refused request must refuse before anything exists to pay for.
+  const limited = await rateGuard('compile_start');
+  if (limited) return { ok: false, error: limited };
+
+  /*
+   * The caller travels with the start, so the day's allowance is spent against
+   * this browser as well as against the deployment. Without it the ceiling is a
+   * single shared counter and one visitor holding down the button exhausts
+   * everybody's research for the day — measured at roughly seventeen minutes.
+   */
+  const outcome = startCompilation(trip, new Date(), await callerKey());
   if (outcome.kind === 'blocked') return { ok: false, error: outcome.message };
 
   // Already running, or already compiled: both mean "what you asked for is
@@ -303,13 +437,31 @@ export async function startCompilationAction(tripId: string): Promise<ActionResu
   }
 
   const jobId = outcome.jobId;
-  after(async () => {
-    try {
-      await runCompilation({ trip, jobId });
-    } catch (error) {
-      console.error('Compilation runner failed', { tripId, jobId, error });
+  const isolation = compilerIsolationMode();
+  const launched =
+    isolation === 'process'
+      ? launchCompilationWorker({ tripId, jobId })
+      : { launched: false as const, reason: 'inline isolation configured' };
+
+  if (!launched.launched) {
+    if (isolation === 'process') {
+      // The fallback is a degradation worth a log line: the build still runs,
+      // but on this event loop, which is the exact condition the worker exists
+      // to end.
+      console.error('Compile worker could not be spawned; running inline', {
+        tripId,
+        jobId,
+        reason: launched.reason,
+      });
     }
-  });
+    after(async () => {
+      try {
+        await runCompilation({ trip, jobId });
+      } catch (error) {
+        console.error('Compilation runner failed', { tripId, jobId, error });
+      }
+    });
+  }
 
   revalidatePath(`/trips/${tripId}/plan`);
   return { ok: true };
@@ -317,6 +469,7 @@ export async function startCompilationAction(tripId: string): Promise<ActionResu
 
 /** Explicit, and only from a terminal state. A retry is never automatic. */
 export async function retryCompilationAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const job = getLatestJob(tripId);
   /*
    * An abandoned job is terminal for this purpose, and saying so here is what
@@ -334,7 +487,14 @@ export async function retryCompilationAction(tripId: string): Promise<ActionResu
   return startCompilationAction(tripId);
 }
 
+/**
+ * Stop, meaning now. `requestCancel` flips the job terminal in the same call,
+ * so the traveller's next read says "cancelled" rather than "running until the
+ * worker notices" — and the worker's pulse notices within one heartbeat
+ * interval and stops the process, which is what stops the spending.
+ */
 export async function cancelCompilationAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   requestCancel(tripId);
   revalidatePath(`/trips/${tripId}/plan`);
   return { ok: true };
@@ -389,6 +549,23 @@ export interface CompilationSnapshot {
  * cannot update client state on its own.
  */
 export async function compilationSnapshotAction(tripId: string): Promise<CompilationSnapshot> {
+  if (!tripIdSchema.safeParse(tripId).success) {
+    return { state: 'none', stages: [], retryable: false };
+  }
+
+  /**
+   * ORPHANS ARE ENDED HERE, NOT MERELY DESCRIBED.
+   *
+   * This poll used to *report* an abandoned job as failed while the row said
+   * `running` forever — which kept the elapsed clock counting ("Working —
+   * 12198m 51s" reached a real screen) and left `startJob` as the only thing
+   * that could ever end the row. The reclaim writes the honest terminal state
+   * — interrupted, retryable, nothing lost — the first time anybody looks
+   * after the heartbeat goes cold, and the terminal-write guards keep a
+   * returning process from arguing with it.
+   */
+  reclaimAbandonedJob(tripId, new Date());
+
   const job = getLatestJob(tripId);
   if (!job) return { state: 'none', stages: [], retryable: false };
 
@@ -624,6 +801,7 @@ const FEATURE_TYPE_FROM_ENTITY: Partial<Record<string, SelectedDestination['feat
  * returned rather than recomputed, so a refresh is free.
  */
 export async function ensurePreflightAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
 
@@ -660,6 +838,11 @@ export async function ensurePreflightAction(tripId: string): Promise<ActionResul
   if (intent.preflight && intent.preflight.destinationKey === destination.entryId) {
     return { ok: true };
   }
+
+  // After the idempotent return above — a stored preflight re-read on refresh
+  // is free and must never be throttled — and before the network call below.
+  const limited = await rateGuard('preflight');
+  if (limited) return { ok: false, error: limited };
 
   try {
     const preflight = await runPreflight({
@@ -792,6 +975,7 @@ export async function adoptDateWindowAction(
   month: number,
   year: number,
 ): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   const intent = getIntent(tripId);
   if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
@@ -819,12 +1003,18 @@ export async function adoptTripLengthAction(
   tripId: string,
   nights: number,
 ): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   const intent = getIntent(tripId);
   if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
   if (!Number.isInteger(nights) || nights < 1 || nights > MAX_TRIP_NIGHTS) {
     return { ok: false, error: 'That is not a length we offered.' };
   }
+
+  // This action recomputes the preflight below, which is a real provider
+  // call, so it draws from the same bucket the preflight itself does.
+  const limited = await rateGuard('preflight');
+  if (limited) return { ok: false, error: limited };
 
   const start = Date.parse(`${trip.basics.startDate}T00:00:00Z`);
   if (Number.isNaN(start)) return { ok: false, error: 'That trip has no usable start date.' };
@@ -877,6 +1067,12 @@ export async function adoptTripLengthAction(
  * present, which is exactly the country case this screen exists for.
  */
 export async function applyStrategyAction(tripId: string, strategyId: string): Promise<ActionResult> {
+  if (
+    !tripIdSchema.safeParse(tripId).success ||
+    !strategyIdSchema.safeParse(strategyId).success
+  ) {
+    return MALFORMED_REQUEST;
+  }
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
 
@@ -1005,6 +1201,7 @@ function provisionalBoardIdFor(tripId: string): string | null {
  * punishment, which is how a product teaches people not to check their work.
  */
 export async function reopenPreflightAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
   if (!intent.composer) {

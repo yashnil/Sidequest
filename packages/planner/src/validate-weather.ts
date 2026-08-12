@@ -103,6 +103,34 @@ export function validateDayWeather(
           placeId: item.placeId,
         });
       }
+    } else if (
+      /**
+       * THE SOFT HALF OF THE DAYLIGHT STORY.
+       *
+       * The hard check above needs an explicit daylight-only sign, and most
+       * outdoor places carry none — so a stored plan scheduled a pond visit
+       * entirely after its own day's recorded sunset and nothing said a word.
+       * The day already stores the sunset it was built against; an outdoor
+       * stop that *starts* after it earns a caution. A caution, never an
+       * error: viewpoints at night and lit gardens are real plans, and the
+       * traveller is the one who knows which this is.
+       *
+       * Keyed on the start rather than the end, so a dinner-hour stroll that
+       * runs a few minutes past dusk does not nag — the plan worth flagging is
+       * the one conducted wholly in the dark.
+       */
+      day.weather.sunsetMinute !== undefined &&
+      item.startMinute >= day.weather.sunsetMinute &&
+      place !== undefined &&
+      place.weather.exposure !== 'indoor'
+    ) {
+      issues.push({
+        code: 'scheduled_after_dark',
+        severity: 'warning',
+        message: `${name} is outdoors and day ${day.dayNumber} starts it at ${formatMinuteOfDay(item.startMinute)} — after that day's sunset at ${formatMinuteOfDay(day.weather.sunsetMinute)}. Fine if it is lit or the dark is the point; otherwise move it earlier.`,
+        dayNumber: day.dayNumber,
+        placeId: item.placeId,
+      });
     }
 
     if (!item.weather) continue;

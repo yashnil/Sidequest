@@ -106,6 +106,11 @@ async function main(): Promise<void> {
     await page.waitForURL(/\/discover$/, { timeout: 30_000 }).catch(() => undefined);
     await check('02-board-weather-not-fetched');
 
+    /* The forecast control moved behind the board's one disclosure. */
+    await page
+      .getByTestId('board-backstage-toggle')
+      .click()
+      .catch(() => undefined);
     await page
       .getByTestId('weather-refresh')
       .click()

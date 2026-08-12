@@ -208,6 +208,17 @@ function summarise(input: ReadinessInput, dominant: readonly PlannerRejection[])
     return 'Nothing on the board is marked to include, so there was nothing to plan.';
   }
   if (funnel.eligible === 0) {
+    /*
+     * Two different zeros, and only one of them is a measurement gap. When the
+     * dominant blocker is a transport conflict — a road measured for a trip
+     * with no car, a walk past the traveller's own limit — saying "we could not
+     * measure" sends them to retry something that will never go differently.
+     * The blocker names what actually stops these, so the summary reads it.
+     */
+    const lead = dominant[0];
+    if (lead && (lead.reasonCode === 'transport_mode_unavailable' || lead.reasonCode === 'access_unavailable')) {
+      return `None of the ${funnel.selected} places you picked can be reached with the transport this trip has — ${REASON_PHRASES[lead.reasonCode]}.`;
+    }
     return `None of the ${funnel.selected} places you picked has a travel time we could measure, so none of them could be placed in a day.`;
   }
   if (funnel.accessFeasible === 0) {

@@ -29,7 +29,12 @@ import {
   type RegionExpansion,
 } from '../region/expansion';
 import type { SeasonAssessment } from '../region/season';
-import { scorePlace, type BlockerCode, type FitAssessment } from '../scoring/fit';
+import {
+  calibrateBandDistribution,
+  scorePlace,
+  type BlockerCode,
+  type FitAssessment,
+} from '../scoring/fit';
 import { assessCandidateQuality, type CandidateOutcome, type QualityAssessment } from '../quality/candidate';
 import { evidenceFor, type PlaceEvidence, type RegionEvidence } from '../schemas/evidence';
 
@@ -446,9 +451,21 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
    */
   const categoryCounts = new Map<string, number>();
 
+  /*
+   * Scored first, then *calibrated as a population*, then built into cards.
+   *
+   * The order matters: the label distribution guard (§9.1) demotes the
+   * lowest-scoring members of an over-subscribed top band, and everything a
+   * card derives from its band — its group, its detour label — has to read the
+   * calibrated band, not the raw one. A board where every card says "Top pick"
+   * is a board with no top picks.
+   */
+  const rawFits = assessments.map((assessment) => scorePlace(assessment, { profile, travelerNeeds }));
+  const calibrated = calibrateBandDistribution(rawFits);
+
   const candidates: DiscoveryCandidate[] = assessments
-    .map((assessment) => {
-      const fit = scorePlace(assessment, { profile, travelerNeeds });
+    .map((assessment, index) => {
+      const fit = calibrated[index]!;
       const placeEvidence = evidenceFor(evidence, assessment.place.id);
       const seen = categoryCounts.get(assessment.place.category) ?? 0;
       categoryCounts.set(assessment.place.category, seen + 1);
@@ -513,7 +530,7 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
           daylightOnly: assessment.operating.daylightOnly,
         }),
         worthDetour: worthDetourLabel(assessment.detourClass, fit.band),
-        group: groupFor(assessment.place, fit.band, quality.outcome),
+        group: groupFor(assessment.place, fit.band, quality.outcome, assessment.detourClass),
       };
     })
     // Anything you cannot actually do sorts below everything you can, however
@@ -543,6 +560,11 @@ function groupFor(
   place: Place,
   band: FitAssessment['band'],
   outcome: CandidateOutcome,
+  /**
+   * How far out this is *for this traveller*, in the mode they would make the
+   * journey in. Read by the two groups whose headings talk about distance.
+   */
+  detourClass: DetourClass,
 ): BoardGroup {
   if (band === 'not_workable' || band === 'weak') return 'weak_fit';
   /**
@@ -557,13 +579,31 @@ function groupFor(
   if (outcome === 'low_confidence') return 'needs_verification';
   if (place.hiddenGemScore >= 0.6) return 'hidden_gems';
   if (place.popularityScore >= 0.7) return 'must_see_classics';
-  if (place.category === 'scenic_drive' || place.category === 'viewpoint') return 'scenic_detours';
   if (
     place.weather.poorWeatherBackup &&
     (place.physicalIntensity === 'none' || place.physicalIntensity === 'easy')
   ) {
     return 'low_effort_backups';
   }
+  /**
+   * THE LAST TWO GROUPS ARE ABOUT DISTANCE, SO THEY ARE DECIDED BY DISTANCE.
+   *
+   * They were not. `scenic_detours` was assigned on category alone and
+   * `nearby_side_quests` was the fallthrough — "matched none of the rules above"
+   * — while both groups' headings, here and in `BOARD_GROUP_COPY`, talk about
+   * how far things are. A reviewer found the predictable result on a real board:
+   * "Easy wins near your base · short hops you can slot into any day" holding a
+   * one-hour-nine-minute drive, and "Worth the detour · further out" led by a
+   * thirteen-minute viewpoint. A heading that asserts a fact its contents
+   * contradict is worse than no heading, because the traveller acts on it.
+   *
+   * `stretch` and `too_far` are the classifier's own words for "past what this
+   * traveller said they would go, in the mode they would go in" — so they are
+   * exactly the population the further-out heading describes. An unmeasured
+   * journey is not evidence of distance in either direction and stays with the
+   * near group, whose heading no longer claims one.
+   */
+  if (detourClass === 'stretch' || detourClass === 'too_far') return 'scenic_detours';
   return 'nearby_side_quests';
 }
 
@@ -665,6 +705,29 @@ export const BOARD_INTEGRITY_FACT_LABELS: Record<BoardIntegrityFactId, string> =
   satellites: 'Offered as optional side trips',
   roleUnclassified: 'Kept without knowing what they are',
 };
+
+/**
+ * THE FACTS A TRAVELLER IS SHOWN, AS OPPOSED TO THE ONES WE RECORD.
+ *
+ * Every count above is worth *computing* — they are how an operator tells a thin
+ * destination from a broken pipeline. Most of them are not worth *rendering*: a
+ * board that opens with "Practical stops kept aside 94 / Added on purpose from
+ * further out 3033" has handed the traveller the compiler's own bookkeeping and
+ * asked them to care about it, which is the §26 failure in its purest form. The
+ * live Tokyo board put the first place card nine hundred pixels down a desktop
+ * screen behind exactly that list.
+ *
+ * These three survive because each answers a question somebody planning a trip
+ * actually asks: how much is there, how varied is it, and how spread out is it.
+ * The rest stay in the reading — nothing is deleted, and a diagnostic surface may
+ * still render them — but they do not belong in front of a person choosing where
+ * to go on Tuesday.
+ */
+export const TRAVELLER_BOARD_FACTS: readonly BoardIntegrityFactId[] = [
+  'attractions',
+  'categoryDiversity',
+  'regionalDiversity',
+];
 
 /** One line under a count, where the count needs one. */
 export const BOARD_INTEGRITY_FACT_BLURBS: Partial<Record<BoardIntegrityFactId, string>> = {

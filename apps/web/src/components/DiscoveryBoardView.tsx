@@ -1,49 +1,39 @@
 'use client';
 
-import { useOptimistic, useState, useTransition } from 'react';
+import { useEffect, useOptimistic, useRef, useState, useTransition } from 'react';
 import {
-  ACCESS_BADGE_LABELS,
-  BOARD_GROUP_COPY,
   FACT_PATH_LABELS,
   FACT_VERIFICATION_LABELS,
   FIT_BAND_LABELS,
   FIT_BAND_METER,
   MONEY_UNIT_LABELS,
-  OPERATING_BADGE_LABELS,
-  PLACE_CATEGORY_LABELS,
-  PLACE_WEATHER_BADGE_LABELS,
   SELECTION_STATUSES,
   SELECTION_STATUS_LABELS,
   REACH_MODE_PHRASE,
-  WORTH_DETOUR_COPY,
   describeReachFromBase,
+  displayNameOf,
   imageryFallbackFor,
   summariseSelections,
   summaryVersion,
   type DestinationImage as ImageRecord,
-  type AccessBadge,
   type BoardGroup,
   type BoardWeatherBackups,
   type DiscoveryCandidate,
-  type OperatingBadge,
-  type PlaceWeatherBadge,
   type SelectionStatus,
   type PlannerReadiness,
   type WeatherSnapshotState,
   type ClosureEvidence,
   type SafetyEvidence,
-  type TransportMode,
 } from '@sidequest/core';
 import {
   Badge,
   ErrorNote,
   FitMeter,
-  FitMeterLegend,
   Panel,
+  PlaceName,
   PlacePlate,
   buttonClass,
   cx,
-  type BadgeTone,
 } from './ui';
 import {
   BoardFilterRail,
@@ -53,10 +43,32 @@ import {
   filterCandidates,
   type BoardFilterState,
 } from './BoardFilters';
-import { DestinationImage } from './DestinationImage';
+import {
+  BOARD_GROUP_HEADINGS,
+  PASS_REASONS,
+  alsoLikeThis,
+  alsoLikeThisPrompt,
+  cardStats,
+  chipsFor,
+  descriptionOf,
+  evidenceDisclosureLabel,
+  whysForBoard,
+  recommendationLabel,
+  sharedBoardFacts,
+  type BoardChip,
+  type PassReason,
+  type SharedBoardFacts,
+  type SharedFactKind,
+} from './BoardCopy';
+import { BoardMap } from './BoardMap';
+import { DestinationImage, ImageCredit } from './DestinationImage';
 import { BuildTripButton, PlannerReadinessPanel } from './BuildTripButton';
-import { formatCost, formatDistance, formatIntensity, formatMinutes } from '@/lib/format';
-import { autoPickAction, setSelectionAction } from '@/app/(product)/trips/[id]/discover/actions';
+import { formatMinutes } from '@/lib/format';
+import {
+  autoPickAction,
+  fillBoardImageryAction,
+  setSelectionAction,
+} from '@/app/(product)/trips/[id]/discover/actions';
 
 export interface SerializedGroup {
   group: BoardGroup;
@@ -85,105 +97,99 @@ const MIN_TARGET = 'min-h-11';
 const MIN_TARGET_SUMMARY = 'min-h-11 py-2.5';
 
 /**
- * The label above a travel time, named for the network that measured it.
+ * The card surface, spelled out rather than taken from `Panel`.
  *
- * "From base" was mode-blind, and a mode-blind duration is the shape of the
- * founder regression: a traveller with no car read road-network minutes as
- * though they were their own. Naming the network costs one word and makes the
- * number checkable.
+ * `Panel` deliberately refuses arbitrary props — a component that silently drops
+ * a `data-testid` cost this project two green-looking tests — and a card needs
+ * `data-place-card` and pointer handlers so the map can find it and it can tell
+ * the map what is being read. Borrowing the classes keeps the two surfaces
+ * identical without loosening the component that is strict on purpose.
  */
-const TRAVEL_MODE_STAT_LABEL: Record<TransportMode, string> = {
-  drive: 'Drive from base',
-  walk: 'Walk from base',
-  rail: 'Train from base',
-  public_bus: 'Bus from base',
-  ferry: 'Ferry from base',
-  shuttle: 'Shuttle from base',
-  rideshare: 'Taxi from base',
-  private_transfer: 'Transfer from base',
-  bicycle: 'Ride from base',
-  unsupported: 'Getting there',
-};
+const CARD_SURFACE = 'rounded-[var(--radius-card)] border border-rule bg-paper-raised';
 
 /**
- * The heading when the journey did not resolve.
- *
- * Deliberately not one of the mode labels. A card that says "Drive from base"
- * over the words "we could not check" has told the traveller two things, one of
- * which is invented — and the invented one is the mode, which is precisely the
- * assumption this whole pass exists to remove. Both the unmeasured case and the
- * ruled-out case sit under the same neutral heading, because neither has a mode.
+ * How many places come before the map on a phone. See the layout comment in the
+ * board's own body.
  */
-const TRAVEL_UNRESOLVED_STAT_LABEL = 'Getting there';
+const LEAD_CARDS = 3;
 
+/** A group as it is rendered: the compiler's group, plus where the cut fell. */
+interface RenderedGroup extends SerializedGroup {
+  /** True for the tail of a group whose head was rendered above the map. */
+  continued: boolean;
+}
+
+/**
+ * THE DISCOVERY BOARD, LEADING WITH PLACES.
+ *
+ * What this replaces, measured on a real compiled Tokyo board: the first place
+ * card sat nine hundred pixels down a desktop screen and fourteen hundred down a
+ * phone, behind a readiness panel, an integrity panel and a column of counts
+ * headed "Practical stops kept aside 94" and "Added on purpose from further out
+ * 3033". Below that were twenty-four visually identical bordered cards, each
+ * wearing the same six chips and the same three warnings, each labelled "Strong
+ * fit", each titled in a script the reader could not read, none with a picture,
+ * and the whole thing with no map anywhere.
+ *
+ * The rebuild is four decisions:
+ *
+ * 1. **Places first.** Everything about how the board was made is at the foot of
+ *    the page behind one disclosure. What is above the fold is the count, the
+ *    two actions, the map and the cards.
+ * 2. **The card argues, once.** An image or an intentional graphic, the name in
+ *    a script the reader can read, where it is and what getting there costs, one
+ *    calibrated label, one sentence of *why*, and at most two chips. The
+ *    provenance and the caveats are one press away.
+ * 3. **A fact true of the board is stated by the board.** See `sharedBoardFacts`.
+ * 4. **The map and the list are one surface.** Pressing a pin focuses a card and
+ *    the reverse, so "where is this" is answerable without leaving the screen.
+ */
 export function DiscoveryBoardView({
   tripId,
   storedReadiness,
   groups,
   initialSelections,
   autoPickNotes,
-  targetCount,
   hasItinerary,
   weatherBackups,
   boardVersion: declaredVersion,
   weatherFreshness,
   images = {},
+  base = null,
+  imageryPending = 0,
 }: {
   tripId: string;
-  /**
-   * How old the weather behind this board is, when the page knows.
-   *
-   * Four states and they are not degrees of one thing. `not_fetched` and
-   * `expired` never reach here with numbers attached — `resolveTripRegion`
-   * substitutes an unfetched dataset for both, so every card reads "we have not
-   * checked" — but `stale` does: a snapshot past its freshness window is still
-   * rendered, badges and all, and without this the board says "the forecast
-   * works against X on your dates" about a forecast fetched days ago in exactly
-   * the same voice it uses for one fetched a minute ago.
-   *
-   * Optional, and its absence means the board says nothing about age rather than
-   * asserting freshness it was not told about.
-   */
+  /** How old the weather behind this board is, when the page knows. */
   weatherFreshness?: WeatherSnapshotState | 'not_fetched';
-  /**
-   * The artifact this board was projected from, when the page knows it.
-   *
-   * Optional, and its absence is not a hole: when nothing is declared the
-   * version is derived from the cards actually rendered, which is the same
-   * identity by a longer route. Passing the compiled region's id makes the stamp
-   * name something an operator can look up, and is the preferred form.
-   */
+  /** The artifact this board was projected from, when the page knows it. */
   boardVersion?: string;
   /** The last refusal, from the database, so it survives a refresh. */
   storedReadiness?: PlannerReadiness | null;
   groups: SerializedGroup[];
-  /**
-   * Derived from this trip's weather, not from what any place fundamentally is.
-   * Null when nothing on the board is in trouble, which is most of the time.
-   */
   weatherBackups: BoardWeatherBackups | null;
   initialSelections: SelectionMap;
   autoPickNotes: string[];
-  targetCount: number;
   hasItinerary: boolean;
-  /**
-   * Licensed photographs by place id, read from a table by the page.
-   *
-   * Optional and empty by default, and that default is the honest one: an
-   * artifact compiled before imagery existed has no rows, and every card on it
-   * renders exactly as it always did. There is no migration, no backfill and no
-   * version check — the absence of a photograph was already a supported state.
-   */
+  /** Licensed photographs by place id, read from a table by the page. */
   images?: Record<string, ImageRecord>;
+  /** Where they are sleeping, so the map can draw the thing everything is measured from. */
+  base?: { name: string; coordinates: { lat: number; lng: number } } | null;
+  /**
+   * How many cards nobody has ever looked for a photograph for.
+   *
+   * The board runs one bounded resolution pass while this is non-zero and then
+   * stops, because a refusal is stored just as an acceptance is. Zero on a board
+   * whose subjects have all been answered, which is the steady state and costs
+   * nothing.
+   */
+  imageryPending?: number;
 }) {
   /*
    * THE VERSION EVERY NUMBER ON THIS SCREEN BELONGS TO.
    *
    * Derived from the cards actually rendered when the page does not declare one,
    * so the identity moves exactly when the board does and not when a traveller
-   * marks something. That distinction is the whole point: a mark changes the
-   * counts, a rebuild changes what the counts are counting, and the second one
-   * has to invalidate everything derived from the first.
+   * marks something.
    */
   const cardIds = groups.flatMap((entry) => entry.candidates.map((c) => c.place.id));
   const boardVersion = summaryVersion([declaredVersion ?? '', ...cardIds]);
@@ -191,15 +197,9 @@ export function DiscoveryBoardView({
   /*
    * THE MIRROR CANNOT OUTLIVE WHAT IT MIRRORS.
    *
-   * `useState(initialSelections)` seeded once and never again, so a rebuilt
-   * board kept the previous board's marks and the previous board's totals — and
-   * a stale "12 in" beside a board of nine cards reads as a fact. The mirror is
-   * keyed to the server state it was derived from and dropped the moment either
-   * the board version or the stored marks change identity.
-   *
-   * It exists at all for one reason, which is still true: `autoPickAction`
-   * returns what it stored, and adopting that immediately is what makes the
-   * board's counts move on the click rather than on the round trip.
+   * Keyed to the server state it was derived from and dropped the moment either
+   * the board version or the stored marks change identity — a stale "12 in"
+   * beside a board of nine cards reads as a fact.
    */
   const serverKey = summaryVersion([boardVersion, marksFingerprint(initialSelections)]);
   const [mirror, setMirror] = useState<{ key: string; value: SelectionMap; notes: string[] }>({
@@ -221,33 +221,62 @@ export function DiscoveryBoardView({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [onlyIncluded, setOnlyIncluded] = useState(false);
-  /*
-   * Filters are view state and nothing else.
-   *
-   * Held here, beside the marks rather than inside them, because hiding a card
-   * must never look like a decision about it. `filterCandidates` returns a
-   * subset; clearing a filter brings every card back marked exactly as it was.
-   */
   const [filters, setFilters] = useState<BoardFilterState>(NO_FILTERS);
   /*
-   * WHY THE LAST BUILD REFUSED, HELD HERE RATHER THAN INSIDE THE BUTTON.
-   *
-   * Seeded from the database so a refusal survives a refresh — a finding that
-   * does not outlive a reload is not much of one — and held at board level so
-   * the panel can render in the flow rather than inside the bar that is pinned
-   * to the top of the viewport. A `ready` reading is not a finding and shows
-   * nothing.
+   * Whether auto-pick has just run. The observed failure was that pressing it
+   * changed some borders far down a very long page and said nothing at all, so
+   * it read as a button that did nothing. The account it returns is now rendered
+   * where the press happened, and announced.
    */
+  const [autoPicked, setAutoPicked] = useState(false);
+  /** The card whose pin is lit, and vice versa. */
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  /** A pass in progress: which card, and the follow-up its reason earned. */
+  const [passing, setPassing] = useState<string | null>(null);
+  const [followUp, setFollowUp] = useState<{
+    reason: PassReason;
+    from: string;
+    ids: string[];
+  } | null>(null);
   const [readiness, setReadiness] = useState<PlannerReadiness | null>(
     storedReadiness && storedReadiness.level !== 'ready' ? storedReadiness : null,
   );
 
+  const allCandidates = groups.flatMap((entry) => entry.candidates);
+
   /*
-   * Counted over the cards on screen, not over the keys of the mark map.
+   * ONE BOUNDED IMAGERY PASS, THEN NEVER AGAIN FOR THIS BOARD.
    *
-   * The map is trip-scoped and outlives every board it was written against, so
-   * counting its values reported decisions about places this board does not
-   * have — which is how the header claimed more picks than there were cards.
+   * The ref, not the state, is what makes that true: an effect keyed only on the
+   * board version would run again after the refresh it itself triggers. The
+   * server action is the terminating half — it resolves only subjects nothing
+   * has ever looked for, and it writes down refusals as well as acceptances, so
+   * `imageryPending` falls to zero and stays there.
+   *
+   * The refresh is conditional on something actually being found. A round trip
+   * that changes no pixel is a page that flickers for no reason.
+   */
+  const imageryAsked = useRef<string | null>(null);
+  useEffect(() => {
+    if (imageryPending <= 0) return;
+    if (imageryAsked.current === boardVersion) return;
+    imageryAsked.current = boardVersion;
+    let cancelled = false;
+    void fillBoardImageryAction(tripId).then((result) => {
+      if (cancelled || !result.ok || !result.accepted) return;
+      // A plain reload rather than `router.refresh()`: this component is not a
+      // route boundary and the page it sits in is `force-dynamic`, so the
+      // simplest correct thing is to let the server re-render it.
+      window.location.reload();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId, boardVersion, imageryPending]);
+
+  /*
+   * Counted over the cards on screen, not over the keys of the mark map. The map
+   * is trip-scoped and outlives every board it was written against.
    */
   const summary = summariseSelections({
     boardVersion,
@@ -275,8 +304,64 @@ export function DiscoveryBoardView({
     });
   }
 
+  /**
+   * A pass, with the reason applied to this trip immediately.
+   *
+   * §10.6 is explicit that a rejection reason must act on the current trip and
+   * must not require a new questionnaire. So the reason is not filed away: it is
+   * turned straight into a question about the board in front of them — "four
+   * more are at least as far out; skip those too?" — which they answer with one
+   * press or ignore. Nothing is applied silently, because a single "no" is not a
+   * mandate to remove five things somebody has not looked at yet.
+   */
+  function passWithReason(candidate: DiscoveryCandidate, reason: PassReason) {
+    setPassing(null);
+    choose(candidate.place.id, 'excluded');
+    const decided = new Set(
+      Object.entries(optimistic)
+        .filter(([, status]) => status !== undefined)
+        .map(([placeId]) => placeId),
+    );
+    decided.add(candidate.place.id);
+    const similar = alsoLikeThis({ candidates: allCandidates, passed: candidate, reason, decided });
+    setFollowUp(
+      similar.length > 0
+        ? {
+            reason,
+            from: displayNameOf(candidate.place),
+            ids: similar.map((entry) => entry.place.id),
+          }
+        : null,
+    );
+  }
+
+  function applyFollowUp() {
+    const target = followUp;
+    setFollowUp(null);
+    if (!target) return;
+    setError(null);
+    startTransition(async () => {
+      applyOptimistic(Object.fromEntries(target.ids.map((id) => [id, 'excluded' as const])));
+      const results = await Promise.all(
+        target.ids.map((id) => setSelectionAction(tripId, id, 'excluded')),
+      );
+      if (results.every((result) => result.ok)) {
+        setMirror((current) => ({
+          ...current,
+          value: {
+            ...current.value,
+            ...Object.fromEntries(target.ids.map((id) => [id, 'excluded' as const])),
+          },
+        }));
+      } else {
+        setError('Some of those did not save. Reload to see what stuck.');
+      }
+    });
+  }
+
   function autoPick() {
     setError(null);
+    setFollowUp(null);
     startTransition(async () => {
       const result = await autoPickAction(tripId);
       if (!result.ok || !result.selections) {
@@ -284,17 +369,16 @@ export function DiscoveryBoardView({
         return;
       }
       // Adopt what the server actually stored, which preserves any card the
-      // traveller had already decided on by hand. Keyed to the board it was
-      // computed for, so a rebuild discards it rather than carrying it across.
+      // traveller had already decided on by hand.
       setMirror((current) => ({
         key: current.key,
         value: result.selections!,
         notes: result.notes ?? [],
       }));
+      setAutoPicked(true);
     });
   }
 
-  const allCandidates = groups.flatMap((entry) => entry.candidates);
   const facets = facetsFor(allCandidates);
   const visibleGroups = groups
     .map((entry) => ({
@@ -306,20 +390,65 @@ export function DiscoveryBoardView({
         filters,
       ),
     }))
+    // §10.2: an empty group never renders.
     .filter((entry) => entry.candidates.length > 0);
   const visibleCardCount = visibleGroups.reduce((total, entry) => total + entry.candidates.length, 0);
   const filtered = anyFilterActive(filters) || onlyIncluded;
 
   /*
-   * THE WEATHER SENTENCE THAT BELONGS TO THE BOARD, NOT TO A CARD.
-   *
-   * Seventeen cards carried the identical thirty-word paragraph "We could not
-   * reach a weather source for your dates…" — about five hundred words of the
-   * same sentence, repeated down a page whose job is to let somebody compare
-   * seventeen different places. A fact that is true of the whole board is a
-   * property of the board.
+   * The board, cut once so the map can sit between the first few places and the
+   * rest. See the layout comment below for why the cut exists at all; the split
+   * itself is deliberately shallow — a heading and a handful of cards — because
+   * anything longer defeats the point on the screen it was made for.
    */
-  const boardWeather = sharedWeatherNote(allCandidates);
+  const lead = visibleGroups[0];
+  const leadGroups: RenderedGroup[] = lead
+    ? [{ ...lead, candidates: lead.candidates.slice(0, LEAD_CARDS), continued: false }]
+    : [];
+  const restGroups: RenderedGroup[] = [
+    ...(lead && lead.candidates.length > LEAD_CARDS
+      ? [{ ...lead, candidates: lead.candidates.slice(LEAD_CARDS), continued: true }]
+      : []),
+    ...visibleGroups.slice(1).map((entry) => ({ ...entry, continued: false })),
+  ];
+
+  /*
+   * The sentences that belong to the board rather than to twenty-four copies of
+   * one card. See `sharedBoardFacts` for why the threshold is what it is.
+   */
+  const shared = sharedBoardFacts(allCandidates);
+  /*
+   * The argument each card leads with, chosen across the board rather than per
+   * card. See `whysForBoard`: the scorer's reasons are ranked, so a per-card
+   * read of the top one prints the same sentence on every card that fits for the
+   * same leading reason.
+   */
+  const whys = whysForBoard(allCandidates, shared);
+
+  const mapPlaces = allCandidates
+    .filter((candidate) => candidate.group !== 'weak_fit')
+    .map((candidate) => ({
+      id: candidate.place.id,
+      /*
+       * The name a reader of this interface can read. A pin's accessible label
+       * is the *only* thing a screen-reader user gets from the drawing, and a
+       * board of Tokyo pins labelled in kanji on a document declaring lang="en"
+       * is a drawing they cannot use. `displayNameOf` chooses between names a
+       * source actually published; nothing here translates.
+       */
+      name: displayNameOf(candidate.place),
+      coordinates: candidate.place.coordinates,
+      chosen: optimistic[candidate.place.id] === 'included',
+      travelMinutes: candidate.travelMinutesFromBase,
+    }));
+
+  /** Bring a card into view when its pin is pressed. The other half of §10.5. */
+  function focusFromMap(placeId: string) {
+    setFocusedId(placeId);
+    document
+      .querySelector(`[data-place-card="${CSS.escape(placeId)}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   return (
     <div data-testid="discovery-board" data-board-version={boardVersion}>
@@ -327,57 +456,73 @@ export function DiscoveryBoardView({
         THE ACTION BAR: STICKY AT THE TOP ON A DESKTOP, PINNED TO THE BOTTOM ON A PHONE.
 
         One element, two positions. It was `sm:sticky`, which means *not* sticky
-        at the one width where it matters: on a 390px screen the board is some
-        twenty-five thousand pixels tall, and the count and the primary action
-        scrolled away after the first card and never came back. A traveller
-        marking their ninth place had no way of knowing how many they had, and no
-        way to build without scrolling to the top of a page thirty screens long.
+        at the one width where it matters: on a 390px screen the board is many
+        thousands of pixels tall and the count and the primary action scrolled
+        away after the first card.
 
-        Deliberately not a second copy of the toolbar. Two "Build my trip"
-        buttons would be two things the traveller has to reconcile — and, more
-        practically, an ambiguous target for anything that goes looking for the
-        button by name.
-
-        Only the count and the build action live here. Auto-pick and the filters
-        sit in the flow below, because they are things you do once while reading
-        rather than things you reach for from the bottom of the screen.
+        Auto-pick now lives here rather than in the flow. It is the product's
+        answer to "there are twenty-four of these and I do not want to read them
+        all", and a control that answers that question has to be reachable from
+        the point in the page where somebody gives up.
       */}
       <Panel
         className={cx(
-          // Below the product header (`z-30`), above the cards. Equal z-indexes
-          // made the two sticky bars fight over which one painted on top.
-          'z-20 flex flex-wrap items-center gap-x-5 gap-y-3 p-4',
+          // Below the product header (`z-30`), above the cards.
+          'z-20 flex flex-wrap items-center gap-x-4 gap-y-2 p-3 sm:p-4',
           'sm:sticky sm:top-[var(--chrome-height)] sm:mb-6',
           /*
            * The safe area, paid for by the bar rather than assumed away.
-           *
            * `bottom-0` on an iPhone is behind the home indicator, so the last
-           * thirty-four pixels of this bar — which is where the primary action
-           * sits — were not tappable. Nothing in the repository used
-           * `env(safe-area-inset-*)` anywhere; this is the control that most
-           * needed it.
+           * thirty-four pixels — where the primary action sits — were not
+           * tappable.
            */
           'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:max-h-[70vh]',
-          /* Additive. A bare `pb-[env(...)]` replaces the padding it should extend. */
-          'max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))]',
+          'max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]',
           'max-sm:overflow-y-auto max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0',
           'max-sm:shadow-panel print:hidden',
         )}
         testId="board-action-bar"
       >
         {/*
-          The count and the version it describes, from one object.
+          The count and the version it describes, from one object. They cannot
+          disagree because `summary` produced both.
 
-          They cannot disagree because `summary` produced both. The stamp is what
-          makes that checkable from outside — a stale total beside a rebuilt
-          board is invisible to review and obvious to an assertion.
+          "we suggested 18" is gone. It sat beside a header reading "We
+          pre-selected 0" — two numbers from the same computation contradicting
+          each other in one glance — and a raw target is not a thing a traveller
+          asked for anyway. What auto-pick did is now said in words, once, where
+          it was pressed.
         */}
         <p className="text-sm text-ink" data-testid="board-summary" data-board-version={summary.boardVersion}>
-          <strong className="font-display text-lg">{includedCount}</strong> in
+          <strong className="font-display text-lg">{includedCount}</strong> chosen
           {maybeCount > 0 ? <span className="text-ink-muted"> · {maybeCount} maybe</span> : null}
-          <span className="text-ink-faint"> · we suggested {targetCount}</span>
+          {/*
+            The denominator is dropped on a phone. Three facts and two buttons do
+            not fit across 390 pixels, and the wrap cost the bar a third of the
+            viewport — on the one screen where the bar is pinned over the content.
+          */}
+          <span className="text-ink-faint max-sm:hidden"> · {summary.onBoard} on the board</span>
         </p>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {/*
+          Two controls, two rows on a phone and one on a desktop.
+
+          `BuildTripButton` is a block that carries its own hint paragraph
+          underneath ("include at least one place first"), so at 390px it cannot
+          share a row with anything: the hint sets the block's width and pushes
+          the count onto a line of its own. Giving it the full row below is the
+          layout that respects that rather than fighting it, and it puts the
+          primary action across the whole width of the thumb's reach.
+        */}
+        <button
+          type="button"
+          onClick={autoPick}
+          disabled={pending}
+          className={cx(buttonClass('secondary', 'sm'), MIN_TARGET, 'ml-auto whitespace-nowrap')}
+          data-testid="board-auto-pick"
+        >
+          {pending ? 'Choosing…' : 'Choose for me'}
+        </button>
+        <div className="max-sm:basis-full">
           <BuildTripButton
             tripId={tripId}
             hasItinerary={hasItinerary}
@@ -390,83 +535,79 @@ export function DiscoveryBoardView({
       {/* Below the bar, in the flow, where a long explanation may be long. */}
       {readiness ? <PlannerReadinessPanel readiness={readiness} /> : null}
 
+      {error ? <ErrorNote>{error}</ErrorNote> : null}
+
       {/*
-        The things you do once, in the flow, where they do not compete with the
-        primary action for the bottom of a phone screen.
+        WHAT AUTO-PICK DID, WHERE IT WAS PRESSED — and only once it has been.
+
+        Two halves of one defect. Pressing "choose for me" used to change some
+        borders far down a very long page and say nothing, so it read as a button
+        that did nothing; meanwhile the *server's* preview of what auto-pick
+        would do was rendered on first load, in the past tense, so a traveller
+        who had pressed nothing was told "we pre-selected 0". The account is now
+        rendered exactly when it is true: after the action returns, describing
+        what it stored.
       */}
-      <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 print:hidden">
-        <label
+      {autoPicked && notes.length > 0 ? (
+        <div
           className={cx(
-            'flex cursor-pointer items-center gap-2 px-1 text-sm text-ink-muted',
-            MIN_TARGET,
+            'mb-6 rounded-[var(--radius-card)] border-l-2 border-pine bg-pine-soft/40 px-4 py-3',
+            autoPicked && 'ring-1 ring-pine/30',
           )}
+          data-testid="board-auto-pick-notes"
+          data-board-version={summary.boardVersion}
         >
-          <input
-            type="checkbox"
-            checked={onlyIncluded}
-            onChange={(event) => setOnlyIncluded(event.target.checked)}
-            className="h-5 w-5 accent-[var(--color-pine)]"
-          />
-          Only what I picked
-        </label>
-        <button
-          type="button"
-          onClick={autoPick}
-          disabled={pending}
-          className={cx(buttonClass('secondary', 'sm'), MIN_TARGET)}
-        >
-          {pending ? 'Working…' : 'Auto-pick the best mix for me'}
-        </button>
-        <FitMeterLegend className="basis-full" />
-      </div>
-
-      <BoardFilterRail
-        facets={facets}
-        filters={filters}
-        onChange={setFilters}
-        showing={visibleCardCount}
-        total={allCandidates.length}
-      />
+          <ul className="space-y-1.5 text-sm leading-relaxed text-ink">
+            {notes.map((note) => (
+              <li key={`${summary.boardVersion}:${note}`}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/*
-        The board-level weather statement, once.
+        THE SENTENCES THAT ARE TRUE OF THE WHOLE BOARD — BEHIND ONE LINE.
 
-        The cards it covers say nothing about the weather at all; a card whose
-        situation differs from this one still carries its own sentence and its own
-        badge, which is the only way the difference is legible.
+        Said once, and *folded*. Hoisting them off the cards was right and did
+        not go far enough: a fresh reviewer opened a live board and found six
+        consecutive negative sentences between the trip header and the first
+        place, which on a phone put the first thing to do about two viewports
+        down. Honest abstention that nobody scrolls past is not honesty, it is a
+        wall.
+
+        So the summary line counts them and the sentences themselves are one
+        press away. Nothing is hidden — the count is on screen, the disclosure is
+        a real control, and print opens every one of these — and the cards they
+        cover still say nothing, so the difference a card *does* carry is still
+        the only thing shouting.
       */}
-      {boardWeather ? (
-        <p
-          className="mb-8 rounded-md bg-paper-sunk p-3 text-sm leading-relaxed text-ink-muted"
-          data-testid="board-weather-note"
-        >
-          {boardWeather}
-        </p>
+      {shared.notes.length > 0 ? (
+        <details className="mb-6 rounded-md bg-paper-sunk px-3" data-testid="board-weather-note">
+          <summary
+            className={cx(
+              MIN_TARGET_SUMMARY,
+              'flex cursor-pointer items-center text-[13px] leading-snug text-ink-muted hover:text-ink',
+            )}
+          >
+            {shared.notes.length === 1
+              ? 'One thing we could not check across this board'
+              : `${shared.notes.length} things we could not check across this board`}
+            <span className="ml-1 text-ink-faint">— see what they are</span>
+          </summary>
+          <ul className="space-y-1 pb-3 text-[13px] leading-snug text-ink-muted">
+            {shared.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       {/*
         A polite status line, and the only thing on this board that speaks.
 
-        Every decision here moves a count, sometimes empties a group and — under
-        "Only what I picked" — can empty the whole board. None of that reached a
-        screen reader: the totals are plain text and a filtered card simply
-        vanishes from the DOM, so a keyboard user pressing Skip got silence and a
-        page that had quietly rearranged itself beneath them.
-
-        The state *after* the change rather than the change itself, so three
-        quick decisions announce one settled result instead of racing each other.
-        An error takes precedence, because a failed save is the one thing here
-        somebody has to hear.
-      */}
-      {/*
-        Phrased as a sentence, not as a copy of the counter beside it.
-        Two reasons, and both are about the person hearing it. A live region that
-        repeats the visible summary verbatim is announced *twice* — once as the
-        element, once as the change — and "9 in, 0 maybe" read aloud out of
-        context is a sequence of numbers rather than a statement. And a second
-        node carrying the same leading text made every `getByText(/^\d+ in/)` in
-        the suite ambiguous, which is the sort of collision that is invisible
-        until four specs fail at once.
+        Phrased as a sentence rather than as a copy of the counter beside it: a
+        live region that repeats the visible summary verbatim is announced twice,
+        and "9 in, 0 maybe" read aloud out of context is a sequence of numbers.
       */}
       <p className="sr-only" role="status" aria-live="polite" data-testid="board-status">
         {error
@@ -474,36 +615,19 @@ export function DiscoveryBoardView({
           : `Your board now has ${includedCount} places included and ${maybeCount} marked maybe, out of ${summary.onBoard}. ${visibleCardCount} showing.`}
       </p>
 
-      {error ? <ErrorNote>{error}</ErrorNote> : null}
-
-      {notes.length > 0 ? (
-        <ul
-          className="mb-8 space-y-1.5 border-l-2 border-pine pl-4 text-sm leading-relaxed text-ink-muted"
-          data-board-version={summary.boardVersion}
-        >
-          {notes.map((note) => (
-            <li key={`${summary.boardVersion}:${note}`}>{note}</li>
-          ))}
-        </ul>
-      ) : null}
-
       {/*
-        Decisions about places this board does not hold.
-
-        Named as history rather than folded into "N in". They are real choices
-        somebody made — about a card an earlier build had, or about a place this
-        trip's answers now rule out — and the count that quietly included them
-        was describing a board nobody was looking at.
+        Decisions about places this board does not hold — named as history rather
+        than folded into the count.
       */}
       {summary.carriedOver > 0 ? (
         <p
-          className="mb-8 text-xs leading-relaxed text-ink-faint"
+          className="mb-6 text-xs leading-relaxed text-ink-faint"
           data-testid="board-carried-over"
           data-board-version={summary.boardVersion}
         >
           You have also decided on {summary.carriedOver}{' '}
-          {summary.carriedOver === 1 ? 'place' : 'places'} that is not on this board. Those
-          choices are kept and are not counted above.
+          {summary.carriedOver === 1 ? 'place' : 'places'} that is not on this board. Those choices
+          are kept and are not counted above.
         </p>
       ) : null}
 
@@ -514,72 +638,261 @@ export function DiscoveryBoardView({
           </p>
           <p className="mt-2 text-sm text-ink-muted">
             {filtered
-              ? 'Every card is still on the board — clear the filters above to see them again, or use auto-pick for a starting set.'
+              ? 'Every card is still on the board — clear the filters to see them again, or let us choose a starting set.'
               : 'Try widening how far you will travel, or moving your dates — some of what we found here is only reachable for part of the year.'}
           </p>
         </Panel>
       ) : (
-        <div className="space-y-14">
-          {visibleGroups.map((entry) => (
-            <section key={entry.group} aria-labelledby={`group-${entry.group}`}>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_23rem]">
+          {/*
+            THE FIRST FEW PLACES, ABOVE EVERYTHING ELSE ON A PHONE.
+
+            Three grid items rather than two, and the reason is the phone. The
+            map used to be the first thing in the document, so on a 390px screen
+            the traveller met a caveat panel, a three-hundred-pixel drawing, a
+            filter rail and only then a place — about two viewports of apparatus
+            before the first thing they could actually decide on.
+
+            On a wide screen nothing moves: blocks one and three both sit in
+            column one, rows one and two, and the map takes column one's whole
+            height beside them. On a narrow one the document order does the work
+            — a few places, then the map, then the rest.
+          */}
+          <div className="lg:col-start-1 lg:row-start-1">
+            <BoardSections
+              groups={leadGroups}
+              images={images}
+              selections={optimistic}
+              focusedId={focusedId}
+              shared={shared}
+              whys={whys}
+              onChoose={choose}
+              onFocus={setFocusedId}
+              passing={passing}
+              onStartPass={setPassing}
+              onCancelPass={() => setPassing(null)}
+              onPass={passWithReason}
+            />
+          </div>
+
+          <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[calc(var(--chrome-height)+5.5rem)] print:hidden">
+            <BoardMap
+              base={base}
+              places={mapPlaces}
+              focusedId={focusedId}
+              onFocus={focusFromMap}
+            />
+
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label
+                className={cx(
+                  'flex cursor-pointer items-center gap-2 px-1 text-sm text-ink-muted',
+                  MIN_TARGET,
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={onlyIncluded}
+                  onChange={(event) => setOnlyIncluded(event.target.checked)}
+                  className="h-5 w-5 accent-[var(--color-pine)]"
+                />
+                Only what I chose
+              </label>
+            </div>
+
+            <BoardFilterRail
+              facets={facets}
+              filters={filters}
+              onChange={setFilters}
+              showing={visibleCardCount}
+              total={allCandidates.length}
+            />
+          </div>
+
+          <div className="lg:col-start-1 lg:row-start-2 space-y-12 lg:mt-12">
+            <BoardSections
+              groups={restGroups}
+              images={images}
+              selections={optimistic}
+              focusedId={focusedId}
+              shared={shared}
+              whys={whys}
+              onChoose={choose}
+              onFocus={setFocusedId}
+              passing={passing}
+              onStartPass={setPassing}
+              onCancelPass={() => setPassing(null)}
+              onPass={passWithReason}
+            />
+
+            <WeatherBackups
+              backups={weatherBackups}
+              selections={optimistic}
+              onChoose={choose}
+              {...(weatherFreshness ? { freshness: weatherFreshness } : {})}
+            />
+
+            <WeatherCredit groups={groups} {...(weatherFreshness ? { freshness: weatherFreshness } : {})} />
+          </div>
+        </div>
+      )}
+
+      {/*
+        THE FOLLOW-UP A REJECTION REASON EARNED.
+
+        Pinned above the action bar rather than inline, because by the time
+        somebody has chosen a reason the card they pressed may well have scrolled
+        away — and an offer nobody sees is a reason nobody used.
+      */}
+      {followUp ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-rule bg-paper-raised p-4 shadow-panel max-sm:bottom-[4.5rem] sm:inset-x-auto sm:right-6 sm:bottom-6 sm:max-w-sm sm:rounded-[var(--radius-card)] sm:border print:hidden"
+          role="status"
+          data-testid="board-pass-followup"
+        >
+          <p className="text-sm leading-relaxed text-ink">
+            {alsoLikeThisPrompt(followUp.reason, followUp.ids.length)}
+          </p>
+          <p className="mt-1 text-xs text-ink-faint">Because you passed on {followUp.from}.</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={applyFollowUp}
+              className={cx(buttonClass('primary', 'sm'), MIN_TARGET)}
+              data-testid="board-pass-followup-apply"
+            >
+              Skip {followUp.ids.length === 1 ? 'it' : 'them'} too
+            </button>
+            <button
+              type="button"
+              onClick={() => setFollowUp(null)}
+              className={cx(buttonClass('ghost', 'sm'), MIN_TARGET)}
+            >
+              Leave them
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * THE GROUPS, AND THE ONE PIECE OF HIERARCHY ON THE BOARD.
+ *
+ * §18 bans the endless identical card, and a uniform two-column grid is that
+ * pattern's structural half: with every cell the same size the eye has no entry
+ * point, so twenty-four places read as one long undifferentiated wall whatever
+ * is printed inside them.
+ *
+ * So the strongest card in each group leads it, across the full width, with room
+ * for a larger picture and larger type — and the rest follow two-up beneath it.
+ * The rank is the board's own: the groups arrive sorted by fit, so the lead is
+ * the card the fit model already put first. Nothing is invented to make it look
+ * important, and a group too short to have a "first among several" (fewer than
+ * three) gets no lead, because promoting one of two cards says nothing.
+ */
+function BoardSections({
+  groups,
+  images,
+  selections,
+  focusedId,
+  shared,
+  whys,
+  onChoose,
+  onFocus,
+  passing,
+  onStartPass,
+  onCancelPass,
+  onPass,
+}: {
+  groups: readonly RenderedGroup[];
+  images: Record<string, ImageRecord>;
+  selections: SelectionMap;
+  focusedId: string | null;
+  shared: SharedBoardFacts;
+  /** The sentence each card leads with, chosen across the board. */
+  whys: Record<string, string | null>;
+  onChoose: (placeId: string, status: SelectionStatus) => void;
+  onFocus: (placeId: string) => void;
+  passing: string | null;
+  onStartPass: (placeId: string) => void;
+  onCancelPass: () => void;
+  onPass: (candidate: DiscoveryCandidate, reason: PassReason) => void;
+}) {
+  return (
+    <div className="space-y-12">
+      {groups.map((entry) => (
+        <section
+          key={`${entry.group}${entry.continued ? ':more' : ''}`}
+          {...(entry.continued ? {} : { 'aria-labelledby': `group-${entry.group}` })}
+          {...(entry.continued ? { 'aria-label': `${BOARD_GROUP_HEADINGS[entry.group].title}, continued` } : {})}
+        >
+          {entry.continued ? null : (
+            <>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h2 id={`group-${entry.group}`} className="font-display text-2xl text-ink">
-                  {BOARD_GROUP_COPY[entry.group].title}
+                  {BOARD_GROUP_HEADINGS[entry.group].title}
                 </h2>
                 <span className="text-sm text-ink-faint">{entry.candidates.length}</span>
               </div>
               <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-                {BOARD_GROUP_COPY[entry.group].blurb}
+                {BOARD_GROUP_HEADINGS[entry.group].blurb}
               </p>
-              {/*
-                THINGS TO SKIP DO NOT GET THE SAME SPACE AS THINGS TO DO.
+            </>
+          )}
 
-                Six full cards — image, description, fit panel, evidence — is
-                about two thousand pixels arguing for places we have just
-                explained are wrong for this trip, laid out identically to the
-                places we are recommending. The group is still complete, still
-                explained and still re-includable; it is simply a list, because
-                the decision it asks for is "no, unless" rather than "yes or no".
-              */}
-              {entry.group === 'weak_fit' ? (
-                <ul className="mt-5 space-y-2" data-testid="skip-list">
-                  {entry.candidates.map((candidate) => (
-                    <li key={candidate.place.id}>
-                      <SkipRow
-                        candidate={candidate}
-                        status={optimistic[candidate.place.id]}
-                        onChoose={choose}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {entry.candidates.map((candidate) => (
-                    <PlaceCard
-                      key={candidate.place.id}
-                      candidate={candidate}
-                      image={anchorImage(images, candidate)}
-                      status={optimistic[candidate.place.id]}
-                      onChoose={choose}
-                      {...(boardWeather ? { boardWeatherNote: boardWeather } : {})}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          ))}
+          {/*
+            THINGS TO SKIP DO NOT GET THE SAME SPACE AS THINGS TO DO.
 
-          <WeatherBackups
-            backups={weatherBackups}
-            selections={optimistic}
-            onChoose={choose}
-            {...(weatherFreshness ? { freshness: weatherFreshness } : {})}
-          />
-
-          <WeatherCredit groups={groups} {...(weatherFreshness ? { freshness: weatherFreshness } : {})} />
-        </div>
-      )}
+            Six full cards is about two thousand pixels arguing for places we
+            have just explained are wrong for this trip. The group is still
+            complete, still explained and still re-includable; it is simply a
+            list, because the decision it asks for is "no, unless" rather than
+            "yes or no".
+          */}
+          {entry.group === 'weak_fit' ? (
+            <ul className="mt-4 space-y-2" data-testid="skip-list">
+              {entry.candidates.map((candidate) => (
+                <li key={candidate.place.id}>
+                  <SkipRow
+                    candidate={candidate}
+                    status={selections[candidate.place.id]}
+                    onChoose={onChoose}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            /*
+              Two columns from the first width that can hold them, and never
+              more. Three-up made every card a column of stacked fragments;
+              one-up at 1024 made each card six hundred pixels wide, which is a
+              paragraph pretending to be a card. The lead spans both.
+            */
+            <div className={cx('grid gap-4 sm:grid-cols-2', entry.continued ? '' : 'mt-4')}>
+              {entry.candidates.map((candidate, index) => (
+                <PlaceCard
+                  key={candidate.place.id}
+                  candidate={candidate}
+                  image={cardImage(images, candidate)}
+                  status={selections[candidate.place.id]}
+                  focused={focusedId === candidate.place.id}
+                  featured={!entry.continued && index === 0 && entry.candidates.length >= 3}
+                  shared={shared}
+                  why={whys[candidate.place.id] ?? null}
+                  onChoose={onChoose}
+                  onFocus={onFocus}
+                  passing={passing === candidate.place.id}
+                  onStartPass={() => onStartPass(candidate.place.id)}
+                  onCancelPass={onCancelPass}
+                  onPass={(reason) => onPass(candidate, reason)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
     </div>
   );
 }
@@ -602,122 +915,504 @@ function marksFingerprint(selections: SelectionMap): string {
 }
 
 /**
- * THE WEATHER SENTENCE EVERY CARD WAS CARRYING A COPY OF.
+ * WHICH CARDS GET A PHOTOGRAPH.
  *
- * Returns the note that is true of the board as a whole, or null when the cards
- * genuinely differ. The threshold is deliberately high: a note has to be on most
- * of the cards *and* on at least three of them before it is treated as a
- * board-level fact, because hoisting a sentence that applies to two of seventeen
- * places would be the opposite mistake — a claim about the board made from a
- * minority of it.
+ * One filter, on meaning rather than on availability: a `weak` subject match is
+ * a file found by searching a name, and a card that says "this is the waterfall"
+ * beside a picture of a different waterfall in the same valley is worse than a
+ * card with no picture — it is a claim, and it is wrong.
  *
- * Nothing is dropped. A card whose note differs still prints its own, and the
- * per-card weather badges are untouched.
+ * `moderate` is admitted, and that is a deliberate loosening. It means the
+ * entity's *own* stated media category contained the file, which the schema
+ * itself describes as "good enough to sit beside a name, not good enough to
+ * headline a page" — and a board card is precisely the first of those. The
+ * previous rule took `strong` only *and* only for base places and top picks,
+ * which on a real board meant no photograph ever appeared on any card.
  */
-function sharedWeatherNote(candidates: readonly DiscoveryCandidate[]): string | null {
-  const notes = candidates.map((candidate) => candidate.weather.note).filter(Boolean) as string[];
-  if (notes.length < 3) return null;
-  const counts = new Map<string, number>();
-  for (const note of notes) counts.set(note, (counts.get(note) ?? 0) + 1);
-  let best: { note: string; count: number } | null = null;
-  for (const [note, count] of counts) {
-    if (!best || count > best.count) best = { note, count };
-  }
-  if (!best) return null;
-  return best.count >= 3 && best.count >= candidates.length * 0.6 ? best.note : null;
+function cardImage(
+  images: Record<string, ImageRecord>,
+  candidate: DiscoveryCandidate,
+): ImageRecord | null {
+  const image = images[candidate.place.id];
+  if (!image) return null;
+  return image.subjectConfidence === 'weak' ? null : image;
 }
 
 /**
- * THE PART A PLACE PLAYS IN THE TRIP, ON THE CARD.
+ * WHAT A CARD SHOWS BEFORE YOU ASK IT ANYTHING.
  *
- * The board already sorts every candidate into exactly one group, and the group
- * *is* the role — classic, hidden gem, side quest, rainy-day backup. That was
- * legible only from the section heading, which is off-screen the moment you have
- * scrolled two rows, so a card in isolation could not say whether it was a famous
- * stop or a quiet find. This reads `candidate.group` and nothing else: no score
- * is invented and no threshold is applied here.
+ * The order is the order a decision is made in: what it looks like, what it is
+ * called in a script the reader can read, where it is and what getting there
+ * costs, how strongly we recommend it, *why*, then the three practical numbers.
+ * At most two chips, and only for facts that change what the traveller has to
+ * do. Everything else — the description, the caveats, the provenance — is behind
+ * one disclosure named for what is inside it.
+ *
+ * "Why this fits" is expanded and the negatives are collapsed. It was the other
+ * way round, which on a product whose entire differentiation is personal fit
+ * meant the argument was hidden and the disclaimers led.
  */
-const ROLE_BADGE: Record<BoardGroup, { label: string; tone: BadgeTone } | null> = {
-  must_see_classics: { label: 'Classic', tone: 'neutral' },
-  hidden_gems: { label: 'Hidden gem', tone: 'amber' },
-  nearby_side_quests: { label: 'Side quest', tone: 'blue' },
-  scenic_detours: { label: 'Scenic detour', tone: 'blue' },
-  low_effort_backups: { label: 'Rainy-day backup', tone: 'blue' },
-  needs_verification: { label: 'Check first', tone: 'amber' },
-  // The skip list says what it is in its own heading and needs no chip.
-  weak_fit: null,
-};
+function PlaceCard({
+  candidate,
+  image,
+  status,
+  focused,
+  featured,
+  shared,
+  why,
+  onChoose,
+  onFocus,
+  passing,
+  onStartPass,
+  onCancelPass,
+  onPass,
+}: {
+  candidate: DiscoveryCandidate;
+  /** Null where nothing licensable was found, which is most of the world. */
+  image: ImageRecord | null;
+  status: SelectionStatus | undefined;
+  focused: boolean;
+  /** The strongest card in its group. See `BoardSections`. */
+  featured: boolean;
+  /** Everything the board has already said, so this card does not repeat it. */
+  shared: SharedBoardFacts;
+  /** The sentence this card leads with, chosen across the board. */
+  why: string | null;
+  onChoose: (placeId: string, status: SelectionStatus) => void;
+  onFocus: (placeId: string) => void;
+  passing: boolean;
+  onStartPass: () => void;
+  onCancelPass: () => void;
+  onPass: (reason: PassReason) => void;
+}) {
+  const { place, fit, access, operating } = candidate;
+  const suppressed = shared.suppressed;
+  const blocked = fit.band === 'not_workable';
+  const chips = chipsFor(candidate, suppressed, shared.verificationMarker);
+  const stats = cardStats(candidate, shared);
+  const description = descriptionOf(place);
+
+  return (
+    <article
+      data-place-card={place.id}
+      className={cx(
+        CARD_SURFACE,
+        // `h-full` so every card in a row is the same height, which is what puts
+        // every row of buttons on one line.
+        //
+        // `scroll-mt` is the other half of a sticky toolbar: two bars are pinned
+        // to the top of this page, so anything the browser scrolls to the top
+        // edge lands underneath about 133px of chrome.
+        'flex h-full scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-col overflow-hidden transition-colors',
+        // The lead card takes the row. Not a decoration: it is the only thing
+        // giving a wall of equal cells somewhere for the eye to start.
+        featured && 'sm:col-span-2',
+        status === 'included' && 'border-pine',
+        status === 'excluded' && 'opacity-60',
+        focused && 'ring-2 ring-pine ring-offset-2 ring-offset-[var(--color-paper)]',
+      )}
+      onMouseEnter={() => onFocus(place.id)}
+      onFocusCapture={() => onFocus(place.id)}
+    >
+      <div className="relative">
+        {/*
+          A photograph when one was licensed *and* credibly of this place; the
+          generated plate otherwise.
+
+          Never cropped — a crop of a share-alike file is an adaptation, and the
+          prop type refuses one here. What changed is the *frame*: it takes the
+          file's own shape (`ratio="natural"`), so an unmodified photograph fills
+          it instead of floating as a letterboxed sliver between two coloured
+          bands. The credit moves to the foot of the card for the same reason:
+          rendered verbatim and reachable, but no longer the loudest text above
+          the name of the place.
+        */}
+        {image ? (
+          <DestinationImage
+            image={image}
+            fallback={imageryFallbackFor({
+              kind: 'candidate',
+              id: place.id,
+              name: place.name,
+              coordinates: place.coordinates,
+            })}
+            ratio="natural"
+            credit="none"
+            category={place.category}
+          />
+        ) : (
+          <PlacePlate
+            category={place.category}
+            className={featured ? 'h-44' : 'h-28'}
+            /*
+              The three facts that make one plate differ from the next. Without
+              them eleven easy walks in one city are eleven identical rectangles
+              — which is exactly what a fresh reviewer found.
+            */
+            signature={{
+              intensity: place.physicalIntensity,
+              minutes: place.typicalDurationMinutes,
+              hiddenGemScore: place.hiddenGemScore,
+            }}
+          />
+        )}
+      </div>
+
+      <div className={cx('flex flex-1 flex-col p-4', featured && 'sm:p-5')}>
+        <h3
+          className={cx(
+            'font-display leading-snug text-ink',
+            featured ? 'text-xl sm:text-2xl' : 'text-lg',
+          )}
+        >
+          {/*
+            English or romanised first, the native name beside it. The board
+            rendered raw local script for every card in Tokyo, on an
+            English-language interface, while the source records held romanised
+            alternates that nothing read. Nothing here translates: `PlaceName`
+            chooses between names a source actually published.
+          */}
+          <PlaceName entity={place} />
+        </h3>
+
+        {/*
+          Where it is and what getting there costs, on one line. Two facts a
+          traveller uses together and which used to sit four rows apart.
+        */}
+        <p className="mt-0.5 text-xs text-ink-faint">
+          {place.locality}
+          {' · '}
+          <TravelPhrase candidate={candidate} suppressed={suppressed} />
+        </p>
+
+        <div className="mt-3">
+          <FitMeter
+            band={fit.band}
+            label={recommendationLabel(candidate)}
+            meter={FIT_BAND_METER[fit.band]}
+          />
+        </div>
+
+        {/*
+          THE ARGUMENT, OPEN. One sentence, never a panel of them: a card that
+          lists eight reasons has not made a case, it has made a list.
+
+          Absent where there is nothing left to say that the board has not
+          already said. A card with no reason line is a card that is honest
+          about having no argument; a card padded with "A viewpoint." has
+          stopped being worth reading.
+        */}
+        {why ? (
+          <p
+            className={cx('mt-2 text-sm leading-relaxed', blocked ? 'text-clay' : 'text-ink-muted')}
+            data-testid="card-why"
+          >
+            {why}
+          </p>
+        ) : null}
+
+        {/*
+          ONLY THE NUMBERS THIS CARD DOES NOT SHARE WITH THE BOARD.
+
+          "Time there 1 hr 30 min · Cost Free · Effort Easy", identical down
+          twenty-four cards, was named verbatim by a fresh designer as the §18
+          banned pattern. The board now states its norm once, above; what is left
+          here is the figure on which this place actually differs — which is the
+          figure somebody comparing places is looking for. A card that matches
+          the norm on all three shows none, and is no poorer for it.
+        */}
+        {stats.length > 0 ? (
+          <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs" data-testid="card-stats">
+            {stats.map((stat) => (
+              <Stat key={stat.key} label={stat.label}>
+                {stat.value}
+              </Stat>
+            ))}
+          </dl>
+        ) : null}
+
+        {chips.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5" data-testid="card-chips">
+            {chips.map((chip: BoardChip) => (
+              <Badge key={chip.key} tone={chip.tone}>
+                {chip.label}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+
+        {/*
+          The one practical statement that changes a decision, where there is
+          one. Access and hours are separate questions and a card that has a
+          problem with both says so once each; a card that shares its problem
+          with the whole board says nothing, because the board has said it.
+        */}
+        {operating.status === 'closed_throughout' ? (
+          <p className="mt-3 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            Shut on every day of your trip.
+          </p>
+        ) : operating.status === 'open_some_days' ? (
+          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            Open on {operating.openDates.length} of your {operating.byDate.length} days
+            {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''} — we will only put it on
+            one of those.
+          </p>
+        ) : access.status === 'partial' ? (
+          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            Reachable on {access.usableDates.length} of your {access.byDate.length} days — we will
+            only put it on one of those.
+          </p>
+        ) : null}
+
+        <details className="mt-3">
+          <summary
+            className={cx(
+              MIN_TARGET_SUMMARY,
+              'cursor-pointer text-xs font-medium text-ink-muted hover:text-ink',
+            )}
+          >
+            More about this place
+          </summary>
+          <div className="mt-2 space-y-2">
+            {/*
+              What it is, where that is worth a sentence. §8.7 bans "A lake." and
+              "A viewpoint." as copy, and a live board carried "A easy walk."
+              eleven times — the classifier's honest minimal sentence for a
+              record nothing is published about, and a line that costs the reader
+              a fixation and returns nothing. `descriptionOf` returns null there.
+            */}
+            {description ? (
+              <p className="text-sm leading-relaxed text-ink-muted">{description}</p>
+            ) : null}
+
+            {/*
+              The weather sentence, only where it is this card's own and not the
+              board's. The verb has to match the evidence, so the sentence is
+              built where the evidence is known rather than assembled here.
+            */}
+            {candidate.weather.note && !suppressed.has('weather') ? (
+              <p className="text-xs leading-relaxed text-ink-faint">{candidate.weather.note}</p>
+            ) : null}
+
+            {fit.blockers.length > 1 ? (
+              <ul className="rounded-lg bg-clay-soft p-3 text-xs leading-relaxed text-ink-muted">
+                {fit.blockers.slice(1).map((blocker) => (
+                  <li key={blocker.code}>{blocker.message}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            {fit.reasons.length > 1 ? (
+              <ul className="space-y-1 rounded-lg bg-paper-sunk p-3 text-xs leading-relaxed text-ink-muted">
+                {fit.reasons.slice(1).map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            {fit.cautions.length > 0 ? (
+              <ul className="space-y-1 text-xs leading-relaxed text-ink-muted">
+                {fit.cautions.map((caution) => (
+                  <li key={caution}>{caution}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            {operating.requiresVerification && operating.verifyNote && !suppressed.has('hours') ? (
+              <p className="text-xs leading-relaxed text-ink-muted">{operating.verifyNote}</p>
+            ) : null}
+
+            {place.accessGroup ? (
+              <p className="text-xs leading-relaxed text-ink-faint">
+                {/*
+                  Two records that share one car park would otherwise read as two
+                  unrelated stops with similar names.
+                */}
+                Part of {place.accessGroup.label}. {place.accessGroup.note}
+              </p>
+            ) : null}
+
+            <EvidencePanel candidate={candidate} />
+
+            <p className="text-[11px] text-ink-muted">
+              Source: {place.source.name}
+              {place.source.url ? (
+                <>
+                  {' · '}
+                  <SourceLink url={place.source.url} />
+                </>
+              ) : null}
+            </p>
+          </div>
+        </details>
+
+        {/*
+          The credit, at the foot of the card rather than over the name.
+
+          Rendered verbatim, in the tab order, with the file page and the licence
+          as real links — the obligation is unchanged. What changed is where it
+          sits: two to four lines of dotted-underlined attribution directly above
+          the place's name made the photographer the loudest text on a card about
+          a river.
+        */}
+        {image ? <ImageCredit image={image} className="mt-3" /> : null}
+
+        <div className="mt-auto pt-4">
+          {/*
+            A choice that has become impossible stays visible as a conflict.
+            Silently flipping it to "Skip" would rewrite what someone asked for
+            and hide the one fact they need in order to change their mind.
+          */}
+          {blocked && status === 'included' ? (
+            <p className="mb-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
+              You picked this, and it no longer works on these dates. We have kept your choice —
+              change your dates, your transport answers, or skip it.
+            </p>
+          ) : null}
+
+          {passing ? (
+            /*
+              THE REASON, ASKED FOR ONCE AND USED IMMEDIATELY.
+
+              In place of the buttons rather than under them: a five-way choice
+              added below a three-way one is a card that grows by sixty pixels
+              every time somebody's finger lands near "Skip".
+            */
+            <div data-testid="card-pass-reasons">
+              <p className="text-xs text-ink-muted">Why not this one?</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {PASS_REASONS.map((reason) => (
+                  <button
+                    key={reason.id}
+                    type="button"
+                    onClick={() => onPass(reason.id)}
+                    className={cx(
+                      'rounded-md border border-rule px-2.5 text-xs text-ink-muted transition-colors hover:border-clay hover:text-clay',
+                      MIN_TARGET,
+                    )}
+                  >
+                    {reason.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={onCancelPass}
+                  className={cx('px-2 text-xs text-ink-faint underline', MIN_TARGET)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="flex gap-1.5"
+              role="group"
+              aria-label={`Your decision on ${displayNameOf(place)}`}
+            >
+              {(['included', 'maybe', 'excluded'] as const).map((option) => {
+                // Offering "Include" on a stop we just explained is impossible
+                // would let the traveller build a plan that cannot run.
+                const unavailable = blocked && option === 'included' && status !== 'included';
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() =>
+                      option === 'excluded' && status !== 'excluded'
+                        ? onStartPass()
+                        : onChoose(place.id, option)
+                    }
+                    disabled={unavailable}
+                    aria-pressed={status === option}
+                    // The reason names the actual constraint. "Low logistics
+                    // fit" tells nobody which of their answers to change.
+                    title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
+                    className={cx(
+                      'flex flex-1 items-center justify-center rounded-md border px-2 text-xs font-medium whitespace-nowrap transition-colors',
+                      MIN_TARGET,
+                      unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
+                      !unavailable && status === option
+                        ? STATUS_STYLE[option]
+                        : !unavailable && 'border-rule text-ink-muted hover:border-ink-faint hover:text-ink',
+                    )}
+                  >
+                    {SELECTION_STATUS_LABELS[option]}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
 
 /**
- * Which access facts earn a badge, in the order they matter to a decision.
+ * HOW LONG IT TAKES TO GET THERE, AND BY WHAT, IN A CLAUSE.
  *
- * `shuttle_available` and `no_transit` are deliberately absent: "there is also a
- * bus" and "there is no bus" are true of almost every card here, and a badge
- * that is always on is a badge nobody reads. They appear in the card's cautions
- * instead, where they belong.
- */
-const ACCESS_BADGE_ORDER: readonly AccessBadge[] = [
-  'shuttle_required',
-  'car_required',
-  'seasonal_service',
-  'permit_required',
-  'verify_conditions',
-];
-
-const ACCESS_BADGE_TONE: Record<AccessBadge, BadgeTone> = {
-  car_required: 'neutral',
-  shuttle_required: 'blue',
-  shuttle_available: 'blue',
-  seasonal_service: 'amber',
-  no_transit: 'neutral',
-  permit_required: 'amber',
-  verify_conditions: 'amber',
-};
-
-/**
- * Which opening-hours facts earn a badge.
+ * Both facts come off this card's own `reach`, which is the object the scorer,
+ * the detour classifier, the auto-selector and the planner all read — so the
+ * number, the mode and the journey the itinerary will schedule cannot disagree
+ * without one of them being changed on purpose.
  *
- * `always_open` earns nothing at all, which is the point. Nineteen of the
- * twenty-two places in this region have no closing time, and stamping "Open 24
- * hours" across the board would drown the three cards where the hours genuinely
- * decide whether the day works.
+ * The board took its mode from the matrix, which has *one* mode for the whole
+ * board, so on a car-free trip every card read "Walk from base": a true
+ * statement about the matrix and a false one about the journey.
+ *
+ * Where the whole board is unrouted the clause says nothing at all, because the
+ * board has already said it once at the top. Twenty-four copies of "we could not
+ * check the journey" is not honesty, it is noise wearing honesty's clothes.
  */
-/**
- * Weather badge tones, in the same vocabulary as everything else on a card:
- * pine confirms, blue offers an alternative, amber cautions, neutral states a
- * fact. Capped at three per card upstream, and `workable` weather earns nothing
- * — the board already carries access and hours badges, and a card wearing eight
- * of them communicates less than one wearing two.
- */
-const WEATHER_BADGE_TONE: Record<PlaceWeatherBadge, BadgeTone> = {
-  best_on_a_day: 'pine',
-  good_in_the_forecast: 'pine',
-  poor_in_the_forecast: 'amber',
-  visibility_dependent: 'neutral',
-  poor_weather_friendly: 'blue',
-  daylight_only: 'neutral',
-  seasonal_pattern: 'neutral',
-  weather_unknown: 'neutral',
-};
+function TravelPhrase({
+  candidate,
+  suppressed,
+}: {
+  candidate: DiscoveryCandidate;
+  suppressed: ReadonlySet<SharedFactKind>;
+}) {
+  if (candidate.detourClass === 'base') return <>at your base</>;
+  if (candidate.reach.status !== 'measured') {
+    if (suppressed.has('journey')) return <>journey not timed</>;
+    return (
+      <>
+        {candidate.detourClass === 'unknown'
+          ? 'journey not verified'
+          : describeReachFromBase(candidate.reach, formatMinutes)}
+      </>
+    );
+  }
+  const { mode, travelMinutes, provenance } = candidate.reach;
+  /*
+   * A modelled journey says so, in one word.
+   *
+   * `modelled` here means the road matrix held a distance for the pair and
+   * nothing measured could carry it in a mode this traveller has — so the number
+   * is that distance walked at a conservative pace, not a measurement. The
+   * planner has walked these since the multimodal pass; the board refused them
+   * outright until the derivation moved into the shared resolver. "About" is
+   * what a person says about a figure they worked out rather than read.
+   */
+  return (
+    <>
+      {provenance === 'modelled' ? 'about ' : ''}
+      {formatMinutes(travelMinutes)} {REACH_MODE_PHRASE[mode]} from base
+    </>
+  );
+}
 
 /**
  * What to have in reserve, if the weather takes something.
  *
  * A cross-cut rather than a group: every place here already has a primary
  * section above, and the point is precisely that the good bad-weather options
- * are scattered across "hidden gems", "must-see classics" and "scenic detours"
- * where nobody would think to look for them on a wet morning. So this is a list
- * of names rather than a second set of cards — duplicating twenty-three cards to
- * surface four of them would make the board longer and less useful.
+ * are scattered across the other groups where nobody would think to look for
+ * them on a wet morning. So this is a list of names rather than a second set of
+ * cards.
  *
  * It appears only when something is actually at risk, and the two registers are
  * kept apart because they are different claims: a forecast is about *your dates*,
- * a seasonal pattern is about *this time of year* and is preparation rather than
- * prediction.
- *
- * Nothing here is scheduled, and saying so is not pedantry — a traveller who
- * reads this as "we have handled it" would arrive expecting a plan that does not
- * exist.
+ * a seasonal pattern is about *this time of year*.
  */
 function WeatherBackups({
   backups,
@@ -736,9 +1431,7 @@ function WeatherBackups({
   // the traveller has just ruled out disappears from here immediately. Offering
   // somebody a fallback they have already said no to teaches them their answers
   // are decorative.
-  const usable = backups.suggestions.filter(
-    (backup) => selections[backup.placeId] !== 'excluded',
-  );
+  const usable = backups.suggestions.filter((backup) => selections[backup.placeId] !== 'excluded');
   const atRisk = backups.atRisk.filter((entry) => selections[entry.placeId] !== 'excluded');
   if (atRisk.length === 0) return null;
 
@@ -754,16 +1447,11 @@ function WeatherBackups({
           {forecast ? 'Forecast' : 'Seasonal pattern'}
         </Badge>
         {/*
-          The age of the evidence, beside the kind of it.
-
-          A stale snapshot renders — that is deliberate, an old forecast is worth
-          more than none — and it must not render in the same voice as a fresh
-          one. Without this the badge said "Forecast" whether it was fetched a
-          minute ago or last week.
+          The age of the evidence, beside the kind of it. A stale snapshot
+          renders — an old forecast is worth more than none — and it must not
+          render in the same voice as a fresh one.
         */}
-        {forecast && freshness === 'stale' ? (
-          <Badge tone="amber">Fetched a while ago</Badge>
-        ) : null}
+        {forecast && freshness === 'stale' ? <Badge tone="amber">Fetched a while ago</Badge> : null}
       </div>
 
       <p className="mt-1 max-w-2xl text-sm text-ink-muted">
@@ -779,17 +1467,14 @@ function WeatherBackups({
         <p className="mt-4 max-w-2xl rounded-md bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
           {/*
             No landform, in a sentence whose whole point is not inventing one.
-
             This used to end "would open up the sheltered stops down the valley"
             — a claim about one mountain region, rendered on a board that now
-            compiles anywhere. An island, a delta, a steppe or a city centre was
-            being told to widen its radius to reach a valley that does not exist
-            there, inside the paragraph that says we will not invent a fallback.
+            compiles anywhere.
           */}
-          <span className="font-medium text-ink">Nothing on your board fits.</span> Everything
-          else here is either too far, shut on your dates, or exposed to the same weather — so
-          we are not going to invent a fallback. Widening how far you will go is the change most
-          likely to open something up.
+          <span className="font-medium text-ink">Nothing on your board fits.</span> Everything else
+          here is either too far, shut on your dates, or exposed to the same weather — so we are not
+          going to invent a fallback. Widening how far you will go is the change most likely to open
+          something up.
         </p>
       ) : (
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -805,10 +1490,9 @@ function WeatherBackups({
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-xs text-ink-faint">
                   {/*
-                    The mode, not just the number. This strip said "40 min" on
-                    every backup on every trip, and a backup is taken on a
-                    morning somebody has already lost their plan — "40 min on
-                    foot" and "40 min by train" are not the same rescue.
+                    The mode, not just the number. A backup is taken on a morning
+                    somebody has already lost their plan — "40 min on foot" and
+                    "40 min by train" are not the same rescue.
                   */}
                   {backup.travelMinutesFromBase === 0
                     ? 'in town'
@@ -846,11 +1530,9 @@ function listNames(names: readonly string[]): string {
 /**
  * The licence line, once, at the foot of the board.
  *
- * The cards quote provider numbers — "a 76% chance of rain" — and Open-Meteo's
- * data is CC BY 4.0, so the notice has to appear wherever the data does. Once
- * per page rather than once per card: twenty-three copies of the same sentence
- * is not attribution, it is noise, and the itinerary does the same thing in the
- * same quiet type.
+ * The cards quote provider numbers and Open-Meteo's data is CC BY 4.0, so the
+ * notice has to appear wherever the data does. Once per page rather than once
+ * per card: twenty-three copies of the same sentence is not attribution.
  */
 function WeatherCredit({
   groups,
@@ -860,8 +1542,7 @@ function WeatherCredit({
   freshness?: WeatherSnapshotState | 'not_fetched';
 }) {
   const candidates = groups.flatMap((group) => group.candidates);
-  const notice = candidates.find((candidate) => candidate.weather.attribution)?.weather
-    .attribution;
+  const notice = candidates.find((candidate) => candidate.weather.attribution)?.weather.attribution;
   const label = candidates.find((candidate) => candidate.weather.evidenceLabel)?.weather
     .evidenceLabel;
   if (!notice) return null;
@@ -871,11 +1552,8 @@ function WeatherCredit({
       {label ? `${label} for your dates. ` : ''}
       {notice}{' '}
       {/*
-        What is actually known about when this was read.
-
-        "Conditions change; we have not checked today" was said whatever the
-        snapshot's age, which is true of a fresh fetch and an understatement of
-        a stale one. Where the page tells us the state, the sentence says it.
+        What is actually known about when this was read. "Conditions change; we
+        have not checked today" was said whatever the snapshot's age.
       */}
       {freshness === 'stale'
         ? 'This is the last weather we fetched and it is old enough to be worth fetching again.'
@@ -886,55 +1564,6 @@ function WeatherCredit({
   );
 }
 
-/** "Thu 13 Aug" — enough to point at a day without spelling out a date. */
-function shortDay(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  });
-}
-
-const OPERATING_BADGE_ORDER: readonly OperatingBadge[] = [
-  'closed_on_your_dates',
-  'closed_some_days',
-  'limited_hours',
-  'last_admission',
-  'timed_entry',
-  'reservation_required',
-  'admission_permit',
-  'hours_unknown',
-  'verify_hours',
-  'daylight_only',
-];
-
-const OPERATING_BADGE_TONE: Record<OperatingBadge, BadgeTone> = {
-  limited_hours: 'neutral',
-  closed_some_days: 'amber',
-  closed_on_your_dates: 'clay',
-  last_admission: 'amber',
-  reservation_required: 'amber',
-  timed_entry: 'amber',
-  admission_permit: 'amber',
-  hours_unknown: 'amber',
-  verify_hours: 'amber',
-  daylight_only: 'neutral',
-};
-
-/**
- * Whether stating the hours would tell the traveller anything. A day-use site
- * posted 06:00 to 22:00 cannot constrain a trip day, and printing its hours on
- * the card is a line of text that only competes with the ones that matter.
- */
-function bindsTheDay(operating: DiscoveryCandidate['operating']): boolean {
-  return (
-    operating.badges.includes('limited_hours') ||
-    operating.badges.includes('last_admission') ||
-    operating.badges.includes('closed_some_days')
-  );
-}
-
 const STATUS_STYLE: Record<SelectionStatus, string> = {
   included: 'border-pine bg-pine-soft text-pine',
   maybe: 'border-slate-blue bg-slate-blue-soft text-slate-blue',
@@ -942,421 +1571,12 @@ const STATUS_STYLE: Record<SelectionStatus, string> = {
 };
 
 /**
- * WHICH CARDS GET A PHOTOGRAPH, AND WHY IT IS NOT ALL OF THEM.
- *
- * Two filters, and they are filters on *meaning* rather than on availability.
- *
- * **Only strong subject confidence.** A file matched through a stated media
- * category is a picture of something in the same category as this place, which
- * is a fine reason to show it beside a destination's name and a bad reason to
- * illustrate one specific stop. A card that says "this is the waterfall" with a
- * picture of a different waterfall in the same valley is worse than a card with
- * no picture at all — it is a claim, and it is wrong.
- *
- * **Only cards where a picture is the argument.** A board carries forty
- * candidates including car parks, bus stations and supermarkets, and a
- * photograph on every one of them turns a decision tool into a gallery: the
- * scanning cost goes up, the information density goes down, and the traveller
- * stops being able to see which four things matter. So imagery is reserved for
- * the places whose appeal *is* what they look like — the anchors and the
- * viewpoints — and support stops keep the category plate they already had.
- */
-function anchorImage(
-  images: Record<string, ImageRecord>,
-  candidate: DiscoveryCandidate,
-): ImageRecord | null {
-  const image = images[candidate.place.id];
-  if (!image || image.subjectConfidence !== 'strong') return null;
-  return candidate.place.relationship === 'base' || candidate.fit.band === 'top_pick' ? image : null;
-}
-
-/**
- * WHAT A CARD SHOWS BEFORE YOU ASK IT ANYTHING.
- *
- * The board was 13,930px tall at 1440 and 25,270px at 390 — about thirty phone
- * screens for seventeen decisions, because every card printed everything it knew
- * at once: a five-line description, a four-line weather caveat, an eight-line
- * "why this fits you" panel, two disclosures and a source line. A comparison
- * tool that cannot be compared is not doing its job.
- *
- * So the card now leads with the eight things a decision is actually made on —
- * what it looks like, what it is called, where it is, how well it fits, how far,
- * how long, how hard, what it costs — plus the badges that change what the
- * traveller has to *do*, and the three buttons. The argument, the description and
- * the cautions are one disclosure away, and the disclosure is labelled with the
- * question it answers rather than with a chevron.
- *
- * Nothing is deleted. Every sentence that used to be on the card is still on the
- * card; the difference is whether you have to read it to see the next place.
- */
-function PlaceCard({
-  candidate,
-  image,
-  status,
-  onChoose,
-  boardWeatherNote,
-}: {
-  candidate: DiscoveryCandidate;
-  /** Which network measured this card's travel time. See the board's own prop. */
-  /** Null on most cards, by design. See `anchorImage`. */
-  image: ImageRecord | null;
-  status: SelectionStatus | undefined;
-  onChoose: (placeId: string, status: SelectionStatus) => void;
-  /**
-   * The sentence the board has already said for every card. Where this card's
-   * own note is the same sentence, the card says nothing and the board's notice
-   * stands for it; where it differs, the card's own note is what renders.
-   */
-  boardWeatherNote?: string;
-}) {
-  const { place, fit, season, access, operating, weather } = candidate;
-  const blocked = fit.band === 'not_workable';
-  const role = ROLE_BADGE[candidate.group];
-  const ownWeatherNote = weather.note && weather.note !== boardWeatherNote ? weather.note : null;
-  /*
-   * The disclosure is named for what is inside it.
-   *
-   * "Why this fits you" is the product's whole argument, so it stays a phrase a
-   * traveller recognises rather than becoming a chevron. Where there is no
-   * argument to make — a card with no reasons — it does not pretend to have one.
-   */
-  const detailLabel =
-    fit.blockers.length > 0
-      ? 'Why this will not work'
-      : fit.reasons.length > 0
-        ? 'Why this fits you'
-        : 'More about this place';
-
-  return (
-    <Panel
-      as="article"
-      className={cx(
-        // `h-full` so every card in a row is the same height, which is what makes
-        // `mt-auto` on the action block put every row of buttons on one line.
-        // Without it a short card ended ninety pixels above its neighbours and
-        // the eye had to hunt for each set of controls.
-        //
-        // `scroll-mt` is the other half of a sticky toolbar. Two bars are pinned
-        // to the top of this page — the product header and the board's own
-        // action bar — so anything the browser scrolls to the top edge (a
-        // keyboard focus, an anchor, `scrollIntoView`) lands *underneath* about
-        // 133px of chrome. Stating the margin here means a card scrolled to is a
-        // card you can see and press.
-        'flex h-full scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-col overflow-hidden transition-colors',
-        status === 'included' && 'border-pine',
-        status === 'excluded' && 'opacity-60',
-      )}
-    >
-      <div className="relative">
-        {/*
-          A photograph when one was licensed *and* credibly of this exact place;
-          the generated category plate otherwise. Never cropped: the frame is
-          only a little wider than a photograph, and a crop here would buy a few
-          pixels of composition at the cost of a share-alike question.
-        */}
-        {image ? (
-          <DestinationImage
-            image={image}
-            fallback={imageryFallbackFor({
-              kind: 'candidate',
-              id: place.id,
-              name: place.name,
-              coordinates: place.coordinates,
-            })}
-            ratio="16 / 7"
-            category={place.category}
-          />
-        ) : (
-          <PlacePlate category={place.category} className="h-24" />
-        )}
-        <span className="absolute top-2 left-2 rounded-full bg-paper-raised/90 px-2 py-0.5 text-[11px] font-medium text-ink">
-          {PLACE_CATEGORY_LABELS[place.category]}
-        </span>
-        {/*
-          The role, opposite the category. Two different questions — "what kind of
-          thing is it" and "what part does it play in this trip" — and the second
-          one used to be readable only from a section heading three rows up.
-        */}
-        {role ? (
-          <span
-            className="absolute top-2 right-2 rounded-full bg-paper-raised/90 px-2 py-0.5 text-[11px] font-medium text-ink"
-            data-testid="card-role"
-          >
-            {role.label}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="flex flex-1 flex-col p-4">
-        <h3 className="font-display text-lg leading-snug text-ink">{place.name}</h3>
-        <p className="mt-0.5 text-xs text-ink-faint">
-          {place.locality}
-          {/*
-            Two records that share one car park would otherwise read as two
-            unrelated stops that happen to have similar names. Saying which site
-            they belong to is what makes "the grounds" and "the visitor centre"
-            legible as halves of one visit rather than a duplicate.
-          */}
-          {place.accessGroup ? (
-            <>
-              {' · '}
-              <span title={place.accessGroup.note}>Part of {place.accessGroup.label}</span>
-            </>
-          ) : null}
-        </p>
-
-        <div className="mt-3">
-          <FitMeter band={fit.band} label={FIT_BAND_LABELS[fit.band]} meter={FIT_BAND_METER[fit.band]} />
-        </div>
-
-        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-          <TravelStat candidate={candidate} />
-          <Stat label="Time there">{formatMinutes(place.typicalDurationMinutes)}</Stat>
-          <Stat label="Cost">{formatCost(place.costLevel)}</Stat>
-          <Stat label="Effort">{formatIntensity(place.physicalIntensity)}</Stat>
-        </dl>
-
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Badge tone={blocked ? 'clay' : 'neutral'}>{WORTH_DETOUR_COPY[candidate.worthDetour]}</Badge>
-          {/*
-            The role chip already says "Hidden gem" on the plate above, so the
-            score-derived badge would be the same word twice on one card.
-          */}
-          {place.hiddenGemScore >= 0.6 && role?.label !== 'Hidden gem' ? (
-            <Badge tone="amber">Hidden gem</Badge>
-          ) : null}
-          {season.status === 'partially_open' ? <Badge tone="amber">Part of your dates</Badge> : null}
-          {season.status === 'closed' ? <Badge tone="clay">Closed on your dates</Badge> : null}
-          {/*
-            Only the badges that change what the traveller has to do. A card that
-            wears every flag it qualifies for teaches people to stop reading them.
-          */}
-          {ACCESS_BADGE_ORDER.filter((badge) => access.badges.includes(badge)).map((badge) => (
-            <Badge key={badge} tone={ACCESS_BADGE_TONE[badge]}>
-              {ACCESS_BADGE_LABELS[badge]}
-            </Badge>
-          ))}
-          {/*
-            "Recheck hours" is dropped where the card already carries the
-            paragraph that says the same thing at length and names the source.
-            One card was wearing "Hours unconfirmed", "Recheck hours" and a
-            three-line "Check its hours" note — one fact, told three times,
-            which is how a reader learns that none of the three is worth reading.
-          */}
-          {OPERATING_BADGE_ORDER.filter(
-            (badge) =>
-              operating.badges.includes(badge) &&
-              !(badge === 'verify_hours' && operating.requiresVerification && operating.verifyNote),
-          ).map((badge) => (
-            <Badge key={badge} tone={OPERATING_BADGE_TONE[badge]}>
-              {OPERATING_BADGE_LABELS[badge]}
-            </Badge>
-          ))}
-          {/*
-            The two weather badges that state the *board's* situation rather
-            than this place's are dropped where the board has already said it,
-            once, in a sentence: "No weather data" and "Seasonal pattern" were
-            true of every card, so they distinguished nothing and cost a line
-            each. The badges that discriminate — needs a clear day, holds up in
-            bad weather, best on a particular day — are untouched, which is the
-            whole point of clearing the others out of their way.
-          */}
-          {candidate.weather.badges
-            .filter(
-              (badge) =>
-                !(boardWeatherNote && (badge === 'weather_unknown' || badge === 'seasonal_pattern')),
-            )
-            .map((badge) => (
-              <Badge key={badge} tone={WEATHER_BADGE_TONE[badge]}>
-                {badge === 'best_on_a_day' && candidate.weather.bestDate
-                  ? `Best on ${shortDay(candidate.weather.bestDate)}`
-                  : PLACE_WEATHER_BADGE_LABELS[badge]}
-              </Badge>
-            ))}
-        </div>
-
-        {access.status === 'partial' ? (
-          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-            Reachable on {access.usableDates.length} of your{' '}
-            {access.byDate.length} days — we will only put it on one of those.
-          </p>
-        ) : null}
-
-        {/*
-          Reaching it and being let in are separate questions, so they get
-          separate lines. Only the hours that bear on these dates appear; the
-          rest of the annual timetable is not the traveller's problem.
-        */}
-        {operating.status === 'closed_throughout' ? (
-          <p className="mt-3 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-            Shut on every day of your trip.
-          </p>
-        ) : operating.status === 'open_some_days' ? (
-          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-            Open on {operating.openDates.length} of your {operating.byDate.length} days
-            {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''} — we will only put it on
-            one of those.
-          </p>
-        ) : operating.hoursSummary && bindsTheDay(operating) ? (
-          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-            Open {operating.hoursSummary}
-            {operating.lastAdmissionSummary ? ` · ${operating.lastAdmissionSummary.toLowerCase()}` : ''}
-          </p>
-        ) : null}
-
-        {operating.requiresVerification && operating.verifyNote ? (
-          <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-            {/*
-              Deliberately not "check before you go" — that is the access
-              badge's phrase, and a card wearing both said the same four words
-              twice about two different things.
-            */}
-            <span className="font-medium text-ink">Check its hours.</span>{' '}
-            {operating.verifyNote}
-          </p>
-        ) : null}
-
-        {/*
-          THE ARGUMENT, ONE CLICK AWAY.
-
-          Everything that used to run down the card unprompted — the description,
-          the weather sentence, the reasons or the blockers, and the cautions —
-          in one disclosure named for the question it answers. `open` when the
-          place will not work, because a card that has just been marked
-          impossible owes its reason immediately rather than on request.
-
-          Independent per card rather than an accordion: comparing two places
-          means having both open, and a control that closes the card you were
-          reading in order to open the next one is a comparison tool that
-          forbids comparison.
-        */}
-        <details className="mt-3" open={blocked}>
-          <summary
-            className={cx(
-              MIN_TARGET_SUMMARY,
-              'cursor-pointer text-xs font-medium',
-              blocked ? 'text-clay' : 'text-ink hover:text-pine',
-            )}
-          >
-            {detailLabel}
-          </summary>
-          <div className="mt-2 space-y-2">
-            <p className="text-sm leading-relaxed text-ink-muted">{place.shortDescription}</p>
-
-            {/*
-              One sentence, and only when the weather over these dates would
-              change the decision, and only when it is not the sentence the board
-              has already made for every card. The verb has to match the
-              evidence: "looks like the day for this one" is sayable about a
-              forecast and not about ten past Augusts, so the sentence is built
-              where the evidence is known rather than assembled here from parts.
-            */}
-            {ownWeatherNote ? (
-              <p className="text-xs leading-relaxed text-ink-faint">{ownWeatherNote}</p>
-            ) : null}
-
-            {fit.blockers.length > 0 ? (
-              <ul className="rounded-lg bg-clay-soft p-3 text-xs leading-relaxed text-ink-muted">
-                {fit.blockers.map((blocker) => (
-                  <li key={blocker.code}>{blocker.message}</li>
-                ))}
-              </ul>
-            ) : fit.reasons.length > 0 ? (
-              <ul className="space-y-1 rounded-lg bg-paper-sunk p-3 text-xs leading-relaxed text-ink-muted">
-                {fit.reasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
-            ) : null}
-
-            {fit.cautions.length > 0 ? (
-              <div className="text-xs">
-                <p className="font-medium text-ink">Worth knowing ({fit.cautions.length})</p>
-                <ul className="mt-1 space-y-1 leading-relaxed text-ink-muted">
-                  {fit.cautions.map((caution) => (
-                    <li key={caution}>{caution}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        </details>
-
-        <EvidencePanel candidate={candidate} />
-
-        <div className="mt-auto pt-4">
-          {/*
-            A choice that has become impossible stays visible as a conflict.
-            Silently flipping it to "Skip" would rewrite what someone asked for
-            and hide the one fact they need in order to change their mind.
-          */}
-          {blocked && status === 'included' ? (
-            <p className="mb-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
-              You picked this, and it no longer works on these dates. We have kept
-              your choice — change your dates, your transport answers, or skip it.
-            </p>
-          ) : null}
-          <div
-            className="flex gap-1.5"
-            role="group"
-            aria-label={`Your decision on ${place.name}`}
-          >
-            {(['included', 'maybe', 'excluded'] as const).map((option) => {
-              // Offering "Include" on a stop we just explained is impossible would
-              // let the traveller build a plan that cannot run.
-              const unavailable = blocked && option === 'included' && status !== 'included';
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => onChoose(place.id, option)}
-                  disabled={unavailable}
-                  aria-pressed={status === option}
-                  // The reason names the actual constraint. "Low logistics fit"
-                  // tells nobody which of their answers to change.
-                  title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
-                  className={cx(
-                    'flex flex-1 items-center justify-center rounded-md border px-2 text-xs font-medium whitespace-nowrap transition-colors',
-                    MIN_TARGET,
-                    unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
-                    !unavailable && status === option
-                      ? STATUS_STYLE[option]
-                      : !unavailable && 'border-rule text-ink-muted hover:border-ink-faint hover:text-ink',
-                  )}
-                >
-                  {SELECTION_STATUS_LABELS[option]}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[11px] text-ink-muted">
-            Source: {place.source.name}
-            {place.source.url ? (
-              <>
-                {' · '}
-                <SourceLink url={place.source.url} />
-              </>
-            ) : null}
-          </p>
-        </div>
-      </div>
-    </Panel>
-  );
-}
-
-/**
  * THE ONE LINK ON EVERY CARD, AT A SIZE A THUMB CAN HIT.
  *
- * Measured at 130x13 px, roughly twenty times per board — under a third of
- * WCAG 2.5.5's 44 px in the axis that matters, and it is the link that takes
- * somebody to the official page to check a closure. `inline-flex` with a minimum
- * height grows the target without moving the text or breaking the sentence it
- * sits in; the floor is lifted on touch widths only, because on a desktop the
- * pointer is precise and a 44px tall line inside 11px type would look broken.
- *
- * The colour moves from `ink-faint` to `ink-muted` for the same reason: a link
- * set in the product's faintest ink is legible by the letter of the contrast
- * rule and unfindable in practice.
+ * Measured at 130x13 px — under a third of WCAG 2.5.5's 44 px in the axis that
+ * matters, and it is the link that takes somebody to the official page to check
+ * a closure. The floor is lifted on touch widths only, because on a desktop a
+ * 44px tall line inside 11px type would look broken.
  */
 function SourceLink({ url }: { url: string }) {
   return (
@@ -1374,16 +1594,10 @@ function SourceLink({ url }: { url: string }) {
 /**
  * A PLACE WE ARE RECOMMENDING AGAINST, AT THE SIZE OF THAT RECOMMENDATION.
  *
- * One row rather than a card: name, how badly it fits, the badges that say what
- * is wrong with it, the reason in a sentence, and the same three buttons every
- * other card has — because "probably skip" is our opinion and the traveller is
- * allowed to disagree with it. Include stays disabled only where the place is
- * genuinely impossible, and the button then carries the constraint as its title,
- * exactly as on a full card.
- *
- * The detail that a full card would show is behind the row's own disclosure, so
- * nothing is lost: somebody who wants to argue with the verdict can read
- * everything it was made from.
+ * One row rather than a card: name, the reason in a sentence, and the same three
+ * buttons every other card has — because "probably skip" is our opinion and the
+ * traveller is allowed to disagree with it. Include stays disabled only where
+ * the place is genuinely impossible.
  */
 function SkipRow({
   candidate,
@@ -1394,62 +1608,33 @@ function SkipRow({
   status: SelectionStatus | undefined;
   onChoose: (placeId: string, status: SelectionStatus) => void;
 }) {
-  const { place, fit, season, access, operating } = candidate;
+  const { place, fit, operating } = candidate;
   const blocked = fit.band === 'not_workable';
   // The blocker where there is one — it is the specific, actionable answer — and
   // the quality layer's own sentence otherwise, which is always present.
   const headline = fit.blockers[0]?.message ?? candidate.quality.reason;
 
   return (
-    <Panel
-      as="article"
+    <article
+      data-place-card={place.id}
       className={cx(
+        CARD_SURFACE,
         'flex scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-wrap items-start gap-x-4 gap-y-3 p-3 transition-colors',
         status === 'included' && 'border-pine',
         status === 'excluded' && 'opacity-60',
       )}
     >
       {/*
-        One line on a desktop, two on a phone.
-
-        `flex-1` alone left the text a hundred and thirty pixels wide beside
-        three buttons that will not shrink, so every badge wrapped onto its own
-        line and the "row" became taller than the card it replaced. Below `sm`
-        the text takes the full width and the controls sit under it.
+        One line on a desktop, two on a phone. `flex-1` alone left the text a
+        hundred and thirty pixels wide beside three buttons that will not shrink.
       */}
       <div className="min-w-0 basis-full sm:flex-1 sm:basis-0">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h3 className="font-display text-base leading-snug text-ink">{place.name}</h3>
+          <h3 className="font-display text-base leading-snug text-ink">
+            <PlaceName entity={place} />
+          </h3>
           <span className="text-xs text-ink-faint">{place.locality}</span>
-          {/*
-            WHICH SITE THIS BELONGS TO, KEPT ON THE COMPACT ROW.
-
-            Dropped when the skip group collapsed to one line per place, and it
-            is exactly the line that stops two halves of one site — a visitor
-            centre and the grounds around it — reading as a duplicate record we
-            failed to merge. The full card has always carried it; a shorter row
-            is not a reason to make the board look wrong.
-          */}
-          {place.accessGroup ? (
-            <span className="text-xs text-ink-faint" title={place.accessGroup.note}>
-              Part of {place.accessGroup.label}
-            </span>
-          ) : null}
           <Badge tone={blocked ? 'clay' : 'neutral'}>{FIT_BAND_LABELS[fit.band]}</Badge>
-          {season.status === 'closed' ? <Badge tone="clay">Closed on your dates</Badge> : null}
-          {season.status === 'partially_open' ? (
-            <Badge tone="amber">Part of your dates</Badge>
-          ) : null}
-          {ACCESS_BADGE_ORDER.filter((badge) => access.badges.includes(badge)).map((badge) => (
-            <Badge key={badge} tone={ACCESS_BADGE_TONE[badge]}>
-              {ACCESS_BADGE_LABELS[badge]}
-            </Badge>
-          ))}
-          {OPERATING_BADGE_ORDER.filter((badge) => operating.badges.includes(badge)).map((badge) => (
-            <Badge key={badge} tone={OPERATING_BADGE_TONE[badge]}>
-              {OPERATING_BADGE_LABELS[badge]}
-            </Badge>
-          ))}
         </div>
 
         <p className="mt-1 text-xs leading-relaxed text-ink-muted">
@@ -1460,20 +1645,8 @@ function SkipRow({
         </p>
 
         {/*
-          THE DATE FACT SURVIVES THE COMPACT ROW.
-
-          Collapsing the skip group to one line per place dropped this sentence,
-          and it is the one sentence on the row a traveller most needs: "shut on
-          every day of your trip" is not a nuance, it is the whole answer. A
-          browser suite caught it — four specifications that had asserted this
-          text for phases went red — but the defect is a product one, and it is
-          the same shape as a reviewer's separate finding that a disabled
-          Include button explained itself only through a `title` attribute
-          nobody on a phone can read.
-
-          Rendered as text rather than as a badge because a badge saying
-          "Closed" and a sentence saying which days are shut are different
-          claims, and the row already carries the badge.
+          THE DATE FACT SURVIVES THE COMPACT ROW. "Shut on every day of your
+          trip" is not a nuance, it is the whole answer.
         */}
         {operating.status === 'closed_throughout' ? (
           <p className="mt-1 text-xs leading-relaxed text-ink-muted">
@@ -1486,10 +1659,6 @@ function SkipRow({
           </p>
         ) : null}
 
-        {/*
-          The choice stays visible as a conflict rather than being flipped for
-          them. Same rule as the full card, and for the same reason.
-        */}
         {blocked && status === 'included' ? (
           <p className="mt-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
             You picked this, and it no longer works on these dates. We have kept your choice —
@@ -1504,7 +1673,10 @@ function SkipRow({
             What it is, and everything we checked
           </summary>
           <div className="mt-2 space-y-2">
-            <p className="text-xs leading-relaxed text-ink-muted">{place.shortDescription}</p>
+            {/* The same stub gate the full card uses. See `descriptionOf`. */}
+            {descriptionOf(place) ? (
+              <p className="text-xs leading-relaxed text-ink-muted">{descriptionOf(place)}</p>
+            ) : null}
             {fit.blockers.length > 1 ? (
               <ul className="space-y-1 text-xs leading-relaxed text-ink-muted">
                 {fit.blockers.slice(1).map((blocker) => (
@@ -1535,7 +1707,7 @@ function SkipRow({
       <div
         className="flex shrink-0 gap-1.5 max-sm:w-full"
         role="group"
-        aria-label={`Your decision on ${place.name}`}
+        aria-label={`Your decision on ${displayNameOf(place)}`}
       >
         {(['included', 'maybe', 'excluded'] as const).map((option) => {
           const unavailable = blocked && option === 'included' && status !== 'included';
@@ -1561,23 +1733,23 @@ function SkipRow({
           );
         })}
       </div>
-    </Panel>
+    </article>
   );
 }
 
 /**
- * WHY WE TRUST THIS — and, more often, why we do not.
+ * WHERE THIS CAME FROM — the audit trail, inside the card's own disclosure.
  *
- * Two registers, kept apart on purpose. The chips above the fold are the facts
- * that change what a traveller *does*: a booking they have to make, a price they
- * have to budget for, a closure that removes the stop. The panel below the fold
- * is the audit trail: which page said it, when we read it, and what nobody
- * answered.
+ * It used to be a second disclosure on the outside of every card, headed "Why we
+ * trust this (0 of 6 checked)": a fraction nobody outside the team can act on,
+ * attached to a promise of trust it withdraws in the same breath, on all
+ * twenty-four cards of a live board. §26 names that string.
  *
- * It is collapsed by default and absent entirely where nothing was established,
- * because an evidence panel that opens onto "unknown, unknown, unknown" teaches
- * people to stop opening evidence panels. The unknowns are still listed *inside*
- * it, where somebody who has decided to care can read them.
+ * What survives is the part somebody who has opened a card genuinely wants: the
+ * official page, what was established, and — the honest half — what nobody
+ * publishes. A traveller deciding whether to travel an hour needs to know that
+ * nobody published the hours far more than they need the two facts we did
+ * establish.
  */
 function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
   const evidence = candidate.evidence;
@@ -1598,98 +1770,77 @@ function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
     (fact) => fact.state !== 'unknown' && fact.state !== 'unavailable',
   );
   const unanswered = evidence.resolved.filter((fact) => fact.state === 'unknown');
-  const conflicted = evidence.resolved.filter((fact) => fact.state === 'conflicted');
 
   if (answered.length === 0 && !evidence.officialUrl && unanswered.length === 0) return null;
 
   return (
-    <div className="mt-3 space-y-2">
-      {/*
-        Only the facts that change a decision get a chip. A card that wears one
-        for every field it happens to have communicates less than one wearing two.
-      */}
-      {(mustBook || admission || blocking.length > 0) && (
-        <div className="flex flex-wrap gap-1.5">
-          {blocking.length > 0 ? <Badge tone="clay">Closed — official notice</Badge> : null}
-          {mustBook ? (
-            <Badge tone="amber">
-              {booking?.permitRequired === 'yes'
-                ? 'Permit needed'
-                : booking?.timedEntry === 'yes'
-                  ? 'Timed entry'
-                  : 'Book ahead'}
-            </Badge>
-          ) : null}
-          {admission ? (
-            <Badge tone="neutral">{describeCost(admission)}</Badge>
-          ) : null}
-        </div>
-      )}
+    <div className="space-y-2 border-t border-rule pt-2 text-xs">
+      <p className="font-medium text-ink">{evidenceDisclosureLabel(answered.length)}</p>
 
-      {cautions.length > 0 ? (
-        <p className="rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-          <span className="font-medium text-ink">Worth knowing.</span> {cautions[0]!.statement}
-          {/*
-            Why it is being shown rather than acted on, where it is not acted on.
-            A closure that ended before the traveller arrives, begins after they
-            leave, or is old enough to have been lifted is still worth reading
-            and must not remove a place — and a warning with no explanation of
-            why nothing changed reads as an inconsistency rather than as care.
-          */}
-          {noteOf(cautions[0]!) ? (
-            <span className="text-ink-faint"> {noteOf(cautions[0]!)}</span>
-          ) : null}
+      {blocking.length > 0 || mustBook || admission ? (
+        <p className="leading-relaxed text-ink-muted">
+          {blocking.length > 0 ? 'An official notice says it is closed. ' : ''}
+          {mustBook
+            ? booking?.permitRequired === 'yes'
+              ? 'A permit is needed. '
+              : booking?.timedEntry === 'yes'
+                ? 'Entry is by timed slot. '
+                : 'You have to book ahead. '
+            : ''}
+          {admission ? describeCost(admission) : ''}
         </p>
       ) : null}
 
-      <details className="text-xs">
-        <summary className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-ink-faint hover:text-ink')}>
-          Why we trust this ({answered.length} of {evidence.resolved.length} checked
-          {conflicted.length > 0 ? `, ${conflicted.length} disputed` : ''})
-        </summary>
-        <div className="mt-2 space-y-2">
-          {evidence.officialUrl ? (
-            <p className="leading-relaxed text-ink-muted">
-              Official page:{' '}
-              <a
-                href={evidence.officialUrl}
-                target="_blank"
-                rel="noreferrer nofollow"
-                className="underline underline-offset-2 hover:text-ink"
-              >
-                {hostOf(evidence.officialUrl)}
-              </a>
-            </p>
-          ) : null}
-
-          <ul className="space-y-1.5">
-            {answered.map((fact) => (
-              <li key={fact.factPath} className="leading-relaxed">
-                <span className="text-ink">{FACT_PATH_LABELS[fact.factPath]}</span>
-                {': '}
-                <span className="text-ink-muted">{fact.rationale}</span>{' '}
-                <span className="text-ink-faint">({FACT_VERIFICATION_LABELS[fact.state]})</span>
-              </li>
-            ))}
-          </ul>
-
+      {cautions.length > 0 ? (
+        <p className="rounded-md bg-amber-soft p-2.5 leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">Worth knowing.</span> {cautions[0]!.statement}
           {/*
-            The unknowns are the honest half. A traveller deciding whether to
-            drive an hour needs to know that nobody published the hours far more
-            than they need to know the two facts we did establish.
+            Why it is being shown rather than acted on, where it is not acted on.
+            A closure that ended before the traveller arrives is still worth
+            reading and must not remove a place — and a warning with no
+            explanation of why nothing changed reads as an inconsistency.
           */}
-          {unanswered.length > 0 ? (
-            <p className="leading-relaxed text-ink-faint">
-              Nobody we could read publishes{' '}
-              {unanswered
-                .slice(0, 4)
-                .map((fact) => FACT_PATH_LABELS[fact.factPath].toLowerCase())
-                .join(', ')}
-              {unanswered.length > 4 ? ` and ${unanswered.length - 4} more` : ''}.
-            </p>
-          ) : null}
-        </div>
-      </details>
+          {noteOf(cautions[0]!) ? <span className="text-ink-faint"> {noteOf(cautions[0]!)}</span> : null}
+        </p>
+      ) : null}
+
+      {evidence.officialUrl ? (
+        <p className="leading-relaxed text-ink-muted">
+          Official page:{' '}
+          <a
+            href={evidence.officialUrl}
+            target="_blank"
+            rel="noreferrer nofollow"
+            className="underline underline-offset-2 hover:text-ink"
+          >
+            {hostOf(evidence.officialUrl)}
+          </a>
+        </p>
+      ) : null}
+
+      {answered.length > 0 ? (
+        <ul className="space-y-1.5">
+          {answered.map((fact) => (
+            <li key={fact.factPath} className="leading-relaxed">
+              <span className="text-ink">{FACT_PATH_LABELS[fact.factPath]}</span>
+              {': '}
+              <span className="text-ink-muted">{fact.rationale}</span>{' '}
+              <span className="text-ink-faint">({FACT_VERIFICATION_LABELS[fact.state]})</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {unanswered.length > 0 ? (
+        <p className="leading-relaxed text-ink-faint">
+          Nobody we could read publishes{' '}
+          {unanswered
+            .slice(0, 4)
+            .map((fact) => FACT_PATH_LABELS[fact.factPath].toLowerCase())
+            .join(', ')}
+          {unanswered.length > 4 ? ` and ${unanswered.length - 4} more` : ''}.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1700,11 +1851,11 @@ function noteOf(entry: ClosureEvidence | SafetyEvidence): string | undefined {
 }
 
 function describeCost(cost: NonNullable<DiscoveryCandidate['evidence']>['costs'][number]): string {
-  if (cost.free) return 'Free entry';
-  if (!cost.money) return 'There is a charge';
+  if (cost.free) return 'Free to enter.';
+  if (!cost.money) return 'There is a charge.';
   const { currency, amount, maxAmount, unit } = cost.money;
   const range = maxAmount !== undefined ? `${amount}–${maxAmount}` : `${amount}`;
-  return `${range} ${currency} ${MONEY_UNIT_LABELS[unit]}`;
+  return `${range} ${currency} ${MONEY_UNIT_LABELS[unit]}.`;
 }
 
 function hostOf(url: string): string {
@@ -1721,59 +1872,5 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
       <dt className="text-ink-faint">{label}</dt>
       <dd className="text-ink">{children}</dd>
     </div>
-  );
-}
-
-/**
- * HOW LONG IT TAKES TO GET THERE, AND BY WHAT.
- *
- * Both facts come off this card's own `reach`, which is the object the scorer,
- * the detour classifier, the auto-selector and the planner all read. That is the
- * property worth having: the number, the noun above it and the journey the
- * itinerary will schedule cannot disagree without one of them being changed on
- * purpose.
- *
- * What it replaces was subtler than a missing label. The board took its mode
- * from `compiled.travelTimes.mode` — one word for the *whole board*, because a
- * matrix has one mode — and stamped it on every card. So on a car-free trip
- * every card read "Walk from base", which was a true statement about the matrix
- * and a false one about the journey: the metro ride sitting in the same
- * artifact's transit evidence was rendered as the walk nobody was going to take.
- *
- * Distance is shown only where the journey is one that covers ground on a road.
- * A train's kilometres are not a fact a traveller uses, and `distanceKm` is
- * `null` on a ride for that reason — printing "27 min · 14 km" beside a metro
- * ride invites the reading that it is a drive.
- */
-function TravelStat({ candidate }: { candidate: DiscoveryCandidate }) {
-  if (candidate.detourClass === 'base') {
-    return <Stat label="From base">At your base</Stat>;
-  }
-  if (candidate.reach.status !== 'measured') {
-    /*
-     * Which unresolved sentence depends on the *merged* verdict, not on the
-     * resolver alone. `conflict` means every measured option is one this
-     * traveller ruled out — but the access dataset is a second, independent
-     * source, and where it still holds a legal way in (an authored trolley, a
-     * scheduled bus), the board files the candidate under `unknown`. A card
-     * that said "No usable route from your base" over a town with four buses a
-     * day would be the confident-wrong sentence this pass exists to remove;
-     * "Journey not verified" is what we actually know.
-     */
-    return (
-      <Stat label={TRAVEL_UNRESOLVED_STAT_LABEL}>
-        {candidate.detourClass === 'unknown'
-          ? 'Journey not verified'
-          : describeReachFromBase(candidate.reach, formatMinutes)}
-      </Stat>
-    );
-  }
-  const { mode, travelMinutes, distanceKm } = candidate.reach;
-  return (
-    <Stat label={TRAVEL_MODE_STAT_LABEL[mode]}>
-      {distanceKm === null
-        ? formatMinutes(travelMinutes)
-        : `${formatMinutes(travelMinutes)} · ${formatDistance(distanceKm)}`}
-    </Stat>
   );
 }

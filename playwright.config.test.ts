@@ -48,23 +48,68 @@ describe('the browser suite configuration', () => {
     expect(names).toEqual(['desktop', 'desktop-dark', 'mobile', 'tablet']);
   });
 
+  /**
+   * THE WALK IS TOTAL BY CONSTRUCTION, AND THAT IS WHAT IS ASSERTED.
+   *
+   * The responsive spec iterates `VIEWPORTS` itself, so a size added to the
+   * constant is necessarily walked. Asserted structurally rather than by looking
+   * for the number in the file: the previous form was
+   * `walked.includes(`${expected.width}`)`, which passes for a width of 360 on
+   * any file that happens to contain a 360 anywhere — a timeout, a pixel budget,
+   * a comment.
+   */
+  it('walks the viewport list itself rather than restating it', () => {
+    const walked = readFileSync(new URL('./e2e/viewports.spec.ts', import.meta.url), 'utf8');
+    expect(walked).toContain("from './support/viewports'");
+    expect(walked, 'the responsive spec no longer iterates VIEWPORTS').toMatch(
+      /for \(const viewport of VIEWPORTS\)/,
+    );
+  });
+
   it.each(VIEWPORTS)('covers $name at $width x $height', (expected) => {
-    const declared = (config.projects ?? []).filter(
+    const projects = config.projects ?? [];
+    const declared = projects.filter(
       (project) =>
         project.use?.viewport?.width === expected.width &&
         project.use?.viewport?.height === expected.height,
     );
-    const walked = readFileSync(new URL('./e2e/viewports.spec.ts', import.meta.url), 'utf8');
+    const responsive = projects.filter((project) =>
+      (Array.isArray(project.testMatch) ? project.testMatch : [project.testMatch]).some(
+        (glob) => typeof glob === 'string' && glob.includes('viewports.spec.ts'),
+      ),
+    );
 
     /*
-     * Declared by a project *or* walked by the responsive spec. Both hold today —
-     * the project states the size for anyone reading the config, the spec sets it
-     * for real — and either alone would still be honest coverage.
+     * Declared by a project *or* walked by the responsive spec, and the second
+     * arm is real coverage rather than a loophole: the test above proves the
+     * spec walks every entry of this list, and this proves some project runs it.
+     *
+     * The arm matters. A fourth *full* project for the narrow phone width would
+     * add ~200 tests to a ~600-test run, three times over for the stability
+     * gate, to re-check screens the sweep already sets that width for — so the
+     * narrow width is walked rather than declared, and this is where that stays
+     * honest instead of becoming "nothing covers it".
      */
-    const covered =
-      declared.length > 0 || walked.includes(`${expected.width}`) || walked.includes(expected.name);
+    const covered = declared.length > 0 || responsive.length > 0;
     expect(covered, `nothing covers ${expected.width}x${expected.height}`).toBe(true);
-    expect(declared.map((project) => project.name).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * AND THE BULK OF THE SUITE STILL RUNS AT MORE THAN ONE SIZE.
+   *
+   * The rule above is satisfiable by declaring nothing and walking everything,
+   * which would leave ~600 tests running at whatever a device descriptor
+   * defaults to. The projects that run the whole suite have to state their own
+   * sizes, and one of them has to be a phone — that is the arrangement the
+   * mobile project exists for, and deleting it is exactly the kind of change
+   * that would otherwise leave every other assertion here green.
+   */
+  it('runs the whole suite at a desktop size and at a phone size', () => {
+    const full = (config.projects ?? []).filter((project) => project.testIgnore !== undefined);
+    const widths = full.map((project) => project.use?.viewport?.width);
+    expect(widths.every((width) => typeof width === 'number')).toBe(true);
+    expect(Math.max(...(widths as number[])), 'no full project runs at a desktop width').toBeGreaterThanOrEqual(1280);
+    expect(Math.min(...(widths as number[])), 'no full project runs at a phone width').toBeLessThanOrEqual(400);
   });
 
   it('does not run a responsive spec four times over', () => {

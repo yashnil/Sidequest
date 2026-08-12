@@ -6,7 +6,9 @@ import {
   type CompilationWorkPlan,
   compiledRegionSchema,
   compilationOperationalSchema,
+  compilationStateSchema,
   isCompilationStage,
+  isTerminal,
   flattenOperationalCounters,
   COMPILATION_ERROR_COPY,
   decodeStoredJob,
@@ -343,13 +345,19 @@ export function startJob(input: {
 
   if (existing) {
     if (!isAbandoned(existing, input.now)) return { kind: 'already_running', job: existing };
-    db.prepare(
-      `UPDATE compilation_jobs
-          SET state = 'failed', error_code = 'internal_error',
-              error_detail = 'The process running this compilation stopped answering.',
-              finished_at = ?, updated_at = ?
-        WHERE id = ?`,
-    ).run(input.now.toISOString(), input.now.toISOString(), existing.id);
+    /*
+     * Through `failJob` rather than an inline UPDATE, for two reasons: the
+     * stage history is terminated with the job — a reclaimed row whose stages
+     * still said `running` kept an elapsed clock counting on screen — and the
+     * code is `compilation_interrupted`, which is the honest one: the build was
+     * not wrong, its process died, and a retry resumes from the shared store.
+     */
+    failJob({
+      jobId: existing.id,
+      code: 'compilation_interrupted',
+      detail: 'The process running this compilation stopped answering.',
+      now: input.now,
+    });
   }
 
   const stamp = input.now.toISOString();
@@ -431,13 +439,41 @@ export function heartbeat(jobId: string, now: Date): void {
     .run(now.toISOString(), jobId);
 }
 
-export function requestCancel(tripId: string): void {
-  getDb()
-    .prepare(
-      `UPDATE compilation_jobs SET cancel_requested = 1, updated_at = ?
-        WHERE trip_id = ? AND state IN ('queued','running')`,
-    )
-    .run(new Date().toISOString(), tripId);
+/**
+ * Cancel, and mean it now rather than at the end.
+ *
+ * The flag alone made cancellation cosmetic: the only reader checked it *after*
+ * `compileRegion` returned, so pressing Stop changed nothing for the remaining
+ * minutes of the build and the traveller watched a job they had cancelled keep
+ * running. Two writes now, in order:
+ *
+ * 1. the flag, which the worker's pulse polls so the process actually stops
+ *    spending within one heartbeat interval;
+ * 2. the terminal flip, through `failJob`, so the trip's state answers
+ *    "cancelled" the moment the traveller asked rather than when the worker
+ *    happens to notice.
+ *
+ * The worker finishing anyway cannot undo this: `completeJob` and `failJob`
+ * both refuse to overwrite a terminal state, so a cancelled job stays
+ * cancelled whatever the process it orphaned goes on to produce.
+ */
+export function requestCancel(tripId: string, now = new Date()): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE compilation_jobs SET cancel_requested = 1, updated_at = ?
+      WHERE trip_id = ? AND state IN ('queued','running')`,
+  ).run(now.toISOString(), tripId);
+
+  const active = getActiveJob(tripId);
+  if (active) {
+    failJob({
+      jobId: active.id,
+      code: 'cancelled_by_user',
+      detail: 'Stopped at your request.',
+      now,
+      cancelled: true,
+    });
+  }
 }
 
 export function isCancelRequested(jobId: string): boolean {
@@ -458,6 +494,14 @@ export function isCancelRequested(jobId: string): boolean {
  * `better-sqlite3` transactions are synchronous, so everything awaited has
  * already happened by the time this is called. That is not a coincidence: it is
  * why the compiler returns a finished artifact rather than writing as it goes.
+ *
+ * Returns `false` — and writes **nothing** — when the job is already terminal.
+ * That is the cancellation guarantee's second half: `requestCancel` flips the
+ * state the moment the traveller asks, and a worker that only notices at its
+ * next pulse must not be able to finish anyway and adopt the artifact of a
+ * build somebody stopped. The same guard closes the orphan race, where a
+ * reclaimed job's original process comes back from a long stall and tries to
+ * complete a row another request has already ended.
  */
 export function completeJob(input: {
   jobId: string;
@@ -465,12 +509,19 @@ export function completeJob(input: {
   region: CompiledRegion;
   state: Extract<CompilationState, 'ready' | 'partial'>;
   now: Date;
-}): void {
+}): boolean {
   const region = compiledRegionSchema.parse(input.region);
   const stamp = input.now.toISOString();
   const db = getDb();
 
-  db.transaction(() => {
+  return db.transaction((): boolean => {
+    const current = db
+      .prepare('SELECT state FROM compilation_jobs WHERE id = ?')
+      .get(input.jobId) as { state: string } | undefined;
+    if (!current) return false;
+    const parsed = compilationStateSchema.safeParse(current.state);
+    if (!parsed.success || isTerminal(parsed.data)) return false;
+
     db.prepare(
       `INSERT INTO compiled_regions
          (id, trip_id, scope_fingerprint, schema_version, compiler_version, payload_json, created_at)
@@ -552,6 +603,7 @@ export function completeJob(input: {
           SET state = ?, compiled_region_id = ?, finished_at = ?, updated_at = ?, heartbeat_at = ?
         WHERE id = ?`,
     ).run(input.state, region.id, stamp, stamp, stamp, input.jobId);
+    return true;
   })();
 }
 
@@ -611,6 +663,12 @@ export function pruneOrphanedSourceDocuments(): number {
  * `running` is exactly the inconsistency this is closing. A stage that already
  * ended is left alone: a terminal write must not rewrite history that was
  * already true.
+ *
+ * Refuses over a terminal state, and returns whether it wrote. A job ends
+ * exactly once: without the guard, a worker noticing a cancellation *after*
+ * `requestCancel` had already flipped the row would rewrite `cancelled` as
+ * `failed`, and a reclaimed orphan's returning process could relabel an
+ * `interrupted` verdict with whatever it died of.
  */
 export function failJob(input: {
   jobId: string;
@@ -618,15 +676,17 @@ export function failJob(input: {
   detail?: string;
   now: Date;
   cancelled?: boolean;
-}): void {
+}): boolean {
   const stamp = input.now.toISOString();
   const db = getDb();
 
-  db.transaction(() => {
+  return db.transaction((): boolean => {
     const row = db
-      .prepare('SELECT stage, stages_json FROM compilation_jobs WHERE id = ?')
-      .get(input.jobId) as { stage: string; stages_json: string } | undefined;
-    if (!row) return;
+      .prepare('SELECT state, stage, stages_json FROM compilation_jobs WHERE id = ?')
+      .get(input.jobId) as { state: string; stage: string; stages_json: string } | undefined;
+    if (!row) return false;
+    const parsed = compilationStateSchema.safeParse(row.state);
+    if (!parsed.success || isTerminal(parsed.data)) return false;
 
     let stages: StageRecord[] = [];
     try {
@@ -658,7 +718,36 @@ export function failJob(input: {
       JSON.stringify(terminated),
       input.jobId,
     );
+    return true;
   })();
+}
+
+/**
+ * End a job whose process is provably gone, so the screen stops calling it
+ * alive.
+ *
+ * `isAbandoned` existed and was consulted only when *starting* — a new request
+ * could take over a stale row, but nothing ever ended one. So a build whose
+ * process died sat `running` for as long as nobody pressed the button, and the
+ * progress screen rendered a live-ticking clock over it: "Working — 12198m 51s"
+ * reached a real screen. The snapshot poll now calls this, which flips the row
+ * to the honest terminal verdict — interrupted, retryable, nothing lost — the
+ * first time anybody looks after the heartbeat goes cold.
+ *
+ * Safe against the process coming back: the heartbeat threshold is above the
+ * longest single call the pipeline may make, and if the worker nonetheless
+ * returns from the dead, `completeJob`/`failJob` refuse to overwrite the
+ * terminal state this wrote.
+ */
+export function reclaimAbandonedJob(tripId: string, now = new Date()): boolean {
+  const active = getActiveJob(tripId);
+  if (!active || !isAbandoned(active, now)) return false;
+  return failJob({
+    jobId: active.id,
+    code: 'compilation_interrupted',
+    detail: 'The process running this compilation stopped answering.',
+    now,
+  });
 }
 
 export function setJobStage(jobId: string, stage: CompilationStage, now: Date): void {

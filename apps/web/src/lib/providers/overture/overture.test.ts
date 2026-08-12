@@ -1,8 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { GeographicEvidence, SourceRecord } from '@sidequest/core';
+import {
+  geographicScopeSchema,
+  type GeographicEvidence,
+  type RegionPack,
+  type SourceRecord,
+} from '@sidequest/core';
 import { CatalogError, fileIntersects, latestRelease, themeFiles } from './catalog';
 import { LAYERS, cleanText, layerById, mapLicence, readWebsites } from './normalize';
-import { boundsOf, overlappingRowGroups, pointOf, rowInBox, rowPointInBox } from './scan';
+import {
+  createOverturePackProvider,
+  recallPriorityOf,
+  retainAcrossCells,
+  rowGroupAllowanceFor,
+} from './pack';
+import {
+  boundsOf,
+  overlappingRowGroups,
+  pointOf,
+  rowGroupStatBounds,
+  rowInBox,
+  rowPointInBox,
+  stratificationOf,
+  stratifyRowGroups,
+  type ScanBudget,
+  type ScanCounters,
+  type scanFile,
+} from './scan';
 import type { FileMetaData } from 'hyparquet';
 
 /**
@@ -214,6 +237,626 @@ describe('row-group pruning', () => {
       schema: [],
     } as unknown as FileMetaData;
     expect(overlappingRowGroups(meta, { west: 0, south: 0, east: 1, north: 1 })).toHaveLength(1);
+  });
+
+  /**
+   * THE ONE-CORNER SCAN, PINNED.
+   *
+   * The live failure: a metro box overlapped 1,920 row groups, the retained
+   * budget stopped the scan after ~20, and because groups were read in file
+   * order — which for this format is spatially coherent, south-west first —
+   * every record acquired sat in one corner. Nothing north of the city centre
+   * was ever read, so the canonical anchors there could not lose a ranking
+   * argument; they were never in the room.
+   *
+   * The fixture reproduces the shape: groups laid south-to-north in file
+   * order over a box divided into four latitude bands. The assertions are the
+   * contract — a budget-truncated prefix of the read order must span the box —
+   * and the file-order counterexample is asserted too, so the defect cannot
+   * come back wearing a refactor.
+   */
+  describe('spatial stratification of the read order', () => {
+    const box = { west: 139, south: 35, east: 140, north: 36 };
+    /** 16 groups in south-to-north file order, 4 per quarter-degree band. */
+    const southToNorth = Array.from({ length: 16 }, (_, index) => {
+      const band = Math.floor(index / 4); // 0 = southernmost, 3 = northernmost
+      const ymin = 35 + band * 0.25 + 0.05;
+      return { xmin: 139.1 + (index % 4) * 0.2, xmax: 139.15 + (index % 4) * 0.2, ymin, ymax: ymin + 0.1, rows: 10 };
+    });
+
+    const bandOf = (meta: FileMetaData, group: { index: number }): number => {
+      const raw = meta.row_groups[group.index]!;
+      const bounds = rowGroupStatBounds(raw)!;
+      return Math.floor(((bounds.south + bounds.north) / 2 - 35) / 0.25);
+    };
+
+    it('spreads a budget-truncated read across the whole box', () => {
+      const meta = metadata(southToNorth);
+      const ordered = stratifyRowGroups(meta, overlappingRowGroups(meta, box), box);
+      expect(ordered).toHaveLength(16);
+
+      /* The first four reads — a tight budget — must span several bands… */
+      const firstFourBands = new Set(ordered.slice(0, 4).map((group) => bandOf(meta, group)));
+      expect(firstFourBands.size).toBeGreaterThanOrEqual(3);
+
+      /* …where the old file order provably did not. This is the defect. */
+      const fileOrder = overlappingRowGroups(meta, box);
+      const fileOrderBands = new Set(fileOrder.slice(0, 4).map((group) => bandOf(meta, group)));
+      expect(fileOrderBands.size).toBe(1);
+    });
+
+    it('is deterministic and loses nothing', () => {
+      const meta = metadata(southToNorth);
+      const groups = overlappingRowGroups(meta, box);
+      const once = stratifyRowGroups(meta, groups, box);
+      const twice = stratifyRowGroups(meta, groups, box);
+      expect(once).toEqual(twice);
+      expect([...once].sort((a, b) => a.index - b.index)).toEqual(groups);
+    });
+
+    it('keeps groups without statistics in the rotation rather than dropping them', () => {
+      const meta = metadata(southToNorth.slice(0, 4)) as unknown as {
+        row_groups: unknown[];
+        schema: unknown[];
+      };
+      meta.row_groups.push({ num_rows: 10n, total_byte_size: 1n, columns: [] });
+      const typed = meta as unknown as FileMetaData;
+      const groups = overlappingRowGroups(typed, box);
+      expect(groups).toHaveLength(5);
+      const ordered = stratifyRowGroups(typed, groups, box);
+      expect(ordered).toHaveLength(5);
+      expect(ordered.some((group) => group.index === 4)).toBe(true);
+    });
+
+    it('leaves a degenerate box in the caller’s order', () => {
+      const meta = metadata(southToNorth);
+      const groups = overlappingRowGroups(meta, box);
+      const degenerate = { west: 139, south: 35, east: 139, north: 35 };
+      expect(stratifyRowGroups(meta, groups, degenerate)).toEqual(groups);
+    });
+
+    /**
+     * THE CASE WHERE THE FIX TURNS ITSELF OFF.
+     *
+     * Every assertion above hands `stratifyRowGroups` sixteen groups that
+     * publish statistics, and one that does not. When **none** does — an older
+     * writer, a different producer — every group goes to `unplaced`, `buckets`
+     * is empty, the rotation is a single bucket, and the round-robin emits file
+     * order: the exact defect this function exists to eliminate, restored with
+     * nothing said. It is a no-op wearing a fix's name, and a truncated read in
+     * that state is one corner of the destination.
+     *
+     * The order cannot be improved — there is nothing to bin on — so what has to
+     * change is that the caller is told, and `stratificationOf` is what tells it.
+     */
+    it('reports that it could not stratify when no writer published statistics', () => {
+      const raw = { row_groups: [] as unknown[], schema: [] as unknown[] };
+      for (let index = 0; index < 8; index += 1) {
+        raw.row_groups.push({ num_rows: 10n, total_byte_size: 1n, columns: [] });
+      }
+      const meta = raw as unknown as FileMetaData;
+      const groups = overlappingRowGroups(meta, box);
+      expect(groups).toHaveLength(8);
+      /* File order, and honest about it rather than silent about it. */
+      expect(stratifyRowGroups(meta, groups, box)).toEqual(groups);
+      expect(stratificationOf(meta, groups, box)).toBe('unavailable');
+    });
+
+    it('reports stratification as applied when any group carries statistics', () => {
+      const meta = metadata(southToNorth);
+      expect(stratificationOf(meta, overlappingRowGroups(meta, box), box)).toBe('applied');
+    });
+
+    it('reports nothing to stratify when there is no ordering to bias', () => {
+      const meta = metadata(southToNorth.slice(0, 2));
+      expect(stratificationOf(meta, overlappingRowGroups(meta, box), box)).toBe('not_required');
+      const wide = metadata(southToNorth);
+      const degenerate = { west: 139, south: 35, east: 139, north: 35 };
+      expect(stratificationOf(wide, overlappingRowGroups(wide, box), degenerate)).toBe(
+        'not_required',
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Acquisition: how far we read, and what we keep
+// ---------------------------------------------------------------------------
+
+/**
+ * THE TWO HALVES OF "A REAL TOKYO TRIP HAS NO TOKYO IN IT".
+ *
+ * A live metropolitan pack held 1,840 places of which the nearest to the
+ * traveller's own base was 10.7 km away, 1,635 sat in one corner cell of nine,
+ * and not one was a landmark of the city. Three separate mechanisms produced
+ * that, and each is pinned below because each on its own is enough to restore
+ * the whole failure:
+ *
+ * 1. the read budget was shaped like a retention budget, so the scan stopped
+ *    after two row groups of a city with 1,920;
+ * 2. retention was first-N-per-cell in parquet row order, so whatever decoded
+ *    first won regardless of what it was;
+ * 3. the backfill was a flat `slice` under a comment claiming it ranked, so the
+ *    dense corner took 78 % of the pack after the per-cell caps had carefully
+ *    stopped it taking 11 %.
+ */
+describe('acquisition reads broadly and keeps deliberately', () => {
+  function packRecord(overrides: Partial<SourceRecord> & { id: string }): SourceRecord {
+    return {
+      layerId: 'places',
+      sourceId: overrides.id,
+      name: overrides.id,
+      alternateNames: [],
+      coordinates: { lat: 35.6, lng: 139.7 },
+      sourceCategory: 'museum',
+      sourceCategoryPath: ['arts_and_entertainment', 'museum'],
+      planningRole: 'attraction',
+      websiteCandidates: [],
+      containment: { divisionIds: [] },
+      attributes: {},
+      sources: [{ dataset: 'meta', licenceId: 'CDLA-Permissive-2.0' }],
+      cellId: 'g-0-0',
+      ...overrides,
+    };
+  }
+
+  describe('recall priority', () => {
+    it('ranks by what the kind is and who has taken note, never by how much was filled in', () => {
+      const temple = packRecord({
+        id: 'temple',
+        sourceCategory: 'temple',
+        sourceCategoryPath: ['cultural_and_historic', 'temple'],
+      });
+      const cashMachine = packRecord({
+        id: 'atm',
+        sourceCategory: 'atm',
+        sourceCategoryPath: ['financial_service', 'atm'],
+        planningRole: 'excluded',
+      });
+      expect(recallPriorityOf(temple)).toBeGreaterThan(recallPriorityOf(cashMachine));
+
+      /*
+       * §8.3 at the one layer no downstream fix can reach. The same temple
+       * against a *thoroughly catalogued* cash machine — six attributes, three
+       * translated names, its own website — must still win, because every one
+       * of those is a measurement of mapping effort and none is a measurement
+       * of significance. A recall pass that ranked on them would put the
+       * franchise ahead of the shrine before anybody could object.
+       */
+      const wellCatalogued = packRecord({
+        id: 'atm-rich',
+        sourceCategory: 'atm',
+        sourceCategoryPath: ['financial_service', 'atm'],
+        planningRole: 'excluded',
+        alternateNames: ['Geldautomat', 'Cajero', 'Bancomat', 'ATM'],
+        websiteCandidates: ['https://bank.example/atm'],
+        attributes: {
+          operator: 'A Bank',
+          opening_hours: 'Mo-Su 00:00-24:00',
+          access: 'yes',
+          wheelchair: 'yes',
+          fee: 'yes',
+          website: 'https://bank.example/atm',
+        },
+      });
+      expect(recallPriorityOf(wellCatalogued)).toBe(recallPriorityOf(cashMachine));
+      expect(recallPriorityOf(temple)).toBeGreaterThan(recallPriorityOf(wellCatalogued));
+
+      /* A knowledge base having heard of it does move the number. */
+      const known = packRecord({ ...temple, id: 'temple-known', wikidataId: 'Q123' });
+      expect(recallPriorityOf(known)).toBeGreaterThan(recallPriorityOf(temple));
+    });
+  });
+
+  describe('retention', () => {
+    it('keeps the significant record that decoded late over the ordinary ones that decoded first', () => {
+      /*
+       * The shape of the live failure in miniature, and deliberately *within*
+       * one purpose family so that only the ranking can decide it: one cell, a
+       * cap of three, ten pocket parks, and the city's great temple arriving
+       * after the cap is already full. File order says the parks. The live
+       * metropolitan pack is what file order produced — 1,840 records, not one
+       * of them a landmark of the city.
+       */
+      const pocketParks = Array.from({ length: 10 }, (_, index) =>
+        packRecord({
+          id: `park-${index}`,
+          sourceCategory: 'park',
+          sourceCategoryPath: ['landmarks_and_outdoors', 'park'],
+          planningRole: 'outdoor',
+        }),
+      );
+      const landmark = packRecord({
+        id: 'grand-temple',
+        sourceCategory: 'temple',
+        sourceCategoryPath: ['cultural_and_historic', 'temple'],
+        wikidataId: 'Q9001',
+      });
+      /*
+       * The cell also holds meals and shops, so its seats are fully spoken for
+       * by the purpose shares. That is deliberate: with capacity to spare the
+       * redistribution pass could rescue the temple on its own, and the
+       * assertion would hold whether or not the queue inside the family was
+       * ever ranked. Here the ranking is the only thing that can decide it.
+       */
+      const meals = Array.from({ length: 3 }, (_, index) =>
+        packRecord({
+          id: `cafe-${index}`,
+          sourceCategory: 'cafe',
+          sourceCategoryPath: ['eat_and_drink', 'cafe'],
+          planningRole: 'food',
+        }),
+      );
+      const shops = Array.from({ length: 3 }, (_, index) =>
+        packRecord({
+          id: `shop-${index}`,
+          sourceCategory: 'supermarket',
+          sourceCategoryPath: ['shopping', 'supermarket'],
+          planningRole: 'support',
+        }),
+      );
+      const records = [...pocketParks, ...meals, ...shops, landmark];
+      const { kept } = retainAcrossCells({ records, retentionCap: 4, perCellCap: 4 });
+      expect(kept).toHaveLength(4);
+      expect(kept.map((record) => record.id)).toContain('grand-temple');
+
+      /*
+       * The negative control, so this cannot pass by accident of the fixture:
+       * swap the temple for one more pocket park, identical in kind and in
+       * evidence to the ten before it, and the late arrival is correctly *not*
+       * kept. The first assertion is therefore about significance and not about
+       * being last in the array.
+       */
+      const anotherPark = packRecord({
+        id: 'zz-late-park',
+        sourceCategory: 'park',
+        sourceCategoryPath: ['landmarks_and_outdoors', 'park'],
+        planningRole: 'outdoor',
+      });
+      const control = retainAcrossCells({
+        records: [...pocketParks, ...meals, ...shops, anotherPark],
+        retentionCap: 4,
+        perCellCap: 4,
+      });
+      expect(control.kept.map((record) => record.id)).not.toContain('zz-late-park');
+    });
+
+    it('never lets one cell take the backfill while another cell still has records', () => {
+      /*
+       * The measured defect: `perCellCap` correctly held the dense cell to 205
+       * of 1,840, and then `overflow.slice(0, remaining)` handed it 1,430 more
+       * because the overflow queue was in file order and the file was one
+       * corner. Seven of nine cells — including the one holding the traveller's
+       * base — ended with nothing.
+       */
+      const dense = Array.from({ length: 200 }, (_, index) =>
+        packRecord({ id: `dense-${index}`, cellId: 'g-0-0' }),
+      );
+      const sparse = Array.from({ length: 40 }, (_, index) =>
+        packRecord({ id: `sparse-${index}`, cellId: 'g-1-1' }),
+      );
+      const { kept } = retainAcrossCells({
+        records: [...dense, ...sparse],
+        retentionCap: 100,
+        perCellCap: 12,
+      });
+      const byCell = new Map<string, number>();
+      for (const record of kept) byCell.set(record.cellId, (byCell.get(record.cellId) ?? 0) + 1);
+      expect(kept).toHaveLength(100);
+      /* Both cells present, and the sparse one drained rather than ignored. */
+      expect(byCell.get('g-1-1')).toBe(40);
+      expect(byCell.get('g-0-0')).toBe(60);
+    });
+
+    it('keeps every purpose represented, so a pack is still ground rather than a board', () => {
+      /*
+       * A pure significance sort would be the mirror-image defect: a day needs
+       * a meal and a station, and a dense city has ten times more of them than
+       * it has landmarks. The shares are what stop "significance first" turning
+       * into "attractions only".
+       */
+      const make = (prefix: string, category: string, path: string[], role: SourceRecord['planningRole']) =>
+        Array.from({ length: 60 }, (_, index) =>
+          packRecord({
+            id: `${prefix}-${index}`,
+            sourceCategory: category,
+            sourceCategoryPath: path,
+            planningRole: role,
+          }),
+        );
+      const { kept } = retainAcrossCells({
+        records: [
+          ...make('museum', 'museum', ['arts_and_entertainment', 'museum'], 'attraction'),
+          ...make('cafe', 'cafe', ['eat_and_drink', 'cafe'], 'food'),
+          ...make('shop', 'supermarket', ['shopping', 'supermarket'], 'support'),
+        ],
+        retentionCap: 40,
+        perCellCap: 40,
+      });
+      const prefixes = new Set(kept.map((record) => record.id.split('-')[0]));
+      expect(prefixes).toEqual(new Set(['museum', 'cafe', 'shop']));
+      /* And the visitable half leads, because that is what a board is made of. */
+      expect(kept.filter((record) => record.id.startsWith('museum')).length).toBeGreaterThan(
+        kept.filter((record) => record.id.startsWith('shop')).length,
+      );
+    });
+
+    it('is deterministic, so a pack’s content hash does not depend on I/O order', () => {
+      const records = Array.from({ length: 30 }, (_, index) =>
+        packRecord({ id: `r-${index}`, cellId: `g-${index % 3}-0` }),
+      );
+      const once = retainAcrossCells({ records, retentionCap: 12, perCellCap: 5 });
+      const reversed = retainAcrossCells({
+        records: [...records].reverse(),
+        retentionCap: 12,
+        perCellCap: 5,
+      });
+      expect(once.kept.map((r) => r.id).sort()).toEqual(reversed.kept.map((r) => r.id).sort());
+    });
+  });
+
+  /**
+   * THE WIRING, WHICH IS WHERE THE DEFECT ACTUALLY LIVED.
+   *
+   * Every helper above was already correct in isolation before this wave, and
+   * the live pack was still one corner of a city — because the decisions that
+   * matter are made where they are *composed*: what budget the scan is handed,
+   * and what the layer does with what comes back. So the provider is driven end
+   * to end here with the catalogue and the columnar reader both injected, which
+   * costs no network and no parquet and is the only test in this file that
+   * could have failed on the shipped defect.
+   */
+  describe('the built pack', () => {
+    const scope = geographicScopeSchema.parse({
+      schemaVersion: 1,
+      revision: 1,
+      destinationCandidateId: 'relation/1',
+      destinationName: 'Testville',
+      destinationEntityType: 'city',
+      breadth: 'city',
+      center: { lat: 40.7, lng: -74 },
+      bounds: { southWest: { lat: 40.6, lng: -74.1 }, northEast: { lat: 40.8, lng: -73.9 } },
+      timeZones: ['UTC'],
+      shape: {
+        kind: 'bounds',
+        bounds: { southWest: { lat: 40.6, lng: -74.1 }, northEast: { lat: 40.8, lng: -73.9 } },
+      },
+      transport: {
+        primaryMode: 'drive',
+        allowedModes: ['drive', 'walk'],
+        carAvailable: true,
+        acceptsWaterOrAirTransfers: true,
+        basis: 'default',
+        note: 'Test transport.',
+      },
+      maxBaseChanges: 0,
+      nights: 4,
+      rationale: 'A test scope.',
+      confidence: { level: 'high', signals: [], note: 'Test.' },
+      confirmedByUser: true,
+    });
+
+    /** The catalogue, answered from fixtures: one release, one file per theme. */
+    const catalogueFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/catalog.json') && url.includes('2026-07-22.0')) return jsonResponse(RELEASE);
+      if (url.endsWith('/catalog.json') && !url.includes('2026-07-22.0')) return jsonResponse(ROOT);
+      if (url.endsWith('collection.json')) {
+        return jsonResponse({ links: [{ rel: 'item', href: './00000/00000.json' }] });
+      }
+      return jsonResponse({
+        bbox: [-74.2, 40.5, -73.8, 40.9],
+        properties: { 'table:row_count': 1_000_000 },
+        assets: {
+          data: {
+            href: 'https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/r/x/part-0.zstd.parquet',
+            type: 'application/vnd.apache.parquet',
+          },
+        },
+      });
+    });
+
+    /**
+     * A metropolis in miniature, and the shape is the point.
+     *
+     * Row groups are laid out so that the *first* ones read are in the
+     * south-west corner and hold nothing but chain commerce, and the city's
+     * landmarks live in groups the reader only reaches if it keeps going. That
+     * is the live file: 1,920 overlapping groups, the anchors spread across
+     * them, and a budget that stopped after two.
+     */
+    function denseCityScan(seen: { budgets: ScanBudget[] }): typeof scanFile {
+      const GROUPS = 40;
+      const ROWS_PER_GROUP = 300;
+      return (async <T,>(request: {
+        budget: ScanBudget;
+        counters: ScanCounters;
+        accept: (row: Record<string, unknown>) => T | null;
+      }) => {
+        seen.budgets.push(request.budget);
+        const rows: T[] = [];
+        let stoppedBecause = 'complete';
+        for (let group = 0; group < GROUPS; group += 1) {
+          if (request.counters.rowGroupsRead >= request.budget.maxRowGroups) {
+            stoppedBecause = 'row_group_budget';
+            break;
+          }
+          if (rows.length >= request.budget.maxFeaturesRetained) {
+            stoppedBecause = 'retained_budget';
+            break;
+          }
+          request.counters.rowGroupsRead += 1;
+          request.counters.featuresRead += ROWS_PER_GROUP;
+          /* Groups march north across the box, four to a latitude band. */
+          const lat = 40.61 + Math.floor(group / 4) * 0.02;
+          for (let index = 0; index < ROWS_PER_GROUP; index += 1) {
+            const landmark = group >= 8 && index === 0;
+            const accepted = request.accept({
+              id: `g${group}-r${index}`,
+              names: { primary: landmark ? `Great Temple ${group}` : `Chain Outlet ${group}-${index}` },
+              taxonomy: landmark
+                ? { primary: 'temple', hierarchy: ['cultural_and_historic', 'temple'] }
+                : { primary: 'atm', hierarchy: ['financial_service', 'atm'] },
+              operating_status: 'open',
+              sources: [{ dataset: 'meta', license: 'CDLA-Permissive-2.0', record_id: `g${group}-r${index}` }],
+              subtype: landmark ? 'temple' : 'atm',
+              class: landmark ? 'temple' : 'atm',
+              bbox: {
+                xmin: -74.05 + (index % 20) * 0.004,
+                xmax: -74.05 + (index % 20) * 0.004,
+                ymin: lat,
+                ymax: lat,
+              },
+            });
+            if (accepted !== null) rows.push(accepted);
+          }
+        }
+        return { rows, counters: request.counters, stoppedBecause };
+      }) as unknown as typeof scanFile;
+    }
+
+    it('reads past the first corner and keeps the landmarks it finds there', async () => {
+      const seen = { budgets: [] as ScanBudget[] };
+      const provider = createOverturePackProvider({
+        fetchOptions: { fetchImpl: catalogueFetch as unknown as typeof fetch },
+        scanImpl: denseCityScan(seen),
+        now: () => new Date('2026-01-01T00:00:00Z'),
+      });
+      const outcome = await provider.getPack({ scope, now: new Date('2026-01-01T00:00:00Z') });
+      expect(outcome.kind === 'ready' || outcome.kind === 'partial').toBe(true);
+      const pack = (outcome as { pack: RegionPack }).pack;
+      const places = pack.layers.find((layer) => layer.id === 'places')!;
+
+      /*
+       * 1. THE READ. The scan's own retained ceiling must not be the retention
+       *    cap in disguise: 1,840 × 2.5 is two row groups of a real city, which
+       *    is where the corner came from.
+       */
+      const placesBudget = seen.budgets[1]!;
+      expect(placesBudget.maxFeaturesRetained).toBeGreaterThan(50_000);
+      expect(placesBudget.maxRowGroups).toBeLessThan(40);
+      expect(placesBudget.maxRowGroups).toBeGreaterThan(10);
+
+      /*
+       * 2. THE LANDMARKS. Every one of them sits in a row group beyond the
+       *    first two, and every one of them is retained — where the shipped
+       *    code both stopped before reaching them and, had it reached them,
+       *    would have let the chain outlets that decoded first evict them.
+       */
+      const temples = places.records.filter((record) => record.name.startsWith('Great Temple'));
+      expect(temples.length).toBeGreaterThan(4);
+
+      /*
+       * 3. THE SPREAD. The corner bias, measured the way the audit measured it:
+       *    the densest partition cell must not hold nearly all of the layer.
+       */
+      const byCell = new Map<string, number>();
+      for (const record of places.records) {
+        byCell.set(record.cellId, (byCell.get(record.cellId) ?? 0) + 1);
+      }
+      const densest = Math.max(...byCell.values());
+      expect(byCell.size).toBeGreaterThan(2);
+      expect(densest / places.records.length).toBeLessThan(0.6);
+    });
+
+    /**
+     * THE ROW COUNT THAT BROKE THE ONLY LIVE COMPILATION THIS PHASE RAN.
+     *
+     * Everything above this test passed while a real metropolis compiled to a
+     * places layer of **zero records**, because the defect needs a *quantity*
+     * no fixture had ever produced. `collected.push(...result.rows)` passes
+     * each row as its own argument, and V8 refuses past roughly 109,832 of
+     * them; `RECALL_MEMORY_CEILING` lets the scan return 120,000. So the scan
+     * succeeded, the normaliser succeeded, and the statement that appends the
+     * result threw `RangeError` — into a catch with no branch for it, which
+     * recorded every cell as failed under `provider_error` and blamed a
+     * volunteer endpoint that had answered perfectly.
+     *
+     * The test is therefore about volume and nothing else: a single file whose
+     * rows exceed the spread limit must land in the pack. It is slow-ish by the
+     * standards of this file and that is inherent — a smaller number cannot
+     * reproduce a limit defined by the size of an argument list.
+     */
+    it('appends a layer larger than the engine will accept as an argument list', async () => {
+      const HUGE = 115_000;
+      const hugeScan = (async (request: Parameters<typeof scanFile>[0]) => {
+        const rows: SourceRecord[] = [];
+        for (let index = 0; index < HUGE; index += 1) {
+          rows.push({
+            id: `places:huge-${index}`,
+            layerId: 'places',
+            sourceId: `huge-${index}`,
+            name: `Place ${index}`,
+            alternateNames: [],
+            coordinates: { lat: 40.7 + (index % 100) * 0.0001, lng: -74 + (index % 100) * 0.0001 },
+            sourceCategory: 'attraction',
+            sourceCategoryPath: [],
+            planningRole: 'attraction',
+            websiteCandidates: [],
+            containment: { countryCode: 'US', divisionIds: [] },
+            attributes: {},
+            sources: [{ dataset: 'meta', licenceId: 'CDLA-Permissive-2.0' }],
+            cellId: `g-${index % 9}`,
+          } as SourceRecord);
+        }
+        return { rows, counters: request.counters, stoppedBecause: 'retained_budget' as const };
+      }) as unknown as typeof scanFile;
+
+      const provider = createOverturePackProvider({
+        fetchOptions: { fetchImpl: catalogueFetch as unknown as typeof fetch },
+        scanImpl: hugeScan,
+        now: () => new Date('2026-01-01T00:00:00Z'),
+      });
+      const outcome = await provider.getPack({ scope, now: new Date('2026-01-01T00:00:00Z') });
+      const pack = (outcome as { pack: RegionPack }).pack;
+      const places = pack.layers.find((layer) => layer.id === 'places')!;
+
+      /* The layer exists at all — this was 0 against a live metropolis. */
+      expect(places.records.length).toBeGreaterThan(0);
+      /* And the failure was never attributed to the provider. */
+      expect(places.failedCellIds ?? []).toHaveLength(0);
+      expect(pack.diagnostics.budgetsExhausted ?? []).not.toContain('provider_error');
+    }, 30_000);
+  });
+
+  describe('read allowance', () => {
+    const budget = { maxRowGroups: 40 };
+
+    it('gives the inventory layer a real read, not two row groups', () => {
+      /*
+       * The number that matters. The scan used to stop at
+       * `retentionCap * 2.5` *rows*, which for a metropolis is two row groups
+       * of the ~1,920 its box overlaps — one corner, and the reason no landmark
+       * was ever in the room. The allowance is now expressed in the unit the
+       * read is actually paid for, and the retention cap is not one of its
+       * inputs: `rowGroupAllowanceFor` cannot see it.
+       */
+      const allowance = rowGroupAllowanceFor('places', budget);
+      expect(allowance).toBeGreaterThan(12);
+      expect(allowance).toBeLessThanOrEqual(budget.maxRowGroups);
+    });
+
+    it('cannot starve the layers that come after it', () => {
+      /*
+       * The geographic layers are where a national park's whole inventory
+       * lives, and they run last. A first-come global budget lets the places
+       * layer take all of it, so each layer is held to what is left once the
+       * ones behind it are paid — a ceiling on the shared running count, which
+       * is why every layer still gets a turn while the total stays bounded by
+       * the one figure a deployment reasons about.
+       */
+      let read = 0;
+      for (const layer of LAYERS) {
+        const allowance = rowGroupAllowanceFor(layer.id, budget);
+        expect(allowance, layer.id).toBeGreaterThan(read);
+        read = allowance;
+      }
+      expect(read).toBeLessThanOrEqual(budget.maxRowGroups);
+      /* The last layer may spend whatever the earlier ones left, and no more. */
+      expect(rowGroupAllowanceFor(LAYERS[LAYERS.length - 1]!.id, budget)).toBe(
+        budget.maxRowGroups,
+      );
+    });
   });
 });
 

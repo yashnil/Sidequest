@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatMinuteOfDay } from '../schemas/common';
-import { solarEventsFor } from './solar';
+import { dayLengthFor, solarEventsFor } from './solar';
 import {
   assessPlaceWeather,
   evaluateWeather,
@@ -78,6 +78,64 @@ describe('sunrise and sunset', () => {
   it('reports polar day rather than inventing a sunset', () => {
     const events = solarEventsFor({ lat: 78.2, lng: 15.6 }, '2026-06-21', 120);
     expect(events.kind).toBe('polar_day');
+  });
+});
+
+/**
+ * Day length checked worldwide, against published almanac values.
+ *
+ * The regression this pins: the climate profile computed daylight as
+ * `sunset − sunrise` with `utcOffsetMinutes: 0`, and for any longitude far from
+ * Greenwich the `[0, 1440]` clamp swallowed the hours that fell before clock
+ * midnight — Tokyo's May read 9.6 hours against a real ~14.2, and the "best
+ * months" advice was built on it. `dayLengthFor` has no offset parameter, so
+ * the mistake is now unwritable. Expected values are timeanddate.com almanac
+ * figures for the fifteenth of the month, tolerated to ±15 minutes (the almanac
+ * quotes civil sunrise/sunset; we use the same 90.833° zenith as NOAA).
+ */
+describe('day length, worldwide', () => {
+  const hoursAt = (lat: number, lng: number, date: string): number => {
+    const events = dayLengthFor({ lat, lng }, date);
+    if (events.kind !== 'normal') throw new Error(`expected a normal day, got ${events.kind}`);
+    return events.minutes / 60;
+  };
+
+  it('gives Tokyo its real June daylight, not the clamped 9.6 hours', () => {
+    expect(Math.abs(hoursAt(35.6764, 139.65, '2026-06-15') - 14.5)).toBeLessThan(0.25);
+  });
+
+  it('gives Tokyo its real December daylight', () => {
+    expect(Math.abs(hoursAt(35.6764, 139.65, '2026-12-15') - 9.7)).toBeLessThan(0.25);
+  });
+
+  it('gives Tokyo its real May daylight — the audited failure was 9.63h', () => {
+    const may = hoursAt(35.6764, 139.65, '2026-05-15');
+    expect(Math.abs(may - 14.1)).toBeLessThan(0.25);
+    expect(may).toBeGreaterThan(13); // the clamped figure can never come back
+  });
+
+  it('handles a longitude near Greenwich identically to the events form', () => {
+    // London in June: ~16.6 hours.
+    expect(Math.abs(hoursAt(51.5072, -0.1276, '2026-06-15') - 16.6)).toBeLessThan(0.25);
+  });
+
+  it('handles the far southern hemisphere in its summer', () => {
+    // Ushuaia in December: ~17.2 hours.
+    expect(Math.abs(hoursAt(-54.8019, -68.303, '2026-12-15') - 17.2)).toBeLessThan(0.3);
+  });
+
+  it('agrees with sunset − sunrise when the correct offset is supplied', () => {
+    // JST is +540. With the *right* offset the two forms must agree; the defect
+    // was only ever reachable through the wrong one.
+    const events = solarEventsFor({ lat: 35.6764, lng: 139.65 }, '2026-06-15', 540);
+    if (events.kind !== 'normal') throw new Error('unexpected');
+    const viaEvents = (events.sunsetMinute - events.sunriseMinute) / 60;
+    expect(Math.abs(hoursAt(35.6764, 139.65, '2026-06-15') - viaEvents)).toBeLessThan(0.05);
+  });
+
+  it('still reports polar day and polar night as answers, not failures', () => {
+    expect(dayLengthFor({ lat: 78.2, lng: 15.6 }, '2026-12-21').kind).toBe('polar_night');
+    expect(dayLengthFor({ lat: 78.2, lng: 15.6 }, '2026-06-21').kind).toBe('polar_day');
   });
 });
 

@@ -26,6 +26,7 @@ import {
 } from '@/lib/db/decision-repository';
 import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { createTrip } from '@/lib/db/repository';
+import { sessionToken } from '@/lib/net/caller';
 import { saveComposerAnswers, saveDestinationQuery, saveSelectedDestination } from '@/lib/db/compiler-repository';
 import { recommendDestinations } from '@/lib/destinations/recommend';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
@@ -169,10 +170,54 @@ export async function buildShortlistAction(id: string): Promise<DecisionResult> 
   try {
     const shortlist = await recommendDestinations({ answers: session.answers, now: new Date() });
     saveDecisionShortlist(id, shortlist, new Date());
-    await resolveShortlistImagery(shortlist);
   } catch (error) {
     console.error('Shortlist failed', { id, error });
     return { ok: false, error: 'We could not put a list together just then. Nothing was lost — try again.' };
+  }
+
+  /**
+   * THE RANKING RETURNS THE MOMENT IT EXISTS.
+   *
+   * This used to `await resolveShortlistImagery(shortlist)` before returning —
+   * eight sequential requests to a volunteer-run image service, deliberately
+   * unparallelised out of API etiquette. The ranking was already durable on
+   * disk; the caller was blocked on the pictures. A live run recorded the
+   * shortlist written at 18:01:33 and the screen still reading "Working out
+   * where you should go" twenty-five seconds later, because the action had not
+   * returned and nothing told the page to look again.
+   *
+   * The photographs are the least important thing on that screen and every card
+   * has a designed coordinate-derived graphic without them. So they are a
+   * second, separate action, triggered by the page once the list is on screen —
+   * see `resolveShortlistImageryAction` and the component that calls it.
+   */
+  revalidatePath(`/decide/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Resolve the photographs for a shortlist that already exists.
+ *
+ * Split out of `buildShortlistAction` so that ranking and imagery fail, retry
+ * and — most importantly — *finish* independently. It reads the stored
+ * shortlist rather than taking one as an argument, because the browser must not
+ * be able to name the subjects an image lookup is performed for.
+ *
+ * Idempotent by construction: the imagery cache writes both acceptances and
+ * refusals through to the table, so calling this again after every subject has
+ * an answer performs no requests at all.
+ */
+export async function resolveShortlistImageryAction(id: string): Promise<DecisionResult> {
+  const session = getDecisionSession(id);
+  if (!session?.shortlist) return { ok: false, error: 'There is no list to illustrate.' };
+
+  try {
+    await resolveShortlistImagery(session.shortlist);
+  } catch (error) {
+    // A picture service having a bad afternoon must never surface as an error
+    // on the screen where somebody is choosing where to go.
+    console.error('Shortlist imagery failed', { id, error });
+    return { ok: false };
   }
 
   revalidatePath(`/decide/${id}`);
@@ -335,7 +380,9 @@ export async function adoptDestinationAction(id: string, entryId: string): Promi
 
   let tripId: string;
   try {
-    tripId = createTrip(basics.data).id;
+    // The owner, exactly as the composer door records it — the two entrances
+    // must produce the same row or one of them makes an unownable trip.
+    tripId = createTrip(basics.data, await sessionToken({ mint: true })).id;
     saveComposerAnswers(tripId, answers);
     saveDestinationQuery(tripId, 'known_destination', entry.displayName);
     saveSelectedDestination(tripId, destination);

@@ -5,6 +5,7 @@ import {
   foldedTokens,
   mustDoDecisionFor,
   mustDoIsAccountedFor,
+  namesSomething,
   type MustDoCoverage,
   type MustDoDecision,
   type MustDoMatch,
@@ -42,6 +43,162 @@ import {
  * count how often it occurs in the data. A hard-coded list of generic nouns would
  * be English-only, destination-specific and wrong in both directions.
  */
+
+/**
+ * ONE BOX, SEVERAL SUBJECTS — SPLIT BEFORE ANYTHING IS LOOKED UP.
+ *
+ * The failure this closes, from a live compiled artifact: a traveller named
+ * three things in the must-do box — a market, a day hike, a neighbourhood —
+ * and the composer carried the whole sentence as ONE span. The resolver then
+ * looked up a forty-word "name", found nothing (of course), and the trip
+ * reported "0 of the 1 things you named" about a box that named three. The
+ * whole-quote was also what the acquisition layer prioritised by folded-name
+ * equality, so none of the three ever ranked first either.
+ *
+ * Segmentation is deterministic and deliberately conservative:
+ *
+ * - **Commas, semicolons, newlines and bullet markers always split.** Nobody
+ *   writes one place name across a comma.
+ * - **" and " splits only when both sides look like named subjects** — each
+ *   side must carry proper-noun evidence of its own. "Museum of Art and
+ *   History" does not split, because "History" alone is not a name;
+ *   "Tsukiji outer market and the old Yanaka streets" does.
+ * - Anything that produces fewer than two usable segments keeps the original
+ *   request untouched, so a single-subject box behaves exactly as before.
+ *
+ * Each segment keeps its provenance: the id extends the parent's
+ * (`mustdo:span:0:2`), the span is the segment's own character range inside
+ * the composer text, and `namedExplicitly` is re-derived per segment so a
+ * fragment that names nothing ("somewhere relaxing") is carried but never
+ * reported as an unfindable name.
+ */
+export function segmentMustDoRequests(
+  requests: readonly MustDoRequest[],
+): MustDoRequest[] {
+  const segmented: MustDoRequest[] = [];
+  for (const request of requests) {
+    if (request.kind !== 'named_subject' || request.span === undefined) {
+      segmented.push(request);
+      continue;
+    }
+    const pieces = segmentQuote(request.quote);
+    if (pieces.length < 2) {
+      segmented.push(request);
+      continue;
+    }
+    const base = request.span[0];
+    pieces.forEach((piece, index) => {
+      segmented.push({
+        ...request,
+        id: `${request.id}:${index}`,
+        quote: piece.text,
+        span: [base + piece.start, base + piece.start + piece.text.length],
+        /*
+         * A list item that opens with a capital is an intentional subject even
+         * when sentence-case logic would discount it — "Tsukiji outer market"
+         * has one capital, and losing its verdict because the rest is lower
+         * case is exactly the silent drop this function exists to end. A
+         * lower-case item ("somewhere relaxing to end the day") stays
+         * unreportable: it is a wish, not a name, and a "we could not find
+         * this" line about it would teach travellers to ignore the panel.
+         */
+        namedExplicitly: namesSomething(piece.text) || /^\p{Lu}/u.test(piece.text),
+      });
+    });
+  }
+  return segmented;
+}
+
+interface QuoteSegment {
+  text: string;
+  /** Character offset of `text` inside the original quote. */
+  start: number;
+}
+
+/** List markers a traveller actually types: bullets, dashes, numbering. */
+const LIST_MARKER = /^(?:[-–—•·*]|\d{1,2}[.)])\s+/;
+
+/** Leading conjunctions left behind by a split: "and the old town" → "the old town". */
+const LEADING_CONJUNCTION = /^(?:and|or|plus|also|then)\s+/i;
+
+function segmentQuote(quote: string): QuoteSegment[] {
+  /* Pass 1: the separators that always split. */
+  const hard: QuoteSegment[] = [];
+  let cursor = 0;
+  const pattern = /[,;\n]/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(quote)) !== null) {
+    hard.push({ text: quote.slice(cursor, match.index), start: cursor });
+    cursor = match.index + match[0].length;
+  }
+  hard.push({ text: quote.slice(cursor), start: cursor });
+
+  /* Pass 2: " and " splits a piece only when both halves name something. */
+  const soft: QuoteSegment[] = [];
+  for (const piece of hard) {
+    const andMatch = / and /.exec(piece.text);
+    if (andMatch) {
+      const left = piece.text.slice(0, andMatch.index);
+      const right = piece.text.slice(andMatch.index + andMatch[0].length);
+      if (
+        namesSubjectFragment(left, piece.start === 0) &&
+        namesSubjectFragment(right, false)
+      ) {
+        soft.push({ text: left, start: piece.start });
+        soft.push({ text: right, start: piece.start + andMatch.index + andMatch[0].length });
+        continue;
+      }
+    }
+    soft.push(piece);
+  }
+
+  /* Tidy: strip markers and stray conjunctions, drop empties, keep offsets honest. */
+  const cleaned: QuoteSegment[] = [];
+  for (const piece of soft) {
+    let text = piece.text;
+    let start = piece.start;
+    const trimLeading = (pattern: RegExp): void => {
+      const found = pattern.exec(text);
+      if (found) {
+        text = text.slice(found[0].length);
+        start += found[0].length;
+      }
+    };
+    const leadingSpace = /^\s+/.exec(text);
+    if (leadingSpace) {
+      text = text.slice(leadingSpace[0].length);
+      start += leadingSpace[0].length;
+    }
+    trimLeading(LIST_MARKER);
+    trimLeading(LEADING_CONJUNCTION);
+    text = text.replace(/[\s.]+$/, '');
+    if (text.length >= 2) cleaned.push({ text, start });
+  }
+  return cleaned;
+}
+
+/**
+ * Whether an " and "-side is plausibly a subject of its own.
+ *
+ * Stricter than `namesSomething` on one axis and looser on another. Looser: a
+ * fragment that does *not* open the sentence has no sentence-case excuse, so a
+ * capitalised first word there is genuine naming evidence — "…and Tsukuji
+ * market" names something. Stricter: a *single* capitalised word only counts
+ * when it is compound ("Senso-ji"), because "Museum of Art and History" must
+ * not lose its History to a split. The asymmetry is the whole design: a wrong
+ * refusal keeps one span the resolver reports honestly (ambiguous, with both
+ * candidates named); a wrong split manufactures a request nobody made.
+ */
+function namesSubjectFragment(fragment: string, atSentenceStart: boolean): boolean {
+  const text = fragment.trim().replace(LEADING_CONJUNCTION, '');
+  if (text.length < 2) return false;
+  if (namesSomething(text)) return true;
+  const words = text.split(/\s+/);
+  if (words.length === 1) {
+    return /^[\p{Lu}]/u.test(words[0]!) && words[0]!.includes('-');
+  }
+  return !atSentenceStart && /^[\p{Lu}]/u.test(words[0]!);
+}
 
 /** Everything the resolver may look a request up against. */
 export interface MustDoSearchSpace {

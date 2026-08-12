@@ -3,6 +3,7 @@ import { expandRegion, worthDetourLabel } from './expansion';
 import { assessSeason, describeOpenSeason } from './season';
 import { EASTERN_SIERRA, EASTERN_SIERRA_ACCESS, EASTERN_SIERRA_PLACES, placeById } from '../data/index';
 import { assessPlaceAccess, capabilityFromProfile } from '../access/feasibility';
+import type { WorthDetourLabel } from '../schemas/region';
 import {
   AUGUST_DATES,
   AUGUST_MONTHS,
@@ -159,5 +160,63 @@ describe('worth-the-detour verdict', () => {
     expect(worthDetourLabel('too_far', 'good')).toBe('too_far_for_this_trip');
     expect(worthDetourLabel('base', 'strong')).toBe('core_to_trip');
     expect(worthDetourLabel('in_tolerance', 'not_workable')).toBe('skip_for_your_style');
+  });
+
+  /**
+   * WHAT EACH VERDICT CLAIMS ABOUT THE JOURNEY, AS OPPOSED TO ABOUT THE PLACE.
+   *
+   * `skip_for_your_style` is deliberately its own claim rather than folded into
+   * one of the others: it is the single label here that says nothing about a
+   * road, so the bands that produce it are compared against each other and
+   * never against a distance verdict.
+   */
+  const REACH_CLAIM: Record<WorthDetourLabel, string> = {
+    core_to_trip: 'no journey to make',
+    definitely_worth_it: 'reachable',
+    worth_it_if_you_like_this: 'reachable',
+    only_if_nearby: 'reachable',
+    too_far_for_this_trip: 'out of this trip’s reach',
+    reach_unverified: 'nobody established it',
+    skip_for_your_style: 'not a claim about the journey',
+  };
+
+  const WORKABLE_BANDS = ['top_pick', 'strong', 'good', 'optional'] as const;
+
+  it('gives one journey one distance verdict, whatever the traveller makes of the place', () => {
+    /*
+     * THE DEFECT: a sixty-nine-minute `stretch` read "worth it if this is your
+     * thing" at band `strong` and "too far for this trip" at band `good`. How
+     * far somewhere is does not move with how much somebody would enjoy it, and
+     * a card that says otherwise is free to contradict the plan built from the
+     * same measurement — which is exactly what it did.
+     */
+    for (const detourClass of ['base', 'in_tolerance', 'stretch', 'too_far', 'unknown'] as const) {
+      const claims = new Map(
+        WORKABLE_BANDS.map((band) => [band, REACH_CLAIM[worthDetourLabel(detourClass, band)]]),
+      );
+      expect(
+        new Set(claims.values()).size,
+        `one ${detourClass} journey is described as ${[...claims]
+          .map(([band, claim]) => `${claim} at ${band}`)
+          .join(', ')}`,
+      ).toBe(1);
+    }
+  });
+
+  it('never sells a journey this trip cannot make as one worth taking', () => {
+    /*
+     * The mirror of the same fault, and the one that reaches the traveller as a
+     * broken promise rather than a broken warning. `too_far` is the class
+     * auto-pick refuses outright and the scheduler's daily caps refuse again, so
+     * a positive detour verdict on one recommends a stop nothing downstream will
+     * ever schedule. It used to say "worth it if this is your thing" the moment
+     * the place was a top pick.
+     */
+    for (const band of WORKABLE_BANDS) {
+      expect(
+        worthDetourLabel('too_far', band),
+        `a ${band} past this trip's reach is offered to the traveller anyway`,
+      ).toBe('too_far_for_this_trip');
+    }
   });
 });

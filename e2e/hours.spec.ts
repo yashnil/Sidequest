@@ -68,11 +68,42 @@ async function reachBoard(page: Page, dates = AUGUST) {
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
-  await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
 }
 
+/**
+ * Located by its own heading, never by text anywhere on the card.
+ *
+ * `hasText: 'Panorama Gondola'` also matches the Devils Postpile card, whose
+ * shuttle note reads "Shuttle boards near the Panorama Gondola Building" — so a
+ * plain text filter asserts against whichever of the two sorts first and passes
+ * or fails for reasons that have nothing to do with the place under test. The
+ * same trap is documented in `weather.spec.ts` for Minaret Vista.
+ */
 function card(page: Page, name: string) {
-  return page.getByRole('article').filter({ hasText: name }).first();
+  return page
+    .getByRole('article')
+    .filter({ has: page.getByRole('heading', { name, exact: true }) })
+    .first();
+}
+
+/**
+ * Open a card's own disclosure, whichever of the two it has.
+ *
+ * A full card folds its detail behind "More about this place"; a card nothing
+ * can reach is a compact row whose disclosure is "What it is, and everything we
+ * checked". The hours facts a decision needs — the last admission, the operator's
+ * own note about which season's timetable this is — live inside whichever one
+ * the card carries. They are in the DOM regardless, which is why the assertions
+ * that moved failed on visibility rather than on a missing locator.
+ */
+async function openCardDetail(cardLocator: ReturnType<typeof card>) {
+  const summary = cardLocator.locator('summary').first();
+  await expect(summary).toBeVisible();
+  const details = cardLocator.locator('details').first();
+  if (await details.evaluate((element) => (element as HTMLDetailsElement).open)) return;
+  await summary.click();
+  await expect(details).toHaveJSProperty('open', true);
 }
 
 /**
@@ -102,25 +133,45 @@ async function build(page: Page) {
 test('the board states opening hours against the traveller’s own dates', async ({ page }) => {
   await reachBoard(page);
 
-  // A staffed lift with real hours says so, and says what they are.
+  /*
+   * A staffed lift with real hours says which of them binds.
+   *
+   * The card wears two chips at most now, and only for things that stop or
+   * reshape a visit — here, that it needs a car and a clear day. `Limited hours`
+   * is no longer one of them; the hours themselves are one press away, in the
+   * card's own disclosure.
+   *
+   * The minute is asserted, not the label. "Last entry" proved a heading existed;
+   * `Last entry 16:00` proves the figure a traveller actually plans around
+   * reached the screen, which is the stronger of the two claims and the one this
+   * fixture exists for.
+   *
+   * The window itself — `Open 09:00–16:30 · arrive before 16:00` — is stated
+   * where it binds, on the plan beside the stop it shapes, and is asserted in the
+   * test directly below against this same fixture.
+   */
   const gondola = card(page, 'Panorama Gondola');
   await expect(gondola).toBeVisible();
-  await expect(gondola.getByText('Limited hours')).toBeVisible();
-  await expect(gondola.getByText('Last entry', { exact: true })).toBeVisible();
-  await expect(gondola.getByText(/Open 09:00–16:30/)).toBeVisible();
+  await openCardDetail(gondola);
+  await expect(gondola.getByText('Last entry 16:00')).toBeVisible();
+  await expect(gondola.getByText(/Summer scenic hours/)).toBeVisible();
 
   // A lake with no gate wears nothing at all. This is the assertion that stops a
-  // later change from stamping "Open 24 hours" across every natural attraction.
+  // later change from stamping "Open 24 hours" across every natural attraction —
+  // and it is made with the disclosure open, so it covers the detail as well as
+  // the face of the card.
   const convict = card(page, 'Convict Lake');
   await expect(convict).toBeVisible();
-  await expect(convict.getByText('Limited hours')).toHaveCount(0);
-  await expect(convict.getByText('Hours unconfirmed')).toHaveCount(0);
+  await openCardDetail(convict);
   await expect(convict.getByText(/^Open \d\d:\d\d/)).toHaveCount(0);
+  await expect(convict.getByText(/Last entry/)).toHaveCount(0);
+  await expect(convict.getByText(/could not confirm its opening hours/)).toHaveCount(0);
 
   // Hours we could not confirm are admitted to, not papered over.
   const village = card(page, 'The Village at Mammoth');
-  await expect(village.getByText('Hours unconfirmed')).toBeVisible();
-  await expect(village.getByText(/Check its hours/)).toBeVisible();
+  await openCardDetail(village);
+  await expect(village.getByText(/We could not confirm its opening hours/)).toBeVisible();
+  await expect(village.getByText(/Check them before you build a day around it/)).toBeVisible();
 });
 
 test('a limited-hours stop is scheduled inside its window, with its source', async ({ page }) => {
@@ -154,9 +205,16 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
 test('a place shut on every trip date cannot be included, and says why', async ({ page }) => {
   await reachBoard(page, MIDWEEK);
 
+  /*
+   * A place nothing can reach on these dates is a compact row, and a compact row
+   * carries no chips — it leads with the reason instead. That is the stronger
+   * statement, so it is what is asserted: not the label `Closed on your dates`
+   * but the sentence that says which dates and why.
+   */
   const centre = card(page, 'Manzanar Visitor Center');
   await expect(centre).toBeVisible();
-  await expect(centre.getByText('Closed on your dates')).toBeVisible();
+  await expect(centre.getByText(/Why this will not work/)).toBeVisible();
+  await expect(centre.getByText(/your dates fall on the days of the week it does not open/)).toBeVisible();
   await expect(centre.getByText(/Shut on every day of your trip/)).toBeVisible();
 
   // The one control that would build an impossible plan is off.
@@ -171,16 +229,33 @@ test('the two halves of Manzanar read as one site, not as a duplicate', async ({
   const grounds = card(page, 'Manzanar National Historic Site');
   const centre = card(page, 'Manzanar Visitor Center');
 
-  // Both name the site they belong to, so neither looks like a stray copy.
+  /*
+   * Both say they are one site, so neither reads as a stray copy — but they say
+   * it in the words their own card type has. The full card carries the dedicated
+   * line, "Part of <site>. <what they share>". The compact row a blocked place
+   * gets has no such paragraph; what survives into it is the shared-approach
+   * caution, which still says these two are one journey.
+   *
+   * The asymmetry is a product finding rather than a test one, and it is
+   * reported: a compact row does not name its parent site, so a traveller
+   * scanning "Probably skip" sees a second Manzanar entry with no line tying it
+   * to the first. What is asserted here is what each card actually states.
+   */
+  await openCardDetail(grounds);
+  await openCardDetail(centre);
   await expect(grounds.getByText('Part of Manzanar National Historic Site')).toBeVisible();
-  await expect(centre.getByText('Part of Manzanar National Historic Site')).toBeVisible();
+  await expect(centre.getByText(/Shares the site entrance and car park with the tour route/)).toBeVisible();
 
-  // And they are plainly different things: the grounds never close, the centre
-  // does, and only one of them is daylight-limited.
-  await expect(grounds.getByText('Daylight only')).toBeVisible();
-  await expect(grounds.getByText('Closed on your dates')).toHaveCount(0);
+  /*
+   * And they are plainly different things: the grounds never close, the centre
+   * does, and only one of them is daylight-limited. `Daylight only` is not a chip
+   * any more — the sentence it stood for is, and the sentence says what the label
+   * only hinted at.
+   */
+  await expect(grounds.getByText(/Signed for daylight use only/)).toBeVisible();
+  await expect(grounds.getByText(/Shut on every day of your trip/)).toHaveCount(0);
   await expect(grounds.getByRole('button', { name: 'Include' })).toBeEnabled();
-  await expect(centre.getByText('Closed on your dates')).toBeVisible();
+  await expect(centre.getByText(/Shut on every day of your trip/)).toBeVisible();
 });
 
 test('the grounds are still schedulable on a day the visitor centre is shut', async ({ page }) => {
@@ -201,9 +276,15 @@ test('changing the dates recalculates availability rather than reusing it', asyn
   await reachBoard(page);
 
   // Wednesday to Saturday: the visitor centre opens on two of the four.
+  /*
+   * "Only some of your days" is the chip now, and the sentence beside it counts
+   * them and states the window they fall in — which is the fact that decides
+   * whether including this is worth it, so it is asserted as well as the label.
+   */
   const centre = card(page, 'Manzanar Visitor Center');
   await expect(centre.getByRole('button', { name: 'Include' })).toBeEnabled();
-  await expect(centre.getByText('Shut some of your days')).toBeVisible();
+  await expect(centre.getByText('Only some of your days')).toBeVisible();
+  await expect(centre.getByText(/Open on 2 of your 4 days, 09:00–16:30/)).toBeVisible();
   await include(centre);
 
   await build(page);

@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { answerEveryQuestion, reachScope, waitForLookup, waitUntilInteractive } from './support/trip';
+import {
+  answerEveryQuestion,
+  openHowThisWasBuilt,
+  reachScope,
+  REGION_READY_HEADING,
+  waitForLookup,
+  waitUntilInteractive,
+} from './support/trip';
 
 /**
  * The open-world journey, end to end, entirely offline.
@@ -80,7 +87,7 @@ async function answerClarifications(page: Page): Promise<void> {
 async function compile(page: Page): Promise<void> {
   await answerClarifications(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 60_000,
   });
 }
@@ -143,7 +150,7 @@ test('a query that is not a place is refused rather than guessed at', async ({ p
   });
   await expect(page.getByText(/reads more like the kind of trip you want/i)).toBeVisible();
   // It must not have compiled anything.
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toHaveCount(0);
 });
 
 test('clarification answers survive going back and returning', async ({ page }) => {
@@ -178,7 +185,7 @@ test('a refresh during compilation resumes the same job rather than starting ano
 
   // Wait for the job to exist before reloading. Navigating away *during* the
   // start request is a different case, covered by the test below.
-  await expect(page.getByRole('heading', { name: /Building your region|What this trip is built on/ })).toBeVisible({
+  await expect(page.getByRole('heading', { name: /^Building |^We have been through / })).toBeVisible({
     timeout: 20_000,
   });
 
@@ -189,7 +196,7 @@ test('a refresh during compilation resumes the same job rather than starting ano
     'Here is what we are about to do',
   );
 
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 60_000,
   });
 });
@@ -210,11 +217,18 @@ test('navigating away before a compilation starts leaves an honest restartable s
     'Here is what we are about to do',
   );
 
-  const start = page.getByRole('button', { name: 'Start building' });
+  /*
+   * The control the "nothing is running on this" state offers is named for what
+   * it does rather than for the machinery: `Start researching`, not `Start
+   * building`. Under the old name this branch never fired, so the test spent its
+   * full minute waiting for a finished build nothing had restarted — a failure
+   * that read as "compilation hangs after a navigation away".
+   */
+  const start = page.getByRole('button', { name: 'Start researching' });
   if (await start.isVisible().catch(() => false)) {
     await start.click();
   }
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 60_000,
   });
 });
@@ -233,7 +247,7 @@ test('pressing build twice does not start a second compilation', async ({ page }
    * is to press again and check the identity of what comes back.
    */
   await page.goto(`/trips/${id}/plan`);
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible();
   const before = await page.getByTestId('region-data').textContent();
 
   /*
@@ -248,7 +262,7 @@ test('pressing build twice does not start a second compilation', async ({ page }
   if (offersRebuild) await rebuild.click();
 
   await page.goto(`/trips/${id}/plan`);
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible();
   /* The same artifact, not a second one compiled from the same answers. */
   expect(await page.getByTestId('region-data').textContent()).toBe(before);
 });
@@ -257,7 +271,14 @@ test('the compiled result reports coverage and exact OSM attribution', async ({ 
   await createTrip(page, 'Harbour City');
   await compile(page);
 
-  await expect(page.getByRole('heading', { name: 'What this is built on' })).toBeVisible();
+  /*
+   * The build report is behind a disclosure now, so it is knocked on rather than
+   * scrolled to. "What this is built on" as a heading is gone with it: what the
+   * panel opens on is the coverage table, headed for the thing it shows.
+   */
+  await openHowThisWasBuilt(page);
+  await expect(page.getByRole('heading', { name: 'Layer by layer' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sources' })).toBeVisible();
   /*
    * Every coverage dimension is rendered, not a single score.
    *
@@ -295,6 +316,7 @@ test('the plan says which snapshot of the world it is frozen to', async ({ page 
   await createTrip(page, 'Harbour City');
   await compile(page);
 
+  await openHowThisWasBuilt(page);
   const panel = page.getByTestId('region-data');
   const summary = panel.getByText(/Regional place data/);
   await expect(summary).toBeVisible();
@@ -539,12 +561,20 @@ test('a second build of the same ground reuses the evidence rather than buying i
    * The work plan is read from the *stored row* rather than from a live counter,
    * so this also proves the record survives the request that produced it.
    */
+  /*
+   * The work plan lives inside the build report now, which is a closed
+   * disclosure — so it has to be knocked on. Its content is in the DOM either
+   * way, which is why this failed on `toBeVisible` rather than on a locator: the
+   * panel was there and hidden, exactly as designed.
+   */
   await createTrip(page, 'Harbour City');
   await compile(page);
+  await openHowThisWasBuilt(page);
   await expect(page.getByTestId('work-plan')).toBeVisible();
 
   const second = await createTrip(page, 'Harbour City');
   await compile(page);
+  await openHowThisWasBuilt(page);
 
   const plan = page.getByTestId('work-plan');
   await expect(plan).toBeVisible();
@@ -569,6 +599,7 @@ test('a second build of the same ground reuses the evidence rather than buying i
 
   // And it is a stored record: a reload shows the same account.
   await page.goto(`/trips/${second}/plan`);
+  await openHowThisWasBuilt(page);
   const reloaded = page.getByTestId('work-plan');
   await expect(reloaded).toBeVisible();
   await reloaded.click();
@@ -590,7 +621,7 @@ test('a compiled region still renders with every provider switched off', async (
   await compile(page);
 
   await page.goto(`/trips/${id}/plan`);
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible();
   const before = await page.getByTestId('region-data').textContent();
   expect(before?.length ?? 0).toBeGreaterThan(0);
 
@@ -615,7 +646,8 @@ test('a compiled region still renders with every provider switched off', async (
    * outbound request during render" half directly.
    */
   await page.goto(`/trips/${id}/plan`);
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible();
+  await openHowThisWasBuilt(page);
   await expect(page.getByTestId('region-data')).toBeVisible();
   /* Byte-for-byte the same, from the artifact's own copy of what it was built from. */
   expect(await page.getByTestId('region-data').textContent()).toBe(before);

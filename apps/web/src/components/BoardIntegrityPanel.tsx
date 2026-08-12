@@ -8,6 +8,7 @@ import {
   BOARD_RECOVERY_ACTION_LABELS,
   BOARD_RECOVERY_ACTION_TARGETS,
   INTEREST_LABELS,
+  TRAVELLER_BOARD_FACTS,
   type BoardIntegrityReading,
   type BoardIntegrityState,
   type BoardRecoveryAction,
@@ -69,6 +70,17 @@ export function BoardIntegrityPanel({
     .map((interest) => (INTEREST_LABELS as Record<string, string | undefined>)[interest])
     .filter((label): label is string => Boolean(label));
 
+  /*
+   * ONLY THE COUNTS A TRAVELLER ASKED A QUESTION ABOUT.
+   *
+   * The reading holds eleven, and rendering all of them put "Practical stops
+   * kept aside 94" and "Added on purpose from further out 3033" between somebody
+   * and the first place on their board. Those are operational truths and they
+   * are worth recording; they are not worth reading. See `TRAVELLER_BOARD_FACTS`
+   * for the three that survive and why.
+   */
+  const facts = reading.facts.filter((fact) => TRAVELLER_BOARD_FACTS.includes(fact.id));
+
   return (
     <Panel
       as="section"
@@ -101,9 +113,9 @@ export function BoardIntegrityPanel({
         {reading.summary}
       </p>
 
-      {reading.facts.length > 0 ? (
+      {facts.length > 0 ? (
         <dl className="mt-4 space-y-2.5">
-          {reading.facts.map((fact) => (
+          {facts.map((fact) => (
             <div key={fact.id}>
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-sm text-ink-muted">{BOARD_INTEGRITY_FACT_LABELS[fact.id]}</dt>

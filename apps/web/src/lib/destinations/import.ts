@@ -62,6 +62,46 @@ export const IMPORT_CATALOG = 'overture';
  */
 const CITY_POPULATION = 100_000;
 
+/**
+ * A LANDSCAPE DESTINATION HAS TO BE ABLE TO GET IN.
+ *
+ * "Help me decide" asks the index for regions, counties, islands, national parks
+ * and protected areas, and the live release supplies 203 regions, 37 counties
+ * and nothing else — which is how one of the three doors on the homepage came to
+ * open on eight administrative polygons. There are two reasons for that and this
+ * is the second one: even handed a national park, this function returned `null`
+ * for it, because its switch is over division subtypes alone. Whoever builds the
+ * producer would have found every row silently discarded.
+ *
+ * The first reason is not fixable here and is stated where it belongs, on
+ * `RECOMMENDABLE` in `recommend.ts`: the only producer today reads Overture's
+ * *divisions* theme, which has no landscape subtypes at all.
+ *
+ * Matched on the `class`, loosely, rather than against an enumerated vocabulary.
+ * The one Overture base-theme row this repository pins is
+ * `{ subtype: 'physical', class: 'peak' }` (`overture.test.ts`), which is enough
+ * to know the shape and not enough to know every value — and the failure modes
+ * are asymmetric. A class we do not recognise is dropped exactly as it is today,
+ * so a gap costs nothing new; a hard-coded list that guessed wrong would look
+ * like coverage while supplying nothing. Anything unrecognised is counted and
+ * reported rather than vanishing, which is the property that would have caught
+ * this in the first place.
+ */
+function landscapeFeatureTypeFor(subtype: string, featureClass: string): DestinationFeatureType | null {
+  if (/(^|_)(island|isle|islet|archipelago|atoll)($|_)/.test(featureClass)) return 'island';
+  if (featureClass.includes('national_park')) return 'national_park';
+  /*
+   * `subtype: 'protected'` is Overture's land-use bucket for designated ground —
+   * nature reserves, wilderness, state and regional parks. The designation is
+   * the travel-relevant fact; which authority made it is not, so they share one
+   * feature type rather than inventing distinctions the index cannot support.
+   */
+  if (subtype === 'protected' || /(^|_)(protected_area|nature_reserve|wilderness)($|_)/.test(featureClass)) {
+    return 'protected_area';
+  }
+  return null;
+}
+
 function featureTypeFor(raw: RawDivisionRecord): DestinationFeatureType | null {
   switch (raw.subtype) {
     case 'country':
@@ -82,7 +122,7 @@ function featureTypeFor(raw: RawDivisionRecord): DestinationFeatureType | null {
     case 'neighborhood':
       return 'district';
     default:
-      return null;
+      return landscapeFeatureTypeFor(raw.subtype, raw.class ?? '');
   }
 }
 
@@ -100,6 +140,22 @@ interface Staged {
   regionCode: string | undefined;
 }
 
+export interface IndexBuild {
+  entries: DestinationIndexEntry[];
+  /**
+   * Well-formed records whose subtype this file has no feature type for, counted
+   * by subtype.
+   *
+   * A silent drop is what let "the index holds no national parks" go unnoticed
+   * for a whole phase: an operator posting a file gets back an entry count and a
+   * malformed-line count, both of which look healthy while an entire kind of
+   * place is discarded on the way in. Counting the discards is the difference
+   * between a gap somebody can see and a gap somebody has to measure the
+   * database to find.
+   */
+  unclassified: Record<string, number>;
+}
+
 /**
  * Build index entries from raw records.
  *
@@ -108,14 +164,22 @@ interface Staged {
  * than against a hundred thousand rows.
  */
 export function buildIndexEntries(records: readonly RawDivisionRecord[]): DestinationIndexEntry[] {
+  return buildIndex(records).entries;
+}
+
+export function buildIndex(records: readonly RawDivisionRecord[]): IndexBuild {
   const staged = new Map<string, Staged>();
   /** Country code and region code both resolve through here to a display name. */
   const countryNames = new Map<string, string>();
   const regionNames = new Map<string, string>();
+  const unclassified: Record<string, number> = {};
 
   for (const raw of records) {
     const featureType = featureTypeFor(raw);
-    if (!featureType) continue;
+    if (!featureType) {
+      unclassified[raw.subtype] = (unclassified[raw.subtype] ?? 0) + 1;
+      continue;
+    }
     const center = centerOf(raw);
     if (!center) continue;
 
@@ -225,7 +289,7 @@ export function buildIndexEntries(records: readonly RawDivisionRecord[]): Destin
     entries.push(entry);
   }
 
-  return entries;
+  return { entries, unclassified };
 }
 
 function grow(
@@ -248,6 +312,8 @@ export interface ImportOutcome {
   entries: number;
   terms: number;
   skipped: number;
+  /** Well-formed rows we had no feature type for, by subtype. See `IndexBuild`. */
+  unclassified: Record<string, number>;
   release: DestinationIndexRelease;
 }
 
@@ -284,7 +350,7 @@ export function importDestinationIndex(input: {
     records.push(record.data);
   }
 
-  const entries = buildIndexEntries(records);
+  const { entries, unclassified } = buildIndex(records);
   const release: DestinationIndexRelease = {
     schemaVersion: DESTINATION_INDEX_VERSION,
     catalog: IMPORT_CATALOG,
@@ -293,5 +359,5 @@ export function importDestinationIndex(input: {
     builtAt: input.now.toISOString(),
   };
   const written = replaceDestinationIndex({ entries, release });
-  return { ...written, skipped, release };
+  return { ...written, skipped, unclassified, release };
 }

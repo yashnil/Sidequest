@@ -219,6 +219,31 @@ function supplyMeasure(input: RankInput): Measure {
             ? 0.1
             : 0;
   if (supply.level === 'infrastructure_failure') return unknown('no_index_coverage');
+
+  /*
+   * THE SUMMARY IS ABOUT A TRIP LENGTH, SO IT MAY ONLY BE QUOTED WHEN WE HAVE ONE.
+   *
+   * `assessSupply` phrases its verdict against the days it was given — "…
+   * comfortably enough to build 9 days from" — and this screen is reached before
+   * anybody has necessarily said how long they are going for. The shortlist then
+   * passes a zero, and `narrate` promoted the resulting sentence to the first
+   * bullet of the lead recommendation: "182 mapped places across 8 areas —
+   * comfortably enough to build **0 days** from."
+   *
+   * The counts are true and the clause about days is not, so the clause is
+   * dropped rather than the fact. Composed here from the same funnel the
+   * assessment was made from, which is the only place that can know the
+   * traveller said nothing — `assessSupply` sees a number and has no way to tell
+   * "zero days" from "not stated".
+   */
+  const nights = nightsFrom(input.answers);
+  if (nights === null) {
+    const { candidates, clusters } = supply.funnel;
+    return measured(
+      value,
+      `${candidates} mapped place${candidates === 1 ? '' : 's'} across ${clusters} area${clusters === 1 ? '' : 's'}`,
+    );
+  }
   return measured(value, supply.summary);
 }
 
@@ -258,6 +283,31 @@ function themeMeasure(input: RankInput): Measure {
   const type = input.candidate.entry.featureType;
   const urban = type === 'city' || type === 'district';
   const wild = type === 'national_park' || type === 'protected_area' || type === 'island';
+
+  /*
+   * AN ADMINISTRATIVE UNIT IS NOT EVIDENCE ABOUT ITS LANDSCAPE.
+   *
+   * The paragraph above promises that "the remaining themes resolve to
+   * `unknown` rather than to a number this data cannot justify". It did not
+   * hold for the remaining *feature types*: a `region` or a `county` is neither
+   * urban nor wild by this test, so the function fell through to its `0.5`
+   * starting value and returned it as a measurement.
+   *
+   * That is not a middling fit, it is no reading at all, and it was the worst
+   * kind of unmeasured number: measured over the live index, `themeFit` came
+   * back `0.50` for **240 of 240** candidates — every one of them a region or a
+   * county, because the index holds no parks, islands or protected areas at
+   * all. So a twelve-hundredths slice of the weight moved nothing, added the
+   * same 0.06 to every score, and — because coverage is measured weight over
+   * nominal weight — lifted every candidate's confidence by 0.12 for a
+   * dimension nobody had looked at. That is how eight indistinguishable
+   * administrative polygons came to be labelled "worth a look".
+   *
+   * `no_index_coverage` rather than `not_sourced`, deliberately: whether a
+   * region has mountains in it is published in plenty of places, just not in
+   * ours. The reason copy says so, and the honest sentence is about us.
+   */
+  if (!urban && !wild) return unknown('no_index_coverage');
 
   let value = 0.5;
   if (wantsCities && urban) value += 0.35;

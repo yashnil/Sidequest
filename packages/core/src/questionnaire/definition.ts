@@ -2,6 +2,7 @@ import type { TransportPriority } from '../schemas/access';
 import {
   AVOIDANCES,
   AVOIDANCE_LABELS,
+  INTERESTS,
   REGIONAL_EXPANSIONS,
   type Avoidance,
   type BudgetStyle,
@@ -9,6 +10,8 @@ import {
   type DailyIntensity,
   type DayStart,
   type DiscoveryMix,
+  type Interest,
+  type InterestLevels,
   type Pace,
   type RegionalExpansion,
 } from '../schemas/common';
@@ -20,22 +23,56 @@ import {
   type FoodStyle,
   type SpecialMealAppetite,
 } from '../schemas/food';
-import type { QuestionnaireAnswers } from '../schemas/profile';
+import { QUESTIONNAIRE_STEP_IDS, type QuestionnaireAnswers } from '../schemas/profile';
 import type { RegionQuestionnaireCopy } from '../schemas/region';
 import type { TravelerNeed } from '../schemas/trip';
 
-export const QUESTIONNAIRE_STEPS = [
-  'interests',
-  'rhythm',
-  'budget',
-  'food',
-  'discovery',
-  'transport',
-  'region',
-  'constraints',
-  'review',
-] as const;
+/**
+ * Re-exported from the schema, where the list now canonically lives: the
+ * answers reference step ids (`decideForMe`), and schemas cannot import from
+ * here without a cycle. Same tuple, same name, same type as it always had.
+ */
+export const QUESTIONNAIRE_STEPS = QUESTIONNAIRE_STEP_IDS;
 export type QuestionnaireStepId = (typeof QUESTIONNAIRE_STEPS)[number];
+
+/**
+ * Where a step sits in the canonical order — the number the draft position is
+ * *stored* as. An index into the visible step list is not storable: the visible
+ * list changes length whenever a composer-answered step is dropped, so a saved
+ * index of six could mean the region step on one render and the constraints
+ * step on the next. The canonical ordinal names the same step in every build
+ * that has the step at all.
+ */
+export function stepOrdinal(id: QuestionnaireStepId): number {
+  return QUESTIONNAIRE_STEPS.indexOf(id);
+}
+
+/** The stored ordinal back to a step id, clamped rather than trusted. */
+export function stepIdForOrdinal(ordinal: number): QuestionnaireStepId {
+  const bounded = Math.min(Math.max(0, Math.floor(ordinal)), QUESTIONNAIRE_STEPS.length - 1);
+  return QUESTIONNAIRE_STEPS[bounded]!;
+}
+
+/**
+ * Where to resume in the list of steps actually being shown.
+ *
+ * Exact match when the saved step is still visible; otherwise the next visible
+ * step in canonical order, because a step that vanished between sessions was
+ * *answered* (that is why it vanished) and resuming before it would replay
+ * ground the traveller has covered. Falls to the last step rather than the
+ * first when nothing later survives — the end of a shrunken questionnaire is
+ * the review, which is exactly where somebody past the missing step belongs.
+ */
+export function resumeStepIndex(
+  visible: readonly { id: QuestionnaireStepId }[],
+  target: QuestionnaireStepId,
+): number {
+  const exact = visible.findIndex((step) => step.id === target);
+  if (exact >= 0) return exact;
+  const wanted = stepOrdinal(target);
+  const following = visible.findIndex((step) => stepOrdinal(step.id) > wanted);
+  return following >= 0 ? following : Math.max(0, visible.length - 1);
+}
 
 export interface QuestionnaireContext {
   /** Facts captured on the trip basics screen, before the questionnaire starts. */
@@ -53,6 +90,46 @@ export interface QuestionnaireContext {
     baseName: string;
     copy?: RegionQuestionnaireCopy;
   };
+  /**
+   * Which interests this destination has earned the right to be graded on.
+   *
+   * Resolved by `interests/offer.ts` — from the compiled region's own places
+   * where one exists, and otherwise from the resolved entity type, which is the
+   * path that matters because the questionnaire runs *before* compilation.
+   *
+   * Absent means nobody has decided, and the whole vocabulary is offered. That
+   * is the honest floor rather than a failure: withholding a question because we
+   * have not looked yet would be a claim about the destination made out of our
+   * own ignorance.
+   */
+  offeredInterests?: readonly Interest[];
+}
+
+/**
+ * The interest rows to put on screen, in order.
+ *
+ * The offer decides what is asked; this decides what is *shown*, and the two
+ * differ in exactly one case — an interest the traveller has already graded
+ * that the offer no longer includes. That happens for real: a profile answered
+ * before the offer existed, a destination changed after intake, an offer
+ * recomputed from a fresh compilation. Dropping such a row would hide a stated
+ * preference behind a control that no longer exists while it carried on
+ * steering the research, so it is appended instead — after the offer, because
+ * the offer is what this destination can actually serve.
+ *
+ * `low` is not an answer. It is what every row starts at, so a `low` grade on an
+ * unoffered interest is silence rather than a preference and adds no row.
+ */
+export function offeredInterestRows(
+  context: QuestionnaireContext | undefined,
+  interests: InterestLevels,
+): Interest[] {
+  const offered = context?.offeredInterests;
+  if (!offered || offered.length === 0) return [...INTERESTS];
+  const stated = INTERESTS.filter(
+    (interest) => !offered.includes(interest) && (interests[interest] ?? 'low') !== 'low',
+  );
+  return [...offered, ...stated];
 }
 
 export interface StepDefinition {
@@ -150,7 +227,15 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
     // an expectation the scoring will immediately override. Force light instead.
     case 'dailyIntensity':
       return !context.travelerNeeds.includes('mobility_limited');
-    // Only meaningful to someone who already said crowds bother them.
+    /*
+     * No longer rendered as a question — the wizard derives the tourist-trap
+     * warning from the graded crowd control (see `normalizeAnswers`), because
+     * crowd preference was being collected on four surfaces for one scoring
+     * dimension. The visibility rule itself survives unchanged: the benchmark
+     * request adapter reads it to decide whether the field is representable,
+     * and its formula together with this rule is exactly the derivation
+     * `normalizeAnswers` applies, which keeps adapter output a fixed point.
+     */
     case 'avoidTouristTraps':
       return answers.crowdTolerance !== 'dont_mind';
     case 'roadComfort':
@@ -160,7 +245,13 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
     // preference, they are the entire transport plan.
     case 'shuttleUse':
       return answers.willDrive;
-    // "Stay in town" already answers this.
+    /*
+     * "Stay in town" already answers this. It stays visible without a car —
+     * the compiler reads the raw figure as its candidate search radius, so the
+     * answer is real either way — but the *wording* is the wizard's to fix: it
+     * used to say "furthest you would drive" directly under "you are not
+     * driving", and now names the mode the traveller actually said they move in.
+     */
     case 'detourToleranceMinutes':
       return answers.regionalExpansion !== 'destination_only';
     // Somebody eating as cheaply as they can has already said no to this, and
@@ -177,6 +268,47 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
 }
 
 /**
+ * What each radius ring means in one-way minutes, for the maths that has to
+ * compare a ring against a travel budget. Slightly above the nominal figure so
+ * "within ~30 minutes" admits the 32-minute lake rather than excluding it on a
+ * technicality the copy never promised.
+ */
+export const EXPANSION_CEILING_MINUTES: Record<RegionalExpansion, number> = {
+  destination_only: 15,
+  nearby_30: 35,
+  nearby_60: 65,
+  nearby_120: 125,
+  best_regional: 165,
+};
+
+/** Without a car, the walk-out radius: the base town and its trolley stops. */
+export const NO_CAR_DETOUR_MINUTES = 20;
+
+/**
+ * Total transport budget for a traveller with no car.
+ *
+ * They never see the driving question, so there is nothing to add an allowance
+ * to. This is what a day of shuttles, buses and walking can realistically hold
+ * before it stops being a holiday.
+ */
+export const NO_CAR_TRANSPORT_MINUTES = 150;
+
+/**
+ * How far out a car-free traveller can actually get, one way.
+ *
+ * The same rule `detourToleranceMinutesFor` in `travel/reach.ts` applies to a
+ * ride: half the daily transport budget, floored by the walk-out radius,
+ * because a detour is a there-and-back inside a day the traveller said they
+ * would accept. Restated here rather than imported because that function takes
+ * a built `TravelerProfile` and building one would drag `transform` into this
+ * module's import graph backwards; `transform.test.ts` pins the two functions
+ * to the same number, so they cannot drift apart silently.
+ */
+export function carFreeReachMinutes(): number {
+  return Math.max(NO_CAR_DETOUR_MINUTES, Math.floor(NO_CAR_TRANSPORT_MINUTES / 2));
+}
+
+/**
  * Which radii are actually on offer, given whether the traveller is driving.
  *
  * This used to be a constant: a non-driver was capped at thirty minutes,
@@ -185,8 +317,20 @@ export function isQuestionVisible(id: ConditionalQuestionId, input: AdaptiveInpu
  * nothing beyond half an hour because they will not hire a car is the sort of
  * hard-coded local truth this whole pass exists to remove.
  *
- * So the region says. A region that has not said gets the conservative answer,
- * because promising reach the planner cannot deliver is the worse failure.
+ * Three tiers of authority, in order:
+ *
+ * 1. **A driver** gets every ring; the detour slider negotiates the rest.
+ * 2. **A region that has authored its car-free reach** is believed outright, in
+ *    either direction — the Eastern Sierra's two rings are a fact about one
+ *    seasonal trolley, not a default to widen.
+ * 3. **Everywhere else** derives the offer from the traveller's own ride
+ *    budget, the same figure the review card prints as "up to 75 min by public
+ *    transport". The two surfaces used to disagree: this fell back to a
+ *    thirty-minute cap for every compiled destination while the card promised
+ *    seventy-five, which made Kamakura unreachable by any answer a Tokyo
+ *    traveller could give. The offer is a *search radius*, not a promise of
+ *    service — whether local transit actually delivers a ring is answered by
+ *    research, and where it disappoints, the board says so.
  */
 export function availableRegionalExpansions(
   willDrive: boolean,
@@ -197,7 +341,8 @@ export function availableRegionalExpansions(
   if (carFree && carFree.length > 0) {
     return REGIONAL_EXPANSIONS.filter((value) => carFree.includes(value));
   }
-  return ['destination_only', 'nearby_30'];
+  const reach = carFreeReachMinutes();
+  return REGIONAL_EXPANSIONS.filter((value) => EXPANSION_CEILING_MINUTES[value] <= reach);
 }
 
 export interface Option<T extends string> {
@@ -325,11 +470,42 @@ export const TRANSPORT_PRIORITY_OPTIONS: readonly Option<TransportPriority>[] = 
   { value: 'cheapest', label: 'Cheapest', detail: 'Ride rather than pay to park' },
 ];
 
+/** Every avoidance the vocabulary has, labelled. The review screen reads this
+ * to name whatever is *stored* — including values that arrived through free
+ * text or older saved answers rather than through the chips below. */
 export const AVOIDANCE_OPTIONS: readonly Option<Avoidance>[] = AVOIDANCES.map((value) => ({
   value,
   label: AVOIDANCE_LABELS[value],
   detail: '',
 }));
+
+/**
+ * The avoidances the constraints step actually offers as chips.
+ *
+ * The screen above them says "these become hard filters, not gentle nudges",
+ * which is a promise, and two members of the vocabulary could not keep it:
+ *
+ * - `crowds_and_tourist_traps` duplicated the graded crowd control two steps
+ *   earlier — the fourth surface collecting one preference — and the scorer
+ *   already promotes `avoid_crowds` to the same table row the chip fed. The
+ *   graded control is the one that stays; free text can still land the hard
+ *   version for somebody who writes "no crowds".
+ * - `cold_water` had no consumer anywhere: not the scorer, not the weather
+ *   layer, not the planner. A control that promises a hard filter and feeds
+ *   nothing is worse than its absence, so it is withheld until something can
+ *   honestly read it (the place data carries no swimming-water temperatures
+ *   yet). The enum member stays — stored answers and phrases still parse.
+ *
+ * `consumers.architecture.test.ts` holds this list to the promise: every value
+ * offered here must have a consumer outside the questionnaire's own files.
+ */
+export const OFFERED_AVOIDANCES: readonly Avoidance[] = AVOIDANCES.filter(
+  (value) => value !== 'crowds_and_tourist_traps' && value !== 'cold_water',
+);
+
+export const OFFERED_AVOIDANCE_OPTIONS: readonly Option<Avoidance>[] = OFFERED_AVOIDANCES.map(
+  (value) => ({ value, label: AVOIDANCE_LABELS[value], detail: '' }),
+);
 
 export const BREAKFAST_STYLE_OPTIONS: readonly Option<BreakfastStyle>[] = [
   { value: 'skip', label: 'I skip it', detail: 'Do not book me a breakfast' },

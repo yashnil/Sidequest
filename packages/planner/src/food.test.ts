@@ -411,6 +411,46 @@ describe('scenario 13 — a venue shut on the day it would have been used', () =
   it('leaves the activity schedule exactly as legal as it was', () => {
     expect(nonFoodErrors(itinerary)).toEqual([]);
   });
+
+  /*
+   * THE ONE-MINUTE SHUT DOOR.
+   *
+   * The meal *block* on the timeline opens when the traveller leaves the
+   * routing node and closes when they are back at it, because that walk is
+   * spent on this stop and hiding it would put a walk inside somebody's lunch.
+   * The *service* is `walkMinutesFromRouting` later and earlier at the ends.
+   *
+   * Judging the block against the opening hours therefore convicted every
+   * venue with a walk in front of it by exactly that walk — Mammoth Brewing,
+   * one minute away and open at 11:30, was reported shut for a block starting
+   * at 11:29. It was an `error`, so the reviser deleted a legal meal to satisfy
+   * a fault that was arithmetic.
+   *
+   * Pinned on both sides: the walk must be given back, and a service that
+   * really does start early must still be refused.
+   */
+  it('judges the service against the hours rather than the walk in front of it', () => {
+    const meals = itinerary.days
+      .flatMap((day) => day.items)
+      .filter((item) => item.kind === 'meal' && item.food?.hours);
+    expect(meals.length).toBeGreaterThan(0);
+    for (const meal of meals) {
+      const walk = meal.food!.walkMinutesFromRouting ?? 0;
+      expect(meal.startMinute + walk).toBeGreaterThanOrEqual(meal.food!.hours!.openMinute);
+      expect(meal.endMinute - walk).toBeLessThanOrEqual(meal.food!.hours!.closeMinute);
+    }
+  });
+
+  it('records the walk it backed off, so the validator can give it back', () => {
+    const walked = itinerary.days
+      .flatMap((day) => day.items)
+      .filter((item) => item.kind === 'meal' && item.food?.venueId !== undefined);
+    expect(walked.length).toBeGreaterThan(0);
+    /* Every venue meal knows its own walk — absent would read as zero. */
+    for (const meal of walked) {
+      expect(meal.food!.walkMinutesFromRouting).toBeDefined();
+    }
+  });
 });
 
 describe('scenario 14 — hours nobody has confirmed', () => {

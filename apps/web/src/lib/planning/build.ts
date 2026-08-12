@@ -1,7 +1,8 @@
 import 'server-only';
-import { planTrip } from '@sidequest/planner';
+import { planTrip, type PlannerInput } from '@sidequest/planner';
 import {
   getFoodSelections,
+  getItineraryLocks,
   getProfile,
   getSelections,
   getTrip,
@@ -64,6 +65,56 @@ export interface BuildResult {
    * an apology.
    */
   mustDoConflict?: MustDoConflict;
+}
+
+/**
+ * The planner's input for a trip, assembled the one way it ever is.
+ *
+ * Extracted so the smart-editing actions plan against exactly what a rebuild
+ * would plan against — same board, same matrix, same stored weather snapshot.
+ * A second assembly in the edit path is how an edit and a rebuild would come
+ * to disagree about what is reachable, which is the divergence class this
+ * whole file exists to prevent. Reads the persisted weather snapshot and
+ * fetches nothing: an edit is a cheap, local act.
+ */
+export async function plannerInputForTrip(
+  tripId: string,
+): Promise<{ ok: true; input: PlannerInput } | { ok: false; error: string }> {
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const profile = getProfile(tripId);
+  if (!profile) {
+    return {
+      ok: false,
+      error: 'Finish the questionnaire first — we need your profile to plan around.',
+    };
+  }
+  const resolved = await resolveTripRegion(trip);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  const context = withRefreshedWeather(tripId, resolved.context);
+  const board = boardFor(trip, profile, context);
+  return {
+    ok: true,
+    input: {
+      tripId,
+      basics: trip.basics,
+      profile,
+      region: context.region,
+      candidates: board.candidates,
+      selections: getSelections(tripId),
+      matrix: context.matrix,
+      ...(context.transit ? { transit: context.transit } : {}),
+      access: context.access,
+      hours: context.hours,
+      weather: context.weather,
+      ...(context.food ? { food: context.food } : {}),
+      foodSelections: getFoodSelections(tripId),
+      locks: getItineraryLocks(tripId),
+      now: new Date(),
+      baseId: context.baseId,
+      ...(context.basePortfolio ? { basePortfolio: context.basePortfolio } : {}),
+    },
+  };
 }
 
 export async function buildItinerary(tripId: string): Promise<BuildResult> {
@@ -156,6 +207,11 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
       // fitted" is what the meal rows then say.
       ...(context.food ? { food: context.food } : {}),
       foodSelections: getFoodSelections(tripId),
+      /*
+       * The traveller's pins. A rebuild that forgot them would break the one
+       * promise a lock makes — see the planner's own lock handling.
+       */
+      locks: getItineraryLocks(tripId),
       // Without this the staleness check is unreachable in production: it is
       // gated on `now` precisely so a test does not have to wait six hours, and
       // omitting it here meant a forecast served from cache could be planned

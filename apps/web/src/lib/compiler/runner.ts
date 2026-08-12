@@ -36,6 +36,8 @@ import {
   findCompiledRegion,
   getActiveJob,
   getIntent,
+  getJob,
+  heartbeat,
   isCancelRequested,
   markJobRunning,
   recordStage,
@@ -44,6 +46,10 @@ import {
   startJob,
   type StartJobResult,
 } from '../db/compiler-repository';
+import { HEARTBEAT_INTERVAL_MS, isAbandoned, isTerminal } from '@sidequest/core';
+import { dailySpendGate, recordDailySpend } from './daily-ceiling';
+import { compileDeadlineMs, modelCallCeiling } from './limits';
+import { fetchRefusalCounts, resetFetchRefusalCounts } from '../net/safe-fetch';
 import { priorityHintsFrom, type ReconciliationBasis } from '@sidequest/core';
 import {
   getProvisionalBoard,
@@ -107,7 +113,18 @@ export type StartOutcome =
  * is an error. Duplicate protection is the database's unique partial index, not
  * the disabled button — two tabs and a direct POST both go past the button.
  */
-export function startCompilation(trip: Trip, now = new Date()): StartOutcome {
+export function startCompilation(
+  trip: Trip,
+  now = new Date(),
+  /**
+   * Who is asking, when the request layer can honestly say. The daily ledger
+   * charges the deployment either way and charges this caller as well when it
+   * is given, so one visitor cannot drain the whole day's allowance. Null (the
+   * default) is the honest answer for an internal caller — the benchmark
+   * driver, a worker, a test — and leaves only the global ceiling in force.
+   */
+  caller: string | null = null,
+): StartOutcome {
   const intent = getIntent(trip.id);
   const scope = intent?.scope;
 
@@ -137,6 +154,28 @@ export function startCompilation(trip: Trip, now = new Date()): StartOutcome {
   if (existing) return { kind: 'already_compiled', compiledRegionId: existing.id };
 
   /**
+   * THE DAILY CEILINGS — THE DEPLOYMENT'S AND THIS CALLER'S — CONSULTED BEFORE
+   * ANY NEW LIVE JOB EXISTS.
+   *
+   * Only for the open stack — a fixture build costs nothing and must never be
+   * refused by a spend gate. Order matters twice here: the artifact check
+   * above stays in front because rendering what already exists is free and
+   * must always work, and the live-job adoption below is checked first for the
+   * same reason — pressing the button on a build that is already running
+   * spends nothing new, so a full ledger must not refuse it.
+   */
+  if (readiness.choice === 'open') {
+    const running = getActiveJob(trip.id);
+    if (running && !isAbandoned(running, now)) {
+      return { kind: 'already_running', jobId: running.id };
+    }
+    const gate = dailySpendGate(now, caller);
+    if (!gate.allowed) {
+      return { kind: 'blocked', code: 'budget_exhausted', message: gate.message };
+    }
+  }
+
+  /**
    * Sweep audit rows whose region is gone, on the rare path rather than the hot
    * one. `compiled_regions` cascades from `trips`; SQLite will not cascade into
    * a table with no foreign key, and adding one would let the audit trail block
@@ -152,6 +191,15 @@ export function startCompilation(trip: Trip, now = new Date()): StartOutcome {
   if (result.kind === 'already_running') {
     return { kind: 'already_running', jobId: result.job.id };
   }
+
+  /*
+   * Reserved on the ledger the moment the job exists, not when it finishes —
+   * the benchmark budget's rule, for the same reason: a ceiling discovered by
+   * crossing it is not a ceiling. Model calls are recorded separately, after
+   * the run, from what the transport actually counted.
+   */
+  if (readiness.choice === 'open') recordDailySpend('live_compilations', 1, now, caller);
+
   return { kind: 'started', jobId: result.job.id };
 }
 
@@ -170,6 +218,16 @@ export async function runCompilation(input: {
   jobId: string;
   providers?: CompilerProviders;
   now?: Date;
+  /**
+   * True only in the dedicated compile worker, where this process exists for
+   * exactly one job: a cancellation noticed by the pulse may then stop the
+   * process outright, which is the only way to stop mid-flight spending
+   * without a hook inside the compiler. In-process callers (the benchmark
+   * harness, tests, the inline fallback) must leave this off — exiting would
+   * take the web server with it — and keep the end-of-run cancellation check,
+   * which never adopts a cancelled build's artifact.
+   */
+  haltOnCancel?: boolean;
 }): Promise<CompileResult | null> {
   const now = input.now ?? new Date();
   const intent = getIntent(input.trip.id);
@@ -211,6 +269,45 @@ export async function runCompilation(input: {
     });
     return null;
   }
+
+  /**
+   * THE PULSE: PROOF OF LIFE ON A CLOCK, NOT ON STAGE BOUNDARIES.
+   *
+   * `heartbeat()` was exported with a rationale and had zero callers, so the
+   * only heartbeat writes were the stage-boundary ones inside `recordStage` —
+   * and real stages run past three minutes while the abandonment threshold
+   * read ninety seconds. Every healthy live build was therefore reported dead
+   * mid-stage, and the screen offered a second paid build while the first was
+   * still spending. The pulse writes every `HEARTBEAT_INTERVAL_MS` for as long
+   * as the job is genuinely running, so silence now means what the threshold
+   * assumes it means: the process is gone.
+   *
+   * The same clock is the cancellation watch. `requestCancel` flips the row
+   * terminal immediately; the pulse notices within one interval, records what
+   * the run had spent by then — the counters exist and money is money whether
+   * or not the build finished — and, in the dedicated worker, stops the
+   * process. Self-stopping on any terminal state, and `unref`ed, so it can
+   * neither beat for a corpse nor hold a process open.
+   */
+  const stopPulse = startCompilationPulse({
+    jobId: input.jobId,
+    haltOnCancel: input.haltOnCancel === true,
+    onCancelled: () => {
+      saveOperationalDiagnostics(input.jobId, {
+        counters: operationalCounters(live, evidence),
+      });
+    },
+  });
+
+  /*
+   * Refusal causes are counted at the safe-fetch layer, per process. Reset at
+   * the start of the run so the histogram stored with this job describes this
+   * job — exact in the dedicated worker, where one process is one compilation,
+   * and best-effort in the inline fallback, where a concurrent build would
+   * share the counter (the same approximation every in-process diagnostic
+   * already accepts there).
+   */
+  resetFetchRefusalCounts();
 
   /**
    * Decisions the compiler took to skip work, kept alongside the ones the shared
@@ -473,6 +570,19 @@ export async function runCompilation(input: {
       months,
       providers,
       now,
+      /*
+       * ONE NUMBER PER CEILING, AND THE PRINTED ONE IS THE OPERATIVE ONE.
+       *
+       * Without this the ledger printed the compiler's defaults — twenty model
+       * calls, a three-minute wall clock — while the transport enforced twelve
+       * and live builds observably ran eight minutes. The runner is the one
+       * place that knows both halves, so it hands the ledger the same figures
+       * the transport and the worker's deadline actually enforce.
+       */
+      budget: {
+        maxModelCalls: modelCallCeiling(),
+        maxDurationMs: compileDeadlineMs(),
+      },
       onStage: (record: StageRecord) => {
         lastStage = record.stage;
         // Written as it happens. A stage that has finished is a fact, and a
@@ -518,7 +628,17 @@ export async function runCompilation(input: {
     });
   } catch (error) {
     console.error('Compilation threw', { jobId: input.jobId });
+    stopPulse();
     observeTermination({ stage: lastStage, kind: 'failed', code: 'internal_error' });
+    /*
+     * The spend still happened. A throw is the one path that used to record
+     * nothing at all, and "we do not know what the failures cost" is the shape
+     * of an unbounded bill — same rule as the failure branch below.
+     */
+    saveOperationalDiagnostics(input.jobId, {
+      counters: operationalCounters(live, evidence),
+    });
+    if (live) recordDailySpend('model_calls', live.model.calls, new Date());
     failJob({
       jobId: input.jobId,
       code: 'internal_error',
@@ -547,7 +667,15 @@ export async function runCompilation(input: {
     compiler: result.operational,
   });
 
+  /*
+   * The day's model-call ledger, from what the transport actually counted.
+   * Written once, here, because every path below — cancelled, failed,
+   * committed, superseded — has already spent these calls.
+   */
+  if (live) recordDailySpend('model_calls', live.model.calls, new Date());
+
   if (isCancelRequested(input.jobId)) {
+    stopPulse();
     observeTermination({ stage: lastStage, kind: 'cancelled', code: 'cancelled_by_user' });
     failJob({
       jobId: input.jobId,
@@ -560,6 +688,7 @@ export async function runCompilation(input: {
   }
 
   if (!result.ok) {
+    stopPulse();
     observeTermination({ stage: lastStage, kind: 'failed', code: result.code });
     failJob({
       jobId: input.jobId,
@@ -611,13 +740,24 @@ export async function runCompilation(input: {
    */
   const region = withResolvedTimeZone(result.region, live);
 
-  completeJob({
+  const committed = completeJob({
     jobId: input.jobId,
     tripId: input.trip.id,
     region,
     state: result.partial ? 'partial' : 'ready',
     now: new Date(),
   });
+  stopPulse();
+
+  /*
+   * Somebody ended this job while the compiler was finishing — a cancellation
+   * the pulse had not yet seen, or an orphan reclaim that outlived a stall.
+   * The terminal verdict on the row is the traveller's truth and stands; the
+   * artifact was not adopted, so none of the adoption side effects below may
+   * run either. The spend was already recorded above, which is the half that
+   * must survive whatever happened to the job.
+   */
+  if (!committed) return result;
 
   /*
    * `StageObservation.compiledRegionId` is written here, and cannot be written
@@ -876,6 +1016,20 @@ function operationalCounters(
     counters.modelOutputTokens = live.model.outputTokens;
     counters.modelCacheReadTokens = live.model.cacheReadTokens;
     counters.modelCostMicroUsd = Math.round(live.model.estimatedCostUsd * 1_000_000);
+    /*
+     * `pagesRejected`, decomposed by cause. The one number answered "how many"
+     * and an operator triaging a thin region needs "why": robots refusals are
+     * politeness working, policy refusals are the SSRF guard working, and a
+     * pile of transient ones is a publisher having a bad day. Counted at the
+     * safe-fetch layer — the only place the cause is known — and carried here
+     * as counts alone: no URL, no hostname, no page body.
+     */
+    const refusals = fetchRefusalCounts();
+    counters.pagesRejectedRobots = refusals.robots;
+    counters.pagesRejectedPolicy = refusals.policy;
+    counters.pagesRejectedSize = refusals.size;
+    counters.pagesRejectedContentType = refusals.content_type;
+    counters.pagesRejectedTransient = refusals.transient;
   }
   if (evidence) {
     const share = reuseShare(evidence.metrics);
@@ -933,6 +1087,73 @@ export function compiledRegionForScope(tripId: string, scope: GeographicScope) {
 
 export function activeJobFor(tripId: string) {
   return getActiveJob(tripId);
+}
+
+/**
+ * The heartbeat-and-cancellation pulse for one running compilation.
+ *
+ * Exported for tests; production callers go through `runCompilation`, which
+ * installs it around the compile call. Three behaviours, in the order the
+ * ticker applies them:
+ *
+ * 1. **A terminal job stops the pulse.** Finished, failed, cancelled or
+ *    reclaimed — there is nothing left to prove alive, and a heartbeat written
+ *    over a reclaimed row would resurrect exactly the zombie the reclaim ended.
+ * 2. **A cancelled job additionally records what was spent and, in the
+ *    dedicated worker, stops the process.** `requestCancel` has already
+ *    flipped the row and closed its stages; the worker's only remaining duty
+ *    is to stop costing money, and `process.exit` is the one lever that works
+ *    without a hook inside the compiler. The terminal-write guards make this
+ *    safe: whatever the dying process had in flight can no longer change the
+ *    row.
+ * 3. **Otherwise, beat.**
+ *
+ * `unref`ed, so a pulse can never hold a process open; self-stopping, so a
+ * caller that forgets to stop it leaks one tick, not a timer.
+ */
+export function startCompilationPulse(input: {
+  jobId: string;
+  haltOnCancel: boolean;
+  onCancelled?: () => void;
+  intervalMs?: number;
+}): () => void {
+  let cancelledHandled = false;
+  const timer: ReturnType<typeof setInterval> = setInterval(() => {
+    try {
+      const job = getJob(input.jobId);
+      if (!job || isTerminal(job.state)) {
+        clearInterval(timer);
+        if (job?.state === 'cancelled' && !cancelledHandled) {
+          cancelledHandled = true;
+          try {
+            input.onCancelled?.();
+          } catch (error) {
+            console.error('Could not record a cancelled build’s spend', {
+              jobId: input.jobId,
+              error,
+            });
+          }
+          if (input.haltOnCancel) {
+            // One job per worker process, by design. The row is already
+            // terminal and every write above is synchronous, so nothing is
+            // lost by leaving now — only further spending is.
+            process.exit(0);
+          }
+        }
+        return;
+      }
+      heartbeat(input.jobId, new Date());
+    } catch (error) {
+      // A missed beat is recoverable for HEARTBEAT_TIMEOUT_MS; a pulse that
+      // threw out of a timer would take the worker down mid-write instead.
+      console.error('Heartbeat pulse could not reach the job row', {
+        jobId: input.jobId,
+        error,
+      });
+    }
+  }, input.intervalMs ?? HEARTBEAT_INTERVAL_MS);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 /**

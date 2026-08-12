@@ -63,17 +63,36 @@ test('a card shows why we trust it, and what nobody publishes', async ({ page })
   await compile(page);
   await reachBoard(page);
 
-  const panel = page.getByText(/Why we trust this/).first();
-  await expect(panel).toBeVisible();
+  /*
+    ONE DISCLOSURE PER CARD, NOT TWO.
+
+    The audit trail used to be its own `<details>` on the outside of every card,
+    headed "Why we trust this (0 of 6 checked)" — a fraction nobody outside the
+    team can act on, attached to a promise of trust it withdraws in the same
+    breath, repeated down all twenty-four cards of a live board. It now sits
+    inside the card's one disclosure and is headed for what is in it.
+
+    The card is found by the sentence this test is about, which is in the
+    document either way — so this cannot silently pick a card that has no
+    evidence and then assert nothing.
+  */
+  const card = page
+    .getByRole('article')
+    .filter({ hasText: 'Nobody we could read publishes' })
+    .first();
+  const details = card.locator('details', { hasText: 'More about this place' }).first();
 
   // Collapsed by default: the audit trail is available, not imposed.
-  const details = page.locator('details', { hasText: 'Why we trust this' }).first();
   expect(await details.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(false);
 
-  await panel.click();
+  await card.getByText('More about this place').click();
   await expect(details).toHaveAttribute('open', '');
 
-  // The honest half is inside, in the same panel as the citations.
+  // Named for what it holds, and the honest half is in the same panel as the
+  // citations.
+  await expect(
+    details.getByText(/What we checked, and where it came from|Where this came from/),
+  ).toBeVisible();
   await expect(details.getByText(/Nobody we could read publishes/)).toBeVisible();
 });
 
@@ -84,7 +103,16 @@ test('a booking requirement is visible before the traveller commits to the stop'
   await compile(page);
   await reachBoard(page);
 
-  await expect(page.getByText(/Book ahead|Timed entry|Permit needed/).first()).toBeVisible();
+  /*
+   * The four labels the product actually uses, enumerated from
+   * `OPERATING_BADGE_LABELS` and `ACCESS_BADGE_LABELS` rather than from memory.
+   * "Book ahead" was never one of them — the reservation badge reads "Booking
+   * needed" — so this alternation could only ever have matched on its other two
+   * arms, and matched on neither once the permit label became "Entry permit".
+   */
+  await expect(
+    page.getByText(/Booking needed|Timed entry|Entry permit|Permit needed/).first(),
+  ).toBeVisible();
 });
 
 test('the itinerary carries a preparation list built from what the plan schedules', async ({
@@ -144,10 +172,16 @@ test('the evidence panel is reachable and readable by keyboard', async ({ page }
   await compile(page);
   await reachBoard(page);
 
-  const summary = page.locator('summary', { hasText: 'Why we trust this' }).first();
+  const card = page
+    .getByRole('article')
+    .filter({ hasText: 'Nobody we could read publishes' })
+    .first();
+  const summary = card.locator('summary', { hasText: 'More about this place' }).first();
   await summary.focus();
   await expect(summary).toBeFocused();
   await page.keyboard.press('Enter');
-  const details = page.locator('details', { hasText: 'Why we trust this' }).first();
+  const details = card.locator('details', { hasText: 'More about this place' }).first();
   await expect(details).toHaveAttribute('open', '');
+  // Opened by the keyboard, and the evidence is genuinely on screen behind it.
+  await expect(details.getByText(/Nobody we could read publishes/)).toBeVisible();
 });

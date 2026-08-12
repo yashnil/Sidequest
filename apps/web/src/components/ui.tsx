@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   displayNameOf,
+  isEnglish,
   localNameOf,
   type DisplayName,
   type FitBand,
@@ -171,8 +172,12 @@ const BAND_TONE: Record<FitBand, BadgeTone> = {
  * got six repetitions of "Strong fit" with nothing ordering them. `role="img"`
  * with a count restores the comparison without reading a gradient aloud.
  *
- * The visible key for what the dashes mean is `FitMeterLegend`, rendered once per
- * board rather than once per card.
+ * The key for what the dashes mean is the badge beside them. There used to be a
+ * separate `FitMeterLegend` under the board explaining the scale; the rebuilt
+ * board moved the calibrated label onto the meter itself, which says the same
+ * thing in the place the reader is already looking, and left the legend with no
+ * call site anywhere. §37: it is deleted rather than left exported, because an
+ * unrendered component is a design decision nobody can see.
  */
 export function FitMeter({ band, label, meter }: { band: FitBand; label: string; meter: number }) {
   return (
@@ -198,48 +203,6 @@ export function FitMeter({ band, label, meter }: { band: FitBand; label: string;
       </span>
       <Badge tone={BAND_TONE[band]}>{label}</Badge>
     </span>
-  );
-}
-
-/**
- * WHAT THE FIVE DASHES MEAN, SAID ONCE.
- *
- * The meter shipped without a key. Five dashes with a word beside them look like
- * a rating out of five, and nothing on the board said what the five were of —
- * popularity, our confidence, how good the place is — so the one control that
- * carries the product's whole argument was decorative to a first-time reader.
- *
- * Once per board rather than once per card: seventeen copies of a legend is the
- * same mistake as seventeen copies of a weather caveat.
- */
-export function FitMeterLegend({ className }: { className?: string }) {
-  return (
-    /*
-      Each swatch and its meaning are one unbreakable unit.
-
-      Laid out as five separate flex children, the line wrapped between a swatch
-      and the phrase it explains — so the legend read as two rows of dashes and
-      two orphaned sentences, which is worse than no legend at all.
-    */
-    <p className={cx('flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted', className)}>
-      <span className="inline-flex items-center gap-2">
-        <span aria-hidden="true" className="flex gap-[3px]">
-          {[1, 2, 3, 4, 5].map((step) => (
-            <span key={step} className="h-1.5 w-4 rounded-full bg-pine" />
-          ))}
-        </span>
-        <span>built for the trip you described</span>
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <span aria-hidden="true" className="flex gap-[3px]">
-          <span className="h-1.5 w-4 rounded-full bg-pine" />
-          {[2, 3, 4, 5].map((step) => (
-            <span key={step} className="h-1.5 w-4 rounded-full bg-rule" />
-          ))}
-        </span>
-        <span>here for completeness — never a popularity ranking</span>
-      </span>
-    </p>
   );
 }
 
@@ -310,22 +273,156 @@ function plateGradient(category: PlaceCategory): string {
   return `linear-gradient(145deg, hsl(${hue} 22% 40%), hsl(${hue} 18% 62%))`;
 }
 
+/**
+ * WHAT MAKES ONE PLATE DIFFER FROM THE NEXT — AND WHY IT IS NOT DECORATION.
+ *
+ * A fresh designer looked at a compiled Tokyo board and reported four
+ * consecutive cards carrying "the same flat green gradient with the same white
+ * squiggle". They were right, and the cause was that the plate encoded exactly
+ * one fact — the category — so eleven easy walks were eleven identical objects.
+ *
+ * The obvious repair is to vary the plate by a hash of the id, and it is the
+ * wrong one: this file already argues, at `PLATE_HUE`, that the eye reads a
+ * visible difference as a meaningful one, so a difference that means nothing is
+ * a claim the board cannot support. The coordinate-derived graphic
+ * (`imageryFallbackFor`) has the same problem from the other end — its horizon
+ * and drift come off *global* latitude and longitude, which within one city vary
+ * by four ten-thousandths of the frame.
+ *
+ * So the plate draws three facts the card is already asking the traveller to
+ * decide on, and nothing else:
+ *
+ *   - **effort** sets the terrain. A `none` place is a flat horizon; a
+ *     `strenuous` one is a steep ridge. This is the axis somebody scanning a
+ *     board of walks is actually sorting by.
+ *   - **how long you would be there** sets how many crests there are, so a
+ *     forty-minute stop and a half-day are different shapes.
+ *   - **how known it is** sets the surface: a well-trodden place is drawn solid,
+ *     a quiet find is drawn as a broken line — the "hidden gem" fact, rendered
+ *     rather than only badged.
+ *
+ * Hue is still the category and only the category. Same place, same plate, every
+ * render; two places that differ on any of the three look different.
+ */
+export interface PlateSignature {
+  intensity: 'none' | 'easy' | 'moderate' | 'strenuous';
+  /** How long a visit runs, in minutes. Sets the number of crests. */
+  minutes: number;
+  /** 0–1. Above 0.6 the line is drawn broken rather than solid. */
+  hiddenGemScore: number;
+}
+
+/** Ridge height per effort band, as a fraction of the frame. */
+const PLATE_RELIEF: Record<PlateSignature['intensity'], number> = {
+  none: 0.06,
+  easy: 0.16,
+  moderate: 0.3,
+  strenuous: 0.46,
+};
+
+/**
+ * The ridge, as an SVG path across a 100×60 frame.
+ *
+ * Deterministic by construction rather than by seeded randomness: the crest
+ * count and the height both come off the signature, so the drawing is a function
+ * of the facts and re-deriving it anywhere would produce the same line.
+ */
+function ridgePath(signature: PlateSignature, drop = 0): string {
+  const relief = PLATE_RELIEF[signature.intensity] * 60;
+  // Two crests for a short stop, up to five for a long one. `minutes` is the
+  // visit length the card prints, so the shape and the number agree.
+  const crests = Math.max(2, Math.min(5, Math.round(signature.minutes / 60) + 1));
+  const step = 100 / crests;
+  /*
+   * The skyline sits high enough that the ground below it is the larger part of
+   * the frame. A ridge drawn near the bottom edge leaves most of a card's plate
+   * as flat colour, which on the full-width lead card is a hundred and eighty
+   * pixels of nothing — the emptiness a first screenshot of this showed.
+   */
+  const base = 26 - relief + drop;
+  let path = `M0 ${(base + relief).toFixed(1)}`;
+  for (let index = 0; index < crests; index += 1) {
+    const peak = base + (index % 2 === 0 ? 0 : relief * 0.45);
+    path += ` Q${(step * (index + 0.5)).toFixed(1)} ${peak.toFixed(1)} ${(step * (index + 1)).toFixed(1)} ${(base + relief * (index % 2 === 0 ? 1 : 0.7)).toFixed(1)}`;
+  }
+  return path;
+}
+
 export function PlacePlate({
   category,
   className,
+  signature,
 }: {
   category: PlaceCategory;
   className?: string;
+  /**
+   * Optional, because a caller that has only a category — a legend, a
+   * placeholder — should not have to invent effort and duration to draw one.
+   * Absent, the plate is the flat category mark it has always been.
+   */
+  signature?: PlateSignature;
 }) {
+  const hue = PLATE_HUE[category];
   return (
     <div
       className={cx('relative overflow-hidden', className)}
       style={{ background: plateGradient(category) }}
       aria-hidden="true"
     >
+      {signature ? (
+        <svg
+          viewBox="0 0 100 60"
+          className="absolute inset-0 h-full w-full"
+          preserveAspectRatio="none"
+        >
+          {/*
+            The ground under the ridge, so the line reads as terrain rather than
+            as a graph. One hue, two lightnesses — the same restraint
+            `FallbackGraphic` states.
+          */}
+          {/*
+            A second ridge behind the first, at a fixed offset. Two lines read as
+            depth rather than as a chart, and the offset is a constant so the
+            *difference* between two plates still comes only from the facts.
+          */}
+          <path
+            d={`${ridgePath(signature, 9)} L100 60 L0 60 Z`}
+            fill={`hsl(${hue} 24% 46%)`}
+            opacity={0.35}
+          />
+          <path
+            d={`${ridgePath(signature)} L100 60 L0 60 Z`}
+            fill={`hsl(${hue} 26% 34%)`}
+            opacity={0.45}
+          />
+          <path
+            d={ridgePath(signature)}
+            fill="none"
+            stroke="#fff"
+            strokeWidth={1.2}
+            strokeLinecap="round"
+            opacity={0.55}
+            /*
+              A broken line for a quiet find. Redundant with the "Quiet find"
+              chip on purpose: a chip is read once, a texture is read while
+              scanning, and this is the surface somebody scans.
+            */
+            {...(signature.hiddenGemScore >= 0.6 ? { strokeDasharray: '5 4' } : {})}
+          />
+        </svg>
+      ) : null}
+
+      {/*
+        The category glyph, small and cornered once there is terrain behind it.
+        Centred and large it *was* the plate, which is how eleven walks came to
+        look like one walk.
+      */}
       <svg
         viewBox="0 0 24 24"
-        className="absolute inset-0 h-full w-full opacity-30"
+        className={cx(
+          'absolute',
+          signature ? 'top-2 left-2 h-8 w-8 opacity-45' : 'inset-0 h-full w-full opacity-30',
+        )}
         fill="none"
         stroke="#fff"
         strokeWidth="0.9"
@@ -589,10 +686,28 @@ export function PlaceName({
   const display = displayNameOf(entity);
   const local = showLocal ? localNameOf(entity) : undefined;
   const language = entity.names?.localLanguage;
+  /**
+   * THE NAME THAT LEADS IS NOT ALWAYS ENGLISH, AND IT WAS NEVER TAGGED.
+   *
+   * The local name beside it has carried `lang` since the naming work landed.
+   * The *display* name never did — and it is not always English: when nothing
+   * publishes an English alternate, `displayNameOf` correctly falls back to the
+   * native form, so `東京都` and `Бишкек шаары` led the page inside a document
+   * declaring `lang="en"`. WCAG 3.1.2 is about exactly that: a screen reader
+   * reads it with English phonemes and produces noise.
+   *
+   * Tagged only when a source actually said which language it is, and only when
+   * that is not a variety of English — a redundant `lang="en"` inside an
+   * English document is noise of a different kind.
+   */
+  const displayLanguage =
+    entity.names?.displayLanguage && !isEnglish(entity.names.displayLanguage)
+      ? entity.names.displayLanguage
+      : undefined;
 
   return (
     <span className={className}>
-      {display}
+      <span {...(displayLanguage ? { lang: displayLanguage } : {})}>{display}</span>
       {local ? (
         <span className="ml-1.5 text-ink-faint" {...(language ? { lang: language } : {})}>
           {local}

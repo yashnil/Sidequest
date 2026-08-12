@@ -297,14 +297,29 @@ function parkingSummary(
   days: readonly ItineraryDay[],
   primary: TransportMode,
 ): string {
+  /**
+   * Which months this trip is actually in, for the one sentence that mentions
+   * a season. "The one thing that actually spoils a summer morning" was
+   * printed on a November trip — template copy claiming a season the plan's
+   * own dates contradict — so the summer clause is only spoken in summer.
+   * Northern-hemisphere months, which is where every seasonal claim in the
+   * access data is authored; a trip that is not in them gets the plain fact.
+   */
+  const months = new Set(days.map((day) => Number(day.date.slice(5, 7))));
+  const inSummer = [6, 7, 8].some((month) => months.has(month));
+
   if (primary !== 'drive') {
-    return 'Nothing on this plan needs a parking space, which removes the one thing that actually spoils a summer morning here.';
+    return inSummer
+      ? 'Nothing on this plan needs a parking space, which removes the one thing that actually spoils a summer morning here.'
+      : 'Nothing on this plan needs a parking space.';
   }
   const hard = dataset.points.filter((point) => point.parking.difficulty === 'hard');
   const notes = [...new Set(days.flatMap((day) => day.transport.parkingNotes))];
   if (notes.length > 0) return notes.join(' ');
   if (hard.length > 0) {
-    return 'Trailhead and gateway lots fill by mid-morning in summer. An early start is worth more than a clever route.';
+    return inSummer
+      ? 'Trailhead and gateway lots fill by mid-morning in summer. An early start is worth more than a clever route.'
+      : 'Some lots here fill early in high season. Outside it, arriving mid-morning is usually fine — an early start still buys the quiet.';
   }
   return 'Parking is straightforward at everything scheduled here.';
 }
@@ -369,7 +384,15 @@ function noCarConsequence(
   } reaches.`;
 }
 
+/**
+ * "3 hr 20 min", never "3.3 hours". The planner's own summary line switched to
+ * hours-and-minutes for exactly this reason and this function was left behind,
+ * so the transport panel was the last surface speaking in decimal hours.
+ */
 function formatHours(minutes: number): string {
-  const hours = Math.round(minutes / 6) / 10;
-  return `${hours} hours`;
+  const whole = Math.round(minutes);
+  if (whole < 60) return `${whole} min`;
+  const hours = Math.floor(whole / 60);
+  const rest = whole % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
 }

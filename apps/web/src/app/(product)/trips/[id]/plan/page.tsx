@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import {
   candidateById,
@@ -5,11 +6,13 @@ import {
   decideInterpretation,
   displayStages,
   identityAmbiguityReasons,
+  isAbandoned,
   settleMustDoCoverage,
   unansweredRequired,
   visibleQuestions,
   type ClarificationQuestion,
 } from '@sidequest/core';
+import { formatDayRange } from '@/lib/format/dates';
 import { scopeFitsTrip } from '@sidequest/compiler';
 import { PlanFlow, type PlanStep } from '@/components/PlanFlow';
 import { TripContextBar } from '@/components/TripContextBar';
@@ -21,6 +24,35 @@ import type { CompilationSnapshot } from './actions';
 import { COMPILATION_ERROR_COPY, isRetryable } from '@sidequest/core';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The tab says which trip, not what the product is.
+ *
+ * Every route in the product inherited one marketing title from the root
+ * layout, so six open trips were six identical tabs and a screen-reader user
+ * heard the same sentence on arrival at every screen. Read from the stored trip
+ * — the same row the page renders — so it cannot claim a destination the page
+ * does not show.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const trip = getTrip(id);
+  return {
+    /*
+     * The destination first, like every other trip route.
+     *
+     * A tab strip truncates from the right, so the leading words are the only
+     * ones a traveller with six trips open can read. "Planning Mammoth Lakes"
+     * and "Planning Mammoth Lakes area" truncate to the same thing; the
+     * destination does not.
+     */
+    title: trip ? `${trip.basics.destinationInput} — Planning — Sidequest` : 'Planning — Sidequest',
+  };
+}
 
 /**
  * The step is derived from what is stored, never from the URL.
@@ -68,12 +100,37 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
     decisions: intent.composer?.mustDoDecisions ?? [],
   });
 
+  /**
+   * A BUILD WHOSE PROCESS IS GONE IS NOT RUNNING, ON THE FIRST PAINT TOO.
+   *
+   * The poll has known this since Wave A — `compilationSnapshotAction` reclaims
+   * an orphan and reports `failed`. The *server render* did not, and it is what
+   * a traveller sees first. So a job whose heartbeat had been cold for eight
+   * days painted "Working · 12458m 52s" with four phase cards breathing at it,
+   * and the poll never corrected it because the polling predicate only fires
+   * for `queued` and `running` — a row left at `partial` never gets a second
+   * look. The screen could not move.
+   *
+   * Read, not written: this render must not mutate a job row, and the reclaim
+   * in the action already owns the write.
+   */
+  const abandoned = job ? isAbandoned(job, new Date()) : false;
+
   const snapshot: CompilationSnapshot = job
     ? {
-        state: job.state,
+        state: abandoned ? 'failed' : job.state,
         stages: displayStages(job),
-        ...(job.errorCode ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] } : {}),
-        retryable: job.errorCode ? isRetryable(job.errorCode) : job.state === 'failed',
+        ...(job.errorCode
+          ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] }
+          : abandoned
+            ? {
+                errorMessage:
+                  'This build stopped before it finished — the machine it was running on went away. Nothing was lost; starting it again picks up everything we had already read.',
+              }
+            : {}),
+        retryable: job.errorCode
+          ? isRetryable(job.errorCode)
+          : abandoned || job.state === 'failed',
         ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
         /*
          * So the elapsed clock is right on the first paint rather than blank
@@ -147,9 +204,20 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
           when:
             dateMode === 'month' || dateMode === 'season' || dateMode === 'undecided'
               ? 'Dates not fixed'
-              : `${trip.basics.startDate} → ${trip.basics.endDate}`,
+              : // `2026-10-12 → 2026-10-18` was the database's format on the
+                // strip that follows a traveller through the whole journey.
+                formatDayRange(trip.basics.startDate, trip.basics.endDate),
           nights,
-          stage: step === 'ready' ? 'Board' : step === 'compiling' ? 'Building' : 'Planning',
+          stage:
+            step === 'ready'
+              ? 'Researched'
+              : step === 'compiling'
+                ? // "Building" over a build that stopped days ago is the same
+                  // present tense the progress card was corrected for.
+                  abandoned || (job && job.state !== 'queued' && job.state !== 'running')
+                  ? 'Stopped'
+                  : 'Building'
+                : 'Planning',
         }}
       />
     <PlanFlow
@@ -246,6 +314,29 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
        * correctly as a one-base trip — the shape those regions actually had.
        */
       basePortfolio={compiled?.basePortfolio ?? null}
+      /**
+       * WHAT THE ARTIFACT ITSELF MEASURED, SO A STORED GRADE CAN BE CHECKED.
+       *
+       * A live artifact rendered "PUBLIC TRANSPORT · Good · Measured road times
+       * across 26 points" three rows under "DRIVING TIMES · Not relevant here".
+       * The compiler that wrote those rows has been repaired, but a coverage
+       * report is stored *inside* the artifact and no repair reaches backwards
+       * — only a paid rebuild would.
+       *
+       * These two facts are the artifact's own and cannot be faked: which
+       * network the matrix measured, and how many transit journeys a timetable
+       * provider actually answered. `reconcileRouting` uses them to refuse any
+       * routing grade the artifact cannot support. See `lib/format/coverage`.
+       */
+      routingTruth={
+        compiled
+          ? {
+              matrixMode: compiled.travelTimes.mode,
+              transitMeasured: compiled.transitEvidence?.measured ?? 0,
+              transitRequested: compiled.transitEvidence?.requested ?? 0,
+            }
+          : null
+      }
       routingDiagnostics={compiled?.routingDiagnostics ?? null}
       workPlan={workPlan ? workPlan.entries.map((entry) => ({ ...entry })) : null}
       providerMessage={readiness.message}

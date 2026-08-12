@@ -557,10 +557,44 @@ describe('provider outage', () => {
 // ---------------------------------------------------------------------------
 
 describe('the deployment switch', () => {
-  it('is off unless a deployment asks for it, and follows the compiler when unset', () => {
-    // No environment variables are set in this suite, and the whole test tree
-    // runs offline, so the default has to be the one that reaches nothing.
-    expect(imageryMode()).toBe('off');
+  /**
+   * KEYLESS IMAGERY IS ON, AND A FIXTURE STACK STILL REACHES NOTHING.
+   *
+   * This assertion used to read `'off'`, and the default it was guarding is what
+   * produced a shipped product with no photographs anywhere: twelve live
+   * compilations, zero rows in `destination_images`, every card a grey plate.
+   * The provider is keyless and every file passes a licence allow-list before it
+   * is stored, so a real deployment has nothing to opt into.
+   *
+   * The half that must never regress is the second one. The browser suite runs
+   * with `SIDEQUEST_COMPILER_PROVIDER=fixture`, and if that stopped implying
+   * fixture imagery the suite would start making live requests to a volunteer
+   * service on every board render — which is both an etiquette breach and a
+   * source of flake nobody would attribute correctly.
+   */
+  it('is on where a deployment is real, and follows the compiler onto fixtures', () => {
+    const compiler = process.env.SIDEQUEST_COMPILER_PROVIDER;
+    try {
+      delete process.env.SIDEQUEST_COMPILER_PROVIDER;
+      expect(imageryMode()).toBe('wikimedia');
+
+      process.env.SIDEQUEST_COMPILER_PROVIDER = 'fixture';
+      expect(imageryMode()).toBe('fixture');
+    } finally {
+      if (compiler === undefined) delete process.env.SIDEQUEST_COMPILER_PROVIDER;
+      else process.env.SIDEQUEST_COMPILER_PROVIDER = compiler;
+    }
+  });
+
+  it('still lets a deployment turn imagery off outright', () => {
+    const explicit = process.env.SIDEQUEST_IMAGERY_PROVIDER;
+    try {
+      process.env.SIDEQUEST_IMAGERY_PROVIDER = 'off';
+      expect(imageryMode()).toBe('off');
+    } finally {
+      if (explicit === undefined) delete process.env.SIDEQUEST_IMAGERY_PROVIDER;
+      else process.env.SIDEQUEST_IMAGERY_PROVIDER = explicit;
+    }
   });
 
   it('puts fixture images through the same gate as live ones', () => {

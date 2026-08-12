@@ -183,6 +183,53 @@ export class BudgetLedger {
     return nowMs - this.startedAtMs > this.limits.maxDurationMs;
   }
 
+  /**
+   * The wall clock, enforced the only way this ledger can enforce anything:
+   * by taking the remaining money away.
+   *
+   * `outOfTime` existed with zero callers, so `maxDurationMs` was a number the
+   * diagnostics printed and nothing obeyed — live builds ran to eight and
+   * eleven minutes against a configured three, and the only thing that ever
+   * stopped one was somebody noticing. Calling this at a stage boundary makes
+   * the ceiling real without restructuring the pipeline, because the pipeline
+   * already knows how to run out: an exhausted counter stops its stage, marks
+   * the region `partial` and names itself in the coverage report.
+   *
+   * **Only the counters that buy provider work are zeroed**, and deliberately
+   * not the structural ones. A build that has run long has been *spending* —
+   * on pages, searches, extractions and model calls — and those stages all
+   * degrade to "nobody publishes this", which is an outcome the artifact
+   * already expresses. Zeroing the route matrix or the weather locations
+   * instead would produce a region that cannot be planned at all, which is a
+   * worse answer than a late one.
+   *
+   * Returns true the first time it fires, so a caller can record the gap once.
+   * Idempotent afterwards.
+   */
+  enforceTimeCeiling(nowMs: number): boolean {
+    if (!this.outOfTime(nowMs)) return false;
+    if (this.exhaustedCounters.has('maxDurationMs')) return false;
+    this.exhaustedCounters.add('maxDurationMs');
+    const purchased: BudgetCounter[] = [
+      'maxResearchSubjects',
+      'maxPagesFetched',
+      'maxSourceSearches',
+      'maxExtractionCalls',
+      'maxRecoveryQueries',
+      'maxModelCalls',
+    ];
+    for (const counter of purchased) {
+      /*
+       * Set to the limit rather than marked exhausted: `remaining()` reads
+       * `limit − spent`, and a counter that reports itself exhausted without
+       * having been spent would tell the coverage report a build bought forty
+       * pages it never asked for.
+       */
+      this.consumed.set(counter, Math.max(this.spent(counter), this.limits[counter]));
+    }
+    return true;
+  }
+
   exhausted(): BudgetCounter[] {
     return [...this.exhaustedCounters].sort();
   }

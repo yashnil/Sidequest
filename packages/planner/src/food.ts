@@ -1,6 +1,9 @@
 import {
   assessDietary,
   earliestMealStart,
+  foodDistinctiveness,
+  foodNameCounts,
+  mealCharacterOf,
   needsExplicitEvidence,
   PRICE_BAND_ORDER,
   venueCanProvision,
@@ -399,6 +402,13 @@ function rankVenues(input: RankInput): string[] {
   const { slot, venues, hours, profile, matrix, nodes, wanted, usedVenues, allowSpecial } = input;
   const needs = profile.food.dietaryNeeds;
   const everyday = PRICE_BAND_ORDER[profile.food.everydayPriceBand];
+  /*
+   * How particular each venue is to this region, over the pool once. Compiled
+   * venues arrive indistinguishable — same band, same inferred price evidence,
+   * same unknown hours — so without this a franchise counter and a place people
+   * queue for scored identically, and a live trip picked the franchise.
+   */
+  const distinctiveness = foodNameCounts(venues);
 
   const scored: { id: string; score: number; detour: number }[] = [];
 
@@ -445,6 +455,14 @@ function rankVenues(input: RankInput): string[] {
     if (!allowSpecial && band === everyday) score += 30;
     if (!allowSpecial && band < everyday) score += 10;
     if (venue.localSpecialty) score += 45;
+    /*
+     * Weighted below the traveller's own pick and below the special-meal quota,
+     * and above route efficiency: two minutes closer is not worth eating at a
+     * chain in a place somebody flew to. Bounded at 60 so it can never overturn
+     * a dietary requirement or a budget rule, both of which are gates rather
+     * than preferences.
+     */
+    score += Math.round(foodDistinctiveness(venue, distinctiveness).score * 60);
     if (usedVenues.has(venue.id)) score -= 400;
     if (venue.hours.hoursConfidence !== 'published') score -= 25;
     if (venue.reservation.requirement === 'required') score -= 60;
@@ -787,6 +805,13 @@ function evaluate(
     stopKind,
     venueId: venue.id,
     venueName: venue.name,
+    /*
+     * Carried so the validator can tell the block apart from the service. The
+     * block starts `walk` minutes before the meal does, and comparing that
+     * earlier minute against the opening time convicted a venue of being shut
+     * for a walk that happened outside it.
+     */
+    walkMinutesFromRouting: walk,
     serviceType: venue.serviceType,
     ...(venue.cuisines.length > 0 ? { cuisineLabel: venue.cuisines.join(', ') } : {}),
     priceBand: venue.priceBand,
@@ -806,6 +831,29 @@ function evaluate(
     fromUserChoice: request.plan.userChosen.has(venue.id),
     alternatives: [],
   };
+
+  /*
+   * WHICH OF §15'S SEVEN KINDS OF FOOD STOP THIS TURNED OUT TO BE.
+   *
+   * Derived from the decision that was just made rather than declared beside
+   * it, so the two cannot drift: every input is a field on `food` above. It is
+   * written here because this is the only place a food stop becomes real.
+   *
+   * The distinction it buys is `destination_meal` against `quick_fuel`. A plan
+   * that cannot make it prints "Lunch" over both a sit-down that is the point of
+   * the afternoon and a fifteen-minute bakery on the way to a trailhead, and a
+   * traveller reading it has no way to tell which one they may drop.
+   */
+  food.mealCharacter = mealCharacterOf({
+    slot: food.slot,
+    stopKind: food.stopKind,
+    routeContext: food.routeContext,
+    isSpecialMeal: food.isSpecialMeal,
+    serviceType: venue.serviceType,
+    priceBand: venue.priceBand,
+    hasLocalSpecialty: venue.localSpecialty !== undefined,
+    everydayPriceBand: request.profile.food.everydayPriceBand,
+  });
 
   return {
     venue,

@@ -398,39 +398,73 @@ function classifyDetour(
 }
 
 /**
- * The worth-the-detour verdict combines distance with fit: a two-hour drive is
- * "worth it" for something you will love and "too far" for something you will
- * not, and saying so is more useful than reporting the distance alone.
+ * EVERY VERDICT A PLACE WE CAN ACTUALLY GET TO MAY CARRY, WEAKEST CLAIM FIRST.
+ *
+ * The order is the invariant, not a presentation detail. Fit chooses a rung;
+ * distance may only ever push a candidate *down* the list, never off it and
+ * never onto it. That is what stops "how far is it" from being answered out of
+ * "how much would you like it".
+ */
+const REACHABLE_VERDICTS = [
+  'only_if_nearby',
+  'worth_it_if_you_like_this',
+  'definitely_worth_it',
+] as const;
+
+/** How keen we are about a place before the journey is charged against it. */
+const FIT_ENTHUSIASM: Record<'top_pick' | 'strong' | 'good' | 'optional', number> = {
+  top_pick: 3,
+  strong: 2,
+  good: 1,
+  optional: 0,
+};
+
+/**
+ * HOW FAR IT IS, SETTLED BEFORE HOW MUCH YOU WOULD LIKE IT AND NEVER OUT OF IT.
+ *
+ * The version this replaces read the fit band first and let it pick the
+ * *distance* sentence. One identical sixty-nine-minute journey therefore read
+ * "worth it if this is your thing" at band `strong` and "too far for this trip"
+ * at band `good`; and a journey the trip genuinely cannot make read "worth it if
+ * this is your thing" whenever the place happened to be a top pick. Those are
+ * the same error in both directions — a claim about the road answered from the
+ * traveller's taste — and each one put the board at odds with the plan built
+ * from the very same numbers:
+ *
+ *   - Auto-pick accepts exactly one stop past the stated tolerance and says so
+ *     ("one pick sits past your usual detour limit because it earned the extra
+ *     journey"). On the remote-road world it took a `stretch` reserve whose own
+ *     card read "Too far for this trip": one screen, one place, two answers.
+ *   - The mirror. `too_far` is the class auto-pick refuses outright and the
+ *     scheduler's daily caps refuse again, so "Worth it if this is your thing"
+ *     on one is a recommendation nothing downstream will ever honour — a board
+ *     that promises and a planner that takes it back.
+ *
+ * So reachability is decided from `detourClass` alone: at the base, unverified,
+ * past what this trip can make, or reachable. Only inside the reachable case
+ * does fit choose the wording, and a `stretch` costs one rung on top of it — at
+ * equal fit a longer journey is never sold harder than a shorter one.
+ *
+ * `skip_for_your_style` stays a fit verdict at both weak bands, ahead of
+ * distance, because it is the one label here that makes no claim about a
+ * journey: a place the traveller should not go to needs no travel advice.
  */
 export function worthDetourLabel(
   detourClass: DetourClass,
   fitBand: 'top_pick' | 'strong' | 'good' | 'optional' | 'weak' | 'not_workable',
 ): WorthDetourLabel {
-  if (fitBand === 'not_workable') return 'skip_for_your_style';
-  if (detourClass === 'base') return fitBand === 'weak' ? 'skip_for_your_style' : 'core_to_trip';
-  /*
-   * An unmeasured journey gets no distance verdict at all — before the fit
-   * check, because "worth the detour" and "too far" are both claims about a
-   * detour whose length nobody established. A weak fit is still a weak fit and
-   * falls through below; not knowing how to get somewhere is not a reason to
-   * suppress what we do know about it.
-   */
-  if (detourClass === 'unknown' && fitBand !== 'weak') return 'reach_unverified';
+  if (fitBand === 'not_workable' || fitBand === 'weak') return 'skip_for_your_style';
 
-  switch (fitBand) {
-    case 'top_pick':
-      return detourClass === 'too_far' ? 'worth_it_if_you_like_this' : 'definitely_worth_it';
-    case 'strong':
-      return detourClass === 'too_far'
-        ? 'too_far_for_this_trip'
-        : detourClass === 'stretch'
-          ? 'worth_it_if_you_like_this'
-          : 'definitely_worth_it';
-    case 'good':
-      return detourClass === 'in_tolerance' ? 'worth_it_if_you_like_this' : 'too_far_for_this_trip';
-    case 'optional':
-      return detourClass === 'in_tolerance' ? 'only_if_nearby' : 'too_far_for_this_trip';
-    case 'weak':
-      return 'skip_for_your_style';
-  }
+  if (detourClass === 'base') return 'core_to_trip';
+  /*
+   * An unmeasured journey gets no distance verdict at all: "worth the detour"
+   * and "too far" are both claims about a detour whose length nobody
+   * established, and a provider that did not answer must not sound like one
+   * that did.
+   */
+  if (detourClass === 'unknown') return 'reach_unverified';
+  if (detourClass === 'too_far') return 'too_far_for_this_trip';
+
+  const rung = FIT_ENTHUSIASM[fitBand] - (detourClass === 'stretch' ? 1 : 0);
+  return REACHABLE_VERDICTS[Math.min(Math.max(rung, 0), REACHABLE_VERDICTS.length - 1)]!;
 }

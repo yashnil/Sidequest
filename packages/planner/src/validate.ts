@@ -1,5 +1,6 @@
 import {
   CLOSED_REASON_COPY,
+  displayNameOf,
   findOperatingCalendar,
   formatMinuteOfDay,
   operatingOn,
@@ -15,6 +16,8 @@ import {
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
 import { isOpenOnDate } from './schedule';
+import { chargeFrequencyCost } from './frequency';
+import { corroboratingKm, impossibleSpeed, modePhrase, roundKm } from './speed';
 import { travelBucketFor } from './travel';
 import { validateDayFood, validateTripFood } from './validate-food';
 import { validateDayWeather } from './validate-weather';
@@ -158,7 +161,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
         issues.push({
           code: 'place_unavailable',
           severity: 'error',
-          message: `${place.name} is not reachable on ${day.date}.`,
+          message: `${displayNameOf(place)} is not reachable on ${day.date}.`,
           dayNumber: day.dayNumber,
           placeId: place.id,
         });
@@ -167,7 +170,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
         issues.push({
           code: 'matrix_entry_missing',
           severity: 'error',
-          message: `No travel time is recorded for ${place.name}.`,
+          message: `No travel time is recorded for ${displayNameOf(place)}.`,
           dayNumber: day.dayNumber,
           placeId: place.id,
         });
@@ -266,25 +269,37 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
     }
   }
 
+  /*
+   * Counted through `frequency.ts`, the one definition the packer also spends
+   * against. Counting it here a second way is how a plan came back with a
+   * caution about a ceiling the packer never thought was near — and a traveller
+   * cannot act on two different answers to "how many of these did I ask for".
+   */
   const frequency = new Map<string, number>();
+  const stopsPerInterest = new Map<string, number>();
   for (const day of days) {
     for (const item of day.items) {
       if (item.kind !== 'activity' || !item.placeId) continue;
       const place = placesById.get(item.placeId);
-      const primary = place?.interests[0];
-      if (!primary) continue;
-      frequency.set(primary, (frequency.get(primary) ?? 0) + 1);
+      if (!place) continue;
+      chargeFrequencyCost(place, profile.derived.frequencyCaps, frequency);
+      const primary = place.interests[0];
+      if (primary) stopsPerInterest.set(primary, (stopsPerInterest.get(primary) ?? 0) + 1);
     }
   }
-  for (const [interest, count] of frequency) {
+  for (const [interest, spent] of frequency) {
     const cap = profile.derived.frequencyCaps[interest as keyof typeof profile.derived.frequencyCaps];
-    if (typeof cap === 'number' && count > cap) {
-      issues.push({
-        code: 'frequency_exceeded',
-        severity: 'warning',
-        message: `The plan has ${count} stops built around ${interest.replace(/_/g, ' ')}, more than the ${cap} you asked for.`,
-      });
-    }
+    if (typeof cap !== 'number' || spent <= cap) continue;
+    /*
+     * Stated in stops, because "3.5 stops built around lakes" is not a sentence
+     * anybody can act on. The ledger is fractional; the explanation is not.
+     */
+    const stops = stopsPerInterest.get(interest) ?? Math.ceil(spent);
+    issues.push({
+      code: 'frequency_exceeded',
+      severity: 'warning',
+      message: `The plan has ${Math.max(stops, 1)} stops built around ${interest.replace(/_/g, ' ')}, more than the ${cap} you asked for.`,
+    });
   }
 
   for (const entry of input.unscheduled) {
@@ -444,6 +459,8 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
     }
   }
 
+  issues.push(...impossibleSpeedIssues(day, input.matrix));
+
   // 2. Boarding the same service twice in a day means the shared-access grouping
   //    failed and the traveller is paying and queueing twice.
   const boardings = travelItems
@@ -532,7 +549,7 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
       issues.push({
         code: 'road_surface_incompatible',
         severity: 'error',
-        message: `${place.name} is reached on an unpaved road, which you asked us to avoid.`,
+        message: `${displayNameOf(place)} is reached on an unpaved road, which you asked us to avoid.`,
         dayNumber: day.dayNumber,
         placeId: place.id,
       });
@@ -544,7 +561,7 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
       issues.push({
         code: 'remote_area_incompatible',
         severity: 'error',
-        message: `${place.name} is out where there are no services, which you asked us to avoid.`,
+        message: `${displayNameOf(place)} is out where there are no services, which you asked us to avoid.`,
         dayNumber: day.dayNumber,
         placeId: place.id,
       });
@@ -557,7 +574,7 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
       issues.push({
         code: 'parking_unavailable',
         severity: 'warning',
-        message: `${place.name} has a lot that fills early. Arriving late may mean no space.`,
+        message: `${displayNameOf(place)} has a lot that fills early. Arriving late may mean no space.`,
         dayNumber: day.dayNumber,
         placeId: place.id,
       });
@@ -788,10 +805,133 @@ function lastReturnGoverning(
   return service ? service.window.lastReturnDeparture : null;
 }
 
+/**
+ * THE SPEED A LEG'S OWN NUMBERS IMPLY, CHECKED AGAINST WHAT THE MODE CAN DO.
+ *
+ * A stored Tokyo plan scheduled ten-minute "walks" to places its own pack
+ * records as 16.4 road-km away — every one of them a legacy authored constant,
+ * every one rendered as a fact. Nothing upstream can be trusted to never write
+ * such a leg again (the constants arrive inside packs the planner did not
+ * build), so the finished plan is checked arithmetically: distance over
+ * minutes, against a generous ceiling per mode.
+ *
+ * Errors, not cautions. A plan that states impossible transport as fact is
+ * the artifact this validator class exists to refuse — and because the check
+ * runs on every build, it guards the Rebuild path against a poisoned pack.
+ *
+ * Scheduled vehicles carry no ceiling: a bullet train is faster than anything
+ * here, and asserting a bound for it would refuse real journeys. Waits are
+ * time standing still and are skipped for the same reason.
+ *
+ * The ceilings themselves live in `speed.ts`, because `access.ts` refuses the
+ * same class *before* scheduling and the two must convict identically. A leg the
+ * scheduler accepted and the validator rejects is not caught, it is an itinerary
+ * ground to nothing by a revision loop chasing a repair that does not exist.
+ */
+export function impossibleSpeedIssues(
+  day: ItineraryDay,
+  matrix: TravelTimeMatrix,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  for (const item of day.items) {
+    const travel = item.travel;
+    if (!travel || travel.minutes === null || travel.role === 'wait') continue;
+
+    /**
+     * The distance this leg may be convicted on, and where it is allowed to come
+     * from.
+     *
+     * The leg's own kilometres are the strongest evidence: a leg that carries a
+     * distance carries it alongside the minutes it was derived from — a measured
+     * pair, or the corridor model, whose own road distance is exactly what its
+     * minutes were computed from. Those two figures are one statement and may be
+     * held against each other freely.
+     *
+     * The matrix fallback is a *different* statement. On a car-free trip the
+     * matrix is a road matrix and the leg is a walk, so the kilometres describe
+     * a journey by another network entirely — and holding an authored
+     * "20 min walk" against a road that loops 3 km around convicted a leg that
+     * was a perfectly ordinary 1.2 km stroll. `corroboratingKm` is what keeps the
+     * fallback honest: same network, the measurement; different network, the
+     * floor below which no route of this mode between those points can fall.
+     *
+     * Still restricted to approach/transfer/return roles: an authored `walk`-role
+     * leg describes a trail from a drop-off, and any distance between the same
+     * two ids describes a different journey entirely.
+     */
+    const own = typeof travel.km === 'number' ? travel.km : 0;
+    const borrowed =
+      travel.role === 'approach' || travel.role === 'return' || travel.role === 'transfer'
+        ? corroboratingKm(matrix, travel.fromId, travel.toId, travel.mode)
+        : null;
+    const usableKm = Math.max(own, borrowed?.usableKm ?? 0);
+    const verdict = impossibleSpeed(travel.mode, usableKm, travel.minutes);
+    if (!verdict) continue;
+
+    /*
+     * Quoted from the leg's own distance when it has one, and otherwise from the
+     * matrix's measurement rather than the discounted figure the verdict used —
+     * the traveller can check "16.4 km by road"; nobody can check a floor.
+     */
+    const statedKm = own >= (borrowed?.usableKm ?? 0) ? own : borrowed!.measuredKm;
+    /*
+     * Deliberately day-scoped and not attributed to the leg's destination. An
+     * impossible leg is a property of the *order* the day was laid out in, not
+     * of the stop at the far end of it — dropping any stop re-routes the day and
+     * can remove the leg entirely. Naming the destination was tried and made the
+     * reviser worse: it turned "re-lay this day out with one less stop" into
+     * "the hand-picked place at the end of the bad leg cannot be dropped, so
+     * nothing can be done", and refused plans that repaired themselves.
+     */
+    issues.push({
+      code: 'travel_leg_speed_impossible',
+      severity: 'error',
+      message: `Day ${day.dayNumber} allows ${travel.minutes} min to cover ${roundKm(statedKm)} km ${modePhrase(travel.mode)} (${travel.fromName} to ${travel.toName}) — around ${Math.round(verdict.kmh)} km/h, which is not possible. The travel time behind this leg cannot be trusted.`,
+      dayNumber: day.dayNumber,
+    });
+  }
+
+  return issues;
+}
+
 function lastTravelReturnsToBase(day: ItineraryDay, baseId: string): boolean {
   const travels = day.items.filter((item) => item.kind === 'travel' && item.travel);
   const last = travels[travels.length - 1];
   return last?.travel?.toId === baseId;
+}
+
+/**
+ * Errors that mean "we could not give you something you asked for", as distinct
+ * from "this plan does not work".
+ *
+ * Both are errors and both must be loud. Only the second invalidates the
+ * itinerary: the first is surfaced as a named conflict with its reason, which is
+ * the honest answer to a request nothing could satisfy.
+ *
+ * Lives here, next to the codes themselves, because two places have to agree on
+ * it — the gate `planTrip` closes before it hands a plan back, and the gate
+ * `assemble` closes before an edit is saved. When only the first had the list,
+ * the second had no gate at all.
+ */
+export const REQUEST_NOT_MET_CODES: ReadonlySet<ValidationIssue['code']> = new Set([
+  'must_include_unscheduled',
+  'food_choice_unscheduled',
+]);
+
+/**
+ * The errors that make a plan unshippable.
+ *
+ * Findings the planner resolved by removing their subject never reach here:
+ * they are carried forward as warnings, because the hazard they describe is no
+ * longer in the plan.
+ */
+export function blockingIssues(
+  issues: readonly ValidationIssue[],
+): readonly ValidationIssue[] {
+  return issues.filter(
+    (issue) => issue.severity === 'error' && !REQUEST_NOT_MET_CODES.has(issue.code),
+  );
 }
 
 /** Plain state from real validator output — never a fabricated numeric score. */

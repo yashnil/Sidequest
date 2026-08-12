@@ -3,6 +3,7 @@ import { EASTERN_SIERRA_ACCESS, easternSierraTravelMatrix } from '@sidequest/cor
 import type { AccessDataset, AccessRule } from '@sidequest/core';
 import type { TravelTimeMatrix } from '@sidequest/geo';
 import { planTrip } from './plan';
+import { MODELLED_WALK_KMH } from './modelled-walk';
 import { buildScenario } from './testing/scenario';
 import type { Itinerary, TravelSegment } from '@sidequest/core';
 
@@ -97,10 +98,20 @@ describe('travel-time provenance', () => {
          * the number was computed from something else and then labelled with the
          * matrix's provenance. That is precisely what a fabricated constant
          * wearing a measured label looks like.
+         *
+         * One derivation is legitimate and has its own identity: a walk derived
+         * from a road matrix's *distance* (never its time) for a traveller the
+         * road time cannot serve. It must equal the distance at the stated
+         * conservative pace — anything else under the `modelled` label is the
+         * fabricated constant returning.
          */
         const leg = matrixLeg(matrix, travel.fromId, travel.toId);
         expect(leg, `${where}: claims to be measured but the matrix has no such pair`).not.toBeNull();
-        expect(minutes, where).toBe(leg!.minutes);
+        if (travel.mode === 'walk' && matrix.mode === 'car') {
+          expect(minutes, where).toBe(Math.ceil((leg!.km * 60) / MODELLED_WALK_KMH));
+        } else {
+          expect(minutes, where).toBe(leg!.minutes);
+        }
         continue;
       }
 
@@ -182,15 +193,24 @@ describe('a car-free traveller against a live-shaped access dataset', () => {
     }
   });
 
-  it('refuses to state a walking time when the only matrix measures roads', () => {
+  it('never states a road time as a walk when the only matrix measures roads', () => {
     /**
-     * The regression, stated as sharply as it can be.
+     * The regression, stated as sharply as it can be — and then the repair.
      *
-     * Car matrix, walking traveller, no authored allowance: there is no honest
-     * duration available for any approach. Before the fix this produced a plan
-     * in which every leg read `10`. It must now produce either no plan or a plan
-     * with no invented walking numbers — and in particular there must be no
-     * walking leg whose duration is a constant unrelated to its endpoints.
+     * Car matrix, walking traveller, no authored allowance: there is no
+     * *measured* duration available for any approach. Before the first fix this
+     * produced a plan in which every leg read `10`. The first fix refused the
+     * whole trip — honest about every leg and a dead end for the traveller,
+     * because it turned "the compiler stored the wrong network" into "there is
+     * no legal way in to anything", including stops a short stroll from the
+     * base.
+     *
+     * The contract now: a near stop gets a **derived walk** — the road distance
+     * at a deliberately slow pace, labelled `modelled`, bounded by the
+     * traveller's own walking radius — and a far stop is refused by name with
+     * the distance in the sentence. What must still never appear is the old
+     * defect in either direction: a road *time* wearing a walking label, or a
+     * constant unrelated to its endpoints.
      */
     const scenario = buildScenario({
       answers: { willDrive: false },
@@ -198,49 +218,42 @@ describe('a car-free traveller against a live-shaped access dataset', () => {
     });
     const result = planTrip(scenario); // scenario.matrix is the car corridor model
 
-    /**
-     * THE REFUSAL IS THE ANSWER, SO IT IS ASSERTED RATHER THAN RETURNED PAST.
-     *
-     * `if (!result.ok) return;` sat here with the comment "refusing outright is
-     * the strongest honest answer" — and it is, which is exactly why stepping
-     * over it silently was wrong. This input *does* make the planner refuse, so
-     * every assertion below this line, including the constant-detector the
-     * docstring calls "the shape of the old defect, caught directly", had never
-     * run. The test named for the regression could not observe it.
-     *
-     * The refusal is now the claim, with the reason checked: a walking traveller
-     * against a road matrix has no honest duration for any approach, and the
-     * planner must say so rather than produce a plan.
+    /*
+     * The fixture region has stops within town-walking range of the base, so a
+     * blanket refusal is now itself the defect this test exists to catch.
      */
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.readiness).toBeDefined();
-      /* And it says why, in words, rather than failing silently. */
-      expect(result.readiness!.summary.length).toBeGreaterThan(0);
-      expect(result.readiness!.rejections.length).toBeGreaterThan(0);
-      /*
-       * The reason is the one this test is named for: every approach needs a
-       * duration nothing can honestly supply, because the only matrix in hand
-       * measures a different network.
-       */
-      expect(result.readiness!.rejections.map((entry) => entry.reasonCode)).toContain(
-        'missing_travel_data',
-      );
-      return;
-    }
+    expect(result.ok, result.ok ? '' : `refused: ${result.message}`).toBe(true);
+    if (!result.ok) return;
 
     const walks = travelSegments(result.itinerary).filter((s) => s.travel.mode === 'walk');
     const stated = walks.map((s) => s.travel.minutes).filter((m): m is number => m !== null);
+    expect(walks.length, 'a car-free plan with no walking legs at all').toBeGreaterThan(0);
 
     for (const { travel } of walks) {
       if (travel.minutes === null) {
         expect(travel.provenance).toBe('unmeasured');
         continue;
       }
-      // Any number that survives has to be the matrix's own, not a stand-in.
       const leg = matrixLeg(scenario.matrix, travel.fromId, travel.toId);
       expect(leg, `${travel.fromName} → ${travel.toName} states ${travel.minutes} min`).not.toBeNull();
-      expect(travel.minutes).toBe(leg!.minutes);
+      /*
+       * The derived-walk identity: the minutes are the road *distance* at the
+       * conservative pace, never the road *time*, and the label says model.
+       */
+      expect(travel.provenance).toBe('modelled');
+      expect(travel.minutes).toBe(Math.ceil((leg!.km * 60) / MODELLED_WALK_KMH));
+    }
+
+    /*
+     * And the far stops came back refused by name rather than silently dropped
+     * — a transport conflict the traveller can weigh, not a data gap to retry.
+     */
+    const conflicts = result.itinerary.unscheduled.filter(
+      (entry) => entry.reasonCode === 'transport_mode_unavailable',
+    );
+    expect(conflicts.length, 'no far stop was refused as a transport conflict').toBeGreaterThan(0);
+    for (const entry of conflicts) {
+      expect(entry.reason).toMatch(/km by road|on foot/);
     }
 
     /**

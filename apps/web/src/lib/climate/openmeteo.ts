@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   CLIMATE_DATASET_VERSION,
   climateProfileSchema,
-  solarEventsFor,
+  dayLengthFor,
   type ClimateNormal,
   type ClimateProfile,
   type ClimateResult,
@@ -128,14 +128,22 @@ export function climateWindow(now: Date): { from: string; to: string; yearFrom: 
  * The fifteenth because it is the month's midpoint to within a day, and because
  * a mean over the month would smooth away the very thing a traveller is choosing
  * between at the solstices.
+ *
+ * `dayLengthFor`, not `solarEventsFor` — the defect that forced the distinction
+ * lived on this exact line. This function used to ask for sunrise and sunset
+ * with `utcOffsetMinutes: 0` and subtract; for any longitude far from Greenwich
+ * that puts solar noon hours from clock noon, the sunrise minute clamps at
+ * midnight, and the truncation read as short days. Tokyo's May came out at 9.6
+ * hours against a real 14.2, and every "best months" sentence downstream was
+ * built on the wrong column. A duration needs no clock at all.
  */
 export function daylightHoursByMonth(lat: number, lng: number, year: number): number[] {
   const hours: number[] = [];
   for (let month = 1; month <= 12; month += 1) {
     const date = `${year}-${String(month).padStart(2, '0')}-15`;
-    const events = solarEventsFor({ lat, lng }, date, 0);
+    const events = dayLengthFor({ lat, lng }, date);
     if (events.kind === 'normal') {
-      hours.push(Math.max(0, Math.min(24, (events.sunsetMinute - events.sunriseMinute) / 60)));
+      hours.push(Math.max(0, Math.min(24, events.minutes / 60)));
     } else {
       /*
        * Polar day and polar night are real answers, not failures.

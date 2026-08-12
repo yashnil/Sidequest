@@ -42,6 +42,11 @@ export type SolarEvents =
   | { kind: 'polar_day' }
   | { kind: 'polar_night' };
 
+export type DayLength =
+  | { kind: 'normal'; minutes: number }
+  | { kind: 'polar_day' }
+  | { kind: 'polar_night' };
+
 /** Days since 1899-12-30, the epoch NOAA's spreadsheet uses. */
 function serialDay(date: string): number {
   const parsed = assertCalendarDate(date);
@@ -50,18 +55,93 @@ function serialDay(date: string): number {
 }
 
 /**
+ * How long the sun is up, without needing to know what the clocks there say.
+ *
+ * Day *length* is `2 × hour angle` and the hour angle depends only on latitude
+ * and the sun's declination — no UTC offset enters it. That matters because the
+ * one caller that wanted only a duration (the climate profile's daylight column)
+ * used to call `solarEventsFor` with `utcOffsetMinutes: 0`, and for any
+ * longitude far from Greenwich that puts solar noon hours away from clock noon;
+ * the sunrise minute then went negative, the `[0, 1440]` clamp swallowed the
+ * difference, and Tokyo's May daylight came out at 9.6 hours instead of 14.2.
+ * Every "best months" sentence built on that column inherited the error.
+ *
+ * So the duration question gets its own function that cannot be asked wrongly:
+ * there is no offset parameter to pass a zero to, and no clock-minute clamp for
+ * the error to hide inside.
+ */
+export function dayLengthFor(coordinates: Coordinates, date: string): DayLength {
+  const cosHourAngle = cosHourAngleFor(coordinates, date, 0);
+  if (cosHourAngle > 1) return { kind: 'polar_night' };
+  if (cosHourAngle < -1) return { kind: 'polar_day' };
+  const hourAngle = Math.acos(cosHourAngle) / DEGREES;
+  // Four clock minutes per degree of hour angle, on both sides of solar noon.
+  return { kind: 'normal', minutes: Math.round(hourAngle * 8) };
+}
+
+/**
  * Sunrise and sunset for one date at one point.
  *
  * `utcOffsetMinutes` is the offset in force *on that date* (so −420 for Pacific
  * Daylight Time, −480 for Pacific Standard Time). Getting it wrong shifts every
  * daylight decision by an hour, which is why the boundary resolves it from a
- * real zone database rather than this file guessing.
+ * real zone database rather than this file guessing. A caller that only wants a
+ * *duration* has no business supplying one at all — that is `dayLengthFor`.
  */
 export function solarEventsFor(
   coordinates: Coordinates,
   date: string,
   utcOffsetMinutes: number,
 ): SolarEvents {
+  const { equationOfTime } = solarPositionFor(date, utcOffsetMinutes);
+  const cosHourAngle = cosHourAngleFor(coordinates, date, utcOffsetMinutes);
+
+  // Outside ±1 the sun never crosses the horizon that day. Representing both
+  // ends explicitly rather than clamping keeps a caller from scheduling a
+  // "daylight" activity through an Arctic winter.
+  if (cosHourAngle > 1) return { kind: 'polar_night' };
+  if (cosHourAngle < -1) return { kind: 'polar_day' };
+
+  const hourAngle = Math.acos(cosHourAngle) / DEGREES;
+  const solarNoonMinutes = 720 - 4 * coordinates.lng - equationOfTime + utcOffsetMinutes;
+
+  const sunriseMinute = Math.round(solarNoonMinutes - hourAngle * 4);
+  const sunsetMinute = Math.round(solarNoonMinutes + hourAngle * 4);
+
+  return {
+    kind: 'normal',
+    sunriseMinute: Math.max(0, Math.min(1440, sunriseMinute)),
+    sunsetMinute: Math.max(0, Math.min(1440, sunsetMinute)),
+  };
+}
+
+/** `cos` of the sunrise hour angle. Outside ±1 the sun never crosses the horizon. */
+function cosHourAngleFor(
+  coordinates: Coordinates,
+  date: string,
+  utcOffsetMinutes: number,
+): number {
+  const { sunDeclin } = solarPositionFor(date, utcOffsetMinutes);
+  const latRad = coordinates.lat * DEGREES;
+  const declRad = sunDeclin * DEGREES;
+  return (
+    Math.cos(ZENITH_DEGREES * DEGREES) / (Math.cos(latRad) * Math.cos(declRad)) -
+    Math.tan(latRad) * Math.tan(declRad)
+  );
+}
+
+/**
+ * The sun's declination and the equation of time for one date.
+ *
+ * The NOAA General Solar Position algebra, shared by the two questions above so
+ * neither can drift from the other. Both quantities move by well under half a
+ * degree over a day, which is why `dayLengthFor` may evaluate them at offset
+ * zero without measurable error.
+ */
+function solarPositionFor(
+  date: string,
+  utcOffsetMinutes: number,
+): { sunDeclin: number; equationOfTime: number } {
   // NOAA's calculation is anchored at local solar noon, so it needs the local
   // date expressed as a fraction of a day past the epoch.
   const julianDay = serialDay(date) + 2_415_018.5 - utcOffsetMinutes / 1440;
@@ -110,29 +190,7 @@ export function solarEventsFor(
       1.25 * eccentEarthOrbit * eccentEarthOrbit * Math.sin(2 * geomMeanAnomSun * DEGREES)) /
     DEGREES;
 
-  const latRad = coordinates.lat * DEGREES;
-  const declRad = sunDeclin * DEGREES;
-  const cosHourAngle =
-    Math.cos(ZENITH_DEGREES * DEGREES) / (Math.cos(latRad) * Math.cos(declRad)) -
-    Math.tan(latRad) * Math.tan(declRad);
-
-  // Outside ±1 the sun never crosses the horizon that day. Representing both
-  // ends explicitly rather than clamping keeps a caller from scheduling a
-  // "daylight" activity through an Arctic winter.
-  if (cosHourAngle > 1) return { kind: 'polar_night' };
-  if (cosHourAngle < -1) return { kind: 'polar_day' };
-
-  const hourAngle = Math.acos(cosHourAngle) / DEGREES;
-  const solarNoonMinutes = 720 - 4 * coordinates.lng - equationOfTime + utcOffsetMinutes;
-
-  const sunriseMinute = Math.round(solarNoonMinutes - hourAngle * 4);
-  const sunsetMinute = Math.round(solarNoonMinutes + hourAngle * 4);
-
-  return {
-    kind: 'normal',
-    sunriseMinute: Math.max(0, Math.min(1440, sunriseMinute)),
-    sunsetMinute: Math.max(0, Math.min(1440, sunsetMinute)),
-  };
+  return { sunDeclin, equationOfTime };
 }
 
 /**

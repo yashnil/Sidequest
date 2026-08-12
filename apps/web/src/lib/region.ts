@@ -38,6 +38,39 @@ import { getWeatherSnapshot, weatherScopeKey } from './weather/snapshot-reposito
 export const DYNAMIC_REGION_ID = 'dynamic';
 
 /**
+ * WHETHER THIS DEPLOYMENT PLANS MEALS AROUND REAL VENUES.
+ *
+ * `on` means the compiled region's own food data reaches the planner. `off`
+ * means it does not, and every meal on every day becomes time held rather than
+ * somewhere named — which is a visible, whole-product difference.
+ *
+ * A named function rather than the inline `process.env… === 'off'` this used to
+ * be, and the reason is the same one the weather, imagery and timezone
+ * predicates learned: `scripts/doctor.mjs` prints a line telling an operator
+ * which of the two their deployment is running, and there was nothing for its
+ * test to compare that line against. It pinned the doctor's own prose instead,
+ * so flipping the default here would have left the doctor cheerfully reporting
+ * "Food provider — on" to a deployment serving nothing but held time. PR-PROV-01
+ * makes "the doctor truthfully reflects actual runtime capability" a release
+ * blocker; a predicate with an address is what makes that checkable.
+ *
+ * Read at call time, never captured, because the environment is only settled
+ * once the process is running.
+ *
+ * The comparison is deliberately the exact one it has always been — no trim, no
+ * case folding — because `doctor.mjs` mirrors this line character for character
+ * and a script cannot import from here. Widening the match on this side alone
+ * would create the very divergence the extraction exists to make visible. If
+ * `off` should be forgiving about whitespace or case, both sides change
+ * together.
+ */
+export type FoodProviderChoice = 'on' | 'off';
+
+export function foodProviderChoice(): FoodProviderChoice {
+  return process.env.SIDEQUEST_FOOD_PROVIDER === 'off' ? 'off' : 'on';
+}
+
+/**
  * Everything a region contributes to planning, resolved in one place.
  *
  * The shape has not changed. What changed is underneath it: the datasets no
@@ -208,7 +241,7 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
    * breaking anything. A region with no usable food data still gets a plan, with
    * every meal saying plainly that it is time held rather than somewhere named.
    */
-  const food = process.env.SIDEQUEST_FOOD_PROVIDER === 'off' ? null : (compiled.food ?? null);
+  const food = foodProviderChoice() === 'off' ? null : (compiled.food ?? null);
 
   /**
    * Weather, and the second — read, never fetched.

@@ -1,5 +1,6 @@
 import {
   assessSeason,
+  displayNameOf,
   formatMinuteOfDay,
   INTEREST_LABELS,
   TRANSPORT_MODE_LABELS,
@@ -44,11 +45,33 @@ import type { PlannedDay } from './windows';
 import type { PlannerConfig, PlanningCandidate } from './types';
 import {
   countsTowardRoadDistance,
-  resolveLeg,
   travelBucketFor,
-  type ResolvedLeg,
   type TravelKnowledge,
 } from './travel';
+import {
+  modelledWalkCapMinutes,
+  resolvePlannerLeg,
+  type PlannerResolvedLeg,
+} from './modelled-walk';
+
+/**
+ * THE NAME A TRAVELLER READS, WHEREVER THIS FILE WRITES ONE DOWN.
+ *
+ * `displayNameOf` was added as a presentation seam and wired into the board's
+ * components — but the planner materialises its titles as plain strings at plan
+ * time, and every one of them read `place.name`. So a traveller who picked
+ * "Sumida River" off the board was handed a day headed 隅田川, and the exported
+ * artifacts that reuse those titles — the calendar file, the print sheet, the
+ * Google and Apple Maps stop lists — inherited the unresolved half. A name
+ * resolved on one of the two screens that show it is not resolved.
+ *
+ * Every title, every leg endpoint, every sentence naming a place goes through
+ * here. The stop's `placeId` is untouched, so nothing that keys off identity
+ * cares which name was chosen.
+ */
+function nameOf(place: Place): string {
+  return displayNameOf(place);
+}
 
 /**
  * A place's season resolved against one specific date rather than the whole
@@ -200,6 +223,27 @@ export function layoutDay(
   const useMode = (mode: TransportMode) => {
     if (!modes.includes(mode)) modes.push(mode);
   };
+
+  /**
+   * Every leg this day resolves goes through one door.
+   *
+   * The planner-level resolver, not core's, so a car-free day handed a road
+   * matrix can still walk its short legs — as a derived, `modelled`-labelled
+   * estimate bounded by the traveller's own walking radius — instead of every
+   * leg failing and the day refusing itself. See `modelled-walk.ts` for the
+   * invariants; nothing at this call site chooses a mode.
+   */
+  const walkCapMinutes = modelledWalkCapMinutes(context.profile);
+  const resolveDayLeg = (
+    fromId: string,
+    toId: string,
+    allowed: TransportMode | readonly TransportMode[],
+    spent?: { driveMinutes: number },
+  ): PlannerResolvedLeg =>
+    resolvePlannerLeg(context.travel, fromId, toId, allowed, {
+      walkCapMinutes,
+      ...(spent ? { spent } : {}),
+    });
 
   /**
    * The one place a leg's minutes are added to a day.
@@ -480,11 +524,31 @@ export function layoutDay(
    * the venue's own travel to the door, the wait if it has not opened, and its
    * service time are all inside the number the next stop is then tested against.
    */
+  /**
+   * WHETHER LUNCH IS STILL LUNCH AT THIS MINUTE.
+   *
+   * Both ends of the window, which it was not: the clamp read
+   * `minute >= earliest` and nothing at the top, so a day whose route ran
+   * straight through the middle of itself came out with a forty-five minute
+   * block headed "Lunch" starting at four in the afternoon — the latest
+   * observed was 16:02, on 41% of the plans in a 135-cell sweep, and 42 of
+   * those days had no dinner on them either, so "Lunch" was the whole of the
+   * traveller's afternoon meal and it was named wrong.
+   *
+   * The window is the product's own definition of when lunch is lunch. Past
+   * it, nothing is emitted rather than something mislabelled: `missing_meal_break`
+   * and `long_day_without_food` are the validator's existing sentences for a
+   * day left with a hole in it, and they say the true thing where a block called
+   * "Lunch" at 16:02 said a false one.
+   */
+  const withinLunchWindow = (minute: number) => minute <= config.mealWindows.lunch.latest;
+
   const lunchDueAt = (minute: number) =>
     !lunchInserted &&
     dayIsLongEnough &&
     wantsSlot('lunch') &&
-    minute >= config.mealWindows.lunch.earliest;
+    minute >= config.mealWindows.lunch.earliest &&
+    withinLunchWindow(minute);
 
   const lunchIsPacked = () =>
     foodPlan?.slots.some((entry) => entry.slot === 'lunch' && entry.fallback === 'packed') ?? false;
@@ -760,7 +824,7 @@ export function layoutDay(
        * it, and the vehicle-position test says so by name. The end-of-day leg
        * below is a different question and takes a different answer.
        */
-      const resolvedBack = resolveLeg(context.travel, atRoutingId, vehicleAt, homeward.mode);
+      const resolvedBack = resolveDayLeg(atRoutingId, vehicleAt, homeward.mode);
       const measuredBack = resolvedBack.ok ? resolvedBack : null;
       const backMinutes = measuredBack ? measuredBack.minutes : homeward.minutes;
       const backProvenance = measuredBack ? measuredBack.provenance : ('estimated' as const);
@@ -809,13 +873,9 @@ export function layoutDay(
        * nothing at all, when the traveller has ruled out the only mode anybody
        * measured.
        */
-      const resolved = resolveLeg(
-        context.travel,
-        atRoutingId,
-        option.gatewayRoutingId,
-        option.approachMode,
-        { driveMinutes },
-      );
+      const resolved = resolveDayLeg(atRoutingId, option.gatewayRoutingId, option.approachMode, {
+        driveMinutes,
+      });
       if (!resolved.ok) {
         violations.push({
           kind: 'access',
@@ -879,7 +939,7 @@ export function layoutDay(
          */
         const movedByLunch = atRoutingId !== approachFrom;
         const after = movedByLunch
-          ? resolveLeg(context.travel, atRoutingId, option.gatewayRoutingId, option.approachMode, {
+          ? resolveDayLeg(atRoutingId, option.gatewayRoutingId, option.approachMode, {
               driveMinutes,
             })
           : resolved;
@@ -1048,7 +1108,7 @@ export function layoutDay(
       cursor = pushLeg(
         items,
         plan.role === 'walk' && members[0]
-          ? { ...plan, toId: members[0].place.id, toName: members[0].place.name }
+          ? { ...plan, toId: members[0].place.id, toName: nameOf(members[0].place) }
           : plan,
         day.dayNumber,
         cursor,
@@ -1089,7 +1149,7 @@ export function layoutDay(
       const measured =
         previous && !option.service
           ? asHop(
-              resolveLeg(context.travel, previous.place.id, candidate.place.id, matrixHopMode, {
+              resolveDayLeg(previous.place.id, candidate.place.id, matrixHopMode, {
                 driveMinutes,
               }),
             )
@@ -1111,7 +1171,7 @@ export function layoutDay(
        */
       const canDetour = previous !== null && !option.service;
       const lunchFromId = previous?.place.id ?? atRoutingId;
-      const lunchFromName = previous?.place.name ?? atName;
+      const lunchFromName = previous ? nameOf(previous.place) : atName;
       /**
        * Where the clock is when lunch becomes due depends on whether a venue is
        * going to sit between the two stops.
@@ -1132,7 +1192,7 @@ export function layoutDay(
       const onward =
         planned.kind === 'venue' && canDetour
           ? asHop(
-              resolveLeg(context.travel, planned.resumeAt, candidate.place.id, matrixHopMode, {
+              resolveDayLeg(planned.resumeAt, candidate.place.id, matrixHopMode, {
                 driveMinutes,
               }),
             )
@@ -1184,7 +1244,7 @@ export function layoutDay(
         items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
-          title: `${TRANSPORT_MODE_LABELS[mode]} to ${candidate.place.name}`,
+          title: `${TRANSPORT_MODE_LABELS[mode]} to ${nameOf(candidate.place)}`,
           startMinute: cursor,
           endMinute: cursor + minutes,
           durationMinutes: minutes,
@@ -1197,7 +1257,7 @@ export function layoutDay(
             fromId,
             toId: candidate.place.id,
             fromName,
-            toName: candidate.place.name,
+            toName: nameOf(candidate.place),
             minutes,
             /*
              * The distance of the journey that was actually made, or null when
@@ -1223,7 +1283,7 @@ export function layoutDay(
         pushTransfer(finalPlan.resumeAt, finalPlan.choice.venue.name, transferMinutes, onward);
       } else {
         pushTransfer(lunchFromId, lunchFromName, transferMinutes, measured);
-        commitLunch(finalPlan, candidate.place.id, candidate.place.name, false);
+        commitLunch(finalPlan, candidate.place.id, nameOf(candidate.place), false);
       }
 
       // Turning up before the doors open does not get you in sooner. The gap is
@@ -1235,7 +1295,7 @@ export function layoutDay(
           day.dayNumber,
           cursor,
           placement.startMinute,
-          candidate.place.name,
+          nameOf(candidate.place),
           placement.window?.openMinute ?? null,
         );
       }
@@ -1249,7 +1309,7 @@ export function layoutDay(
       items.push({
         id: `activity-${day.dayNumber}-${place.id}`,
         kind: 'activity',
-        title: place.name,
+        title: nameOf(place),
         startMinute: cursor,
         endMinute: cursor + candidate.durationMinutes,
         durationMinutes: candidate.durationMinutes,
@@ -1354,7 +1414,7 @@ export function layoutDay(
       cursor = pushLeg(
         items,
         plan.role === 'walk' && previous
-          ? { ...plan, fromId: previous.place.id, fromName: previous.place.name }
+          ? { ...plan, fromId: previous.place.id, fromName: nameOf(previous.place) }
           : plan,
         day.dayNumber,
         cursor,
@@ -1374,7 +1434,7 @@ export function layoutDay(
      */
     const exitedFrom = option.service ? option.exitRoutingId : (previous?.place.id ?? option.exitRoutingId);
     atRoutingId = exitedFrom;
-    atName = option.service ? option.gatewayName : (previous?.place.name ?? atName);
+    atName = option.service ? option.gatewayName : previous ? nameOf(previous.place) : atName;
     // The car moves with the traveller only when the traveller drove it. Keyed on
     // the mode rather than on "was this measured", now that walks are measured.
     if (!option.service && option.approachMode === 'drive') vehicleAt = exitedFrom;
@@ -1401,6 +1461,62 @@ export function layoutDay(
    * minutes measured for a completely different journey.
    */
   const carIsToHand = () => !context.profile.transport.willDrive || vehicleAt === atRoutingId;
+
+  /**
+   * LUNCH AT THE END OF THE ROUTE, WHILE IT IS STILL LUNCHTIME.
+   *
+   * Lunch is offered before each unit and again once the traveller is back at
+   * base, and between those two points sits a gap that a day with one long stop
+   * on it falls straight into. The traveller is standing at their last stop at
+   * 14:04, inside the lunch window, and nothing asks. The ride home then takes
+   * thirty-four minutes, the fallback at base finds it is 14:38 — past
+   * `lunch.latest` — and correctly refuses to put a block headed "Lunch" at that
+   * hour. The day came back with no meal on it at all: six hours out,
+   * `missing_meal_break` raised against it, and nothing able to answer, on a
+   * traveller who had said food mattered to them.
+   *
+   * The refusal is right and stays. The missing question was the defect, and
+   * asked here it can still be answered truthfully — lunch, at lunchtime, where
+   * the traveller actually is.
+   *
+   * No onward id and `returnsToOrigin`, because the only journey left is the one
+   * home: a venue here is a there-and-back from the last stop, which is what the
+   * traveller would do, and it leaves the way home the leg it already was.
+   */
+  if (!lunchInserted && atRoutingId !== baseId && lunchDueAt(cursor)) {
+    /**
+     * Guarded by the way home, because this is the one meal decision with a
+     * journey still to come after it.
+     *
+     * A lunch that pushed the return past the day's own end would not merely run
+     * late: `foodFits` measures the whole food-bearing layout against
+     * `latestFinishFor` and, when it overruns, drops *every* meal on the day. An
+     * unguarded lunch here would therefore have cost a short departure day its
+     * dinner as well. Bounded by both numbers the leg home can be charged at —
+     * the allowance recorded on the way out and the leg re-resolved from where
+     * the day has actually got to — because the home block below picks between
+     * exactly those two and either can be the larger.
+     */
+    const homewardModes: readonly TransportMode[] = homeward
+      ? matrix.mode === 'foot'
+        ? [homeward.mode, 'walk']
+        : [homeward.mode]
+      : [matrixLegMode(matrix)];
+    const wayHome = Math.max(
+      homeward?.minutes ?? 0,
+      asHop(resolveDayLeg(atRoutingId, baseId, homewardModes))?.minutes ?? 0,
+    );
+    const planned = carIsToHand()
+      ? planLunch(cursor, atRoutingId, null, false)
+      : planLunchInPlace(cursor);
+    // The walk or drive back from a venue lands after the meal, so it is not in
+    // the plan's own `minutes` and has to be added before the day is measured.
+    const stopAndBack =
+      planned.kind === 'venue' ? planned.minutes + planned.choice.approachMinutes : planned.minutes;
+    if (planned.kind !== 'none' && cursor + stopAndBack + wayHome <= day.window.endMinute) {
+      commitLunch(planned, atRoutingId, atName, false);
+    }
+  }
 
   let dinnerInserted = false;
   if (hasFood() && carIsToHand() && wantsSlot('dinner') && atRoutingId !== baseId) {
@@ -1459,7 +1575,7 @@ export function layoutDay(
      */
     const homewardModes: TransportMode[] =
       matrix.mode === 'foot' ? [homeward.mode, 'walk'] : [homeward.mode];
-    const measured = asHop(resolveLeg(context.travel, atRoutingId, baseId, homewardModes));
+    const measured = asHop(resolveDayLeg(atRoutingId, baseId, homewardModes));
     const back = measured
       ? {
           minutes: measured.minutes,
@@ -1498,7 +1614,7 @@ export function layoutDay(
     charge(back.mode, 'return', back.minutes, back.km ?? 0);
   } else if (atRoutingId !== baseId) {
     const matrixHomeMode = matrixLegMode(matrix);
-    const resolvedHome = resolveLeg(context.travel, atRoutingId, baseId, matrixHomeMode);
+    const resolvedHome = resolveDayLeg(atRoutingId, baseId, matrixHomeMode);
     if (!resolvedHome.ok) {
       /**
        * NO LEG, AND A VIOLATION — WHICH IS WHAT KEEPS THE PACKER HONEST.
@@ -1590,15 +1706,28 @@ export function layoutDay(
     atName = baseName;
   }
 
-  // Lunch never found a gap mid-route; give it one now if the clock allows.
+  // Lunch never found a gap mid-route; give it one now if the clock allows —
+  // and only while it is still lunchtime. `withinLunchWindow` guards this the
+  // same way it guards the mid-route insertion, because this fallback is where
+  // the 16:02 lunches were coming from: the route finished after the window and
+  // the block was bolted on at whatever the cursor happened to be.
   if (
     !lunchInserted &&
     dayIsLongEnough &&
     wantsSlot('lunch') &&
+    withinLunchWindow(cursor) &&
     cursor + config.unplannedMealMinutes.lunch <= day.window.endMinute
   ) {
     if (lunchIsPacked()) {
-      commitPackedLunch();
+      /* The packed fallback is clamped for the same reason the bare one is. */
+      const lunchStart = Math.max(cursor, config.mealWindows.lunch.earliest);
+      if (lunchStart + PACKED_MEAL_MINUTES <= day.window.endMinute) {
+        if (lunchStart > cursor) {
+          cursor = pushFreeTime(items, day, config, cursor, lunchStart);
+          cursor = Math.max(cursor, lunchStart);
+        }
+        commitPackedLunch();
+      }
     } else {
       const late =
         hasFood() && carIsToHand()
@@ -1614,7 +1743,30 @@ export function layoutDay(
           fromName: atName,
         });
       } else {
-        cursor = pushBareMeal('lunch', 'Lunch', cursor, 'Late, but better than skipping it.');
+        /**
+         * Clamped into the lunch window, never bolted on wherever the morning
+         * happened to end. This branch used to push the block at the bare
+         * cursor with "Late, but better than skipping it" — and on a light day
+         * whose route was done by 09:20 that printed a *breakfast-hour* block
+         * labelled lunch, apologising for a lateness that had not happened.
+         * The window is the product's own definition of when lunch is lunch;
+         * a block outside it is a different meal wearing the name.
+         */
+        const lunchStart = Math.max(cursor, config.mealWindows.lunch.earliest);
+        if (lunchStart + config.unplannedMealMinutes.lunch <= day.window.endMinute) {
+          if (lunchStart > cursor) {
+            cursor = pushFreeTime(items, day, config, cursor, lunchStart);
+            cursor = Math.max(cursor, lunchStart);
+          }
+          cursor = pushBareMeal(
+            'lunch',
+            'Lunch',
+            cursor,
+            cursor > config.mealWindows.lunch.latest
+              ? 'Late, but better than skipping it.'
+              : 'Time held inside the lunch window rather than somewhere named.',
+          );
+        }
       }
     }
   }
@@ -1644,9 +1796,24 @@ export function layoutDay(
         fromId: atRoutingId,
         fromName: atName,
       });
-    } else if (cursor + config.unplannedMealMinutes.dinner <= day.window.endMinute) {
+    } else if (
+      /**
+       * The overrun allowance the venue branch and the validator both grant,
+       * granted here too. Without it an arrival day whose window closed at
+       * seven could hold a named restaurant but not a bare hour for dinner —
+       * so the traveller with a 19:00 evening and no verified venue got no
+       * dinner row at all, while a day one street over kept one. An evening
+       * meal is the one thing a traveller carries on past the window, and the
+       * validator's ceiling has said so all along.
+       */
+      cursor + config.unplannedMealMinutes.dinner <=
+      day.window.endMinute + config.mealOverrunAllowanceMinutes
+    ) {
       const dinnerStart = Math.max(cursor, config.mealWindows.dinner.earliest);
-      if (dinnerStart + config.unplannedMealMinutes.dinner <= day.window.endMinute) {
+      if (
+        dinnerStart + config.unplannedMealMinutes.dinner <=
+        day.window.endMinute + config.mealOverrunAllowanceMinutes
+      ) {
         if (dinnerStart > cursor) {
           cursor = pushFreeTime(items, day, config, cursor, dinnerStart);
         }
@@ -1735,7 +1902,7 @@ function legTitle(plan: AccessLegPlan): string {
 
 function gatewayLabel(option: AccessOption, members: readonly PlanningCandidate[]): string {
   if (option.service) return option.gatewayName;
-  return members[0]?.place.name ?? option.gatewayName;
+  return members[0] ? nameOf(members[0].place) : option.gatewayName;
 }
 
 /**
@@ -1771,9 +1938,9 @@ function matrixLegMode(matrix: TravelTimeMatrix): TransportMode {
  * Narrowing rather than a second type, so there is no way to construct one that
  * did not come out of `resolveLeg`.
  */
-type ResolvedHop = ResolvedLeg & { ok: true };
+type ResolvedHop = PlannerResolvedLeg & { ok: true };
 
-function asHop(resolved: ResolvedLeg): ResolvedHop | null {
+function asHop(resolved: PlannerResolvedLeg): ResolvedHop | null {
   return resolved.ok ? resolved : null;
 }
 
@@ -1786,11 +1953,20 @@ function asHop(resolved: ResolvedLeg): ResolvedHop | null {
  * already says which. The departure basis is named on a scheduled leg because a
  * timetabled duration is only an answer to a particular time of day.
  */
-function approachReason(hop: ResolvedLeg & { ok: true }, buffer: number): string {
+function approachReason(hop: PlannerResolvedLeg & { ok: true }, buffer: number): string {
   if (hop.mode === 'drive') {
     return `${hop.minutes} min on the road, plus ${buffer} min to park and get going.`;
   }
   if (hop.mode === 'walk') {
+    /*
+     * A derived walk says it is one. "Measured between the two points" over a
+     * figure computed from a road distance would be the exact provenance lie
+     * the leg's own `modelled` label exists to prevent — and the reason string
+     * is the copy a traveller actually reads.
+     */
+    if (hop.provenance === 'modelled') {
+      return `About ${hop.minutes} min on foot — estimated from the road distance, since nobody has measured this walk.`;
+    }
     return `${hop.minutes} min on foot, measured between the two points.`;
   }
   if (hop.provenance === 'official') {
@@ -1831,7 +2007,18 @@ function pushFreeTime(
     startMinute: from,
     endMinute: to,
     durationMinutes: span,
-    reason: 'Deliberately unbooked. A plan with no slack in it is a plan that breaks.',
+    /**
+     * A very long block owes a different sentence. "Deliberately unbooked"
+     * over eight open hours reads as a shrug — a stored plan actually carried
+     * a 7 h 55 m block wearing it. By the time this runs, the overflow pass
+     * has already offered every unplaced pick to every day with room, so a
+     * stretch this long means the board's remaining supply genuinely could
+     * not be reached or fitted here — and saying that is the honest version.
+     */
+    reason:
+      span > 180
+        ? 'A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.'
+        : 'Deliberately unbooked. A plan with no slack in it is a plan that breaks.',
     weatherSensitive: false,
   });
   return to;
@@ -1913,7 +2100,7 @@ function bookingFor(place: Place, hours: PlaceDayHours): BookingRequirement | un
   if (!kind) return undefined;
   return {
     placeId: place.id,
-    name: place.name,
+    name: nameOf(place),
     kind,
     ...(admission.note ? { note: admission.note } : {}),
     ...(admission.bookingUrl ? { url: admission.bookingUrl } : {}),
@@ -2030,59 +2217,140 @@ export interface PackOptions {
   unitByPlaceId: ReadonlyMap<string, AccessUnit>;
 }
 
+/**
+ * HOW LATE THE DAY THIS LAYOUT DESCRIBES IS ALLOWED TO FINISH.
+ *
+ * The window bounds what the planner *schedules*; the evening meal, and getting
+ * home from it, is the one thing carried past that line. `layoutDay` grants that
+ * overrun when it places the meal, and `validateItinerary` grants it again when
+ * it checks the finished day — the packer granted it to neither, and measured
+ * every layout against the bare window.
+ *
+ * That went unnoticed while only a *named* restaurant could use the allowance,
+ * because packing runs with `food: null` and never sees one. The moment the held
+ * dinner hour was allowed the same overrun, the packer started charging it to
+ * the traveller's stop: a day whose only minute past the window was a block of
+ * held dinner time was declared not to fit, and the candidate that led to it
+ * went into overflow. It then spilled onto whatever day would take it, which is
+ * how a viewpoint fifteen minutes up a spur road ended up on the day that drives
+ * ninety-five minutes down the valley, lengthening the approach by the spur.
+ *
+ * Read the same way the validator reads it — last meal of the evening onward,
+ * meals and travel only — so the packer can never offer a day the validator will
+ * reject, nor refuse one it would have passed.
+ *
+ * Exported because the food layer needs the same ceiling. `planTrip` lays each
+ * day out twice, plain and with the meals on, and the second layout is the one
+ * thing in the planner that is never packed — so nothing measured it against the
+ * clock, and a breakfast that shifted a departure-day return drive one minute
+ * past the window produced a plan the validator then refused outright. Three
+ * readers of one definition; a fourth would be a fourth chance to disagree.
+ */
+export function latestFinishFor(
+  day: PlannedDay,
+  config: PlannerConfig,
+  layout: DayLayout,
+): number {
+  const last = layout.items.at(-1);
+  if (!last || (last.kind !== 'meal' && last.kind !== 'travel')) return day.window.endMinute;
+  const lastMealStart = layout.items
+    .filter(
+      (item) => item.kind === 'meal' && item.startMinute >= config.mealWindows.dinner.earliest,
+    )
+    .at(-1)?.startMinute;
+  return lastMealStart !== undefined && last.startMinute >= lastMealStart
+    ? day.window.endMinute + config.mealOverrunAllowanceMinutes
+    : day.window.endMinute;
+}
+
+// The slack floor exists to stop a day being crammed, so it only guards the
+// third stop onward. Applying it from the first would do the opposite of what
+// it is for: it would veto pairing two stops that sit on the same road and
+// leave the traveller driving an hour each way for a single afternoon.
+const SLACK_APPLIES_FROM_STOP = 3;
+
+/**
+ * WHY THIS STOP CANNOT JOIN THIS DAY — or `null` when it can.
+ *
+ * The whole of a day's acceptance, in one place: the four things a stop can be
+ * wrong about before the day is even laid out (no slot left, shut that day, no
+ * confirmed way in, one strenuous walk too many) and the six the layout decides
+ * (the clock, the day's capacity, the driving cap, the transport cap, an
+ * outright illegality, and the free time the traveller's pace asks for).
+ *
+ * Extracted from `packDay`, unchanged, because `packDay` was not the only thing
+ * that needed it and was the only thing that had it. The editing surface lays a
+ * day out with `layoutBestOrder` — which is deliberately limit-free, since
+ * packing is what owns the limits — and so every one of these tests was skipped
+ * on an edit: a swap could put a day forty minutes over the traveller's own
+ * driving cap, or land the drive home an hour after the day was supposed to
+ * end, and the plan was saved. Two callers, one definition, one answer.
+ *
+ * Returns the reason rather than a boolean so a refusal can say which limit it
+ * is: "that will not fit" is not an answer a traveller can act on.
+ */
+export function admissionRefusal(
+  context: LayoutContext,
+  accepted: readonly PlanningCandidate[],
+  candidate: PlanningCandidate,
+  options: PackOptions,
+): string | null {
+  const { day } = context;
+  const slackFloor = day.isEdgeDay ? 0 : context.config.minFreeMinutesByPace[context.profile.pace];
+
+  if (accepted.length >= options.maxActivities) {
+    return `Day ${day.dayNumber} already holds the ${options.maxActivities} stop${options.maxActivities === 1 ? '' : 's'} a day gets at the pace you chose.`;
+  }
+  if (!isOpenOnDate(candidate.place, day.date)) {
+    return `${nameOf(candidate.place)} is not open on day ${day.dayNumber}.`;
+  }
+  const unit = options.unitByPlaceId.get(candidate.place.id);
+  if (!unit || !options.accessByUnit.has(unit.key)) {
+    return `We have no way we can confirm of getting to ${nameOf(candidate.place)} on day ${day.dayNumber}.`;
+  }
+  const strenuousSoFar = accepted.filter(
+    (item) => item.place.physicalIntensity === 'strenuous',
+  ).length;
+  if (candidate.place.physicalIntensity === 'strenuous' && strenuousSoFar >= options.maxStrenuous) {
+    return `Day ${day.dayNumber} already has as much hard walking on it as you asked for.`;
+  }
+
+  const tentative = [...accepted, candidate];
+  const { layout } = layoutBestOrder(context, tentative, options);
+
+  const latestFinish = latestFinishFor(day, context.config, layout);
+  if (layout.endMinute > latestFinish) {
+    return `With ${nameOf(candidate.place)} on it, day ${day.dayNumber} does not end until ${formatMinuteOfDay(layout.endMinute)}, past the ${formatMinuteOfDay(latestFinish)} the day allows.`;
+  }
+  if (layout.activityMinutes + layout.travelMinutes > day.capacityMinutes) {
+    return `Day ${day.dayNumber} does not have the hours for ${nameOf(candidate.place)} as well as what is already on it.`;
+  }
+  if (layout.driveMinutes > options.maxDailyDriveMinutes) {
+    return `With ${nameOf(candidate.place)} on it, day ${day.dayNumber} has ${layout.driveMinutes} min at the wheel, past the ${options.maxDailyDriveMinutes} min you set.`;
+  }
+  if (layout.travelMinutes > options.maxDailyTransportMinutes) {
+    return `With ${nameOf(candidate.place)} on it, day ${day.dayNumber} spends ${layout.travelMinutes} min getting about, past the ${options.maxDailyTransportMinutes} min you set.`;
+  }
+  // Covers both kinds of illegality: no way out, and no way in through the
+  // door. A day with either is never offered.
+  if (layout.violations.length > 0) return layout.violations[0]!.message;
+  const requiredFree = tentative.length >= SLACK_APPLIES_FROM_STOP ? slackFloor : 0;
+  if (layout.freeMinutes < requiredFree) {
+    return `Adding ${nameOf(candidate.place)} would leave day ${day.dayNumber} ${layout.freeMinutes} min of free time, under the ${requiredFree} min your pace asks for.`;
+  }
+  return null;
+}
+
 export function packDay(
   context: LayoutContext,
   available: readonly PlanningCandidate[],
   options: PackOptions,
 ): PackResult {
-  // The slack floor exists to stop a day being crammed, so it only guards the
-  // third stop onward. Applying it from the first would do the opposite of what
-  // it is for: it would veto pairing two stops that sit on the same road and
-  // leave the traveller driving an hour each way for a single afternoon.
-  const slackFloor = context.day.isEdgeDay
-    ? 0
-    : context.config.minFreeMinutesByPace[context.profile.pace];
-  const SLACK_APPLIES_FROM_STOP = 3;
   const accepted: PlanningCandidate[] = [];
   const overflow: PlanningCandidate[] = [];
-  const { day } = context;
 
   for (const candidate of available) {
-    if (accepted.length >= options.maxActivities) {
-      overflow.push(candidate);
-      continue;
-    }
-    if (!isOpenOnDate(candidate.place, day.date)) {
-      overflow.push(candidate);
-      continue;
-    }
-    const unit = options.unitByPlaceId.get(candidate.place.id);
-    if (!unit || !options.accessByUnit.has(unit.key)) {
-      overflow.push(candidate);
-      continue;
-    }
-    const strenuousSoFar = accepted.filter(
-      (item) => item.place.physicalIntensity === 'strenuous',
-    ).length;
-    if (candidate.place.physicalIntensity === 'strenuous' && strenuousSoFar >= options.maxStrenuous) {
-      overflow.push(candidate);
-      continue;
-    }
-
-    const tentative = [...accepted, candidate];
-    const { layout } = layoutBestOrder(context, tentative, options);
-
-    const fitsClock = layout.endMinute <= day.window.endMinute;
-    const fitsCapacity = layout.activityMinutes + layout.travelMinutes <= day.capacityMinutes;
-    const fitsDriving = layout.driveMinutes <= options.maxDailyDriveMinutes;
-    const fitsTransport = layout.travelMinutes <= options.maxDailyTransportMinutes;
-    // Covers both kinds of illegality: no way out, and no way in through the
-    // door. A day with either is never offered.
-    const legalAccess = layout.violations.length === 0;
-    const requiredFree = tentative.length >= SLACK_APPLIES_FROM_STOP ? slackFloor : 0;
-    const keepsSlack = layout.freeMinutes >= requiredFree;
-
-    if (fitsClock && fitsCapacity && fitsDriving && fitsTransport && legalAccess && keepsSlack) {
+    if (admissionRefusal(context, accepted, candidate, options) === null) {
       accepted.push(candidate);
     } else {
       overflow.push(candidate);
@@ -2130,7 +2398,7 @@ function visitFor(
       violation: {
         kind: 'hours',
         code: 'no_window_in_reach',
-        message: `We hold no opening-hours record for ${candidate.place.name}, so we will not put it on a day.`,
+        message: `We hold no opening-hours record for ${nameOf(candidate.place)}, so we will not put it on a day.`,
         placeId: candidate.place.id,
       },
     };
@@ -2160,7 +2428,7 @@ function visitFor(
       violation: {
         kind: 'hours',
         code: 'no_window_in_reach',
-        message: `${candidate.place.name} is signed for daylight use only, and there is no daylight left inside what the rest of this day allows.`,
+        message: `${nameOf(candidate.place)} is signed for daylight use only, and there is no daylight left inside what the rest of this day allows.`,
         placeId: candidate.place.id,
       },
     };
@@ -2168,7 +2436,7 @@ function visitFor(
 
   const placement = placeVisit({
     hours,
-    placeName: candidate.place.name,
+    placeName: nameOf(candidate.place),
     arrivalMinute,
     durationMinutes: candidate.durationMinutes,
     bounds: daylit,
@@ -2438,6 +2706,18 @@ export function buildDay(
 
   if (day.window.usableMinutes === 0) {
     warnings.push('There are no usable hours on this day once travel in or out is accounted for.');
+  } else if (accepted.length === 0) {
+    /**
+     * An empty day with hours in it says why, once, in its own voice.
+     *
+     * Without this the trip summary counts "12 stops across 3 of 4 days" while
+     * day 4 sits silent — two statements a reader has to reconcile themselves.
+     * The warning and the totals now tell one story: the hours are real, the
+     * stops are elsewhere, and the reason is the supply rather than the clock.
+     */
+    warnings.push(
+      'Nothing is scheduled on this day. Everything you picked either fitted better on another day or could not be reached on this one — the hours are yours.',
+    );
   }
   // The old warning here told the traveller to "have a fallback in mind", which
   // is the product handing back its own job. Weather cautions now live on the
@@ -2449,7 +2729,7 @@ export function buildDay(
     date: day.date,
     baseId,
     baseName,
-    theme: themeFor(accepted, baseName),
+    theme: themeFor(accepted, baseName, layout),
     window: day.window,
     items: layout.items,
     totals: {
@@ -2655,7 +2935,11 @@ function classifyIntensity(
 }
 
 /** Deterministic: the dominant interest, plus where the day actually went. */
-function themeFor(accepted: readonly PlanningCandidate[], baseName: string): string {
+export function themeFor(
+  accepted: readonly PlanningCandidate[],
+  baseName: string,
+  layout?: DayLayout,
+): string {
   if (accepted.length === 0) return 'An open day';
 
   // Weighted by time on site, not by headcount. A day with a three-hour canyon
@@ -2681,6 +2965,20 @@ function themeFor(accepted: readonly PlanningCandidate[], baseName: string): str
   const area =
     farthest && farthest.travelMinutesFromBase > 20 ? farthest.place.locality : baseName;
   const lead = dominant ? INTEREST_LABELS[dominant] : 'Mixed';
+  /**
+   * The one interest label that makes a claim about the clock. "Sunrise &
+   * sunset photography" over a day whose stops run 07:40–11:00 is a heading
+   * the timeline directly contradicts — a stored plan wore exactly that — so
+   * the label is only used when the schedule actually touches an edge of the
+   * day. Mid-day photography is still photography; the theme says so instead.
+   */
+  if (dominant === 'photography_golden_hour' && layout) {
+    const activities = layout.items.filter((item) => item.kind === 'activity');
+    const first = activities[0]?.startMinute ?? Number.POSITIVE_INFINITY;
+    const last = activities.length > 0 ? activities[activities.length - 1]!.endMinute : 0;
+    const touchesGoldenHours = first <= 8 * 60 || last >= 18 * 60;
+    if (!touchesGoldenHours) return `Photography around ${area}`;
+  }
   return `${lead} around ${area}`;
 }
 

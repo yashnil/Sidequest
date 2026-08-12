@@ -159,13 +159,70 @@ export async function reachScope(page: Page): Promise<void> {
 }
 
 
+/**
+ * THE HEADING A FINISHED BUILD LANDS ON, NAMED ONCE.
+ *
+ * It was the literal string `'What this trip is built on'` in nine specs and two
+ * helpers. That title was an accurate name for a build report and the wrong name
+ * for the screen — what has happened, from the traveller's side, is that we went
+ * and looked — so it became `We have been through <destination>`, and nine specs
+ * spent sixty seconds each waiting for a heading that no longer exists.
+ *
+ * A prefix rather than the whole sentence, because the rest of it is the
+ * destination and every spec uses a different synthetic world.
+ */
+export const REGION_READY_HEADING = /^We have been through /;
+
 /** Push all the way through to a compiled region. */
 export async function compileRegion(page: Page): Promise<void> {
   await reachScope(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
-  await expect(page.getByRole('heading', { name: 'What this trip is built on' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 90_000,
   });
+}
+
+/**
+ * OPEN A DISCLOSURE, WITHOUT CLOSING ONE THAT IS ALREADY OPEN.
+ *
+ * Both of the product's big `<details>` panels — the plan page's build report and
+ * the board's backstage — were introduced by this phase to get the engine's
+ * account of itself out from in front of the places. Everything they hold is
+ * still in the DOM, so `.textContent()` reads it either way; `toBeVisible()` does
+ * not, which is the whole reason a dozen assertions had to learn to knock first.
+ *
+ * Idempotent on purpose. A helper that blindly clicks `summary` is a helper that
+ * closes the panel for the second assertion in the same test, and the failure it
+ * produces ("element is not visible") reads exactly like the regression it is
+ * not.
+ */
+async function openDisclosure(page: Page, testId: string, summary: Locator): Promise<void> {
+  const details = page.getByTestId(testId);
+  await expect(details).toBeVisible();
+  if (await details.evaluate((element) => (element as HTMLDetailsElement).open)) return;
+  await summary.click();
+  await expect(details).toHaveJSProperty('open', true);
+}
+
+/**
+ * Reveal the plan page's build report: sources, coverage, work plan, licences.
+ *
+ * `:scope > summary`, not `summary`. The build report now *contains* four more
+ * disclosures — the place-data release, how travel times were measured, what the
+ * build reused, and the stage log — so a descendant search resolves to five
+ * elements and Playwright refuses in strict mode. The failure it produced was
+ * five specs reporting `strict mode violation` on a helper, which reads like a
+ * broken locator rather than like the panel gaining children it was designed to
+ * gain. A disclosure has exactly one summary of its own; this asks for that one.
+ */
+export async function openHowThisWasBuilt(page: Page): Promise<void> {
+  const details = page.getByTestId('how-this-was-built');
+  await openDisclosure(page, 'how-this-was-built', details.locator(':scope > summary'));
+}
+
+/** Reveal the board's backstage: readiness, what we searched, personality, weather. */
+export async function openBoardBackstage(page: Page): Promise<void> {
+  await openDisclosure(page, 'board-backstage', page.getByTestId('board-backstage-toggle'));
 }
 
 /**
@@ -185,11 +242,26 @@ export async function compileRegion(page: Page): Promise<void> {
  * moved rather than on a count.
  */
 export async function completeQuestionnaire(page: Page): Promise<void> {
-  // Interests: the canonical hiking/lakes/viewpoints traveller.
+  /*
+   * Interests: the canonical hiking/lakes/viewpoints traveller, graded against
+   * the offer the destination actually produced.
+   *
+   * The offer is destination-shaped now — a synthetic harbour city is not asked
+   * about geothermal ground and a mountain town is — so grading a fixed four
+   * meant `check()` waiting the full sixty seconds for a control the screen was
+   * right not to render. Two specs reported that as a routing failure.
+   *
+   * The three below are offered everywhere this suite goes, so they are checked
+   * unconditionally: an offer that stopped carrying them is a change worth
+   * failing on, and failing here names the interest rather than timing out three
+   * screens later. Only the fourth is conditional, because only the fourth is
+   * genuinely destination-specific.
+   */
   await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
   await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
   await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' }).check();
+  const geothermal = page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' });
+  if ((await geothermal.count()) > 0) await geothermal.check();
   await page.getByRole('button', { name: 'Continue' }).click();
 
   // Rhythm

@@ -1,4 +1,5 @@
 import { haversineKm } from '@sidequest/geo';
+import { foldForMatch } from '../destinations/normalize';
 import type { Coordinates } from '../schemas/common';
 /**
  * One definition of "a base is worth at least two nights", shared with the
@@ -283,6 +284,18 @@ export interface GraphClusterInput {
   weight: number;
   memberNames: string[];
   timeZone?: string;
+  /**
+   * The seed entry's resolved parent chain, coarse to fine, when the caller has
+   * it: `["Japan", "Tokyo"]` for a ward of Tokyo.
+   *
+   * Optional and additive — a caller that does not thread it loses nothing but
+   * the containment test below. What it buys is the fix for a live defect: a
+   * metropolis's own wards each seed a cluster, sit just past a walking-reach
+   * day radius, and were reported to the traveller as *rejected satellite
+   * areas of their own destination* — seven identical sentences explaining why
+   * the trip "cannot reach" districts of the city they are staying in.
+   */
+  hierarchy?: readonly string[];
 }
 
 /**
@@ -328,9 +341,33 @@ export interface RejectedCluster {
   transferMinutes: number;
 }
 
+/**
+ * The same refusals, folded for reading.
+ *
+ * `rejected` keeps one entry per cluster because a legend and a map pin need
+ * one; a *panel* does not, and rendering the per-cluster list verbatim printed
+ * the identical "your 5 nights are already spoken for…" sentence seven times on
+ * a live build. One group per (rejection, sentence) pair, naming every cluster
+ * it covers, is what a screen should read.
+ */
+export interface RejectionSummary {
+  rejection: BaseRejection;
+  clusterNames: string[];
+  /** One sentence covering every cluster named above. */
+  summary: string;
+}
+
 export interface BaseStructure {
   bases: ChosenBase[];
   rejected: RejectedCluster[];
+  /**
+   * Divisions of the destination itself, folded into the core rather than
+   * offered or refused as separate areas. Absent when the caller supplied no
+   * hierarchy evidence — absence means "not established", never "none".
+   */
+  absorbed?: { cluster: GraphClusterInput; reason: string }[];
+  /** Identical refusals aggregated into one sentence each. See above. */
+  rejectionSummaries?: RejectionSummary[];
   /** Estimated whole days the route spends moving between bases. */
   transferDays: number;
   reach: ReachClass;
@@ -343,6 +380,15 @@ export interface BaseStructureInput {
   nights: number | null;
   /** Base changes the traveller will accept. Null means unconstrained. */
   maxBaseChanges: number | null;
+  /**
+   * What the traveller actually named, for the containment test.
+   *
+   * Optional and additive: with it, a cluster whose `hierarchy` names this
+   * destination is recognised as a division of it and absorbed into the core
+   * rather than judged as a competing area. Without it every cluster competes,
+   * which is the pre-existing behaviour unchanged.
+   */
+  destinationName?: string;
 }
 
 /**
@@ -368,10 +414,51 @@ export interface BaseStructureInput {
  */
 export function chooseBaseStructure(input: BaseStructureInput): BaseStructure {
   const { reach, nights, maxBaseChanges } = input;
-  const clusters = [...input.clusters];
-  if (clusters.length === 0) {
+  const allClusters = [...input.clusters];
+  if (allClusters.length === 0) {
     return { bases: [], rejected: [], transferDays: 0, reach };
   }
+
+  /*
+   * DIVISIONS OF THE DESTINATION ARE THE DESTINATION.
+   *
+   * A metropolis's own wards arrive as clusters of their own — each is a
+   * `city`-typed index entry with real weight — and on a walking-reach trip they
+   * sit just past the day radius, so every test below would refuse them and the
+   * traveller would read seven sentences explaining why districts of the city
+   * they named are "not reachable". The hierarchy the index already resolves
+   * says what they are: a cluster whose parent chain names the destination is
+   * ground *inside* it, so its weight joins the core and it competes for
+   * nothing. Fold-matched, so scripts and diacritics do not decide containment.
+   */
+  const destinationFolded =
+    input.destinationName !== undefined ? foldForMatch(input.destinationName) : '';
+  const absorbed: { cluster: GraphClusterInput; reason: string }[] = [];
+  const clusters: GraphClusterInput[] = [allClusters[0]!];
+  for (const cluster of allClusters.slice(1)) {
+    /*
+     * An *ancestor* named the destination, never the cluster's own name.
+     *
+     * The index publishes a hierarchy that can include the entry itself, so a
+     * cluster actually called "Tokyo" carries "Tokyo" in its own chain. Reading
+     * that as containment would absorb the destination into whatever happened
+     * to outrank it and delete the one place a trip would obviously be based —
+     * which is the opposite of the defect this test exists to fix.
+     */
+    const contained =
+      destinationFolded.length > 0 &&
+      foldForMatch(cluster.name) !== destinationFolded &&
+      (cluster.hierarchy ?? []).some((part) => foldForMatch(part) === destinationFolded);
+    if (contained) {
+      absorbed.push({
+        cluster,
+        reason: `${cluster.name} is part of ${input.destinationName} — it is ground this trip already covers, not a separate area to judge.`,
+      });
+    } else {
+      clusters.push(cluster);
+    }
+  }
+  const absorbedWeight = absorbed.reduce((total, entry) => total + entry.cluster.weight, 0);
 
   const reachMinutes = dayReachMinutes(reach);
   const basesAllowed = maxBaseChanges === null ? clusters.length : maxBaseChanges + 1;
@@ -385,13 +472,15 @@ export function chooseBaseStructure(input: BaseStructureInput): BaseStructure {
   const tripDays = nights === null ? Number.POSITIVE_INFINITY : Math.max(1, nights);
 
   const first = clusters[0]!;
-  const firstDays = Math.min(daysWorthOf(first.weight), tripDays);
+  /* The core's days include its absorbed divisions: they are the same ground. */
+  const coreWeight = first.weight + absorbedWeight;
+  const firstDays = Math.min(daysWorthOf(coreWeight), tripDays);
   bases.push({
     cluster: first,
-    nights: nights === null ? daysWorthOf(first.weight) : Math.min(nights, firstDays),
+    nights: nights === null ? daysWorthOf(coreWeight) : Math.min(nights, firstDays),
     transferMinutes: 0,
-    reason: `The densest part of the region — about ${daysWorthOf(first.weight)} day${
-      daysWorthOf(first.weight) === 1 ? '' : 's'
+    reason: `The densest part of the region — about ${daysWorthOf(coreWeight)} day${
+      daysWorthOf(coreWeight) === 1 ? '' : 's'
     } of places within a day's reach.`,
     satellites: [],
   });
@@ -429,9 +518,16 @@ export function chooseBaseStructure(input: BaseStructureInput): BaseStructure {
         reason:
           nights === null
             ? 'How long you are staying decides whether this is reachable at all.'
-            : `Your ${nights} night${nights === 1 ? '' : 's'} are already spoken for by ${bases
+            : /*
+               * Subject–verb agreement follows the number of *bases*, not the
+               * number of nights: one base "holds", two bases "hold". A live
+               * build printed "Tokyo, which alone hold about 5 days" seven
+               * times over, which is the kind of sentence that tells a reader
+               * nobody proofread the machine.
+               */
+              `Your ${nights} night${nights === 1 ? '' : 's'} are already spoken for by ${bases
                 .map((base) => base.cluster.name)
-                .join(' and ')}, which alone hold about ${Math.round(daysCommitted)} day${
+                .join(' and ')}, which alone ${bases.length === 1 ? 'holds' : 'hold'} about ${Math.round(daysCommitted)} day${
                 Math.round(daysCommitted) === 1 ? '' : 's'
               }.`,
       });
@@ -584,9 +680,46 @@ export function chooseBaseStructure(input: BaseStructureInput): BaseStructure {
   return {
     bases,
     rejected: stillRejected,
+    ...(absorbed.length > 0 ? { absorbed } : {}),
+    ...(stillRejected.length > 0 ? { rejectionSummaries: summarizeRejections(stillRejected) } : {}),
     transferDays: Math.round((transferMinutes / 240) * 10) / 10,
     reach,
   };
+}
+
+/**
+ * One sentence per identical refusal, however many clusters it covers.
+ *
+ * Grouped on the rejection kind *and* the sentence, because two
+ * `trip_already_full` refusals written against different base sets are
+ * genuinely different explanations and must not be folded into one. Within a
+ * group the clusters are named once, in input order, so "seven identical
+ * paragraphs" becomes "one paragraph naming seven areas".
+ */
+export function summarizeRejections(rejected: readonly RejectedCluster[]): RejectionSummary[] {
+  const groups = new Map<string, { rejection: BaseRejection; names: string[]; reason: string }>();
+  for (const entry of rejected) {
+    const key = `${entry.rejection}\n${entry.reason}`;
+    const group = groups.get(key);
+    if (group) group.names.push(entry.cluster.name);
+    else groups.set(key, { rejection: entry.rejection, names: [entry.cluster.name], reason: entry.reason });
+  }
+  return [...groups.values()].map((group) => ({
+    rejection: group.rejection,
+    clusterNames: group.names,
+    summary:
+      group.names.length === 1
+        ? `${group.names[0]}: ${group.reason}`
+        : `${listNames(group.names)}: ${group.reason}`,
+  }));
+}
+
+/** "A, B and C" for up to four names; "A, B and 3 more areas" beyond that. */
+function listNames(names: readonly string[]): string {
+  if (names.length <= 4) {
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  }
+  return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more areas`;
 }
 
 function formatMinutes(minutes: number): string {

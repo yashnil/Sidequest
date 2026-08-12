@@ -100,34 +100,57 @@ export interface MatrixOutcome {
   km: number[][];
   failedPairs: { from: string; to: string }[];
   calls: number;
+  /** Ordered pairs this run needed. Counted whether bought or read back. */
   pairs: number;
+  /** Ordered pairs answered from the store rather than from the router. */
   cacheHits: number;
+}
+
+/**
+ * ONE CACHE ENTRY PER ORDERED PAIR OF COORDINATES.
+ *
+ * The entry used to be a whole 20×20 block, keyed on the ordered coordinate
+ * lists of both its axes. Every pair in it was genuinely cached and none of it
+ * was ever reusable, because a key naming forty points only matches a request
+ * that assembles the same forty in the same two orders. Two Tokyo builds three
+ * days apart both reported `routeCacheHits=0` against `routePairs=676` — the
+ * second re-bought all 676 pairs and spent 57 seconds doing it, 73% of its
+ * machine time, for a matrix that had changed by one place.
+ *
+ * A pair is the unit the router is actually asked about and the unit whose
+ * answer is stable, so it is the unit stored. Any block composition then
+ * assembles from what is held and only the genuinely new pairs are requested —
+ * which is also what makes an itinerary edit cheap, since adding one stop to a
+ * region asks for one row and one column rather than the square.
+ */
+export interface MatrixPairCache {
+  read: (key: string) => { minutes: number; km: number } | null;
+  write: (key: string, value: { minutes: number; km: number }) => void;
 }
 
 export interface MatrixOptions {
   maxPairs: number;
   fetchImpl?: typeof fetch;
-  cache?: {
-    read: (key: string) => { minutes: number[][]; km: number[][] } | null;
-    write: (key: string, value: { minutes: number[][]; km: number[][] }) => void;
-  };
+  cache?: MatrixPairCache;
 }
 
-export function matrixCacheKey(
-  sources: readonly RoutePoint[],
-  targets: readonly RoutePoint[],
+/**
+ * Five decimal places, which is about a metre.
+ *
+ * Coordinates rather than ids, deliberately: the same trailhead arrives with a
+ * different synthetic id from one compilation to the next, and a key built from
+ * ids would miss on every rebuild while describing the same journey. What the
+ * router answered about is two points on the ground.
+ */
+export function matrixPairCacheKey(
+  from: RoutePoint,
+  to: RoutePoint,
   costing: ValhallaCosting,
 ): string {
   const point = (entry: RoutePoint): string => `${entry.lat.toFixed(5)},${entry.lng.toFixed(5)}`;
-  return [
-    'valhalla',
-    'v1',
-    routingEndpoint(),
-    costing,
-    sources.map(point).join(';'),
-    '->',
-    targets.map(point).join(';'),
-  ].join('|');
+  return ['valhalla', 'pair', 'v1', routingEndpoint(), costing, point(from), '->', point(to)].join(
+    '|',
+  );
 }
 
 /**
@@ -164,17 +187,13 @@ export function newCircuit(): CircuitState {
   return { consecutiveFailures: 0, open: false };
 }
 
-async function requestBlock(
+async function fetchBlock(
   sources: readonly RoutePoint[],
   targets: readonly RoutePoint[],
   costing: ValhallaCosting,
   options: MatrixOptions,
   circuit?: CircuitState,
-): Promise<{ minutes: number[][]; km: number[][]; cached: boolean }> {
-  const key = matrixCacheKey(sources, targets, costing);
-  const cached = options.cache?.read(key);
-  if (cached) return { ...cached, cached: true };
-
+): Promise<{ minutes: number[][]; km: number[][] }> {
   if (circuit?.open) {
     throw new RoutingError('request_failed', 'The routing service stopped answering.');
   }
@@ -272,9 +291,146 @@ async function requestBlock(
     km[from]![to] = cell.distance ?? Number.NaN;
   }
 
-  const result = { minutes, km };
-  options.cache?.write(key, result);
-  return { ...result, cached: false };
+  return { minutes, km };
+}
+
+/**
+ * One block, assembled from what is held and bought only where it is not.
+ *
+ * The three counters it returns are the whole point of the rewrite, so they are
+ * exact rather than approximate: `served` is pairs answered from the store,
+ * `bought` is pairs the router was asked for, and `calls` is the number of
+ * requests that took (zero when everything was held).
+ *
+ * Only a *routed* pair is written back. A pair the router could not answer is
+ * left unstored, because "no route today" is frequently a snapped endpoint or a
+ * closed road rather than a fact about the ground, and a cache that made it
+ * permanent would keep a place out of every future plan for a month.
+ */
+async function resolveBlock(
+  sources: readonly RoutePoint[],
+  targets: readonly RoutePoint[],
+  costing: ValhallaCosting,
+  options: MatrixOptions,
+  budgetRemaining: number,
+  circuit?: CircuitState,
+): Promise<{
+  minutes: number[][];
+  km: number[][];
+  served: number;
+  bought: number;
+  calls: number;
+  /** True when the block was skipped whole because its missing pairs cost too much. */
+  overBudget: boolean;
+}> {
+  const minutes = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
+  const km = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
+
+  /** Which columns each row still needs, so a request covers only those. */
+  const missingByRow = new Map<number, number[]>();
+  let served = 0;
+
+  for (let row = 0; row < sources.length; row += 1) {
+    const wanted: number[] = [];
+    for (let col = 0; col < targets.length; col += 1) {
+      const source = sources[row]!;
+      const target = targets[col]!;
+      const held = options.cache?.read(matrixPairCacheKey(source, target, costing)) ?? null;
+      if (held && Number.isFinite(held.minutes)) {
+        minutes[row]![col] = held.minutes;
+        km[row]![col] = held.km;
+        served += 1;
+        continue;
+      }
+      wanted.push(col);
+    }
+    if (wanted.length > 0) missingByRow.set(row, wanted);
+  }
+
+  if (missingByRow.size === 0) {
+    return { minutes, km, served, bought: 0, calls: 0, overBudget: false };
+  }
+
+  /**
+   * THE MISSING CELLS ARE A CROSS, NOT A RECTANGLE, AND THE API TAKES RECTANGLES.
+   *
+   * Adding one place to a held region leaves its whole row and its whole column
+   * unanswered and everything else held. The smallest rectangle covering that
+   * cross is the entire square — so a single covering request re-buys all 49
+   * pairs of a 7×7 matrix to learn 13, which is most of the saving thrown away
+   * at the last step.
+   *
+   * Rows that need the *same* columns are one rectangle, so grouping by that
+   * signature decomposes the cross exactly: the new row against everything, and
+   * everything against the new column. Two requests, thirteen pairs.
+   *
+   * Bounded, because calls and pairs are different resources: pairs are what a
+   * router bills for and calls are what it rate-limits, at better than a second
+   * apart. Past a handful of groups the wall-clock cost of the extra round trips
+   * outweighs the pairs they save, and the single covering rectangle is the
+   * better trade. Four covers every shape a rebuild actually produces.
+   */
+  const MAX_REQUESTS_PER_BLOCK = 4;
+  const bySignature = new Map<string, { rows: number[]; cols: number[] }>();
+  for (const [row, cols] of missingByRow) {
+    const signature = cols.join(',');
+    const group = bySignature.get(signature);
+    if (group) group.rows.push(row);
+    else bySignature.set(signature, { rows: [row], cols });
+  }
+
+  const groups =
+    bySignature.size <= MAX_REQUESTS_PER_BLOCK
+      ? [...bySignature.values()]
+      : [
+          {
+            rows: [...missingByRow.keys()].sort((a, b) => a - b),
+            cols: [...new Set([...missingByRow.values()].flat())].sort((a, b) => a - b),
+          },
+        ];
+
+  const bought = groups.reduce((sum, group) => sum + group.rows.length * group.cols.length, 0);
+
+  /*
+   * The budget is charged for what is bought, never for what was held.
+   *
+   * Charging cached pairs was the old behaviour and it made a warm build
+   * *smaller* than a cold one: the ceiling was reached on pairs that cost
+   * nothing, and the blocks beyond it were reported as unroutable.
+   */
+  if (bought > budgetRemaining) {
+    return { minutes, km, served, bought: 0, calls: 0, overBudget: true };
+  }
+
+  let calls = 0;
+  for (const group of groups) {
+    const fetched = await fetchBlock(
+      group.rows.map((row) => sources[row]!),
+      group.cols.map((col) => targets[col]!),
+      costing,
+      options,
+      circuit,
+    );
+    calls += 1;
+
+    for (let r = 0; r < group.rows.length; r += 1) {
+      for (let c = 0; c < group.cols.length; c += 1) {
+        const value = fetched.minutes[r]?.[c];
+        const distance = fetched.km[r]?.[c];
+        if (value === undefined || !Number.isFinite(value)) continue;
+        const row = group.rows[r]!;
+        const col = group.cols[c]!;
+        minutes[row]![col] = value;
+        km[row]![col] = distance ?? Number.NaN;
+        options.cache?.write(matrixPairCacheKey(sources[row]!, targets[col]!, costing), {
+          minutes: value,
+          km: Number.isFinite(distance) ? (distance as number) : Number.NaN,
+        });
+      }
+    }
+  }
+
+  return { minutes, km, served, bought, calls, overBudget: false };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -284,10 +440,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * A full square matrix, batched to stay inside the pair budget.
  *
- * The budget is spent block by block, and a block that would exceed it is not
- * requested — every pair inside it is reported as failed instead. That is what
- * turns "we ran out of budget" into a visible coverage number rather than a
- * matrix that is quietly smaller than it looks.
+ * The budget is spent block by block, and a block whose *unheld* pairs would
+ * exceed it is not requested — every pair inside it is reported as failed
+ * instead. That is what turns "we ran out of budget" into a visible coverage
+ * number rather than a matrix that is quietly smaller than it looks.
  */
 export async function computeMatrix(
   points: readonly RoutePoint[],
@@ -305,6 +461,8 @@ export async function computeMatrix(
   let calls = 0;
   let pairs = 0;
   let cacheHits = 0;
+  /** Pairs actually charged to the router, which is what the budget bounds. */
+  let bought = 0;
 
   for (let rowStart = 0; rowStart < size; rowStart += blockSize) {
     for (let colStart = 0; colStart < size; colStart += blockSize) {
@@ -320,15 +478,22 @@ export async function computeMatrix(
         }
       };
 
-      if (pairs + cells > options.maxPairs) {
-        markFailed();
-        continue;
-      }
-
       try {
-        const block = await requestBlock(sources, targets, costing, options, circuit);
-        if (block.cached) cacheHits += 1;
-        else calls += 1;
+        const block = await resolveBlock(
+          sources,
+          targets,
+          costing,
+          options,
+          options.maxPairs - bought,
+          circuit,
+        );
+        if (block.overBudget) {
+          markFailed();
+          continue;
+        }
+        calls += block.calls;
+        bought += block.bought;
+        cacheHits += block.served;
         pairs += cells;
 
         for (let row = 0; row < sources.length; row += 1) {

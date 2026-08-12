@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openBoardBackstage } from './support/trip';
 
 /**
  * The slice this proves: a traveller sees weather context on the board before
@@ -123,7 +124,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
-  await expect(page.getByRole('heading', { name: 'Must-see classics' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
 }
 
 /**
@@ -139,6 +140,14 @@ async function reachBoard(page: Page, dates = AUGUST) {
  * is now a precondition of every weather assertion on the board.
  */
 async function fetchWeather(page: Page) {
+  /*
+   * The weather panel is one of the things that moved backstage when the board
+   * stopped opening with an account of its own research, so the control has to
+   * be uncovered before it can be pressed. It is in the DOM either way — which
+   * is why this failed on `toBeVisible` against a button the report showed
+   * resolving perfectly well.
+   */
+  await openBoardBackstage(page);
   const button = page.getByTestId('weather-refresh');
   await expect(button).toBeVisible();
   await button.click();
@@ -384,7 +393,9 @@ test('a place the traveller ruled out never appears as a backup', async ({ page 
     .getByRole('article')
     .filter({ has: page.getByRole('heading', { name: first, exact: true }) })
     .first();
+  // Skipping asks why before it commits, and the answer is what records the pass.
   await card.getByRole('button', { name: 'Skip' }).click();
+  await card.getByRole('button', { name: 'Not my thing' }).click();
   await expect(card.getByRole('button', { name: 'Skip' })).toHaveAttribute(
     'aria-pressed',
     'true',

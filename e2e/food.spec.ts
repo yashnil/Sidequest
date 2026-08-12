@@ -124,10 +124,28 @@ test('the plan survives a refresh unchanged, then changes when the preference do
   await finishQuestionnaire(page);
   await buildTrip(page);
 
-  const before = await page.locator('ol').first().innerText();
+  /**
+   * WHAT IS COMPARED, AND WHY IT IS NOT THE FIRST LIST ON THE PAGE.
+   *
+   * `page.locator('ol').first()` is the day rail — "Day 1 · Wed 12 Aug · Scenic
+   * viewpoints around Mammoth Lakes", four of them. It is a table of contents,
+   * and no food preference on earth changes it. So the half of this test that
+   * says "then changes when the preference does" was comparing two things that
+   * were the same by construction, and the half above it proved a refresh does
+   * not renumber the days.
+   *
+   * The stop and meal titles are the plan. They are the level-3 headings on the
+   * timeline — every scheduled thing, in order, including each meal and the venue
+   * it names — so they are stable across a reload and they are exactly what a
+   * different way of eating is supposed to move.
+   */
+  const plan = () => page.getByRole('heading', { level: 3 }).allTextContents();
+
+  const before = await plan();
+  expect(before.length, 'the plan should have scheduled something').toBeGreaterThan(0);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Eating' }).first()).toBeVisible();
-  expect(await page.locator('ol').first().innerText()).toBe(before);
+  expect(await plan()).toEqual(before);
 
   const url = page.url();
   const tripPath = url.slice(0, url.lastIndexOf('/'));
@@ -144,7 +162,13 @@ test('the plan survives a refresh unchanged, then changes when the preference do
    * than routing around it.
    */
   await page.goto(`${tripPath}/questionnaire`);
-  const jump = page.getByRole('button', { name: 'Change Eating' });
+  /*
+   * "Change how you eat", not "Change Eating". The control renders the verb and
+   * appends the rest for screen readers, and the appended half was the row's own
+   * label — which made the constraints row announce itself as "Change Steering
+   * around". Every row now carries a hand-written phrase instead.
+   */
+  const jump = page.getByRole('button', { name: 'Change how you eat' });
   await expect(jump).toBeVisible();
   await jump.click();
   await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
@@ -152,8 +176,7 @@ test('the plan survives a refresh unchanged, then changes when the preference do
   await finishQuestionnaire(page);
   await buildTrip(page);
 
-  const after = await page.locator('ol').first().innerText();
-  expect(after).not.toBe(before);
+  expect(await plan(), 'a different way of eating produced an identical plan').not.toEqual(before);
 });
 
 test('a venue the traveller rules out never appears on the plan', async ({ page }) => {

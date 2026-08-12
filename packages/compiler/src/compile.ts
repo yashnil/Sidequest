@@ -67,6 +67,7 @@ import {
   mergeMustDoResolutions,
   mustDoCoverageFrom,
   resolveMustDos,
+  segmentMustDoRequests,
   type MustDoSearchSpace,
 } from './must-do';
 import {
@@ -82,7 +83,15 @@ import {
   type DestinationResearchReadiness,
   type ResearchRepair,
 } from '@sidequest/core';
+/**
+ * The intake contract this compilation owes the questionnaire. See
+ * `interests/offer.ts` and `interests/decisions.ts` — both are pure functions
+ * over what the compilation found, kept in core so the questionnaire can read
+ * the same vocabulary the scorer does.
+ */
+import { decisionQuestionsFor, interestOffer } from '@sidequest/core';
 import { dedupeCandidates } from './dedupe';
+import { foodSupplyGaps } from './food-supply';
 import { buildProvisionalBoard } from './provisional';
 import type { ProvisionalBoard, ResearchPriorityHints } from '@sidequest/core';
 import {
@@ -304,7 +313,17 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     breadthRank: breadthRank(input.scope.breadth),
     ...(input.budget ? { base: input.budget } : {}),
   });
-  const ledger = new BudgetLedger(limits, startedAtMs);
+  /**
+   * The ledger keeps the **wall** clock, not the injected one.
+   *
+   * Every timestamp on the artifact comes from `input.now` so two compiles of
+   * the same ground are byte-identical — but a time *ceiling* asks a different
+   * question ("how long has this actually been running") and answering it from
+   * a frozen clock would give a build eight real minutes against a
+   * three-minute limit and call it inside. So the two clocks are separated
+   * here: `startedAtMs` above stamps the artifact, and this one bounds spend.
+   */
+  const ledger = new BudgetLedger(limits, Date.now());
 
   const stages: StageRecord[] = [];
   /**
@@ -395,6 +414,32 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       retries?: number;
     }>,
   ): Promise<T> => {
+    /**
+     * THE WALL CLOCK, CHECKED WHERE A STAGE BEGINS.
+     *
+     * `maxDurationMs` used to be printed and never obeyed — `outOfTime` had no
+     * callers anywhere, and observed live builds ran two and three times past
+     * the configured ceiling with nothing to stop them but a person watching.
+     * A stage boundary is the only honest place to check it: mid-stage there
+     * is no partial answer to keep, and between stages everything already
+     * produced survives.
+     *
+     * Enforcement is by budget rather than by abort, because "running out is
+     * normal" is a property this pipeline already has: the purchased counters
+     * go to zero, the enrichment stages degrade to "nobody publishes this",
+     * the region comes back `partial` with `maxDurationMs` named in its
+     * coverage report, and the traveller gets the trip that was built rather
+     * than a failure. The worker's hard stop still exists above this, for the
+     * build that wedges *inside* a stage and never reaches here.
+     */
+    if (ledger.enforceTimeCeiling(Date.now())) {
+      gaps.push({
+        subjectId: 'compilation',
+        reason: 'budget_exhausted',
+        detail:
+          'This build reached its overall time ceiling, so the remaining research was not bought. Everything already found is kept.',
+      });
+    }
     const startedAt = new Date(startedAtMs + elapsed).toISOString();
     const wallStartedAt = new Date();
     inFlight = stage;
@@ -906,7 +951,17 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          * it after the matrix has been bought cannot put it back on the board.
          */
         ...(input.mustDo && input.mustDo.length > 0
-          ? { namedByTraveller: input.mustDo.map((request) => request.quote) }
+          ? {
+              /*
+               * Segmented, so each discrete subject can rank first by its own
+               * folded name. The unsegmented span was a forty-word "name" that
+               * matched nothing, which is half of how three named must-dos
+               * became one not_found on a live artifact.
+               */
+              namedByTraveller: segmentMustDoRequests(input.mustDo).map(
+                (request) => request.quote,
+              ),
+            }
           : {}),
       });
       ledger.record('maxModelCalls', value.calls);
@@ -3078,9 +3133,43 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           ? { requested: transitEvidence.requested, measured: transitEvidence.measured }
           : null,
         walkingPlanned: input.scope.transport.primaryMode !== 'drive',
-        hasWaterOrRail: input.scope.transport.allowedModes.some(
-          (mode) => mode === 'ferry' || mode === 'rail',
-        ),
+        /*
+         * The access layer this compilation actually built, not the mode list it
+         * was allowed to use.
+         *
+         * `hasWaterOrRail` used to be derived here from
+         * `scope.transport.allowedModes`, and `deriveScope` grants `rail` on
+         * every trip — so the coverage row it fed said "crossings are modelled as
+         * services with calendars" for regions with no service at all, and its
+         * `not_applicable` branch was unreachable. The rules and services
+         * themselves are the only thing that can answer either that row or the
+         * "getting around" row beside it, so they are what is passed.
+         */
+        access: { rules: access.rules, services: access.services },
+        /*
+         * The evidence behind "where this is", from the two layers that hold it.
+         *
+         * The scope knows how its own edge was drawn; the containment overlay
+         * knows how much of the ground it could place against that edge. Coverage
+         * held neither, so its blocking geography row graded on a place count and
+         * printed "the region resolved to a real boundary" over a reach circle.
+         *
+         * `placement` is omitted rather than zeroed when no ground layer ran: an
+         * uncounted zero and a counted one are different claims, and only the
+         * counted one may drive a grade down.
+         */
+        geography: {
+          boundaryEvidence: input.scope.boundaryEvidence,
+          ...(portfolioFacts
+            ? {
+                placement: {
+                  read: portfolioFacts.packRecords,
+                  placed: portfolioFacts.membershipDecided,
+                  inside: portfolioFacts.insideSelected,
+                },
+              }
+            : {}),
+        },
         now: input.now,
       });
       const weak = value.dimensions.filter(
@@ -3155,7 +3244,13 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * particular never builds the second overlay: `isOutsideDestination` is a
      * callback and is only reached by a request that matched a ground record.
      */
-    const mustDoRequests = input.mustDo ?? [];
+    /*
+     * Segmented before anything looks them up. One composer span holding three
+     * named subjects resolved — and failed — as one forty-word "name" on a live
+     * artifact; each discrete subject now gets its own request, its own verdict
+     * and its own line on the coverage panel. See `segmentMustDoRequests`.
+     */
+    const mustDoRequests = segmentMustDoRequests(input.mustDo ?? []);
     /*
      * Flattened only when somebody named something. A pack can hold tens of
      * thousands of records and the overwhelming majority of trips name none.
@@ -3560,7 +3655,14 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         schemaVersion: COMPILED_REGION_VERSION,
         id: input.compilationId,
         compilerVersion: COMPILER_VERSION,
-        region: buildRegion(scope, primary, plannable),
+        region: buildRegion(scope, primary, plannable, {
+          access,
+          foodVenueCount: routableFood.length,
+          secondaryBaseMinutes: routedBases
+            .filter((base) => base.id !== primary.id)
+            .map((base) => legBetween(primary.routingId, base.routingId)?.minutes)
+            .filter((minutes): minutes is number => typeof minutes === 'number'),
+        }),
         scope,
         /*
          * Fingerprinted from the *input* scope, deliberately.
@@ -3595,8 +3697,31 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         access,
         operatingHours: hours,
         weatherLocations,
+        /*
+         * `gaps: []` was a literal here from the first compiled artifact, and
+         * an empty gap list is a claim: the planner reads a day with no
+         * matching gap as a day that can feed itself. Six days in a food-first
+         * destination built on three venues therefore said nothing at all about
+         * how thin that was. The gaps are now counted — see `food-supply.ts`,
+         * which is careful to report a shortfall in our own index as exactly
+         * that rather than as a statement about the ground.
+         */
         ...(routableFood.length > 0
-          ? { food: { version: FOOD_DATASET_VERSION, regionId: access.regionId, venues: routableFood, gaps: [] } as FoodDataset }
+          ? {
+              food: {
+                version: FOOD_DATASET_VERSION,
+                regionId: access.regionId,
+                venues: routableFood,
+                gaps: foodSupplyGaps({
+                  venues: routableFood,
+                  places: plannable,
+                  tripDays: input.dates.length,
+                  foodIsCore: foodIsCoreInterest(input.profile),
+                  unroutableCount: enrichedFood.length - routableFood.length,
+                  regionName: scope.destinationName,
+                }),
+              } as FoodDataset,
+            }
           : {}),
         ...(portfolio.bases.length > 0 ? { basePortfolio: portfolio } : {}),
         ...(routingDiagnostics ? { routingDiagnostics } : {}),
@@ -3819,6 +3944,19 @@ function roughFit(place: Place, profile: TravelerProfile | undefined): number {
 
 function detourTolerance(profile: TravelerProfile | undefined): number {
   return Math.max(20, profile?.detourToleranceMinutes ?? 90);
+}
+
+/**
+ * Did the traveller ask for the trip to be built around eating?
+ *
+ * `frequent` and `core` only, matching the rung the Discovery Board already
+ * treats as "you asked us to build the trip around this". A `low` food answer
+ * is "if it is right there", and doubling the supply target on that would spend
+ * acquisition budget nobody asked for.
+ */
+function foodIsCoreInterest(profile: TravelerProfile | undefined): boolean {
+  const level = profile?.interests.food_and_towns;
+  return level === 'frequent' || level === 'core';
 }
 
 /** The operator's own domain, where the map data already carried one. */
@@ -4160,7 +4298,25 @@ function regionIdFor(scope: GeographicScope): string {
   return `compiled-${scope.destinationCandidateId}`;
 }
 
-function buildRegion(scope: GeographicScope, primary: BaseCandidate, places: readonly Place[]): Region {
+function buildRegion(
+  scope: GeographicScope,
+  primary: BaseCandidate,
+  places: readonly Place[],
+  /**
+   * What the intake screens need from this compilation, and nothing else.
+   *
+   * Optional so every existing caller and test keeps working: a region built
+   * without it simply carries no offer and no follow-ups, which is what the
+   * whole product did before and which the questionnaire already handles by
+   * falling back to the full vocabulary.
+   */
+  intake?: {
+    access: AccessDataset;
+    foodVenueCount: number;
+    /** Minutes from the primary base to each other base, where measured. */
+    secondaryBaseMinutes: readonly number[];
+  },
+): Region {
   const radiusKm =
     scope.shape.kind === 'radius'
       ? scope.shape.radiusKm
@@ -4168,6 +4324,27 @@ function buildRegion(scope: GeographicScope, primary: BaseCandidate, places: rea
           10,
           ...places.map((place) => Math.max(1, place.travelFromBase.distanceKm)),
         );
+  /**
+   * WHAT THIS DESTINATION HAS EARNED THE RIGHT TO ASK.
+   *
+   * Both of these are derived from the compilation's own findings and stored on
+   * the artifact, because the questionnaire runs in a different request from the
+   * compiler and cannot re-derive them. Before this, the mechanism that renders
+   * region-owned intake read a field only the authored fixture carried — so
+   * every compiled destination in the product was asked one valley's questions.
+   */
+  const offer = interestOffer({
+    places,
+    ...(intake ? { foodVenueCount: intake.foodVenueCount } : {}),
+  });
+  const decisionQuestions = intake
+    ? decisionQuestionsFor({
+        places,
+        access: intake.access,
+        carAvailable: scope.transport.carAvailable,
+        secondaryBaseMinutes: intake.secondaryBaseMinutes,
+      })
+    : [];
   return {
     id: regionIdFor(scope),
     name: scope.destinationName,
@@ -4188,6 +4365,22 @@ function buildRegion(scope: GeographicScope, primary: BaseCandidate, places: rea
       scope.transport.carAvailable === false
         ? 'This plan assumes no car. Anything that needs one has been left out rather than offered and then withdrawn.'
         : 'We have not established what a car adds here, so nothing in this plan assumes one is missing.',
+    /*
+     * `whole_vocabulary` is deliberately not stored. It means "we withheld
+     * nothing because we know nothing", which is the reader's own default —
+     * writing it down would turn an absence of evidence into a stored claim
+     * that this region was assessed and found to need every question.
+     */
+    ...(offer.basis === 'whole_vocabulary'
+      ? {}
+      : {
+          interestOffer: {
+            interests: [...offer.interests],
+            classes: [...offer.classes],
+            basis: offer.basis,
+          },
+        }),
+    ...(decisionQuestions.length > 0 ? { decisionQuestions } : {}),
   };
 }
 
@@ -4298,14 +4491,25 @@ function buildSatellites(
 }
 
 /**
- * Hours for every place, and `unknown` where nobody published any.
+ * Hours for every place, with the *kind* of answer matched to the kind of
+ * place.
  *
- * The dataset validator insists on full coverage, and the value it insists on is
- * the important part: `unknown` rather than `always_open`. A trailhead with no
- * gate and a museum nobody looked up are different situations, and a planner
- * that treats them the same schedules the museum at seven in the evening.
+ * The dataset validator insists on full coverage, and the default used to be
+ * one value for everything: `unknown`, plus a "check its hours" recheck note.
+ * Right for a museum nobody looked up; absurd for a river — and a live build
+ * stamped "Nobody publishes opening hours…" on every slope, hill and stretch
+ * of water it shipped, which taught the traveller to ignore the one warning
+ * that matters. So the fallback now reads `hoursExpectation`, written where
+ * the record's own category was in hand:
+ *
+ * - `open_ground` — a river, an unfenced park, a plaza: there is no gate and
+ *   no staffed schedule to be wrong about. `always_open`, with a note that
+ *   says what it is rather than warning about hours it cannot have.
+ * - `gated`, or unclassified (every stored place from before the field) —
+ *   `unknown`, exactly as before. The cautious direction is unchanged: a
+ *   museum with no hours record still refuses a seven-p.m. slot.
  */
-function buildHours(
+export function buildHours(
   scope: GeographicScope,
   places: readonly Place[],
   calendars: readonly OperatingCalendar[],
@@ -4316,32 +4520,49 @@ function buildHours(
   for (const calendar of calendars) {
     if (!byPlace.has(calendar.placeId)) byPlace.set(calendar.placeId, calendar);
   }
+  const noAdmission = {
+    reservationRequired: false,
+    timedEntry: false,
+    permitRequired: false,
+    walkInAllowed: true,
+    capacityLimited: false,
+  };
   return {
     version: OPERATING_HOURS_DATASET_VERSION,
     regionId: regionIdFor(scope),
-    calendars: places.map(
-      (place) =>
-        byPlace.get(place.id) ?? {
-          kind: 'unknown' as const,
+    calendars: places.map((place) => {
+      const found = byPlace.get(place.id);
+      if (found) return found;
+      if (place.hoursExpectation === 'open_ground') {
+        return {
+          kind: 'always_open' as const,
           placeId: place.id,
-          admission: {
-            reservationRequired: false,
-            timedEntry: false,
-            permitRequired: false,
-            walkInAllowed: true,
-            capacityLimited: false,
-          },
+          admission: noAdmission,
           daylightOnly: false,
-          note: 'We hold no opening-hours record for this place.',
+          note: 'Open ground — no staffed opening hours apply.',
           provenance: {
             kind: 'estimated' as const,
-            sourceName: 'No source',
-            confidence: 0,
-            volatility: 'dynamic' as const,
-            recheckNote: 'Nobody publishes opening hours for this that we could find. Check before you go.',
+            sourceName: 'Category of place',
+            confidence: 0.6,
+            volatility: 'stable' as const,
           },
+        };
+      }
+      return {
+        kind: 'unknown' as const,
+        placeId: place.id,
+        admission: noAdmission,
+        daylightOnly: false,
+        note: 'We hold no opening-hours record for this place.',
+        provenance: {
+          kind: 'estimated' as const,
+          sourceName: 'No source',
+          confidence: 0,
+          volatility: 'dynamic' as const,
+          recheckNote: 'Nobody publishes opening hours for this that we could find. Check before you go.',
         },
-    ),
+      };
+    }),
   };
 }
 

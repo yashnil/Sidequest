@@ -135,6 +135,14 @@ export const COMPILATION_ERROR_CODES = [
   'coverage_insufficient',
   'malicious_source_rejected',
   'cancelled_by_user',
+  /**
+   * The process running the build went away — a crash, a deploy, a killed
+   * worker — and the heartbeat went cold. Distinct from `internal_error`
+   * because nothing about the *build* is known to be wrong: starting again
+   * picks up everything the shared evidence store already holds, and the UI
+   * may honestly offer that rather than apologising for a defect.
+   */
+  'compilation_interrupted',
   'internal_error',
 ] as const;
 export const compilationErrorCodeSchema = z.enum(COMPILATION_ERROR_CODES);
@@ -162,6 +170,8 @@ export const COMPILATION_ERROR_COPY: Record<CompilationErrorCode, string> = {
   coverage_insufficient: 'There is not enough here to plan on. We would rather say so than pad it.',
   malicious_source_rejected: 'A page we were pointed at was not safe to read, so we did not.',
   cancelled_by_user: 'Stopped.',
+  compilation_interrupted:
+    'That build stopped without finishing — the process running it went away. Nothing was lost: starting again picks up everything we had already read.',
   internal_error: 'Something went wrong on our side.',
 };
 
@@ -172,6 +182,12 @@ export function isRetryable(code: CompilationErrorCode): boolean {
     code === 'provider_rate_limited' ||
     code === 'route_matrix_incomplete' ||
     code === 'ai_output_malformed' ||
+    /*
+     * The most retryable code of all: the build was healthy and its process
+     * died. A retry re-reads the shared evidence store rather than re-buying
+     * it, so the offer is honest as well as cheap.
+     */
+    code === 'compilation_interrupted' ||
     code === 'internal_error'
   );
 }
@@ -210,8 +226,30 @@ export const compilationJobSchema = z.object({
 });
 export type CompilationJob = z.infer<typeof compilationJobSchema>;
 
-/** How long a `running` job may go silent before another request may take it over. */
-export const HEARTBEAT_TIMEOUT_MS = 90_000;
+/**
+ * How often a live compilation writes its heartbeat, independent of stage
+ * boundaries.
+ *
+ * The interval exists because stage boundaries were the only writer for months
+ * and real stages run three minutes and more: `heartbeat()` was exported with a
+ * rationale and had zero callers, so every healthy build longer than the
+ * timeout was reported dead — and the progress screen offered a duplicate paid
+ * build while the first one was still spending. The runner's pulse now writes
+ * on this clock for as long as the compile call is in flight.
+ */
+export const HEARTBEAT_INTERVAL_MS = 15_000;
+
+/**
+ * How long a `running` job may go silent before another request may take it over.
+ *
+ * Above the longest single provider call the pipeline is allowed to make — the
+ * research model's extraction ceiling is 240 s — plus a margin, because a
+ * heartbeat pulse runs on the worker's event loop and a long synchronous
+ * stretch (clustering, routing arithmetic) legitimately delays it. Below that
+ * ceiling this constant called healthy builds dead, which is how a traveller
+ * came to be offered a second paid build while the first was mid-call.
+ */
+export const HEARTBEAT_TIMEOUT_MS = 300_000;
 
 export function isAbandoned(job: CompilationJob, now: Date): boolean {
   if (job.state !== 'running' && job.state !== 'queued') return false;
@@ -554,4 +592,31 @@ export function displayStages(job: CompilationJob): StageRecord[] {
    * added to them, so it is `runsInJob` on the registry instead.
    */
   return JOB_STAGES.map((stage) => recorded.get(stage) ?? { stage, status: 'waiting' as const });
+}
+
+/**
+ * A duration for a progress surface, with hours rolled up.
+ *
+ * The progress screen's own private formatter stopped at minutes, and a job
+ * whose process had died kept counting — so a traveller read "Working —
+ * 12198m 51s", which is eight days rendered as if it were a stopwatch lap. The
+ * orphan reclaim is what stops the counting; this is what stops any number
+ * that does get large from being printed in a unit nobody uses. Seconds are
+ * dropped past the hour because at that magnitude they are noise.
+ *
+ * Negative and non-finite inputs render as zero: a clamp is a bug nobody sees
+ * and `-1s` is a bug a traveller sees.
+ */
+export function formatCompilationDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+  seconds = Math.round(seconds);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    const rest = seconds % 60;
+    return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes === 0 ? `${hours}h` : `${hours}h ${restMinutes}m`;
 }

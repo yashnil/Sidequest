@@ -9,6 +9,7 @@ import {
   type PlanRatings,
 } from '@sidequest/bench';
 import { readDraft } from '@/components/benchmark/neutral-dto';
+import { labsAccessGranted } from '@/lib/labs/access';
 import { blindPanels } from '@/lib/benchmark/blind';
 import {
   advanceSessionState,
@@ -36,6 +37,10 @@ import {
  *
  * Every refusal is a *return value* with the same wording whichever arm caused
  * it. A message that said which one had run out of rounds would identify it.
+ *
+ * All three begin with `labsAccessGranted()`: the `/labs` middleware guards the
+ * pages, and a server action is dispatched by id from any URL. See
+ * `lib/labs/access`.
  */
 
 export type SaveResult = { ok: boolean };
@@ -44,6 +49,7 @@ export async function saveReviewDraftAction(
   sessionId: string,
   draft: unknown,
 ): Promise<SaveResult> {
+  if (!(await labsAccessGranted())) return { ok: false };
   return { ok: saveReviewDraft(sessionId, readDraft(draft), new Date()) };
 }
 
@@ -64,6 +70,8 @@ export type LockResult = { kind: 'locked' | 'incomplete' | 'refused' };
  * would mean leaving a tab open changed the experiment.
  */
 export async function lockReviewAction(sessionId: string, draft: unknown): Promise<LockResult> {
+  if (!(await labsAccessGranted())) return { kind: 'refused' };
+
   const session = getBenchmarkSession(sessionId);
   if (!session) return { kind: 'refused' };
 
@@ -143,6 +151,8 @@ export async function requestCorrectionAction(
   sessionId: string,
   instruction: string,
 ): Promise<CorrectionResult> {
+  if (!(await labsAccessGranted())) return { kind: 'unavailable', roundsUsed: 0 };
+
   const text = instruction.trim();
   const rounds = listCorrections(sessionId);
   const usedBySystem = new Map<string, number>();

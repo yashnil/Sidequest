@@ -135,71 +135,169 @@ export function autoSelect(input: AutoSelectInput): AutoSelection {
   let hiddenUsed = 0;
   let classicUsed = 0;
   const skippedForFrequency = new Set<Interest>();
+  /*
+   * What the set already holds, along the axes a portfolio is balanced on.
+   *
+   * Separate from the counters above because those are *ceilings* — they say
+   * when to stop — and these are *marginal value*: they say which of two
+   * admissible candidates makes the better next pick. A board where every
+   * constraint is slack still has a best answer, and before this the ordering
+   * had no opinion about it.
+   */
+  const effortTaken = new Set<string>();
+  const areasTaken = new Set<string>();
+  const interestsTaken = new Set<Interest>();
+  let poorWeatherHeld = 0;
 
-  const ordered = [...eligible].sort(
+  /*
+   * The scale travel is judged against: the longest journey on this board.
+   *
+   * Relative rather than absolute, because "far" is a property of the
+   * destination and not of a number. Twenty-five minutes is the far end of a
+   * city board and the near end of an island one, and a fixed threshold would
+   * make the penalty meaningless on one of them.
+   */
+  const longestJourney = eligible.reduce(
+    (longest, candidate) =>
+      candidate.detourClass === 'base' || candidate.travelMinutesFromBase === null
+        ? longest
+        : Math.max(longest, candidate.travelMinutesFromBase),
+    0,
+  );
+
+  const byScore = [...eligible].sort(
     (a, b) => b.fit.score - a.fit.score || a.place.id.localeCompare(b.place.id),
   );
 
-  // Pass 1 — every constraint active.
-  for (const candidate of ordered) {
-    if (selected.length >= targetCount) break;
-    // Once the remaining slots are exactly what the gem quota still needs, stop
-    // spending them on anything else.
-    const slotsLeft = targetCount - selected.length;
-    const gemsStillNeeded = minHidden - hiddenUsed;
-    if (gemsStillNeeded >= slotsLeft && !isHiddenGem(candidate)) continue;
+  /**
+   * How much this candidate would add to the set *as it currently stands*.
+   *
+   * THE DEFECT THIS REPLACES. Selection took strictly the top N by fit score,
+   * and fit score is a blunt instrument at the top of its range: on a live Tokyo
+   * board a stop fifteen minutes' walk from the bed lost to six stops twenty-two
+   * to twenty-eight minutes away by train, because all seven scored within noise
+   * of one another and nothing else was consulted. The traveller got a
+   * pre-selection that was six train rides and a monoculture — which is the
+   * definition of ranking a list rather than composing a trip (§10.7).
+   *
+   * Three terms, and each answers a question the score cannot:
+   *
+   *   - **Travel burden.** An hour spent getting somewhere is an hour not spent
+   *     anywhere, and it is the cost the traveller feels first.
+   *   - **Marginal variety.** The fourth viewpoint is worth less than the first,
+   *     whatever it scores. Category, effort, area and interest each earn a
+   *     bonus only while the set is still missing them.
+   *   - **Weather over these dates.** A stop the forecast is against is a worse
+   *     pick than an equal one it is not, and one shelter is worth holding.
+   *
+   * Every term is small relative to the score itself: this reorders candidates
+   * the scorer considers equivalent, and never promotes a poor fit over a good
+   * one. Deterministic — no randomness, no clock — so the same board and profile
+   * always produce the same set.
+   */
+  function marginalValue(candidate: DiscoveryCandidate): number {
+    /*
+     * Normalised to 0–1, because `FitAssessment.score` is 0–100 and every term
+     * below is expressed as a fraction of a whole fit. Getting this wrong is
+     * silent: on the raw scale a 0.06 variety bonus is six hundredths of a
+     * point, so the portfolio terms would apply only to exact ties and the
+     * function would read as balanced while behaving as top-N-by-score.
+     */
+    let value = candidate.fit.score / 100;
 
-    const check = canTake(candidate, {
-      interestCounts,
-      categoryCounts,
-      driveUsed,
-      driveBudget,
-      travelUsed,
-      travelBudget,
-      maxPerCategory,
-      stretchUsed,
-      maxStretch,
-      hiddenUsed,
-      maxHidden,
-      classicUsed,
-      maxClassic,
-      profile,
-    });
-    if (!check.ok) {
-      if (check.reason === 'frequency' && candidate.fit.primaryInterest) {
-        skippedForFrequency.add(candidate.fit.primaryInterest);
-      }
-      continue;
+    const minutes = candidate.travelMinutesFromBase;
+    if (candidate.detourClass !== 'base' && minutes !== null && longestJourney > 0) {
+      value -= 0.15 * (minutes / longestJourney);
     }
-    take(candidate);
+
+    /*
+     * The famous/quiet lean, as a preference rather than only as a quota.
+     *
+     * `minHidden` and `maxClassic` are ceilings and floors; they decide when a
+     * set is unbalanced, not which of two admissible candidates is the better
+     * next pick. On a board where the travel budget binds before either bound
+     * does — a real trip, most of the time — a quota-only model produced the
+     * *identical* selection for "mostly famous" and "deep cuts", because the two
+     * profiles never reached the bound that distinguishes them. Centred on 0.5
+     * so a traveller with no lean pays and receives nothing.
+     */
+    value +=
+      (derived.hiddenGemTarget - 0.5) * 0.24 * (candidate.place.hiddenGemScore - 0.5) * 2;
+
+    if (!categoryCounts.has(candidate.place.category)) value += 0.06;
+    if (!effortTaken.has(candidate.place.physicalIntensity)) value += 0.04;
+    if (!areasTaken.has(areaCellOf(candidate))) value += 0.05;
+    const primary = candidate.fit.primaryInterest;
+    if (primary && !interestsTaken.has(primary)) value += 0.03;
+
+    if (candidate.weather.badges.includes('poor_in_the_forecast')) value -= 0.08;
+    if (candidate.weather.badges.includes('poor_weather_friendly') && poorWeatherHeld === 0) {
+      value += 0.05;
+    }
+
+    return value;
   }
 
+  /**
+   * One greedy pass over the admissible candidates, re-ranking after every take.
+   *
+   * Re-ranking is the whole mechanism: the bonus for an unused category is only
+   * meaningful if it disappears the moment that category is used, and a sort
+   * computed once cannot express that. The cost is quadratic in the board size,
+   * which for forty candidates and fifteen slots is a few hundred comparisons.
+   */
+  function fill(relaxed: boolean): void {
+    for (;;) {
+      if (selected.length >= targetCount) return;
+      const slotsLeft = targetCount - selected.length;
+      const gemsStillNeeded = minHidden - hiddenUsed;
+
+      let best: { candidate: DiscoveryCandidate; value: number } | null = null;
+      for (const candidate of byScore) {
+        if (selected.includes(candidate)) continue;
+        // Once the remaining slots are exactly what the gem quota still needs,
+        // stop spending them on anything else.
+        if (!relaxed && gemsStillNeeded >= slotsLeft && !isHiddenGem(candidate)) continue;
+
+        const check = canTake(candidate, {
+          interestCounts,
+          categoryCounts,
+          driveUsed,
+          driveBudget,
+          travelUsed,
+          travelBudget,
+          maxPerCategory: relaxed ? maxPerCategory + 1 : maxPerCategory,
+          stretchUsed,
+          maxStretch,
+          hiddenUsed,
+          maxHidden: relaxed ? targetCount : maxHidden,
+          classicUsed,
+          maxClassic: relaxed ? targetCount : maxClassic,
+          profile,
+        });
+        if (!check.ok) {
+          if (!relaxed && check.reason === 'frequency' && candidate.fit.primaryInterest) {
+            skippedForFrequency.add(candidate.fit.primaryInterest);
+          }
+          continue;
+        }
+
+        const value = marginalValue(candidate);
+        // `byScore` is already a total order, so the first candidate at a given
+        // value wins and the result is stable without a second tiebreak here.
+        if (!best || value > best.value) best = { candidate, value };
+      }
+
+      if (!best) return;
+      take(best.candidate);
+    }
+  }
+
+  // Pass 1 — every constraint active.
+  fill(false);
   // Pass 2 — fill any remaining slots, relaxing the balance targets but never
   // the traveller's own frequency ceilings or travel budget.
-  if (selected.length < targetCount) {
-    for (const candidate of ordered) {
-      if (selected.length >= targetCount) break;
-      if (selected.includes(candidate)) continue;
-      const check = canTake(candidate, {
-        interestCounts,
-        categoryCounts,
-        driveUsed,
-        driveBudget,
-        travelUsed,
-        travelBudget,
-        maxPerCategory: maxPerCategory + 1,
-        stretchUsed,
-        maxStretch,
-        hiddenUsed,
-        maxHidden: targetCount,
-        classicUsed,
-        maxClassic: targetCount,
-        profile,
-      });
-      if (!check.ok) continue;
-      take(candidate);
-    }
-  }
+  fill(true);
 
   /*
    * The final verdict per eligible candidate, taken once, after both passes.
@@ -209,7 +307,7 @@ export function autoSelect(input: AutoSelectInput): AutoSelection {
    * rule and simply arrived after the last slot is `no_slots` rather than a
    * constraint it never actually hit.
    */
-  for (const candidate of ordered) {
+  for (const candidate of byScore) {
     if (selected.includes(candidate)) continue;
     const check = canTake(candidate, {
       interestCounts,
@@ -262,9 +360,49 @@ export function autoSelect(input: AutoSelectInput): AutoSelection {
     if (candidate.detourClass === 'stretch') stretchUsed += 1;
     if (isHiddenGem(candidate)) hiddenUsed += 1;
     if (candidate.place.popularityScore >= 0.7) classicUsed += 1;
+    effortTaken.add(candidate.place.physicalIntensity);
+    areasTaken.add(areaCellOf(candidate));
+    if (candidate.fit.primaryInterest) interestsTaken.add(candidate.fit.primaryInterest);
+    if (candidate.weather.badges.includes('poor_weather_friendly')) poorWeatherHeld += 1;
   }
 
-  if (targetCount - selected.length >= 2) {
+  /*
+   * WHAT IT DID, ALWAYS — not only when something went wrong.
+   *
+   * Every note here used to be conditional, so the common case produced an empty
+   * list: a traveller pressed "choose for me", fifteen cards silently gained a
+   * green border somewhere down a page thirty screens long, and the product said
+   * nothing at all about what it had just decided on their behalf. §10.7 asks
+   * for a selection that *feels* intelligent, and an unexplained one cannot.
+   *
+   * The sentence states the composition rather than the algorithm: how many, out
+   * of how many days, across how many kinds of thing, and how much of it is
+   * quiet finds. Those are the axes it actually balanced.
+   */
+  if (selected.length > 0) {
+    const kinds = categoryCounts.size;
+    const quiet = hiddenUsed;
+    const parts = [
+      `${selected.length} ${selected.length === 1 ? 'place' : 'places'} for your ${tripDays} days`,
+      `${kinds} different ${kinds === 1 ? 'kind of thing' : 'kinds of thing'}`,
+    ];
+    if (quiet > 0) parts.push(`${quiet} of them quieter finds`);
+    if (areasTaken.size > 1) parts.push(`spread over ${areasTaken.size} parts of the area`);
+    notes.push(`We picked ${listOut(parts)}.`);
+  } else {
+    notes.push(
+      'We could not pre-select anything here: everything on this board is either shut on your dates, past how far you will travel, or a journey nobody could verify.',
+    );
+  }
+
+  /*
+   * Only where something was actually picked. The two notes were independent
+   * and both fired on an empty selection, so a board with nothing to pre-select
+   * said "we could not pre-select anything" and then, underneath it, "we
+   * pre-selected 0 rather than padding out to 18" — the same fact twice, the
+   * second time in the compiler's arithmetic.
+   */
+  if (selected.length > 0 && targetCount - selected.length >= 2) {
     notes.push(
       `We pre-selected ${selected.length} rather than padding out to ${targetCount}. Add more from the board if you want fuller days.`,
     );
@@ -305,6 +443,35 @@ function isHiddenGem(candidate: DiscoveryCandidate): boolean {
   return candidate.place.hiddenGemScore >= 0.6;
 }
 
+/**
+ * A COARSE PATCH OF GROUND, SO "SPREAD OUT" MEANS SOMETHING.
+ *
+ * Geography is one of §10.7's balance axes and the selector had no notion of it
+ * at all — six stops in one suburb and six stops across a city were the same set
+ * as far as the ordering was concerned. There is no cluster structure on a
+ * candidate to read, so this derives one the crudest defensible way: round the
+ * coordinates to a cell and call two places in the same cell the same area.
+ *
+ * A fiftieth of a degree is roughly two kilometres north-south, which is about
+ * the distance at which two stops stop being "the same afternoon". It is
+ * deliberately coarse and deliberately not a claim: nothing downstream treats
+ * this as a real region, it only decides which of two equally-scored candidates
+ * adds more variety. A candidate with no coordinates falls back to its own id,
+ * which makes it its own area — the honest reading of "we do not know where this
+ * is", and never a claim that it sits beside something else.
+ */
+function areaCellOf(candidate: DiscoveryCandidate): string {
+  const point = candidate.place.coordinates;
+  if (!point) return candidate.place.id;
+  return `${Math.round(point.lat * 50)}:${Math.round(point.lng * 50)}`;
+}
+
+/** "a, b and c" — a list a person would say, for a sentence read aloud. */
+function listOut(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 interface TakeContext {
   interestCounts: Map<Interest, number>;
   categoryCounts: Map<PlaceCategory, number>;
@@ -340,18 +507,40 @@ function drivesThere(candidate: DiscoveryCandidate): boolean {
 }
 
 /**
- * What one stop costs against the traveller's frequency ceilings. A place spends
- * a full unit of the thing it primarily is, and half a unit of everything else it
- * happens to deliver — so a lakeside hike draws down the hiking allowance in full
- * and the lake allowance partially, instead of either double-charging or ignoring
- * one of them.
+ * WHAT ONE STOP COSTS AGAINST THE TRAVELLER'S FREQUENCY CEILINGS.
+ *
+ * One stop, one unit, charged to the one interest the traveller is there for.
+ *
+ * It used to charge the primary interest in full and every other interest the
+ * place satisfied at a half, so that a lakeside hike drew down the hiking
+ * allowance whole and the lake allowance partially. That reasoning is right
+ * about the place and wrong about the ceiling. `frequencyCaps` is one number
+ * read by three modules — this one refuses against it, the packer refuses
+ * against it, the validator afterwards warns when a finished plan exceeded it —
+ * and the other two count **stops**, one integer per place. Fractions are
+ * arithmetic no other reader of the same number can reproduce: four lakeside
+ * walks filled a two-stop lake allowance without one lake-led pick, and the
+ * board then declined a genuine lake against a ceiling that, counted the way
+ * the plan counts it, was empty. The traveller reads the refusal in the notes
+ * and finds nothing on their board that explains it. §9.3's ceiling is a number
+ * of stops, so this spends stops.
+ *
+ * The interest charged is `fit.primaryInterest` — the one the traveller is
+ * actually there for, and the same field the board's own frequency tests and
+ * "we stopped at the frequency you asked for" note already key on — falling
+ * back to the place's leading interest where the scorer named none.
+ *
+ * The planner and validator currently key on `place.interests[0]` instead.
+ * That is the same interest on every place whose leading category the traveller
+ * cares about, and the wrong one where they do not: a lake the traveller is
+ * lukewarm about but which is also the region's best hike is charged to lakes
+ * there and to hiking here. Closing that needs the planner's half, which is not
+ * this module's to change; it is recorded as a handoff, and this is the
+ * definition both sides should end up holding.
  */
 function frequencyCost(candidate: DiscoveryCandidate): [Interest, number][] {
-  const primary = candidate.fit.primaryInterest;
-  return candidate.fit.matchedInterests.map((interest) => [
-    interest,
-    interest === primary ? 1 : 0.5,
-  ]);
+  const interest = candidate.fit.primaryInterest ?? candidate.place.interests[0];
+  return interest === undefined ? [] : [[interest, 1]];
 }
 
 function canTake(candidate: DiscoveryCandidate, ctx: TakeContext): TakeCheck {

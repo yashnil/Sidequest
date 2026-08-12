@@ -12,6 +12,7 @@ import {
   type StageRecord,
 } from '@sidequest/core';
 import { Badge, Panel, cx } from './ui';
+import { formatElapsed, formatTimeAgo } from '@/lib/format/elapsed';
 
 /**
  * TWENTY-SIX ROWS, GROUPED INTO FIVE THINGS A TRAVELLER CAN READ.
@@ -79,17 +80,123 @@ const PHASE_LABEL: Record<PhaseProgress['status'], string> = {
   failed: 'Failed',
 };
 
+/**
+ * WHAT A PHASE IS CALLED WHEN NOTHING IS RUNNING ANY MORE.
+ *
+ * `groupStages` reads stage records, and a stage record cannot know whether the
+ * process that wrote it is still alive. So a build whose machine went away left
+ * two phases reading `running` for ever, and this component rendered them as
+ * "Working" — present tense, breathing animation, clock ticking — eight and a
+ * half days after the last heartbeat.
+ *
+ * The tense is decided here, from the job's liveness, because that is the only
+ * layer that has both facts. `waiting` becomes "Never started" rather than
+ * "Waiting", which is the difference between a queue and an abandonment.
+ */
+const STOPPED_PHASE_LABEL: Record<PhaseProgress['status'], string> = {
+  done: 'Done',
+  running: 'Stopped part-way',
+  waiting: 'Never started',
+  partial: 'Partly done',
+  failed: 'Failed',
+};
+
+const STOPPED_PHASE_TONE: Record<PhaseProgress['status'], 'pine' | 'blue' | 'amber' | 'neutral' | 'clay'> = {
+  done: 'pine',
+  running: 'amber',
+  waiting: 'neutral',
+  partial: 'amber',
+  failed: 'clay',
+};
+
+/**
+ * THE ONE COMPILER NOUN THAT REACHES THE PRIMARY CARD.
+ *
+ * A stage's outcome is written by the compiler and rendered here verbatim,
+ * which is right — the stage counted it and a second count composed on the way
+ * to the screen is a second thing that can disagree. But two of those sentences
+ * carry the word §26 names first in its list of vocabulary that must not appear
+ * in primary UI: "4 candidate bases across 7 areas", "158 candidates from 6
+ * searches". A traveller waiting for their trip does not have a candidate set.
+ *
+ * Deliberately a substitution of one word rather than a rewrite of the
+ * sentence: the count, the units and the claim are the compiler's and must
+ * survive intact. The same discipline as `travellerVoice` in `plan-language`,
+ * which exists for the same reason on a different surface.
+ *
+ * Anything it does not recognise passes through unchanged, because an
+ * unrecognised outcome is still a true sentence.
+ */
+function travellerOutcome(text: string): string {
+  return text
+    .replace(/\bcandidate bases\b/g, 'possible bases')
+    .replace(/\bcandidates\b/g, 'places found')
+    .replace(/\bcandidate\b/g, 'place');
+}
+
+/**
+ * ONE PHASE IS HAPPENING. THE REST ARE PAST OR PENDING.
+ *
+ * A compilation is a sequential narrative and the screen is the narrative's
+ * only telling, so two phases badged "Working" at once — with two breathing
+ * labels and two blue borders — is not a small inaccuracy, it is the screen
+ * contradicting the thing it exists to explain. A reviewer found three at once
+ * on a live build.
+ *
+ * The cause is upstream of the badge and cannot be fixed by it: `groupStages`
+ * reads stage rows, and a stage that started and never wrote a finish stays
+ * `running` for ever — an abandoned attempt the compiler has already moved past.
+ * A stage record cannot know that; the ordered list of phases can, because the
+ * compiler runs them in order. So the furthest-along running phase is the one
+ * happening now, and any earlier phase still claiming to run is what it actually
+ * is: started, unfinished, moved past.
+ *
+ * Nothing is hidden — the stage rows are all still in the disclosure with their
+ * own statuses, which is where an operator looks for exactly this.
+ */
+function narrateOneAtATime(phases: PhaseProgress[]): PhaseProgress[] {
+  let lastRunning = -1;
+  phases.forEach((phase, index) => {
+    if (phase.status === 'running') lastRunning = index;
+  });
+  if (lastRunning < 0) return phases;
+  return phases.map((phase, index) =>
+    phase.status === 'running' && index !== lastRunning
+      ? { ...phase, status: 'partial' as const }
+      : phase,
+  );
+}
+
 export function CompilationProgress({
   stages,
   failed,
+  live,
   startedAt,
+  stoppedAt,
   estimate,
   reusedSummary,
 }: {
   stages: StageRecord[];
   failed: boolean;
+  /**
+   * Whether a process is still working on this, right now.
+   *
+   * The single fact that decides tense, motion and whether the clock runs.
+   * Derived by the caller from the job state after abandonment has been folded
+   * in — a row saying `running` with a cold heartbeat is not live, and a row
+   * saying `partial` is finished whatever its stage records still claim.
+   */
+  live: boolean;
   /** When the job began, so the header clock survives a refresh. */
   startedAt?: string;
+  /**
+   * The last sign of life, for a build that is no longer one.
+   *
+   * Used instead of the running clock: "stopped 8 days ago" is what somebody
+   * needs in order to decide whether to start it again, and a live-ticking
+   * elapsed counter on a dead job is the specific lie this replaced.
+   */
+  stoppedAt?: string;
   /**
    * A remaining range, or nothing.
    *
@@ -111,12 +218,19 @@ export function CompilationProgress({
    */
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    if (failed) return;
+    /*
+     * The clock runs only while something is running.
+     *
+     * `failed` alone was not enough: a job left at `partial` is finished and is
+     * not failed, so the interval kept ticking against a `startedAt` from last
+     * week and the header rendered `12458m 52s`.
+     */
+    if (!live) return;
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
-  }, [failed]);
+  }, [live]);
 
-  const phases = groupStages(stages, now);
+  const phases = narrateOneAtATime(groupStages(stages, now));
 
   /*
    * The identity of the run this panel is describing.
@@ -147,10 +261,37 @@ export function CompilationProgress({
     ? null
     : Math.max(0, Math.round((now.getTime() - startedMs) / 1000));
 
+  /*
+   * A stopped build reports when it stopped, not how long it has been stopped.
+   *
+   * The two are different sentences and only one of them is useful: "9 days"
+   * beside a phase card reads as a duration the build took, which is what
+   * `12458m 52s` was mistaken for. `formatTimeAgo` makes it a moment.
+   */
+  const stoppedAgo = live ? null : formatTimeAgo(stoppedAt ?? startedAt, now);
+
   const inspectable = phases
     .filter((phase) => phase.status === 'done' || phase.status === 'partial')
     .map((phase) => AVAILABILITY_AFTER[phase.phase])
     .filter((entry): entry is string => Boolean(entry));
+
+  /*
+   * WHAT THE STAGE NOTES BECAME.
+   *
+   * Each phase card used to carry every warning its stages had emitted, in
+   * amber, under the progress line. On a real build that was eleven sentences —
+   * "217 pairs look alike and could not be confirmed as the same place, so both
+   * were kept", "847 more records of kinds this trip already has enough of were
+   * left out" — stacked in front of somebody who only wanted to know whether to
+   * keep waiting. They are engineering observations and they belong with the
+   * other engineering observations, which is the disclosure below, where
+   * `StageDisclosure` already renders every one of them against its own stage.
+   *
+   * Counted rather than deleted. A warning silently removed from a screen is a
+   * worse outcome than a warning in the wrong place, so the count stays visible
+   * and says where they went.
+   */
+  const noteCount = phases.reduce((total, phase) => total + phase.notes.length, 0);
 
   return (
     /*
@@ -174,10 +315,21 @@ export function CompilationProgress({
       data-progress-version={progressVersion}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
+        {/*
+          PRESENT TENSE ONLY WHILE SOMETHING IS ACTUALLY HAPPENING.
+
+          "Shaping the region" over a build that died last week is the whole
+          defect in one line, and it is worse than a wrong number because it is
+          the sentence somebody reads while deciding whether to keep waiting.
+        */}
         <span className="text-ink-muted" aria-live="polite">
-          {failed
-            ? 'Stopped.'
-            : (phases.find((phase) => phase.status === 'running')?.label ?? 'Getting started…')}
+          {live
+            ? (phases.find((phase) => phase.status === 'running')?.label ?? 'Getting started…')
+            : failed
+              ? 'This build stopped before it finished.'
+              : // Not "finished": a run left at `partial` did not finish, and
+                // saying it did is the same overclaim in a quieter voice.
+                'Nothing is running on this now.'}
         </span>
         {/*
           Elapsed, and an estimate only when one has been earned.
@@ -194,11 +346,15 @@ export function CompilationProgress({
           builds exist. Nothing is the expected output for a long time.
         */}
         <span className="text-ink-faint" data-testid="progress-elapsed" data-progress-version={progressVersion}>
-          {totalElapsed !== null ? formatDuration(totalElapsed) : null}
-          {estimate && !failed ? (
+          {live
+            ? totalElapsed !== null
+              ? formatElapsed(totalElapsed)
+              : null
+            : (stoppedAgo ?? null)}
+          {estimate && live ? (
             <span data-testid="progress-estimate" data-progress-version={progressVersion}>
               {' · roughly '}
-              {formatDuration(estimate.lowSeconds)}–{formatDuration(estimate.highSeconds)} to go,
+              {formatElapsed(estimate.lowSeconds)}–{formatElapsed(estimate.highSeconds)} to go,
               from {estimate.runs} similar {estimate.runs === 1 ? 'build' : 'builds'}
             </span>
           ) : null}
@@ -212,11 +368,6 @@ export function CompilationProgress({
         composing a second one — two counts of the same thing is two things that
         can disagree, and the one on screen would be the one nobody could trace.
       */}
-      {reusedSummary ? (
-        <p className="text-sm text-ink-muted" data-testid="progress-reused" data-progress-version={progressVersion}>
-          Already held, so nothing was bought for it: {reusedSummary}
-        </p>
-      ) : null}
 
       <ol className="space-y-2.5">
         {phases.map((phase) => (
@@ -224,49 +375,80 @@ export function CompilationProgress({
             <Panel
               className={cx(
                 'p-4 transition-colors',
-                phase.status === 'running' ? 'border-slate-blue' : '',
+                /*
+                 * The blue edge means "this is the one happening now". On a
+                 * build that stopped it was drawn round two phases at once,
+                 * which is the border version of the "Working" badge.
+                 */
+                live && phase.status === 'running' ? 'border-slate-blue' : '',
+                !live && phase.status === 'running' ? 'border-amber' : '',
                 phase.status === 'failed' ? 'border-clay' : '',
               )}
             >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <Badge tone={PHASE_TONE[phase.status]}>{PHASE_LABEL[phase.status]}</Badge>
+                <Badge tone={(live ? PHASE_TONE : STOPPED_PHASE_TONE)[phase.status]}>
+                  {(live ? PHASE_LABEL : STOPPED_PHASE_LABEL)[phase.status]}
+                </Badge>
                 <span
                   className={cx(
                     'min-w-0 flex-1 font-medium text-ink',
-                    phase.status === 'running' ? 'breathing' : '',
+                    live && phase.status === 'running' ? 'breathing' : '',
                   )}
                 >
                   {phase.label}
                 </span>
+                {/*
+                  A COUNT WITH ITS UNIT, AND NO ELAPSED A PART CANNOT HAVE HAD.
+
+                  This read `5/6 · 9 days` on four consecutive rows of a live
+                  six-night build. Both halves were wrong for the same reason:
+                  a bare fraction names no denominator, so nobody outside the
+                  team can say what six of anything is; and the elapsed comes
+                  from stage timestamps, which on a resumed or previously
+                  abandoned run are older than the build the traveller is
+                  watching — so a *part* of the build claimed nine days while
+                  the whole of it had run for two minutes.
+
+                  A part cannot be longer than the whole, and that is a check
+                  the page can actually make, so it makes it.
+                */}
                 <span className="shrink-0 text-xs text-ink-faint">
-                  {phase.done}/{phase.total}
-                  {phase.elapsedSeconds !== undefined && phase.elapsedSeconds > 1
-                    ? ` · ${formatDuration(phase.elapsedSeconds)}`
+                  {phase.done} of {phase.total} steps
+                  {phase.elapsedSeconds !== undefined &&
+                  phase.elapsedSeconds > 1 &&
+                  (totalElapsed === null || phase.elapsedSeconds <= totalElapsed)
+                    ? ` · ${formatElapsed(phase.elapsedSeconds)}`
                     : ''}
                 </span>
               </div>
 
               <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-                {phase.status === 'running' && phase.currentWork
-                  ? phase.currentWork
-                  : (phase.latestOutcome ?? phase.detail)}
+                {travellerOutcome(
+                  live && phase.status === 'running' && phase.currentWork
+                    ? phase.currentWork
+                    : (phase.latestOutcome ?? phase.detail),
+                )}
               </p>
-
-              {phase.notes.length > 0 ? (
-                <ul className="mt-2 space-y-1">
-                  {phase.notes.map((note) => (
-                    <li key={note} className="text-xs leading-relaxed text-amber">
-                      {note}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
             </Panel>
           </li>
         ))}
       </ol>
 
-      {inspectable.length > 0 ? (
+      {noteCount > 0 ? (
+        <p className="text-xs text-ink-faint" data-testid="progress-note-count">
+          {noteCount} note{noteCount === 1 ? '' : 's'} about how this build read the data —
+          in the details below.
+        </p>
+      ) : null}
+
+      {/*
+        "Ready to look at already" is a statement about a wait — it exists so
+        that several minutes of waiting has a floor of usefulness. There is no
+        wait on a build that stopped, and its entries are written in the present
+        continuous ("as each one lands"), which on a dead build is the same
+        tense error the badges had.
+      */}
+      {live && inspectable.length > 0 ? (
         <Panel className="border-dashed p-4">
           <p className="text-sm font-medium text-ink">Ready to look at already</p>
           <ul className="mt-1.5 space-y-0.5 text-sm text-ink-muted">
@@ -277,13 +459,20 @@ export function CompilationProgress({
         </Panel>
       ) : null}
 
-      <StageDisclosure stages={stages} />
+      <StageDisclosure stages={stages} {...(reusedSummary ? { reusedSummary } : {})} />
 
-      <p className="text-xs leading-relaxed text-ink-faint">
-        You can close this page. The build carries on and picks up where it left off when you come
-        back — nothing here depends on the browser staying open. There is no percentage on purpose:
-        several of these steps take as long as somebody else&rsquo;s server takes.
-      </p>
+      {/*
+        The reassurance is only true while the build is alive. Telling somebody
+        their dead build "carries on and picks up where it left off" is the
+        sentence that keeps them waiting for a thing that has already stopped.
+      */}
+      {live ? (
+        <p className="text-xs leading-relaxed text-ink-faint">
+          You can close this page. The build carries on and picks up where it left off when you come
+          back — nothing here depends on the browser staying open. There is no percentage on
+          purpose: several of these steps take as long as somebody else&rsquo;s server takes.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -311,7 +500,23 @@ const UNREGISTERED_STAGE = 'A step of the build';
  * showing anything: the question "why did that take four minutes" is one people
  * ask afterwards.
  */
-export function StageDisclosure({ stages }: { stages: StageRecord[] }) {
+export function StageDisclosure({
+  stages,
+  reusedSummary,
+}: {
+  stages: StageRecord[];
+  /**
+   * What this build did not have to buy, in the reusing stage's own words.
+   *
+   * Here rather than on the primary card, where it used to sit. It is cache
+   * accounting — "0 of 8 already answered, 0 facts reused" is what a real build
+   * rendered — and §26 puts that vocabulary out of primary UI. A traveller
+   * waiting for a holiday cannot act on it, and stated as a saving made entirely
+   * of noughts it is not even good news. It is genuinely useful to an operator,
+   * which is what this disclosure is for.
+   */
+  reusedSummary?: string;
+}) {
   return (
     <details data-testid="technical-stages">
         <summary
@@ -349,7 +554,7 @@ export function StageDisclosure({ stages }: { stages: StageRecord[] }) {
                     <span className="text-ink">{stageLabel(stage.stage) ?? UNREGISTERED_STAGE}</span>
                     {measured !== null ? (
                       <span className="ml-2 text-xs text-ink-faint">
-                        {formatDuration(Math.round(measured / 1000))}
+                        {formatElapsed(Math.round(measured / 1000))}
                       </span>
                     ) : null}
                     {stage.outcome ? (
@@ -363,23 +568,12 @@ export function StageDisclosure({ stages }: { stages: StageRecord[] }) {
               );
             })}
           </ol>
+          {reusedSummary ? (
+            <p className="mt-3 border-t border-rule pt-3 text-xs text-ink-muted" data-testid="progress-reused">
+              Already held, so nothing was bought for it: {reusedSummary}
+            </p>
+          ) : null}
         </Panel>
     </details>
   );
-}
-
-
-function formatDuration(seconds: number): string {
-  /*
-   * Never negative, whatever the caller did.
-   *
-   * Every caller clamps already; this is the second line of defence for the one
-   * that will not, because a duration rendered as `-1s` is a bug a traveller
-   * sees and a clamp is a bug nobody does.
-   */
-  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`;
 }

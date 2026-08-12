@@ -43,6 +43,7 @@ const EXPECTED: Record<string, readonly [PlanningRole, TaxonomySubrole]> = {
   trail: ['outdoor', 'outdoor_nature'],
   trailhead: ['support', 'visitor_information'],
   forest: ['outdoor', 'outdoor_nature'],
+  wood: ['outdoor', 'outdoor_nature'],
   valley: ['outdoor', 'scenic'],
   hill: ['outdoor', 'scenic'],
   mountain_range: ['outdoor', 'scenic'],
@@ -52,6 +53,8 @@ const EXPECTED: Record<string, readonly [PlanningRole, TaxonomySubrole]> = {
   lake: ['outdoor', 'outdoor_nature'],
   reservoir: ['outdoor', 'outdoor_nature'],
   river: ['outdoor', 'outdoor_nature'],
+  stream: ['outdoor', 'outdoor_nature'],
+  canal: ['outdoor', 'outdoor_nature'],
   pond: ['outdoor', 'outdoor_nature'],
   lagoon: ['outdoor', 'outdoor_nature'],
   bay: ['outdoor', 'outdoor_nature'],
@@ -117,6 +120,31 @@ const EXPECTED: Record<string, readonly [PlanningRole, TaxonomySubrole]> = {
   scenic_drive: ['outdoor', 'scenic'],
   scenic_byway: ['outdoor', 'scenic'],
   bridge: ['outdoor', 'scenic'],
+  viaduct: ['outdoor', 'scenic'],
+  railway: ['infrastructure', 'utility'],
+  railway_line: ['infrastructure', 'utility'],
+  rail_line: ['infrastructure', 'utility'],
+  rail: ['infrastructure', 'utility'],
+  subway_line: ['infrastructure', 'utility'],
+  tram_line: ['infrastructure', 'utility'],
+  level_crossing: ['infrastructure', 'utility'],
+  railway_yard: ['infrastructure', 'utility'],
+  // A place of rest first, a sight second; the significance gate decides which.
+  cemetery: ['side_quest', 'cultural'],
+  graveyard: ['side_quest', 'cultural'],
+  // Paid enclosures: one gate, one ticket, everything inside is the attraction.
+  theme_park: ['attraction', 'urban_place'],
+  amusement_park: ['attraction', 'urban_place'],
+  water_park: ['attraction', 'urban_place'],
+  // Entities, not places: a person and a company both reached a live board.
+  person: ['excluded', 'commerce'],
+  company: ['excluded', 'commerce'],
+  corporation: ['excluded', 'commerce'],
+  office: ['excluded', 'commerce'],
+  corporate_office: ['excluded', 'commerce'],
+  headquarters: ['excluded', 'commerce'],
+  corporate_headquarters: ['excluded', 'commerce'],
+  coworking_space: ['excluded', 'commerce'],
   pier: ['outdoor', 'scenic'],
   restaurant: ['food', 'food_service'],
   cafe: ['food', 'food_service'],
@@ -203,10 +231,10 @@ const EXPECTED: Record<string, readonly [PlanningRole, TaxonomySubrole]> = {
   attractions_and_activities: ['attraction', 'cultural'],
   arts_and_entertainment: ['attraction', 'cultural'],
   cultural_and_historic: ['attraction', 'cultural'],
-  geographic_entities: ['attraction', 'scenic'],
+  geographic_entities: ['attraction', 'outdoor_nature'],
   sports_and_recreation: ['attraction', 'outdoor_nature'],
   active_life: ['attraction', 'outdoor_nature'],
-  natural_features: ['attraction', 'scenic'],
+  natural_features: ['attraction', 'outdoor_nature'],
   // Local amenities: used because somebody lives there, not because they travelled.
   gym: ['excluded', 'commerce'],
   fitness_center: ['excluded', 'commerce'],
@@ -242,8 +270,8 @@ describe('the category table', () => {
   const { leaves, branches } = knownCategoryKeys();
   const everyKey = [...leaves, ...branches];
 
-  it('has 184 leaves and 30 branches, and the expectation table covers all of them', () => {
-    expect(leaves.length).toBe(184);
+  it('has 209 leaves and 30 branches, and the expectation table covers all of them', () => {
+    expect(leaves.length).toBe(209);
     expect(branches.length).toBe(30);
     expect([...everyKey].sort()).toEqual(Object.keys(EXPECTED).sort());
   });
@@ -251,6 +279,56 @@ describe('the category table', () => {
   it.each(everyKey)('%s keeps its role and resolves to its archetype', (key) => {
     const classification = classifySourceCategory({ category: key });
     expect([classification.role, classification.subrole]).toEqual(EXPECTED[key]);
+  });
+
+  /**
+   * A BRANCH WE DO NOT RECOGNISE MUST NOT INVENT A VIEW.
+   *
+   * The file's own stated rule is that an unrecognised branch resolves to
+   * something honest rather than to an invention. These two resolved to the
+   * *viewpoint* archetype, which stamped `scenic_viewpoints` and
+   * `photography_golden_hour` on everything underneath them and handed it the
+   * viewpoint's class weight — so a landfill, a drainage channel and a spoil
+   * mound all arrived as scenic highlights that satisfied a photography
+   * interest, and on a live metropolitan run the highest-ordered card on the
+   * whole board was a refuse-disposal site.
+   */
+  it('never claims a view for a geographic feature whose kind it does not know', () => {
+    for (const branch of ['geographic_entities', 'natural_features']) {
+      const classification = classifySourceCategory({
+        category: 'a_feature_class_nobody_has_seen',
+        path: [branch],
+      });
+      expect(classification.interests, branch).not.toContain('scenic_viewpoints');
+      expect(classification.interests, branch).not.toContain('photography_golden_hour');
+      expect(classification.category, branch).not.toBe('viewpoint');
+      /* And nothing outside the record vouching for it means it is not offered. */
+      expect(classification.requiresSignificanceEvidence, branch).toBe(true);
+    }
+
+    /* The recognised leaves underneath are untouched: they matched first. */
+    const realViewpoint = classifySourceCategory({
+      category: 'viewpoint',
+      path: ['geographic_entities', 'viewpoint'],
+    });
+    expect(realViewpoint.category).toBe('viewpoint');
+    expect(realViewpoint.interests).toContain('scenic_viewpoints');
+  });
+
+  /**
+   * A spring is where water comes out of the ground, and nothing about it is
+   * hot. Mapped to the geothermal archetype it inherited
+   * `geology_and_geothermal`, so a traveller who asked for geysers and lava was
+   * offered a suburban water spring as a match, on a card reading
+   * "A geothermal."
+   */
+  it('does not offer plain water as geology', () => {
+    const spring = classifySourceCategory({ category: 'spring' });
+    expect(spring.interests).not.toContain('geology_and_geothermal');
+    expect(spring.category).not.toBe('geothermal');
+    /* The heated kinds keep the geothermal archetype and say so themselves. */
+    expect(classifySourceCategory({ category: 'geyser' }).category).toBe('geothermal');
+    expect(classifySourceCategory({ category: 'hot_spring' }).interests).toContain('hot_springs');
   });
 
   it('gives every key an archetype, so nothing falls through to a default', () => {
@@ -413,6 +491,88 @@ describe('nothing in the table names a destination', () => {
     for (const key of [...leaves, ...branches]) {
       expect(key, key).toMatch(/^[a-z][a-z_]*[a-z]$/);
     }
+  });
+});
+
+describe('type-truthful display and the significance annotations', () => {
+  it('gives a river a river’s name, not a lake’s', () => {
+    /*
+     * The archetype stays `lake` — a river plans like one — but the display
+     * noun is the source's own word. A live board captioned the Sumida River
+     * "Lake" and a railway "Viewpoint"; both are now unrepresentable.
+     */
+    const river = classifySourceCategory({ category: 'river' });
+    expect(river.category).toBe('lake');
+    expect(river.displayKind).toBe('River');
+    expect(classifySourceCategory({ category: 'canal' }).displayKind).toBe('Canal');
+    expect(classifySourceCategory({ category: 'bay' }).displayKind).toBe('Bay');
+    expect(classifySourceCategory({ category: 'cemetery' }).displayKind).toBe('Cemetery');
+  });
+
+  it('leaves displayKind absent where the category label is already truthful', () => {
+    expect(classifySourceCategory({ category: 'lake' }).displayKind).toBeUndefined();
+    expect(classifySourceCategory({ category: 'museum' }).displayKind).toBeUndefined();
+  });
+
+  it('weights kinds, not metadata: a museum outweighs a pocket park and a hill', () => {
+    const museum = classifySourceCategory({ category: 'museum' }).significanceWeight;
+    const temple = classifySourceCategory({ category: 'buddhist_temple' }).significanceWeight;
+    const park = classifySourceCategory({ category: 'park' }).significanceWeight;
+    const hill = classifySourceCategory({ category: 'hill' }).significanceWeight;
+    const nationalPark = classifySourceCategory({ category: 'national_park' }).significanceWeight;
+    expect(museum).toBeGreaterThan(park);
+    expect(temple).toBeGreaterThan(park);
+    expect(park).toBeGreaterThan(hill);
+    expect(nationalPark).toBeGreaterThan(park);
+  });
+
+  it('gives every utility kind zero experience weight', () => {
+    for (const key of ['railway', 'substation', 'bench', 'person', 'office']) {
+      expect(classifySourceCategory({ category: key }).significanceWeight, key).toBe(0);
+    }
+    // Support stops carry a token weight — real, useful, never an experience.
+    expect(classifySourceCategory({ category: 'parking' }).significanceWeight).toBeLessThanOrEqual(0.1);
+  });
+
+  it('marks bridges, viaducts and cemeteries as evidence-gated', () => {
+    for (const key of ['bridge', 'viaduct', 'cemetery', 'graveyard']) {
+      expect(classifySourceCategory({ category: key }).requiresSignificanceEvidence, key).toBe(true);
+    }
+    for (const key of ['museum', 'park', 'river']) {
+      expect(classifySourceCategory({ category: key }).requiresSignificanceEvidence, key).toBe(false);
+    }
+  });
+
+  it('never routes a rail line to a scenic archetype, whatever the evidence', () => {
+    for (const key of ['railway', 'railway_line', 'rail_line', 'subway_line', 'tram_line']) {
+      const classification = classifySourceCategory({ category: key });
+      expect(classification.subrole, key).toBe('utility');
+      expect(classification.role, key).toBe('infrastructure');
+    }
+  });
+
+  it('marks paid enclosures so interior features can be folded into them', () => {
+    for (const key of ['theme_park', 'amusement_park', 'zoo', 'aquarium', 'water_park']) {
+      expect(classifySourceCategory({ category: key }).paidEnclosure, key).toBe(true);
+    }
+    expect(classifySourceCategory({ category: 'national_park' }).paidEnclosure).toBe(false);
+    expect(classifySourceCategory({ category: 'park' }).paidEnclosure).toBe(false);
+  });
+
+  it('marks large natural-feature claims for the plausibility gate', () => {
+    for (const key of ['peak', 'summit', 'volcano', 'glacier', 'mountain_range']) {
+      expect(classifySourceCategory({ category: key }).landscapeClaim, key).toBe(true);
+    }
+    expect(classifySourceCategory({ category: 'viewpoint' }).landscapeClaim).toBe(false);
+  });
+
+  it('excludes persons and companies however they arrive in the path', () => {
+    const viaPath = classifySourceCategory({
+      category: 'a_word_no_catalogue_publishes',
+      path: ['person'],
+    });
+    expect(viaPath.role).toBe('excluded');
+    expect(classifySourceCategory({ category: 'company' }).role).toBe('excluded');
   });
 });
 

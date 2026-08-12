@@ -12,7 +12,7 @@ import {
   type MustDoResolution,
   type Place,
 } from '@sidequest/core';
-import { mergeMustDoResolutions, mustDoCoverageFrom, resolveMustDos } from './must-do';
+import { mergeMustDoResolutions, mustDoCoverageFrom, resolveMustDos, segmentMustDoRequests } from './must-do';
 
 /**
  * CAN A TRAVELLER SAY "THIS ONE IS NON-NEGOTIABLE" AND TRUST THE ANSWER?
@@ -573,5 +573,101 @@ describe('a second look at what somebody named', () => {
         ).toBeGreaterThanOrEqual(accountedBefore);
       }
     }
+  });
+});
+
+/**
+ * ONE BOX, THREE SUBJECTS — the live artifact's collapse, as a class.
+ *
+ * A traveller named three things and the composer carried one span; the
+ * resolver looked up the whole sentence as a name and the trip reported
+ * "0 of the 1 things you named". Segmentation runs before resolution, so
+ * these tests are the contract: discrete subjects get discrete requests,
+ * discrete verdicts, and honest per-item reporting.
+ */
+describe('segmenting one must-do span into its subjects', () => {
+  it('splits a comma list into one request per subject', () => {
+    const [a, b, c, ...rest] = segmentMustDoRequests([
+      request('Ainsworth fish market, a day hike with mountain views, and the old Weaver Quarter streets'),
+    ]);
+    expect(rest).toHaveLength(0);
+    expect(a?.quote).toBe('Ainsworth fish market');
+    expect(b?.quote).toBe('a day hike with mountain views');
+    expect(c?.quote).toBe('the old Weaver Quarter streets');
+    /* Ids extend the parent, so a decision can still address each. */
+    expect([a?.id, b?.id, c?.id]).toEqual(['mustdo:span:0:0', 'mustdo:span:0:1', 'mustdo:span:0:2']);
+    /* Spans are each segment's own characters, not the parent's whole range. */
+    expect(a?.span).toEqual([0, 'Ainsworth fish market'.length]);
+  });
+
+  it('re-derives namedExplicitly per segment, so a vague fragment is not a reportable name', () => {
+    const segments = segmentMustDoRequests([
+      request('Ainsworth fish market, somewhere relaxing to end the day'),
+    ]);
+    expect(segments).toHaveLength(2);
+    expect(segments[0]?.namedExplicitly).toBe(true);
+    expect(segments[1]?.namedExplicitly).toBe(false);
+  });
+
+  it('splits " and " only when both sides carry naming evidence', () => {
+    /* Mid-clause capitals after a comma: both sides are names — split. */
+    const split = segmentMustDoRequests([request('the harbour, Weaver Quarter and Ainsworth Market')]);
+    expect(split.map((entry) => entry.quote)).toEqual([
+      'the harbour',
+      'Weaver Quarter',
+      'Ainsworth Market',
+    ]);
+
+    /* A conjunction inside one title must not be torn apart. */
+    const kept = segmentMustDoRequests([request('one long afternoon in the Museum of Art and History')]);
+    expect(kept).toHaveLength(1);
+  });
+
+  it('keeps a single-subject box byte-for-byte untouched', () => {
+    const single = request('Cutler Falls');
+    expect(segmentMustDoRequests([single])).toEqual([single]);
+  });
+
+  it('leaves experience requests alone — a preference is not a list', () => {
+    const experience: MustDoRequest = {
+      id: 'mustdo:interest:hiking',
+      kind: 'experience',
+      source: 'confirmed_preference',
+      quote: 'hiking, wildlife and food',
+      interest: 'hiking',
+      namedExplicitly: true,
+    };
+    expect(segmentMustDoRequests([experience])).toEqual([experience]);
+  });
+
+  it('resolves each segment independently — the collapse cannot come back', () => {
+    const resolutions = resolveMustDos({
+      requests: segmentMustDoRequests([
+        request('Ainsworth fish market, Cutler Falls, and the old Weaver Quarter'),
+      ]),
+      space: {
+        plannable: [placeNamed('Ainsworth Fish Market')],
+        groundRecords: [{ id: 'g1', name: 'Weaver Quarter' }],
+      },
+    });
+    /* Three subjects, three verdicts — never "1 of the 1 things you named". */
+    expect(resolutions).toHaveLength(3);
+    const byQuote = new Map(resolutions.map((entry) => [entry.request.quote, entry]));
+    expect(byQuote.get('Ainsworth fish market')?.status).toBe('covered');
+    /* Found on the map but never confirmed into the trip: honest, per item. */
+    expect(byQuote.get('the old Weaver Quarter')?.status).toBe('unusable');
+    /* A named place nobody found gets its own honest verdict. */
+    expect(byQuote.get('Cutler Falls')?.status).toBe('not_found');
+  });
+
+  it('handles bullet lists and numbered lists', () => {
+    const segments = segmentMustDoRequests([
+      request('- Cutler Falls\n- Harbour Museum\n2) Weaver Quarter'),
+    ]);
+    expect(segments.map((entry) => entry.quote)).toEqual([
+      'Cutler Falls',
+      'Harbour Museum',
+      'Weaver Quarter',
+    ]);
   });
 });

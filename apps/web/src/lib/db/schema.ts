@@ -1611,6 +1611,25 @@ export const COLUMN_MIGRATIONS: readonly {
    * identity was recorded genuinely has no board attached, and inventing version
    * 1 would be asserting it was made on the first board when nobody knows.
    */
+  /**
+   * WHOSE TRIP THIS IS.
+   *
+   * The product deliberately ships without accounts — "no account needed" is on
+   * the homepage — and it never introduced anything to stand in for one, so
+   * `listTrips()` had no owner predicate and the front page rendered *every*
+   * trip in the database as "your trips", each with a Remove button. On a
+   * shared deployment that is one visitor holding another visitor's plans and
+   * a control that deletes them.
+   *
+   * The token is the browser's `sidequest_session` cookie: no login, no
+   * identity, nothing personal — just enough to answer "did this browser make
+   * this trip". Nullable, and null means nobody: a trip written before this
+   * column existed cannot be attributed to anyone, so it is listed to nobody
+   * rather than to everybody. Defaulting it to a placeholder would hand every
+   * legacy row to whoever visited next, which is the defect rather than the
+   * fix.
+   */
+  { table: 'trips', column: 'owner_token', definition: 'TEXT' },
   { table: 'provisional_selections', column: 'board_id', definition: 'TEXT' },
   { table: 'provisional_selections', column: 'board_version', definition: 'INTEGER' },
   /**

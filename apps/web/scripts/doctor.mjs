@@ -31,16 +31,84 @@
  * deployment with a transit-capable router was told it had none.
  *
  * The duplication stays, because the zero-import property is worth more than
- * the tidiness. What changed is that `doctor.test.ts` now runs this script under
- * a matrix of environments and compares every capability verdict against
- * `capabilityRegistry()` evaluated in-process under the *same* environment. The
- * two are still two implementations; they can no longer disagree quietly.
+ * the tidiness. What changed is that `doctor.test.ts` runs this script under a
+ * matrix of environments and compares its verdict against `capabilityRegistry()`
+ * evaluated in-process under the *same* environment.
+ *
+ * That sentence used to end "compares **every** capability verdict", and a
+ * reviewer checked. `COMPARED` in `doctor.test.ts` holds four —
+ * `route_transit`, `civil_time_zone`, `climate_normals`,
+ * `official_web_research` — out of the six capabilities printed below. The
+ * weather and imagery lines are compared against their own predicates
+ * (`weatherProviderChoice()`, `imageryMode()`) in separate tests, and "Plan an
+ * arbitrary destination" is compared against nothing: it is this script's own
+ * `openReady` arithmetic and no second implementation checks it. A comment that
+ * claims a guard which does not exist is how a reviewer concludes the code is
+ * safer than it is, so it says what is true.
  *
  * **It reports what it cannot verify, as unverified.** Every check here is
  * configuration, not reachability: a build with a real-looking key and three
  * endpoints pointed at a closed port passes every line below. Saying so is the
- * difference between a diagnostic and a reassurance.
+ * difference between a diagnostic and a reassurance. The same rule now governs
+ * the wording of the capability lines themselves — see "Bounded web research".
  */
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
+/**
+ * THE ENV FILE THE APP READS, READ HERE TOO — OR THE REPORT LIES.
+ *
+ * `npm run doctor` runs from the repository root, and Next loads
+ * `apps/web/.env.local` itself — so the doctor answered for a bare shell while
+ * the app ran fully configured, and an operator comparing the two saw a
+ * contradiction with no cause. The file is parsed with a plain dotenv-style
+ * reader (no dependency, values never printed, real environment always wins),
+ * and the report names which file it read so the basis of every verdict below
+ * is stated rather than assumed.
+ *
+ * `--sidequest-env-file=<path>` points elsewhere; `--sidequest-env-file=none` skips loading, which
+ * is what the doctor's own tests use to stay hermetic.
+ */
+const envFileArg = process.argv
+  .find((entry) => entry.startsWith('--sidequest-env-file='))
+  ?.slice('--sidequest-env-file='.length);
+
+let envFileNote;
+if (envFileArg === 'none') {
+  envFileNote = 'none (skipped with --sidequest-env-file=none)';
+} else {
+  const path = envFileArg
+    ? resolve(process.cwd(), envFileArg)
+    : fileURLToPath(new URL('../.env.local', import.meta.url));
+  try {
+    const lines = readFileSync(path, 'utf8').split(/\r?\n/);
+    let applied = 0;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line === '' || line.startsWith('#')) continue;
+      const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+      if (!match) continue;
+      let value = match[2].trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      // The real environment wins, exactly as dotenv behaves: a shell override
+      // must override.
+      if (process.env[match[1]] === undefined) {
+        process.env[match[1]] = value;
+        applied += 1;
+      }
+    }
+    envFileNote = `${path} (${applied} value${applied === 1 ? '' : 's'} applied where the shell had none)`;
+  } catch {
+    envFileNote = `${path} (not found — shell environment only)`;
+  }
+}
 
 const env = (name) => process.env[name]?.trim() ?? '';
 const isSet = (name) => env(name).length > 0;
@@ -57,9 +125,6 @@ const climate = !equals('SIDEQUEST_CLIMATE_PROVIDER', 'off');
 const timeZone = !equals('SIDEQUEST_TIMEZONE_PROVIDER', 'off');
 /* Mirrors `transitProviderName`: named, never merely non-empty. */
 const transit = equals('SIDEQUEST_TRANSIT_PROVIDER', 'valhalla');
-const weather = env('SIDEQUEST_WEATHER_PROVIDER') || '(default)';
-const imagery = env('SIDEQUEST_IMAGERY_PROVIDER') || '(default)';
-const food = env('SIDEQUEST_FOOD_PROVIDER') || '(default)';
 
 const openReady = geocoder && (backbone || poi) && routes && researchModel && researchProvider;
 
@@ -71,6 +136,36 @@ const choice =
       ? 'open'
       : 'off';
 const inferred = configured === '' || !['fixture', 'off', 'open'].includes(configured);
+
+/**
+ * The RESOLVED verdicts for the defaulting providers, not the raw variables.
+ *
+ * `(default)` was printed for weather, imagery and food alike, and it hid
+ * three different answers: weather defaults *on* (open-meteo), imagery
+ * follows the compiler (fixtures when the compiler is on fixtures, otherwise
+ * live Wikimedia), and food follows the compiled region unless switched off.
+ * An operator read three identical lines and two of them meant "this does
+ * nothing". Each mirrors its own predicate: `weatherProviderChoice()`,
+ * `imageryMode()`, and the `SIDEQUEST_FOOD_PROVIDER === 'off'` check in
+ * `region.ts`.
+ *
+ * The imagery default moved once already — it was opt-in while the candidate
+ * pass that consumes it did not exist, and this file went on reporting `off`
+ * for two hours after that pass landed and the default flipped. That is the
+ * exact failure the zero-import rule costs us and the reason `doctor.test.ts`
+ * evaluates the real predicate under a matrix of environments and compares:
+ * a duplicated predicate is allowed to exist here, it is not allowed to
+ * disagree quietly.
+ */
+const weatherRaw = env('SIDEQUEST_WEATHER_PROVIDER').toLowerCase();
+const weather = ['openmeteo', 'fixture', 'off'].includes(weatherRaw) ? weatherRaw : 'openmeteo';
+const imageryRaw = env('SIDEQUEST_IMAGERY_PROVIDER').toLowerCase();
+const imagery = ['wikimedia', 'fixture', 'off'].includes(imageryRaw)
+  ? imageryRaw
+  : configured === 'fixture'
+    ? 'fixture'
+    : 'wikimedia';
+const food = process.env.SIDEQUEST_FOOD_PROVIDER === 'off' ? 'off' : 'on';
 
 const missing = [];
 if (!geocoder) missing.push('SIDEQUEST_GEOCODER_PROVIDER=nominatim');
@@ -86,6 +181,7 @@ const mark = (ok, label, detail) => say(`  ${ok ? '✓' : '·'} ${label}${detail
 say('');
 say('Sidequest — what this build can do');
 say('');
+say(`Environment file: ${envFileNote}`);
 say(`Compilation mode: ${choice}${inferred ? ' (inferred from the switches below)' : ' (set explicitly)'}`);
 say('');
 
@@ -118,9 +214,25 @@ mark(
     ? 'valhalla multimodal — requires an instance built with timetable data'
     : 'SIDEQUEST_TRANSIT_PROVIDER not set',
 );
-say(`  · Weather provider — ${weather}`);
-say(`  · Imagery provider — ${imagery}`);
-say(`  · Food provider — ${food}`);
+say(
+  `  · Weather provider — ${weather}${weatherRaw ? ' (set explicitly)' : ' (default: live open-meteo, keyless)'}`,
+);
+say(
+  `  · Imagery provider — ${imagery}${
+    imageryRaw
+      ? ' (set explicitly)'
+      : imagery === 'fixture'
+        ? ' (default: follows the fixture compiler)'
+        : ' (default: live Wikimedia, keyless — licence-gated with attribution)'
+  }`,
+);
+say(
+  `  · Food provider — ${
+    food === 'off'
+      ? 'off — every meal becomes held time rather than somewhere named'
+      : 'on (meals come from the compiled region’s food data)'
+  }${isSet('SIDEQUEST_FOOD_PROVIDER') ? ' (set explicitly)' : ' (default)'}`,
+);
 say('');
 
 say('Capabilities');
@@ -149,10 +261,29 @@ mark(
     ? 'yes — resolved from coordinates; a fixed offset is refused rather than accepted'
     : 'no — a solar approximation is used and is labelled as one',
 );
+/*
+ * THE RUNG, NOT A TICK.
+ *
+ * This line read "Bounded web research — yes". It is derived from
+ * `isResearchModelConfigured()`, which is a length check on `ANTHROPIC_API_KEY`
+ * and nothing else — so "yes" meant "somebody set a variable". A reviewer went
+ * looking for the other end of it: `sourceSearches` and `modelWebSearches` are
+ * **0 across every compilation this deployment has ever recorded**, against
+ * per-job limits of 15, 18 and 22. The search tier has never fired once, and an
+ * operator reading a tick had no way to know.
+ *
+ * The mark stays `✓` because the capability registry says `available` from the
+ * same predicate and the two are held to agreeing; what changes is the sentence
+ * beside it, which is the part that was making a claim the mark does not.
+ * §7's ladder is implemented → configured → invokable → live-smoke verified →
+ * production-normal-path, and this is *configured*.
+ */
 mark(
   researchProvider && researchModel,
   'Bounded web research',
-  researchProvider && researchModel ? 'yes' : 'no — the research model is not configured',
+  researchProvider && researchModel
+    ? 'credential set — configured only; nothing here observes whether the search tier has ever fired'
+    : 'no — the research model is not configured',
 );
 mark(climate, 'Historical climate', climate ? 'yes' : 'no — switched off');
 mark(
@@ -202,15 +333,46 @@ mark(
   'Model calls per compilation',
   isSet('SIDEQUEST_COMPILER_MAX_AI_CALLS') ? 'set' : 'not set — defaults to 12',
 );
-mark(
-  isSet('SIDEQUEST_LABS_TOKEN') || !equals('SIDEQUEST_BENCHMARK_MODE', 'live'),
-  'Internal /labs surface',
-  equals('SIDEQUEST_BENCHMARK_MODE', 'live')
-    ? isSet('SIDEQUEST_LABS_TOKEN')
-      ? 'live mode, token required'
-      : 'LIVE MODE WITH NO TOKEN — anybody who finds the URL can spend money'
-    : 'fixture mode, nothing billable',
+/*
+ * The wall clock is a spending guard too, and it was the only one missing.
+ *
+ * `compileDeadlineMs()` bounds how long one build may hold the open stack open;
+ * a deployment that raised it without knowing has raised its worst-case bill per
+ * compilation with it. Mirrors `lib/compiler/limits.ts`, like the line above
+ * mirrors `modelCallCeiling()`.
+ */
+say(
+  `  · Wall clock per compilation — SIDEQUEST_COMPILER_DEADLINE_MS ${
+    isSet('SIDEQUEST_COMPILER_DEADLINE_MS') ? 'set' : 'not set, defaults to 720000 (12 minutes)'
+  }`,
 );
+say(
+  `  · Daily ceilings — SIDEQUEST_DAILY_LIVE_COMPILATIONS ${
+    isSet('SIDEQUEST_DAILY_LIVE_COMPILATIONS') ? 'set' : 'not set, defaults to 20'
+  }; SIDEQUEST_DAILY_MODEL_CALLS ${
+    isSet('SIDEQUEST_DAILY_MODEL_CALLS') ? 'set' : 'not set, defaults to 300'
+  }`,
+);
+/*
+ * Mirrors `billableSurfaceConfigured()` in `middleware.ts`: the door is locked
+ * when live benchmark spending is configured OR the compiler is on the open
+ * stack — the benchmark's sidequest arm compiles real regions whenever the
+ * compiler is open, whatever the benchmark mode says.
+ */
+{
+  const liveBenchmark =
+    equals('SIDEQUEST_BENCHMARK_MODE', 'live') && isSet('SIDEQUEST_BENCHMARK_BUDGET_USD');
+  const billable = liveBenchmark || choice === 'open';
+  mark(
+    isSet('SIDEQUEST_LABS_TOKEN') || !billable,
+    'Internal /labs surface',
+    billable
+      ? isSet('SIDEQUEST_LABS_TOKEN')
+        ? `billable providers configured (${liveBenchmark ? 'live benchmark' : 'open compiler'}), token required`
+        : 'BILLABLE PROVIDERS WITH NO TOKEN — /labs is refused outright until SIDEQUEST_LABS_TOKEN is set'
+      : 'nothing billable is configured, surface open',
+  );
+}
 say('');
 
 const blocked = choice === 'off' || (choice === 'open' && !openReady);

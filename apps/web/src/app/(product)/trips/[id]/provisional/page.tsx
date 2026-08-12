@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import type { ProvisionalIntent } from '@sidequest/core';
 import { ProvisionalBoardView } from '@/components/ProvisionalBoardView';
@@ -22,6 +23,21 @@ import { countTripDays, isTerminal } from '@sidequest/core';
  * true rather than aspirational.
  */
 export const dynamic = 'force-dynamic';
+
+/** Which trip is being looked at, while it is still being looked at. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const trip = getTrip(id);
+  return {
+    title: trip
+      ? `${trip.basics.destinationInput} — First look — Sidequest`
+      : 'First look — Sidequest',
+  };
+}
 
 export default async function ProvisionalBoardPage({
   params,

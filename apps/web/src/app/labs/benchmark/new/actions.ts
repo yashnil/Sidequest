@@ -33,6 +33,7 @@ import {
   validSidequestShapedPlan,
 } from '@sidequest/bench/testing';
 import { benchmarkModeIsLive } from '@/lib/benchmark/budget';
+import { labsAccessGranted } from '@/lib/labs/access';
 import {
   advanceSessionState,
   createBenchmarkSession,
@@ -65,6 +66,10 @@ import { saveRunMetrics, saveValidation } from '@/lib/db/benchmark-review-reposi
  * that would then be averaged in with real ones — and the assignments it writes
  * are marked `seeded`, which is the second, independent guard against exactly
  * that pooling.
+ *
+ * Both begin with `labsAccessGranted()`, because a server action is dispatched
+ * by id rather than by URL and the `/labs` middleware never sees this POST. See
+ * `lib/labs/access`.
  */
 
 export interface ComposerState {
@@ -78,6 +83,8 @@ export async function createComparisonAction(
   _previous: ComposerState,
   form: FormData,
 ): Promise<ComposerState> {
+  if (!(await labsAccessGranted())) return { error: 'unavailable' };
+
   const now = new Date();
   const caseId = text(form, 'caseId');
 
@@ -298,6 +305,7 @@ export async function seedFixtureComparisonAction(input: {
   seed: string;
   shape: FixtureShape;
 }): Promise<FixtureResult> {
+  if (!(await labsAccessGranted())) return { ok: false, sessionId: null };
   if (benchmarkModeIsLive()) return { ok: false, sessionId: null };
 
   const library = caseById(input.caseId);

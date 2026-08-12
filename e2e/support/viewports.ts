@@ -16,11 +16,34 @@ import { expect, type Page } from '@playwright/test';
  *
  * Colour scheme is not a viewport. `desktop-dark` is worth running and is not
  * counted here.
+ *
+ * ## The two corrections this list has needed
+ *
+ * **The height was a screen, not a viewport.** `mobile` said 390x**844** for
+ * three phases — in this file, four lines under its own comment saying that 844
+ * is the iPhone's screen height and 664 is the box a layout is laid out in. No
+ * phone lays out at 844: the browser's own chrome takes the difference. A page
+ * measured at 844 has 180 more vertical pixels than the device gives it, which
+ * is exactly enough to hide every "is the sticky bar still on screen" and "does
+ * this fold" failure the mobile project exists to find.
+ *
+ * **There was no narrow width at all.** The list bottomed out at 390, and the
+ * homepage overflowed horizontally at every width below 383 — 8px at 375, 23px
+ * at 360, 63px at 320, measured in both colour schemes — while three viewports
+ * and a full-page screenshot sweep reported no overflow anywhere. Seven pixels
+ * of margin between the narrowest declared width and the threshold is not
+ * coverage; it is a coin landing the right way up. 360 is the width most
+ * Androids lay out at and the one the defect was worst at.
+ *
+ * Both sizes are real device descriptors rather than round numbers — 390x664 is
+ * `devices['iPhone 13']`, 360x780 is `devices['Galaxy S24']` — so a reviewer can
+ * check them against something rather than against a preference.
  */
 export const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900 },
   { name: 'tablet', width: 1024, height: 768 },
-  { name: 'mobile', width: 390, height: 844 },
+  { name: 'mobile', width: 390, height: 664 },
+  { name: 'phone-narrow', width: 360, height: 780 },
 ] as const;
 
 export type Viewport = (typeof VIEWPORTS)[number];

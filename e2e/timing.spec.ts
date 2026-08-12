@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createTrip, reachScope } from './support/trip';
+import { createTrip, openHowThisWasBuilt, reachScope, REGION_READY_HEADING } from './support/trip';
 
 /**
  * WHAT THE PROGRESS SCREEN IS ALLOWED TO SAY ABOUT TIME.
@@ -33,47 +33,50 @@ test('the progress screen shows elapsed time immediately and no fabricated estim
   await reachScope(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
 
-  /*
-   * Either clock, because both are real and which one you catch depends on how
-   * fast the build was.
-   *
-   * A synthetic world compiles in about a second — faster than a browser can
-   * reliably assert against a screen that only exists while it is running. The
-   * first version of this test waited twenty seconds for `progress-elapsed` and
-   * failed because the element had already been replaced by the finished plan.
-   *
-   * So: the live elapsed figure if the build is still going, the measured total
-   * on the finished page if it is not. Racing the environment to prove a
-   * property that holds in both states would be testing the machine, not the
-   * product.
-   */
-  const elapsed = page.getByTestId('progress-elapsed');
-  const total = page.getByTestId('build-duration');
-  await expect(elapsed.or(total).first()).toBeVisible({ timeout: 30_000 });
-  /*
-   * A duration or an honest statement that it was under one — and "0s" is
-   * neither.
-   *
-   * This used to demand `/\d+\s*(?:s|m)/`, which a synthetic build satisfied by
-   * rendering "0s in total, measured": a measurement of zero seconds, presented
-   * with the word *measured* beside it, for a build that took several hundred
-   * milliseconds. The floor that replaced it says "Under a second" instead, which
-   * is the true sentence and has no digit in it. Both forms are accepted here;
-   * a bare zero is accepted by neither.
-   */
-  await expect(elapsed.or(total).first()).toHaveText(/\d+\s*(?:s|m)|[Uu]nder a second/, {
-    timeout: 30_000,
-  });
-  await expect(elapsed.or(total).first()).not.toHaveText(/(^|\D)0\s*s\b/);
+  const finished = page.getByRole('heading', { name: REGION_READY_HEADING });
 
   /*
-   * No estimate, and that is the pass condition rather than a gap.
+   * No estimate, checked while the build is running — which is the only time the
+   * element could exist at all.
    *
-   * A fresh environment has no comparable history, so `estimateRemainingFrom`
-   * refuses and the screen renders silence. An estimate appearing here would
-   * mean the bar had been lowered.
+   * It used to be one `toHaveCount(0)` after the wait, and a synthetic world
+   * compiles in about a second, so it was almost always asserting the absence of
+   * an element from a screen that no longer had *any* progress markup on it: a
+   * pass that would have survived the estimator being switched back on. Sampling
+   * until the plan lands puts the assertion where the defect would be. A fresh
+   * environment has no comparable history, so `estimateRemainingFrom` refuses
+   * and the screen renders silence; an estimate in any of these frames is a
+   * failure.
    */
-  await expect(page.getByTestId('progress-estimate')).toHaveCount(0);
+  const estimate = page.getByTestId('progress-estimate');
+  for (let sample = 0; sample < 40; sample += 1) {
+    if (await finished.isVisible().catch(() => false)) break;
+    await expect(estimate).toHaveCount(0);
+    await page.waitForTimeout(300);
+  }
+
+  await expect(finished).toBeVisible({ timeout: 30_000 });
+
+  /*
+   * The measured total, on the finished plan, inside the build report.
+   *
+   * The report is a `<details>` now — the whole engine's account of itself moved
+   * behind one door — so the figure is not on screen until somebody opens it.
+   * Opened rather than read through the closed panel with `textContent`, because
+   * a number nobody can see is not a number the product shows.
+   *
+   * A duration or an honest statement that it was under one — and "0s" is
+   * neither. This used to demand `/\d+\s*(?:s|m)/`, which a synthetic build
+   * satisfied by rendering "0s in total, measured": a measurement of zero
+   * seconds, presented with the word *measured* beside it, for a build that took
+   * several hundred milliseconds. The floor that replaced it says "Under a
+   * second" instead, which is the true sentence and has no digit in it.
+   */
+  await openHowThisWasBuilt(page);
+  const total = page.getByTestId('build-duration');
+  await expect(total).toBeVisible();
+  await expect(total).toHaveText(/\d+\s*(?:s|m)|[Uu]nder a second/);
+  await expect(total).not.toHaveText(/(^|\D)0\s*s\b/);
 });
 
 test('nothing on the progress screen is a percentage, a zero range or a negative duration', async ({
@@ -83,7 +86,7 @@ test('nothing on the progress screen is a percentage, a zero range or a negative
   await reachScope(page);
   await page.getByRole('button', { name: 'Build the region' }).click();
 
-  const heading = page.getByRole('heading', { name: 'What this trip is built on' });
+  const heading = page.getByRole('heading', { name: REGION_READY_HEADING });
 
   /*
    * Sampled repeatedly while the build runs rather than once at the end. The
@@ -122,26 +125,91 @@ test('no raw stage identifier reaches the screen, in the phases or in the disclo
   /*
    * The disclosure exists on the progress screen *and* on the finished plan —
    * deliberately, because "what did this build do" is a question people ask
-   * afterwards. Either one satisfies this: the identifier must not reach a
-   * traveller in either state.
+   * afterwards. **Both** are checked now, rather than whichever one the test
+   * happened to catch: the running one while the build runs, and the finished
+   * one unconditionally afterwards. On the finished plan it moved inside the
+   * build report, so it has to be opened twice — the report, then the stage list
+   * inside it — and a version of this test that only ever caught the progress
+   * screen would have said nothing at all about the state a traveller returns to.
    */
-  const disclosure = page.getByTestId('technical-stages').first();
-  await expect(disclosure).toBeVisible({ timeout: 30_000 });
-  // Open it: the identifier this guards against lived in the stage list, which
-  // is behind the disclosure and therefore invisible to a check that never opens it.
-  await disclosure.locator('summary').click();
+  const finished = page.getByRole('heading', { name: REGION_READY_HEADING });
 
-  const heading = page.getByRole('heading', { name: 'What this trip is built on' });
-  for (let sample = 0; sample < 20; sample += 1) {
-    const text = await disclosure.innerText();
+  function refuseIdentifiers(text: string): void {
+    expect(text.length, 'an unopened stage list reads as empty and proves nothing').toBeGreaterThan(
+      0,
+    );
     expect(/[a-z0-9]+_[a-z0-9]+/.test(text), `a raw identifier reached the screen: ${text}`).toBe(
       false,
     );
     expect(text).not.toMatch(/\breusing shared claims\b/);
     expect(text).not.toMatch(/\benriching priority candidates\b/);
-    if (await heading.isVisible().catch(() => false)) break;
-    await page.waitForTimeout(600);
   }
+
+  const running = page.getByTestId('technical-stages').first();
+  for (let sample = 0; sample < 20; sample += 1) {
+    if (await finished.isVisible().catch(() => false)) break;
+    if (await running.isVisible().catch(() => false)) {
+      if (!(await running.evaluate((element) => (element as HTMLDetailsElement).open))) {
+        /*
+         * BOUNDED, BECAUSE THE THING BEING CLICKED IS SUPPOSED TO VANISH.
+         *
+         * The fixture compiler finishes a synthetic world in about a second, so
+         * this loop is a sampler: it asserts about the progress screen when it
+         * catches one, and the finished plan below is the check that always
+         * runs. When the build completes between the visibility test above and
+         * this click, the same `data-testid` is still in the document — inside
+         * the finished plan's *closed* build report — and the default click
+         * waits sixty seconds for an element that will never become visible.
+         * Observed twice across three gate runs, as a minute-long timeout with
+         * the panel it wanted sitting open beside it.
+         *
+         * Two seconds is not a tolerance for a slow page; it is the statement
+         * that a control on screen right now is clickable now. Failing it means
+         * the screen changed underneath, which is the loop's exit condition and
+         * not a defect.
+         */
+        try {
+          await running.locator(':scope > summary').click({ timeout: 2_000 });
+        } catch {
+          break;
+        }
+      }
+      const text = await running.innerText().catch(() => '');
+      /*
+       * AN EMPTY READ IS TWO DIFFERENT FAILURES AND ONLY ONE OF THEM IS REAL.
+       *
+       * A stage list that is on the screen and reads empty is the vacuity this
+       * guard exists for — an unopened `<details>` returns nothing, and a test
+       * that scanned it for identifiers would pass against anything. But the
+       * build can also finish *between* the visibility check and the read, and
+       * then the progress screen is gone and the empty string is a fact about
+       * the navigation rather than about the panel. Observed once in three
+       * consecutive gate runs, as "an unopened stage list reads as empty and
+       * proves nothing" on a run where nothing was wrong with the panel.
+       *
+       * So the two are told apart by asking again: still there and empty is the
+       * failure; gone is the loop's own exit condition, one iteration early.
+       */
+      if (text.length === 0 && !(await running.isVisible().catch(() => false))) break;
+      refuseIdentifiers(text);
+    }
+    await page.waitForTimeout(400);
+  }
+
+  await expect(finished).toBeVisible({ timeout: 30_000 });
+  await openHowThisWasBuilt(page);
+  /*
+   * The stored list *inside the report*, not the first one on the page.
+   *
+   * The progress screen's copy can still be in the document — hidden — when the
+   * finished plan renders, and `.first()` picked it: the click then waited the
+   * full minute for an element that was never going to become visible, on a
+   * panel that had been sitting open beside it the whole time.
+   */
+  const stored = page.getByTestId('how-this-was-built').getByTestId('technical-stages');
+  await expect(stored).toBeVisible();
+  await stored.locator(':scope > summary').click();
+  refuseIdentifiers(await stored.innerText());
 });
 
 test('a finished phase never goes back to working while somebody watches', async ({ page }) => {
@@ -158,7 +226,7 @@ test('a finished phase never goes back to working while somebody watches', async
    * places" report Done and then, a few seconds later, report Working again.
    */
   const settled = new Set<string>();
-  const heading = page.getByRole('heading', { name: 'What this trip is built on' });
+  const heading = page.getByRole('heading', { name: REGION_READY_HEADING });
 
   for (let sample = 0; sample < 40; sample += 1) {
     if (await heading.isVisible().catch(() => false)) break;
