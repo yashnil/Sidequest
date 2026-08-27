@@ -26,7 +26,8 @@ import {
 } from '@/lib/db/decision-repository';
 import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { createTrip } from '@/lib/db/repository';
-import { sessionToken } from '@/lib/net/caller';
+import { guardAction, sessionToken } from '@/lib/net/caller';
+import { decisionAccessRefusal } from '@/lib/net/decision-access';
 import { saveComposerAnswers, saveDestinationQuery, saveSelectedDestination } from '@/lib/db/compiler-repository';
 import { recommendDestinations } from '@/lib/destinations/recommend';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
@@ -130,10 +131,29 @@ const THEME_VALUES = new Set([
   'quiet',
 ]);
 
-/** Start a session and go to it. The id in the URL is what makes a refresh free. */
-export async function startDecisionAction(input: DecisionAnswersInput): Promise<never> {
+/**
+ * Start a session and go to it. The id in the URL is what makes a refresh free.
+ *
+ * Two guards before the row exists, both absent for one release:
+ *
+ * - **The rate fence.** This action writes a row per call and sat outside
+ *   every fence; two hundred scripted POSTs were two hundred rows with no
+ *   refusal at any layer. `decide_start` is a row in the same table every
+ *   other guarded action uses.
+ * - **The owner stamp.** Minted from the same cookie `createTrip` uses, so the
+ *   session belongs to the browser that started it — see
+ *   `lib/net/decision-access` for what happens when a different one arrives.
+ *
+ * Returns a result instead of `never` because a refusal has to reach the
+ * screen; on success the redirect throws and nothing is returned.
+ */
+export async function startDecisionAction(input: DecisionAnswersInput): Promise<DecisionResult> {
+  const limited = await guardAction('decide_start');
+  if (limited) return { ok: false, error: limited };
+
   const parsed = answersSchema.parse(input);
-  const id = createDecisionSession(toComposerAnswers(parsed, new Date()), new Date());
+  const owner = await sessionToken({ mint: true });
+  const id = createDecisionSession(toComposerAnswers(parsed, new Date()), owner, new Date());
   redirect(`/decide/${id}`);
 }
 
@@ -141,6 +161,8 @@ export async function saveDecisionAnswersAction(
   id: string,
   input: DecisionAnswersInput,
 ): Promise<DecisionResult> {
+  const foreign = await decisionAccessRefusal(id);
+  if (foreign) return { ok: false, error: foreign };
   const session = getDecisionSession(id);
   if (!session) return { ok: false, error: 'We could not find that.' };
   if (session.resolvedTripId) {
@@ -164,6 +186,16 @@ export async function saveDecisionAnswersAction(
  * be machinery nobody needs.
  */
 export async function buildShortlistAction(id: string): Promise<DecisionResult> {
+  /*
+   * Ownership first, then the fence. A stranger's press must read as a missing
+   * session before it can learn anything — including whether the deployment is
+   * busy — and must not drain the owner's bucket while doing it.
+   */
+  const foreign = await decisionAccessRefusal(id);
+  if (foreign) return { ok: false, error: foreign };
+  const limited = await guardAction('decide_shortlist');
+  if (limited) return { ok: false, error: limited };
+
   const session = getDecisionSession(id);
   if (!session) return { ok: false, error: 'We could not find that.' };
 
@@ -208,6 +240,18 @@ export async function buildShortlistAction(id: string): Promise<DecisionResult> 
  * an answer performs no requests at all.
  */
 export async function resolveShortlistImageryAction(id: string): Promise<DecisionResult> {
+  /*
+   * The same two guards as the ranking, from the same bucket — the imagery
+   * pass is the half of the button press that reaches a volunteer-run
+   * service. A rate refusal is returned without a sentence on purpose: the
+   * page treats a false result as "no pictures yet", which is the correct
+   * traveller experience for both failure and throttling.
+   */
+  const foreign = await decisionAccessRefusal(id);
+  if (foreign) return { ok: false, error: foreign };
+  const limited = await guardAction('decide_shortlist');
+  if (limited) return { ok: false };
+
   const session = getDecisionSession(id);
   if (!session?.shortlist) return { ok: false, error: 'There is no list to illustrate.' };
 
@@ -291,6 +335,14 @@ async function resolveShortlistImagery(shortlist: DestinationShortlist): Promise
  *   cannot see and cannot report.
  */
 export async function adoptDestinationAction(id: string, entryId: string): Promise<DecisionResult> {
+  /*
+   * The fourth guard, and the one with the irreversible consequence behind it:
+   * adoption mints the trip under the *caller's* cookie and resolves the
+   * session for good, so a stranger who reached this line would not merely
+   * read the answers — they would take the trip and lock the owner out.
+   */
+  const foreign = await decisionAccessRefusal(id);
+  if (foreign) return { ok: false, error: foreign };
   const session = getDecisionSession(id);
   if (!session) return { ok: false, error: 'We could not find that.' };
   if (session.resolvedTripId) return { ok: false, error: 'You have already chosen for this one.' };

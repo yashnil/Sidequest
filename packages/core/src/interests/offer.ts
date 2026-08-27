@@ -7,6 +7,7 @@ import {
   INTEREST_EVIDENCE,
   UNIVERSAL_INTERESTS,
   type DestinationClass,
+  type InterestEvidenceRule,
 } from './vocabulary';
 
 /**
@@ -140,6 +141,54 @@ function sourceCategoriesIn(tags: readonly string[] | undefined): string[] {
   return values;
 }
 
+/**
+ * WHETHER A KEYWORD NAMES THIS LEAF'S OWN KIND, OR MERELY SITS INSIDE IT.
+ *
+ * A leaf category is a snake_case compound, and this test used to be
+ * `sourceCategory.includes(keyword)`. A raw substring reads a keyword out of
+ * the middle of an unrelated word, and over the 220 leaves the compiler's
+ * taxonomy recognises it did: `market` inside `supermarket`, `quarter` inside
+ * `corporate_headquarters`, `park` inside `bicycle_parking`. Each one put an
+ * interest on a record that does not serve it, and the interest then reached
+ * the traveller twice over — once as a stamped `matchedInterests` chip, once as
+ * "you marked this, and that is what this delivers".
+ *
+ * Whole tokens instead, and a contiguous run for the multi-token keywords
+ * (`hot_spring`, `nature_reserve`, `food_hall`), so a keyword names one kind
+ * rather than two words that happen to co-occur. Split on any non-alphanumeric
+ * run because vocabularies differ about the separator.
+ */
+function namesKind(sourceCategory: string, keyword: string): boolean {
+  const tokens = sourceCategory.split(/[^a-z0-9]+/).filter((token) => token.length > 0);
+  const wanted = keyword.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 0);
+  if (wanted.length === 0 || wanted.length > tokens.length) return false;
+  for (let start = 0; start + wanted.length <= tokens.length; start += 1) {
+    if (wanted.every((word, offset) => tokens[start + offset] === word)) return true;
+  }
+  return false;
+}
+
+/**
+ * The keyword channel, with the rule's own refusals applied first.
+ *
+ * `sourceExclusions` names the compounds whose head noun is one of the keywords
+ * and whose kind is not — see the table. Checked before the keywords rather
+ * than after a match, so an excluded leaf reaches no keyword at all and cannot
+ * be admitted by a second one.
+ */
+function keywordEvidences(
+  rule: InterestEvidenceRule,
+  sourceCategories: readonly string[],
+): boolean {
+  if (!rule.sourceKeywords) return false;
+  for (const raw of sourceCategories) {
+    const sourceCategory = raw.toLowerCase();
+    if (rule.sourceExclusions?.includes(sourceCategory)) continue;
+    if (rule.sourceKeywords.some((keyword) => namesKind(sourceCategory, keyword))) return true;
+  }
+  return false;
+}
+
 /** True when this evidence says an interest can be served. The one matcher. */
 export function evidences(evidence: InterestEvidence, interest: Interest): boolean {
   // The classifier's own verdict, and the strongest channel there is.
@@ -151,12 +200,7 @@ export function evidences(evidence: InterestEvidence, interest: Interest): boole
   const kind = lower(evidence.displayKind);
   if (kind.length > 0 && rule.displayKinds?.some((entry) => entry === kind)) return true;
 
-  if (rule.sourceKeywords) {
-    for (const sourceCategory of evidence.sourceCategories ?? []) {
-      if (rule.sourceKeywords.some((keyword) => sourceCategory.includes(keyword))) return true;
-    }
-  }
-  return false;
+  return keywordEvidences(rule, evidence.sourceCategories ?? []);
 }
 
 /**
@@ -168,6 +212,44 @@ export function evidences(evidence: InterestEvidence, interest: Interest): boole
  */
 export function evidencedInterests(evidence: InterestEvidence): Interest[] {
   return INTERESTS.filter((interest) => evidences(evidence, interest));
+}
+
+/**
+ * WHETHER A RECORD NAMES ITS OWN KIND AT ALL.
+ *
+ * A compiled place always does — the inventory writes the source's leaf
+ * category as its first tag (`places=shinto_shrine`), and `displayKind` carries
+ * the truthful noun a card prints. An authored place carries neither: its
+ * category and interests were curated by the same hand, and curation is itself
+ * the evidence. Callers that hold a claim to the *kind* standard (see
+ * `kindEvidences`) read this first, so a hand-written record is never held to a
+ * channel it structurally does not carry.
+ */
+export function namesOwnKind(subject: InterestEvidenceSubject): boolean {
+  return lower(subject.displayKind).length > 0 || sourceCategoriesIn(subject.tags).length > 0;
+}
+
+/**
+ * THE KIND CHANNELS ALONE: WHAT THE SOURCE CALLED IT, NEVER WHAT A BUCKET IMPLIES.
+ *
+ * `evidences` answers "can this record serve the interest", and its planning
+ * category channel is right for that question. But the thirteen-value planning
+ * category is a *bucket*, and a bucket launders: a theme park files under the
+ * food-and-towns category, so by the category channel a theme park "delivers"
+ * food — which is, verbatim, a sentence a live board printed at a traveller. A
+ * claim **about the record's own kind** ("you marked X, and that is what this
+ * delivers") therefore has to clear the two channels with the resolution to
+ * name a kind: the display noun and the source's own leaf category.
+ *
+ * The stamped-interest channel is deliberately not consulted either: stamps
+ * arrive through the same bucket, and a claim checked against its own
+ * derivation checks nothing.
+ */
+export function kindEvidences(subject: InterestEvidenceSubject, interest: Interest): boolean {
+  const rule = INTEREST_EVIDENCE[interest];
+  const kind = lower(subject.displayKind);
+  if (kind.length > 0 && rule.displayKinds?.some((entry) => entry === kind)) return true;
+  return keywordEvidences(rule, sourceCategoriesIn(subject.tags));
 }
 
 /** True when this place is evidence that the region can serve this interest. */

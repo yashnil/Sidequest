@@ -26,7 +26,13 @@ import type { DestinationIndexEntry } from '@sidequest/core';
 vi.mock('next/cache', () => ({ revalidatePath: () => undefined }));
 vi.mock('next/headers', () => ({
   headers: async () => ({ get: () => null }),
-  cookies: async () => ({ get: () => undefined, set: () => undefined }),
+  cookies: async () => ({
+    // One stable browser identity: the ownership boundary refuses a request
+    // that presents no cookie, and this file is about scope identity.
+    get: (name: string) =>
+      name === 'sidequest_session' ? { name, value: 'session-under-test' } : undefined,
+    set: () => undefined,
+  }),
 }));
 
 let dir: string;
@@ -103,18 +109,21 @@ async function tripPickedFromTheIndex(): Promise<string> {
     },
   });
 
-  const trip = createTrip({
-    mode: 'known_destination',
-    destinationInput: 'Tokyo',
-    regionId: 'open-world',
-    startDate: '2026-09-01',
-    endDate: '2026-09-06',
-    arrivalTime: '10:00',
-    departureTime: '18:00',
-    adults: 2,
-    children: 0,
-    travelerNeeds: [],
-  });
+  const trip = createTrip(
+    {
+      mode: 'known_destination',
+      destinationInput: 'Tokyo',
+      regionId: 'open-world',
+      startDate: '2026-09-01',
+      endDate: '2026-09-06',
+      arrivalTime: '10:00',
+      departureTime: '18:00',
+      adults: 2,
+      children: 0,
+      travelerNeeds: [],
+  },
+    'session-under-test',
+  );
   repo.saveDestinationQuery(trip.id, 'known_destination', 'Tokyo');
   /* Exactly what `trips/new` writes when a suggestion is chosen from the list. */
   repo.saveSelectedDestination(trip.id, {

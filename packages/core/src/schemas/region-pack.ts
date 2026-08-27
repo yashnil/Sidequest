@@ -91,8 +91,73 @@ import { dataLicenceSchema, licenceIdSchema } from './licence';
  * `forceRefresh` exists but has no production call site, and adding one would
  * put the decision in a caller's hands trip by trip. The version is the honest
  * lever: every pack older than the rules is refused once, everywhere.
+ *
+ * ---
+ *
+ * **5** — Phase 16B stage 8, and again the content changed shape, not just
+ * quality. Retention now orders by place-attesting standing (operator URLs
+ * order nothing, ground-namesake attestation, knowledge-donor floor), the
+ * normaliser keeps the designation-bearing columns (`boundary`, `heritage`,
+ * `protect_class`, `protection_title`, `site_type`, `landuse`) that v4 records
+ * simply do not carry, and the partition schedules the full trimmed grid where
+ * v4 truncated a country to its 24 most central cells — a v4 Iceland pack is
+ * missing the capital's ground entirely. A pack without those columns and
+ * without that ground is not an older copy of the same answer; it is an answer
+ * to a narrower question. Same observed-not-predicted trigger as 4: the first
+ * live gate run after the stage-8 fixes was judged against v4 packs the new
+ * code could never have produced.
+ *
+ * ---
+ *
+ * **6** — the release-confirmation pass, and the same trigger a third time.
+ * Retention now orders a graded ground-witness count between attestation and
+ * provider confidence — a landmark the surrounding ground names eight times no
+ * longer loses its seat to a same-tier record on a provider-confidence lottery
+ * — and purpose-built broadcast/observation towers are a rated leaf rather than
+ * unrated infrastructure, so a v5 pack's seat roster is a different answer, not
+ * a staler one. The read itself also changed what a slow link produces: a
+ * stalled-transfer guard replaced a whole-body timeout that was a throughput
+ * floor in disguise, and layers the clock starved wholesale are read once more
+ * before the build ships them empty. Observed, not predicted: the first live
+ * recompile after the retention fix cache-hit the pre-fix `ready` pack —
+ * correctly, under the cache's own rules — and the repaired retention never
+ * ran. The version is still the only honest lever.
+ *
+ * ---
+ *
+ * **7** — the confirmation-review closure wave, and the trigger is the same
+ * once more: what a pack's records SAY changed, not just how they rank. The
+ * taxonomy now resolves the catalogue's plural leaves to their singular rules
+ * (a v6 pack refused a destination's most-visited attraction as an unknown
+ * kind); watercourses and metres-scale mounds are witness-gated instead of
+ * carrying prior bands above real landmarks; hazardous-approach ground
+ * (glaciers, caves) seats only with visit evidence; category-archetype
+ * access/season/intensity/crowd guesses are marked as estimates instead of
+ * shipping as facts; unmeasured travel legs are declared rather than zero;
+ * knowledge-base identity tolerates one trailing character of name fanning;
+ * and the normaliser now keeps the source's own `en` name — first among the
+ * alternates and tagged in the attributes — where v6 threw the tag away. A v6
+ * pack answers with a different vocabulary, a different seat roster and
+ * unmarked guesses; reading it as current would judge repaired code by
+ * un-repaired artifacts.
+ *
+ * ---
+ *
+ * **8** — the road/outdoor board-floor closure, same trigger. Two things a
+ * pack *stores* changed. The linker now folds a protected area published under
+ * its proper name alone and under the proper name plus its designation's
+ * generic noun into one collapse component (a v7 country pack's stored links
+ * held two components for its headline national park, and the served board
+ * seated the same park twice); and the protected-area vocabulary's designated
+ * natural landmark is a rated, witness-gated leaf instead of unrecognised
+ * ground, so its records carry a planning role and can link to the features
+ * they protect (a v7 pack refused the destination's two most famous waterfalls
+ * as `insufficient_travel_value` while townsquare lawns held seats). Links and
+ * roles are stored on the pack, so a v7 pack keeps answering with the split
+ * components and the refused designations however repaired the code reading it
+ * is. The version is still the only honest lever.
  */
-export const REGION_PACK_VERSION = 4 as const;
+export const REGION_PACK_VERSION = 8 as const;
 
 // ---------------------------------------------------------------------------
 // Layers

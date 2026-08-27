@@ -112,6 +112,93 @@ describe('the editing surface answers to the builder’s own acceptance', () => 
   });
 
   /**
+   * AND EVERY OFFER MUST APPLY — THE HALF THE TEST ABOVE ACCEPTS AS CORRECT.
+   *
+   * The gate above treats a refusal as a good outcome, and for the mutation it
+   * is: a menu can be open in a tab while two other edits land. For the *offer
+   * list* it is not. `feasibleReplacements` judges a candidate the way a board
+   * does — open that date, a way in, no harder than the stop it replaces — and
+   * then the day it would join is already three stops deep, two thirds through
+   * its driving budget, and ends at a flight.
+   *
+   * Measured across this sweep before the offer list ran the swap it offers:
+   * **228 of 676 offers could not be applied, and 26 menus were dead in full**,
+   * every row an error toast. Departure days were the worst of it — four
+   * options, four refusals — and a departure day is where a traveller is most
+   * likely to be rearranging something.
+   *
+   * The scenarios vary pace and day start across four trip lengths because a
+   * single fixture hides this: the failure is a function of how full the day
+   * already is, and one pace fills days one way. They are the same
+   * twenty-four the measurement above was taken on.
+   *
+   * THE TIME BUDGET, AND WHAT IT IS AND IS NOT MEASURING.
+   *
+   * Twenty-four plans, about 150 menus and about 470 applied swaps, and the offer
+   * list now runs the swap before offering it — so this test pays for each
+   * candidate twice, once inside the menu and once again here to check the menu
+   * told the truth. That second pass is the whole property and cannot be
+   * dropped for speed. It runs to roughly two seconds alone and past the
+   * five-second default when the whole suite is running beside it, which is a
+   * fact about a twenty-four-scenario sweep rather than about the product: opening
+   * one menu on the golden region measures at most sixteen milliseconds.
+   *
+   * Stated as a budget rather than bought by cutting arms off the sweep, since
+   * the arms are what make this reproduce.
+   */
+  it('offers no replacement that cannot then be applied', { timeout: 60_000 }, () => {
+    const scenarios: { name: string; options: Parameters<typeof buildScenario>[0] }[] = [];
+    for (const endDate of ['2026-08-14', '2026-08-15', '2026-08-17', '2026-08-18']) {
+      for (const pace of ['slow', 'balanced', 'fast'] as const) {
+        for (const dayStart of ['early', 'relaxed'] as const) {
+          scenarios.push({
+            name: `${endDate} ${pace}/${dayStart}`,
+            options: { basics: { startDate: '2026-08-12', endDate }, answers: { pace, dayStart } },
+          });
+        }
+      }
+    }
+
+    let offered = 0;
+    const unapplicable: string[] = [];
+    for (const scenario of scenarios) {
+      const input = buildScenario(scenario.options);
+      const result = planTrip(input);
+      expect(result.ok, `${scenario.name}: ${result.ok ? '' : result.message}`).toBe(true);
+      if (!result.ok) continue;
+      for (const swap of everyOfferedSwap(input, result.itinerary)) {
+        offered += 1;
+        const applied = swapStopOnDay(
+          input,
+          result.itinerary,
+          swap.dayNumber,
+          swap.placeId,
+          swap.replacementId,
+        );
+        if (!applied.ok) {
+          unapplicable.push(
+            `${scenario.name} day ${swap.dayNumber} ${swap.stopTitle} → ${swap.offer}: ${applied.message}`,
+          );
+        }
+      }
+    }
+
+    /*
+     * The guard on the guard, and it is doing real work here: filtering the
+     * offers down to what applies is one edit away from filtering them down to
+     * nothing at all, and an empty menu everywhere would satisfy the assertion
+     * below perfectly.
+     */
+    expect(offered, 'the sweep must still put real offers in front of a traveller').toBeGreaterThan(
+      300,
+    );
+    expect(
+      unapplicable,
+      `${unapplicable.length} of ${offered} offered replacements could not be applied — every one of them an error toast on a row the product itself put in the menu:\n${unapplicable.slice(0, 20).join('\n')}`,
+    ).toEqual([]);
+  });
+
+  /**
    * The half of the acceptance the packer cannot see.
    *
    * `packDay` measures a day against the traveller's own limits and the clock;

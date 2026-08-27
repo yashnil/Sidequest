@@ -245,7 +245,25 @@ export async function seedReviewableSession(
  * run, because nothing in the browser suite may reach a provider.
  */
 export async function seedQuestionRound(page: Page, seed: string): Promise<string> {
-  return seedReviewableSession(page, { seed, shape: 'awaiting_answers' });
+  const sessionId = await seedReviewableSession(page, { seed, shape: 'awaiting_answers' });
+  /*
+   * THE ROUND IS ON SCREEN BEFORE THIS RETURNS, LIKE `reachReview` BELOW.
+   *
+   * The seed only waits for the URL, and the question list is drawn by the
+   * client from live state that arrives after it — so a caller that reached
+   * straight for the controls was reading a page that had a run panel and no
+   * questions yet. `count()` is a snapshot and does not retry, so that caller
+   * got 0 and asserted against it: measured at one unchanged source hash over
+   * three gate runs, 611 / 610 / 611, the single failure being a control count
+   * of 0 in the tap-target spec.
+   *
+   * Both halves are named because both are gated on the same live flag and both
+   * are what the callers came for: the list with its answer controls, and the
+   * second press underneath it.
+   */
+  await expect(page.getByTestId('pooled-questions')).toBeVisible();
+  await expect(page.getByTestId('plan-both')).toBeVisible();
+  return sessionId;
 }
 
 export async function reachReview(page: Page, sessionId: string): Promise<void> {

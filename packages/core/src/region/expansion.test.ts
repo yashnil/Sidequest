@@ -4,6 +4,16 @@ import { assessSeason, describeOpenSeason } from './season';
 import { EASTERN_SIERRA, EASTERN_SIERRA_ACCESS, EASTERN_SIERRA_PLACES, placeById } from '../data/index';
 import { assessPlaceAccess, capabilityFromProfile } from '../access/feasibility';
 import type { WorthDetourLabel } from '../schemas/region';
+import type { TransitEvidence } from '../schemas/compiled-region';
+import { autoSelect } from '../discovery/autoselect';
+import { buildDiscoveryBoard } from '../discovery/board';
+import { detourToleranceMinutesFor, DETOUR_STRETCH_MULTIPLIER } from '../travel/reach';
+import {
+  TRANSIT_CITY_IDENTITY,
+  TRANSIT_CITY_JOURNEYS,
+  transitCityBoardInput,
+  transitCityTraveler,
+} from '../testing/transit-city';
 import {
   AUGUST_DATES,
   AUGUST_MONTHS,
@@ -218,5 +228,220 @@ describe('worth-the-detour verdict', () => {
         `a ${band} past this trip's reach is offered to the traveller anyway`,
       ).toBe('too_far_for_this_trip');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A walking figure pricing a traveller whose own mode nobody could measure
+// ---------------------------------------------------------------------------
+
+/**
+ * THE TOKYO SKIP LIST, REBUILT AS A WORLD.
+ *
+ * Measured on the fresh Tokyo artifact (`region-25590a1e-…`): the trip is
+ * scoped car-free, the compiler measured a pedestrian matrix, no transit
+ * provider is configured, and `transitEvidence` reads
+ * `{requested: 0, measured: 0, absence: 'unsupported'}`. Every board card
+ * priced its journey "on foot from base", and the Probably-skip group told the
+ * traveller "1 hr 42 min each way on foot is past how far you said you would
+ * go" — over Yoyogi Park, in a city whose own pack records a hundred and seven
+ * railway stations. The traveller stated a travel-time tolerance, not a
+ * walking-time tolerance; pricing the whole city on foot and skipping what
+ * walking cannot reach converts "we cannot see the trains" into "the trains do
+ * not exist".
+ *
+ * The fixture walks are chosen so each rule bites unambiguously for the
+ * transit-city traveller (walking tolerance 20, car-free transport day 150,
+ * car-free detour radius 20 → stretch ceiling 30):
+ *
+ *   A  12 min walk  → inside tolerance, verdicts never move
+ *   B  70 min walk  → past the radius, and the round trip (140) fits the day:
+ *                     the *radius* verdict is the only refusal, priced on foot
+ *   C 120 min walk  → the round trip (240) is past what any day of this trip
+ *                     holds; even the measured walk cannot fit, whatever the
+ *                     trains do
+ */
+function blindFootMatrix(walkToB = 70) {
+  const walks: Record<string, { minutes: number; km: number }> = {
+    [TRANSIT_CITY_IDENTITY.candidateA]: { minutes: 12, km: 1 },
+    [TRANSIT_CITY_IDENTITY.candidateB]: { minutes: walkToB, km: 5 },
+    [TRANSIT_CITY_IDENTITY.candidateC]: { minutes: 120, km: 9 },
+  };
+  const ids = [TRANSIT_CITY_IDENTITY.baseId, ...Object.keys(walks)];
+  const between = (from: string, to: string, field: 'minutes' | 'km'): number => {
+    if (from === to) return 0;
+    const other = from === TRANSIT_CITY_IDENTITY.baseId ? to : from;
+    return walks[other]?.[field] ?? 0;
+  };
+  return {
+    mode: 'foot' as const,
+    ids,
+    minutes: ids.map((from) => ids.map((to) => between(from, to, 'minutes'))),
+    km: ids.map((from) => ids.map((to) => between(from, to, 'km'))),
+    provenance: {
+      kind: 'measured' as const,
+      note: 'Fixture pedestrian network, measured by construction.',
+      source: 'packages/core/src/region/expansion.test.ts',
+    },
+  };
+}
+
+/** The build's own record that nothing in it could time a scheduled journey. */
+function transitNeverMeasured(): TransitEvidence {
+  return { journeys: [], requested: 0, measured: 0, absence: 'unsupported' };
+}
+
+function blindBoard(scheduledNetwork?: 'observed' | 'not_observed', walkToB?: number) {
+  const traveler = transitCityTraveler();
+  const board = buildDiscoveryBoard({
+    ...transitCityBoardInput(traveler),
+    travel: {
+      matrix: blindFootMatrix(walkToB),
+      transit: transitNeverMeasured(),
+      baseId: TRANSIT_CITY_IDENTITY.baseId,
+      ...(scheduledNetwork ? { scheduledNetwork } : {}),
+    },
+  });
+  const of = (id: string) => board.candidates.find((entry) => entry.place.id === id)!;
+  return { traveler, board, of };
+}
+
+describe('a walk pricing a transit traveller, where nothing could see the trains', () => {
+  it('holds the walking verdicts where no scheduled network was observed', () => {
+    /*
+     * The control, pinned against the outputs the board produced *before* the
+     * transit-blind gate existed, so any drift in the genuinely walk-only world
+     * fails loudly. In a world without a scheduled network — or where nobody
+     * said there is one — a seventy-minute walk past a twenty-minute radius is
+     * exactly what the card says it is, and the skip verdict stands.
+     */
+    for (const world of [undefined, 'not_observed' as const]) {
+      const { traveler, board, of } = blindBoard(world);
+      const b = of(TRANSIT_CITY_IDENTITY.candidateB);
+
+      expect(b.detourClass, 'the walking distance verdict must stand').toBe('too_far');
+      expect(b.travelMinutesFromBase).toBe(70);
+      expect(b.travelModeFromBase).toBe('walk');
+      expect(b.worthDetour).toBe('too_far_for_this_trip');
+      expect(b.quality.outcome).toBe('not_worth_detour');
+      expect(b.quality.reason).toMatch(/each way on foot is past how far you said you would go/);
+      expect(b.group).toBe('weak_fit');
+
+      const auto = autoSelect({ candidates: board.candidates, profile: traveler, tripDays: 3 });
+      expect(
+        auto.excluded.some(
+          (entry) =>
+            entry.placeId === TRANSIT_CITY_IDENTITY.candidateB &&
+            entry.reason === 'travel_budget',
+        ),
+        'auto-pick must keep refusing the walk for distance in a walk-only world',
+      ).toBe(true);
+    }
+  });
+
+  it('does not auto-skip for distance when the trains exist and nobody could time them', () => {
+    /*
+     * The fix itself. The traveller chose public transport, the compilation
+     * signed — in its own artifact — that nothing could measure a scheduled
+     * journey, and the destination evidence observes a scheduled network. A
+     * seventy-minute walking figure is then a fact about the fallback network,
+     * not about how far away the place is for this traveller: the honest
+     * verdict is that the transit route is unverified, the walk figure stays a
+     * walk figure, and the card stays selectable.
+     */
+    const { traveler, board, of } = blindBoard('observed');
+    const b = of(TRANSIT_CITY_IDENTITY.candidateB);
+
+    expect(b.detourClass, 'a radius refusal priced on foot must become unknown').toBe('unknown');
+    /* The measured walk survives, as a walk. Never erased, never relabelled. */
+    expect(b.travelMinutesFromBase).toBe(70);
+    expect(b.travelModeFromBase).toBe('walk');
+    expect(b.reach.status).toBe('measured');
+    expect(b.worthDetour).toBe('reach_unverified');
+    /* No distance verdict from a number that is not the traveller's mode. */
+    expect(b.quality.outcome).not.toBe('not_worth_detour');
+    expect(b.quality.reason).not.toMatch(/past how far you said you would go/);
+    expect(b.group).not.toBe('weak_fit');
+
+    const auto = autoSelect({ candidates: board.candidates, profile: traveler, tripDays: 3 });
+    expect(
+      auto.excluded.some(
+        (entry) =>
+          entry.placeId === TRANSIT_CITY_IDENTITY.candidateB && entry.reason === 'travel_budget',
+      ),
+      'auto-pick refused for distance a journey nobody established',
+    ).toBe(false);
+  });
+
+  it('never overrides the traveller’s own day budget, whatever the network', () => {
+    /*
+     * The boundary that keeps this from recreating Phase 9. C's walk is 120
+     * minutes each way — past what any day of this trip holds even before a
+     * train is imagined — and the planner's daily caps, which are settled,
+     * would refuse it on the same arithmetic. Softening it would put a card on
+     * the board that the plan must always take back.
+     */
+    const { of } = blindBoard('observed');
+    const c = of(TRANSIT_CITY_IDENTITY.candidateC);
+    expect(c.detourClass).toBe('too_far');
+    expect(c.worthDetour).toBe('too_far_for_this_trip');
+  });
+
+  /**
+   * THE SEAT SIZE THE LIVE FAILURE WAS MADE OF, AT BOTH VERDICTS.
+   *
+   * Forty-five minutes is the middle of the range two live car-free
+   * dense-metro boards actually produced: thirty-nine to seventy measured
+   * walking minutes to every canonical seat, because no transit provider was
+   * configured and the matrix therefore priced the pedestrian network. Each one
+   * was refused against "twenty-five minutes is the furthest you would walk to
+   * reach a stop" — an answer about the last mile from a stop, standing in for
+   * a whole-journey verdict, on a walk the traveller was never going to take.
+   */
+  it('passes no walking-radius refusal on a stand-in walk, and still passes one on a real walk', () => {
+    const traveler = transitCityTraveler();
+    const walkingRadius = detourToleranceMinutesFor(traveler, 'walk');
+    const rideBound = detourToleranceMinutesFor(traveler, 'walk', { transitUnmeasured: true });
+    /* The fixture is only a witness if the two bounds actually differ here. */
+    expect(45).toBeGreaterThan(walkingRadius * DETOUR_STRETCH_MULTIPLIER);
+    expect(45).toBeLessThanOrEqual(rideBound);
+
+    /* Trains on the ground, none in the evidence: no distance verdict at all. */
+    const blind = blindBoard('observed', 45).of(TRANSIT_CITY_IDENTITY.candidateB);
+    expect(blind.detourClass).toBe('unknown');
+    expect(blind.worthDetour).toBe('reach_unverified');
+    expect(blind.quality.outcome).not.toBe('not_worth_detour');
+    expect(blind.quality.reason).not.toMatch(/past how far you said you would go/);
+    /* The measured walk survives on the card, as the walk it is. */
+    expect(blind.travelMinutesFromBase).toBe(45);
+    expect(blind.travelModeFromBase).toBe('walk');
+
+    /*
+     * And the control, which is the same walk in a world with no scheduled
+     * network to stand in for: the walking verdict is the honest one and the
+     * refusal stands.
+     */
+    const genuine = blindBoard('not_observed', 45).of(TRANSIT_CITY_IDENTITY.candidateB);
+    expect(genuine.detourClass).toBe('too_far');
+    expect(genuine.worthDetour).toBe('too_far_for_this_trip');
+  });
+
+  it('says a measured ride is a ride, with no unverified copy anywhere near it', () => {
+    /*
+     * The third direction: where a journey planner did answer, the measured
+     * ride is the story and the unverified-transit verdict must not appear.
+     * This is the untouched transit-city world — pedestrian matrix, measured
+     * train to B — and the settled semantics it encodes.
+     */
+    const traveler = transitCityTraveler();
+    const board = buildDiscoveryBoard(transitCityBoardInput(traveler));
+    const b = board.candidates.find(
+      (entry) => entry.place.id === TRANSIT_CITY_IDENTITY.candidateB,
+    )!;
+
+    expect(b.travelModeFromBase).toBe('rail');
+    expect(b.travelMinutesFromBase).toBe(TRANSIT_CITY_JOURNEYS.transitToB);
+    expect(b.detourClass).not.toBe('unknown');
+    expect(b.quality.reason).not.toMatch(/could not verify the transit route/i);
   });
 });

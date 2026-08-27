@@ -3,6 +3,7 @@ import {
   RESEARCH_READINESS_COPY,
   RESEARCH_REPAIR_COPY,
   reportableDeficits,
+  type CoverageReport,
   type DestinationResearchReadiness,
   type ResearchDimensionReport,
   type ResearchFunnel,
@@ -107,12 +108,63 @@ export function deficitSentence(entry: ResearchDimensionReport, funnel: Research
   }
 }
 
+/**
+ * DID THIS BUILD STOP BEFORE IT HAD READ EVERYTHING?
+ *
+ * Read off the artifact's own coverage report — the same report whose summary
+ * says "we stopped early because this trip ran out of lookups" — so the two
+ * screens that render the readiness panel answer the question from the same
+ * frozen facts and cannot drift apart. `budget_exhausted` is written by the
+ * compiler exactly when a lookup ceiling cut the research short.
+ */
+export function coverageStoppedEarly(
+  coverage: Pick<CoverageReport, 'dimensions'> | null | undefined,
+): boolean {
+  if (!coverage) return false;
+  return coverage.dimensions.some((entry) => entry.reasons.includes('budget_exhausted'));
+}
+
+/**
+ * THE ONE SENTENCE THAT MUST NOT BLAME THE WORLD FOR OUR OWN BUDGET.
+ *
+ * The stored `thin` blurb asserts "There genuinely is not much published about
+ * this place" — which is the right sentence for genuinely quiet ground and a
+ * false one on a build that stopped because *this trip* ran out of lookups.
+ * A live dense-city plan carried both sentences on one page: the banner
+ * blaming the world, and the build report three sections down saying "we
+ * stopped early because this trip ran out of lookups". A reader who catches
+ * the page contradicting itself stops believing every other honesty statement
+ * on it.
+ *
+ * So the blurb branches on *why* coverage is thin. The claim is never
+ * weakened — both versions say there is less here than usual — only the
+ * attribution changes: self-imposed scarcity is owned, not projected onto the
+ * destination.
+ */
+export function readinessBlurb(
+  level: DestinationResearchReadiness['level'],
+  buildStoppedEarly: boolean,
+): string {
+  if (level === 'thin' && buildStoppedEarly) {
+    return 'We stopped before reading everything here, because this trip ran out of lookups. What follows is real; there is just less of it than a full look would have found.';
+  }
+  return RESEARCH_READINESS_COPY[level].blurb;
+}
+
 export function ResearchReadinessPanel({
   tripId,
   readiness,
+  buildStoppedEarly = false,
 }: {
   tripId: string;
   readiness: DestinationResearchReadiness;
+  /**
+   * Whether the build behind this reading stopped on its own budget or was
+   * left partial — the fact that decides which `thin` sentence is honest.
+   * Computed by the page from the same artifact (see `coverageStoppedEarly`)
+   * or from the job's own terminal state.
+   */
+  buildStoppedEarly?: boolean;
 }) {
   /**
    * `ready` is the ordinary case and says nothing — unless something was done.
@@ -193,7 +245,9 @@ export function ResearchReadinessPanel({
       >
         {copy.label}
       </h2>
-      <p className="measure mt-2 text-sm leading-relaxed text-ink">{copy.blurb}</p>
+      <p className="measure mt-2 text-sm leading-relaxed text-ink">
+        {readinessBlurb(readiness.level, buildStoppedEarly)}
+      </p>
       <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">{readiness.summary}</p>
 
       {/*

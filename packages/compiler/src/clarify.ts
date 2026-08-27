@@ -1,6 +1,7 @@
 import {
   breadthRank,
   CLARIFICATION_SET_VERSION,
+  singleAnswer,
   type ClarificationQuestion,
   type ClarificationSet,
   type DestinationCandidate,
@@ -256,6 +257,29 @@ export function deriveClarificationQuestions(input: ClarificationInput): Clarifi
   }
 
   return questions;
+}
+
+/**
+ * The car decision the clarification holds, as the settled boolean.
+ *
+ * `null` when nobody answered — and when the answer was "unsure", which is a
+ * real answer whose content is exactly "nobody has decided". One mapping, here,
+ * because the question's vocabulary (`yes`/`no`/`unsure`) belongs to the bank
+ * that wrote the question: a consumer parsing the strings for itself is a
+ * consumer that breaks when an option is reworded.
+ *
+ * `deriveScope` reads the same answer through its own precedence cascade; this
+ * exists for consumers outside that cascade — the questionnaire seeds itself
+ * with it, so a traveller who answered "no" at the clarification is not shown
+ * "you will have a car" pre-ticked by a hard-coded default.
+ */
+export function carAvailableFromAnswers(
+  clarifications: ClarificationSet | null | undefined,
+): boolean | null {
+  const answer = clarifications
+    ? singleAnswer(clarifications, QUESTION_IDS.carAvailable)
+    : undefined;
+  return answer === 'yes' ? true : answer === 'no' ? false : null;
 }
 
 /**

@@ -54,11 +54,15 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+function corpus(): { path: string; text: string }[] {
+  return [...walk(CORE_SRC), ...walk(PLANNER_SRC)]
+    .filter((path) => !NON_CONSUMERS.some((excluded) => path.startsWith(excluded)))
+    .map((path) => ({ path, text: readFileSync(path, 'utf8') }));
+}
+
 describe('offered avoidances have consumers', () => {
-  const files = [...walk(CORE_SRC), ...walk(PLANNER_SRC)].filter(
-    (path) => !NON_CONSUMERS.some((excluded) => path.startsWith(excluded)),
-  );
-  const sources = files.map((path) => ({ path, text: readFileSync(path, 'utf8') }));
+  const sources = corpus();
+  const files = sources.map((source) => source.path);
 
   it('searches a real corpus', () => {
     expect(files.length).toBeGreaterThan(20);
@@ -77,4 +81,36 @@ describe('offered avoidances have consumers', () => {
       ).toBeGreaterThan(0);
     });
   }
+});
+
+describe('the accessibility note has a consumer', () => {
+  /**
+   * THE FREE-TEXT BOX MUST FEED SOMETHING THE TRAVELLER CAN SEE.
+   *
+   * PR-QUES-10's last placebo: `accessibilityNotes` was written to
+   * `profile.accessibility.notes` at confirmation, and a repository-wide grep
+   * returned exactly one hit — that write. A traveller who typed "I can't
+   * manage stairs at the moment" into a box beside a working control had their
+   * words stored and never read, which is worse than not asking.
+   *
+   * The contract this enforces is deliberately narrow: some non-test module
+   * *outside* the questionnaire that writes the field must read
+   * `accessibility.notes` — carrying the traveller's own words into an output
+   * they can act on. It does not ask anyone to parse the free text into
+   * behaviour; acting on an unconfirmed guess about a sentence would be a
+   * worse dishonesty than the placebo. The consumer's own tests hold the other
+   * half: the words arrive verbatim and change nothing else about the plan.
+   */
+  it('profile.accessibility.notes is read outside the questionnaire that writes it', () => {
+    const consumers = corpus()
+      .filter((source) => !source.path.startsWith(join(CORE_SRC, 'questionnaire')))
+      .filter((source) => source.text.includes('accessibility.notes'))
+      .map((source) => source.path);
+    expect(
+      consumers.length,
+      'The questionnaire stores an accessibility note and nothing reads it. ' +
+        'Carry the traveller’s words into traveller-facing output, or stop collecting them — ' +
+        'a free-text box that feeds nothing spends trust on a placebo.',
+    ).toBeGreaterThan(0);
+  });
 });

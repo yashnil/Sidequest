@@ -282,7 +282,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
       if (item.kind !== 'activity' || !item.placeId) continue;
       const place = placesById.get(item.placeId);
       if (!place) continue;
-      chargeFrequencyCost(place, profile.derived.frequencyCaps, frequency);
+      chargeFrequencyCost(place, profile, frequency);
       const primary = place.interests[0];
       if (primary) stopsPerInterest.set(primary, (stopsPerInterest.get(primary) ?? 0) + 1);
     }
@@ -362,14 +362,16 @@ export function validateStrategy(
       transit: acc.transit + day.totals.transitMinutes,
       walk: acc.walk + day.totals.walkMinutes,
       wait: acc.wait + day.totals.waitMinutes,
+      unverified: acc.unverified + day.totals.unverifiedMinutes,
     }),
-    { drive: 0, transit: 0, walk: 0, wait: 0 },
+    { drive: 0, transit: 0, walk: 0, wait: 0, unverified: 0 },
   );
   if (
     actual.drive !== strategy.totals.driveMinutes ||
     actual.transit !== strategy.totals.transitMinutes ||
     actual.walk !== strategy.totals.walkMinutes ||
-    actual.wait !== strategy.totals.waitMinutes
+    actual.wait !== strategy.totals.waitMinutes ||
+    actual.unverified !== strategy.totals.unverifiedMinutes
   ) {
     issues.push({
       code: 'inconsistent_transport_totals',
@@ -409,16 +411,25 @@ function validateDayTransport(day: ItineraryDay, input: ValidationInput): Valida
       // null: a day's travel minutes are the minutes somebody stands behind, and
       // the count of what is missing rides beside them rather than inside them.
       if (travel.minutes === null) return acc;
-      acc[travelBucketFor(travel.mode, travel.role)] += travel.minutes;
+      /*
+       * The leg's own statement that its mode is a stand-in, read from the
+       * stored timeline. Without it this sum classifies a proxy journey as a
+       * walk and the layout's `unverifiedMinutes` looks like a discrepancy —
+       * which is the check doing its job: the two must classify identically,
+       * so both are told the same thing about the same leg.
+       */
+      acc[travelBucketFor(travel.mode, travel.role, travel.unverifiedScheduled === true)] +=
+        travel.minutes;
       return acc;
     },
-    { drive: 0, transit: 0, walk: 0, wait: 0 },
+    { drive: 0, transit: 0, walk: 0, wait: 0, unverified: 0 },
   );
   if (
     summed.drive !== day.totals.driveMinutes ||
     summed.transit !== day.totals.transitMinutes ||
     summed.walk !== day.totals.walkMinutes ||
-    summed.wait !== day.totals.waitMinutes
+    summed.wait !== day.totals.waitMinutes ||
+    summed.unverified !== day.totals.unverifiedMinutes
   ) {
     issues.push({
       code: 'inconsistent_transport_totals',
@@ -917,6 +928,13 @@ function lastTravelReturnsToBase(day: ItineraryDay, baseId: string): boolean {
 export const REQUEST_NOT_MET_CODES: ReadonlySet<ValidationIssue['code']> = new Set([
   'must_include_unscheduled',
   'food_choice_unscheduled',
+  /*
+   * A thin plan is a disappointing one, not a broken one. Every day in it is
+   * internally valid — that is precisely why the status was reading "Ready,
+   * with cautions" — so the honest outcome is `needs_decision` over a plan the
+   * traveller can still see, not a refusal that leaves them with nothing.
+   */
+  'coverage_below_pace',
 ]);
 
 /**

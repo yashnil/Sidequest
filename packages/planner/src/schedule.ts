@@ -1,8 +1,11 @@
 import {
   assessSeason,
+  describeTransitBlindWalk,
   displayNameOf,
   formatMinuteOfDay,
   INTEREST_LABELS,
+  MEAL_SLOT_LABELS,
+  PLACE_CATEGORY_LABELS,
   TRANSPORT_MODE_LABELS,
   type BookingRequirement,
   type DayAvailability,
@@ -37,6 +40,7 @@ import {
   chooseFoodStop,
   chooseProvisioningStop,
   PACKED_MEAL_MINUTES,
+  type FoodArea,
   type FoodChoice,
   type FoodContext,
   type FoodDayPlan,
@@ -49,7 +53,9 @@ import {
   type TravelKnowledge,
 } from './travel';
 import {
-  modelledWalkCapMinutes,
+  formatSpan,
+  isUnverifiedScheduledJourney,
+  plannerLegBounds,
   resolvePlannerLeg,
   type PlannerResolvedLeg,
 } from './modelled-walk';
@@ -132,6 +138,8 @@ export interface DayLayout {
   transitMinutes: number;
   walkMinutes: number;
   waitMinutes: number;
+  /** Held for journeys nobody could price. Never a claim about a mode. */
+  unverifiedMinutes: number;
   travelKm: number;
   freeMinutes: number;
   strenuousCount: number;
@@ -205,6 +213,7 @@ export function layoutDay(
   let transitMinutes = 0;
   let walkMinutes = 0;
   let waitMinutes = 0;
+  let unverifiedMinutes = 0;
   let travelKm = 0;
   let strenuousCount = 0;
   let lunchInserted = false;
@@ -232,8 +241,21 @@ export function layoutDay(
    * estimate bounded by the traveller's own walking radius — instead of every
    * leg failing and the day refusing itself. See `modelled-walk.ts` for the
    * invariants; nothing at this call site chooses a mode.
+   *
+   * The day's own travel knowledge decides which of the traveller's answers the
+   * *journey* bound is: where a scheduled network went unmeasured, a walking
+   * figure is standing in for a ride and is bounded like one, which is the same
+   * fact the board's detour class was decided on. The walking bound beside it is
+   * never widened by that, because it is what any leg laid on foot below is held
+   * to.
+   *
+   * `config.bufferMinutes` goes in as the drive overhead. It is not a bound: it
+   * is the parking-and-getting-going time this very function books on a driving
+   * leg twenty lines down, handed to the resolver so a leg short enough that
+   * walking beats the parking is walked. Reading it from the config rather than
+   * restating it is what keeps the two numbers the same number.
    */
-  const walkCapMinutes = modelledWalkCapMinutes(context.profile);
+  const legBounds = plannerLegBounds(context.profile, context.travel, config.bufferMinutes);
   const resolveDayLeg = (
     fromId: string,
     toId: string,
@@ -241,7 +263,7 @@ export function layoutDay(
     spent?: { driveMinutes: number },
   ): PlannerResolvedLeg =>
     resolvePlannerLeg(context.travel, fromId, toId, allowed, {
-      walkCapMinutes,
+      bounds: legBounds,
       ...(spent ? { spent } : {}),
     });
 
@@ -259,10 +281,23 @@ export function layoutDay(
    * imports it from, so "the layout and the validator agree" is true by
    * construction rather than by inspection. `useMode` is folded in because every
    * one of those ten sites called it and two of them forgot.
+   *
+   * `unverifiedScheduled` is the leg saying that its mode is a stand-in. It has
+   * to be told, because nothing in `(mode, role)` can tell: a proxy leg and a
+   * genuine walk are both `('walk', 'approach')`, and classifying by the pair
+   * booked a whole day of unpriceable journeys to `walkMinutes`. It also keeps
+   * the mode out of `modes` — the day did not walk, and a day whose only travel
+   * is a proxy must not go on to announce walking as how it is got through.
    */
-  const charge = (mode: TransportMode, role: string, minutes: number, km = 0): void => {
+  const charge = (
+    mode: TransportMode,
+    role: string,
+    minutes: number,
+    km = 0,
+    unverifiedScheduled = false,
+  ): void => {
     if (minutes > 0) {
-      switch (travelBucketFor(mode, role)) {
+      switch (travelBucketFor(mode, role, unverifiedScheduled)) {
         case 'drive':
           driveMinutes += minutes;
           break;
@@ -275,13 +310,16 @@ export function layoutDay(
         case 'transit':
           transitMinutes += minutes;
           break;
+        case 'unverified':
+          unverifiedMinutes += minutes;
+          break;
       }
     }
     // Road distance only, which is what the day's `travelKm` claims to be and
     // what the itinerary renders under "Road distance". A ride adds minutes to a
     // day, not kilometres to a car.
     if (km > 0 && countsTowardRoadDistance(mode)) travelKm += km;
-    useMode(mode);
+    if (!unverifiedScheduled) useMode(mode);
   };
 
   let atRoutingId = baseId;
@@ -450,16 +488,47 @@ export function layoutDay(
     }
   };
 
-  /** What a slot looks like when nothing verified fitted. Never a fabricated venue. */
-  const pushBareMeal = (slot: MealSlot, title: string, start: number, reason: string): number => {
+  /**
+   * WHAT A SLOT LOOKS LIKE WHEN NO VENUE COULD BE NAMED. NEVER A FABRICATED ONE.
+   *
+   * Two outcomes, and which one is reached is a statement about the evidence
+   * rather than a choice of wording.
+   *
+   * An **area** is the product's own fallback: the locality the day's own
+   * cluster sits in, taken off records that published one, with a count of what
+   * our index holds there. It is what turns a meal from an hour with a name on
+   * it into somewhere to go, and it is the outcome this exists to reach.
+   *
+   * A **bare** block is what is left when there is no area to read — no venue in
+   * reach of the day and no locality on its stops — and it keeps saying so
+   * plainly. Inventing a neighbourhood there would be the same overreach as
+   * inventing a restaurant, in a larger unit.
+   *
+   * `reason` is the caller's, because only the caller knows which of the several
+   * ways a slot can end up here it actually took.
+   */
+  const pushUnnamedMeal = (
+    slot: MealSlot,
+    start: number,
+    input: { title: string; reason: string; areaReason: (area: FoodArea) => string },
+  ): number => {
     const minutes = config.unplannedMealMinutes[slot];
+    const area = foodPlan?.area ?? null;
     items.push({
-      ...mealItem(day.dayNumber, title, start, minutes, reason),
+      ...mealItem(
+        day.dayNumber,
+        area ? `${input.title} around ${area.name}` : input.title,
+        start,
+        minutes,
+        area ? input.areaReason(area) : input.reason,
+      ),
       food: {
         slot,
         stopKind: 'unplanned',
         dietary: [],
         dietaryUnverified: [],
+        hoursUnknown: false,
+        ...(area ? { areaName: area.name } : {}),
         routeContext: 'at_base',
         detourMinutes: 0,
         isSpecialMeal: false,
@@ -468,6 +537,23 @@ export function layoutDay(
       },
     });
     return start + minutes;
+  };
+
+  /**
+   * The area sentence, written once so all four slots say the same true thing.
+   *
+   * It states what the count is a count *of* — what we hold, not what is there —
+   * because "several options" over an index that has read four venues in a city
+   * of thousands is a claim about our coverage dressed as a claim about the
+   * neighbourhood. Zero is a different sentence rather than a suppressed one.
+   */
+  const areaReasonFor = (slot: MealSlot) => (area: FoodArea) => {
+    const count = area.countBySlot[slot];
+    const label = MEAL_SLOT_LABELS[slot].toLowerCase();
+    if (count === 0) {
+      return `Nothing we hold near where this day goes serves ${label}, so this is time held around ${area.name} and the choice of where is yours.`;
+    }
+    return `${count} ${count === 1 ? 'place' : 'places'} we hold near this day's cluster ${count === 1 ? 'serves' : 'serve'} ${label}, and none of them worked from where the day actually is at this hour — so this is ${area.name} rather than somewhere named.`;
   };
 
   const foodRequest = (
@@ -624,6 +710,7 @@ export function layoutDay(
         stopKind: 'packed',
         dietary: [],
         dietaryUnverified: [],
+        hoursUnknown: false,
         routeContext: 'on_route',
         detourMinutes: 0,
         ...(supplied !== null ? { preparedOnDayNumber: supplied } : {}),
@@ -649,14 +736,13 @@ export function layoutDay(
       return;
     }
     if (planned.kind === 'bare') {
-      cursor = pushBareMeal(
-        'lunch',
-        'Lunch',
-        cursor,
-        hasFood()
+      cursor = pushUnnamedMeal('lunch', cursor, {
+        title: 'Lunch',
+        reason: hasFood()
           ? 'Nothing open near this stretch of the day fitted, so this is time set aside rather than somewhere named.'
           : 'Slotted in before the next stop rather than skipped.',
-      );
+        areaReason: areaReasonFor('lunch'),
+      });
       lunchInserted = true;
       return;
     }
@@ -731,6 +817,22 @@ export function layoutDay(
     }
   }
 
+  /**
+   * BREAKFAST, INCLUDING THE MORNINGS WHERE NOBODY COULD BE NAMED.
+   *
+   * `wantsSlot` has already decided this day asks for one — an arrival at noon
+   * does not, and a breakfast-skipper only does when the morning is long, early
+   * and physical enough that setting off with nothing is a logistics problem.
+   * Once it has decided, the day owes the traveller an answer either way.
+   *
+   * The `if (stop)` used to be the whole of it, with no else: on every day where
+   * no venue could be named the slot simply vanished, and because a day's food
+   * summary is read back off the timeline, nothing anywhere reported the
+   * absence. Every venue a live compilation stores has unknown hours, so that
+   * was every day of every trip — three delivered plans, not one breakfast row,
+   * and no warning saying so. Lunch and dinner have always fallen back to a
+   * block that says what it is; this one now does the same.
+   */
   if (hasFood() && wantsSlot('breakfast')) {
     const stop = chooseFoodStop(foodRequest('breakfast', atRoutingId, firstHeading, cursor, !leavesByCar));
     if (stop) {
@@ -741,6 +843,18 @@ export function layoutDay(
         food: attachAlternatives(stop, 'breakfast', atRoutingId),
         fromId: atRoutingId,
         fromName: atName,
+      });
+    } else if (
+      cursor + config.unplannedMealMinutes.breakfast <= day.window.endMinute &&
+      cursor <= config.mealWindows.breakfast.latest
+    ) {
+      cursor = pushUnnamedMeal('breakfast', cursor, {
+        title: 'Breakfast',
+        reason:
+          context.profile.food.breakfastStyle === 'skip'
+            ? 'You said you skip breakfast, and nothing we can vouch for sits on the way out, so this is only time before you go.'
+            : 'Nothing we can vouch for was open and on the way out at this hour, so this is time held before the day starts.',
+        areaReason: areaReasonFor('breakfast'),
       });
     }
   }
@@ -829,14 +943,19 @@ export function layoutDay(
       const backMinutes = measuredBack ? measuredBack.minutes : homeward.minutes;
       const backProvenance = measuredBack ? measuredBack.provenance : ('estimated' as const);
       const backMode = measuredBack ? measuredBack.mode : homeward.mode;
+      const retraceUnverified = measuredBack !== null && isUnverifiedScheduledJourney(measuredBack);
       items.push({
         id: `travel-${day.dayNumber}-${sequence++}`,
         kind: 'travel',
-        title: `${TRANSPORT_MODE_LABELS[backMode]} back to the car`,
+        title: retraceUnverified
+          ? 'Travel back to the car'
+          : `${TRANSPORT_MODE_LABELS[backMode]} back to the car`,
         startMinute: cursor,
         endMinute: cursor + backMinutes,
         durationMinutes: backMinutes,
-        reason: 'Back to where you left the car before driving on.',
+        reason: retraceUnverified
+          ? `${describeTransitBlindWalk(backMinutes, formatSpan)}, and that is what is held for getting back to the car.`
+          : 'Back to where you left the car before driving on.',
         weatherSensitive: false,
         travel: {
           fromId: atRoutingId,
@@ -848,10 +967,11 @@ export function layoutDay(
           mode: backMode,
           role: 'return',
           provenance: backProvenance,
+          ...unverifiedScheduledMark(measuredBack),
         },
       });
       cursor += backMinutes;
-      charge(backMode, 'return', backMinutes, measuredBack?.km ?? 0);
+      charge(backMode, 'return', backMinutes, measuredBack?.km ?? 0, retraceUnverified);
       atRoutingId = vehicleAt;
       atName = baseName;
       homeward = null;
@@ -964,7 +1084,7 @@ export function layoutDay(
         items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
-          title: `${TRANSPORT_MODE_LABELS[hop.mode]} to ${toName}`,
+          title: hopTitle(hop, `to ${toName}`),
           startMinute: cursor,
           endMinute: cursor + duration,
           durationMinutes: duration,
@@ -980,10 +1100,11 @@ export function layoutDay(
             mode: hop.mode,
             role: 'approach',
             provenance: hop.provenance,
+            ...unverifiedScheduledMark(hop),
           },
         });
         cursor += duration;
-        charge(hop.mode, 'approach', hop.minutes, hop.km ?? 0);
+        charge(hop.mode, 'approach', hop.minutes, hop.km ?? 0, isUnverifiedScheduledJourney(hop));
         if (hopIsDrive) {
           homeward = null;
           vehicleAt = option.gatewayRoutingId;
@@ -1241,15 +1362,24 @@ export function layoutDay(
       ): void => {
         if (minutes <= 0 || !previous) return;
         const mode = hop ? hop.mode : transfer.mode;
+        const unverified = hop !== null && isUnverifiedScheduledJourney(hop);
         items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
-          title: `${TRANSPORT_MODE_LABELS[mode]} to ${nameOf(candidate.place)}`,
+          title: hop
+            ? hopTitle(hop, `to ${nameOf(candidate.place)}`)
+            : `${TRANSPORT_MODE_LABELS[mode]} to ${nameOf(candidate.place)}`,
           startMinute: cursor,
           endMinute: cursor + minutes,
           durationMinutes: minutes,
-          reason:
-            fromId === previous.place.id
+          /*
+           * "A short hop" is a claim about a journey, and it is false about the
+           * one leg here whose length nobody could establish. The unverified
+           * sentence outranks both of the ordinary ones.
+           */
+          reason: unverified
+            ? describeTransitBlindWalk(minutes, formatSpan)
+            : fromId === previous.place.id
               ? 'Both sit inside the same access area, so this is a short hop.'
               : 'On from lunch to the next stop.',
           weatherSensitive: false,
@@ -1269,10 +1399,11 @@ export function layoutDay(
             mode,
             role: 'transfer',
             provenance: hop ? hop.provenance : 'estimated',
+            ...unverifiedScheduledMark(hop),
           },
         });
         cursor += minutes;
-        charge(mode, 'transfer', minutes, hop?.km ?? 0);
+        charge(mode, 'transfer', minutes, hop?.km ?? 0, unverified);
         if (mode === 'drive') vehicleAt = candidate.place.id;
       };
 
@@ -1592,11 +1723,16 @@ export function layoutDay(
     items.push({
       id: `travel-${day.dayNumber}-${sequence++}`,
       kind: 'travel',
-      title: `${TRANSPORT_MODE_LABELS[back.mode]} back to ${baseName}`,
+      title: measured
+        ? hopTitle(measured, `back to ${baseName}`)
+        : `${TRANSPORT_MODE_LABELS[back.mode]} back to ${baseName}`,
       startMinute: cursor,
       endMinute: cursor + back.minutes,
       durationMinutes: back.minutes,
-      reason: `${back.minutes} min back to ${baseName}.`,
+      reason:
+        measured && isUnverifiedScheduledJourney(measured)
+          ? `${describeTransitBlindWalk(back.minutes, formatSpan)} — the longest the way back can take, and what the day holds for it.`
+          : `${back.minutes} min back to ${baseName}.`,
       weatherSensitive: false,
       travel: {
         fromId: atRoutingId,
@@ -1608,10 +1744,17 @@ export function layoutDay(
         mode: back.mode,
         role: 'return',
         provenance: back.provenance,
+        ...unverifiedScheduledMark(measured),
       },
     });
     cursor += back.minutes;
-    charge(back.mode, 'return', back.minutes, back.km ?? 0);
+    charge(
+      back.mode,
+      'return',
+      back.minutes,
+      back.km ?? 0,
+      measured !== null && isUnverifiedScheduledJourney(measured),
+    );
   } else if (atRoutingId !== baseId) {
     const matrixHomeMode = matrixLegMode(matrix);
     const resolvedHome = resolveDayLeg(atRoutingId, baseId, matrixHomeMode);
@@ -1668,7 +1811,7 @@ export function layoutDay(
       items.push({
         id: `travel-${day.dayNumber}-${sequence++}`,
         kind: 'travel',
-        title: `${TRANSPORT_MODE_LABELS[hop.mode]} to ${baseName}`,
+        title: hopTitle(hop, `to ${baseName}`),
         startMinute: cursor,
         endMinute: cursor + duration,
         durationMinutes: duration,
@@ -1684,10 +1827,11 @@ export function layoutDay(
           mode: hop.mode,
           role: 'return',
           provenance: hop.provenance,
+          ...unverifiedScheduledMark(hop),
         },
       });
       cursor += duration;
-      charge(hop.mode, 'return', hop.minutes, hop.km ?? 0);
+      charge(hop.mode, 'return', hop.minutes, hop.km ?? 0, isUnverifiedScheduledJourney(hop));
       if (isDrive) vehicleAt = baseId;
     }
   }
@@ -1758,14 +1902,14 @@ export function layoutDay(
             cursor = pushFreeTime(items, day, config, cursor, lunchStart);
             cursor = Math.max(cursor, lunchStart);
           }
-          cursor = pushBareMeal(
-            'lunch',
-            'Lunch',
-            cursor,
-            cursor > config.mealWindows.lunch.latest
-              ? 'Late, but better than skipping it.'
-              : 'Time held inside the lunch window rather than somewhere named.',
-          );
+          cursor = pushUnnamedMeal('lunch', cursor, {
+            title: 'Lunch',
+            reason:
+              cursor > config.mealWindows.lunch.latest
+                ? 'Late, but better than skipping it.'
+                : 'Time held inside the lunch window rather than somewhere named.',
+            areaReason: areaReasonFor('lunch'),
+          });
         }
       }
     }
@@ -1817,14 +1961,13 @@ export function layoutDay(
         if (dinnerStart > cursor) {
           cursor = pushFreeTime(items, day, config, cursor, dinnerStart);
         }
-        cursor = pushBareMeal(
-          'dinner',
-          'Dinner',
-          cursor,
-          hasFood()
+        cursor = pushUnnamedMeal('dinner', cursor, {
+          title: 'Dinner',
+          reason: hasFood()
             ? 'Nothing verified was open and near enough at this hour, so this is time held for dinner rather than somewhere named.'
             : 'Back at base, nothing booked.',
-        );
+          areaReason: areaReasonFor('dinner'),
+        });
       }
     }
   }
@@ -1839,11 +1982,18 @@ export function layoutDay(
     items,
     endMinute: cursor,
     activityMinutes,
-    travelMinutes: driveMinutes + transitMinutes + walkMinutes + waitMinutes,
+    /*
+     * Still every minute the day reserves for getting somewhere, unverified
+     * legs included — they cost the traveller the same hours whether or not
+     * anybody could price them, and a budget checked against a smaller number
+     * would be checking a day that does not exist.
+     */
+    travelMinutes: driveMinutes + transitMinutes + walkMinutes + waitMinutes + unverifiedMinutes,
     driveMinutes,
     transitMinutes,
     walkMinutes,
     waitMinutes,
+    unverifiedMinutes,
     travelKm: Math.round(travelKm * 10) / 10,
     freeMinutes,
     strenuousCount,
@@ -1945,6 +2095,44 @@ function asHop(resolved: PlannerResolvedLeg): ResolvedHop | null {
 }
 
 /**
+ * WHAT A LEG IS CALLED, WHERE THE MEASURED MODE IS NOT THE MODE IT IS MADE IN.
+ *
+ * Every other leg is named by its mode, because its mode is the truth. One is
+ * not: a journey through a served city whose scheduled network nobody could
+ * time is priced on the only network anybody measured — the pedestrian one —
+ * and naming it by that mode instructs a walk the traveller was never going to
+ * take. Two live car-free itineraries shipped rows reading "Walk to X — 67 min
+ * on foot" on exactly that arithmetic.
+ *
+ * So the one leg the resolver marks `transit_unverified` gets a mode-free
+ * heading, and `approachReason` gives it the sentence this product already
+ * mints for the state. Nothing here invents a train: the duration is still the
+ * walk, and the sentence still says so.
+ */
+function hopTitle(hop: ResolvedHop, phrase: string): string {
+  return isUnverifiedScheduledJourney(hop)
+    ? `Travel ${phrase}`
+    : `${TRANSPORT_MODE_LABELS[hop.mode]} ${phrase}`;
+}
+
+/**
+ * THE SAME FACT, CARRIED ON THE LEG RATHER THAN LEFT IN THE TITLE.
+ *
+ * A mode-free heading was the whole of the previous repair, and a heading is
+ * one string on one row. The chip beside it still read WALK, the accumulator
+ * still charged `walkMinutes`, and the validator — which re-derives the totals
+ * off the stored timeline — had nothing to re-derive them from. Every one of
+ * those reads the stored leg, so the stored leg is where the fact belongs.
+ *
+ * Spread into the segment at each site rather than set by a wrapper, because
+ * the sites build their segments from different sources and a wrapper that
+ * accepted all of them would be a second constructor for the same object.
+ */
+function unverifiedScheduledMark(hop: ResolvedHop | null): { unverifiedScheduled?: true } {
+  return hop !== null && isUnverifiedScheduledJourney(hop) ? { unverifiedScheduled: true } : {};
+}
+
+/**
  * What the traveller is told a leg is, in the mode it is actually made in.
  *
  * One sentence per family rather than per mode, because "on the road" and "on
@@ -1954,6 +2142,21 @@ function asHop(resolved: PlannerResolvedLeg): ResolvedHop | null {
  * timetabled duration is only an answer to a particular time of day.
  */
 function approachReason(hop: PlannerResolvedLeg & { ok: true }, buffer: number): string {
+  /*
+   * Asked before the mode, because on this one leg the mode is the stand-in and
+   * not the story. `describeTransitBlindWalk` is core's own sentence for it —
+   * reused rather than restated, so the board and the timeline cannot come to
+   * describe the same gap two different ways.
+   */
+  if (isUnverifiedScheduledJourney(hop)) {
+    /*
+     * Named as the bound it is, because the figure is the only real number on
+     * the row and a reader has to know which question it answers. It is not how
+     * long the journey takes and it is not an instruction to walk it: it is the
+     * longest this can cost, and the day reserves exactly that.
+     */
+    return `${describeTransitBlindWalk(hop.minutes, formatSpan)} — the longest this journey can take, and what the day holds for it.`;
+  }
   if (hop.mode === 'drive') {
     return `${hop.minutes} min on the road, plus ${buffer} min to park and get going.`;
   }
@@ -2151,6 +2354,23 @@ const FOOD_WAIT_BLOCK_MINUTES = 10;
  * to one of these produces half a sentence. Never prints a score.
  */
 function foodReason(choice: FoodChoice, slot: MealSlot, unrequested = false): string {
+  /**
+   * The uncertainty travels with the name, on the row that carries the name.
+   *
+   * Said once and here, rather than in a second block under the row: the day
+   * summary already refuses to reprint what a meal row says, and a reader who
+   * meets the same sentence twice a centimetre apart learns to skip both. What
+   * this cannot say is an opening time, because there is not one — the sentence
+   * is the venue's own record verbatim, and the instruction after it is the
+   * recheck note that record carries.
+   */
+  const caution = choice.food.hoursUnknown
+    ? ' Nobody publishes hours for it that we could read, so check before you go.'
+    : '';
+  return `${namedFoodReason(choice, slot, unrequested)}${caution}`;
+}
+
+function namedFoodReason(choice: FoodChoice, slot: MealSlot, unrequested: boolean): string {
   const venue = choice.venue;
   if (choice.food.isSpecialMeal) {
     return `Your one meal on this trip that is meant to be an event, and the route already comes this way.`;
@@ -2176,7 +2396,9 @@ function foodReason(choice: FoodChoice, slot: MealSlot, unrequested = false): st
   if (choice.routeContext === 'at_base') {
     return `A short hop from where you are staying, after the day is done.`;
   }
-  return `${choice.detourMinutes} min off the route in the model, which is the closest thing that was open and fits how you said you wanted to eat.`;
+  return choice.food.hoursUnknown
+    ? `${choice.detourMinutes} min off the route in the model, and the closest thing that fits how you said you wanted to eat.`
+    : `${choice.detourMinutes} min off the route in the model, which is the closest thing that was open and fits how you said you wanted to eat.`;
 }
 
 function dinnerAtEndReason(choice: FoodChoice, homeMinutes: number): string {
@@ -2739,6 +2961,7 @@ export function buildDay(
       transitMinutes: layout.transitMinutes,
       walkMinutes: layout.walkMinutes,
       waitMinutes: layout.waitMinutes,
+      unverifiedMinutes: layout.unverifiedMinutes,
       travelKm: layout.travelKm,
       freeMinutes: layout.freeMinutes,
       strenuousCount: layout.strenuousCount,
@@ -2810,6 +3033,16 @@ function summariseFood(context: LayoutContext, layout: DayLayout): ItineraryDay[
 
   const packed = meals.some((item) => item.food?.stopKind === 'packed');
   if (plan?.remote && plan.gapNote) notes.push(plan.gapNote);
+  /*
+   * A coverage shortfall is a caution about our index, never remoteness: the
+   * compiler's own sentence says what was found, and the planner adds the one
+   * instruction a traveller can act on. Only when the day names nothing — a
+   * day that scheduled a venue has already answered the question.
+   */
+  if (plan && !plan.remote && plan.coverageNote && meals.every((item) => item.food?.stopKind !== 'venue')) {
+    notes.push('We could not verify places to eat near where this day goes — check locally.');
+    notes.push(plan.coverageNote);
+  }
   // Deliberately nothing about held time. The row says it, and the validator
   // says it, and a third copy a centimetre below the second is how a reader
   // learns to skip all three.
@@ -2837,7 +3070,23 @@ function foodDaySummary(input: {
     return 'Carried food, because there is nothing verified to buy where this day goes.';
   }
   if (named.length === 0) {
-    return 'No named places today — time is held for meals, but nothing we can vouch for fitted.';
+    /*
+     * Read off the rows rather than assumed, like everything else in this
+     * block. A day whose meals point at an area is not a day of held time, and
+     * a summary that says so while the rows below it name a neighbourhood is the
+     * kind of disagreement between a plan and its own summary that this file is
+     * arranged to make impossible.
+     */
+    const areas = [
+      ...new Set(
+        input.meals
+          .map((item) => item.food?.areaName)
+          .filter((name): name is string => name !== undefined),
+      ),
+    ];
+    return areas.length > 0
+      ? `Nowhere named today — the meals point at ${areas.join(' and ')}, and which place is yours to pick.`
+      : 'No named places today — time is held for meals, but nothing we can vouch for fitted.';
   }
   const list =
     named.length === 1
@@ -2964,7 +3213,31 @@ export function themeFor(
 
   const area =
     farthest && farthest.travelMinutesFromBase > 20 ? farthest.place.locality : baseName;
-  const lead = dominant ? INTEREST_LABELS[dominant] : 'Mixed';
+  /*
+   * When no candidate carries a speakable interest — the kind gate in
+   * `resolveCandidates` withholds one whose category contradicts it — the
+   * theme falls back to what the scheduled places *are*, by their own planning
+   * category, weighted by the same time-on-site rule as the interests. "Town &
+   * food around X" over a theme park is a true sentence; "Easy nature walks"
+   * over the same day was a stored plan's actual heading, and the interest
+   * that produced it never described the place. 'Mixed' stays the last resort
+   * for a day whose stops genuinely agree on nothing.
+   */
+  const categoryWeights = new Map<Place['category'], number>();
+  for (const candidate of accepted) {
+    categoryWeights.set(
+      candidate.place.category,
+      (categoryWeights.get(candidate.place.category) ?? 0) + candidate.durationMinutes,
+    );
+  }
+  const dominantCategory = [...categoryWeights.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  )[0]?.[0];
+  const lead = dominant
+    ? INTEREST_LABELS[dominant]
+    : dominantCategory
+      ? PLACE_CATEGORY_LABELS[dominantCategory]
+      : 'Mixed';
   /**
    * The one interest label that makes a claim about the clock. "Sunrise &
    * sunset photography" over a day whose stops run 07:40–11:00 is a heading

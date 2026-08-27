@@ -15,13 +15,26 @@ import { compileRegion, matrixModeFor } from '../compile';
 import { packBackedProviders, syntheticPack } from '../testing/pack-fakes';
 import { SYNTHETIC_WORLDS, fakeProviders } from '../testing/fakes';
 import { assemblePack, contentHashOf, failedPack } from './assemble';
-import { buildInventory, foodVenueFromRecord, packLicences } from './inventory';
-import { compare, linkRecords, supersededRecordIds } from './link';
+import {
+  buildInventory,
+  DEFAULT_INVENTORY_LIMITS,
+  foodVenueFromRecord,
+  packLicences,
+} from './inventory';
+import {
+  canonicalUrl,
+  compare,
+  linkRecords,
+  namesFromCollapsedTwins,
+  supersededRecordIds,
+} from './link';
+import { buildTripScopeOverlay } from './overlay';
 import {
   CELL_OVERLAP_DEGREES,
   MAX_CELL_DEGREES,
   MAX_CELLS,
   MIN_CELL_DEGREES,
+  boundsContain,
   cellSizeFor,
   partitionScope,
   scopeBounds,
@@ -244,6 +257,79 @@ describe('scope partitioning', () => {
     // The first cell is the nearest one, and priority descends with distance.
     expect(distances[0]).toBeLessThanOrEqual(Math.min(...distances) + 0.001);
     expect(plan.cells[0]!.priority).toBeGreaterThan(plan.cells.at(-1)!.priority);
+  });
+
+  it('schedules the whole of a country-shaped scope, with priority as read order only', () => {
+    /*
+     * The live failure this pins, in synthetic geography: a country-breadth
+     * scope partitions to more cells than the old global cap of 24, and the
+     * cap kept the cells nearest the centroid — for a coastal country that is
+     * the empty interior — while dropping the edge cells where the biggest
+     * city stands. Ground that is dropped here is never *scheduled* to be
+     * read, and no budget, ranking or retention downstream can recover it.
+     *
+     * The cap was a read-cost proxy from before the byte-priced scan. The scan
+     * now prices every read from parquet footers before spending, so a cell
+     * whose ground holds nothing costs nothing — cell count is not the cost,
+     * overlapping compressed bytes are. Priority survives as the read-order
+     * hint; it must never again decide which ground exists.
+     */
+    const bounds = { southWest: { lat: -55, lng: -40 }, northEast: { lat: -51, lng: -30.6 } };
+    const plan = partitionScope(scopeFor({ breadth: 'country', shape: { kind: 'bounds', bounds } }));
+    /* The raw grid genuinely exceeds the old cap of 24 — that is the case under test. */
+    expect(plan.cells.length).toBeGreaterThan(24);
+    expect(plan.droppedCells).toBe(0);
+
+    /* Positions on the scope's own edges — where a coastal capital stands. */
+    const positions = [
+      { lat: -54.9, lng: -39.9 }, // south-west corner
+      { lat: -51.1, lng: -30.7 }, // north-east corner
+      { lat: -53, lng: -39.95 }, // west edge, centre latitude
+      { lat: -54.95, lng: -35 }, // south edge
+      { lat: -51.05, lng: -35 }, // north edge
+      { lat: -53, lng: -30.65 }, // east edge
+    ];
+    for (const position of positions) {
+      expect(plan.cells.some((cell) => boundsContain(cell.bounds, position))).toBe(true);
+    }
+
+    /* Priority still orders reads from the traveller outward, ties stable. */
+    const centre = { lat: -53, lng: -35.3 };
+    const byPriority = [...plan.cells].sort((a, b) => b.priority - a.priority);
+    const distanceOf = (cell: (typeof plan.cells)[number]): number => {
+      const lat = (cell.bounds.southWest.lat + cell.bounds.northEast.lat) / 2 - centre.lat;
+      const lng =
+        ((cell.bounds.southWest.lng + cell.bounds.northEast.lng) / 2 - centre.lng) *
+        Math.cos((centre.lat * Math.PI) / 180);
+      return Math.hypot(lat, lng);
+    };
+    const distances = byPriority.map(distanceOf);
+    expect(distances[0]).toBeLessThanOrEqual(Math.min(...distances) + 0.001);
+    expect(byPriority[0]!.priority).toBeGreaterThan(byPriority.at(-1)!.priority);
+  });
+
+  it('keeps the coastal rim of a reach circle in the schedule, not only the interior', () => {
+    /*
+     * The same guarantee for the shape the live scope actually had: a reach
+     * circle over a country. Its bounding grid clips the four corners the
+     * circle never reaches, and everything that survives the trim must be
+     * scheduled — a capital sits on a coast far more often than at a
+     * country's centroid.
+     */
+    const centre = { lat: -53, lng: -35 };
+    const plan = partitionScope(
+      scopeFor({
+        breadth: 'country',
+        shape: { kind: 'radius', center: centre, radiusKm: 220 },
+      }),
+    );
+    expect(plan.cells.length).toBeGreaterThan(24);
+    expect(plan.droppedCells).toBe(0);
+
+    /* A "capital" near the circle's western rim, at the centre's latitude. */
+    const lngDelta = 220 / (111 * Math.cos((centre.lat * Math.PI) / 180));
+    const westRim = { lat: centre.lat, lng: centre.lng - lngDelta * 0.97 };
+    expect(plan.cells.some((cell) => boundsContain(cell.bounds, westRim))).toBe(true);
   });
 
   it('overlaps adjacent cells so a feature on a seam is in both, not neither', () => {
@@ -490,6 +576,397 @@ describe('cross-source linking', () => {
     expect(['same_entity', 'probable_same_entity']).toContain(link!.kind);
   });
 
+  it('sees through word segmentation between same-kind records at identity distance', () => {
+    /*
+     * The real shape: one catalogue writes a compound name as one word, another
+     * as two, and `normalizeName` rightly keeps the space — so the two name
+     * sets share nothing and a single place stayed two candidates. The folded
+     * comparison closes exactly that, and only inside the bounded branch.
+     */
+    const one = record({ id: 'places:seg-a', sourceId: 'seg-a', name: 'Northgate Garden' });
+    const two = record({
+      id: 'places:seg-b',
+      sourceId: 'seg-b',
+      name: 'North Gate Garden',
+      coordinates: { lat: 40.70045, lng: -74 },
+    });
+    const link = compare(one, two);
+    expect(link?.kind).toBe('same_entity');
+    expect(link?.evidence).toContain('name_and_category_and_proximity');
+  });
+
+  it('does not let a folded name match records that plan differently, or at a distance', () => {
+    /* Different planning role: the fold never fires, however close. */
+    const garden = record({ id: 'places:seg-c', sourceId: 'seg-c', name: 'Northgate Garden' });
+    const cafe = record({
+      id: 'places:seg-d',
+      sourceId: 'seg-d',
+      name: 'North Gate Garden',
+      planningRole: 'food',
+      sourceCategory: 'cafe',
+      sourceCategoryPath: ['food_and_drink', 'cafe'],
+      coordinates: { lat: 40.70045, lng: -74 },
+    });
+    expect(compare(garden, cafe)).toBeNull();
+    /*
+     * Distance: an *exact* name at five kilometres is a namesake worth flagging
+     * as `name_only`; a segmentation-folded one is not evidence of anything.
+     */
+    const far = record({
+      id: 'places:seg-e',
+      sourceId: 'seg-e',
+      name: 'North Gate Garden',
+      coordinates: { lat: 40.745, lng: -74 },
+    });
+    expect(compare(garden, far)).toBeNull();
+  });
+
+  it('folds a designated area named with and without its designation into one entity', () => {
+    /*
+     * The measured country-pack shape: the geographic layer publishes the
+     * national park as a polygon under a local-language primary with the
+     * "<name> National Park" form among its alternates, and the place catalogue
+     * publishes the same park as a POI under the proper name alone. Exact and
+     * segmentation folds both refuse the pair — the names differ by exactly the
+     * designation's generic noun — so two collapse components formed for one
+     * canonical place and the served board seated the same park twice.
+     */
+    const polygon = record({
+      id: 'land_use:sanctuary-polygon',
+      layerId: 'land_use',
+      sourceId: 'sanctuary-polygon',
+      name: 'Parque Nacional Silverbrook',
+      alternateNames: ['Silverbrook National Park'],
+      sourceCategory: 'national_park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.702, lng: -74.002 },
+      bounds: {
+        southWest: { lat: 40.688, lng: -74.02 },
+        northEast: { lat: 40.716, lng: -73.984 },
+      },
+    });
+    const bareNamePoi = record({
+      id: 'places:sanctuary-poi',
+      sourceId: 'sanctuary-poi',
+      name: 'Silverbrook',
+      sourceCategory: 'national_park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7005, lng: -74.0005 },
+    });
+    const link = compare(polygon, bareNamePoi);
+    expect(link?.kind).toBe('same_entity');
+    expect(link?.evidence).toContain('name_and_category_and_proximity');
+  });
+
+  it('keeps one survivor for a designated area split across designation spellings', () => {
+    /*
+     * The whole component, as the pack held it: the polygon, the bare-name POI
+     * and a park-category record carrying the designated form. Pre-fold the
+     * exact-name pair collapsed and the bare-name POI stayed its own entity —
+     * two survivors, two seats. A group the linker says is one thing keeps
+     * exactly one record.
+     */
+    const polygon = record({
+      id: 'land_use:sanctuary-polygon',
+      layerId: 'land_use',
+      sourceId: 'sanctuary-polygon',
+      name: 'Parque Nacional Silverbrook',
+      alternateNames: ['Silverbrook National Park'],
+      sourceCategory: 'national_park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.702, lng: -74.002 },
+      bounds: {
+        southWest: { lat: 40.688, lng: -74.02 },
+        northEast: { lat: 40.716, lng: -73.984 },
+      },
+    });
+    const bareNamePoi = record({
+      id: 'places:sanctuary-poi',
+      sourceId: 'sanctuary-poi',
+      name: 'Silverbrook',
+      sourceCategory: 'national_park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7005, lng: -74.0005 },
+    });
+    const parkRecord = record({
+      id: 'places:sanctuary-park',
+      sourceId: 'sanctuary-park',
+      name: 'Silverbrook National Park',
+      sourceCategory: 'park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.712, lng: -73.99 },
+    });
+    const records = [polygon, bareNamePoi, parkRecord];
+    const superseded = supersededRecordIds(records, linkRecords(records));
+    expect(superseded.size).toBe(2);
+  });
+
+  it('never detaches a generic word from a plain park, a premises kind, or at a distance', () => {
+    /*
+     * `park` is not a designation kind: for a municipal park the generic word
+     * is part of the proper name, and detaching it folded a control
+     * metropolis's headline garden onto a differently-catalogued twin. The two
+     * below stay two records however close they stand.
+     */
+    const namedPark = record({
+      id: 'places:plain-park',
+      sourceId: 'plain-park',
+      name: 'Greenhollow National Park',
+      sourceCategory: 'park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+    });
+    const bareNeighbour = record({
+      id: 'places:plain-bare',
+      sourceId: 'plain-bare',
+      name: 'Greenhollow',
+      sourceCategory: 'park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7002, lng: -74.0002 },
+    });
+    expect(compare(namedPark, bareNeighbour)).toBeNull();
+
+    /* Family-gated on both sides: a lake wearing the reserve's proper name is
+     * a neighbour, not the reserve. */
+    const reserve = record({
+      id: 'places:res',
+      sourceId: 'res',
+      name: 'Riverport Nature Reserve',
+      sourceCategory: 'nature_reserve',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+    });
+    const lake = record({
+      id: 'places:res-lake',
+      sourceId: 'res-lake',
+      name: 'Riverport',
+      sourceCategory: 'lake',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7003, lng: -74.0001 },
+    });
+    expect(compare(reserve, lake)).toBeNull();
+
+    /* And the fold never reaches past the identity radius or mints name_only. */
+    const farPoi = record({
+      id: 'places:far-poi',
+      sourceId: 'far-poi',
+      name: 'Silverbrook',
+      sourceCategory: 'national_park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.85, lng: -74 },
+    });
+    const namedReserve = record({
+      id: 'places:far-named',
+      sourceId: 'far-named',
+      name: 'Silverbrook National Park',
+      sourceCategory: 'national_park',
+      sourceCategoryPath: [],
+      planningRole: 'outdoor',
+    });
+    expect(compare(namedReserve, farPoi)).toBeNull();
+  });
+
+  it('measures separation to a published boundary, not to a representative point', () => {
+    /*
+     * The theme-park pair, in its measured geometry: a polygon over a kilometre
+     * across whose representative point sits mid-ground, and a POI at the gate
+     * ~100 m outside the boundary — 725 m from the point, so every radius
+     * failed and the same park went forward twice, once per script. The name
+     * lives only in the polygon's alternates and differs from the POI's by one
+     * space, which is the whole cross-script case in one pair.
+     */
+    const polygon = record({
+      id: 'land:park-polygon',
+      layerId: 'land',
+      sourceId: 'park-polygon',
+      name: '青浜遊園地',
+      alternateNames: ['Aohama Fun Land'],
+      sourceCategory: 'theme_park',
+      sourceCategoryPath: ['attractions_and_activities', 'theme_park'],
+      coordinates: { lat: 40.63265, lng: -73.99815 },
+      bounds: {
+        southWest: { lat: 40.629, lng: -74.0043 },
+        northEast: { lat: 40.6363, lng: -73.992 },
+      },
+    });
+    const gatePoi = record({
+      id: 'places:park-poi',
+      sourceId: 'park-poi',
+      name: 'Aohama Funland',
+      sourceCategory: 'amusement_park',
+      sourceCategoryPath: ['attractions_and_activities', 'amusement_park'],
+      coordinates: { lat: 40.62922, lng: -74.00546 },
+    });
+    const link = compare(polygon, gatePoi);
+    expect(link?.kind).toBe('same_entity');
+    /* The recorded separation is to the boundary the source published. */
+    expect(link?.separationMetres).toBeLessThan(150);
+  });
+
+  it('treats a shared canonical page as identity where no script can agree', () => {
+    /*
+     * A catalogue records one palace once per language: two records at the same
+     * point, primaries in scripts that never overlap, no alternates — so no
+     * name comparison can ever succeed — both pointing at the same *page*. They
+     * used to survive as `possible_duplicate`, which collapses nothing, and the
+     * board showed the palace twice.
+     */
+    const vietnamese = record({
+      id: 'places:pal-a',
+      sourceId: 'pal-a',
+      name: 'Cung điện Aohama',
+      sourceCategory: 'palace',
+      sourceCategoryPath: ['attractions_and_activities', 'palace'],
+      websiteCandidates: ['http://palace.example/guide/visit.html'],
+    });
+    const cyrillic = record({
+      id: 'places:pal-b',
+      sourceId: 'pal-b',
+      name: 'Аохамский дворец',
+      sourceCategory: 'palace',
+      sourceCategoryPath: ['attractions_and_activities', 'palace'],
+      websiteCandidates: ['http://palace.example/guide/visit.html'],
+      coordinates: { lat: 40.70001, lng: -74.00001 },
+    });
+    const link = compare(vietnamese, cyrillic);
+    expect(link?.kind).toBe('same_entity');
+    expect(link?.evidence).toContain('shared_canonical_website');
+  });
+
+  it('does not read a bare shared domain, or a shared page at a distance, as identity', () => {
+    /* The chain case: every branch points at the homepage. Names disagree. */
+    const branchA = record({
+      id: 'places:br-a',
+      sourceId: 'br-a',
+      name: 'Cung điện Aohama',
+      websiteCandidates: ['http://palace.example/'],
+    });
+    const branchB = record({
+      id: 'places:br-b',
+      sourceId: 'br-b',
+      name: 'Аохамский дворец',
+      websiteCandidates: ['http://palace.example/'],
+      coordinates: { lat: 40.70001, lng: -74.00001 },
+    });
+    const near = compare(branchA, branchB);
+    expect(near?.kind ?? 'none').not.toBe('same_entity');
+    expect(near?.kind ?? 'none').not.toBe('probable_same_entity');
+    /* And the same page five kilometres apart is two things sharing a page. */
+    const farTwin = record({
+      id: 'places:br-c',
+      sourceId: 'br-c',
+      name: 'Аохамский дворец',
+      websiteCandidates: ['http://palace.example/guide/visit.html'],
+      coordinates: { lat: 40.745, lng: -74 },
+    });
+    const pageA = record({
+      id: 'places:br-d',
+      sourceId: 'br-d',
+      name: 'Cung điện Aohama',
+      websiteCandidates: ['http://palace.example/guide/visit.html'],
+    });
+    expect(compare(pageA, farTwin)?.kind).toBe('colocated_distinct');
+  });
+
+  it('keeps a page shared beyond the pair from merging anything but records on one point', () => {
+    /*
+     * The full-pack shape of the operator-page case: three same-role records
+     * wear one page. Two of them coincide to the metre — one catalogue row
+     * recorded once per language — and the third is a pavilion thirty metres
+     * away, well inside the identity radius, that the operator's site is
+     * stamped onto. That third sharer is what proves the page is the
+     * operator's, not one place's: the count refuses it, and only the
+     * coincidence carries the twins. On a real pack the version without the
+     * count merged a theme park, its polygon and three rides into one entity
+     * whose survivor was a canoe ride.
+     */
+    const page = ['http://palace.example/guide/visit.html'];
+    const twinA = record({
+      id: 'places:tw-a',
+      sourceId: 'tw-a',
+      name: 'Cung điện Aohama',
+      sourceCategory: 'palace',
+      sourceCategoryPath: ['attractions_and_activities', 'palace'],
+      websiteCandidates: page,
+    });
+    const twinB = record({
+      id: 'places:tw-b',
+      sourceId: 'tw-b',
+      name: 'Аохамский дворец',
+      sourceCategory: 'palace',
+      sourceCategoryPath: ['attractions_and_activities', 'palace'],
+      websiteCandidates: page,
+    });
+    const pavilion = record({
+      id: 'places:tw-c',
+      sourceId: 'tw-c',
+      name: 'Aohama Pavilion',
+      sourceCategory: 'historic_site',
+      sourceCategoryPath: ['attractions_and_activities', 'historic_site'],
+      websiteCandidates: page,
+      coordinates: { lat: 40.70027, lng: -74 },
+    });
+    const records = [twinA, twinB, pavilion];
+    const superseded = supersededRecordIds(records, linkRecords(records));
+    expect(superseded.size).toBe(1);
+    expect(superseded.has('places:tw-c')).toBe(false);
+  });
+
+  it('carries every script’s names onto the survivor of a cross-script collapse', () => {
+    /*
+     * PR-DISC-06's mechanism, over the collapses the cross-script matching now
+     * produces: whichever record survives, the names the other one published —
+     * including the only Latin form anywhere in the pair — reach the survivor,
+     * so the card a traveller sees can be read.
+     */
+    const polygon = record({
+      id: 'land:cs-polygon',
+      layerId: 'land',
+      sourceId: 'cs-polygon',
+      name: '青浜遊園地',
+      alternateNames: ['Aohama Fun Land'],
+      sourceCategory: 'theme_park',
+      sourceCategoryPath: ['attractions_and_activities', 'theme_park'],
+      coordinates: { lat: 40.63265, lng: -73.99815 },
+      bounds: {
+        southWest: { lat: 40.629, lng: -74.0043 },
+        northEast: { lat: 40.6363, lng: -73.992 },
+      },
+      sources: [
+        { dataset: 'OpenStreetMap', licenceId: 'ODbL-1.0' },
+        { dataset: 'other', licenceId: 'ODbL-1.0' },
+      ],
+    });
+    const gatePoi = record({
+      id: 'places:cs-poi',
+      sourceId: 'cs-poi',
+      name: 'Aohama Funland',
+      sourceCategory: 'amusement_park',
+      sourceCategoryPath: ['attractions_and_activities', 'amusement_park'],
+      coordinates: { lat: 40.62922, lng: -74.00546 },
+    });
+    const records = [polygon, gatePoi];
+    const links = linkRecords(records);
+    const superseded = supersededRecordIds(records, links);
+    expect(superseded.size).toBe(1);
+    const survivor = records.find((entry) => !superseded.has(entry.id))!;
+    const inherited = namesFromCollapsedTwins(records, links).get(survivor.id) ?? [];
+    const surviving = new Set(
+      [survivor.name, ...survivor.alternateNames, ...inherited].map((name) => name.toLowerCase()),
+    );
+    /* Both scripts survive, wherever each was published. */
+    expect([...surviving].some((name) => name.includes('aohama'))).toBe(true);
+    expect(surviving.has('青浜遊園地')).toBe(true);
+  });
+
   it('produces links in a stable order whatever order records arrive in', () => {
     const records = [
       record({ id: 'places:a', wikidataId: 'Q1' }),
@@ -517,6 +994,328 @@ describe('cross-source linking', () => {
     });
     const superseded = supersededRecordIds([thin, rich], linkRecords([thin, rich]));
     expect([...superseded]).toEqual(['places:thin']);
+  });
+
+  /**
+   * THE SAME PARK, ONCE IN EACH LANGUAGE.
+   *
+   * The shape that put four copies of one harbour and three of one canal at the
+   * top of live packs, reduced to its smallest form: a park published by the
+   * place catalogue under its local name and again under its English one, plus
+   * the land-use polygon of the same park. The polygon matches *both* names; the
+   * two place records match neither each other's, because neither carries the
+   * other's language as an alternate.
+   *
+   * The collapse used to walk the links one at a time and skip any link whose
+   * partner had already gone, so the polygon — the thinner record of the three,
+   * as a geometry-layer record usually is — was dropped by the first link and
+   * the second link, the one that would have dropped a place record, was skipped
+   * because its partner was gone. Both names went to the board. Identity is
+   * transitive, and this is the assertion that the collapse is too.
+   */
+  it('collapses a group of records the linker joined only through a third', () => {
+    /* Two provenance rows apiece, so the hub is the *weakest* of the three. */
+    const contributed = [
+      { dataset: 'primary', licenceId: 'CDLA-Permissive-2.0' as const },
+      { dataset: 'other', licenceId: 'CDLA-Permissive-2.0' as const },
+    ];
+    const local = record({
+      id: 'places:local',
+      name: '東陽公園',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      sources: contributed,
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const english = record({
+      id: 'places:english',
+      sourceId: 'english',
+      name: 'Toyo Park',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      sources: contributed,
+      coordinates: { lat: 40.70005, lng: -74.00005 },
+    });
+    const polygon = record({
+      id: 'land_use:polygon',
+      layerId: 'land_use',
+      sourceId: 'polygon',
+      name: '東陽公園',
+      alternateNames: ['Toyo Park'],
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.70002, lng: -74.00002 },
+    });
+
+    const records = [local, english, polygon];
+    const links = linkRecords(records);
+    // The premise: the polygon links to both names, and the two names do not
+    // link to each other. Without that this test would prove nothing.
+    expect(compare(local, english)).toBeNull();
+    const superseded = supersededRecordIds(records, links);
+    expect(superseded.size).toBe(2);
+    expect(records.filter((entry) => !superseded.has(entry.id))).toHaveLength(1);
+  });
+
+  /**
+   * A chain of segments is one watercourse, and the answer may not depend on
+   * which end the linker reached first.
+   *
+   * Three records of one canal, where the two outer segments are far enough
+   * apart to be only `name_only` and each links to the middle one. Reversing the
+   * input reverses the link order, and the old pairwise collapse gave a
+   * different survivor count for each direction — which also meant the pack's
+   * content hash, which covers what survives, depended on I/O order.
+   */
+  it('leaves one survivor per group whatever order the records arrive in', () => {
+    const segment = (id: string, lat: number, contributors: number): SourceRecord =>
+      record({
+        id,
+        sourceId: id,
+        layerId: 'water',
+        name: '朝潮運河',
+        sourceCategory: 'canal',
+        sourceCategoryPath: ['physical'],
+        planningRole: 'outdoor',
+        sources: Array.from({ length: contributors }, (_, index) => ({
+          dataset: `contributor-${index}`,
+          licenceId: 'ODbL-1.0' as const,
+        })),
+        coordinates: { lat, lng: -74 },
+      });
+    /* The middle segment is the thinnest, so it is the one the collapse drops first. */
+    const records = [
+      segment('water:north', 40.7018, 2),
+      segment('water:middle', 40.7009, 1),
+      segment('water:south', 40.7, 2),
+    ];
+
+    const forward = supersededRecordIds(records, linkRecords(records));
+    const backward = supersededRecordIds([...records].reverse(), linkRecords([...records].reverse()));
+    expect(forward.size).toBe(2);
+    expect([...forward].sort()).toEqual([...backward].sort());
+  });
+
+  /**
+   * THE ROLE GATE, AND WHY IT STAYS.
+   *
+   * `name_and_category_and_proximity` requires the two records to plan the same
+   * way, and the obvious complaint is that it refuses real twins — a monument
+   * filed as a historic site by one layer and as parkland by another.
+   *
+   * It does, and the trade is measured rather than argued. Over a metro box
+   * compiled from the live catalogue (release 2026-07-22.0) at the production
+   * retention budget, 46 pairs matched on name within 1.5 km while planning
+   * differently. Two were genuine twins. The other forty-four were **a thing
+   * named after another thing** — a station, a bus stop, a neighbourhood polygon
+   * or a pharmacy carrying the name of the park beside it. Merging on the name
+   * alone would move a park to a railway station's coordinates or replace it
+   * with a chemist, and the survivor is chosen by evidence rather than by role,
+   * so there is no guarantee the thing left standing is the one worth visiting.
+   *
+   * The pairs that are genuinely one thing and share neither an identifier nor a
+   * domain are the price. The ones that share either are already carried by the
+   * routes above — the case that named this complaint, a broadcast tower and the
+   * observation deck two metres from it, links today on a shared website.
+   */
+  it('refuses a name match between records that plan differently, and says what it costs', () => {
+    const river = record({
+      id: 'water:river',
+      layerId: 'water',
+      sourceId: 'river',
+      name: '立会川',
+      sourceCategory: 'river',
+      sourceCategoryPath: ['physical'],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    /* The station named after it, a hundred metres away — inside every distance
+     * this file uses, so the role is the only thing refusing the merge. */
+    const stationOfTheSameName = record({
+      id: 'infrastructure:station',
+      layerId: 'infrastructure',
+      sourceId: 'station',
+      name: '立会川',
+      sourceCategory: 'railway_station',
+      sourceCategoryPath: ['transit'],
+      planningRole: 'gateway',
+      coordinates: { lat: 40.7009, lng: -74 },
+    });
+    const namedAfterIt = supersededRecordIds(
+      [river, stationOfTheSameName],
+      linkRecords([river, stationOfTheSameName]),
+    );
+    expect(namedAfterIt.size).toBe(0);
+    expect(compare(river, stationOfTheSameName)?.evidence).not.toContain(
+      'name_and_category_and_proximity',
+    );
+
+    /*
+     * And the same gate on a pair that really is one thing, kept here so the
+     * cost of the refusal is written down beside the reason for it. Both records
+     * survive; the link records that they look alike.
+     */
+    const marker = record({
+      id: 'places:marker',
+      name: '大森貝塚遺跡庭園',
+      sourceCategory: 'historic_site',
+      sourceCategoryPath: ['cultural_and_historic', 'historic_site'],
+      planningRole: 'attraction',
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const grounds = record({
+      id: 'land_use:grounds',
+      layerId: 'land_use',
+      sourceId: 'grounds',
+      name: '大森貝塚遺跡庭園',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.70003, lng: -74 },
+    });
+    expect(supersededRecordIds([marker, grounds], linkRecords([marker, grounds])).size).toBe(0);
+    expect(compare(marker, grounds)?.kind).toBe('possible_duplicate');
+
+    /* The route that does carry a cross-role twin: a domain both sources publish. */
+    const tower = record({
+      id: 'infrastructure:tower',
+      layerId: 'infrastructure',
+      sourceId: 'tower',
+      name: '東京タワー',
+      sourceCategory: 'communication_tower',
+      sourceCategoryPath: ['communication'],
+      planningRole: 'infrastructure',
+      websiteCandidates: ['https://www.example-tower.jp/'],
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const deck = record({
+      id: 'places:deck',
+      name: '東京タワー',
+      sourceCategory: 'observatory',
+      sourceCategoryPath: ['arts_and_entertainment', 'science_attraction', 'observatory'],
+      planningRole: 'attraction',
+      websiteCandidates: ['https://example-tower.jp'],
+      coordinates: { lat: 40.700018, lng: -74 },
+    });
+    expect(compare(tower, deck)?.kind).toBe('same_entity');
+    expect(supersededRecordIds([tower, deck], linkRecords([tower, deck])).size).toBe(1);
+  });
+
+  /**
+   * A GLOSS IN BRACKETS IS A SECOND NAME, AND IT WAS BEING READ AS PART OF A
+   * FIRST ONE.
+   *
+   * Catalogues publish a translation inside the primary field. Compared whole,
+   * the parenthesised row has *no* name in common with the twin filed under the
+   * bare form, so nothing links them and both reach the board. On the stored
+   * Tokyo pack of 2026-08-12 that is one of the reasons the imperial palace
+   * grounds appeared several times over, which §8.8 forbids by name.
+   */
+  it('matches a name published with its translation in brackets', () => {
+    const listed = record({
+      id: 'places:garden',
+      name: '東御苑 (East Gardens)',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const mapped = record({
+      id: 'land_use:garden',
+      layerId: 'land_use',
+      sourceId: 'garden',
+      name: '東御苑',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7005, lng: -74 },
+    });
+    expect(compare(listed, mapped)?.evidence).toContain('name_and_category_and_proximity');
+    expect(supersededRecordIds([listed, mapped], linkRecords([listed, mapped])).size).toBe(1);
+
+    /* Two different places disambiguated in brackets are still two places. */
+    const north = record({
+      id: 'places:north',
+      name: 'Springfield (North)',
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const south = record({
+      id: 'places:south',
+      name: 'Springfield (South)',
+      coordinates: { lat: 40.9, lng: -74 },
+    });
+    expect(supersededRecordIds([north, south], linkRecords([north, south])).size).toBe(0);
+  });
+
+  /**
+   * A DIRECTORY INDEX IS THE DIRECTORY.
+   *
+   * `nps.gov/stli` and `nps.gov/stli/index.htm` are one page, and on the stored
+   * New York pack they are what two of the four Statue of Liberty rows point
+   * at. Compared literally they were two pages, so the one piece of hard
+   * identity evidence those records carried said nothing.
+   */
+  it('reads a directory index as the directory it is in', () => {
+    expect(canonicalUrl('https://www.parks.example.gov/stli/index.htm')).toBe(
+      canonicalUrl('http://parks.example.gov/stli'),
+    );
+    expect(canonicalUrl('https://parks.example.gov/stli/index.php')).toBe('parks.example.gov/stli');
+    expect(canonicalUrl('https://parks.example.gov/stli/default.html')).toBe(
+      'parks.example.gov/stli',
+    );
+    /* A page that merely ends in a filename is still its own page. */
+    expect(canonicalUrl('https://parks.example.gov/stli/visit.html')).toBe(
+      'parks.example.gov/stli/visit.html',
+    );
+  });
+
+  /**
+   * THE NAME A COLLAPSE WOULD OTHERWISE TAKE WITH IT.
+   *
+   * The survivor of a same-entity group carries its own data and none of the
+   * loser's — including, on a dense non-Latin pack, the only name a traveller
+   * can read. 71 of 123 shortlisted Tokyo cards led in a script the reader
+   * cannot read while the land-use record the linker had just dropped held
+   * "Kitanomaru Park". Names cross; nothing else does.
+   */
+  it('keeps the readable name a collapsed twin published', () => {
+    const listed = record({
+      id: 'places:park',
+      name: '北の丸公園',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      attributes: { operator: 'Somebody' },
+      sources: [
+        { dataset: 'primary', licenceId: 'CDLA-Permissive-2.0' },
+        { dataset: 'primary-2', licenceId: 'CDLA-Permissive-2.0' },
+      ],
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const mapped = record({
+      id: 'land_use:park',
+      layerId: 'land_use',
+      sourceId: 'park',
+      name: '北の丸公園',
+      alternateNames: ['Kitanomaru Park', 'Parc Kitanomaru'],
+      sourceCategory: 'park',
+      sourceCategoryPath: ['park'],
+      planningRole: 'outdoor',
+      coordinates: { lat: 40.7003, lng: -74 },
+    });
+    const links = linkRecords([listed, mapped]);
+    /* The better-evidenced record still survives; only the names travel. */
+    expect([...supersededRecordIds([listed, mapped], links)]).toEqual(['land_use:park']);
+    expect(namesFromCollapsedTwins([listed, mapped], links).get('places:park')).toContain(
+      'Kitanomaru Park',
+    );
+    /* Nothing else crosses: a licence nobody chose is what this file forbids. */
+    expect(namesFromCollapsedTwins([listed, mapped], links).get('places:park')).not.toContain(
+      '北の丸公園',
+    );
   });
 });
 
@@ -546,16 +1345,27 @@ describe('taxonomy classification', () => {
     ).toBe('excluded');
   });
 
-  it('treats a congregation as a support stop and a monument as an attraction', () => {
+  it('gates a worship building on evidence and keeps a monument an attraction', () => {
+    /*
+     * The congregation guarantee, restated where its mechanism now lives. The
+     * `place_of_worship` node used to be a support stop, which kept storefront
+     * congregations off boards *and* typed a city's most famous temple as
+     * plumbing — the same word carries both, and only evidence can tell them
+     * apart. So the node is a witness-gated experience kind: an unwitnessed
+     * congregation is refused by the significance gate (see the inventory test
+     * of the same name below), a witnessed temple is finally an attraction.
+     */
     const congregation = classifySourceCategory({
       category: 'christian_place_of_worship',
       path: ['cultural_and_historic', 'religious_organization', 'place_of_worship'],
     });
-    expect(congregation.role).toBe('support');
+    expect(congregation.role).toBe('attraction');
+    expect(congregation.requiresSignificanceEvidence).toBe(true);
 
     const temple = classifySourceCategory({ category: 'hindu_temple' });
     expect(temple.role).toBe('attraction');
     expect(temple.category).toBe('historic_site');
+    expect(temple.requiresSignificanceEvidence).toBe(false);
   });
 
   it('separates food, lodging and support from attractions', () => {
@@ -1059,6 +1869,110 @@ describe('candidate inventory', () => {
     );
   });
 
+  /**
+   * THE CONGREGATION GUARANTEE AND THE FAMOUS TEMPLE, ONE VOCABULARY, TWO
+   * VERDICTS.
+   *
+   * A global catalogue publishes both under the same words —
+   * `*_place_of_worship` beneath a `place_of_worship` node — and for a release
+   * the node was filed as a support stop, which held the storefront
+   * congregations off boards by holding *every* worship building off them: on
+   * a fresh dense-metro pack the destination's canonical temples normalised to
+   * a cash machine's retention priority and were evicted unread. The node is
+   * now a witness-gated experience kind, so the guarantee this test carries is
+   * two-directional and the direction is decided by evidence, not vocabulary:
+   * a worship record with a place-attesting witness is admitted as a visitable
+   * candidate, and its unwitnessed twin — the neighbourhood chapel, the
+   * storefront congregation — reaches neither the candidate list nor the
+   * support portfolio. §29 A's live fixture asserts the same refusal end to
+   * end; this is the compiler-level twin of it.
+   */
+  it('admits a witnessed worship building and refuses its unwitnessed twin everywhere', () => {
+    const worship = (overrides: Partial<SourceRecord>) =>
+      record({
+        sourceCategory: 'buddhist_place_of_worship',
+        sourceCategoryPath: ['cultural_and_historic', 'religious_organization', 'place_of_worship'],
+        planningRole: 'attraction',
+        ...overrides,
+      });
+    const witnessed = worship({
+      id: 'places:great-temple',
+      sourceId: 'great-temple',
+      name: 'Great Gate Temple',
+      wikidataId: 'Q424242',
+      attributes: { wikipedia: 'aa:Great Gate Temple' },
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const unwitnessed = worship({
+      id: 'places:street-chapel',
+      sourceId: 'street-chapel',
+      name: 'Fourth Street Congregation Hall',
+      coordinates: { lat: 40.71, lng: -74.01 },
+    });
+
+    const inventory = buildInventory({ pack: packWith([witnessed, unwitnessed]), scope });
+
+    const candidateNames = inventory.candidates.map((entry) => entry.place.name);
+    expect(candidateNames).toContain('Great Gate Temple');
+    expect(candidateNames).not.toContain('Fourth Street Congregation Hall');
+    /* Refused, not demoted: a chapel is not a support stop either. */
+    expect(inventory.supporting.map((entry) => entry.place.name)).not.toContain(
+      'Fourth Street Congregation Hall',
+    );
+
+    /* And the admitted temple is an experience a traveller can be offered. */
+    const temple = inventory.candidates.find((entry) => entry.place.name === 'Great Gate Temple')!;
+    expect(isVisitableRole(planningRoleOfPlace(temple.place)!)).toBe(true);
+  });
+
+  it('lets a cross-layer knowledge-base twin rescue a branch-guessed record', () => {
+    /*
+     * The witness the eligibility layer cannot see on its own: the places row
+     * carries no identifier and no article — its evidence lives on a twin in
+     * another layer, resolved by `resolveKnowledgeBaseEvidence` and visible only
+     * to the standing built inside `buildInventory`. The donor carries a
+     * different planning role, so the linker (which folds only equal roles)
+     * keeps them two records, while the knowledge twin (which matches on the
+     * taxonomy kind) still donates across the 220 m between them. The donor
+     * publishes the shared name only as an alternate, so the assertion on the
+     * recipient's name cannot be satisfied by the donor being admitted instead.
+     */
+    const recipient = record({
+      id: 'places:silk-poi',
+      sourceId: 'silk-poi',
+      name: 'Old Silk Market',
+      sourceCategory: 'a_leaf_no_table_has_seen',
+      sourceCategoryPath: ['arts_and_entertainment', 'a_leaf_no_table_has_seen'],
+      coordinates: { lat: 40.7, lng: -74 },
+    });
+    const donor = record({
+      id: 'land:silk-ground',
+      layerId: 'land',
+      sourceId: 'silk-ground',
+      name: '旧絹市場',
+      alternateNames: ['Old Silk Market'],
+      wikidataId: 'Q7770001',
+      sourceCategory: 'a_leaf_no_table_has_seen',
+      sourceCategoryPath: ['arts_and_entertainment', 'a_leaf_no_table_has_seen'],
+      planningRole: 'support',
+      coordinates: { lat: 40.701976, lng: -74 },
+    });
+
+    const inventory = buildInventory({ pack: packWith([recipient, donor]), scope });
+
+    /*
+     * The recipient is admitted as discovery on the twin's evidence — asserted
+     * by record identity, because the display-name layer may surface the
+     * donor's Latin alternate and a name assertion could be satisfied by the
+     * wrong record. Sever the standing hand-over at the `resolveEligibility`
+     * call site and this record dies as `insufficient_travel_value` while its
+     * donor survives — which is exactly the shape F3 measured live: a real
+     * market refused under a bare `arts_and_entertainment` leaf while its
+     * evidence sat one layer away.
+     */
+    expect(inventory.candidates.map((entry) => entry.place.id)).toContain('places:silk-poi');
+  });
+
   it('refuses a closed record, an outside-scope one and a nameless one, and says so', () => {
     const pack = packWith([
       record({ id: 'places:ok', sourceId: 'ok', name: 'Harbour Museum' }),
@@ -1204,6 +2118,344 @@ describe('candidate inventory', () => {
     expect(venue?.hours.kind).toBe('unknown');
     expect(venue?.priceEvidence).toBe('format_inferred');
     expect(venue?.provisioning).toBe('none');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the shortlist hands on
+// ---------------------------------------------------------------------------
+
+describe('what the shortlist hands on', () => {
+  const scope = scopeFor();
+
+  /**
+   * An inventory built the way a dense city forces one to be built.
+   *
+   * The administrative layer placed only some of the ground, so every record it
+   * missed is `membership_unknown` — eligible for the anchor slot by role,
+   * refused it by scope, and demoted into the *discovery* pool of the role it
+   * already had. That is what leaves a single role holding two populated pools,
+   * and it is the ordinary state of a metropolis rather than an edge case: on
+   * the live Tokyo pack 615 of the 653 outdoor records reached the inventory
+   * that way. Modelled by handing the overlay only the records it could place,
+   * which is the documented meaning of a record the overlay never saw.
+   */
+  function inventoryWherePlaced(
+    records: SourceRecord[],
+    placed: (record: SourceRecord) => boolean,
+  ) {
+    const pack = packWith(records);
+    const all = pack.layers.flatMap((layer) => layer.records);
+    return buildInventory({
+      pack,
+      scope,
+      overlay: buildTripScopeOverlay({
+        scope,
+        records: all.filter((entry) => entry.layerId === 'divisions' || placed(entry)),
+      }),
+    });
+  }
+
+  /**
+   * A destination whose every role has both a placed and an unplaceable half.
+   *
+   * Counts stay under `maxPerCategory` and under `maxAttractions` on purpose:
+   * this fixture is about what happens to records the quotas **kept**, and a
+   * fixture that also trips a cap could not tell a dropped record from a capped
+   * one.
+   */
+  /** `count` records of one kind under one id prefix. */
+  const poolOf = (count: number, prefix: string, park: boolean): SourceRecord[] =>
+    Array.from({ length: count }, (_, index) =>
+      record({
+        id: `places:${prefix}${index}`,
+        sourceId: `${prefix}${index}`,
+        name: `${park ? 'Park' : 'Museum'} ${prefix}${index}`,
+        ...(park
+          ? {
+              sourceCategory: 'park',
+              sourceCategoryPath: ['sports_and_recreation', 'park'],
+              coordinates: { lat: 40.75 + index * 0.001, lng: -73.95 + index * 0.001 },
+            }
+          : { coordinates: { lat: 40.7 + index * 0.001, lng: -74 + index * 0.001 } }),
+      }),
+    );
+
+  /** The four pools, in whatever sizes a case wants them. */
+  const poolsSized = (counts: readonly [number, number, number, number]): SourceRecord[] => [
+    ...poolOf(counts[0], 'ma', false),
+    ...poolOf(counts[1], 'md', false),
+    ...poolOf(counts[2], 'pa', true),
+    ...poolOf(counts[3], 'pd', true),
+  ];
+
+  function bothPools(): SourceRecord[] {
+    return poolsSized([10, 10, 10, 10]);
+  }
+
+  /** The half the administrative layer reached. `…d…` is the half it did not. */
+  const wasPlaced = (entry: SourceRecord): boolean => !/^places:[mp]d/.test(entry.id);
+
+  /**
+   * THE REGRESSION THIS EXISTS FOR.
+   *
+   * `interleaveByRole` was handed one entry per *pool*, so a role with both an
+   * anchor and a discovery pool named itself twice and got two identical
+   * buckets. Every round emitted its records once per copy while counting the
+   * copies against the total it was waiting for, so it stopped half way: on a
+   * live metropolis 129 selected records became 132 emitted ones holding 70
+   * distinct places, and 59 records the quotas had already chosen were dropped
+   * by a round index. Four of the six canonical attractions that pass admission
+   * on that destination were among them.
+   *
+   * The assertion is deliberately about the *set*, not about any one record: the
+   * shortlist is the last stage that may narrow on evidence, and anything it
+   * loses after that point is lost to arithmetic.
+   */
+  it('hands on every record its quotas kept, exactly once', () => {
+    const inventory = inventoryWherePlaced(bothPools(), wasPlaced);
+    const ids = inventory.candidates.map((entry) => entry.place.id);
+
+    /* The condition the defect needs: one role, two populated pools. */
+    expect(inventory.portfolio.anchorDemotions).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(
+      ids.length,
+      'Every record the balance kept has to survive the ordering. A shorter list ' +
+        'here means the shortlist threw away something it had already chosen, and ' +
+        'nothing downstream can tell that from a destination with less to offer.',
+    ).toBe(inventory.diagnostics.attractions);
+  });
+
+  /**
+   * THE DROP DIRECTION, AND WHY THE TEST ABOVE CANNOT SEE IT.
+   *
+   * `interleaveByRole` is documented as "a permutation of its input, by
+   * construction", and the two assertions that existed cover one direction of
+   * that: it may not duplicate, and it may not overshoot its ceiling. It may
+   * still *lose* something, and losing something is the direction the defect
+   * actually took — 59 records the quotas had already chosen, discarded by a
+   * round index on the live Tokyo pack.
+   *
+   * The assertion above looks like it covers this — it compares the emitted
+   * count against what the quotas kept — and on its own fixture it cannot. The
+   * emitting loop pushes a whole *round* at a time, one record per bucket, and
+   * `bothPools` is four pools of ten. Any off-by-one in the round condition is
+   * absorbed by a round that emits four: the loop is checked at 36, runs, and
+   * lands on 40 exactly. Measured, not assumed — a round-index drop introduced
+   * through the mutation harness leaves that test green and is noticed only by
+   * six unrelated cases whose failure messages are about corroboration and
+   * tie-breaking, which is a defence nobody could act on.
+   *
+   * So the shape of the pools is swept rather than chosen. What decides whether
+   * a lost record is visible is the arithmetic of the last round — how many
+   * buckets still have a member in it — and any single fixture is a bet on that
+   * number. Uneven sizes, a pool of one, and a total that no round can land on
+   * squarely are all included for that reason, and the count of cases actually
+   * exercised is asserted so a sweep that swept nothing cannot pass.
+   */
+  it('loses nothing to a round index, whatever shape the pools are', () => {
+    const shapes: [number, number, number, number][] = [
+      [10, 10, 10, 10],
+      [10, 10, 10, 9],
+      [1, 10, 10, 10],
+      [11, 3, 7, 2],
+      [12, 1, 1, 1],
+      [5, 4, 3, 2],
+      [2, 1, 1, 1],
+    ];
+    let checked = 0;
+
+    for (const shape of shapes) {
+      const inventory = inventoryWherePlaced(poolsSized(shape), wasPlaced);
+      const ids = inventory.candidates.map((entry) => entry.place.id);
+      const where = shape.join('/');
+
+      /* A shape that produced nothing says nothing about what survives it. */
+      expect(ids.length, `${where} produced an empty shortlist`).toBeGreaterThan(0);
+      expect(new Set(ids).size, `${where} handed on a record twice`).toBe(ids.length);
+      expect({
+        shape: where,
+        handedOn: ids.length,
+      }).toEqual({ shape: where, handedOn: inventory.diagnostics.attractions });
+      checked += 1;
+    }
+
+    expect(checked, 'a sweep that swept nothing is a green test protecting nothing').toBe(
+      shapes.length,
+    );
+  });
+
+  /**
+   * The other half of the same property, and the reason it is a separate
+   * assertion: the broken ordering *overshot* as well as truncating, so the
+   * shortlist could hand out more places than its own ceiling allows.
+   */
+  it('never hands on more than the attraction ceiling, whatever the pools look like', () => {
+    const crowded = [
+      ...bothPools(),
+      ...Array.from({ length: 400 }, (_, index) =>
+        record({
+          id: `places:xd${index}`,
+          sourceId: `xd${index}`,
+          name: `Gallery ${index}`,
+          sourceCategory: index % 2 === 0 ? 'art_gallery' : 'monument',
+          sourceCategoryPath:
+            index % 2 === 0
+              ? ['arts_and_entertainment', 'art_gallery']
+              : ['landmark_and_historical_building', 'monument'],
+          coordinates: { lat: 40.62 + (index % 90) * 0.002, lng: -74.08 + (index % 70) * 0.002 },
+        }),
+      ),
+    ];
+    const inventory = inventoryWherePlaced(
+      crowded,
+      (entry) => wasPlaced(entry) && !/^places:xd/.test(entry.id),
+    );
+    const ids = inventory.candidates.map((entry) => entry.place.id);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeLessThanOrEqual(DEFAULT_INVENTORY_LIMITS.maxAttractions);
+  });
+
+  /**
+   * THE FAILURE THE REPAIR ABOVE COULD HAVE CREATED.
+   *
+   * A shortlist that stops losing what it chose is worth nothing if it responds
+   * by handing on everything well-evidenced in the densest corner. §12.2 wants
+   * the customer-facing set deliberately bounded, and the bound has to survive
+   * the *shape* that breaks it: hundreds of one richly-catalogued kind in one
+   * place, against a handful of everything else.
+   *
+   * So this asserts what a downstream truncation sees rather than only the
+   * total — the board, the autoselector and the planner all cut from the top of
+   * this list, and a list that is bounded but monotonous fails them exactly as
+   * badly as an unbounded one.
+   */
+  it('stays bounded and stays mixed when one kind floods the densest area', () => {
+    const flood = Array.from({ length: 300 }, (_, index) =>
+      record({
+        id: `places:g${index}`,
+        sourceId: `g${index}`,
+        name: `Gallery ${index}`,
+        sourceCategory: 'art_gallery',
+        sourceCategoryPath: ['arts_and_entertainment', 'art_gallery'],
+        coordinates: { lat: 40.7 + index * 0.00002, lng: -74 + index * 0.00002 },
+        /* Thoroughly described, which is what used to decide the order. */
+        attributes: { operator: 'City', opening_hours: 'Mo-Su 10:00-18:00', fee: 'yes' },
+        websiteCandidates: [`https://gallery.example/${index}`],
+      }),
+    );
+    const rest = [
+      ...Array.from({ length: 6 }, (_, index) =>
+        record({
+          id: `places:t${index}`,
+          sourceId: `t${index}`,
+          name: `Temple ${index}`,
+          sourceCategory: 'temple',
+          sourceCategoryPath: ['religious_locations', 'temple'],
+          coordinates: { lat: 40.78 - index * 0.004, lng: -73.92 + index * 0.004 },
+        }),
+      ),
+      ...Array.from({ length: 6 }, (_, index) =>
+        record({
+          id: `places:w${index}`,
+          sourceId: `w${index}`,
+          name: `Park ${index}`,
+          sourceCategory: 'park',
+          sourceCategoryPath: ['sports_and_recreation', 'park'],
+          coordinates: { lat: 40.64 + index * 0.004, lng: -74.06 - index * 0.004 },
+        }),
+      ),
+    ];
+
+    const inventory = buildInventory({ pack: packWith([...flood, ...rest]), scope });
+    const ids = inventory.candidates.map((entry) => entry.place.id);
+    expect(ids.length).toBeLessThanOrEqual(DEFAULT_INVENTORY_LIMITS.maxAttractions);
+
+    /* The source calls them galleries; the taxonomy files them under museums. */
+    const galleries = inventory.candidates.filter((entry) => entry.place.category === 'museum');
+    expect(galleries.length).toBeLessThanOrEqual(DEFAULT_INVENTORY_LIMITS.maxPerCategory);
+
+    /* And the first slice a board would take is not one kind of thing. */
+    const firstTwenty = inventory.candidates.slice(0, 20).map((entry) => entry.place.category);
+    expect(new Set(firstTwenty).size).toBeGreaterThan(2);
+    expect(firstTwenty.filter((category) => category === 'museum').length).toBeLessThan(12);
+  });
+
+  /**
+   * WHAT DECIDES A TIE, NOW THAT A TIE IS THE COMMON CASE.
+   *
+   * Significance is rounded to two decimals, so a dense city hands the ranking
+   * six hundred records of one role holding a couple of dozen distinct scores.
+   * Underneath the score the only tiebreak was the source identifier, which over
+   * these catalogues is a sort on hexadecimal — and on a live pack that put a
+   * hundred-metre flower garden and a traffic-safety playground ahead of two of
+   * the city's headline gardens purely on digits.
+   *
+   * The two records below are identical to the significance model and differ
+   * only in the ground the source mapped, with the identifiers ordered against
+   * the answer so an id sort cannot pass by accident.
+   */
+  it('breaks a tie on mapped ground rather than on the source identifier', () => {
+    const bounded = (id: string, name: string, metres: number): SourceRecord =>
+      record({
+        id: `places:${id}`,
+        sourceId: id,
+        name,
+        sourceCategory: 'park',
+        sourceCategoryPath: ['sports_and_recreation', 'park'],
+        coordinates: { lat: 40.7, lng: -74 },
+        bounds: {
+          southWest: { lat: 40.7, lng: -74 },
+          northEast: { lat: 40.7 + metres / 111_320, lng: -74 },
+        },
+      });
+
+    /* `a…` sorts before `z…`, and the larger ground belongs to `z…`. */
+    const inventory = buildInventory({
+      pack: packWith([bounded('a1', 'Pocket Green', 120), bounded('z9', 'The Great Park', 2_000)]),
+      scope,
+    });
+    const names = inventory.candidates.map((entry) => entry.place.name);
+
+    expect(names).toHaveLength(2);
+    expect(
+      names[0],
+      'Both records are the same kind with the same evidence, so significance ' +
+        'cannot separate them. What separates them has to be a measurement of the ' +
+        'thing — not which identifier happens to sort first.',
+    ).toBe('The Great Park');
+  });
+
+  /** And the tiebreak may never lift a record over a better-evidenced one. */
+  it('never lets mapped ground outrank significance', () => {
+    const sprawling = record({
+      id: 'places:a1',
+      sourceId: 'a1',
+      name: 'Sprawling Green',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['sports_and_recreation', 'park'],
+      coordinates: { lat: 40.7, lng: -74 },
+      bounds: {
+        southWest: { lat: 40.7, lng: -74 },
+        northEast: { lat: 40.73, lng: -74 },
+      },
+    });
+    const established = record({
+      id: 'places:z9',
+      sourceId: 'z9',
+      name: 'The Old Garden',
+      sourceCategory: 'park',
+      sourceCategoryPath: ['sports_and_recreation', 'park'],
+      coordinates: { lat: 40.71, lng: -74.01 },
+      alternateNames: ['Le Vieux Jardin', '旧庭園'],
+      attributes: { wikidata: 'Q42', wikipedia: 'en:The Old Garden' },
+      websiteCandidates: ['https://oldgarden.example'],
+    });
+
+    const inventory = buildInventory({ pack: packWith([sprawling, established]), scope });
+    expect(inventory.candidates[0]?.place.name).toBe('The Old Garden');
   });
 });
 

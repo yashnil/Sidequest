@@ -125,8 +125,36 @@ export function balanceAcrossAreas<T>(input: BalanceInput<T>): BalanceResult<T> 
   const { ranked, areaOf, categoryOf, limits } = input;
   const quota = Math.max(0, Math.trunc(limits.quota));
 
-  const pools = new Map<string, T[]>();
+  /*
+   * THE CATEGORY CAP IS DECIDED BY RANK, BEFORE ANY AREA IS SERVED.
+   *
+   * It used to be spent in serving order — dense areas first — so which
+   * members of an over-cap category survived was decided by *where they
+   * stood*, not by how they ranked: on a stored dense-metro pack the whole
+   * pool's second-ranked record was flushed because its harbour cell was
+   * served after a centre whose weaker records of the same category had
+   * already filled the cap. A cap is density control; it must hold back the
+   * weakest of a category, never the unluckily-placed best. So each category
+   * keeps its top `maxPerCategory` of the caller's ranked order, the rest are
+   * counted as held back, and the area round-robin below runs over what
+   * survives — same cap, same spread, rank-honest membership.
+   */
+  const categorySeen = new Map<string, number>();
+  let heldBackByCategory = 0;
+  const capped: T[] = [];
   for (const item of ranked) {
+    const category = categoryOf(item);
+    const seen = (categorySeen.get(category) ?? 0) + 1;
+    categorySeen.set(category, seen);
+    if (seen > limits.maxPerCategory) {
+      heldBackByCategory += 1;
+      continue;
+    }
+    capped.push(item);
+  }
+
+  const pools = new Map<string, T[]>();
+  for (const item of capped) {
     const area = areaOf(item);
     const pool = pools.get(area);
     if (pool) pool.push(item);
@@ -139,50 +167,72 @@ export function balanceAcrossAreas<T>(input: BalanceInput<T>): BalanceResult<T> 
 
   const cursor = new Map<string, number>(areas.map((area) => [area, 0]));
   const takenPerArea = new Map<string, number>(areas.map((area) => [area, 0]));
-  const categoryCounts = new Map<string, number>();
   const kept: T[] = [];
-  let heldBackByCategory = 0;
   let heldBackByAreaShare = 0;
   let areaCapRelaxed = false;
 
   /**
-   * The next item from an area that the category cap will accept.
-   *
-   * Advancing the cursor past a saturated category rather than stopping is the
-   * point: a capital whose museums are full still has its markets, and skipping
-   * the area entirely would hand its whole remaining share to somewhere else.
+   * The next item from an area. The category cap was already applied by rank
+   * above, so an area's pool holds only items the cap accepted — a capital
+   * whose museums are capped still has its markets in the pool, exactly as
+   * the old skip-and-advance behaviour served them.
    */
   const nextFrom = (area: string): T | null => {
     const pool = pools.get(area) ?? [];
-    let index = cursor.get(area) ?? 0;
-    while (index < pool.length) {
-      const item = pool[index]!;
-      const category = categoryOf(item);
-      if ((categoryCounts.get(category) ?? 0) >= limits.maxPerCategory) {
-        heldBackByCategory += 1;
-        index += 1;
-        continue;
-      }
-      cursor.set(area, index + 1);
-      categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
-      takenPerArea.set(area, (takenPerArea.get(area) ?? 0) + 1);
-      return item;
-    }
-    cursor.set(area, index);
-    return null;
+    const index = cursor.get(area) ?? 0;
+    if (index >= pool.length) return null;
+    cursor.set(area, index + 1);
+    takenPerArea.set(area, (takenPerArea.get(area) ?? 0) + 1);
+    return pool[index]!;
   };
 
+  /**
+   * THE MIDDLE IS PROPORTIONAL TO SUPPLY, NOT EQUAL BY ROTATION.
+   *
+   * The header above has always promised "a round robin between them, which
+   * distributes the middle proportionally to what each area actually holds" —
+   * and the implementation was a strict one-per-round rotation, which is an
+   * *equal* split wearing the proportional sentence. On the live Tokyo pack of
+   * 2026-08-13 the difference was exactly the funnel collapse: the city-centre
+   * cell held 220 of the outdoor pool's 1,307 candidates — the destination's
+   * headline gardens among them — and the rotation dealt it the same one seat
+   * per round as a harbour cell holding 20, so a globally 19th-ranked imperial
+   * park died while a sparse cell's fourth-best pocket park was seated. Where
+   * a quota binds, the ordering under it has to be the meaningful one, and
+   * "which cell's turn it is" is not an ordering.
+   *
+   * So each pass serves every live area — the floor survives: an area with
+   * anything in it is served in every pass, so a four-record province still
+   * contributes all four — but serves it up to its *proportional share* of the
+   * room left, largest areas first (the `areas` order), everything still capped
+   * by the ceiling. A region whose areas hold equal supply behaves exactly as
+   * the old rotation did.
+   */
   const fill = (areaCeiling: number): void => {
     let progressed = true;
     while (kept.length < quota && progressed) {
       progressed = false;
-      for (const area of areas) {
+      const live = areas.filter(
+        (area) =>
+          (takenPerArea.get(area) ?? 0) < areaCeiling &&
+          (cursor.get(area) ?? 0) < (pools.get(area)?.length ?? 0),
+      );
+      if (live.length === 0) break;
+      const room = quota - kept.length;
+      const supplyOf = (area: string): number =>
+        (pools.get(area)?.length ?? 0) - (cursor.get(area) ?? 0);
+      const totalSupply = live.reduce((total, area) => total + supplyOf(area), 0);
+      for (const area of live) {
         if (kept.length >= quota) break;
-        if ((takenPerArea.get(area) ?? 0) >= areaCeiling) continue;
-        const item = nextFrom(area);
-        if (!item) continue;
-        kept.push(item);
-        progressed = true;
+        const share = Math.max(1, Math.floor((room * supplyOf(area)) / totalSupply));
+        for (let served = 0; served < share; served += 1) {
+          if (kept.length >= quota) break;
+          if ((takenPerArea.get(area) ?? 0) >= areaCeiling) break;
+          const item = nextFrom(area);
+          if (!item) break;
+          kept.push(item);
+          progressed = true;
+        }
       }
     }
   };
@@ -559,6 +609,16 @@ export const PORTFOLIO_REJECTIONS = [
    * interior features are not free stops of their own.
    */
   'inside_paid_enclosure',
+  /**
+   * A category that claims regional ground — a conferred protected area, a
+   * mountain-scale landform, ground whose approach is the hazard — on a record
+   * with no outline of its own, standing where nothing the pack publishes about
+   * that ground puts it, and with nothing independent vouching for the
+   * identity. A tour desk filed under the park it sells, a shop named after a
+   * distant mountain and a mis-projected point all arrive in this shape: a
+   * famous kind of thing standing somewhere it cannot be.
+   */
+  'identity_conflicts_with_ground',
   'over_role_quota',
   'over_category_cap',
   'over_area_share',

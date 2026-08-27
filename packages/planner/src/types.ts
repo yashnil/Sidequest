@@ -17,6 +17,7 @@ import type {
   TravelerProfile,
   TripBasics,
   WeatherDataset,
+  ScheduledNetworkPresence,
 } from '@sidequest/core';
 import type { TravelTimeMatrix } from '@sidequest/geo';
 import type { MustDoConflict } from './feasibility';
@@ -39,6 +40,24 @@ export interface PlanningCandidate {
   place: Place;
   /** Higher wins. Manual choices outrank auto-picks, which outrank maybes. */
   priority: number;
+  /**
+   * THE BOARD'S OWN ORDER, CARRIED RATHER THAN RECONSTRUCTED.
+   *
+   * `boardPriorityOf(boardOrderingOf(candidate))` — the composed key the board
+   * sorted the traveller's cards by, on `fit.score`'s 0–100 scale. `priority`
+   * above is this plus the selection band's offset, so the two never disagree
+   * about which of two cards came first.
+   *
+   * It is a field rather than something each re-ranking works out for itself
+   * because the re-rankings are exactly where it went missing: pinning a stop
+   * rewrote `priority` as `10_000 + fitScore`, which silently reverted that
+   * place — and only that place — to the order the board stopped using when it
+   * started composing significance into the key. Two pinned cards a band apart
+   * on screen came back in the plan ranked by match alone, and nothing anywhere
+   * said why. Anything that lifts a candidate into another band adds this, not
+   * `fitScore`.
+   */
+  boardPriority: number;
   /** The traveller chose this by hand rather than accepting an auto-pick. */
   manual: boolean;
   selectionStatus: SelectionStatus;
@@ -180,6 +199,18 @@ export interface PlannerInput {
    * service.
    */
   transit?: TransitEvidence;
+  /**
+   * Whether the compiled evidence counted any scheduled stop in this region.
+   *
+   * The planner needs it for one decision and it is not derivable from anything
+   * else it holds: whether a long measured walk is the journey the traveller
+   * will make, or is only standing in for a scheduled journey nobody could
+   * price. Without it the planner reads every stand-in walk as a real one and
+   * bounds it by the last-mile answer — which is how a car-free trip in a city
+   * with a hundred railway stations came back with two stops across six days.
+   * `null` means nobody said, and opens no gate.
+   */
+  scheduledNetwork?: ScheduledNetworkPresence | null;
   /**
    * Resolved and validated at the server boundary, exactly like the matrix. The
    * planner never asks a provider anything; it is handed the facts and stays a

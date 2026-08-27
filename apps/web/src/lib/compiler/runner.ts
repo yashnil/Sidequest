@@ -30,6 +30,9 @@ import {
   reuseShare,
 } from '@sidequest/core';
 import {
+  occupiedCompilationSlots,
+  queuedCompilationDepth,
+  queuePositionFor,
   completeJob,
   failJob,
   pruneOrphanedSourceDocuments,
@@ -48,7 +51,12 @@ import {
 } from '../db/compiler-repository';
 import { HEARTBEAT_INTERVAL_MS, isAbandoned, isTerminal } from '@sidequest/core';
 import { dailySpendGate, recordDailySpend } from './daily-ceiling';
-import { compileDeadlineMs, modelCallCeiling } from './limits';
+import {
+  compileDeadlineMs,
+  maxConcurrentCompilations,
+  maxQueuedCompilations,
+  modelCallCeiling,
+} from './limits';
 import { fetchRefusalCounts, resetFetchRefusalCounts } from '../net/safe-fetch';
 import { priorityHintsFrom, type ReconciliationBasis } from '@sidequest/core';
 import {
@@ -101,9 +109,36 @@ import type { LiveDiagnostics } from '../providers/live';
 
 export type StartOutcome =
   | { kind: 'started'; jobId: string }
+  /**
+   * Accepted, and waiting for the deployment's one build slot.
+   *
+   * Not a failure and not a start: the row exists, the traveller can see it,
+   * cancel it and watch it, and the queue pump dispatches it when the slot
+   * frees. `position` counts from one so the screen can say where they are
+   * without recomputing it against a table it does not read.
+   */
+  | { kind: 'queued'; jobId: string; position: number }
   | { kind: 'already_running'; jobId: string }
   | { kind: 'already_compiled'; compiledRegionId: string }
   | { kind: 'blocked'; code: CompilationErrorCode; message: string };
+
+/**
+ * The refusal that is left once there is a queue, in the traveller's words.
+ *
+ * Backpressure used to be told here on the *first* contested press — one build
+ * at a time and no line, so at a launch cohort's click rate roughly a third of
+ * presses were turned away on the one action in this product that costs money
+ * and matters most. A press now joins a bounded queue, and this sentence is
+ * reserved for the case where even the queue is full.
+ *
+ * Deliberately not the daily-ceiling sentence: that one says "come back
+ * tomorrow" and this one clears in minutes, so borrowing it would be a false
+ * statement about the system. It names what is happening, says how long the
+ * thing in the way takes, keeps the promise that nothing was lost, and gives an
+ * instruction a person can act on.
+ */
+const QUEUE_FULL_MESSAGE =
+  'Sidequest builds one trip at a time — so the map and place services it depends on are not overrun — and the queue for that is full just now. Nothing was lost: your trip and everything you have chosen are saved. Each build takes several minutes, so try again shortly and we will put yours in line.';
 
 /**
  * Start a compilation, or hand back the one already happening.
@@ -118,15 +153,22 @@ export function startCompilation(
   now = new Date(),
   /**
    * Who is asking, when the request layer can honestly say. The daily ledger
-   * charges the deployment either way and charges this caller as well when it
-   * is given, so one visitor cannot drain the whole day's allowance. Null (the
-   * default) is the honest answer for an internal caller — the benchmark
-   * driver, a worker, a test — and leaves only the global ceiling in force.
+   * charges the deployment either way and charges this caller as well, so one
+   * visitor cannot drain the whole day's allowance.
+   *
+   * Three values, not two: a key, `null` for a request nobody could attribute —
+   * which is charged to the shared unattributed pool, so declining a cookie is
+   * never cheaper than presenting one — and *absent* for a caller that is not a
+   * request at all, which is the benchmark driver and the tests. `daily-ceiling`
+   * documents the distinction; it is the whole per-user story.
    */
-  caller: string | null = null,
+  caller?: string | null,
 ): StartOutcome {
   const intent = getIntent(trip.id);
   const scope = intent?.scope;
+
+  /** Set by the concurrency check below: this job joins the line rather than starting. */
+  let waiting = false;
 
   if (!scope || !scope.confirmedByUser) {
     return {
@@ -173,6 +215,27 @@ export function startCompilation(
     if (!gate.allowed) {
       return { kind: 'blocked', code: 'budget_exhausted', message: gate.message };
     }
+    /**
+     * HOW MANY BUILDS MAY BE IN FLIGHT AT ONCE, AND WHERE THE REST WAIT.
+     *
+     * Last of the three, deliberately: it is the only outcome here that clears
+     * on its own in minutes, so it must not pre-empt an adoption or a ceiling,
+     * both of which say something more permanent. Read `limits.ts` before
+     * changing either number — the concurrency ceiling is set by what this app
+     * promised volunteer-run services, not by what the hardware could stand,
+     * and the queue depth by the longest wait we are willing to promise.
+     *
+     * The queue defers spend rather than adding any: a queued job reserves
+     * exactly the one live compilation it will run, on the same ledger, at the
+     * same moment a dispatched one does. No spend ceiling moves because a
+     * traveller waits instead of being refused.
+     */
+    if (occupiedCompilationSlots(now) >= maxConcurrentCompilations()) {
+      if (queuedCompilationDepth() >= maxQueuedCompilations()) {
+        return { kind: 'blocked', code: 'provider_rate_limited', message: QUEUE_FULL_MESSAGE };
+      }
+      waiting = true;
+    }
   }
 
   /**
@@ -187,7 +250,18 @@ export function startCompilation(
     tripId: trip.id,
     scopeFingerprint: fingerprint,
     now,
+    ...(waiting ? { waiting: true } : {}),
   });
+  /*
+   * THE DEDUP, AND IT COVERS THE QUEUE TOO.
+   *
+   * The unique partial index spans `('queued','running')`, and a parked job is
+   * `queued` — so a second press, a second tab or a direct POST for a trip that
+   * is *waiting* lands on the same row rather than taking a second place in
+   * line. Nothing here had to change for that; it is worth saying because a
+   * queue is exactly where a second identical request would otherwise be free
+   * to hide.
+   */
   if (result.kind === 'already_running') {
     return { kind: 'already_running', jobId: result.job.id };
   }
@@ -197,8 +271,23 @@ export function startCompilation(
    * the benchmark budget's rule, for the same reason: a ceiling discovered by
    * crossing it is not a ceiling. Model calls are recorded separately, after
    * the run, from what the transport actually counted.
+   *
+   * A queued job reserves here too. It is one build that will run; booking it
+   * only on dispatch would let a full queue quietly overrun the day's ceiling
+   * between the press and the slot.
    */
   if (readiness.choice === 'open') recordDailySpend('live_compilations', 1, now, caller);
+
+  if (waiting) {
+    return {
+      kind: 'queued',
+      jobId: result.job.id,
+      // Read back rather than counted here: the row is the queue, and a
+      // position computed from a variable this function happened to hold is a
+      // second answer that can disagree with the one the screen polls for.
+      position: queuePositionFor(result.job.id) ?? 1,
+    };
+  }
 
   return { kind: 'started', jobId: result.job.id };
 }
@@ -242,7 +331,14 @@ export async function runCompilation(input: {
     return null;
   }
 
-  markJobRunning(input.jobId, now);
+  /*
+   * The first spend of the run is guarded by the state machine rather than by
+   * the flag: a job that ended while this process was starting — stopped by the
+   * traveller, or reclaimed and replaced — is not ours to compile, and the
+   * cheapest possible way to honour that is to never begin. Returning here
+   * writes nothing: the row already carries whoever ended it and why.
+   */
+  if (!markJobRunning(input.jobId, now)) return null;
 
   const dates = tripDates(input.trip.basics.startDate, input.trip.basics.endDate);
   const months = tripMonths(input.trip.basics.startDate, input.trip.basics.endDate);
@@ -629,7 +725,14 @@ export async function runCompilation(input: {
   } catch (error) {
     console.error('Compilation threw', { jobId: input.jobId });
     stopPulse();
-    observeTermination({ stage: lastStage, kind: 'failed', code: 'internal_error' });
+    /*
+     * A throw with credential rejections behind it is named for its cause. An
+     * `internal_error` is retryable and reads as our defect; a dead key is
+     * neither, and the retry button it buys would fail identically.
+     */
+    const code: CompilationErrorCode =
+      live && live.model.authFailures > 0 ? 'provider_credentials_missing' : 'internal_error';
+    observeTermination({ stage: lastStage, kind: 'failed', code });
     /*
      * The spend still happened. A throw is the one path that used to record
      * nothing at all, and "we do not know what the failures cost" is the shape
@@ -641,7 +744,7 @@ export async function runCompilation(input: {
     if (live) recordDailySpend('model_calls', live.model.calls, new Date());
     failJob({
       jobId: input.jobId,
-      code: 'internal_error',
+      code,
       detail: error instanceof Error ? error.message.slice(0, 300) : undefined,
       now: new Date(),
     });
@@ -668,11 +771,27 @@ export async function runCompilation(input: {
   });
 
   /*
-   * The day's model-call ledger, from what the transport actually counted.
-   * Written once, here, because every path below — cancelled, failed,
-   * committed, superseded — has already spent these calls.
+   * The day's model-call ledger. Written once, here, because every path below —
+   * cancelled, failed, committed, superseded — has already spent these calls.
+   *
+   * THE CEILING NOBODY HAD EVER EXERCISED. This read `if (live)`, and `live` is
+   * non-null only when the runner built the open provider stack itself. Every
+   * other caller — the benchmark driver, the evaluation matrix, every test that
+   * hands `runCompilation` a provider set — therefore spent model calls the
+   * ledger never saw, and the ledger held no `model_calls` row at all: both
+   * ceilings that govern model spend were unexercised, and one live run was the
+   * only way to find out whether either worked.
+   *
+   * The compiler counts the same calls against its own `maxModelCalls` budget on
+   * every path, injected stack included, so it is the honest fallback and it is
+   * what makes the ceiling observable — and testable — without spending money.
+   * The transport's count still wins where there is one: it is the thing that is
+   * billed.
    */
-  if (live) recordDailySpend('model_calls', live.model.calls, new Date());
+  const modelCalls = live
+    ? live.model.calls
+    : (result.operational.budget.consumed.maxModelCalls ?? 0);
+  recordDailySpend('model_calls', modelCalls, new Date());
 
   if (isCancelRequested(input.jobId)) {
     stopPulse();
@@ -683,6 +802,43 @@ export async function runCompilation(input: {
       detail: 'Stopped before the result was adopted.',
       now: new Date(),
       cancelled: true,
+    });
+    return result;
+  }
+
+  /**
+   * A REJECTED CREDENTIAL FAILS THE BUILD, LOUDLY, BEFORE ANYTHING IS ADOPTED.
+   *
+   * Twelve consecutive live builds ran against a dead key: the transport 401'd
+   * every research call, every stage degraded exactly as it does for a bad
+   * minute, and each build completed as a quiet `partial` with zero extracted
+   * facts — hours, costs and safety all skipped — while charging the day's
+   * allowance. Nothing failed, so nothing said so.
+   *
+   * The stages are right to degrade — mid-build there is no one to act — but
+   * an authentication or permission rejection is deterministic: the same key
+   * fails the same way until an operator replaces it, which makes it
+   * configuration rather than weather. So the run's verdict is decided here,
+   * where the transport's count is in hand: any credential rejection ends the
+   * job as `provider_credentials_missing` — non-retryable, with traveller copy
+   * that names the deployment — instead of committing a hollow artifact.
+   * Cancellation still wins above (the traveller's stop is the truth of the
+   * row), the spend records above still ran (money spent on refusals is still
+   * money), and a run degraded by anything *other* than the auth class commits
+   * exactly as before.
+   */
+  if (live && live.model.authFailures > 0) {
+    stopPulse();
+    observeTermination({ stage: lastStage, kind: 'failed', code: 'provider_credentials_missing' });
+    failJob({
+      jobId: input.jobId,
+      code: 'provider_credentials_missing',
+      detail:
+        `The research model rejected this deployment's credentials ` +
+        `(${live.model.authFailures} call${live.model.authFailures === 1 ? '' : 's'} refused as ` +
+        `unauthenticated). The key is present but not accepted; every build will fail the same ` +
+        `way until whoever runs this deployment replaces it.`,
+      now: new Date(),
     });
     return result;
   }
@@ -1011,6 +1167,13 @@ function operationalCounters(
     counters.pagesFetched = live.pagesFetched;
     counters.pagesRejected = live.pagesRejected;
     counters.modelCalls = live.model.calls;
+    /*
+     * Calls the provider refused as unauthenticated. Zero on a healthy run;
+     * any other value is the dead-credential condition the runner fails the
+     * job for, kept as a counter so an operator auditing a day of failures can
+     * see the cause without opening a per-job log.
+     */
+    counters.modelAuthFailures = live.model.authFailures;
     counters.modelWebSearches = live.model.webSearches;
     counters.modelInputTokens = live.model.inputTokens;
     counters.modelOutputTokens = live.model.outputTokens;
@@ -1099,13 +1262,15 @@ export function activeJobFor(tripId: string) {
  * 1. **A terminal job stops the pulse.** Finished, failed, cancelled or
  *    reclaimed — there is nothing left to prove alive, and a heartbeat written
  *    over a reclaimed row would resurrect exactly the zombie the reclaim ended.
- * 2. **A cancelled job additionally records what was spent and, in the
- *    dedicated worker, stops the process.** `requestCancel` has already
- *    flipped the row and closed its stages; the worker's only remaining duty
- *    is to stop costing money, and `process.exit` is the one lever that works
- *    without a hook inside the compiler. The terminal-write guards make this
- *    safe: whatever the dying process had in flight can no longer change the
- *    row.
+ * 2. **A job somebody asked to stop additionally records what was spent and, in
+ *    the dedicated worker, stops the process.** The row's stop flag is the
+ *    trigger rather than the `cancelled` state, and the difference is a whole
+ *    class of double spending: a *reclaimed* job is terminal but not cancelled,
+ *    so a stalled worker that came back found the pulse already stopped, no
+ *    reason to exit, and carried on paying providers alongside the replacement
+ *    build the traveller had been given. Both paths write the flag; both end
+ *    the process. The terminal-write guards make it safe: whatever the dying
+ *    process had in flight can no longer change the row.
  * 3. **Otherwise, beat.**
  *
  * `unref`ed, so a pulse can never hold a process open; self-stopping, so a
@@ -1117,18 +1282,18 @@ export function startCompilationPulse(input: {
   onCancelled?: () => void;
   intervalMs?: number;
 }): () => void {
-  let cancelledHandled = false;
+  let stopHandled = false;
   const timer: ReturnType<typeof setInterval> = setInterval(() => {
     try {
       const job = getJob(input.jobId);
       if (!job || isTerminal(job.state)) {
         clearInterval(timer);
-        if (job?.state === 'cancelled' && !cancelledHandled) {
-          cancelledHandled = true;
+        if (job?.cancelRequested && !stopHandled) {
+          stopHandled = true;
           try {
             input.onCancelled?.();
           } catch (error) {
-            console.error('Could not record a cancelled build’s spend', {
+            console.error('Could not record a stopped build’s spend', {
               jobId: input.jobId,
               error,
             });

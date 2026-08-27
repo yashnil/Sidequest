@@ -1602,6 +1602,21 @@ export const COLUMN_MIGRATIONS: readonly {
    */
   { table: 'compilation_jobs', column: 'operational_json', definition: 'TEXT' },
   /**
+   * Added when the concurrency bound gained a queue instead of a refusal.
+   *
+   * `state = 'queued'` had to carry two meanings at once — "a worker is on its
+   * way" and "nothing is coming yet, because the deployment's one build slot is
+   * somebody else's" — and the slot count, the heartbeat rules and the progress
+   * screen all need those apart. Non-null is the second: parked, no process
+   * ever dispatched, holding a place in line rather than the slot.
+   *
+   * Nullable rather than defaulted, because the default would be a lie about
+   * every row already in the table: a job written before the queue existed was
+   * dispatched the instant it was created, and reading it as parked would
+   * exempt a dead worker's row from the reclaim that ends it.
+   */
+  { table: 'compilation_jobs', column: 'waiting_since', definition: 'TEXT' },
+  /**
    * Added when a traveller's mark gained the identity of the board it was made
    * on.
    *
@@ -1630,6 +1645,36 @@ export const COLUMN_MIGRATIONS: readonly {
    * fix.
    */
   { table: 'trips', column: 'owner_token', definition: 'TEXT' },
+  /**
+   * WHOSE DECISION THIS IS.
+   *
+   * The same boundary as `trips.owner_token`, arriving late for the same
+   * reason that column did: decision sessions were built as their own table
+   * and the one-boundary discipline never reached them, so any holder of the
+   * URL could read the traveller's answers, rewrite them, and adopt the
+   * destination into a trip owned by the *stranger's* cookie — after which the
+   * legitimate traveller is locked out of their own decision for good.
+   *
+   * Nullable, and null means nobody: a session written before this column
+   * existed cannot be attributed to any browser, so it is refused to everyone
+   * rather than handed to whoever arrives next. Sessions are short-lived;
+   * losing a legacy one is a re-answered questionnaire, not a lost trip.
+   */
+  { table: 'decision_sessions', column: 'owner_token', definition: 'TEXT' },
+  /**
+   * THE SHARE LINK, AS A SECOND SECRET RATHER THAN A REUSED ONE.
+   *
+   * A trip's id already reaches every owner surface — the board, the
+   * questionnaire, the rebuild — so a share link built from it would hand a
+   * reader every control the owner has. The token opens exactly one thing: the
+   * read-only view at /share/<token>. Minted on the owner's first press of
+   * Share, never rotated afterwards (a link somebody already sent must keep
+   * working), and resolved only by exact match — never as a fallback for an id.
+   *
+   * Nullable, and null means never shared: a trip written before this column
+   * existed has no link in circulation, which is exactly what null says.
+   */
+  { table: 'trips', column: 'share_token', definition: 'TEXT' },
   { table: 'provisional_selections', column: 'board_id', definition: 'TEXT' },
   { table: 'provisional_selections', column: 'board_version', definition: 'INTEGER' },
   /**
@@ -1821,4 +1866,14 @@ export const INDEX_MIGRATIONS: readonly string[] = [
    */
   `CREATE INDEX IF NOT EXISTS idx_weather_snapshots_expiry
      ON weather_snapshots(valid_until)`,
+  /**
+   * The share-link lookup, and its uniqueness in one statement.
+   *
+   * Opening /share/<token> is a point read on this column, and two trips
+   * answering to one token would show somebody a trip that was never shared
+   * with them — so the index is unique, and partial because every unshared
+   * trip holds NULL.
+   */
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_share_token
+     ON trips(share_token) WHERE share_token IS NOT NULL`,
 ];

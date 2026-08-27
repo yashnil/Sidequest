@@ -19,7 +19,12 @@ import {
   type StageRecord,
 } from '@sidequest/core';
 import { BudgetLedger, budgetFor, DEFAULT_COMPILER_BUDGET } from './budget';
-import { deriveClarificationQuestions, QUESTION_IDS, rebuildClarificationSet } from './clarify';
+import {
+  carAvailableFromAnswers,
+  deriveClarificationQuestions,
+  QUESTION_IDS,
+  rebuildClarificationSet,
+} from './clarify';
 import { compileRegion } from './compile';
 import { dedupeCandidates, normalizeName } from './dedupe';
 import { deriveScope, scopeFitsTrip } from './scope';
@@ -182,6 +187,26 @@ describe('clarification rules', () => {
     };
     const rebuilt = rebuildClarificationSet(input, answered);
     expect(rebuilt.answers.map((answer) => answer.questionId)).toEqual([QUESTION_IDS.breadthStrategy]);
+  });
+
+  it('reads the settled car decision back out of the answers, unsure included', () => {
+    /*
+     * The mapping consumers outside the scope cascade rely on — the
+     * questionnaire seeds itself with it. "Unsure" is a real answer whose
+     * content is "nobody has decided", and must read as null, never as a car.
+     */
+    const withAnswer = (value: string): ClarificationSet => ({
+      schemaVersion: CLARIFICATION_SET_VERSION,
+      questions: [],
+      answers: [{ questionId: QUESTION_IDS.carAvailable, values: [value], answeredAt: 'x' }],
+    });
+    expect(carAvailableFromAnswers(withAnswer('yes'))).toBe(true);
+    expect(carAvailableFromAnswers(withAnswer('no'))).toBe(false);
+    expect(carAvailableFromAnswers(withAnswer('unsure'))).toBeNull();
+    expect(
+      carAvailableFromAnswers({ schemaVersion: CLARIFICATION_SET_VERSION, questions: [], answers: [] }),
+    ).toBeNull();
+    expect(carAvailableFromAnswers(null)).toBeNull();
   });
 
   it('reports a required question as blocking until it is answered', () => {
@@ -1202,5 +1227,86 @@ describe('research priority from provisional feedback', () => {
   it('leaves the compilation valid when nobody has marked anything', async () => {
     const result = await compile({ pinned: [], interested: [], suppressed: [] });
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('a seat with unmeasured legs stays on the board', () => {
+  /**
+   * The live failure this pins: a car-free dense-metro build whose pedestrian
+   * matrix could not measure some seats' legs stored only the measured
+   * survivors — the compile filtered `places` on the routable core, so a
+   * routing shape artifact deleted the destination's walkable anchors from
+   * the traveller's board while a far seat survived. Board membership is an
+   * admission decision the routing *plan* budgets; a journey nobody measured
+   * is a per-stop fact the board renders as an unverified reach and the
+   * planner refuses per stop. Synthetic world, one victim struck from every
+   * routing answer.
+   */
+  it('keeps a place the router could not measure, absent from the matrix, with the region intact', async () => {
+    const spec = SYNTHETIC_WORLDS.transit_city!;
+    const providers = fakeProviders(spec);
+    const victim = `${spec.id}-place-3`;
+    const realMatrix = providers.routing.matrix.bind(providers.routing);
+    providers.routing = {
+      ...providers.routing,
+      matrix: async (input) => {
+        const result = await realMatrix(input);
+        const struck = result.ids.indexOf(victim);
+        if (struck < 0) return result;
+        const minutes = result.minutes.map((row) => [...row]);
+        const km = result.km.map((row) => [...row]);
+        const failedPairs = [...result.failedPairs];
+        for (let other = 0; other < result.ids.length; other += 1) {
+          if (other === struck) continue;
+          minutes[struck]![other] = Number.NaN;
+          minutes[other]![struck] = Number.NaN;
+          km[struck]![other] = Number.NaN;
+          km[other]![struck] = Number.NaN;
+          failedPairs.push({ from: victim, to: result.ids[other]!, reason: 'not_found' });
+          failedPairs.push({ from: result.ids[other]!, to: victim, reason: 'not_found' });
+        }
+        return { ...result, minutes, km, failedPairs };
+      },
+    };
+
+    const result = await compileRegion({
+      compilationId: 'test-unmeasured-seat',
+      scope: scopeFor('transit_city'),
+      dates: DATES,
+      months: MONTHS,
+      providers,
+      now: NOW,
+    });
+    expect(result.ok, result.ok ? '' : result.message).toBe(true);
+    if (!result.ok) return;
+
+    /* The seat stays… */
+    expect(result.region.places.map((place) => place.id)).toContain(victim);
+    /* …its journeys stay honestly unmeasured… */
+    expect(result.region.travelTimes.ids).not.toContain(victim);
+    /*
+     * …and the stored legs say what they are: a measured leg carries the mode
+     * it was measured in, an unmeasured one carries no marker at all — its
+     * schema-required zeros are placeholders, and a reader that would take
+     * `0` for "no journey" must find `measured` absent. A live no-car trip
+     * read a foot matrix's 275 minutes out of a field named `driveMinutes`;
+     * the mode field is what stops that being a claim about driving.
+     */
+    const victimPlace = result.region.places.find((place) => place.id === victim)!;
+    expect(victimPlace.travelFromBase.measured).toBeUndefined();
+    const measuredPlace = result.region.places.find(
+      (place) => place.id !== victim && result.region.travelTimes.ids.includes(place.id),
+    )!;
+    expect(measuredPlace.travelFromBase.measured).toBe(true);
+    expect(['car', 'foot']).toContain(measuredPlace.travelFromBase.mode);
+    /* …and the artifact is still whole: schema-valid, integrity-clean. */
+    expect(() => compiledRegionSchema.parse(result.region)).not.toThrow();
+    expect(checkRegionIntegrity(result.region)).toEqual([]);
+    expect(
+      result.region.diagnostics.warnings.some((warning) =>
+        warning.includes('no measured travel time'),
+      ),
+      'the unmeasured seat has to be said out loud, not carried silently',
+    ).toBe(true);
   });
 });

@@ -31,6 +31,12 @@
  * run the same restore, because the failure mode this guards against is a
  * developer pressing ctrl-C during a slow vitest run.
  *
+ * **Every recorded defender is confirmed against the restored tree.** A test
+ * that fails under the mutation *and* fails without it defended nothing; it is
+ * simply unstable, and crediting it manufactures a CAUGHT verdict for a
+ * behaviour no test can observe. See `markUnstable` for the run that produced
+ * exactly that and why one baseline run cannot tell the two apart.
+ *
  * ## Working against a copy, by default
  *
  * The tree this repository is developed in is shared — more than one agent, and
@@ -452,6 +458,44 @@ function runTests(paths) {
  */
 const baselineFailures = new Map();
 
+/**
+ * WHY ONE UNMUTATED RUN IS NOT ENOUGH, AND WHAT A FABRICATED DEFENDER IS.
+ *
+ * Subtracting a single baseline answers "was this test red before?". It does
+ * not answer the question a CAUGHT verdict actually claims, which is "did *this
+ * mutation* make this test red?". Those come apart the moment any test in the
+ * selection is unstable — flaky, order-dependent, or reading state some other
+ * test wrote. Such a test is green in the baseline run and red in the mutated
+ * run for reasons that have nothing to do with the edit, and the harness writes
+ * its name down as a defender.
+ *
+ * That is not hypothetical and it is not rare. A §16B probe recorded
+ * `autopick-action-forgets-what-the-traveller-decided` — an edit to one line of
+ * a server action — as CAUGHT by two tests, `planner/zz-sweep.test.ts > SWEEP >
+ * measures swap menu applicability` and `overture.test.ts > … reads past the
+ * first corner and keeps the landmarks it finds there`. Neither loads the
+ * mutated module. Neither could observe the edit under any circumstances. The
+ * same two names appear as "defenders" of three unrelated mutations in the same
+ * log, which is the signature: an unstable test defends everything, because it
+ * fails on its own schedule. Re-run in isolation, that mutation SURVIVED — a
+ * genuine hole in the suite, reported as a guarded behaviour.
+ *
+ * A harness that over-reports CAUGHT is worse than no harness at all, because a
+ * SURVIVED verdict gets fixed and a CAUGHT one gets cited.
+ *
+ * So a defender has to prove itself twice: it must fail with the mutation held
+ * **and pass on the restored tree**, under the identical command. Anything that
+ * fails both ways is unstable by demonstration rather than by suspicion, is
+ * struck off the defender list, and is folded into the baseline so it cannot
+ * manufacture a defence for any later entry sharing this selection either.
+ */
+function markUnstable(paths, failures, fileErrors) {
+  const baseline = baselineFailures.get(JSON.stringify(paths));
+  if (!baseline) return;
+  for (const entry of failures) baseline.failures.add(entry);
+  for (const entry of fileErrors) baseline.fileErrors.add(entry);
+}
+
 function baselineFor(paths) {
   /*
    * `JSON.stringify` rather than a joined string, and not for elegance: the
@@ -498,6 +542,30 @@ if (!inPlace) {
 const before = porcelain();
 const results = [];
 
+/**
+ * A DECLARED DEFENDER THAT IS NOT THERE, WHICH VITEST WILL NOT MENTION.
+ *
+ * `tests` is the harness's claim about which tests are supposed to notice, and
+ * vitest treats each entry as a substring filter over the files it finds. A
+ * filter matching nothing is not an error to vitest — it simply selects fewer
+ * files, silently — so a selection can rot to half its declared size and every
+ * verdict still prints as though the whole of it had been asked.
+ *
+ * It had. Four entries named `packages/core/src/discovery/board.test.ts` and
+ * `packages/core/src/discovery/autoselect.test.ts`, neither of which exists;
+ * the tests moved into `discovery.test.ts` at some point and the declarations
+ * did not follow. §30 asks *which test defended the behaviour*, and an answer
+ * assembled from a selection nobody verified is the same class of quiet
+ * inaccuracy as the stale anchor one line further down.
+ *
+ * So a missing path is refused the way a stale anchor is refused: loudly, and
+ * without producing a verdict, because a partial selection cannot produce an
+ * honest one.
+ */
+function missingTests(mutation) {
+  return mutation.tests.filter((relative) => !existsSync(join(workRoot, relative)));
+}
+
 for (const mutation of selected) {
   if (mutation.unanchored) {
     results.push({ id: mutation.id, verdict: 'unanchored', detail: mutation.unanchored });
@@ -505,11 +573,45 @@ for (const mutation of selected) {
     continue;
   }
 
+  const absent = missingTests(mutation);
+  if (absent.length > 0) {
+    results.push({
+      id: mutation.id,
+      verdict: 'stale',
+      detail: `declared test file(s) do not exist: ${absent.join(', ')}`,
+    });
+    say(`— ${mutation.id}: UNMEASURED — declared test file(s) do not exist: ${absent.join(', ')}`);
+    say(
+      '  Vitest silently selects nothing for a filter that matches no file, so this entry ' +
+        'would have been judged on a smaller selection than it claims. Fix the paths.\n',
+    );
+    continue;
+  }
+
   const sourceBefore = sourceFingerprint(mutation);
   const applied = apply(mutation);
   if (!applied.ok) {
+    /**
+     * A STALE ANCHOR IS THE QUIETEST WAY THIS EXERCISE FAILS.
+     *
+     * §30 class 3 — "a raw obscure map feature outranks a well-established
+     * anchor on metadata alone" — sat at `anchor matched 0 times` for a whole
+     * phase after `significance.ts` grew a floor on the kind contribution. The
+     * class was neither CAUGHT nor SURVIVED. It was **unmeasured**, and it read
+     * as one grey line in a table of green ones. That is the second time an
+     * anchor has gone stale after a refactor here.
+     *
+     * So it is shouted rather than tabulated, in the words that say what it
+     * costs: nothing was learned about that behaviour, and a table that lists it
+     * beside real results invites a reader to count it as one.
+     */
     results.push({ id: mutation.id, verdict: 'stale', detail: applied.detail });
-    say(`— ${mutation.id}: STALE — ${applied.detail}\n`);
+    say(`— ${mutation.id}: UNMEASURED — ${applied.detail}`);
+    say(
+      '  The regression was never introduced, so no test was asked about it. This class is ' +
+        'neither caught nor survived: it is a hole where a measurement used to be, and it ' +
+        're-anchoring is the only thing that closes it.\n',
+    );
     continue;
   }
 
@@ -581,12 +683,41 @@ for (const mutation of selected) {
   }
 
   /* Only the failures the mutation itself caused count as a defence. */
-  const newFailures = run.failures.filter((failure) => !alreadyRed.failures.has(failure));
-  const newFileErrors = run.fileErrors.filter((entry) => !alreadyRed.fileErrors.has(entry));
+  let newFailures = run.failures.filter((failure) => !alreadyRed.failures.has(failure));
+  let newFileErrors = run.fileErrors.filter((entry) => !alreadyRed.fileErrors.has(entry));
   const ignored = alreadyRed.failures.size + alreadyRed.fileErrors.size;
 
+  /*
+   * THE CONFIRMATION RUN. Every recorded defender passes on the restored tree.
+   *
+   * Same selection, same command, same tree the baseline was taken from — the
+   * only thing that differs from the mutated run is the mutation, which is what
+   * a CAUGHT verdict claims and what nothing here used to check. Paid only when
+   * something claims to have caught the mutation, so a survivor costs nothing
+   * extra and a defence costs one run to be worth quoting.
+   */
+  let unstable = [];
+  let unstableFiles = [];
+  if (newFailures.length > 0 || newFileErrors.length > 0) {
+    const confirm = runTests(mutation.tests);
+    if (!confirm.collected) {
+      results.push({
+        id: mutation.id,
+        verdict: 'error',
+        detail: 'the confirmation run against the restored tree could not be collected',
+      });
+      say('  the restored tree would not run the selection — no verdict is safe here\n');
+      continue;
+    }
+    unstable = newFailures.filter((failure) => confirm.failures.includes(failure));
+    unstableFiles = newFileErrors.filter((entry) => confirm.fileErrors.includes(entry));
+    markUnstable(mutation.tests, unstable, unstableFiles);
+    newFailures = newFailures.filter((failure) => !unstable.includes(failure));
+    newFileErrors = newFileErrors.filter((entry) => !unstableFiles.includes(entry));
+  }
+
   if (newFailures.length > 0) {
-    results.push({ id: mutation.id, verdict: 'caught', caughtBy: newFailures });
+    results.push({ id: mutation.id, verdict: 'caught', caughtBy: newFailures, unstable });
     say(`  CAUGHT by ${newFailures.length}:`);
     for (const failure of newFailures) say(`    ${failure}`);
     /*
@@ -595,10 +726,27 @@ for (const mutation of selected) {
      * looked — but it names no test, so it cannot be a defence.
      */
     for (const entry of newFileErrors) say(`    (file-level failure, not counted: ${entry})`);
+    for (const entry of [...unstable, ...unstableFiles]) {
+      say(`    (struck off — fails on the restored tree too, so it defends nothing: ${entry})`);
+    }
     if (ignored > 0) {
       say(`  (${ignored} failure(s) in this selection were already there and do not count)`);
     }
     say('');
+  } else if (unstable.length > 0 || unstableFiles.length > 0) {
+    results.push({
+      id: mutation.id,
+      verdict: 'survived',
+      unstable: [...unstable, ...unstableFiles],
+      detail:
+        `every alleged defender (${[...unstable, ...unstableFiles].length}) also failed on the ` +
+        'restored tree — unstable, not a defence',
+    });
+    say(
+      '  SURVIVED — the only tests that went red also go red without the mutation:\n' +
+        [...unstable, ...unstableFiles].map((entry) => `    ${entry}`).join('\n') +
+        '\n',
+    );
   } else if (newFileErrors.length > 0) {
     results.push({
       id: mutation.id,
@@ -643,7 +791,8 @@ say('\n=== §30 mutation results ===');
 for (const result of results) {
   const suffix =
     result.verdict === 'caught'
-      ? ` (${result.caughtBy.length} test${result.caughtBy.length === 1 ? '' : 's'})`
+      ? ` (${result.caughtBy.length} test${result.caughtBy.length === 1 ? '' : 's'})` +
+        (result.unstable?.length ? `, ${result.unstable.length} struck off as unstable` : '')
       : result.detail
         ? ` — ${result.detail}`
         : '';
@@ -651,12 +800,35 @@ for (const result of results) {
 }
 
 const survived = results.filter((result) => result.verdict === 'survived');
+const stale = results.filter((result) => result.verdict === 'stale');
 const broken = results.filter((result) =>
   ['restore_failed', 'stale', 'error'].includes(result.verdict),
 );
 if (survived.length > 0) {
   say(
     `\n${survived.length} mutation(s) survived. §30: if no test fails, the coverage is vacuous.`,
+  );
+}
+/*
+ * Counted separately from survivors and said in full, because the two failures
+ * are not the same failure and the second one hides. A survivor is a measured
+ * hole in the suite; a stale anchor is an unmeasured behaviour wearing a table
+ * row, and this table is the artifact everybody quotes.
+ */
+if (stale.length > 0) {
+  say(
+    `\n${stale.length} class(es) were NOT MEASURED AT ALL — their anchors no longer match the ` +
+      'source, so no regression was introduced and no test was asked anything:',
+  );
+  for (const entry of stale) say(`  ${entry.id} — ${entry.detail}`);
+  say('Re-anchor them. Until then the contract line each one stands for is unguarded.');
+}
+const struckOff = results.filter((result) => result.unstable?.length);
+if (struckOff.length > 0) {
+  say(
+    `\n${struckOff.length} entr(ies) had an alleged defender struck off: it failed under the ` +
+      'mutation and again on the restored tree, so it defended nothing. Those tests are ' +
+      'unstable and are worth fixing on their own account.',
   );
 }
 process.exit(survived.length > 0 || broken.length > 0 ? 1 : 0);

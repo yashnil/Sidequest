@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { mustDoDecisionKindSchema, type MustDoDecision } from '@sidequest/core';
 import { getIntent, saveComposerAnswers } from '@/lib/db/compiler-repository';
 import { getSelections, getTrip, setSelection } from '@/lib/db/repository';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { compiledRegionFor } from '@/lib/region';
 
 /**
@@ -32,6 +33,8 @@ export async function decideMustDoAction(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
 
     const parsedKind = mustDoDecisionKindSchema.safeParse(kind);
     if (!parsedKind.success) return { ok: false, error: 'That is not something we can record.' };

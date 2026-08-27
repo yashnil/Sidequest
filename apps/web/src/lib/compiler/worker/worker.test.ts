@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -208,7 +209,123 @@ describe('the compile worker', () => {
       expect(getIntent(tripId)?.selectedCompiledRegionId).toBeNull();
     },
   );
+
+  it(
+    'a worker killed mid-compile leaves a terminal failed job with an honest error code, never an eternal compiling',
+    { timeout: 120_000 },
+    async () => {
+      /**
+       * THE CRASH-WITHOUT-TERMINAL-STATE CLASS, DRIVEN FOR REAL.
+       *
+       * SIGKILL is the honest stand-in for every way a worker dies without a
+       * chance to write — the OOM killer, a `kill -9`, a host reboot. The
+       * worker cannot catch it, so nothing inside the worker can save the row;
+       * what this test pins is that the *system* still converts the job to a
+       * terminal, retryable verdict in bounded time. The parent that spawned
+       * the worker hears the exit immediately and reaps it; the heartbeat
+       * reclaim remains the backstop for the case where the parent died too.
+       *
+       * Bounded time matters as much as the verdict: the reclaim path alone
+       * needs `HEARTBEAT_TIMEOUT_MS` (five minutes) of silence *plus* somebody
+       * polling, which on a screen a traveller has already closed is never.
+       * The 15-second window below is what makes "eternal compiling" a test
+       * failure rather than a philosophical claim.
+       */
+      const { tripId } = await seededConfirmedTrip();
+      const { getTrip } = await import('../../db/repository');
+      const { startCompilation } = await import('../runner');
+      const { launchCompilationWorker } = await import('./launch');
+      const { getJob } = await import('../../db/compiler-repository');
+      const { isTerminal } = await import('@sidequest/core');
+
+      const outcome = startCompilation(getTrip(tripId)!);
+      if (outcome.kind !== 'started') throw new Error('expected a fresh job');
+
+      const launched = launchCompilationWorker({ tripId, jobId: outcome.jobId });
+      expect(launched.launched).toBe(true);
+
+      /*
+       * A warm fixture build runs spawn-to-terminal in well under two seconds,
+       * so "wait for `running`, then kill" is a race the test would sometimes
+       * lose. Determinism instead: freeze the worker the moment it is visible,
+       * then ratchet it forward in small SIGCONT/SIGSTOP slices until the row
+       * says `running` while the process is provably frozen. The kill then
+       * lands mid-compile every time, not most times.
+       */
+      const pidDeadline = Date.now() + 10_000;
+      let pid: number | null = null;
+      while (pid === null) {
+        pid = findWorkerPid(outcome.jobId);
+        if (pid === null && Date.now() > pidDeadline) {
+          throw new Error('the worker process never became findable by its --job argument');
+        }
+      }
+      process.kill(pid, 'SIGSTOP');
+
+      const ratchetDeadline = Date.now() + 60_000;
+      for (;;) {
+        const job = getJob(outcome.jobId);
+        if (job?.state === 'running') break;
+        if (job && isTerminal(job.state)) {
+          throw new Error(`job ended ${job.state} before the kill could happen`);
+        }
+        if (Date.now() > ratchetDeadline) throw new Error('worker never took the job');
+        process.kill(pid, 'SIGCONT');
+        await new Promise((settle) => setTimeout(settle, 5));
+        process.kill(pid, 'SIGSTOP');
+      }
+
+      process.kill(pid, 'SIGKILL');
+
+      /*
+       * The row must go terminal within seconds of the death, not within
+       * `HEARTBEAT_TIMEOUT_MS` of it. A job left at `running` here is the
+       * exact shape a traveller reads as "compiling forever".
+       */
+      const deadline = Date.now() + 15_000;
+      for (;;) {
+        const job = getJob(outcome.jobId);
+        if (job && isTerminal(job.state)) break;
+        if (Date.now() > deadline) {
+          throw new Error(
+            `job still ${getJob(outcome.jobId)?.state ?? 'missing'} 15s after its worker was SIGKILLed — the eternal-compiling defect`,
+          );
+        }
+        await new Promise((settle) => setTimeout(settle, 250));
+      }
+
+      const job = getJob(outcome.jobId)!;
+      expect(job.state).toBe('failed');
+      // The honest code: the build was healthy and its process went away, so a
+      // retry is cheap and the offer is truthful. Anything else here — an
+      // `internal_error`, a bare `failed` with no code — misdescribes the death.
+      expect(job.errorCode).toBe('compilation_interrupted');
+      expect(job.finishedAt).toBeTruthy();
+      // No artifact was adopted, and the stage history stopped claiming work
+      // that can no longer be happening.
+      expect(job.compiledRegionId).toBeUndefined();
+      expect(job.stages.every((stage) => stage.status !== 'running')).toBe(true);
+    },
+  );
 });
+
+/**
+ * The spawned worker's pid, recovered from the process table by the one thing
+ * that names it: the `--job=<id>` argument `launch.ts` passes. The launcher
+ * deliberately does not return the child handle — the web process must not
+ * hold one — so a test that needs to kill the worker finds it the way an
+ * operator would.
+ */
+function findWorkerPid(jobId: string): number | null {
+  const table = execSync('ps ax -o pid=,command=', { encoding: 'utf8' });
+  for (const line of table.split('\n')) {
+    if (line.includes(`--job=${jobId}`) && line.includes('compile-worker.mjs')) {
+      const pid = Number(line.trim().split(/\s+/)[0]);
+      if (Number.isFinite(pid)) return pid;
+    }
+  }
+  return null;
+}
 
 describe('which side of the isolation boundary a build lands on', () => {
   /**

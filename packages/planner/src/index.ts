@@ -20,3 +20,10 @@ export * from './frequency';
 export * from './edit';
 export { planTrip, summarise } from './plan';
 export { validateItinerary, validateStrategy, statusFor } from './validate';
+
+/*
+ * Named rather than re-exporting the whole food module: the bound on how often
+ * one venue may be named is a product rule an end-to-end test has to be able to
+ * read, and the rest of that module is planner-internal.
+ */
+export { MAX_TIMES_ONE_VENUE_IS_NAMED } from './food';

@@ -19,6 +19,7 @@ import {
   setSelection,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 import {
   acknowledgeReconciliationEntry,
   getReconciliation,
@@ -49,6 +50,10 @@ export async function setSelectionAction(
 ): Promise<ActionResult> {
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+    // The board belongs to the browser that made the trip — same boundary as
+    // every other trip door. See `lib/net/trip-access`.
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
     if (status === null) {
       clearSelection(tripId, placeId);
     } else {
@@ -77,6 +82,8 @@ export async function setFoodSelectionAction(
 ): Promise<ActionResult> {
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
     if (status === null) {
       clearFoodSelection(tripId, venueId);
     } else {
@@ -98,6 +105,8 @@ export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
   try {
     const trip = getTrip(tripId);
     if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
 
     const profile = getProfile(tripId);
     if (!profile) {
@@ -108,10 +117,31 @@ export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
     if (!resolved.ok) return { ok: false, error: resolved.error };
 
     const board = boardFor(trip, profile, resolved.context);
+    /*
+     * WHAT THE TRAVELLER HAS ALREADY SAID, HANDED TO THE PASS THAT MUST RESPECT IT.
+     *
+     * `replaceAutoSelections` clears only its own rows and inserts
+     * `ON CONFLICT DO NOTHING`, so every choice made by hand survives this call
+     * untouched — which is the contract this action's own heading states. What
+     * was missing is that auto-pick did not know: it spent slots on places whose
+     * insert the very next statement refused, and then told the traveller it had
+     * picked more places than it had. Reading the store here is the only way the
+     * two halves can agree, and it is why this call site owns the input.
+     *
+     * Only rows the traveller wrote. An `auto` row is this pass's own previous
+     * answer, is about to be deleted, and treating it as a decision would freeze
+     * the first pre-selection in place for ever.
+     */
+    const decided: Record<string, SelectionStatus> = {};
+    for (const stored of getSelections(tripId)) {
+      if (stored.source === 'user') decided[stored.placeId] = stored.status;
+    }
     const selection = autoSelect({
       candidates: board.candidates,
       profile,
       tripDays: countTripDays(trip.basics.startDate, trip.basics.endDate),
+      decided,
+      transitUnmeasured: board.transitUnmeasured,
     });
 
     replaceAutoSelections(tripId, selection.selectedIds);
@@ -186,6 +216,8 @@ export async function fillBoardImageryAction(tripId: string): Promise<BoardImage
   try {
     const trip = getTrip(tripId);
     if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
     const profile = getProfile(tripId);
     if (!profile) return { ok: false, error: 'Finish the questionnaire first.' };
 
@@ -258,6 +290,8 @@ export async function fillBoardImageryAction(tripId: string): Promise<BoardImage
 export async function refreshWeatherAction(tripId: string): Promise<ActionResult> {
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const resolved = await resolveTripRegion(trip);
   if (!resolved.ok) return { ok: false, error: resolved.error };
@@ -309,6 +343,8 @@ export async function acknowledgeRemovalAction(
   placeId: string,
 ): Promise<ActionResult> {
   try {
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
     const reconciliation = getReconciliation(tripId);
     if (!reconciliation) {
       return { ok: false, error: 'There is nothing to acknowledge on this trip any more.' };

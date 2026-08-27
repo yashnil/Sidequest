@@ -53,9 +53,9 @@
  * the wording of the capability lines themselves — see "Bounded web research".
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 /**
  * THE ENV FILE THE APP READS, READ HERE TOO — OR THE REPORT LIES.
@@ -195,7 +195,7 @@ mark(
   'Research model',
   researchProvider
     ? researchModel
-      ? 'anthropic, credential set'
+      ? 'anthropic, credential present — presence only; whether the provider accepts it is learned from live calls, and the "Last live build" section below reads the newest compile log for a recorded rejection'
       : 'anthropic selected, ANTHROPIC_API_KEY not set'
     : 'SIDEQUEST_RESEARCH_PROVIDER not set',
 );
@@ -348,9 +348,9 @@ say(
 );
 say(
   `  · Daily ceilings — SIDEQUEST_DAILY_LIVE_COMPILATIONS ${
-    isSet('SIDEQUEST_DAILY_LIVE_COMPILATIONS') ? 'set' : 'not set, defaults to 20'
+    isSet('SIDEQUEST_DAILY_LIVE_COMPILATIONS') ? 'set' : 'not set, defaults to 60'
   }; SIDEQUEST_DAILY_MODEL_CALLS ${
-    isSet('SIDEQUEST_DAILY_MODEL_CALLS') ? 'set' : 'not set, defaults to 300'
+    isSet('SIDEQUEST_DAILY_MODEL_CALLS') ? 'set' : 'not set, defaults to 800'
   }`,
 );
 /*
@@ -374,6 +374,70 @@ say(
   );
 }
 say('');
+
+/**
+ * WHAT THE LAST LIVE BUILD SAID ABOUT THE CREDENTIAL.
+ *
+ * Every check above is configuration; this is the one recorded observation.
+ * Twelve consecutive live builds once ran against a rejected key, every
+ * research call 401'd, and nothing an operator would read said so — the
+ * evidence sat verbatim in per-job log files nobody was watching. The doctor
+ * cannot make a live call (it must answer without a network or a bill), but it
+ * can read what the last build wrote: the transport logs `Research model
+ * credentials rejected` on a 401/403, and the newest log either carries that
+ * line or it does not.
+ *
+ * Only the newest log, deliberately: after the key is fixed, one healthy build
+ * clears the warning, and a month of old 401s must not shout for ever. Reading
+ * a log is not reading a secret — the transport never writes the key, and
+ * nothing from the log is printed here beyond the file's name.
+ *
+ * `--sidequest-compile-logs=<dir>` points elsewhere; `=none` skips the read,
+ * which is what keeps the doctor's own tests hermetic.
+ */
+const logsArg = process.argv
+  .find((entry) => entry.startsWith('--sidequest-compile-logs='))
+  ?.slice('--sidequest-compile-logs='.length);
+if (logsArg !== 'none') {
+  const logDir = logsArg
+    ? resolve(process.cwd(), logsArg)
+    : fileURLToPath(new URL('../data/compile-logs', import.meta.url));
+  let newest = null;
+  try {
+    for (const name of readdirSync(logDir)) {
+      if (!name.endsWith('.log')) continue;
+      const mtimeMs = statSync(join(logDir, name)).mtimeMs;
+      if (!newest || mtimeMs > newest.mtimeMs) newest = { name, mtimeMs };
+    }
+  } catch {
+    newest = null; // No log directory: nothing has built here. Not a failure.
+  }
+  say('Last live build');
+  if (!newest) {
+    say('  · No compile logs on disk — no live build has run here, so nothing is observable yet.');
+  } else {
+    let rejected = false;
+    try {
+      const log = readFileSync(join(logDir, newest.name), 'utf8');
+      rejected =
+        log.includes('Research model credentials rejected') ||
+        // The line the transport wrote before rejections had their own log
+        // sentence — today's live logs still carry it.
+        log.includes("type: 'authentication_error'") ||
+        log.includes('authentication_error');
+    } catch {
+      // A log that cannot be read is reported as nothing rather than guessed at.
+    }
+    mark(
+      !rejected,
+      'Research credential, as the newest compile log recorded it',
+      rejected
+        ? `REJECTED by the provider (${newest.name}). The key is present but dead: every research call fails, builds fail as provider configuration, and nothing will improve until whoever runs this deployment replaces the key.`
+        : `no rejection recorded (${newest.name}) — the last build's research calls were not refused as unauthenticated`,
+    );
+  }
+  say('');
+}
 
 const blocked = choice === 'off' || (choice === 'open' && !openReady);
 if (blocked) {

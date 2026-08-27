@@ -30,6 +30,13 @@ export interface DecisionSession {
   shortlist: DestinationShortlist | null;
   /** Set once, when they chose. Never cleared. */
   resolvedTripId: string | null;
+  /**
+   * The `sidequest_session` token of the browser that started this decision,
+   * or null for a row written before the column existed — which is owned by
+   * nobody and therefore shown to nobody, exactly as an unowned trip is.
+   * See `lib/net/decision-access`.
+   */
+  ownerToken: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +46,7 @@ interface Row {
   answers_json: string;
   shortlist_json: string | null;
   resolved_trip_id: string | null;
+  owner_token: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -67,21 +75,46 @@ function toSession(row: Row): DecisionSession | null {
     answers: answers.data,
     shortlist,
     resolvedTripId: row.resolved_trip_id,
+    ownerToken: row.owner_token,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-export function createDecisionSession(answers: TripComposerAnswers, now: Date): string {
+/**
+ * The owner is stamped at creation, exactly as `createTrip` stamps a trip.
+ *
+ * Null is accepted for the internal callers that have no cookie jar — a test,
+ * a worker — and a null-owned session is refused to every browser, never
+ * handed to the next visitor. See `lib/net/decision-access`.
+ */
+export function createDecisionSession(
+  answers: TripComposerAnswers,
+  ownerToken: string | null,
+  now: Date,
+): string {
   const id = randomUUID();
   const stamp = now.toISOString();
   getDb()
     .prepare(
-      `INSERT INTO decision_sessions (id, schema_version, answers_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO decision_sessions (id, schema_version, answers_json, owner_token, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, 1, JSON.stringify(answers), stamp, stamp);
+    .run(id, 1, JSON.stringify(answers), ownerToken, stamp, stamp);
   return id;
+}
+
+/**
+ * The one indexed read the ownership boundary needs, mirroring
+ * `tripOwnerToken`: cheap enough to sit in front of every decision action.
+ */
+export function decisionOwnerToken(id: string): string | null {
+  const row = getDb()
+    .prepare<[string], { owner_token: string | null }>(
+      'SELECT owner_token FROM decision_sessions WHERE id = ?',
+    )
+    .get(id);
+  return row?.owner_token ?? null;
 }
 
 export function getDecisionSession(id: string): DecisionSession | null {

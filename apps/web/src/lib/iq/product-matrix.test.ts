@@ -29,6 +29,7 @@ import {
   expectWorld,
   packBackedProviders,
   syntheticCandidate,
+  type FakeResearchOptions,
 } from '@sidequest/compiler/testing';
 import { planTrip, type PlanResult } from '@sidequest/planner';
 
@@ -87,6 +88,29 @@ interface CompileOptions {
   transitMeasurable?: boolean;
   nights?: number;
   dates?: readonly string[];
+  /**
+   * How much of this destination the *research* layer can find a source for.
+   *
+   * Separate from the world's shape because it is a different kind of thinness.
+   * A `SyntheticWorldSpec` describes the ground — how many places are there, how
+   * far apart, whether a road can be measured — and `packBackedProviders` takes
+   * this second argument to describe how much of that ground anybody has
+   * written down. Left unset, the fake funnel finds an official page for 60% of
+   * subjects, which is the right default for six of the seven shapes and flatly
+   * wrong for the seventh. See `WEAK_DATA`.
+   */
+  research?: FakeResearchOptions;
+  /**
+   * An extent the destination's own source published, where a scenario needs one.
+   *
+   * `syntheticCandidate` publishes none, which is the truthful default — the
+   * live destination index carries a centre and no polygon for every city, town,
+   * county, island and park in it. §29 D needs the other case as well, because
+   * the multi-part guard in `deriveShape` lives inside the branch a published
+   * extent selects, and a fixture that can never take that branch leaves the
+   * guard covered by nothing.
+   */
+  bounds?: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } };
 }
 
 /**
@@ -105,8 +129,9 @@ async function compileWorld(
 ): Promise<CompiledRegion> {
   const spec = SYNTHETIC_WORLDS[key]!;
   const dates = options.dates ?? DATES;
+  const candidate = syntheticCandidate(spec);
   const scope = deriveScope({
-    candidate: syntheticCandidate(spec),
+    candidate: options.bounds ? { ...candidate, bounds: options.bounds } : candidate,
     clarifications: emptyClarifications(),
     nights: options.nights ?? dates.length,
     revision: 1,
@@ -120,7 +145,7 @@ async function compileWorld(
     scope,
     dates: [...dates],
     months: MONTHS,
-    providers: packBackedProviders(spec),
+    providers: packBackedProviders(spec, options.research ?? {}),
     now: NOW,
   });
   if (!result.ok) {
@@ -350,7 +375,15 @@ describe('§29 — every trip shape reaches a plan', () => {
     {
       label: 'F — a destination almost nobody has catalogued',
       world: 'weak_data',
-      options: { composerTransport: 'drive' },
+      /*
+       * Spelled out rather than referring to `WEAK_DATA`, for the same reason
+       * the row above spells out `composerTransport` rather than referring to
+       * `ROAD`: this table is built while the file is still being read, and both
+       * constants live beside the sections that own them. It must stay the same
+       * destination as the one §29 F asserts about — see `WEAK_DATA` for why
+       * nobody publishing a page is what "almost nobody has catalogued" means.
+       */
+      options: { composerTransport: 'drive', research: { officialSourceCoverage: 0 } },
       answers: { willDrive: true, ...interests({ easy_nature_walks: 'core' }) },
     },
     {
@@ -915,8 +948,26 @@ describe('§29 B — a dense familiar city', () => {
     const forClassics = boardFor(region, classicsFirst);
     const forHidden = boardFor(region, offTheBeatenTrack);
 
-    const mostEstablished = [...region.places].sort(
-      (a, b) => b.popularityScore - a.popularityScore || a.id.localeCompare(b.id),
+    /*
+     * Selected on `globalProminence` — what the wider world actually published
+     * — rather than on `popularityScore`. The legacy read is lossy in a way that
+     * matters exactly here: since the withheld-prominence repair it answers with
+     * what the *region's own* authorities, designations and ground established
+     * whenever the world's notice was never observed, so sorting on it picked a
+     * locally-established, globally-unnoticed reserve and called it "the most
+     * established place". That record is a hidden gem by the model's own
+     * reckoning, so the hidden-seeking traveller rates it *higher* — a true
+     * outcome under a false premise, which is a fixture defect rather than a
+     * ranking one. The contrast this test is about is fame, and fame is the
+     * field named for it.
+     */
+    const noted = region.places.filter((place) => place.globalProminence !== undefined);
+    expect(
+      noted.length,
+      'nothing in this region carries observed prominence, so the contrast has no subject',
+    ).toBeGreaterThan(0);
+    const mostEstablished = [...noted].sort(
+      (a, b) => b.globalProminence! - a.globalProminence! || a.id.localeCompare(b.id),
     )[0]!;
     expect(
       mostEstablished.popularityScore,
@@ -938,9 +989,25 @@ describe('§29 B — a dense familiar city', () => {
 
   it('orders a day better than the orders it could have chosen instead', async () => {
     const region = await compileWorld('transit_mixed', CITY);
+    /*
+     * A fast-paced, high-intensity traveller, deliberately. The balanced
+     * profile's qualifying day used to hold its third stop on a 69-minute
+     * mid-day walk — three times the traveller's own stated walking answer,
+     * which the planner now enforces per leg — so the honest balanced plan is
+     * out-and-back pairs with nothing to order. The ordering property needs a
+     * day that *legally* holds three stops, and a traveller who packs their
+     * days gets one: every walk on it sits inside the stated answer, the long
+     * hops ride the metro, and the guard below still fails the test if no
+     * such day materialises.
+     */
     const journey = journeyThrough(
       region,
-      travellerFrom({ willDrive: false, ...interests({ food_and_towns: 'core' }) }),
+      travellerFrom({
+        willDrive: false,
+        pace: 'fast',
+        dailyIntensity: 'intense',
+        ...interests({ food_and_towns: 'core' }),
+      }),
     );
     const itinerary = itineraryOf(journey);
 
@@ -1288,6 +1355,35 @@ describe('§29 C — a road and outdoor region', () => {
 // D — Island / multi-component geography
 // ---------------------------------------------------------------------------
 
+/**
+ * How much ground a compiled scope covers, as one comparable value.
+ *
+ * A shape is a box or a circle and the two are not comparable as they stand,
+ * which is how the claim below came to be made about a field that cannot carry
+ * it. Both reduce to a span in kilometres, and that is the thing a traveller's
+ * transport must not be able to move.
+ */
+function groundSpanKm(scope: CompiledRegion['scope']): number {
+  const shape = scope.shape;
+  if (shape.kind === 'radius') return shape.radiusKm * 2;
+  /*
+   * The two shapes `deriveShape` cannot produce, kept honest rather than cast
+   * away: a corridor is as wide as it says, and a set of areas is the widest
+   * area in it. Neither reaches §29 D today, and a silent `as` here is how a
+   * helper starts returning a number about the wrong thing.
+   */
+  if (shape.kind === 'corridor') return shape.corridorWidthKm;
+  if (shape.kind === 'areas') {
+    return Math.max(0, ...shape.areas.map((area) => area.radiusKm * 2));
+  }
+  const latKm = (shape.bounds.northEast.lat - shape.bounds.southWest.lat) * 111;
+  const lngKm =
+    (shape.bounds.northEast.lng - shape.bounds.southWest.lng) *
+    111 *
+    Math.cos((scope.center.lat * Math.PI) / 180);
+  return Math.max(latKm, lngKm);
+}
+
 describe('§29 D — an island with separate components', () => {
   it('does not let the way the traveller gets around redefine the destination', async () => {
     /**
@@ -1299,9 +1395,23 @@ describe('§29 D — an island with separate components', () => {
      * traveller could walk across — and nothing said so, because the
      * *artifact* was internally consistent.
      *
-     * So the claim is a contrast between two compilations of the same world.
-     * Breadth is a fact about the ground; the place set is what the traveller
-     * is offered. Neither may move because somebody said they have no car.
+     * WHY THIS ASSERTS ON THE GROUND AND NOT ON THE PLACE SET.
+     *
+     * It asserted on the place set, and a reviewer showed the assertion was true
+     * by fixture construction and could not fail. `syntheticPack` builds its
+     * records from the world spec and computes the scope's bounds only to
+     * discard them (`void bounds`), and it stamps every record with the same
+     * `containment.divisionIds`, so every place is administratively inside the
+     * destination however wide or narrow the compiled ground is. Two
+     * compilations of one world therefore return the same fourteen places
+     * whether the scope is a hundred and forty kilometres across or twelve — the
+     * assertion held over the version of `deriveShape` that had the defect in
+     * it, and over every version that could ever have it.
+     *
+     * The ground is the thing that actually moved, so the ground is what is
+     * asserted. Both readings are kept: the *shape*, which is what the compiler
+     * spends its budget on, and the *breadth*, which is what the destination is
+     * called. Neither may move because somebody said they have no car.
      */
     const driving = await compileWorld('ferry_island', { composerTransport: 'drive' });
     const carFree = await compileWorld('ferry_island', { composerTransport: 'public_transport' });
@@ -1309,12 +1419,47 @@ describe('§29 D — an island with separate components', () => {
     expect(carFree.scope.breadth).toBe(SYNTHETIC_WORLDS.ferry_island!.breadth);
     expect(carFree.scope.breadth).toBe(driving.scope.breadth);
     expect(
-      carFree.places.length,
-      'a car-free traveller was shown a smaller archipelago than a driver',
-    ).toBe(driving.places.length);
-    expect(new Set(carFree.places.map((place) => place.id))).toEqual(
-      new Set(driving.places.map((place) => place.id)),
-    );
+      groundSpanKm(carFree.scope),
+      'a car-free traveller was compiled a smaller archipelago than a driver',
+    ).toBe(groundSpanKm(driving.scope));
+
+    /*
+     * And the traveller's own reach really did differ, or the contrast above is
+     * two runs of the same trip. This is the control: without it, a change that
+     * ignored `composerTransport` entirely would pass the assertion.
+     */
+    expect(carFree.scope.transport.carAvailable).toBe(false);
+    expect(driving.scope.transport.carAvailable).toBe(true);
+    expect(carFree.scope.reachRadiusKm).toBeLessThan(driving.scope.reachRadiusKm!);
+  });
+
+  it('holds the same rule when the archipelago publishes its own edges', async () => {
+    /**
+     * The case the multi-part guard was written for, which until now no fixture
+     * could reach: `syntheticCandidate` publishes no bounds, and the guard lives
+     * inside the branch that needs them. So it never executed here, and the
+     * behaviour it protects was covered by nothing.
+     *
+     * Measured against the live destination index, the boundless case above is
+     * the ordinary one — 38,909 of 38,909 counties and every island, park and
+     * protected area in it carry a centre and no polygon — and this is the
+     * exception. Both have to hold, and they are one rule: a container is not
+     * clipped to what the traveller can cross.
+     */
+    const edges = {
+      southWest: { lat: SYNTHETIC_WORLDS.ferry_island!.center.lat - 0.6, lng: SYNTHETIC_WORLDS.ferry_island!.center.lng - 0.6 },
+      northEast: { lat: SYNTHETIC_WORLDS.ferry_island!.center.lat + 0.6, lng: SYNTHETIC_WORLDS.ferry_island!.center.lng + 0.6 },
+    };
+    const driving = await compileWorld('ferry_island', { composerTransport: 'drive', bounds: edges });
+    const carFree = await compileWorld('ferry_island', {
+      composerTransport: 'public_transport',
+      bounds: edges,
+    });
+
+    expect(carFree.scope.boundaryEvidence).toBe('measured_extent');
+    expect(carFree.scope.shape).toEqual(driving.scope.shape);
+    /* Unclipped: the published extent is the whole destination, both ways. */
+    expect(carFree.scope.shape).toEqual({ kind: 'bounds', bounds: edges });
   });
 
   it('says where its border came from rather than presenting a circle as one', async () => {
@@ -1479,9 +1624,38 @@ describe('§29 E — a broad region over a longer trip', () => {
 // F — A destination almost nobody has catalogued
 // ---------------------------------------------------------------------------
 
+/**
+ * WHAT MAKES THIS SHAPE THE WEAK ONE, AND WHY THE WORLD ALONE DID NOT.
+ *
+ * `weak_data` is a nine-place valley that declares `hoursCoverage: 0.05` — five
+ * per cent of its places have an opening-hours record — and every §29 F property
+ * below is about what the product does with the other ninety-five. But the world
+ * spec only reaches the *constraints* provider, and a compiled calendar has two
+ * possible authors: an operator's own page, resolved by the research funnel, and
+ * the constraints research the spec governs. Sourced calendars take precedence,
+ * by design and correctly. So the fake funnel's 60% default was quietly
+ * publishing an official 0.9-confidence calendar for the whole surviving region,
+ * and the world's declared thinness never reached the assertions at all.
+ *
+ * That went unnoticed while one record happened to escape the funnel. It stopped
+ * escaping when the significance witness was narrowed this cycle — a government
+ * URL now attests who *operates* a place rather than that it matters, so the one
+ * supplemental record filed under the bare `historic_site` node with nothing but
+ * a `.gov` address behind it is refused, as its live New York counterparts (11
+ * public-housing developments) now are. The refusal is right. What it exposed is
+ * that a single accidental survivor was carrying two release requirements.
+ *
+ * So the thinness is stated here instead, where it is legible: **nobody has
+ * published a page about anything in this valley**. That is what a
+ * barely-catalogued destination *is*, it is the same shape `enrichment.test.ts`
+ * gives this world, and it costs nothing to the other six. The properties below
+ * now bite on half the region rather than on one lucky record.
+ */
+const WEAK_DATA: CompileOptions = { ...ROAD, research: { officialSourceCoverage: 0 } };
+
 describe('§29 F — a weak-data destination', () => {
   it('still produces something a traveller can use', async () => {
-    const region = await compileWorld('weak_data', ROAD);
+    const region = await compileWorld('weak_data', WEAK_DATA);
     const journey = journeyThrough(
       region,
       travellerFrom({ willDrive: true, ...interests({ easy_nature_walks: 'core', scenic_viewpoints: 'occasional' }) }),
@@ -1498,7 +1672,7 @@ describe('§29 F — a weak-data destination', () => {
   });
 
   it('does not manufacture the precision it does not have', async () => {
-    const region = await compileWorld('weak_data', ROAD);
+    const region = await compileWorld('weak_data', WEAK_DATA);
     const journey = journeyThrough(
       region,
       travellerFrom({ willDrive: true, ...interests({ easy_nature_walks: 'core' }) }),
@@ -1529,7 +1703,7 @@ describe('§29 F — a weak-data destination', () => {
   });
 
   it('separates “we could not check this” from “this is fine”', async () => {
-    const region = await compileWorld('weak_data', ROAD);
+    const region = await compileWorld('weak_data', WEAK_DATA);
     const journey = journeyThrough(
       region,
       travellerFrom({ willDrive: true, ...interests({ easy_nature_walks: 'core' }) }),
@@ -1556,7 +1730,7 @@ describe('§29 F — a weak-data destination', () => {
   });
 
   it('tells the traveller what it could not establish, rather than dropping it silently', async () => {
-    const region = await compileWorld('weak_data', ROAD);
+    const region = await compileWorld('weak_data', WEAK_DATA);
     expect(region.diagnostics.warnings.length).toBeGreaterThan(0);
     for (const warning of region.diagnostics.warnings) {
       expect(warning.trim().length).toBeGreaterThan(10);

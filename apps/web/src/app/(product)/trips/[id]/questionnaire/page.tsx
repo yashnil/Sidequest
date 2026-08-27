@@ -4,6 +4,7 @@ import {
   applyComposer,
   applyInterpretation,
   applyThemes,
+  applyTransportDecision,
   composerCarriedFields,
   countTripDays,
   defaultAnswers,
@@ -13,10 +14,13 @@ import {
   stepIdForOrdinal,
   type QuestionnaireContext,
 } from '@sidequest/core';
+import { carAvailableFromAnswers } from '@sidequest/compiler';
 import { QuestionnaireWizard } from '@/components/QuestionnaireWizard';
-import { getAnswers, getDraftStep, getTrip } from '@/lib/db/repository';
+import { Panel } from '@/components/ui';
+import { getAnswers, getDraftStep, getProfile } from '@/lib/db/repository';
+import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
-import { resolveTripRegion } from '@/lib/region';
+import { compiledRegionFor, resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +31,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const trip = getTrip(id);
+  const trip = await ownedTrip(id);
   return {
     title: trip
       ? `${trip.basics.destinationInput} — How you travel — Sidequest`
@@ -41,7 +45,11 @@ export default async function QuestionnairePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const trip = getTrip(id);
+  /*
+   * The owner's trip or nothing — a foreign browser sees a missing trip, the
+   * same boundary every trip door holds. See `lib/net/trip-access`.
+   */
+  const trip = await ownedTrip(id);
   if (!trip) notFound();
 
   /**
@@ -126,12 +134,31 @@ export default async function QuestionnairePage({
    * somebody who chose trains and buses on the first screen reached this one
    * with "You will have a car" already ticked.
    */
+  /*
+   * The car decision, from wherever it was actually settled.
+   *
+   * `applyComposer` carries the composer's transport — and on the ordinary city
+   * journey the composer leaves transport undecided and the car question is
+   * asked as a clarification on the plan flow instead, which `applyComposer`
+   * never reads. A live car-free trip stored `willDrive: true` in its profile
+   * that way, contradicting its own confirmed scope. The clarification answer
+   * wins where one exists because it is the later, more specific statement; the
+   * confirmed scope's assumption — which already reconciles profile over
+   * clarification over composer — is the fallback. `null` means nobody said,
+   * and seeds nothing.
+   */
+  const clarifiedCar =
+    carAvailableFromAnswers(intent?.clarifications) ??
+    (intent?.scope?.confirmedByUser ? intent.scope.transport.carAvailable : null);
   const seeded =
     saved ??
-    applyInterpretation(
-      applyThemes(applyComposer(defaultAnswers(context), intent?.composer), intent?.composer?.themes),
-      interpretation,
-    ).answers;
+    applyTransportDecision(
+      applyInterpretation(
+        applyThemes(applyComposer(defaultAnswers(context), intent?.composer), intent?.composer?.themes),
+        interpretation,
+      ).answers,
+      clarifiedCar,
+    );
   const initialAnswers = normalizeAnswers(seeded, context);
 
   /*
@@ -147,7 +174,19 @@ export default async function QuestionnairePage({
    * value still agrees with what the composer said, so a traveller's overruling
    * edit — and only that — removes the badge.
    */
-  const alreadyAnswered = composerCarriedFields(intent?.composer, initialAnswers);
+  const carriedFromComposer = composerCarriedFields(intent?.composer, initialAnswers);
+  /*
+   * The clarification's car answer earns the same "from your answers" standing
+   * as a composer answer, by the same rule `composerCarriedFields` applies: it
+   * counts as carried exactly while the stored value still agrees with what
+   * was said, so a traveller's overruling edit — and only that — removes it.
+   */
+  const alreadyAnswered =
+    clarifiedCar !== null &&
+    initialAnswers.willDrive === clarifiedCar &&
+    !carriedFromComposer.includes('willDrive')
+      ? [...carriedFromComposer, 'willDrive' as const]
+      : carriedFromComposer;
 
   /*
    * The trip-length steer, for travellers who asked the composer for one.
@@ -181,7 +220,19 @@ export default async function QuestionnairePage({
    * collapse to a one-line bar after the first advance, instead of pushing the
    * questionnaire 1.4 mobile viewports down on every visit.
    */
-  return (
+  /*
+   * WHY THIS SCREEN, WHEN A BOARD ALREADY EXISTS.
+   *
+   * The discover route sends a traveller without a profile here — correctly,
+   * because the board is ranked against these answers — but it does so as a
+   * silent redirect, and the provisional footer had just told them their
+   * results were ready. Landing on nine questions with no explanation read as
+   * a loop, not a step. One sentence turns the bounce into a path: the board
+   * is built, and these answers are what unlock it.
+   */
+  const boardAwaitingProfile = compiledRegionFor(id) !== null && !getProfile(id);
+
+  const wizard = (
     <QuestionnaireWizard
       tripId={id}
       context={context}
@@ -211,5 +262,27 @@ export default async function QuestionnairePage({
           }
         : {})}
     />
+  );
+
+  /*
+   * The wizard stays the page's root on the ordinary journey — the banner
+   * wraps it only when there is genuinely a finished board waiting, so the
+   * common case renders exactly what it always did.
+   */
+  if (!boardAwaitingProfile) return wizard;
+
+  return (
+    <>
+      <div className="mx-auto max-w-3xl px-5 pt-8 sm:px-8">
+        <Panel
+          className="border-pine p-4 text-sm leading-relaxed text-ink"
+          testId="board-awaits-answers"
+        >
+          The research has finished and your board is built. These questions are what rank it
+          around you — answer them and the board opens straight after.
+        </Panel>
+      </div>
+      {wizard}
+    </>
   );
 }

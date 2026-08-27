@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { roundedDuration, roundedMinuteOfDay, travellerVoice } from './plan-language';
+import {
+  isMachineWeatherLabel,
+  roundedDuration,
+  roundedMinuteOfDay,
+  travellerVoice,
+} from './plan-language';
 
 /**
  * THE TEST THAT STOPS A REPHRASING FROM BECOMING A DELETION.
@@ -42,6 +47,50 @@ describe('provider notices become traveller notices', () => {
     expect(result).not.toMatch(/for testing only/i);
     expect(result).toMatch(/not a forecast/i);
     expect(result).toMatch(/not a real observation/i);
+  });
+
+  it('keeps "not established as open" while dropping the routing-engine self-reference', () => {
+    // Verbatim from a live itinerary's "Check before you go" line.
+    const result = travellerVoice(
+      'We know a routing engine can reach this, not that it is open to the public on your dates. Check before you go.',
+    );
+    expect(result).not.toMatch(/routing engine/i);
+    // The claim survives whole: reachable, yes; open, not established.
+    expect(result).toMatch(/reaches this/i);
+    expect(result).toMatch(/not that it is open to the public on your dates/i);
+    expect(result).toMatch(/Check before you go\./);
+  });
+
+  it('keeps the OpenStreetMap attribution while dropping the name of our own router', () => {
+    for (const mode of ['driving', 'walking'] as const) {
+      const result = travellerVoice(
+        `Measured ${mode} times from a Valhalla routing engine over OpenStreetMap data.`,
+      );
+      expect(result).not.toMatch(/Valhalla/i);
+      expect(result).not.toMatch(/routing engine/i);
+      // The two load-bearing halves: measured, and from OpenStreetMap.
+      expect(result).toMatch(new RegExp(`Measured ${mode} times`));
+      expect(result).toMatch(/OpenStreetMap/);
+    }
+  });
+
+  it('keeps "no measured times" while dropping candidates and unrouted reserve', () => {
+    const result = travellerVoice(
+      'North shore has more candidates than one local routing pass covers; the rest are kept as unrouted reserve.',
+    );
+    expect(result).not.toMatch(/candidate/i);
+    expect(result).not.toMatch(/unrouted reserve/i);
+    // The cluster's own name and the fact both survive.
+    expect(result).toMatch(/^North shore /);
+    expect(result).toMatch(/without measured travel times/i);
+  });
+
+  it('recognises a machine-minted weather point label, and only that', () => {
+    expect(isMachineWeatherLabel('Forecast point 3')).toBe(true);
+    expect(isMachineWeatherLabel('Forecast point 12')).toBe(true);
+    // A label that names somewhere is information and must keep rendering.
+    expect(isMachineWeatherLabel('The upper valley')).toBe(false);
+    expect(isMachineWeatherLabel('Forecast point 3, revised')).toBe(false);
   });
 
   it('leaves a notice it has never seen exactly as written', () => {

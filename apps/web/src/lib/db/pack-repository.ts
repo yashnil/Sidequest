@@ -24,6 +24,9 @@ import { getDb } from './client';
  * Every read parses through the schema. A row that no longer validates — a
  * schema version bump, a truncated write — is treated as absent and swept,
  * rather than being cast and blowing up two screens later.
+ *
+ * The name a row is stored under is derived here rather than accepted from the
+ * builder — see `packRowId`, and read it before changing anything in this file.
  */
 
 interface PackRow {
@@ -195,13 +198,66 @@ export function getRegionPack(id: string): RegionPack | null {
 }
 
 /**
- * Store a pack, and never replace a usable one with a worse one.
+ * THE NAME A PACK IS STORED UNDER, DERIVED FROM WHAT MAKES ONE PACK DIFFERENT
+ * FROM ANOTHER.
  *
- * `INSERT OR IGNORE` against the unique partial index is the whole concurrency
+ * THE CACHE THAT NEVER WROTE. The builder minted
+ * `pack-{destinationCandidateId}-{releaseId}`, and that string carries neither
+ * the schema version nor the bounds — while `scope_hash` carries both. The row
+ * id is the primary key, so `INSERT OR IGNORE` silently discarded any pack
+ * whose id already existed:
+ *
+ * - a fresh v4 pack could not persist over a v3 row for the same city, because
+ *   the two ids are identical and only the *scope hashes* differ by version;
+ * - two trips to one destination whose derived boxes differ — the box is a
+ *   function of the traveller — collided on id, so the second was thrown away.
+ *
+ * Neither loss was visible: `saveRegionPack` reads back the winner, finds a row
+ * this build cannot parse, and returns the in-memory pack, so the *current*
+ * build works and the next one pays the whole 94–126 MB acquisition again. That
+ * is why the compiler re-bought Tokyo on every build and why an offline gate
+ * kept judging a pack no current code had written.
+ *
+ * So the identity is composed from the four things that make two packs
+ * genuinely different — schema version, ground, catalogue, release — and the
+ * builder's own id is not one of them. Different ground or a different schema is
+ * a different row; an equivalent pack is the same row and is reused.
+ */
+export function packRowId(pack: RegionPack): string {
+  const release = pack.releases[0];
+  return [
+    `v${pack.schemaVersion}`,
+    pack.scopeHash,
+    release?.catalog ?? 'unknown',
+    release?.releaseId ?? 'unknown',
+  ].join('|');
+}
+
+/**
+ * Store a pack: never replace a usable one with a worse one, and never let a
+ * worse one squat on the identity of a better one.
+ *
+ * `INSERT OR IGNORE` against the unique partial index is the concurrency
  * story: two tabs, two web instances or a retry racing the original all end up
- * with the row that got there first, and the loser reads it back rather than
- * overwriting. A pack that is not `ready` or `partial` is outside the index, so
- * failed builds can accumulate and be swept without ever competing.
+ * with one winning row, and the loser reads it back rather than overwriting. A
+ * pack that is not `ready` or `partial` is outside the index, so failed builds
+ * can accumulate and be swept without ever competing.
+ *
+ * What IGNORE alone could not express is *completion*. The row id is the
+ * identity of the ground — schema, scope, catalogue, release — so a rebuild
+ * that finally reads the ground a partial pack missed arrives under the same
+ * id, and IGNORE was silently discarding it: one time-starved build became the
+ * truth about a destination for the whole release, measured live when a
+ * metropolitan pack shipped four of six layers empty and no later build could
+ * displace it. So a strictly better pack — a `ready` one over a `partial` one,
+ * or more retained ground in the same state — replaces the row; anything else
+ * is ignored exactly as before. Races still converge: replacement happens only
+ * on strict improvement, so two equal builds keep the first and two unequal
+ * builds keep the better regardless of order.
+ *
+ * The stored pack carries the row's own id, so the artifact that names a pack
+ * names something `getRegionPack` can find. The builder's id is provenance
+ * about one build; the row's id is the identity of the ground.
  *
  * Returns the pack that is actually stored, which may be the other build's.
  */
@@ -210,33 +266,73 @@ export function saveRegionPack(pack: RegionPack): RegionPack {
   const release = pack.releases[0];
   if (!release) return pack;
 
+  const named: RegionPack = { ...pack, id: packRowId(pack) };
+
   const stored = db.transaction((): RegionPack => {
-    db.prepare(
-      `INSERT OR IGNORE INTO region_packs
-         (id, scope_hash, catalog, release_id, schema_version, state, content_hash,
-          record_count, payload_json, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      pack.id,
-      pack.scopeHash,
-      release.catalog,
-      release.releaseId,
-      pack.schemaVersion,
-      pack.state,
-      pack.contentHash,
-      pack.diagnostics.featuresRetained,
-      JSON.stringify(pack),
-      pack.createdAt,
-      pack.refreshRecommendedAfter ?? null,
+    /*
+     * A failed row is not a pack anybody can read, and it must not squat on the
+     * identity of the ground it failed to cover. The sweep below removes them
+     * anyway; this is the case where the sweep did not get to run.
+     */
+    db.prepare(`DELETE FROM region_packs WHERE id = ? AND state NOT IN ('ready', 'partial')`).run(
+      named.id,
     );
 
-    if (!isPackUsable(pack.state)) return pack;
+    const existing = db
+      .prepare(`SELECT state, record_count FROM region_packs WHERE id = ?`)
+      .get(named.id) as { state: string; record_count: number } | undefined;
+    const rank = (state: string): number => (state === 'ready' ? 1 : 0);
+    const strictlyBetter =
+      existing !== undefined &&
+      isPackUsable(named.state) &&
+      (rank(named.state) > rank(existing.state) ||
+        (rank(named.state) === rank(existing.state) &&
+          named.diagnostics.featuresRetained > existing.record_count));
+
+    if (strictlyBetter) {
+      db.prepare(
+        `UPDATE region_packs
+            SET state = ?, content_hash = ?, record_count = ?, payload_json = ?,
+                created_at = ?, expires_at = ?, schema_version = ?
+          WHERE id = ?`,
+      ).run(
+        named.state,
+        named.contentHash,
+        named.diagnostics.featuresRetained,
+        JSON.stringify(named),
+        named.createdAt,
+        named.refreshRecommendedAfter ?? null,
+        named.schemaVersion,
+        named.id,
+      );
+    } else {
+      db.prepare(
+        `INSERT OR IGNORE INTO region_packs
+           (id, scope_hash, catalog, release_id, schema_version, state, content_hash,
+            record_count, payload_json, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        named.id,
+        named.scopeHash,
+        release.catalog,
+        release.releaseId,
+        named.schemaVersion,
+        named.state,
+        named.contentHash,
+        named.diagnostics.featuresRetained,
+        JSON.stringify(named),
+        named.createdAt,
+        named.refreshRecommendedAfter ?? null,
+      );
+    }
+
+    if (!isPackUsable(named.state)) return named;
     const winner = findRegionPack({
-      scopeHash: pack.scopeHash,
+      scopeHash: named.scopeHash,
       catalog: release.catalog,
       releaseId: release.releaseId,
     });
-    return winner ?? pack;
+    return winner ?? named;
   })();
 
   pruneRegionPacks();

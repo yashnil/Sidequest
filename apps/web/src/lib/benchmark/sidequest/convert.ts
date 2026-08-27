@@ -343,7 +343,14 @@ function toBlock(item: ItineraryItem, places: PlaceIndex, sources: SourceLedger)
     place: item.placeId ? refFor(item.placeId, item.title, places) : null,
     travel: item.travel
       ? {
-          mode: TRAVEL_MODE[item.travel.mode],
+          /*
+           * A leg whose mode is a stand-in converts as `unknown`, which is the
+           * neutral schema's own word for it. Handing over `walk` would enter a
+           * proxy for an unpriceable scheduled journey into the evaluation as a
+           * walk — the same substitution the itinerary itself stopped making,
+           * one layer out, where a grader would read it as a claim.
+           */
+          mode: item.travel.unverifiedScheduled ? 'unknown' : TRAVEL_MODE[item.travel.mode],
           from: refFor(item.travel.fromId, item.travel.fromName, places),
           to: refFor(item.travel.toId, item.travel.toName, places),
           minutes: item.travel.minutes,

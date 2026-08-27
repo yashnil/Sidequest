@@ -2,6 +2,7 @@ import type { TransportMode } from '../schemas/access';
 import type { PlaceEvidence } from '../schemas/evidence';
 import type { Place } from '../schemas/place';
 import { REACH_MODE_PHRASE } from '../travel/reach';
+import { KIND_ONLY_SHARE } from './significance';
 
 /**
  * The standing model reaches consumers through the quality module's one door.
@@ -193,6 +194,29 @@ export interface QualityInput {
    * question. Optional alongside `detourMinutes`, absent when it is.
    */
   detourMode?: TransportMode;
+  /**
+   * WHETHER THOSE MINUTES ARE THE JOURNEY, OR A STAND-IN FOR ONE NOBODY PRICED.
+   *
+   * `transitBlindWalk` asked of this candidate's own reach: the compilation
+   * signed that nothing could time a scheduled route, the destination evidence
+   * observes a scheduled network, and the walk is past what the traveller said
+   * they would walk. Where that holds, the minutes above are a pedestrian clock
+   * standing in for a train, and the refusal sentence may not be built out of
+   * them.
+   *
+   * The live skip list is what this exists to stop: "1 hr 29 min each way on
+   * foot is past how far you said you would go", over the principal temple of a
+   * city with a metro, for a traveller who chose public transport. Every clause
+   * of that sentence is false — it is not how far away the place is, it is not
+   * how they would go, and it was not their answer that ruled it out. It was
+   * our missing timetable, and the traveller was billed for it.
+   *
+   * Optional, and absent means "the walk is the journey", which is the ordinary
+   * case and keeps every caller written before the distinction exactly as it
+   * was. It is a fact about the trip's travel evidence and can only be supplied
+   * by whoever holds it; nothing here may infer it from a duration.
+   */
+  journeyUnverified?: boolean;
   /** How many already-ranked candidates share this category. */
   categoryCount: number;
   /** True when something larger already covers this ground. */
@@ -208,8 +232,28 @@ export interface QualityInput {
 }
 
 export interface QualitySignals {
-  /** 0–1. How many evidence dimensions produced anything at all. */
+  /**
+   * 0–1. How many evidence dimensions produced anything at all.
+   *
+   * **A verification signal, never a rank.** It decides whether a candidate is
+   * a name-and-a-coordinate (`insufficient_evidence`), whether its card needs a
+   * "we could not confirm" warning (`low_confidence`), and it may break a tie
+   * between candidates the honest dimensions cannot separate — its §7 job, all
+   * of it. It holds no share of `score`, because a count of filled-in fields is
+   * a fact about somebody's database and §8.3 bans ranking on that: a chain
+   * café with posted hours and a website out-completed a famous garden on a
+   * live Tokyo board, and took the garden's seat at the final cut.
+   */
   evidenceCompleteness: number;
+  /**
+   * 0–1 composed kind-and-evidence significance, straight off the place.
+   *
+   * Present only where a producer composed it (`experienceSignificanceOf`, the
+   * §8.3 dimension); absent means nobody could, which is a different claim
+   * from a low value and is recorded as such. The score substitutes a neutral
+   * read for the absence — see `UNKNOWN_SIGNIFICANCE_READ`.
+   */
+  experienceSignificance?: number;
   /** An official voice said something about this. */
   officialCorroboration: boolean;
   /** Something indicates the public is expected: hours, a fee, a website. */
@@ -221,6 +265,27 @@ export interface QualitySignals {
   categorySaturation: number;
 }
 
+/**
+ * WHAT KIND OF STATEMENT THE REASON IS — BECAUSE A HEADING CLAIMS ONE OF THEM.
+ *
+ * `reason` is one sentence, and the surfaces that render it put a heading over
+ * it that makes its own claim. "Worth skipping · Popular or nearby, and still a
+ * poor match for how you said you travel" is a claim about *this traveller's
+ * fit*; "Too little is published about this for us to plan a visit around it"
+ * is a claim about *our evidence*; "Shut, or out of season, on the dates you
+ * are travelling" is a claim about *the trip*. On the delivered packets the
+ * first heading stood over sentences of all three kinds, so a traveller reading
+ * "we could not confirm this" was told the product had weighed the place
+ * against their answers and rejected it. It had not, and the two are acted on
+ * differently: a fit refusal is settled, an evidence gap is something they can
+ * go and close in a browser tab.
+ *
+ * Three values because there are three kinds of sentence in `reasonFor`, and a
+ * surface routes on the code rather than pattern-matching the prose.
+ */
+export const REASON_BASES = ['fit_judgement', 'evidence_gap', 'trip_state'] as const;
+export type ReasonBasis = (typeof REASON_BASES)[number];
+
 export interface QualityAssessment {
   signals: QualitySignals;
   /** 0–1, and the only number the ranker sorts on. */
@@ -228,6 +293,13 @@ export interface QualityAssessment {
   outcome: CandidateOutcome;
   /** One sentence a person could argue with. Rendered as-is on the board. */
   reason: string;
+  /**
+   * Which of the three claims `reason` makes. A surface whose heading asserts
+   * one of them may render only the reasons that make it, and must say less
+   * about the rest rather than filing them under a heading that misdescribes
+   * them.
+   */
+  reasonBasis: ReasonBasis;
 }
 
 /**
@@ -297,6 +369,18 @@ function hasPublicVisitationEvidence(place: Place, evidence: PlaceEvidence | und
   return evidence?.suggestedDurationMinutes !== undefined;
 }
 
+/**
+ * What the ranker reads when no producer composed an experience significance.
+ *
+ * The neutral middle, for the same reason `routeFeasibility` reads 0.5 when no
+ * journey was measured: a 1 would reward a record for coming from a producer
+ * that never asked the question, a 0 would punish it for the same, and neither
+ * is a fact about the place. Compiled packs compose the score on every record;
+ * the live map fallback does not, and within either producer the read is
+ * uniform, so it never reorders candidates against each other dishonestly.
+ */
+export const UNKNOWN_SIGNIFICANCE_READ = 0.5;
+
 export function assessCandidateQuality(input: QualityInput): QualityAssessment {
   const { place, evidence } = input;
 
@@ -321,6 +405,9 @@ export function assessCandidateQuality(input: QualityInput): QualityAssessment {
 
   const signals: QualitySignals = {
     evidenceCompleteness,
+    ...(place.experienceSignificance !== undefined
+      ? { experienceSignificance: place.experienceSignificance }
+      : {}),
     officialCorroboration,
     publicVisitation,
     scale,
@@ -329,14 +416,31 @@ export function assessCandidateQuality(input: QualityInput): QualityAssessment {
   };
 
   /**
-   * The score. Fit leads, because the product ranks by fit; evidence is the
-   * second term, because a place we cannot describe is a place we cannot
-   * recommend; and the rest are penalties rather than credits, so a candidate
+   * The score. Fit leads, because the product ranks by fit; **significance is
+   * the second term**, because whether a place is worth a traveller's attention
+   * is a question about the world, not about how completely somebody filled a
+   * listing in; and the rest are penalties rather than credits, so a candidate
    * never climbs by being small and near.
+   *
+   * `evidenceCompleteness` held this quarter-share until 16B stage 8d, and the
+   * consequence was measured on a live Tokyo pack: the final board cut ranked
+   * on `fit·0.5 + completeness·0.25`, so a memorial plaque carrying a website
+   * attribute (completeness 0.29, significance 0.22) held a seat at 0.671
+   * while the city's headline imperial garden — significance 0.81 but a
+   * thinner record — was cut at 0.571. That is §8.3's metadata heuristic
+   * deciding a quarter of the last rung. Completeness now informs the
+   * verification labels below and may break ties between candidates the honest
+   * dimensions cannot separate; it holds no share of this number.
+   *
+   * The significance read is the §8.3 dimension the phase built for exactly
+   * this: kind prior bounded at `KIND_ONLY_SHARE`, established evidence
+   * bounded by the channel table, no count reaching it by any path — see
+   * `composeExperienceSignificance`.
    */
+  const significance = place.experienceSignificance ?? UNKNOWN_SIGNIFICANCE_READ;
   let score =
     input.fitScore * 0.5 +
-    evidenceCompleteness * 0.25 +
+    significance * 0.25 +
     routeFeasibility * 0.15 +
     (officialCorroboration ? 0.1 : 0);
 
@@ -358,7 +462,41 @@ export function assessCandidateQuality(input: QualityInput): QualityAssessment {
   score = Math.max(0, Math.min(1, score));
 
   const outcome = decideOutcome(input, signals, score);
-  return { signals, score, outcome, reason: reasonFor(outcome, input, signals) };
+  return {
+    signals,
+    score,
+    outcome,
+    reason: reasonFor(outcome, input, signals),
+    reasonBasis: reasonBasisFor(outcome, input),
+  };
+}
+
+/**
+ * The basis of the sentence `reasonFor` will produce, decided from the same two
+ * inputs so the pair cannot disagree.
+ *
+ * `not_worth_detour` is the one outcome that produces sentences of two
+ * different kinds, and it splits on exactly the condition `reasonFor` splits
+ * on: an unpriced journey is our gap, and a measured one past a stated
+ * tolerance is the traveller's own answer.
+ */
+function reasonBasisFor(outcome: CandidateOutcome, input: QualityInput): ReasonBasis {
+  switch (outcome) {
+    case 'insufficient_evidence':
+    case 'low_confidence':
+      return 'evidence_gap';
+    case 'redundant':
+    case 'closed_or_unavailable':
+      return 'trip_state';
+    case 'not_worth_detour':
+      return input.journeyUnverified &&
+        input.detourMinutes !== undefined &&
+        input.detourMinutes > input.detourToleranceMinutes
+        ? 'evidence_gap'
+        : 'fit_judgement';
+    default:
+      return 'fit_judgement';
+  }
 }
 
 function decideOutcome(
@@ -382,9 +520,26 @@ function decideOutcome(
    * no usable description, no official page, no price, no hours and no stated
    * duration is a name and a coordinate. That is the generic shape of the defect
    * the live evaluations surfaced.
+   *
+   * **Established significance is evidence too, and this gate has to hear it.**
+   * A composed significance above `KIND_ONLY_SHARE` cannot be reached on the
+   * kind prior alone — arithmetic, not convention — so it means somebody
+   * outside the record vouched for this place: an encyclopaedic entry or
+   * article, a second catalogue, a designation with a drawn boundary, an
+   * authority publication. A record the world has vouched for is not a name
+   * and a coordinate however few practical fields anyone filled in, and
+   * dropping it here was this defect one rung later: on the live Tokyo replay
+   * an encyclopaedically-noted canal (significance 0.66) was discarded as
+   * `insufficient_evidence` because its *description was short*. It keeps its
+   * verification label — unknown hours still read `low_confidence` below —
+   * which is the honest split: completeness gates what we can *confirm*, never
+   * what exists. The raw field is read, not the ranker's neutral substitute:
+   * an absence means nobody composed the score, and an absence must never
+   * open a gate.
    */
+  const worldEstablished = (input.place.experienceSignificance ?? 0) > KIND_ONLY_SHARE;
   const floor = signals.scale === 'micro' ? 0.34 : 0.09;
-  if (signals.evidenceCompleteness < floor && !signals.publicVisitation) {
+  if (signals.evidenceCompleteness < floor && !signals.publicVisitation && !worldEstablished) {
     return 'insufficient_evidence';
   }
 
@@ -465,6 +620,24 @@ function reasonFor(
         ? 'A small mapped feature with nothing published about it — a nice thing to pass, not a stop to plan.'
         : 'Too little is published about this for us to plan a visit around it.';
     case 'not_worth_detour':
+      /*
+       * A JOURNEY NOBODY COULD PRICE IS NOT THE TRAVELLER'S FAULT, AND NOT A
+       * CLOCK.
+       *
+       * Asked before the distance sentence, because the distance sentence is
+       * built out of the two things that are untrue here: a walking clock for a
+       * ride, and "you said" for an answer that ruled nothing out. See
+       * `journeyUnverified`. What is left is what is true — nobody could
+       * confirm a route — and it names our gap rather than their preference,
+       * which is also the only version of this a traveller can act on.
+       */
+      if (
+        input.journeyUnverified &&
+        input.detourMinutes !== undefined &&
+        input.detourMinutes > input.detourToleranceMinutes
+      ) {
+        return 'We could not confirm any route here, so we cannot say how far away it really is.';
+      }
       return input.detourMinutes !== undefined &&
         input.detourMinutes > input.detourToleranceMinutes
         ? `${humaneMinutes(Math.round(input.detourMinutes))} each way${input.detourMode ? ` ${REACH_MODE_PHRASE[input.detourMode]}` : ''} is past how far you said you would go.`

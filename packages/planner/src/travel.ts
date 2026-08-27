@@ -37,11 +37,13 @@ export {
    */
   deriveModelledWalk,
   detourToleranceMinutesFor,
+  DETOUR_STRETCH_MULTIPLIER,
   MODELLED_WALK_KMH,
   permittedModesFor,
   reachFromBase,
   resolveCandidateReach,
   resolveLeg,
+  scheduledTransportUnmeasured,
   transitModeOf,
   travelBucketFor,
   travelKnowledgeFor,

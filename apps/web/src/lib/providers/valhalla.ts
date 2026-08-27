@@ -33,11 +33,26 @@ export const MAX_MATRIX_PAIRS_PER_REQUEST = 400;
 
 export class RoutingError extends Error {
   readonly code: 'not_configured' | 'rate_limited' | 'request_failed' | 'malformed_response';
+  /**
+   * True when the service *rejected this request* rather than failing to
+   * answer — a 4xx other than 429. The distinction is load-bearing twice: a
+   * deterministic rejection is a fact about the request (its size, its
+   * costing's limits) and must not count towards the circuit breaker that
+   * exists for outages, and it is the failure shape worth subdividing — the
+   * same pairs asked for in smaller rectangles can succeed where the covering
+   * request could not.
+   */
+  readonly deterministic: boolean;
 
-  constructor(code: RoutingError['code'], message: string) {
+  constructor(
+    code: RoutingError['code'],
+    message: string,
+    options: { deterministic?: boolean } = {},
+  ) {
     super(message);
     this.name = 'RoutingError';
     this.code = code;
+    this.deterministic = options.deterministic ?? false;
   }
 }
 
@@ -193,6 +208,13 @@ async function fetchBlock(
   costing: ValhallaCosting,
   options: MatrixOptions,
   circuit?: CircuitState,
+  /**
+   * Attempts for *this* request. Subdivided children pass 1: their parent has
+   * just established what the service does with a request of this shape, and a
+   * smaller request is cheaper for the server, so re-running the full backoff
+   * ladder per child would multiply wall-clock for nothing.
+   */
+  maxAttempts: number = MAX_ATTEMPTS,
 ): Promise<{ minutes: number[][]; km: number[][] }> {
   if (circuit?.open) {
     throw new RoutingError('request_failed', 'The routing service stopped answering.');
@@ -210,7 +232,7 @@ async function fetchBlock(
   let text = '';
   let lastError: RoutingError | null = null;
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (attempt > 0) await sleep(BACKOFF_MS[attempt] ?? 4_000);
     await nextSlot();
 
@@ -241,10 +263,14 @@ async function fetchBlock(
       /*
        * A 4xx other than 429 is us, not them — a malformed request retried three
        * times is three identical rejections. Only 5xx and transport failures are
-       * worth another attempt.
+       * worth another attempt. The rejection is marked deterministic: it is a
+       * fact about this request, not about the service's health.
        */
-      lastError = new RoutingError('request_failed', 'The routing service did not answer.');
-      if (response.status < 500) break;
+      const deterministic = response.status < 500;
+      lastError = new RoutingError('request_failed', 'The routing service did not answer.', {
+        deterministic,
+      });
+      if (deterministic) break;
       continue;
     }
 
@@ -254,7 +280,15 @@ async function fetchBlock(
   }
 
   if (lastError) {
-    if (circuit) {
+    /*
+     * Only an *unanswered* request is evidence the service has stopped
+     * answering. A deterministic rejection used to count here, and the
+     * consequence was wholesale: one request the service will never accept —
+     * a pedestrian matrix with a beyond-limit pair in it — was retried across
+     * consecutive blocks, tripped the breaker, and every block after it was
+     * discarded unasked. The breaker exists for outages; a 400 is an answer.
+     */
+    if (circuit && !lastError.deterministic) {
       circuit.consecutiveFailures += 1;
       if (circuit.consecutiveFailures >= CIRCUIT_THRESHOLD) circuit.open = true;
     }
@@ -402,35 +436,145 @@ async function resolveBlock(
     return { minutes, km, served, bought: 0, calls: 0, overBudget: true };
   }
 
+  /**
+   * A FAILED RECTANGLE DEGRADES BY SUBDIVISION, NEVER WHOLESALE.
+   *
+   * The API takes rectangles and answers or refuses them whole, and both of
+   * its refusal shapes are about the *request*, not about every pair in it: a
+   * costing's service limits reject a matrix containing one beyond-range pair
+   * with a 4xx, and a pedestrian expansion over one far-out point can outgrow
+   * the timeout that a smaller request sits comfortably inside. Treating
+   * either as "these 400 pairs cannot be routed" is how one distant seat
+   * poisoned a whole walkable metropolis: the foot matrix came back with
+   * fewer than two points, the car retry succeeded, and a car-free traveller
+   * was handed a driving matrix their planner rightly refused stop by stop —
+   * eleven refusals, zero plan.
+   *
+   * So a failed rectangle is split into quadrants and each is asked for on
+   * its own, recursively, to a bounded depth. The poisoned pairs isolate into
+   * the smallest rectangles that still contain them — where they stay
+   * honestly unmeasured (`NaN`, reported as failed pairs) for the transit
+   * seam or the planner's per-stop refusal machinery — and every well-formed
+   * sub-rectangle is measured and kept. Children spend real budget and are
+   * counted; a child the remaining budget cannot cover is left unmeasured
+   * rather than bought, so degradation never widens the spend ceiling. An
+   * open circuit stops the recursion: an outage is not a shape subdivision
+   * can fix.
+   */
+  const MAX_SUBDIVISION_DEPTH = 2;
+  /**
+   * How many *failed* requests one block may absorb before subdivision stops.
+   *
+   * The bound a pathological world needs: a request set the service rejects
+   * entirely would otherwise walk all the way down to per-point probes for
+   * every pair — hundreds of rate-limited calls to learn one fact many times.
+   * Generous enough that a single poisoned point among twenty-five isolates
+   * fully (its block, its quadrants, its rows and its own singletons come to a
+   * few dozen failures at worst); once exceeded, the remaining rectangles stay
+   * honestly unmeasured.
+   */
+  const MAX_FAILED_REQUESTS_PER_BLOCK = 48;
   let calls = 0;
-  for (const group of groups) {
-    const fetched = await fetchBlock(
-      group.rows.map((row) => sources[row]!),
-      group.cols.map((col) => targets[col]!),
-      costing,
-      options,
-      circuit,
-    );
-    calls += 1;
+  let spent = 0;
+  let failedRequests = 0;
 
-    for (let r = 0; r < group.rows.length; r += 1) {
-      for (let c = 0; c < group.cols.length; c += 1) {
-        const value = fetched.minutes[r]?.[c];
-        const distance = fetched.km[r]?.[c];
-        if (value === undefined || !Number.isFinite(value)) continue;
-        const row = group.rows[r]!;
-        const col = group.cols[c]!;
-        minutes[row]![col] = value;
-        km[row]![col] = distance ?? Number.NaN;
-        options.cache?.write(matrixPairCacheKey(sources[row]!, targets[col]!, costing), {
-          minutes: value,
-          km: Number.isFinite(distance) ? (distance as number) : Number.NaN,
-        });
+  const resolveRectangle = async (
+    rowIndexes: readonly number[],
+    colIndexes: readonly number[],
+    depth: number,
+  ): Promise<void> => {
+    const cells = rowIndexes.length * colIndexes.length;
+    if (cells === 0) return;
+    if (circuit?.open) return; // an outage is not a shape subdivision can fix
+    if (spent + cells > budgetRemaining) return; // stays unmeasured, never overspends
+    calls += 1;
+    try {
+      const fetched = await fetchBlock(
+        rowIndexes.map((row) => sources[row]!),
+        colIndexes.map((col) => targets[col]!),
+        costing,
+        options,
+        circuit,
+        depth === 0 ? MAX_ATTEMPTS : 1,
+      );
+      /*
+       * Charged for what was *answered*. A failed request spends a call and a
+       * rate-limit slot but no pair budget — charging failures was tried, and
+       * one dead 400-pair request then starved the budget the subdivided
+       * successes needed: a live build measured one quadrant, ran out of
+       * ledger, and stored a ten-point matrix for a twenty-five point board.
+       */
+      spent += cells;
+      for (let r = 0; r < rowIndexes.length; r += 1) {
+        for (let c = 0; c < colIndexes.length; c += 1) {
+          const value = fetched.minutes[r]?.[c];
+          const distance = fetched.km[r]?.[c];
+          if (value === undefined || !Number.isFinite(value)) continue;
+          const row = rowIndexes[r]!;
+          const col = colIndexes[c]!;
+          minutes[row]![col] = value;
+          km[row]![col] = distance ?? Number.NaN;
+          options.cache?.write(matrixPairCacheKey(sources[row]!, targets[col]!, costing), {
+            minutes: value,
+            km: Number.isFinite(distance) ? (distance as number) : Number.NaN,
+          });
+        }
+      }
+    } catch {
+      failedRequests += 1;
+      if (circuit?.open) return;
+      /* A pair that failed alone is the answer: it stays unmeasured. */
+      if (rowIndexes.length <= 1 && colIndexes.length <= 1) return;
+      if (failedRequests > MAX_FAILED_REQUESTS_PER_BLOCK) return;
+      /**
+       * SUBDIVISION ISOLATES POINTS, NOT RECTANGLES.
+       *
+       * Quadrant halving to `MAX_SUBDIVISION_DEPTH`, then per-row probes, then
+       * per-point probes — because a rectangle abandoned whole at max depth
+       * kills its innocent pairs with it, and on a live build the far seat sat
+       * at the head of the point order, so the abandoned rectangles covered
+       * exactly the mutual legs of the board's top seats: the walkable anchors
+       * lost their rows to a routing *shape* and were peeled as unroutable. At
+       * the end of this ladder the only unmeasured pairs are the ones the
+       * service genuinely refused one by one.
+       */
+      let parts: [readonly number[], readonly number[]][];
+      if (depth < MAX_SUBDIVISION_DEPTH) {
+        const rowHalf = Math.ceil(rowIndexes.length / 2);
+        const colHalf = Math.ceil(colIndexes.length / 2);
+        const rowHalves =
+          rowIndexes.length > 1
+            ? [rowIndexes.slice(0, rowHalf), rowIndexes.slice(rowHalf)]
+            : [rowIndexes];
+        const colHalves =
+          colIndexes.length > 1
+            ? [colIndexes.slice(0, colHalf), colIndexes.slice(colHalf)]
+            : [colIndexes];
+        parts = rowHalves.flatMap((rowsPart) =>
+          colHalves.map((colsPart): [readonly number[], readonly number[]] => [rowsPart, colsPart]),
+        );
+      } else if (rowIndexes.length > 1) {
+        parts = rowIndexes.map((row): [readonly number[], readonly number[]] => [
+          [row],
+          colIndexes,
+        ]);
+      } else {
+        parts = colIndexes.map((col): [readonly number[], readonly number[]] => [
+          rowIndexes,
+          [col],
+        ]);
+      }
+      for (const [rowsPart, colsPart] of parts) {
+        await resolveRectangle(rowsPart, colsPart, depth + 1);
       }
     }
+  };
+
+  for (const group of groups) {
+    await resolveRectangle(group.rows, group.cols, 0);
   }
 
-  return { minutes, km, served, bought, calls, overBudget: false };
+  return { minutes, km, served, bought: spent, calls, overBudget: false };
 }
 
 function sleep(ms: number): Promise<void> {

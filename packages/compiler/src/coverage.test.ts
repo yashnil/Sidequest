@@ -188,6 +188,121 @@ function evidenceOver(shape: readonly number[]): RegionEvidence {
   };
 }
 
+/**
+ * A researched place, with the two things `candidate_quality` has to tell apart.
+ *
+ * `link` is where the operator's URL came from. `'map_tag'` is the production
+ * case — `compile.ts` lifts it off `place.source.url`, `enrich.ts` mints its
+ * claim through `knownClaim`, and `knownClaim` writes no `factId` because there
+ * is no fact: nobody fetched anything. `'fetched'` is the same URL established
+ * by a resolved fact, which is the only version that means a page was read.
+ */
+function researchedPlace(
+  subjectId: string,
+  options: { answers: number; link?: 'map_tag' | 'fetched' },
+): PlaceEvidence {
+  const resolved: ResolvedFact[] = [
+    ...Array.from({ length: options.answers }, (_, index) => ({
+      subjectId,
+      factPath: 'hours.weekly' as const,
+      state: 'verified' as const,
+      acceptedFactId: `fact-${subjectId}-${index}`,
+      factIds: [`fact-${subjectId}-${index}`],
+      independentSources: 1,
+      rationale: 'Stated on the operator’s own page.',
+    })),
+    /*
+     * The shape of a question that was asked and could not be answered. Present
+     * on every real subject, which is why "has a resolved entry" cannot be the
+     * test and the *state* has to be.
+     */
+    {
+      subjectId,
+      factPath: 'cost.admission' as const,
+      state: 'unknown' as const,
+      factIds: [],
+      independentSources: 0,
+      rationale: 'Nothing published said.',
+    },
+  ];
+  return {
+    subjectId,
+    aliases: [],
+    costs: [],
+    closures: [],
+    safety: [],
+    resolved,
+    ...(options.link
+      ? {
+          officialUrl: `https://example.org/${subjectId}`,
+          officialUrlClaim:
+            options.link === 'fetched'
+              ? {
+                  factId: `fact-${subjectId}-site`,
+                  state: 'verified' as const,
+                  factPath: 'identity.officialSite' as const,
+                }
+              : { state: 'single_source' as const, factPath: 'identity.officialSite' as const },
+        }
+      : {}),
+  };
+}
+
+/**
+ * A place with an answer on every evidence path, so the four evidence rows all
+ * grade above the line. Used only to reach the summary's `weak.length === 0`
+ * branch, which is otherwise unreachable and would leave that branch untested.
+ */
+function wellDocumented(subjectId: string): PlaceEvidence {
+  const answered = (factPath: ResolvedFact['factPath']): ResolvedFact => ({
+    subjectId,
+    factPath,
+    state: 'verified',
+    acceptedFactId: `fact-${subjectId}-${factPath}`,
+    factIds: [`fact-${subjectId}-${factPath}`],
+    independentSources: 1,
+    rationale: 'Stated on the operator’s own page.',
+  });
+  return {
+    subjectId,
+    aliases: [],
+    costs: [
+      {
+        kind: 'admission',
+        free: false,
+        money: {
+          amount: 10,
+          currency: 'USD',
+          unit: 'per_person',
+          estimated: false,
+          taxesUncertain: false,
+        },
+        advancePurchaseRequired: 'unknown',
+        claim: { state: 'verified' },
+      },
+    ],
+    closures: [],
+    safety: [
+      {
+        statement: 'Bring water on the exposed section.',
+        severity: 'informs',
+        requires: [],
+        claim: { state: 'verified' },
+      },
+    ],
+    resolved: [
+      answered('access.method'),
+      answered('booking.required'),
+      answered('cost.admission'),
+      answered('safety.caution'),
+    ],
+  };
+}
+
+function evidenceOf(places: readonly PlaceEvidence[]): RegionEvidence {
+  return { version: REGION_EVIDENCE_VERSION, places: [...places], regionSafety: [] };
+}
+
 /** A fact that never expires, so `temporary_access` sees a non-empty table with nothing seasonal in it. */
 function stableFact(id: string): SourceFact {
   return sourceFactSchema.parse({
@@ -201,6 +316,23 @@ function stableFact(id: string): SourceFact {
     retrievedAt: '2026-08-01T00:00:00.000Z',
     derivation: 'directly_stated',
     volatility: 'stable',
+    recheckRequired: false,
+  });
+}
+
+/** A fact that changes with the season, so `temporary_access` has something to report. */
+function seasonalFact(id: string): SourceFact {
+  return sourceFactSchema.parse({
+    id,
+    subjectId: 'subject-0',
+    kind: 'general',
+    statement: 'The north road closes over winter.',
+    authorityKind: 'managing_authority',
+    authorityName: 'Synthetic authority',
+    sourceUrl: 'https://example.org/seasonal',
+    retrievedAt: '2026-08-01T00:00:00.000Z',
+    derivation: 'directly_stated',
+    volatility: 'seasonal_recurring',
     recheckRequired: false,
   });
 }
@@ -453,6 +585,151 @@ describe('access_evidence divides places by places', () => {
   });
 });
 
+describe('candidate_quality counts what came back, not links printed on map records', () => {
+  /**
+   * THE ROW THAT TOLD A TRAVELLER WE HAD READ PAGES NOBODY FETCHED.
+   *
+   * It was `officialUrl !== undefined`, graded as a share of researched places
+   * and printed as "N of M researched places have an official page behind them".
+   * `officialUrl` is filled from the `website` tag that travelled with the map
+   * record — `identity.officialSite` is deliberately never a wanted path, so the
+   * fact branch of that chain is unreachable in production and **every** count
+   * the row produced came from a string in a map record.
+   *
+   * Both halves are asserted: the sentence may not claim a page was read, and
+   * the *grade* may not climb on links alone.
+   */
+  it('refuses a good grade for map records that carry a website nobody opened', () => {
+    const row = rowFor(
+      {
+        ...inputWith(undefined),
+        evidence: evidenceOf(
+          Array.from({ length: 10 }, (_, index) =>
+            researchedPlace(`subject-${index}`, { answers: 0, link: 'map_tag' }),
+          ),
+        ),
+      },
+      'candidate_quality',
+    );
+    /* Ten of ten links used to be a ratio of 1.0, which is `high`. */
+    expect(row.level).not.toBe('high');
+    expect(row.level).toBe('unavailable');
+    expect(row.covered).toBe(0);
+    expect(row.detail).not.toMatch(/have an official page behind them/i);
+    expect(row.detail).toMatch(/Nothing we looked up came back with a published statement/i);
+    /* The links are still reported — as links, and as unopened. */
+    expect(row.detail).toMatch(/10 carry a website the map data listed for them/i);
+    expect(row.detail).toMatch(/nothing here has opened/i);
+  });
+
+  it('grades on the places that came back with something a source states', () => {
+    const row = rowFor(
+      {
+        ...inputWith(undefined),
+        evidence: evidenceOf(
+          Array.from({ length: 10 }, (_, index) =>
+            researchedPlace(`subject-${index}`, {
+              answers: index < 3 ? 2 : 0,
+              /* Every one of them carries a link, so only the answers can move the grade. */
+              link: 'map_tag',
+            }),
+          ),
+        ),
+      },
+      'candidate_quality',
+    );
+    expect(row.covered).toBe(3);
+    expect(row.expected).toBe(10);
+    expect(row.level).toBe('weak');
+    expect(row.detail).toMatch(/^3 of 10 places we looked up came back with something/);
+  });
+
+  it('separates a link a fetched fact established from a link a map record listed', () => {
+    const fetched = rowFor(
+      {
+        ...inputWith(undefined),
+        evidence: evidenceOf([researchedPlace('subject-0', { answers: 1, link: 'fetched' })]),
+      },
+      'candidate_quality',
+    );
+    const listed = rowFor(
+      {
+        ...inputWith(undefined),
+        evidence: evidenceOf([researchedPlace('subject-0', { answers: 1, link: 'map_tag' })]),
+      },
+      'candidate_quality',
+    );
+    /* Same grade — the answer is what grades — and two different sentences. */
+    expect(fetched.level).toBe(listed.level);
+    expect(fetched.detail).not.toMatch(/map data listed/i);
+    expect(listed.detail).toMatch(/1 carry a website the map data listed/i);
+  });
+
+  /**
+   * THE ANTI-VACUITY CASE.
+   *
+   * The three above build their own evidence, so they prove the rule and not the
+   * wiring. This drives the real `compileRegion` over a pack-backed world and
+   * first asserts the world is one where the defect was reachable — it publishes
+   * map-record websites and **not one** of them is backed by a resolved fact —
+   * then asserts the row describes what came back rather than those links.
+   */
+  it('describes a real compilation by what it retrieved, over a pack that publishes links', async () => {
+    const spec = SYNTHETIC_WORLDS.transit_city!;
+    const clarifications: ClarificationSet = {
+      schemaVersion: CLARIFICATION_SET_VERSION,
+      questions: [],
+      answers: [],
+    };
+    const scope = {
+      ...deriveScope({
+        candidate: syntheticCandidate(spec),
+        clarifications,
+        nights: 4,
+        revision: 1,
+      }),
+      confirmedByUser: true,
+    };
+    const result = await compileRegion({
+      compilationId: 'coverage-candidate-quality',
+      scope,
+      dates: ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15'],
+      months: [8],
+      providers: packBackedProviders(spec),
+      now: NOW,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const evidencePlaces = result.region.evidence?.places ?? [];
+    const linked = evidencePlaces.filter((place) => place.officialUrl !== undefined);
+    expect(linked.length, 'the world must publish links for this case to mean anything').toBeGreaterThan(0);
+    expect(
+      linked.filter((place) => place.officialUrlClaim?.factId !== undefined),
+      'not one link in a real compilation is backed by a fetched fact',
+    ).toHaveLength(0);
+
+    const row = result.region.coverage.dimensions.find(
+      (entry) => entry.dimension === 'candidate_quality',
+    );
+    expect(row).toBeDefined();
+    expect(row!.detail).not.toMatch(/have an official page behind them/i);
+    expect(row!.detail).toMatch(/came back with something a published source states/i);
+    expect(row!.detail).toMatch(new RegExp(`${linked.length} carry a website the map data listed`));
+    /*
+     * The number that grades is the count of places that answered, which is a
+     * different number from the link count on this world. Equal counts would let
+     * a link-based grade satisfy this case.
+     */
+    expect(row!.covered).not.toBe(linked.length);
+    expect(row!.covered).toBe(
+      evidencePlaces.filter((place) =>
+        place.resolved.some((fact) => fact.state !== 'unknown' && fact.state !== 'unavailable'),
+      ).length,
+    );
+  });
+});
+
 describe('planner_readiness counts places, not matrix nodes', () => {
   /**
    * `matrix.ids` also holds bases, food venues and gateways. The old test was
@@ -659,6 +936,126 @@ describe('every row’s reason agrees with the grade beside it', () => {
         expect(row.reasons, dimension).not.toContain('fully_covered');
       }
     }
+  });
+});
+
+describe('the summary says when the sources refused', () => {
+  /**
+   * THE GREEN INSTRUMENT DURING A TOTAL OUTAGE.
+   *
+   * The summary knew about the budget running out and said so. It knew nothing
+   * about every provider erroring — which is the failure that happens at three
+   * in the morning, and the one a cached pack hides, because a row whose
+   * evidence came out of the cache grades on the cache. So the top line read
+   * "Everything the planner needs is here, with sources." over a build on which
+   * nothing external answered at all.
+   */
+  const outage = (subjects: number): CoverageInput['gaps'] =>
+    Array.from({ length: subjects }, (_, index) => ({
+      subjectId: `subject-${index}`,
+      reason: 'provider_error' as const,
+      detail: 'The provider returned 503.',
+    }));
+
+  /** Every layer above the line, which is what makes the green branch reachable. */
+  function healthy(): CoverageInput {
+    const base = inputWith({
+      boundaryEvidence: 'published_boundary',
+      placement: { read: 400, placed: 396, inside: 380 },
+    }, 20);
+    return {
+      ...base,
+      hours: {
+        ...NO_HOURS,
+        /*
+         * A published calendar for every place, so `operating_hours` grades
+         * above the line. `always_open` is the simplest kind that carries real
+         * provenance and asserts nothing about a timetable nobody read.
+         */
+        calendars: base.places.map((place) => ({
+          placeId: place.id,
+          kind: 'always_open' as const,
+          admission: {
+            reservationRequired: false,
+            timedEntry: false,
+            permitRequired: false,
+            walkInAllowed: true,
+            capacityLimited: false,
+          },
+          daylightOnly: false,
+          provenance: OFFICIAL,
+        })),
+      } as OperatingHoursDataset,
+      access: {
+        rules: base.places.map((place) => ruleFor(place, OFFICIAL)),
+        services: [crossing('ferry')],
+      },
+      foodVenueCount: 8,
+      foodVenues: base.places.slice(0, 8).map((place) => ({
+        id: `venue-${place.id}`,
+        dietary: [{ tag: 'vegetarian' }],
+      })) as unknown as CoverageInput['foodVenues'],
+      weatherLocations: [
+        {
+          id: 'w-1',
+          label: 'Centre',
+          coordinates: { lat: 1, lng: 1 },
+          elevationMetres: 10,
+          timeZone: 'UTC',
+          placeIds: base.places.map((place) => place.id),
+          limitation: 'One point for the whole area.',
+        },
+      ],
+      facts: [stableFact('fact-a'), seasonalFact('fact-b')],
+      /*
+       * Every evidence row answered, so the only thing that can move the summary
+       * between the two builds below is the refusals.
+       */
+      evidence: evidenceOf(base.places.map((place) => wellDocumented(place.id))),
+      transit: { requested: 10, measured: 10 },
+    };
+  }
+
+  it('does not claim sources on a build where every source refused', () => {
+    const quiet = buildCoverageReport(healthy());
+    const outaged = buildCoverageReport({ ...healthy(), gaps: outage(12) });
+    /*
+     * Asserted, because the case is only meaningful against it: this shape does
+     * reach the green branch, so the difference below can only be the refusals.
+     */
+    expect(quiet.summary).toBe('Everything the planner needs is here, with sources.');
+    expect(outaged.summary).not.toBe(quiet.summary);
+    expect(outaged.summary).not.toMatch(/with sources/i);
+    expect(outaged.summary).toMatch(/12 lookups failed or were turned away/i);
+  });
+
+  it('says it on a partly covered build too, where the green branch is not taken', () => {
+    const partial = buildCoverageReport({ ...inputWith(undefined), gaps: outage(3) });
+    expect(partial.summary).toMatch(/^Enough to plan on, with gaps in/);
+    expect(partial.summary).toMatch(/3 lookups failed or were turned away/i);
+  });
+
+  it('does not report a source that simply had no answer as a refusal', () => {
+    /*
+     * `not_found` and `no_official_source` are answers. Counting them would put
+     * an outage sentence on every ordinary build and teach a reader to ignore it.
+     */
+    const report = buildCoverageReport({
+      ...inputWith(undefined),
+      gaps: [
+        { subjectId: 'a', reason: 'not_found', detail: 'Nothing matched.' },
+        { subjectId: 'b', reason: 'no_official_source', detail: 'No operator page.' },
+      ],
+    });
+    expect(report.summary).not.toMatch(/failed or were turned away/i);
+  });
+
+  it('keeps the budget sentence beside it rather than instead of it', () => {
+    const ledger = new BudgetLedger({ ...DEFAULT_COMPILER_BUDGET, maxSourceSearches: 1 }, NOW.getTime());
+    ledger.take('maxSourceSearches', 5);
+    const report = buildCoverageReport({ ...inputWith(undefined), ledger, gaps: outage(2) });
+    expect(report.summary).toMatch(/2 lookups failed or were turned away/i);
+    expect(report.summary).toMatch(/ran out of lookups/i);
   });
 });
 

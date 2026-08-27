@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useOptimistic, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
 import {
   FACT_PATH_LABELS,
   FACT_VERIFICATION_LABELS,
@@ -11,6 +11,7 @@ import {
   SELECTION_STATUS_LABELS,
   REACH_MODE_PHRASE,
   describeReachFromBase,
+  describeTransitBlindWalk,
   displayNameOf,
   imageryFallbackFor,
   summariseSelections,
@@ -52,6 +53,7 @@ import {
   chipsFor,
   descriptionOf,
   evidenceDisclosureLabel,
+  honestWeatherNote,
   whysForBoard,
   recommendationLabel,
   sharedBoardFacts,
@@ -147,7 +149,7 @@ interface RenderedGroup extends SerializedGroup {
 export function DiscoveryBoardView({
   tripId,
   storedReadiness,
-  groups,
+  groups: incomingGroups,
   initialSelections,
   autoPickNotes,
   hasItinerary,
@@ -184,6 +186,39 @@ export function DiscoveryBoardView({
    */
   imageryPending?: number;
 }) {
+  /*
+   * ONE WEATHER STORY PER PAGE.
+   *
+   * The cards arrive carrying the sentence core composed for their per-day
+   * evidence, and for an *absent* dataset that sentence claims an outage — "we
+   * could not reach a weather source" — on the same page whose weather panel
+   * says "not fetched" with a fetch button. Only this page knows which absence
+   * it is (`weatherFreshness === 'not_fetched'` means no snapshot row exists),
+   * so the notes are reconciled here, once, before anything reads them: the
+   * hoisted banner, the per-card fallbacks and `sharedBoardFacts` all see the
+   * same words. A board whose fetch genuinely failed keeps the outage story.
+   */
+  const groups = useMemo<SerializedGroup[]>(
+    () =>
+      weatherFreshness === 'not_fetched'
+        ? incomingGroups.map((entry) => ({
+            ...entry,
+            candidates: entry.candidates.map((candidate) =>
+              candidate.weather.note
+                ? {
+                    ...candidate,
+                    weather: {
+                      ...candidate.weather,
+                      note: honestWeatherNote(candidate.weather.note, weatherFreshness),
+                    },
+                  }
+                : candidate,
+            ),
+          }))
+        : incomingGroups,
+    [incomingGroups, weatherFreshness],
+  );
+
   /*
    * THE VERSION EVERY NUMBER ON THIS SCREEN BELONGS TO.
    *
@@ -1384,6 +1419,17 @@ function TravelPhrase({
   }
   const { mode, travelMinutes, provenance } = candidate.reach;
   /*
+   * A measured walk whose *verdict* is unknown is the transit-blind case: the
+   * traveller's scheduled modes were never measured, the destination's own
+   * evidence observes a network, and the walking figure is the fallback
+   * network's answer rather than this traveller's journey. The sentence is
+   * minted in the reach module beside the rule that produces the state — the
+   * walk stays a walk, and no transit time is invented for it.
+   */
+  if (candidate.detourClass === 'unknown' && candidate.reach.mode === 'walk') {
+    return <>{describeTransitBlindWalk(travelMinutes, formatMinutes)}</>;
+  }
+  /*
    * A modelled journey says so, in one word.
    *
    * `modelled` here means the road matrix held a distance for the pair and
@@ -1833,12 +1879,23 @@ function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
 
       {unanswered.length > 0 ? (
         <p className="leading-relaxed text-ink-faint">
-          Nobody we could read publishes{' '}
-          {unanswered
-            .slice(0, 4)
-            .map((fact) => FACT_PATH_LABELS[fact.factPath].toLowerCase())
-            .join(', ')}
-          {unanswered.length > 4 ? ` and ${unanswered.length - 4} more` : ''}.
+          {/*
+            De-duplicated before counting: several fact paths carry labels a
+            reader cannot tell apart once lowercased in a running sentence,
+            and a list that says the same thing twice reads as a defect
+            rather than as thoroughness. The remainder is counted over the
+            distinct labels so the arithmetic matches what is printed.
+          */}
+          {(() => {
+            const labels = [
+              ...new Set(unanswered.map((fact) => FACT_PATH_LABELS[fact.factPath].toLowerCase())),
+            ];
+            const shown = labels.slice(0, 4);
+            const rest = labels.length - shown.length;
+            return `Nobody we could read publishes ${shown.join(', ')}${
+              rest > 0 ? ` and ${rest} more` : ''
+            }.`;
+          })()}
         </p>
       ) : null}
     </div>

@@ -213,4 +213,26 @@ describe('the browser suite configuration', () => {
     expect(command).not.toContain('SIDEQUEST_COMPILER_PROVIDER=open');
     expect(command).not.toContain('SIDEQUEST_BENCHMARK_MODE=live');
   });
+
+  /**
+   * AND THE OWNERSHIP COOKIE IS NOT ASKED TO CROSS A TRANSPORT IT CANNOT.
+   *
+   * `Secure` belongs on the cookie that owns every trip, and `next start` — what
+   * `npm run start` runs, and what the server below is — reports itself as
+   * production, so the attribute would be set here. This suite is served over
+   * `http://127.0.0.1`, where a Secure cookie is stored only because browsers
+   * treat loopback as trustworthy: a policy in somebody else's software, not a
+   * property of this repository. Since every journey here creates a trip and
+   * then opens it, losing that cookie is the whole suite, so the exemption is
+   * pinned and this is what keeps it pinned.
+   */
+  it('serves the ownership cookie without Secure, the one thing plain http cannot carry', () => {
+    const command = config.webServer?.command ?? '';
+    expect(command, 'the end-to-end server no longer exempts itself from Secure').toContain(
+      'SIDEQUEST_SECURE_COOKIES=off',
+    );
+    expect(config.use?.baseURL, 'the exemption is only honest while the suite is plain http').toMatch(
+      /^http:\/\/(127\.0\.0\.1|localhost)[:/]/,
+    );
+  });
 });

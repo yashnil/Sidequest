@@ -78,6 +78,7 @@ export function ProvisionalBoardView({
   board,
   selections,
   stillRunning,
+  finishedBoardReady = false,
   tripDays,
 }: {
   tripId: string;
@@ -85,6 +86,14 @@ export function ProvisionalBoardView({
   selections: Record<string, ProvisionalIntent | undefined>;
   /** Whether verification is still going. Decides what the footer offers. */
   stillRunning: boolean;
+  /**
+   * Whether the checked, final board exists to link to. The footer used to
+   * announce a board "below" that was not below — this page *is* the
+   * provisional board, and what checking produces lives on `/discover`. When
+   * the check ended without an artifact, the honest offer is the progress
+   * screen, where the failure and the retry both live.
+   */
+  finishedBoardReady?: boolean;
   /**
    * Days the trip runs, so "how much is here" can be answered against something.
    *
@@ -341,12 +350,37 @@ export function ProvisionalBoardView({
       })}
 
       <Panel className="p-5">
+        {/*
+          THE WAY FORWARD, NOT A DESCRIPTION OF A BOARD THAT IS NOT HERE.
+
+          The finished-state sentence used to say "The board below has what
+          survived" — on a page whose cards sit *above* it, about a board that
+          lives on a different route. A traveller who scrolled on found only
+          "Back to progress" and was done: a dead end at the exact moment the
+          product had something to show them. Three states, each with the one
+          link that actually leads somewhere:
+
+          - still checking: reassurance, and the way back to progress;
+          - checked, artifact exists: the finished board, as the primary act;
+          - checked, no artifact: the check stopped — the progress screen has
+            what happened and the way to start it again.
+        */}
         <p className="text-sm leading-relaxed text-ink" data-board-version={summary.boardVersion}>
           {stillRunning
             ? `We are checking the strongest of these now${pinnedCount > 0 ? `, starting with the ${pinnedCount} you marked` : ''}. You can close this page — it carries on without you.`
-            : 'Checking has finished. The board below has what survived, and what did not.'}
+            : finishedBoardReady
+              ? 'Checking has finished. The finished board has what survived — checked travel times, opening evidence and all.'
+              : 'Checking stopped before it finished. The progress page has what happened, and the way to start it again.'}
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
+          {!stillRunning && finishedBoardReady ? (
+            <Link
+              href={`/trips/${tripId}/discover`}
+              className={cx(buttonClass('primary'), MIN_TARGET)}
+            >
+              See the finished board
+            </Link>
+          ) : null}
           <Link href={`/trips/${tripId}/plan`} className={cx(buttonClass('secondary'), MIN_TARGET)}>
             Back to progress
           </Link>

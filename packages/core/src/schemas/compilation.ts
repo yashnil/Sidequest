@@ -161,8 +161,15 @@ export const COMPILATION_ERROR_COPY: Record<CompilationErrorCode, string> = {
   no_plausible_base: 'We could not find anywhere sensible to stay inside that region.',
   provider_unavailable: 'One of our sources did not answer.',
   provider_rate_limited: 'A source asked us to slow down.',
+  /*
+   * Covers both ways a credential can be dead: never set, and set but refused
+   * by the provider. The second is the one that hollowed twelve live builds
+   * silently — the runner now fails those loudly with this code, and the
+   * sentence must not claim "no credentials" at a traveller whose deployment
+   * has a key that simply does not work.
+   */
   provider_credentials_missing:
-    'This build has no credentials for the live sources, so it can only compile regions we already hold.',
+    'This deployment’s credentials for the live sources are missing or not working, so it can only compile regions we already hold. Whoever set this up needs to fix that before new destinations can build.',
   budget_exhausted: 'We ran out of lookups for this trip before we finished.',
   ai_output_malformed: 'A source came back in a shape we could not read, so we did not use it.',
   ai_fact_missing_citation: 'Something came back without a source, so we left it out.',
@@ -216,6 +223,25 @@ export const compilationJobSchema = z.object({
    * trip permanently unable to compile.
    */
   heartbeatAt: z.string().min(1),
+  /**
+   * WHEN THIS JOB WAS PARKED FOR CAPACITY, AND ABSENT WHEN IT NEVER WAS.
+   *
+   * `queued` has always meant two different things — "a row exists and a
+   * process is on its way to it" and, since the deployment gained a bound on
+   * concurrent builds, "nothing is coming yet because somebody else's build
+   * holds the only slot". The screen, the heartbeat rules and the slot count
+   * all need to tell those apart, and the state alone cannot.
+   *
+   * Present ⇒ no process has ever been dispatched for this job, so its silence
+   * proves nothing (see `isAbandoned`) and it occupies a place in the queue
+   * rather than a build slot. Cleared the moment a worker is dispatched.
+   *
+   * Optional rather than defaulted, and the distinction is load-bearing on a
+   * database written before the queue existed: a stored `running` row from then
+   * genuinely had a process, and reading it as "parked" would exempt a real
+   * corpse from reclaim for ever.
+   */
+  waitingSince: z.string().min(1).optional(),
   cancelRequested: z.boolean().default(false),
   errorCode: compilationErrorCodeSchema.optional(),
   errorDetail: z.string().min(1).optional(),
@@ -253,6 +279,18 @@ export const HEARTBEAT_TIMEOUT_MS = 300_000;
 
 export function isAbandoned(job: CompilationJob, now: Date): boolean {
   if (job.state !== 'running' && job.state !== 'queued') return false;
+  /*
+   * A job nobody has dispatched has no process to have died. Abandonment is an
+   * inference from silence, and silence only means death where something was
+   * supposed to be speaking — a build parked behind the deployment's
+   * concurrency bound is silent by design, for as long as the queue ahead of it
+   * takes. Reclaiming those would have failed every queued traveller five
+   * minutes into a wait for a build that legitimately runs twelve.
+   *
+   * How long a parked job may wait is a separate bound with a separate,
+   * truthful sentence; see the queue's wait ceiling in `lib/compiler/limits`.
+   */
+  if (job.waitingSince !== undefined) return false;
   const beat = Date.parse(job.heartbeatAt);
   if (Number.isNaN(beat)) return true;
   return now.getTime() - beat > HEARTBEAT_TIMEOUT_MS;
@@ -417,6 +455,8 @@ export interface StoredJobRow {
   updated_at: string;
   finished_at: string | null;
   heartbeat_at: string;
+  /** Non-null only while the job is parked behind the concurrency bound. */
+  waiting_since?: string | null;
   cancel_requested: number;
   error_code: string | null;
   error_detail: string | null;
@@ -478,6 +518,7 @@ export function decodeStoredJob(row: StoredJobRow): CompilationJob | null {
     updatedAt: row.updated_at,
     ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
     heartbeatAt: row.heartbeat_at,
+    ...(row.waiting_since ? { waitingSince: row.waiting_since } : {}),
     cancelRequested: row.cancel_requested === 1,
     ...(row.error_code ? { errorCode: row.error_code } : {}),
     ...(row.error_detail ? { errorDetail: row.error_detail } : {}),
@@ -504,6 +545,7 @@ export function decodeStoredJob(row: StoredJobRow): CompilationJob | null {
     updatedAt: row.updated_at,
     ...(row.finished_at ? { finishedAt: row.finished_at } : {}),
     heartbeatAt: row.heartbeat_at,
+    ...(row.waiting_since ? { waitingSince: row.waiting_since } : {}),
     cancelRequested: row.cancel_requested === 1,
     ...(row.error_code ? { errorCode: row.error_code } : {}),
     ...(row.error_detail ? { errorDetail: row.error_detail } : {}),

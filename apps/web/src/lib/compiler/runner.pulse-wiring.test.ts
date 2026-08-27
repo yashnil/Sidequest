@@ -199,4 +199,43 @@ describe('runCompilation installs the pulse around the compile call', () => {
     releaseStage?.();
     await run;
   });
+
+  /**
+   * STOP, WHEN THE WORKER HAD NOT STARTED YET.
+   *
+   * `markJobRunning` was an unguarded write of `state = 'running'`, so a job
+   * cancelled between the click that queued it and the worker that picked it up
+   * came *back to life* — and then spent its whole budget, because the pulse
+   * stops on a terminal state and this one no longer had one. The window is not
+   * theoretical: spawning a Node process and loading the compiler is the
+   * slowest part of a build's first second, and Stop is offered from the moment
+   * the progress screen renders.
+   *
+   * Asserted at the seam that costs money: the compiler is never reached.
+   */
+  it('never compiles a job that was stopped before this process took it', async () => {
+    const { getTrip } = await import('../db/repository');
+    const { getJob, requestCancel } = await import('../db/compiler-repository');
+    const { runCompilation } = await import('./runner');
+
+    const { tripId, jobId } = await seededConfirmedTrip();
+    requestCancel(tripId, new Date());
+
+    const run = runCompilation({ trip: getTrip(tripId)!, jobId });
+    try {
+      // Every chance to reach the compiler, on the same microtask budget the
+      // barrier above uses. A run that has not entered the stage by now is a
+      // run that never will.
+      for (let turn = 0; turn < 50; turn += 1) await Promise.resolve();
+      expect(stageEntered, 'a stopped build reached the compiler and started spending').toBeNull();
+    } finally {
+      // Only reachable when the guard failed and the stage really is parked.
+      releaseStage?.();
+    }
+
+    expect(await run).toBeNull();
+    // …and the traveller's verdict is still theirs, not overwritten by ours.
+    expect(getJob(jobId)!.state).toBe('cancelled');
+    expect(getJob(jobId)!.errorCode).toBe('cancelled_by_user');
+  });
 });

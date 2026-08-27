@@ -80,9 +80,35 @@ describe('the daily spend gate', () => {
   it('treats a malformed ceiling as the default, never as unlimited', async () => {
     process.env.SIDEQUEST_DAILY_LIVE_COMPILATIONS = 'lots';
     const { dailyLiveCompilationCeiling, dailyModelCallCeiling } = await import('./daily-ceiling');
-    expect(dailyLiveCompilationCeiling()).toBe(20);
+    expect(dailyLiveCompilationCeiling()).toBe(60);
     process.env.SIDEQUEST_DAILY_MODEL_CALLS = '-4';
-    expect(dailyModelCallCeiling()).toBe(300);
+    expect(dailyModelCallCeiling()).toBe(800);
+  });
+
+  /**
+   * THE DEFAULTS ARE A LAUNCH DECISION, SO THEY ARE PINNED LIKE ONE.
+   *
+   * Twenty builds a day is not a hundred-user launch: a quarter of a hundred
+   * travellers building twice each is fifty-five, and the first hundred people
+   * to try a product are the ones who must not be told to come back tomorrow.
+   * The arithmetic behind both numbers is written out in the module header; this
+   * exists so lowering them back is a decision somebody makes on purpose.
+   */
+  it('is sized for the launch cohort, and a caller gets a tenth of it', async () => {
+    const { dailyLiveCompilationCeiling, dailyModelCallCeiling, dailySpendGate, recordDailySpend } =
+      await import('./daily-ceiling');
+
+    expect(dailyLiveCompilationCeiling()).toBe(60);
+    expect(dailyModelCallCeiling()).toBe(800);
+
+    // Six builds a day from one browser — more than the previous default
+    // allowed, and it now takes ten distinct browsers to exhaust the day.
+    for (let index = 0; index < 6; index += 1) {
+      expect(dailySpendGate(NOW, 'session:abc').allowed).toBe(true);
+      recordDailySpend('live_compilations', 1, NOW, 'session:abc');
+    }
+    expect(dailySpendGate(NOW, 'session:abc').allowed).toBe(false);
+    expect(dailySpendGate(NOW, 'session:xyz').allowed).toBe(true);
   });
 
   it('honours an explicit zero as "no live builds today"', async () => {
@@ -105,11 +131,11 @@ describe('the daily spend gate', () => {
  */
 describe('the per-caller share of the day', () => {
   it('refuses one caller while the deployment still has room', async () => {
-    process.env.SIDEQUEST_DAILY_LIVE_COMPILATIONS = '20';
+    process.env.SIDEQUEST_DAILY_LIVE_COMPILATIONS = '50';
     const { dailySpendGate, recordDailySpend } = await import('./daily-ceiling');
 
-    // A quarter of twenty is five. The sixth start from this browser is
-    // refused; the deployment has spent five of twenty and is wide open.
+    // A tenth of fifty is five. The sixth start from this browser is refused;
+    // the deployment has spent five of fifty and is wide open.
     for (let index = 0; index < 5; index += 1) {
       expect(dailySpendGate(NOW, 'session:abc').allowed).toBe(true);
       recordDailySpend('live_compilations', 1, NOW, 'session:abc');
@@ -145,11 +171,42 @@ describe('the per-caller share of the day', () => {
     /*
      * An internal caller — a worker, the benchmark driver, a test — has no
      * identity, and inventing one would hand every request its own fresh
-     * allowance, which is worse than having none.
+     * allowance, which is worse than having none. *Absent*, not null: the two
+     * are different arguments and the test below is the reason.
      */
     process.env.SIDEQUEST_DAILY_LIVE_COMPILATIONS = '20';
     const { dailySpendGate, recordDailySpend } = await import('./daily-ceiling');
     for (let index = 0; index < 10; index += 1) recordDailySpend('live_compilations', 1, NOW);
+    expect(dailySpendGate(NOW).allowed).toBe(true);
+  });
+
+  /**
+   * DECLINING THE COOKIE WAS A DISCOUNT.
+   *
+   * The share is keyed on a session cookie, and a caller is free not to return
+   * one. That made refusing identity *strictly better* than presenting it: an
+   * attributed browser got a tenth of the day, and an anonymous caller — charged
+   * to the deployment row and nothing else — had the whole of it. The fix is not
+   * a better identity, because there is not one to be had here; it is that
+   * everybody who cannot be told apart shares one allowance between them.
+   */
+  it('charges every request it cannot attribute to one shared pool', async () => {
+    process.env.SIDEQUEST_DAILY_LIVE_COMPILATIONS = '50';
+    const { dailySpendGate, recordDailySpend } = await import('./daily-ceiling');
+
+    // Five anonymous starts — from five different connections, for all anyone
+    // here can tell — and the sixth is refused, exactly as one browser's would be.
+    for (let index = 0; index < 5; index += 1) {
+      expect(dailySpendGate(NOW, null).allowed).toBe(true);
+      recordDailySpend('live_compilations', 1, NOW, null);
+    }
+    const anonymous = dailySpendGate(NOW, null);
+    expect(anonymous.allowed, 'declining identity bought a bigger allowance').toBe(false);
+    if (!anonymous.allowed) expect(anonymous.message).toContain('your share');
+
+    // A traveller who does present a cookie is unaffected, and so is the
+    // deployment: forty-five of fifty are still there for everybody else.
+    expect(dailySpendGate(NOW, 'session:honest').allowed).toBe(true);
     expect(dailySpendGate(NOW).allowed).toBe(true);
   });
 });
@@ -181,7 +238,7 @@ describe('reserving model calls outside a compilation', () => {
   });
 
   it('runs out for one caller at their share, while the deployment has room', async () => {
-    process.env.SIDEQUEST_DAILY_MODEL_CALLS = '20';
+    process.env.SIDEQUEST_DAILY_MODEL_CALLS = '50';
     const { dailySpendSoFar, reserveModelCalls } = await import('./daily-ceiling');
     for (let index = 0; index < 5; index += 1) {
       expect(reserveModelCalls(1, { now: NOW, caller: 'session:abc' }).allowed).toBe(true);

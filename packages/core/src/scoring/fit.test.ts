@@ -297,6 +297,17 @@ describe('explanations', () => {
         inKnowledgeBase: true,
         encyclopaedicArticle: true,
         crossDatasetCorroboration: true,
+        /*
+         * And the magnitude behind the notice, which the bar now requires: the
+         * three presence statements alone stop at `MINTED_NOTICE_PROMINENCE`,
+         * because a catalogue mints them for every municipal park it maps. A
+         * fixture without this would be asserting the tourist-trap branch off a
+         * record the model no longer calls widely noted — the dead branch this
+         * test was written to prevent, one rung along.
+         */
+        classifyingValues: ['leisure=nature_reserve'],
+        mappedExtentMetres: 2_600,
+        groundWitnessCount: 5,
       }),
     );
     expect(noted.popularityScore).toBeGreaterThanOrEqual(WIDELY_NOTED_PROMINENCE);
@@ -701,31 +712,337 @@ describe('zero-verified-evidence candidates cannot overclaim', () => {
   });
 });
 
-describe('"why this fits" is never a tautology', () => {
-  const TAUTOLOGY = /and that is what this delivers\.$/;
+/**
+ * §9.2 — THE REASON HIERARCHY, AND THE CLAUSES IT IS ALLOWED TO MAKE.
+ *
+ * Measured on a live Tokyo board, eleven of twenty-one card reasons were the
+ * logistics-only travel-time form and only two named a graded interest — on a
+ * board whose scorer knew the graded levels, the matched interests and every
+ * place's own description. The suites below hold the composer to the repaired
+ * contract: lead with the strongest true connection, name what the place
+ * concretely offers, append logistics rather than leading with them, and never
+ * make a claim whose backing field is absent.
+ */
+const REASON_VARIANTS: Partial<QuestionnaireAnswers>[] = [
+  MAMMOTH_HIKER_ANSWERS,
+  { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'deep_cuts', crowdTolerance: 'avoid_crowds' },
+  { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'mostly_classics', pace: 'fast' },
+];
 
-  it('never shows the interest sentence alone, on any traveller variant', () => {
-    const variants: Partial<QuestionnaireAnswers>[] = [
-      MAMMOTH_HIKER_ANSWERS,
-      { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'deep_cuts', crowdTolerance: 'avoid_crowds' },
-      { ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'mostly_classics', pace: 'fast' },
-    ];
-    for (const variant of variants) {
+describe('§9.2 — the reason names the offer, never the tautology', () => {
+  it('never emits "you like X; this is X" without naming what the place offers', () => {
+    for (const variant of REASON_VARIANTS) {
       for (const candidate of board(variant).candidates) {
-        if (candidate.fit.reasons.length === 1) {
-          expect(candidate.fit.reasons[0]).not.toMatch(TAUTOLOGY);
+        for (const reason of candidate.fit.reasons) {
+          /*
+           * The bare form ends at the claim; the honest form continues into
+           * the place's own substance. The end-anchor is the whole test.
+           */
+          expect(reason).not.toMatch(/and that is what this delivers\.$/);
         }
       }
     }
   });
 
-  it('still says it in company — the sentence is banned alone, not banned', () => {
-    const candidates = board(MAMMOTH_HIKER_ANSWERS).candidates;
-    const accompanied = candidates.filter(
-      (candidate) =>
-        candidate.fit.reasons.length >= 2 &&
-        candidate.fit.reasons.some((reason) => TAUTOLOGY.test(reason)),
+  it('backs every interest sentence with the place’s own description', () => {
+    let sentences = 0;
+    for (const variant of REASON_VARIANTS) {
+      for (const candidate of board(variant).candidates) {
+        for (const reason of candidate.fit.reasons) {
+          if (!reason.startsWith('You marked ')) continue;
+          sentences += 1;
+          expect(reason).toContain(candidate.place.shortDescription.trim());
+        }
+      }
+    }
+    // The sentence exists — the tautology was banned, not the interest.
+    expect(sentences).toBeGreaterThan(0);
+  });
+
+  it('speaks to the interest the place leads with, not the loudest grade on the profile', () => {
+    /*
+     * Convict Lake is a lake first and a viewpoint fourth; this traveller
+     * grades scenic viewpoints higher than lakes. The honest sentence connects
+     * them through what the place actually is, not through whichever of their
+     * grades is loudest.
+     */
+    const convict = find(board().candidates, 'convict-lake');
+    expect(convict.fit.reasons[0]).toContain('lakes & rivers');
+  });
+});
+
+describe('§9.2 — logistics may append, never lead over a personal reason', () => {
+  const LOGISTICS_FORMS = [
+    /min you were happy to travel\.$/,
+    /^Minutes from where you are staying/,
+  ];
+  const isLogistics = (reason: string): boolean =>
+    LOGISTICS_FORMS.some((form) => form.test(reason));
+
+  it('keeps every logistics line behind the personal case, on every card', () => {
+    for (const variant of REASON_VARIANTS) {
+      for (const candidate of board(variant).candidates) {
+        const at = candidate.fit.reasons.findIndex(isLogistics);
+        if (at === -1) continue;
+        // Last place, which also means alone when nothing personal is true.
+        expect(
+          at,
+          `${candidate.place.name} puts logistics ahead of a personal reason`,
+        ).toBe(candidate.fit.reasons.length - 1);
+      }
+    }
+  });
+
+  it('still appends the travel line, quoting the limit the traveller set', () => {
+    expect(find(board().candidates, 'convict-lake').fit.reasons.at(-1)).toContain('60 min');
+  });
+});
+
+describe('§9.2 — no clause without the field that backs it', () => {
+  it('never calls a place an established name below the standing bar', () => {
+    for (const variant of REASON_VARIANTS) {
+      for (const candidate of board(variant).candidates) {
+        if (candidate.place.popularityScore >= WIDELY_NOTED_PROMINENCE) continue;
+        for (const reason of candidate.fit.reasons) {
+          expect(reason).not.toMatch(/established names|names people come here for/);
+        }
+      }
+    }
+  });
+
+  it('never sells fame to a traveller who asked for deep cuts', () => {
+    for (const candidate of board({ ...MAMMOTH_HIKER_ANSWERS, discoveryMix: 'deep_cuts' })
+      .candidates) {
+      for (const reason of candidate.fit.reasons) {
+        expect(reason).not.toMatch(/established names|names people come here for/);
+      }
+    }
+  });
+
+  it('refuses the established-names caption and the classics seat to a bounded standing', () => {
+    /*
+     * The live defect this pins: three suburban micro-sites — a stream-side
+     * spot, a basalt knoll, a pond — rendered under "Classics worth your
+     * time" captioned "One of the established names here", on the strength of
+     * the knowledge-base pair the cataloguing convention mints for nearly
+     * everything. The significance model itself had bounded their evidence
+     * (`significanceBounded`); a caption must not assert what the rank was
+     * refused. Same place, same prominence, flag flipped — the caption and
+     * the classics group must both follow the flag.
+     */
+    const ctx = context({});
+    const built = profile(MAMMOTH_HIKER_ANSWERS, ctx);
+    const base = boardContext(AUGUST_DATES);
+    const withFlag = (bounded: boolean) =>
+      buildDiscoveryBoard({
+        ...base,
+        places: base.places.map((place) =>
+          place.id === 'mammoth-lakes-basin'
+            ? { ...place, ...(bounded ? { significanceBounded: true } : {}) }
+            : place,
+        ),
+        profile: built,
+        travelerNeeds: [],
+      });
+
+    const unbounded = find(withFlag(false).candidates, 'mammoth-lakes-basin');
+    expect(unbounded.group).toBe('must_see_classics');
+
+    const bounded = find(withFlag(true).candidates, 'mammoth-lakes-basin');
+    expect(bounded.group).not.toBe('must_see_classics');
+    for (const reason of bounded.fit.reasons) {
+      expect(reason).not.toMatch(/established names|names people come here for/);
+    }
+  });
+
+  it('never claims a quiet find off a record that is not one', () => {
+    for (const variant of REASON_VARIANTS) {
+      for (const candidate of board(variant).candidates) {
+        if (candidate.place.hiddenGemScore >= 0.6) continue;
+        for (const reason of candidate.fit.reasons) {
+          expect(reason).not.toMatch(/off the standard loop/);
+        }
+      }
+    }
+  });
+
+  it('grants "earns the extra travel" only to a stretch the scorer still rates', () => {
+    let granted = 0;
+    for (const variant of REASON_VARIANTS) {
+      for (const candidate of board(variant).candidates) {
+        for (const reason of candidate.fit.reasons) {
+          if (!/earns the extra travel/.test(reason)) continue;
+          granted += 1;
+          expect(candidate.detourClass).toBe('stretch');
+          expect(['top_pick', 'strong']).toContain(candidate.fit.band);
+        }
+      }
+    }
+    // The label is earnable, or the three assertions above guard nothing.
+    expect(granted).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * §16B — THE RANKING COMPOSITION, AND THE FOUR THINGS IT MUST NOT BREAK.
+ *
+ * `quality/significance.ts` was rewritten so that a category weight is a prior
+ * rather than a multiplicative ceiling. The four guards below are the other
+ * half of that change: the things the repair could plausibly have traded away,
+ * each stated so that it fails if the composition regresses in that direction.
+ *
+ * They are written against `buildDiscoveryBoard` rather than `scorePlace`
+ * because that is the ranking a traveller actually sees, and against the same
+ * authored region every other test in this file uses — with one field varied at
+ * a time, so nothing here can pass by accident of the fixture.
+ */
+describe('§16B — the ranking keeps its dimensions distinct', () => {
+  /** Everything a fully-established place carries, and the fields that read it. */
+  const CANONICAL = standingFields(
+    assessPlaceStanding({
+      inKnowledgeBase: true,
+      encyclopaedicArticle: true,
+      crossDatasetCorroboration: true,
+      classifyingValues: ['leisure=nature_reserve'],
+      namedInRegionRecords: true,
+      publishedSites: ['https://www.parks.example.gov/x'],
+    }),
+  );
+
+  /** The same board, with one place's significance set to a chosen value. */
+  const boardWithSignificance = (
+    placeId: string,
+    experienceSignificance: number,
+    overrides: Partial<QuestionnaireAnswers> = MAMMOTH_HIKER_ANSWERS,
+  ) =>
+    buildDiscoveryBoard({
+      ...boardContext(AUGUST_DATES),
+      places: boardContext(AUGUST_DATES).places.map((place) =>
+        place.id === placeId ? { ...place, experienceSignificance } : place,
+      ),
+      profile: profile(overrides, context({ travelerNeeds: [] })),
+      travelerNeeds: [],
+    });
+
+  it('does not let canonical significance buy a single point of personal fit', () => {
+    /**
+     * THE GUARD THAT WOULD HAVE CAUGHT THE OBVIOUS REPAIR.
+     *
+     * Weighting `experienceSignificance` into the fit score is the tempting way
+     * to make the board notice a landmark, and it was measured before it was
+     * refused: on the §29 B dense-city world it demoted all three `strong` cards
+     * and cost a planned day one of its three stops, because significance
+     * occupies 0.12–0.6 on real records while the nine match factors occupy
+     * 0.75–1.0, and averaging the two just deflates everything compiled.
+     *
+     * Fit answers *does this suit you*. Significance answers *does this matter*.
+     * §9 asks for both, kept apart — so this number must not move when only the
+     * other one does, and the ordering must be composed where ordering happens.
+     */
+    const famous = boardWithSignificance('bodie-state-historic-park', 1);
+    const nobody = boardWithSignificance('bodie-state-historic-park', 0.05);
+    expect(find(famous.candidates, 'bodie-state-historic-park').fit.score).toBe(
+      find(nobody.candidates, 'bodie-state-historic-park').fit.score,
     );
-    expect(accompanied.length).toBeGreaterThan(0);
+    expect(find(famous.candidates, 'bodie-state-historic-park').fit.band).toBe(
+      find(nobody.candidates, 'bodie-state-historic-park').fit.band,
+    );
+  });
+
+  it('refuses a place the traveller ruled out however established it is', () => {
+    /*
+     * A confirmed avoidance is a gate, and no amount of standing may open it. A
+     * composition that let significance out-argue a refusal would be putting a
+     * famous place in a trip the traveller said they did not want it in — §16B's
+     * third guard, and the one a "make landmarks win" change breaks first.
+     */
+    const refused = buildDiscoveryBoard({
+      ...boardContext(AUGUST_DATES),
+      places: boardContext(AUGUST_DATES).places.map((place) =>
+        place.id === 'rainbow-falls'
+          ? { ...place, ...CANONICAL, experienceSignificance: 1 }
+          : place,
+      ),
+      profile: profile(
+        {
+          ...MAMMOTH_HIKER_ANSWERS,
+          interests: interests({
+            ...MAMMOTH_HIKER_ANSWERS.interests,
+            hiking: 'avoid',
+            lakes_and_rivers: 'avoid',
+            photography_golden_hour: 'avoid',
+            scenic_viewpoints: 'avoid',
+          }),
+        },
+        context({ travelerNeeds: [] }),
+      ),
+      travelerNeeds: [],
+    });
+    const candidate = find(refused.candidates, 'rainbow-falls');
+    expect(candidate.place.experienceSignificance).toBe(1);
+    expect(candidate.fit.band).toBe('not_workable');
+    expect(candidate.fit.blockers.map((blocker) => blocker.code)).toContain('avoided_interest');
+  });
+
+  it('still separates two travellers by what they said they liked', () => {
+    /**
+     * §16B's fourth guard, and §9's "category preference" dimension: the
+     * traveller's own ranking of kinds has to keep moving the board. It lives in
+     * `interestMatch` — a preference of theirs, never a prior about kinds — and
+     * the margin has to be a step somebody could see rather than a rounding
+     * artefact, or "personalised" is decoration.
+     */
+    const historian = board({
+      ...MAMMOTH_HIKER_ANSWERS,
+      interests: interests({
+        ...MAMMOTH_HIKER_ANSWERS.interests,
+        history_and_culture: 'core',
+        hiking: 'low',
+      }),
+      maxDailyTravelMinutes: 240,
+      regionalExpansion: 'nearby_120',
+      detourToleranceMinutes: 120,
+    });
+    const walker = board({
+      ...MAMMOTH_HIKER_ANSWERS,
+      interests: interests({
+        ...MAMMOTH_HIKER_ANSWERS.interests,
+        history_and_culture: 'avoid',
+        hiking: 'core',
+      }),
+      maxDailyTravelMinutes: 240,
+      regionalExpansion: 'nearby_120',
+      detourToleranceMinutes: 120,
+    });
+    const historic = 'bodie-state-historic-park';
+    const hike = 'rainbow-falls';
+
+    /* Half a band, in a scoring range where a band is ten points. */
+    expect(
+      find(historian.candidates, historic).fit.score -
+        find(walker.candidates, historic).fit.score,
+    ).toBeGreaterThanOrEqual(5);
+    expect(
+      find(walker.candidates, hike).fit.score - find(historian.candidates, hike).fit.score,
+    ).toBeGreaterThanOrEqual(5);
+    expect(rank(historian.candidates, historic)).toBeLessThan(rank(walker.candidates, historic));
+  });
+
+  it('multiplies no score by a prior about the kind of place it is', () => {
+    /**
+     * The structural half of "no ceiling", asserted where a ceiling would have
+     * to live. Every factor's contribution is its own weight times its own
+     * score, the weights sum to one, and nothing scales the total — so there is
+     * no `f(kind) × everythingElse` for a category prior to hide in. A
+     * multiplicative cap added here would break the identity below on the first
+     * candidate it touched.
+     */
+    for (const candidate of board().candidates) {
+      const summed = candidate.fit.factors.reduce(
+        (total, factor) => total + factor.weight * factor.score,
+        0,
+      );
+      expect(candidate.fit.score).toBe(Math.round(summed * 100));
+    }
   });
 });

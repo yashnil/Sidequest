@@ -4,6 +4,7 @@ import {
   type AccessDataset,
   type ItineraryDay,
   type Region,
+  type TransitEvidence,
   type TransportMode,
   type TransportStrategy,
   type TravelerProfile,
@@ -37,11 +38,45 @@ export interface StrategyInput {
    * that every existing caller has to be revisited at once.
    */
   matrixMode?: 'car' | 'foot' | 'transit';
+  /**
+   * The compiled transit evidence, so the panel's claims about the ground can
+   * be checked against what was actually measured before they are made.
+   *
+   * Optional, and absent means what the artifact means by absence: the trip
+   * was planned around a car and bought no timetables, so nothing here is a
+   * claim about scheduled transport at all.
+   */
+  transit?: TransitEvidence | null;
 }
 
 export function buildTransportStrategy(input: StrategyInput): TransportStrategy {
   const { days, profile, region, dataset, matrixNote, matrixProvenance } = input;
   const matrixMode = input.matrixMode ?? 'car';
+
+  /**
+   * WHETHER "WALKABLE" IS A CLAIM THIS BUILD IS ENTITLED TO MAKE.
+   *
+   * A trip that leans on scheduled transport and measured none of it is a trip
+   * whose walking totals describe our instruments, not the ground. The
+   * compiler signs exactly that state: transit evidence present, zero journeys
+   * measured, absence `unsupported` or `budget_exhausted`. A shipped build in
+   * that state printed "Walk the whole way" and "Everything here is walkable
+   * from your base" over a region whose own evidence records dozens of
+   * railway stations — an unverifiable claim stated as fact. When this is
+   * true, every walking-first sentence below says the honest version instead:
+   * public transport is not verified here yet, and the times shown are on
+   * foot because walking is the one thing that was measured.
+   *
+   * `out_of_coverage` keeps the walking sentences: a provider was asked about
+   * this ground and holds nothing, which is the closest thing to "there is no
+   * network" a build can attest. `not_needed` and an absent record are trips
+   * that never leaned on scheduled transport at all.
+   */
+  const transitUnverified =
+    input.transit !== null &&
+    input.transit !== undefined &&
+    input.transit.measured === 0 &&
+    (input.transit.absence === 'unsupported' || input.transit.absence === 'budget_exhausted');
 
   const totals = days.reduce(
     (acc, day) => ({
@@ -49,9 +84,22 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
       transitMinutes: acc.transitMinutes + day.totals.transitMinutes,
       walkMinutes: acc.walkMinutes + day.totals.walkMinutes,
       waitMinutes: acc.waitMinutes + day.totals.waitMinutes,
+      /*
+       * Carried up beside the four rather than folded into one of them. A trip
+       * total is read as a claim about how the trip is made, and these minutes
+       * are the one part of it nobody could say that about.
+       */
+      unverifiedMinutes: acc.unverifiedMinutes + day.totals.unverifiedMinutes,
       driveKm: acc.driveKm + day.totals.travelKm,
     }),
-    { driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, driveKm: 0 },
+    {
+      driveMinutes: 0,
+      transitMinutes: 0,
+      walkMinutes: 0,
+      waitMinutes: 0,
+      unverifiedMinutes: 0,
+      driveKm: 0,
+    },
   );
   totals.driveKm = Math.round(totals.driveKm * 10) / 10;
 
@@ -68,6 +116,26 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
   const tradeoffs: string[] = [];
   const seasonalWarnings: string[] = [];
   const verifyBeforeTravel = [...new Set(days.flatMap((day) => day.transport.verifyBeforeTravel))];
+
+  /*
+   * THE TRAVELLER'S OWN ACCESSIBILITY NOTE, VERBATIM AND ATTRIBUTED.
+   *
+   * The questionnaire's free-text box wrote to `profile.accessibility.notes`
+   * and nothing anywhere read it — a placebo control, spending trust on words
+   * that were stored and never seen again. The honest consumer is the simplest
+   * one: carry the words to the check-before-you-book list every plan renders,
+   * say whose words they are, and do not pretend to have understood them.
+   * Parsing free text into scheduling behaviour would be the worse dishonesty —
+   * acting on a guess about a sentence nobody confirmed. The structured
+   * `mobilityLimited` answer is the input that changes the plan;
+   * `accessibility-note.test.ts` holds both halves of that line.
+   */
+  const accessibilityNote = profile.accessibility.notes?.trim();
+  if (accessibilityNote) {
+    verifyBeforeTravel.push(
+      `Your accessibility note, in your own words: “${accessibilityNote}” We have not turned this into assumptions — raise it directly when you book stays, transport or timed entries.`,
+    );
+  }
 
   const drivingDays = days.filter((day) => day.totals.driveMinutes > 0).length;
   const serviceDays = days.filter((day) => day.transport.serviceIds.length > 0).length;
@@ -91,7 +159,9 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
     }
   } else if (primaryMode === 'walk') {
     rationale.push(
-      'Everything scheduled is within walking distance or on a free town route, so nothing here needs a vehicle.',
+      transitUnverified
+        ? 'Public transport is not verified here yet — nothing in this build can measure a scheduled journey — so every leg is priced as the measured walk, and what was scheduled is what fits on foot.'
+        : 'Everything scheduled is within walking distance or on a free town route, so nothing here needs a vehicle.',
     );
   } else {
     rationale.push(
@@ -128,7 +198,7 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
   return {
     primaryMode,
     secondaryMode,
-    headline: headlineFor(primaryMode, secondaryMode, services.length),
+    headline: headlineFor(primaryMode, secondaryMode, services.length, transitUnverified),
     rationale,
     tradeoffs,
     ...(withoutPrimary ? { withoutPrimary } : {}),
@@ -139,6 +209,7 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
       services,
       primaryMode,
       days.some((day) => day.totals.transitMinutes > 0),
+      transitUnverified,
     ),
     seasonalWarnings: [...new Set(seasonalWarnings)],
     verifyBeforeTravel,
@@ -268,6 +339,7 @@ function headlineFor(
   primary: TransportMode,
   secondary: TransportMode | null,
   serviceCount: number,
+  transitUnverified: boolean,
 ): string {
   const lead = TRANSPORT_MODE_LABELS[primary];
   if (primary === 'drive' && serviceCount > 0) {
@@ -275,6 +347,15 @@ function headlineFor(
   }
   if (primary === 'drive') return 'Drive — there is no practical alternative here';
   if (secondary) return `${lead}, with ${TRANSPORT_MODE_LABELS[secondary].toLowerCase()} filling the gaps`;
+  /*
+   * "Walk the whole way" is a verdict about the ground; on foot only because
+   * nothing measured the alternatives is a fact about this build. The
+   * headline is the one line everybody reads, so it is the one place the
+   * difference must not be blurred.
+   */
+  if (primary === 'walk' && transitUnverified) {
+    return 'On foot for now — public transport is not verified here yet';
+  }
   return `${lead} the whole way`;
 }
 
@@ -329,6 +410,8 @@ function transitSummary(
   primary: TransportMode,
   /** True when a day actually rides something — measured transit, not authored. */
   ridesTransit: boolean,
+  /** True when this trip leaned on scheduled transport and none was measured. */
+  transitUnverified: boolean,
 ): string {
   if (services.length === 0) {
     /*
@@ -341,6 +424,15 @@ function transitSummary(
      */
     if (ridesTransit) {
       return 'Public transport does the longer hops here, timed against published timetables.';
+    }
+    /*
+     * "Walkable" is a claim about the ground. When the trip leaned on
+     * scheduled transport and nothing could measure a journey, the truthful
+     * statement is about the gap — the same sentence the board's own transit
+     * disclosure makes — never a verdict the evidence cannot back.
+     */
+    if (transitUnverified) {
+      return 'Public transport is not verified here yet — we cannot check timetables, so the times shown are on foot.';
     }
     return primary === 'drive'
       ? 'No scheduled service reaches anything on this plan. The vehicle is not a convenience, it is the access.'

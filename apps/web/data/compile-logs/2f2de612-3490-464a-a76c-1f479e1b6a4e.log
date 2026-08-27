@@ -1,0 +1,6 @@
+Research model credentials rejected {
+  status: 401,
+  type: 'authentication_error',
+  requestId: 'req_011CeE4EL2tpMYoZ1BwxsNuC',
+  promptVersion: 'expand-region/2026-07-31.1'
+}

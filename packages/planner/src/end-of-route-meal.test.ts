@@ -137,7 +137,14 @@ describe('a day that finishes its route at lunchtime eats', () => {
      */
     const result = planTrip(
       buildScenario({
-        answers: { pace: 'slow', dayStart: 'relaxed', dailyIntensity: 'intense' },
+        /*
+         * The witness is searched for, not sacred: the shared frequency ledger
+         * (§29 G) recomposed the sweep's plans, and the relaxed-start variant
+         * of this combination no longer finishes its route inside lunchtime.
+         * The early-start variant does — day 2's route ends at minute 742 —
+         * and the property being asserted is unchanged.
+         */
+        answers: { pace: 'slow', dayStart: 'early', dailyIntensity: 'intense' },
         basics: { departureTime: '09:00' },
       }),
     );

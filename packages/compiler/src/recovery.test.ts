@@ -85,7 +85,7 @@ function input(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
     unroutableModes: [],
     bases: 1,
     satellites: 0,
-    identityAgrees: true,
+    identity: { placedInside: 160, refutedElsewhere: 40 },
     packPartial: false,
     ...overrides,
   };

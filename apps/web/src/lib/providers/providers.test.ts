@@ -302,6 +302,158 @@ describe('valhalla', () => {
     expect(outcome.pairs).toBeLessThanOrEqual(1);
   });
 
+  /**
+   * THE POISONED-RECTANGLE CLASS, PINNED OFFLINE.
+   *
+   * The live failure: a car-free dense-metro compile whose board correctly
+   * includes one far-out anchor. The routing API takes rectangles and refuses
+   * them whole — a pedestrian request containing one beyond-limit or
+   * too-expensive pair dies as a request — and the provider treated each dead
+   * request as 400 dead pairs, then counted the deterministic rejections
+   * toward the outage breaker, which opened and discarded every block after.
+   * The foot matrix came back with fewer than two points; the car retry
+   * succeeded; the planner then rightly refused every stop of a driving
+   * matrix for a traveller who said they would not drive. Zero plan, from one
+   * far seat.
+   */
+  function rectangleRouter(isPoisoned: (points: { lat: number; lon: number }[]) => boolean) {
+    let requests = 0;
+    const fetchImpl = async (_url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      requests += 1;
+      const body = JSON.parse(String(init?.body)) as {
+        sources: { lat: number; lon: number }[];
+        targets: { lat: number; lon: number }[];
+      };
+      if (isPoisoned([...body.sources, ...body.targets])) {
+        return jsonResponse({ error: 'exceeds max matrix distance' }, 400);
+      }
+      const cells = body.sources.flatMap((_, row) =>
+        body.targets.map((__, col) => ({
+          from_index: row,
+          to_index: col,
+          time: 600,
+          distance: 1,
+        })),
+      );
+      return matrixResponse(cells);
+    };
+    return { fetchImpl, count: () => requests };
+  }
+
+  it('degrades a poisoned pedestrian matrix per pair, never wholesale', async () => {
+    const near = Array.from({ length: 4 }, (_, index) => ({
+      id: `near-${index}`,
+      lat: 40.7 + index * 0.002,
+      lng: -74.0,
+    }));
+    const far = { id: 'far-anchor', lat: 40.85, lng: -73.8 };
+    const router = rectangleRouter((pts) => pts.some((pt) => Math.abs(pt.lat - far.lat) < 1e-6));
+
+    const outcome = await computeMatrix([...near, far], 'pedestrian', {
+      maxPairs: 400,
+      fetchImpl: router.fetchImpl,
+    });
+
+    /* Every walkable pair survives the far seat. */
+    for (let from = 0; from < near.length; from += 1) {
+      for (let to = 0; to < near.length; to += 1) {
+        if (from === to) continue;
+        expect(
+          Number.isFinite(outcome.minutes[from]![to]!),
+          `walkable pair near-${from} -> near-${to} was discarded with the poisoned rectangle`,
+        ).toBe(true);
+      }
+    }
+    /* The far seat's legs stay honestly unmeasured — failed pairs, never zeros. */
+    expect(outcome.failedPairs.length).toBeGreaterThan(0);
+    for (const pair of outcome.failedPairs) {
+      expect([pair.from, pair.to]).toContain('far-anchor');
+    }
+    /* And the dense core the compiler keeps is the walkable one, minus one seat. */
+    const dense = densify(outcome);
+    expect(dense.ids).toEqual(near.map((point) => point.id));
+    expect(dense.dropped).toEqual(['far-anchor']);
+  }, 120_000);
+
+  it('isolates a poisoned point down to its own pairs, past the quadrant depth', async () => {
+    /*
+     * The residual the quadrant cap left: a rectangle still failing at max
+     * depth was abandoned whole, killing up to two dozen innocent pairs — and
+     * because the poisoned point sat at the head of the point order on the
+     * live build, the abandoned rectangles covered exactly the mutual legs of
+     * the board's top seats, which the routable-core peel then removed. With
+     * enough points that quadrant halving alone cannot isolate the poison,
+     * every innocent pair must still come back measured; only the poisoned
+     * point's own legs stay unmeasured.
+     */
+    const far = { id: 'far-anchor', lat: 40.85, lng: -73.8 };
+    const near = Array.from({ length: 6 }, (_, index) => ({
+      id: `near-${index}`,
+      lat: 40.7 + index * 0.002,
+      lng: -74.0,
+    }));
+    const router = rectangleRouter((pts) => pts.some((pt) => Math.abs(pt.lat - far.lat) < 1e-6));
+
+    /* Far seat first, mirroring the live composed seat order. */
+    const outcome = await computeMatrix([far, ...near], 'pedestrian', {
+      maxPairs: 400,
+      fetchImpl: router.fetchImpl,
+    });
+
+    for (let from = 1; from <= near.length; from += 1) {
+      for (let to = 1; to <= near.length; to += 1) {
+        if (from === to) continue;
+        expect(
+          Number.isFinite(outcome.minutes[from]![to]!),
+          `innocent pair ${outcome.ids[from]} -> ${outcome.ids[to]} died with an abandoned rectangle`,
+        ).toBe(true);
+      }
+    }
+    for (const pair of outcome.failedPairs) {
+      expect([pair.from, pair.to]).toContain('far-anchor');
+    }
+    const dense = densify(outcome);
+    expect(dense.dropped).toEqual(['far-anchor']);
+    expect(dense.ids).toEqual(near.map((point) => point.id));
+  }, 240_000);
+
+  it('never lets deterministic rejections open the outage breaker', async () => {
+    /*
+     * Five straight 4xx rejections — more than the breaker's threshold — then
+     * an answering service. A rejection is a fact about the request, not the
+     * service's health; counting it opened the breaker mid-subdivision and the
+     * rest of the matrix was discarded unasked.
+     */
+    let calls = 0;
+    const trio = Array.from({ length: 3 }, (_, index) => ({
+      id: `t${index}`,
+      lat: 40.7 + index * 0.002,
+      lng: -74.0,
+    }));
+    const fetchImpl = async (_url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls += 1;
+      if (calls <= 5) return jsonResponse({ error: 'bad request' }, 400);
+      const body = JSON.parse(String(init?.body)) as {
+        sources: unknown[];
+        targets: unknown[];
+      };
+      const cells = body.sources.flatMap((_, row) =>
+        body.targets.map((__, col) => ({ from_index: row, to_index: col, time: 600, distance: 1 })),
+      );
+      return matrixResponse(cells);
+    };
+
+    const outcome = await computeMatrix(trio, 'pedestrian', { maxPairs: 400, fetchImpl });
+
+    /* The breaker stayed shut: requests continued past the rejections… */
+    expect(calls).toBeGreaterThan(5);
+    /* …and the pairs behind them were measured rather than discarded. */
+    const measured = outcome.minutes
+      .flatMap((row, from) => row.map((value, to) => (from === to ? 0 : value)))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    expect(measured.length).toBeGreaterThan(0);
+  }, 120_000);
+
   it('keeps the largest routable core instead of dropping everything', () => {
     /**
      * A live Denali build came back with a matrix of zero points out of

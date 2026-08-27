@@ -114,6 +114,16 @@ export interface ModelUsage {
   webSearches: number;
   estimatedCostUsd: number;
   requestIds: string[];
+  /**
+   * Calls the provider refused as unauthenticated or unauthorised.
+   *
+   * On the ledger rather than in a log line, because this is the counter that
+   * turns "every stage quietly degraded" into a diagnosable fact: a rejected
+   * key fails every call until an operator acts, and the runner reads this
+   * after the compile to fail the job loudly instead of shipping a hollow
+   * partial. Non-zero here means configuration, never weather.
+   */
+  authFailures: number;
 }
 
 export function emptyUsage(): ModelUsage {
@@ -126,6 +136,7 @@ export function emptyUsage(): ModelUsage {
     webSearches: 0,
     estimatedCostUsd: 0,
     requestIds: [],
+    authFailures: 0,
   };
 }
 
@@ -154,8 +165,25 @@ const RATE = { input: 5 / 1e6, output: 25 / 1e6 };
  */
 const STREAMING_REQUIRED_ABOVE_MAX_TOKENS = 16_000;
 
+/**
+ * The SDK exports its error classes as values on the default export; in type
+ * position they have to be named through `InstanceType`.
+ */
+type ProviderApiError = InstanceType<typeof Anthropic.APIError>;
+
 export class ResearchModelError extends Error {
-  readonly code: 'not_configured' | 'malformed_output' | 'rate_limited' | 'request_failed';
+  readonly code:
+    | 'not_configured'
+    | 'malformed_output'
+    | 'rate_limited'
+    | 'request_failed'
+    /**
+     * The provider rejected the credential itself — 401 authentication or 403
+     * permission. Deterministic until an operator acts, which is why it is its
+     * own code rather than `request_failed`: the stages may still degrade past
+     * it, but the runner must be able to tell a dead key from a bad minute.
+     */
+    | 'auth_rejected';
   readonly requestId: string | undefined;
 
   constructor(code: ResearchModelError['code'], message: string, requestId?: string) {
@@ -194,6 +222,13 @@ export class ResearchModel {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly maxCalls: number;
+  /**
+   * Latched on the first 401/403 and never cleared: the provider has said this
+   * credential is dead, and a dead credential does not get better between two
+   * stages of one compilation. Every later call is refused here, unbilled,
+   * instead of paying the provider to say the same thing per stage.
+   */
+  private credentialRejected = false;
   readonly usage: ModelUsage = emptyUsage();
 
   constructor(options: ResearchModelOptions) {
@@ -210,6 +245,42 @@ export class ResearchModel {
 
   get callsRemaining(): number {
     return Math.max(0, this.maxCalls - this.usage.calls);
+  }
+
+  /** The refusal every door throws once the credential is known dead. */
+  private static deadCredentialError(requestId?: string): ResearchModelError {
+    return new ResearchModelError(
+      'auth_rejected',
+      'The research model refused this deployment’s credentials.',
+      requestId,
+    );
+  }
+
+  /**
+   * Record a provider credential rejection and throw its own code.
+   *
+   * The log line is the one the compile-log scan and an operator grep for, so
+   * its first words are stable. Status, type and request id only — the
+   * provider's sentence adds nothing here and the error object carries the
+   * outbound request, which must not be logged.
+   */
+  private rejectCredential(error: ProviderApiError, promptVersion: string): never {
+    this.credentialRejected = true;
+    this.usage.authFailures += 1;
+    console.error('Research model credentials rejected', {
+      status: error.status,
+      type: error.type,
+      requestId: error.requestID,
+      promptVersion,
+    });
+    throw ResearchModel.deadCredentialError(error.requestID ?? undefined);
+  }
+
+  private static isCredentialRejection(error: unknown): error is ProviderApiError {
+    return (
+      error instanceof Anthropic.AuthenticationError ||
+      error instanceof Anthropic.PermissionDeniedError
+    );
   }
 
   async structured<T>(input: {
@@ -254,6 +325,7 @@ export class ResearchModel {
      */
     schemaEnforcement?: 'grammar' | 'prompt';
   }): Promise<T> {
+    if (this.credentialRejected) throw ResearchModel.deadCredentialError();
     if (this.callsRemaining <= 0) {
       throw new ResearchModelError('request_failed', 'This trip has no model calls left.');
     }
@@ -350,6 +422,16 @@ export class ResearchModel {
           error.requestID ?? undefined,
         );
       }
+      /*
+       * A rejected credential is deterministic — permanent until an operator
+       * acts — so it must not dissolve into the transient `request_failed`
+       * path the stages are built to degrade around. Its own code, its own
+       * counter, and the latch above stop the next stage buying the same
+       * refusal again.
+       */
+      if (ResearchModel.isCredentialRejection(error)) {
+        this.rejectCredential(error, input.promptVersion);
+      }
       if (error instanceof Anthropic.APIError) {
         // The provider's own message is kept out of the sentence a traveller
         // sees; only the code and the request id travel, which is what an
@@ -404,6 +486,7 @@ export class ResearchModel {
     maxSearches: number;
     maxTokens?: number;
   }): Promise<{ results: { url: string; title?: string; pageAge?: string }[]; searches: number }> {
+    if (this.credentialRejected) throw ResearchModel.deadCredentialError();
     if (this.callsRemaining <= 0 || input.maxSearches <= 0) {
       return { results: [], searches: 0 };
     }
@@ -446,6 +529,11 @@ export class ResearchModel {
 
     if (lastError instanceof Anthropic.RateLimitError) {
       throw new ResearchModelError('rate_limited', 'The research model asked us to slow down.');
+    }
+    // Same classification as `structured`: a dead key is configuration, and
+    // the search door must latch it too or the discovery stage keeps paying.
+    if (ResearchModel.isCredentialRejection(lastError)) {
+      this.rejectCredential(lastError, input.promptVersion);
     }
     throw new ResearchModelError('request_failed', 'The search provider did not answer.');
   }

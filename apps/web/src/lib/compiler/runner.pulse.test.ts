@@ -117,6 +117,40 @@ describe('the compilation pulse', () => {
     }
   });
 
+  /**
+   * TWO PAID WORKERS, ONE TRIP.
+   *
+   * A reclaim ends a job whose heartbeat went cold so the screen stops calling
+   * it alive and the traveller can start again. The case it exists for is a
+   * process that *stalled* rather than died — and nothing told that process
+   * anything. It was disowned, its writes were refused, and it went on paying
+   * providers next to the replacement build. The pulse now halts on the row's
+   * stop flag rather than on the `cancelled` state, and reclaim writes it.
+   */
+  it('stops the worker of a reclaimed build, not only a cancelled one', async () => {
+    const { startCompilationPulse } = await import('./runner');
+    const { getJob, reclaimAbandonedJob } = await import('../db/compiler-repository');
+    const { HEARTBEAT_TIMEOUT_MS } = await import('@sidequest/core');
+    const { tripId, jobId } = await seededRunningJob();
+
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    try {
+      startCompilationPulse({ jobId, haltOnCancel: true, intervalMs: 1_000 });
+      const cold = new Date(NOW.getTime() + HEARTBEAT_TIMEOUT_MS + 1_000);
+      expect(reclaimAbandonedJob(tripId, cold)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1_500);
+
+      // Terminal, and *asked to stop* — the second half is the one that reaches
+      // the process still spending.
+      expect(getJob(jobId)!.state).toBe('failed');
+      expect(getJob(jobId)!.cancelRequested).toBe(true);
+      expect(exit, 'the reclaimed build kept running').toHaveBeenCalledWith(0);
+    } finally {
+      exit.mockRestore();
+    }
+  });
+
   it('self-stops once the job reaches any terminal state', async () => {
     const { startCompilationPulse } = await import('./runner');
     const { failJob, getJob } = await import('../db/compiler-repository');

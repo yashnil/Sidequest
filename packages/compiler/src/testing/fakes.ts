@@ -2,6 +2,7 @@ import {
   assessConfidence,
   DESTINATION_RESOLUTION_VERSION,
   normalizeDestinationQuery,
+  singleTimeZone,
   type AccessRule,
   type DestinationCandidate,
   type DestinationEntityType,
@@ -10,6 +11,7 @@ import {
   type Place,
   type ScopeBreadth,
   type SourceFact,
+  type SourceRecord,
   type TransportMode,
   type WeatherLocation,
   stableHash,
@@ -165,6 +167,19 @@ export interface SyntheticWorldSpec {
     outOfCoverage?: boolean;
   };
   /**
+   * SCHEDULED-NETWORK STOP RECORDS THE PACK PUBLISHES, BY SOURCE KIND.
+   *
+   * Keyed by the source vocabulary's own category string — `railway_station`,
+   * `train_station`, `bus_station`, `ferry_terminal` — and counted, because the
+   * compiled artifact's scheduled-stop observation is a *kind-aware count* and a
+   * fixture that could only say "some stations" could not watch a kinds-blind
+   * regression fail. Absent means the pack holds no stop records at all, which
+   * keeps every world written before this byte-identical and is itself a state
+   * under test: a pack that was read and records nothing must persist an honest
+   * zero, never an absence.
+   */
+  scheduledStopRecords?: Readonly<Record<string, number>>;
+  /**
    * RECORDS HELD BACK FROM THE ORDINARY SWEEP, RELEASED ONLY ON ACQUISITION.
    *
    * The piece without which an acquiring-recovery test cannot mean anything. A
@@ -177,6 +192,21 @@ export interface SyntheticWorldSpec {
    * retrieve the thing that fixes *that* deficit and nothing else.
    */
   acquirable?: Record<string, number>;
+  /**
+   * PLACE-LAYER RECORDS THE PACK PUBLISHES VERBATIM, BESIDE ITS GENERATED ONES.
+   *
+   * The generated population is uniform by construction — every record is a
+   * plausible member of its own destination — and a uniform population cannot
+   * express the shape the identity gate exists for: a row whose *category*
+   * claims regional ground standing in the middle of a dense city with nothing
+   * behind it. A fixture that could only vary counts could not put one on a
+   * board, so it could not watch one be refused either.
+   *
+   * `layerId` and `cellId` are stamped by the pack builder, because both are
+   * facts about the pack rather than about the record, and a fixture guessing
+   * either would silently land its record outside the partition.
+   */
+  extraPlaceRecords?: readonly SourceRecord[];
 }
 
 /**
@@ -355,6 +385,13 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
    * Every place is reachable and open and passes the board. None of them fits
    * inside a day once the drive is counted, which is the planner's own refusal
    * rather than the board's.
+   *
+   * The supply is deliberately unremarkable — enough things to do for the trip
+   * that the research reading comes out clean. This world exists to exercise
+   * the *planner's* refusal of a board full of workable-looking stops, and a
+   * supply small enough to trip the research gate would withhold the board
+   * before the planner ever saw it, which is a different world's job
+   * (`recovery_adversary` owns the thin-supply shape).
    */
   unplannable_region: {
     id: 'unplannable-region',
@@ -365,7 +402,7 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
     center: { lat: 38.9, lng: -107.4 },
     entityType: 'subregion',
     breadth: 'subregion',
-    placeCount: 4,
+    placeCount: 8,
     baseCount: 1,
     subregionCount: 0,
     primaryMode: 'drive',
@@ -1214,7 +1251,7 @@ export function fakeProviders(
 
   const weatherLocations: WeatherLocationProvider = {
     name: 'fake-weather-locations',
-    async plan({ places: subjects, maxLocations }) {
+    async plan({ scope, places: subjects, maxLocations }) {
       if (maxLocations <= 0) {
         return {
           locations: [],
@@ -1226,6 +1263,15 @@ export function fakeProviders(
       // is claimed exactly once whatever the compiler dropped along the way.
       const ids = subjects.map((place) => place.id);
       const pointCount = Math.max(1, Math.min(maxLocations, spec.weatherPoints, ids.length));
+      /*
+       * The zone off the scope it was handed, exactly as the shipped adapter
+       * reads it. Stamping `spec.timeZone` here made the fixture answer the
+       * question under test: the world's real zone came back whatever scope the
+       * compiler passed, so a build that handed over the *un*upgraded scope —
+       * and therefore shipped forecast points on a longitude approximation —
+       * was indistinguishable from one that did not.
+       */
+      const zone = singleTimeZone(scope.timeZones) ?? scope.timeZones[0] ?? spec.timeZone;
       const locations = Array.from({ length: pointCount }, (_, index) => {
         const delta = offset(index + 1);
         return {
@@ -1233,7 +1279,7 @@ export function fakeProviders(
           label: `${spec.name} point ${index + 1}`,
           coordinates: { lat: spec.center.lat + delta.lat, lng: spec.center.lng + delta.lng },
           elevationMetres: 100 + index * 250,
-          timeZone: spec.timeZone,
+          timeZone: zone,
           placeIds: ids.filter((_, placeIndex) => placeIndex % pointCount === index),
           limitation: 'One synthetic point standing for a band of the region.',
         };

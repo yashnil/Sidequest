@@ -9,6 +9,7 @@ import {
   setProvisionalSelection,
 } from '@/lib/db/provisional-repository';
 import { getTrip } from '@/lib/db/repository';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 /**
  * What somebody said about a card they cannot yet be told the hours of.
@@ -30,6 +31,8 @@ export async function setProvisionalIntentAction(
   intent: ProvisionalIntent | null,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   try {
     const now = new Date();

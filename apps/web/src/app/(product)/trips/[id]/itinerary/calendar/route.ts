@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { formatMinuteOfDay, licence } from '@sidequest/core';
 import type { Itinerary, ItineraryItem } from '@sidequest/core';
 import { getItinerary, getTrip } from '@/lib/db/repository';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,13 @@ export async function GET(
   const { id } = await params;
   const trip = getTrip(id);
   if (!trip) return new NextResponse('No such trip.', { status: 404 });
+  /*
+   * Owner-gated like the page that links here: this response is the whole
+   * plan, and the read-only /share/<token> surface is the one unauthenticated
+   * copy of it. A foreign browser gets the missing-trip answer, verbatim, so
+   * the id cannot be used to tell "hidden" from "gone".
+   */
+  if (await tripAccessRefusal(id)) return new NextResponse('No such trip.', { status: 404 });
 
   let itinerary: Itinerary | null;
   try {

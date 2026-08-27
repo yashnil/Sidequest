@@ -286,7 +286,14 @@ export function ImageCredit({
   className,
 }: {
   image: ImageRecord;
-  as?: 'figcaption' | 'p';
+  /*
+   * `span` exists because a credit can sit inside a caption that is itself a
+   * paragraph, and HTML forbids <p> inside <p> — the browser's parser hoists
+   * the inner one out and every server-rendered itinerary then fails React
+   * hydration (#418) and re-renders client-side. Measured live on the day-card
+   * hero caption.
+   */
+  as?: 'figcaption' | 'p' | 'span';
   className?: string;
 }) {
   return (

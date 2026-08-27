@@ -587,6 +587,46 @@ export function applyComposer(
 }
 
 /**
+ * A SETTLED CAR DECISION, CARRIED INTO THE QUESTIONNAIRE INSTEAD OF DISCARDED.
+ *
+ * `applyComposer` above closed the willDrive defect for the composer path — and
+ * only for it. On the ordinary city journey the composer leaves transport
+ * undecided, the car question is asked as a *clarification* on the plan flow
+ * ("Will you have a car?"), and the answer lands in the clarification set and
+ * on the derived scope — neither of which `applyComposer` reads. So a traveller
+ * who answered "No — public transport, walking and transfers" minutes earlier
+ * still arrived at the questionnaire with `defaultAnswers`' hard-coded
+ * `willDrive: true` pre-ticked, completed it, and stored a profile that
+ * contradicts their own confirmed scope. The durable record then disagreed with
+ * itself: scope `carAvailable: false`, profile `willDrive: true`.
+ *
+ * The input is the settled boolean rather than a raw answer string, because the
+ * scope layer already owns the reconciliation (profile over clarification over
+ * composer) and restating it here would be a second cascade that can drift.
+ *
+ * The contract is `applyComposer`'s, exactly:
+ *
+ * - **Seed time only.** The traveller's own edits win from the first keystroke.
+ * - **`null` means nobody said**, and writes nothing — a default must not be
+ *   promoted into a statement.
+ * - **No invented precision.** "No car" grants shuttles and buses, the same
+ *   reading `applyComposer` gives "public transport"; it says nothing about
+ *   mountain roads or anything finer.
+ */
+export function applyTransportDecision(
+  base: QuestionnaireAnswers,
+  carAvailable: boolean | null | undefined,
+): QuestionnaireAnswers {
+  if (carAvailable === true) {
+    return { ...base, willDrive: true };
+  }
+  if (carAvailable === false) {
+    return { ...base, willDrive: false, willUseShuttles: true };
+  }
+  return base;
+}
+
+/**
  * Which questionnaire fields the composer has already answered.
  *
  * Read by the wizard so a question the traveller has *already* answered is

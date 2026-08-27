@@ -423,13 +423,57 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
       'Nothing here was researched against a published source, so every place is only as good as the map data behind it.',
     );
   } else {
-    const withOfficial = evidencePlaces.filter((place) => place.officialUrl !== undefined).length;
+    /**
+     * A LINK PRINTED IN A MAP RECORD IS NOT A PAGE ANYBODY READ.
+     *
+     * This row was `officialUrl !== undefined`, graded as a share of researched
+     * places and printed as "N of M researched places have an official page
+     * behind them" — a sentence a traveller reads as *we went and looked*. It is
+     * not what the field means. `officialUrl` is filled in `enrich.ts` from
+     * `knownOfficialUrls`, which `compile.ts` builds out of `place.source.url` —
+     * the `website` tag that travelled with the map record. And
+     * `identity.officialSite` is deliberately absent from `wantedPathsFor`
+     * ("answered by a structured source ... never by extraction"), so the fact
+     * branch of that same `??` chain is unreachable in production: **every**
+     * count this row produced came from a map tag, on a build that may have
+     * fetched nothing at all. The grade was `levelFromRatio`, so a pack whose
+     * records happen to carry websites reached **Good — How much we know about
+     * them** with zero pages retrieved.
+     *
+     * That is this file's own rule broken on this file's own row: "Every count
+     * below is over resolved facts, never over pages fetched" — this one was
+     * over neither. It counted a string.
+     *
+     * So it grades on what came back. A place counts when at least one fact we
+     * wanted for it resolved to a state only a retrieved source can produce;
+     * `unknown` and `unavailable` are what a question nobody could answer looks
+     * like and they are excluded, exactly as `stateCounts` excludes them.
+     *
+     * The links are still reported, because a traveller can open one and it is
+     * worth having — but as what they are. `factId` is the discriminator: a
+     * claim minted from a resolved fact carries one and `knownClaim`, which is
+     * what a map tag gets, does not.
+     */
+    const readFromSource = (state: string): boolean =>
+      state !== 'unknown' && state !== 'unavailable';
+    const answered = evidencePlaces.filter((place) =>
+      place.resolved.some((fact) => readFromSource(fact.state)),
+    ).length;
+    const unreadLinks = evidencePlaces.filter(
+      (place) => place.officialUrl !== undefined && place.officialUrlClaim?.factId === undefined,
+    ).length;
+    const linkSentence =
+      unreadLinks > 0
+        ? ` ${unreadLinks} carry a website the map data listed for them, which nothing here has opened.`
+        : '';
     add(
       'candidate_quality',
-      levelFromRatio(withOfficial, Math.max(1, researched)),
-      withOfficial > 0 ? ['partial_results_returned'] : ['no_official_source_found'],
-      `${withOfficial} of ${researched} researched places have an official page behind them.`,
-      { expected: researched, covered: withOfficial },
+      levelFromRatio(answered, Math.max(1, researched)),
+      answered > 0 ? ['partial_results_returned'] : ['no_official_source_found'],
+      answered > 0
+        ? `${answered} of ${researched} places we looked up came back with something a published source states.${linkSentence}`
+        : `Nothing we looked up came back with a published statement, so these ${researched} places are only as good as the map data behind them.${linkSentence}`,
+      { expected: researched, covered: answered },
     );
   }
 
@@ -468,7 +512,7 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
     researched === 0 ? 'weak' : levelFromRatio(priced, Math.max(1, researched)),
     evidenceReasons(costCounts, 'no_official_source_found'),
     priced > 0
-      ? `${priced} places have a published price. A missing price is not a free one.`
+      ? `${priced} ${priced === 1 ? 'place has' : 'places have'} a published price. A missing price is not a free one.`
       : 'No prices were published anywhere we could read. A missing price is not a free one.',
     { expected: researched, covered: priced },
   );
@@ -802,14 +846,36 @@ export function buildCoverageReport(input: CoverageInput): CoverageReport {
     blocksItinerary: blocking.blocksItinerary,
     blockingDimensions: blocking.blockingDimensions,
     recheckFactIds: input.facts.filter((fact) => fact.recheckRequired).map((fact) => fact.id),
-    summary: summarise(dimensions, blocking.blocksItinerary, exhausted),
+    summary: summarise(dimensions, blocking.blocksItinerary, exhausted, input.gaps),
   };
+}
+
+/**
+ * A SOURCE THAT REFUSED IS NOT A SOURCE THAT ANSWERED NOTHING INTERESTING.
+ *
+ * The summary knew about one way a build could be short of what is out there —
+ * the budget — and said so. It knew nothing about the other, which is the one
+ * that happens at three in the morning: every provider erroring or rate-limiting
+ * while a cached pack supplies the places. Nothing in `weak.length` can see that,
+ * because a row whose evidence came out of the cache grades on the cache. So the
+ * top line of the build report read "Everything the planner needs is here, with
+ * sources." over a compilation on which **nothing external answered at all** —
+ * a green instrument during a total outage, which is worse than no instrument.
+ *
+ * `gaps` was already an input and already carries the reason. Two of its values
+ * are a live source failing rather than a live source having no answer, and only
+ * those two are counted: `not_found` and `no_official_source` are answers.
+ */
+function refusedProviderCount(gaps: readonly ProviderGap[]): number {
+  return gaps.filter((gap) => gap.reason === 'provider_error' || gap.reason === 'rate_limited')
+    .length;
 }
 
 function summarise(
   dimensions: readonly CoverageDimensionReport[],
   blocked: boolean,
   exhausted: readonly string[],
+  gaps: readonly ProviderGap[],
 ): string {
   if (blocked) {
     return 'There is not enough here to plan on. We would rather say so than pad it.';
@@ -821,8 +887,21 @@ function summarise(
     exhausted.length > 0
       ? ' We stopped early because this trip ran out of lookups, so this is not everything there is.'
       : '';
+  const refused = refusedProviderCount(gaps);
+  const refusalNote =
+    refused > 0
+      ? ` ${refused} ${refused === 1 ? 'lookup' : 'lookups'} failed or were turned away while we built this, so parts of it are older or thinner than they would otherwise be.`
+      : '';
   if (weak.length === 0) {
-    return `Everything the planner needs is here, with sources.${budgetNote}`;
+    /*
+     * "with sources" is a claim about where this came from, and it may not be
+     * made on a build where the sources refused. The rest of the sentence is
+     * still true — the layers really are all above the line — so it is qualified
+     * rather than replaced.
+     */
+    return refused > 0
+      ? `Everything the planner needs is here, from what we already held.${refusalNote}${budgetNote}`
+      : `Everything the planner needs is here, with sources.${budgetNote}`;
   }
-  return `Enough to plan on, with gaps in ${weak.length} ${weak.length === 1 ? 'area' : 'areas'} listed below.${budgetNote}`;
+  return `Enough to plan on, with gaps in ${weak.length} ${weak.length === 1 ? 'area' : 'areas'} listed below.${refusalNote}${budgetNote}`;
 }

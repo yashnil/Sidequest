@@ -210,6 +210,19 @@ export const geographicScopeSchema = z.object({
     .array(z.object({ questionId: z.string().min(1), values: z.array(z.string().min(1)) }))
     .default([]),
   confirmedByUser: z.boolean(),
+  /**
+   * Whether a traveller profile existed — and was read — when this scope was
+   * derived. The real flow derives and stores a proposal at the first plan
+   * visit, before any questionnaire exists, and "Build the region" then
+   * reuses the stored proposal — so a profile-aware widening that only runs
+   * at derivation time is unreachable for every real traveller. This marker
+   * is what lets the build path notice the delta ("a profile has materialised
+   * since this was derived") and re-derive exactly once, instead of
+   * re-deriving on every visit or never. Absent on scopes stored before the
+   * field existed, which reads as "not derived from a profile" — the honest
+   * default, since the flow ordering made that overwhelmingly the case.
+   */
+  derivedFromProfile: z.boolean().optional(),
   confirmedAt: z.string().min(1).optional(),
 });
 export type GeographicScope = z.infer<typeof geographicScopeSchema>;

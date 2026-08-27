@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { applyComposer, composerAnsweredFields, composerCarriedFields } from './apply';
+import {
+  applyComposer,
+  applyTransportDecision,
+  composerAnsweredFields,
+  composerCarriedFields,
+} from './apply';
 import { defaultAnswers } from '../questionnaire/transform';
 import type { QuestionnaireContext } from '../questionnaire/definition';
 
@@ -144,5 +149,38 @@ describe('the composer answers reach the questionnaire', () => {
     for (const field of fields) {
       expect(carried[field]).not.toEqual(base[field]);
     }
+  });
+});
+
+describe('a settled car decision reaches the questionnaire seed', () => {
+  /*
+   * The clarification path of the same defect the file header describes: on the
+   * ordinary city journey the composer leaves transport undecided, the car
+   * question is asked on the plan flow instead, and a "no" answered there still
+   * met `defaultAnswers`' hard-coded `willDrive: true` at the questionnaire.
+   */
+  it('unticks the car for a traveller whose settled decision is no', () => {
+    const base = defaultAnswers(CONTEXT);
+    expect(base.willDrive).toBe(true);
+
+    const carried = applyTransportDecision(base, false);
+    expect(carried.willDrive).toBe(false);
+    /* No car means shuttles and buses, the same reading applyComposer gives. */
+    expect(carried.willUseShuttles).toBe(true);
+  });
+
+  it('keeps the car for a traveller whose settled decision is yes', () => {
+    const carried = applyTransportDecision(
+      applyComposer(defaultAnswers(CONTEXT), { transport: 'public_transport' }),
+      true,
+    );
+    /* Applied after the composer because it is the later, more specific statement. */
+    expect(carried.willDrive).toBe(true);
+  });
+
+  it('writes nothing when nobody has said', () => {
+    const base = defaultAnswers(CONTEXT);
+    expect(applyTransportDecision(base, null)).toEqual(base);
+    expect(applyTransportDecision(base, undefined)).toEqual(base);
   });
 });

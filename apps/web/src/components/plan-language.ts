@@ -92,7 +92,60 @@ const TRANSLATIONS: readonly Translation[] = [
     replacement:
       'This is stand-in weather: not a forecast, not a real observation, and not a claim about your dates.',
   },
+  {
+    /*
+     * The access layer's recheck note, verbatim from a live itinerary's "check
+     * before you go" line. "A routing engine can reach this" is the data
+     * layer talking about its own tooling; what the traveller needs from the
+     * sentence is the claim — the way there exists, its being open is not
+     * established — and that survives whole.
+     */
+    pattern:
+      /We know a routing engine can reach this, not that it is open to the public on your dates\./g,
+    replacement:
+      'We know the road or path reaches this, not that it is open to the public on your dates.',
+  },
+  {
+    /*
+     * The travel-time attribution. OpenStreetMap stays by name — that half is
+     * the attribution the licence is about — while the name of our own
+     * routing software is infrastructure a traveller has no use for. The
+     * claim ("measured", and from what data) is untouched.
+     */
+    pattern: /Measured (driving|walking) times from a Valhalla routing engine over OpenStreetMap data\./g,
+    replacement: 'Measured $1 times, worked out over OpenStreetMap road data.',
+  },
+  {
+    /*
+     * The routing planner's own note about a cluster it could not fully
+     * measure, stored in the artifact's diagnostics and rendered under "How
+     * travel times were measured". "Candidates" and "unrouted reserve" are
+     * §26 vocabulary; the fact — some places there have no measured times —
+     * is kept exactly.
+     */
+    pattern:
+      /has more candidates than one local routing pass covers; the rest are kept as unrouted reserve\./g,
+    replacement:
+      'has more places than one measuring pass covers; the rest were set aside without measured travel times.',
+  },
 ];
+
+/**
+ * A WEATHER POINT LABEL A TRAVELLER CANNOT USE, RECOGNISED.
+ *
+ * The forecast layer names its points `Forecast point 3` — an index into a
+ * list nobody outside the build can see. On a live itinerary that rendered as
+ * "Taken at 2 separate points: Forecast point 3, Forecast point 4" and a day
+ * badge reading "Historical pattern Forecast point 3". The index carries no
+ * geography a traveller could act on, and no locality name exists at render
+ * time to translate it into — so the honest treatment is to keep the *count*
+ * (which is real information: the region was not measured as one number) and
+ * drop the machine index. A label that names an actual place passes this test
+ * and is shown.
+ */
+export function isMachineWeatherLabel(label: string): boolean {
+  return /^Forecast point \d+$/.test(label);
+}
 
 /**
  * Rewrite provider-facing sentences into traveller-facing ones.

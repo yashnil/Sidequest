@@ -192,6 +192,31 @@ export interface TaxonomyClassification {
    * checks the claim before believing the coordinates.
    */
   landscapeClaim: boolean;
+  /**
+   * True for kinds whose *approach* is the hazard: a glacier, a volcano, a
+   * cave. A record of one of these can be entirely real, encyclopaedically
+   * noted, and still be somewhere no unguided first-time visitor should be
+   * sent — a highland ice cap reached only by mountain track, a locked lava
+   * tube entered only on a paid tour. Encyclopaedic notice attests the
+   * *feature*; taking a board seat needs somebody expecting visitors — posted
+   * hours, a fee, an operator's designation — which is exactly what a managed
+   * glacier walk or a guided cave publishes and an unstaffed crater does not.
+   */
+  hazardousAccess: boolean;
+  /**
+   * True for kinds whose encyclopaedic notice is minted at cataloguing scale:
+   * a municipal park, a zoo, a theme park, a reserve. In a dense catalogue
+   * nearly every instance of these kinds carries a knowledge-base entry and
+   * an article — the mapping convention stamps the pair on the polygon — so
+   * notice cannot discriminate *within* the kind, and on live metro boards a
+   * petting zoo and four neighbourhood parks outranked the destination's
+   * palace, temples and every museum on exactly that pair. The significance
+   * model bounds encyclopaedic evidence for these kinds the same way it does
+   * for the witness-demanding ones, with the same doors out — posted hours or
+   * a fee, a standing designation, an authority's page, or a precinct of
+   * graded ground witnesses. Admission is untouched: a park is a real park.
+   */
+  commonplaceNotice: boolean;
 }
 
 type Rule = Omit<
@@ -204,6 +229,8 @@ type Rule = Omit<
   | 'requiresSignificanceEvidence'
   | 'paidEnclosure'
   | 'landscapeClaim'
+  | 'hazardousAccess'
+  | 'commonplaceNotice'
 > & {
   role?: PlanningRole;
   /** Omitted where `subroleFor` derives the obvious answer from role + category. */
@@ -214,6 +241,8 @@ type Rule = Omit<
   requiresSignificanceEvidence?: boolean;
   paidEnclosure?: boolean;
   landscapeClaim?: boolean;
+  hazardousAccess?: boolean;
+  commonplaceNotice?: boolean;
 };
 
 const OUTDOOR_VIEW: Rule = {
@@ -577,23 +606,101 @@ const BY_CATEGORY: Record<string, Rule> = {
   viewpoint: OUTDOOR_VIEW,
   scenic_lookout: OUTDOOR_VIEW,
   observation_deck: { ...OUTDOOR_VIEW, exposure: 'mixed', costLevel: 2, plausiblyGated: true },
+  /**
+   * The word a global place catalogue actually publishes for an observation
+   * tower's deck — and, on the measured packs, for plain roadside 展望台
+   * lookouts too. It arrives under `arts_and_entertainment >
+   * science_attraction > observatory`, so with no leaf of its own it fell to
+   * the branch rule and the branch rule refuses ("a branch is not a
+   * permission"): a fresh dense-metro pack held two observation decks refused
+   * as `insufficient_travel_value`, and the destination's canonical tower
+   * publishes under exactly this word. An observatory is the observation-deck
+   * kind wearing the source's own spelling; it gets the same rule.
+   */
+  observatory: { ...OUTDOOR_VIEW, exposure: 'mixed', costLevel: 2, plausiblyGated: true, displayKind: 'Observatory' },
+  /**
+   * The purpose-built broadcast tower, as a *structure* class rather than a
+   * utility.
+   *
+   * The geographic vocabulary distinguishes the huge free-standing tower
+   * (`communication_tower`) from the relay masts (`mobile_phone_tower`), and
+   * the path rule above flattened both into `communication > INFRASTRUCTURE` —
+   * so a destination's tallest structure, published under exactly this class
+   * with a knowledge-base identifier and dozens of surrounding records
+   * embedding its name, classified identically to a cell mast and could never
+   * enter the inventory however loudly the ground attested it. Measured on a
+   * live metropolitan box: 37 rows carry this class, 3 of them named (the
+   * unnamed ones never normalise), 42 more are `mobile_phone_tower` and stay
+   * infrastructure below. The observation-deck rule fits what the class is
+   * for a traveller — a deck, a ticket, a view — and the witness requirement
+   * keeps an unremarkable named relay tower out unless somebody vouches for
+   * the visit.
+   */
+  communication_tower: { ...OUTDOOR_VIEW, exposure: 'mixed', costLevel: 2, plausiblyGated: true, displayKind: 'Observation tower', requiresSignificanceEvidence: true },
   scenic_point_of_interest: OUTDOOR_VIEW,
+  /*
+   * NAMED RELIEF: admission stays the landscape-plausibility gate's (a real
+   * outline is itself ground attestation — a surveyed 4 km mountain needs no
+   * encyclopaedia), but the RANK is witness-bounded through `landscapeClaim`
+   * — see the inventory's significance wiring. Terrain layers mint a
+   * knowledge-base entry for every named rise, and on a live anti-overfit
+   * metro build a 33-metre rubble mound held a scenic "Mt." seat at 0.64 on
+   * an encyclopaedic entry alone, with no elevation attribute for the
+   * metres-scale correction to read. Notice alone cannot also buy the seat;
+   * a designated summit or an operated lookout keeps its full rank.
+   */
   peak: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60, displayKind: 'Peak', significanceWeight: 0.5, landscapeClaim: true },
   summit: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60, displayKind: 'Peak', significanceWeight: 0.5, landscapeClaim: true },
   saddle: OUTDOOR_VIEW,
   ridge: OUTDOOR_VIEW,
   cliff: OUTDOOR_VIEW,
-  volcano: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, displayKind: 'Volcano', significanceWeight: 0.7, landscapeClaim: true },
+  volcano: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, displayKind: 'Volcano', significanceWeight: 0.7, landscapeClaim: true, hazardousAccess: true },
 
   // Walking, hiking, parks
-  park: { ...WALK, category: 'easy_walk', typicalDurationMinutes: 90, significanceWeight: 0.4 },
-  national_park: { ...HIKE, typicalDurationMinutes: 240, plausiblyGated: true, costLevel: 1, significanceWeight: 1 },
-  state_park: { ...WALK, typicalDurationMinutes: 150, plausiblyGated: true, costLevel: 1, significanceWeight: 0.7 },
-  nature_reserve: { ...WILDLIFE },
-  nature_preserve: { ...WILDLIFE },
+  park: { ...WALK, category: 'easy_walk', typicalDurationMinutes: 90, significanceWeight: 0.4, commonplaceNotice: true },
+  national_park: { ...HIKE, typicalDurationMinutes: 240, plausiblyGated: true, costLevel: 1, significanceWeight: 1, commonplaceNotice: true },
+  state_park: { ...WALK, typicalDurationMinutes: 150, plausiblyGated: true, costLevel: 1, significanceWeight: 0.7, commonplaceNotice: true },
+  nature_reserve: { ...WILDLIFE, commonplaceNotice: true },
+  nature_preserve: { ...WILDLIFE, commonplaceNotice: true },
   protected_area: { ...WILDLIFE },
-  botanical_garden: { ...WALK, costLevel: 2, plausiblyGated: true },
-  garden: WALK,
+  /**
+   * A designated natural landmark — the protected-area vocabulary's word for
+   * ground a public authority drew a boundary around to protect one specific
+   * natural feature: a waterfall, a crater row, a lava field, a sea cliff.
+   *
+   * It had no leaf, so it fell to no rule at all and classified as
+   * `insufficient_travel_value` — and the measured cost was the exact §4 shape
+   * on a road/outdoor country build: the geographic layer publishes a
+   * destination's two most famous waterfalls *as* natural monuments, with a
+   * protection class, a drawn boundary and (for one) an encyclopaedic entry,
+   * and both were refused as unrecognised ground while townsquare lawns held
+   * board seats. Sixteen of sixteen bearers on that pack were real designated
+   * areas; the two dense-metro control packs carry zero, so the leaf cannot
+   * move a metro board.
+   *
+   * Witness-gated like the other designation-claiming kinds, and for the same
+   * reason: the word is a claim about a designation, and the designation —
+   * a protection class conferred on a drawn boundary — is exactly what the
+   * witness channels read. A record wearing the word with nothing conferred on
+   * it is a listing, not a landmark.
+   */
+  natural_monument: { ...OUTDOOR_VIEW, typicalDurationMinutes: 60, displayKind: 'Natural monument', significanceWeight: 0.7, requiresSignificanceEvidence: true },
+  /**
+   * A ticketed animal venue, from the catalogue's `animal_attraction` family —
+   * the same family as `zoo` and `aquarium`, which have had leaves from the
+   * start. With no leaf it fell to the `arts_and_entertainment` branch and was
+   * refused, so no record of a kind the interest model explicitly serves
+   * (`wildlife`) could ever compete.
+   *
+   * Evidence-gated, unlike `zoo`, because the measured instances demand it: on
+   * a fresh dense-metro pack the word's four bearers were a storefront
+   * business, a street of cats, a school biotope and a limited company — not
+   * one sanctuary. The kind is admitted so a witnessed instance can compete;
+   * an unwitnessed one is a listing wearing a conservation word.
+   */
+  wildlife_sanctuary: { ...WILDLIFE, displayKind: 'Wildlife sanctuary', requiresSignificanceEvidence: true },
+  botanical_garden: { ...WALK, costLevel: 2, plausiblyGated: true, commonplaceNotice: true },
+  garden: { ...WALK, commonplaceNotice: true },
   hiking_trail: HIKE,
   trail: HIKE,
   trailhead: { ...SUPPORT, subrole: 'visitor_information', category: 'day_hike', interests: ['hiking'], typicalDurationMinutes: 20 },
@@ -615,8 +722,8 @@ const BY_CATEGORY: Record<string, Rule> = {
   hill: { ...OUTDOOR_VIEW, displayKind: 'Hill', significanceWeight: 0.2 },
   mountain_range: { ...OUTDOOR_VIEW, significanceWeight: 0.5, landscapeClaim: true },
   dune: WALK,
-  cave: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false, plausiblyGated: true, costLevel: 2 },
-  cave_entrance: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false },
+  cave: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false, plausiblyGated: true, costLevel: 2, hazardousAccess: true, displayKind: 'Cave' },
+  cave_entrance: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false, hazardousAccess: true, displayKind: 'Cave', plausiblyGated: true, costLevel: 2 },
 
   /**
    * Water, and every entry says what it is.
@@ -628,17 +735,53 @@ const BY_CATEGORY: Record<string, Rule> = {
    * not "lake".
    */
   lake: WATER,
-  reservoir: { ...WATER, displayKind: 'Reservoir', significanceWeight: 0.25 },
-  river: { ...WATER, displayKind: 'River' },
-  stream: { ...WATER, displayKind: 'Stream', significanceWeight: 0.15 },
-  canal: { ...WATER, displayKind: 'Canal', significanceWeight: 0.35 },
-  pond: { ...WATER, displayKind: 'Pond', significanceWeight: 0.2 },
+  reservoir: { ...WATER, displayKind: 'Reservoir', significanceWeight: 0.25, requiresSignificanceEvidence: true },
+  /**
+   * A river is a line you cross. A lake is a place you stand at.
+   *
+   * This was the one flowing-water leaf that kept the lake archetype's 0.45,
+   * while every other one had already been overridden downward — `stream` 0.15,
+   * `pond` 0.2, `reservoir` 0.25, `spring` 0.25, `canal` 0.35 — and the
+   * inconsistency decided two live boards. On the compiled Osaka pack (release
+   * 2026-07-22.0, 1,218 visitable records) twenty-seven anonymous urban creeks
+   * outranked the walled castle grounds that are the city's headline historic
+   * park, and on Tokyo twenty of the top twenty-five visitable records were
+   * named drainage channels. Every one of them held *exactly* the evidence that
+   * park held — a knowledge-base entry and an encyclopaedic article, which any
+   * named watercourse in Japan carries — so the only thing between them was
+   * this number.
+   *
+   * `canal`'s weight, because the two are the same kind of thing: a corridor
+   * whose recorded point is arbitrary along its length. The rivers that really
+   * are destinations say so through the evidence channels, which now decide
+   * more than the kind does.
+   */
+  /*
+   * FLOWING AND ARTIFICIAL WATER ASKS FOR A WITNESS — the bridge's argument,
+   * one layer down. The weights above already say what the class is worth,
+   * and the weights were not enough: every named watercourse in a dense
+   * hydrography carries a knowledge-base entry and an article, so on live
+   * metro boards six canals and an industrial inner harbour held seats at
+   * one significance band (each ~0.68) over the destination's own witnessed
+   * landmarks. A corridor of water is how a city drains; a few are why people
+   * visit, and the category cannot tell them apart — so, like the bridge and
+   * the cemetery, these kinds are candidates only with significance evidence
+   * behind them, and the witness bound in `composeExperienceSignificance`
+   * keeps encyclopaedic notice alone from also buying the seat: a designated
+   * or operated waterfront keeps its full rank, a drainage channel with an
+   * article ranks as what it is. Standing water people stand at — a lake, a
+   * lagoon, a bay, a waterfall, a beach — keeps unconditional admission.
+   */
+  river: { ...WATER, displayKind: 'River', significanceWeight: 0.35, requiresSignificanceEvidence: true },
+  stream: { ...WATER, displayKind: 'Stream', significanceWeight: 0.15, requiresSignificanceEvidence: true },
+  canal: { ...WATER, displayKind: 'Canal', significanceWeight: 0.35, requiresSignificanceEvidence: true },
+  pond: { ...WATER, displayKind: 'Pond', significanceWeight: 0.2, requiresSignificanceEvidence: true },
   lagoon: { ...WATER, displayKind: 'Lagoon' },
   bay: { ...WATER, displayKind: 'Bay' },
   fjord: { ...WATER, visibilityDependent: true, displayKind: 'Fjord' },
   waterfall: { ...WATER, category: 'lake', typicalDurationMinutes: 60, displayKind: 'Waterfall', significanceWeight: 0.65 },
   beach: { ...WATER, category: 'lake', typicalDurationMinutes: 150, interests: ['lakes_and_rivers', 'scenic_viewpoints'], displayKind: 'Beach', significanceWeight: 0.6 },
-  glacier: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, interests: ['geology_and_geothermal', 'scenic_viewpoints'], displayKind: 'Glacier', significanceWeight: 0.7, landscapeClaim: true },
+  glacier: { ...OUTDOOR_VIEW, typicalDurationMinutes: 120, interests: ['geology_and_geothermal', 'scenic_viewpoints'], displayKind: 'Glacier', significanceWeight: 0.7, landscapeClaim: true, hazardousAccess: true },
   /**
    * A spring is where water comes out of the ground. Nothing about it is hot.
    *
@@ -660,8 +803,8 @@ const BY_CATEGORY: Record<string, Rule> = {
   science_museum: MUSEUM,
   art_gallery: { ...MUSEUM, typicalDurationMinutes: 75, costLevel: 1 },
   gallery: { ...MUSEUM, typicalDurationMinutes: 75, costLevel: 1 },
-  aquarium: { ...MUSEUM, interests: ['wildlife'], costLevel: 3, displayKind: 'Aquarium', paidEnclosure: true },
-  zoo: { ...WILDLIFE, exposure: 'mixed', costLevel: 3, typicalDurationMinutes: 180, displayKind: 'Zoo', significanceWeight: 0.7, paidEnclosure: true },
+  aquarium: { ...MUSEUM, interests: ['wildlife'], costLevel: 3, displayKind: 'Aquarium', paidEnclosure: true, commonplaceNotice: true },
+  zoo: { ...WILDLIFE, exposure: 'mixed', costLevel: 3, typicalDurationMinutes: 180, displayKind: 'Zoo', significanceWeight: 0.7, paidEnclosure: true, commonplaceNotice: true },
   planetarium: MUSEUM,
   /**
    * A public library is a civic amenity that is *occasionally* a landmark.
@@ -674,7 +817,44 @@ const BY_CATEGORY: Record<string, Rule> = {
    */
   library: { ...MUSEUM, costLevel: 0, typicalDurationMinutes: 45, displayKind: 'Library', significanceWeight: 0.4, requiresSignificanceEvidence: true },
   theatre: { ...MUSEUM, typicalDurationMinutes: 150, costLevel: 3 },
+  /**
+   * The catalogue's own spelling of the kind the `theatre` leaf already
+   * admits: it publishes `arts_and_entertainment > performing_arts_venue >
+   * theatre_venue`, and the missing leaf sent a city's Noh theatre to the
+   * branch rule's refusal while `theatre` sat one line up. The *other*
+   * children of `performing_arts_venue` — comedy clubs, cabarets — stay
+   * unlisted deliberately: an evening out is a class this product models no
+   * interest for, so the branch refusal is their correct answer.
+   *
+   * Evidence-gated, unlike `theatre`, because this word is where a commercial
+   * catalogue files *anything with a stage*: a fresh dense-metro pack held the
+   * national Noh theatre under it — and beside it two limited companies, a
+   * ballet studio, an audition website and a restaurant chain with "theatre"
+   * in its trade name, each of which would have entered the shortlist as a
+   * two-and-a-half-hour anchor. The venues people cross a city for carry a
+   * witness; a studio's own listing is not one. This is the `library`
+   * precedent: a civic amenity that is *occasionally* a landmark, admitted on
+   * the evidence that it is one.
+   */
+  theatre_venue: { ...MUSEUM, typicalDurationMinutes: 150, costLevel: 3, requiresSignificanceEvidence: true },
   concert_hall: { ...MUSEUM, typicalDurationMinutes: 150, costLevel: 3 },
+  /**
+   * The catalogue's word for a convention centre, an expo hall, a trade-fair
+   * ground. Previously branch-guessed (`arts_and_entertainment` → museum), so
+   * a fresh-pack audit read a shrine's neighbouring exhibition building as a
+   * guessed `cultural` and the gate had to refuse it by hand.
+   *
+   * The `theatre_venue` precedent, applied unchanged: a venue class whose
+   * everyday instances exist for the *event*, not the place — a class this
+   * product models no interest for — while a few instances are landmark
+   * buildings people cross a city to see. So the kind is admitted
+   * evidence-gated: a hall the world has written about competes as a cultural
+   * visit; a booking listing for exhibition space is refused. The weight is
+   * deliberately far below the museum archetype it borrows — an exhibition
+   * hall is an occasional landmark, not a collection — which also corrects the
+   * branch guess the retention layer used to price these records at.
+   */
+  exhibition_and_trade_fair_venue: { ...MUSEUM, typicalDurationMinutes: 120, costLevel: 2, displayKind: 'Exhibition venue', significanceWeight: 0.45, requiresSignificanceEvidence: true },
 
   /**
    * THE STRUCTURAL CLAIM, AND WHY IT NEEDS A WITNESS.
@@ -699,31 +879,143 @@ const BY_CATEGORY: Record<string, Rule> = {
    * The named building kinds beneath it keep their unconditional admission,
    * because `castle`, `fort`, `ruins`, `monument` and `archaeological_site` all
    * say what the thing *is*. A mis-tag there is rare; here it is the norm.
+   *
+   * The witness this asks for is `hasSignificanceEvidence`, and that predicate
+   * has since been narrowed: a government publishing the asset it operates no
+   * longer opens it. The two changes belong together. This entry is where a
+   * catalogue puts a named building whose use it did not state — a live New York
+   * pack filed 115 records here, the clear majority of them apartment blocks,
+   * condominium associations, public-housing developments and street addresses —
+   * so a witness that fires on "a public body is the landlord" was admitting
+   * precisely the majority.
+   *
+   * THE WEIGHT HAS TO AGREE WITH THE SENTENCE ABOVE — the same correction the
+   * bridge entry already carries. The prior is "what to believe about a place
+   * of this kind before anybody has said anything about this one", and for a
+   * node whose own documentation says mis-tags are the norm, inheriting the
+   * full 0.75 of the archetype priced an *assertion* above every named
+   * building kind under it — above a worship building (0.6), level with a
+   * palace. On a stored dense-metro compile the consequence was direct: eleven
+   * neighbourhood records filed under this bare node, admitted through the
+   * witness outage with nothing but a shared name behind them, outranked both
+   * of the destination's headline sanctuaries at the shortlist cut, seat for
+   * seat. The named kinds say what a thing is and keep the archetype's weight;
+   * the bare assertion prices at the memorial band, because a marker or a
+   * former use is what the class mostly holds — and a genuinely great site
+   * filed bare still rises on what the world established about it.
    */
-  historic_site: { ...HISTORIC, requiresSignificanceEvidence: true },
-  historical_landmark: { ...HISTORIC, requiresSignificanceEvidence: true },
+  historic_site: { ...HISTORIC, requiresSignificanceEvidence: true, significanceWeight: 0.45 },
+  historical_landmark: { ...HISTORIC, requiresSignificanceEvidence: true, significanceWeight: 0.45 },
   archaeological_site: { ...HISTORIC, typicalDurationMinutes: 90, exposure: 'exposed_outdoor' },
   castle: { ...HISTORIC, typicalDurationMinutes: 120, costLevel: 2 },
+  /**
+   * A palace is a kind of building, and it was being read as an assertion.
+   *
+   * `castle` has been on this list since the table existed; its obvious twin was
+   * not, and the omission had teeth. Global catalogues publish `palace` as a
+   * *child* of the historic-site node — the live Tokyo pack carries four of them
+   * under `cultural_and_historic > historic_site > palace` — so with no leaf of
+   * its own it fell through to the parent's rule and had to argue its way past a
+   * gate built to filter commemorative plaques. The building an entire imperial
+   * capital is arranged around was admitted on the strength of a `.go.jp` URL.
+   */
+  palace: { ...HISTORIC, typicalDurationMinutes: 120, costLevel: 2, displayKind: 'Palace' },
   fort: HISTORIC,
   ruins: { ...HISTORIC, exposure: 'exposed_outdoor', costLevel: 0, plausiblyGated: false },
-  monument: MONUMENT,
-  memorial: { ...MONUMENT, typicalDurationMinutes: 40, plausiblyGated: false },
-  landmark_and_historical_building: { ...HISTORIC, requiresSignificanceEvidence: true },
+  /*
+   * The bare `monument` leaf joins the memorial family's witness rule. The
+   * archetype's 0.75 was priced for the built, ticketed monument — and an
+   * open catalogue files every roadside stele, founder's stone and site
+   * marker under this one word: on a live anti-overfit metro build seventeen
+   * 0.22 kind-only stones held anchor-pool seats while the destination's
+   * castle lost the same band's id lottery. The weight stands — a witnessed
+   * monument is a real anchor — but the class needs somebody's statement
+   * before a stone competes for seats, exactly as its memorial and statuary
+   * siblings already do.
+   */
+  monument: { ...MONUMENT, requiresSignificanceEvidence: true },
+  /**
+   * A MEMORIAL IS AN ACT OF REMEMBRANCE, NOT A KIND OF BUILDING — AND THE
+   * CATALOGUE CANNOT TELL A CENOTAPH FROM A KERBSIDE STONE.
+   *
+   * These three leaves inherited the monument archetype whole: weight 0.75 —
+   * the same as a castle, above a zoo, above a beach — and no witness asked of
+   * anything. On a live dense-metro board the top card of the whole
+   * worth-the-detour group, badged "Top pick for you", was a ward's war-damage
+   * stone whose only page is the ministry registry that catalogues such
+   * stones: an operator's asset list, the exact channel this phase ruled may
+   * never decide significance. The stone seated because the side-quest pool
+   * was undersubscribed and 0.75 outbid everything else that could fill it.
+   *
+   * This is the sculpture/cemetery argument verbatim, and the family gets the
+   * same two answers. **The gate**: most records under a memorial word are a
+   * plaque, a stone, a slope with a story — the ones people cross a city for
+   * (a national cenotaph, a peace park) carry a knowledge-base entry or an
+   * encyclopaedic article, so `requiresSignificanceEvidence` lets exactly
+   * those through and refuses the bare stone. **The weight**: `monument`
+   * keeps 0.75 — it names a built, ticketed, ninety-minute thing — while the
+   * forty-minute ungated remembrance class prices at the cemetery's 0.45,
+   * because the two are the same register: a place of remembrance first and a
+   * sight second. The gate decides *whether* one is a candidate; this decides
+   * what being one is worth before anybody looks, and an evidenced memorial
+   * still competes through the channels, which now decide more than the kind.
+   */
+  memorial: { ...MONUMENT, typicalDurationMinutes: 40, plausiblyGated: false, significanceWeight: 0.45, requiresSignificanceEvidence: true },
+  /**
+   * The memorial family as the catalogue spells it: `cultural_and_historic >
+   * memorial_site > memorial_park`. `memorial` has always had a leaf; the two
+   * words the source actually publishes did not, so a war memorial park fell
+   * to the branch rule and was refused as having no travel value — the same
+   * one-kind-two-spellings gap as `theatre_venue`.
+   */
+  memorial_site: { ...MONUMENT, typicalDurationMinutes: 40, plausiblyGated: false, significanceWeight: 0.45, requiresSignificanceEvidence: true },
+  memorial_park: { ...MONUMENT, typicalDurationMinutes: 40, plausiblyGated: false, displayKind: 'Memorial park', significanceWeight: 0.45, requiresSignificanceEvidence: true },
+  /**
+   * Public statuary. A real sightseeing kind — the famous ones are why a
+   * traveller crosses a square — and the *unwitnessed* majority is garden
+   * ornament: a fresh dense-metro pack held seventeen, led by temple guardian
+   * lions and a corporate plaza's mascots. So the kind is admitted and, like
+   * the bridge and the cemetery, asks for a witness: the statues people cross
+   * a city for carry identity evidence, and a bronze nobody has written about
+   * is not a stop.
+   */
+  sculpture_statue: { ...MONUMENT, typicalDurationMinutes: 20, costLevel: 0, plausiblyGated: false, displayKind: 'Sculpture', significanceWeight: 0.3, requiresSignificanceEvidence: true },
+  // The same bare assertion as `historic_site`, in another catalogue's
+  // spelling — same witness, same assertion-band prior. See that entry.
+  landmark_and_historical_building: { ...HISTORIC, requiresSignificanceEvidence: true, significanceWeight: 0.45 },
 
   /**
-   * Somewhere to worship, and the distinction the live evaluation forced.
+   * Somewhere to worship, and the word the split above could not see.
    *
    * A cathedral, a temple and a shrine are destinations. A storefront
    * congregation is not, and a live New York run put nine neighbourhood churches
    * on the board as historic sites because the catalogue files every
-   * denomination under a cultural-and-historic branch.
+   * denomination under a cultural-and-historic branch. The first fix split the
+   * vocabulary: building words as attractions, congregation words as support
+   * stops (`religious_organization` in the branch table below).
    *
-   * So the *building* words are attractions and the *congregation* words are
-   * support stops — see `religious_organization` in the branch table below. The
-   * split is on the source's vocabulary, not on any judgement about which faiths
-   * make good sightseeing, and it holds in Bali and Bavaria alike.
+   * The split had a blind spot, and it cost a city its most famous temple. The
+   * catalogue's own spelling for a worship *building* is not `temple` or
+   * `shrine` — it is `*_place_of_worship` under a `place_of_worship` node, and
+   * this entry filed that whole node as a support stop. On a fresh dense-metro
+   * pack the destination's two canonical temples arrived exactly there: each
+   * normalised to the same retention priority as a cash machine and was evicted
+   * before eligibility ever saw it. A place of worship is one of the canonical
+   * experience archetypes of world travel; typing every one as plumbing is how
+   * a city loses the building it is famous for.
+   *
+   * So the node is an experience kind — worship-shaped, like `temple` — and it
+   * is **evidence-gated**, because the word still covers both halves of the
+   * original defect: a metropolis holds thousands of neighbourhood chapels,
+   * shrines and congregation halls under exactly this vocabulary, and none of
+   * them is a stop. The witness decides, per record, which half this one is —
+   * the famous ones carry one, a storefront congregation's own listing is not
+   * one. This is the `historic_site` argument verbatim: a generic assertion is
+   * gated while the named building kinds below stay unconditional. The split
+   * stays on the source's vocabulary and on evidence somebody else published,
+   * never on a judgement about which faiths make good sightseeing.
    */
-  place_of_worship: { ...SUPPORT, subrole: 'civic', typicalDurationMinutes: 40, exposure: 'indoor' },
+  place_of_worship: { ...HISTORIC, typicalDurationMinutes: 45, exposure: 'mixed', displayKind: 'Place of worship', significanceWeight: 0.6, requiresSignificanceEvidence: true },
   church: { ...HISTORIC, typicalDurationMinutes: 45, exposure: 'indoor', poorWeatherBackup: true, significanceWeight: 0.5 },
   cathedral: { ...HISTORIC, typicalDurationMinutes: 60, exposure: 'indoor', poorWeatherBackup: true },
   basilica: { ...HISTORIC, typicalDurationMinutes: 60, exposure: 'indoor', poorWeatherBackup: true },
@@ -744,16 +1036,60 @@ const BY_CATEGORY: Record<string, Rule> = {
   aerial_lift: TRAM,
   gondola: TRAM,
   funicular: TRAM,
-  ski_resort: { ...TRAM, typicalDurationMinutes: 240, physicalIntensity: 'moderate' },
+  /*
+   * A LANDSCAPE CLAIM, LIKE THE RANGE IT SITS ON.
+   *
+   * Its lift siblings above are pieces of infrastructure and are honestly a
+   * point: a cable car station is a building. A *resort* is the mountain — the
+   * word names a whole ski area, which is why this row alone carries four
+   * hours. So it makes the same claim `mountain_range` makes and is subject to
+   * the same plausibility test: an extent, or an identity somebody else
+   * vouches for. Without the flag, a live metro board carried seven of these
+   * inside central wards on a source tag alone, one of them a gondola whose
+   * ground is a hundred and fifty kilometres away and which held a whole day
+   * of the flagship journey.
+   */
+  ski_resort: {
+    ...TRAM,
+    typicalDurationMinutes: 240,
+    physicalIntensity: 'moderate',
+    landscapeClaim: true,
+  },
 
   // Markets and neighbourhoods
   market: MARKET,
   marketplace: MARKET,
-  farmers_market: { ...MARKET, typicalDurationMinutes: 60 },
+  /**
+   * The open-air market kinds are not rain reserves.
+   *
+   * `MARKET` says `poorWeatherBackup: true`, which is right for the covered
+   * kinds — a market hall, a bazaar, a food hall — and flatly wrong for a
+   * street of stalls: a farmers' market, a flea market and a night market are
+   * the *first* things a downpour closes. The board's reserve shelf collects
+   * exactly this bit ("hold this back for when the weather turns"), and a live
+   * dense-metro board shelved a night-stall eatery and a late-night shop as
+   * rainy-day backups on the strength of it. The bit is the class's honest
+   * answer, not a gate: the kinds keep their full market admission.
+   */
+  farmers_market: { ...MARKET, typicalDurationMinutes: 60, poorWeatherBackup: false },
   public_market: MARKET,
   bazaar: MARKET,
-  night_market: MARKET,
-  flea_market: { ...MARKET, typicalDurationMinutes: 60 },
+  night_market: { ...MARKET, poorWeatherBackup: false },
+  flea_market: { ...MARKET, typicalDurationMinutes: 60, poorWeatherBackup: false },
+  /**
+   * A HEALTH MARKET IS A SHOP, AND THE WORD ARRIVED THROUGH A HOLE.
+   *
+   * The catalogue files health-food retailers under `shopping > market >
+   * health_market`. With no leaf of its own the word fell through to the
+   * `market` *path segment* one level up, and a retail shop class inherited
+   * the full market admission — board card, attraction seat, rainy-day shelf.
+   * On a live dense-metro board the record wearing it was a trading company's
+   * registry row. The kind is a place a traveller *provisions* at, exactly
+   * like the grocery it is, so it gets the grocery's answer — and any future
+   * unknown child of the market node still lands on the market family, which
+   * is the honest inference for words that actually mean a market.
+   */
+  health_market: { ...SUPPORT, subrole: 'provisioning', typicalDurationMinutes: 20 },
   neighborhood: { ...TOWN, typicalDurationMinutes: 120, displayKind: 'Neighbourhood' },
   plaza: { ...TOWN, typicalDurationMinutes: 45, exposure: 'exposed_outdoor', poorWeatherBackup: false, plausiblyGated: false, displayKind: 'Plaza', significanceWeight: 0.3 },
   /**
@@ -781,7 +1117,18 @@ const BY_CATEGORY: Record<string, Rule> = {
    * identifier, cross-layer corroboration, a designation — and rail lines are
    * never candidates at all: a famous railway is a journey, not a stop.
    */
-  bridge: { ...OUTDOOR_VIEW, typicalDurationMinutes: 30, displayKind: 'Bridge', significanceWeight: 0.5, requiresSignificanceEvidence: true },
+  /*
+   * The weight has to agree with the sentence above it. "Most bridges are how a
+   * road crosses water" and 0.5 — above a public park, above a walk, above a
+   * wood — were two different opinions in one entry, and the higher one was
+   * winning: the top-ranked visitable record in the live Tokyo pack was a
+   * motorway bridge over the Tama River, admitted by the significance gate
+   * because a river crossing carries an encyclopaedic article like everything
+   * else in that layer. The gate decides *whether* a bridge is a candidate; this
+   * decides what being one is worth before anybody looks at it, and the honest
+   * answer for the class is `canal`'s.
+   */
+  bridge: { ...OUTDOOR_VIEW, typicalDurationMinutes: 30, displayKind: 'Bridge', significanceWeight: 0.35, requiresSignificanceEvidence: true },
   viaduct: { ...OUTDOOR_VIEW, typicalDurationMinutes: 30, displayKind: 'Viaduct', significanceWeight: 0.3, requiresSignificanceEvidence: true },
   railway: INFRASTRUCTURE,
   railway_line: INFRASTRUCTURE,
@@ -812,9 +1159,9 @@ const BY_CATEGORY: Record<string, Rule> = {
    * to a traveller who had excluded theme parks. The enclosure kinds are named
    * so the inventory can fold their interior features into them.
    */
-  theme_park: { ...TOWN, typicalDurationMinutes: 420, costLevel: 3, displayKind: 'Theme park', significanceWeight: 0.8, paidEnclosure: true },
-  amusement_park: { ...TOWN, typicalDurationMinutes: 300, costLevel: 3, displayKind: 'Amusement park', significanceWeight: 0.7, paidEnclosure: true },
-  water_park: { ...TOWN, typicalDurationMinutes: 300, costLevel: 3, displayKind: 'Water park', significanceWeight: 0.6, paidEnclosure: true },
+  theme_park: { ...TOWN, typicalDurationMinutes: 420, costLevel: 3, displayKind: 'Theme park', significanceWeight: 0.8, paidEnclosure: true, commonplaceNotice: true },
+  amusement_park: { ...TOWN, typicalDurationMinutes: 300, costLevel: 3, displayKind: 'Amusement park', significanceWeight: 0.7, paidEnclosure: true, commonplaceNotice: true },
+  water_park: { ...TOWN, typicalDurationMinutes: 300, costLevel: 3, displayKind: 'Water park', significanceWeight: 0.6, paidEnclosure: true, commonplaceNotice: true },
 
   /**
    * Records that are not places at all: people, brands and the desks they work
@@ -1115,10 +1462,116 @@ const BY_BRANCH: Record<string, Rule> = {
 export function classifySourceCategory(input: {
   category: string;
   path?: readonly string[];
+  /**
+   * The record's own planning attributes, read for exactly one thing: a claim
+   * the *record itself* contradicts. Optional, because most callers hold only
+   * the vocabulary — and an absent attribute changes nothing, so omitting it
+   * is always safe.
+   */
+  attributes?: Readonly<Record<string, string>>;
+}): TaxonomyClassification {
+  const resolved = resolveByVocabulary(input);
+  /**
+   * A HAZARDOUS APPROACH THE RECORD'S OWN GROUND EVIDENCES.
+   *
+   * The gate used to hear the hazard only from the leaf, and the catalogue
+   * files the same ground under many words: a glacier tongue arrived as
+   * `national_park` (a tour lister's menu choice), carded as a plain day
+   * hike, while its own attributes said `natural=glacier`. Evidence the
+   * record itself carries outranks the filing — see `hazardEvidencedGround`.
+   * Additive only: it can mark an approach hazardous, never clear one.
+   */
+  const classification =
+    !resolved.hazardousAccess && hazardEvidencedGround(input.attributes)
+      ? { ...resolved, hazardousAccess: true }
+      : resolved;
+  /**
+   * A HISTORIC CLAIM THE RECORD'S OWN DATE CONTRADICTS.
+   *
+   * `historic_site` is an assertion, not a kind of building — the entry above
+   * says so at length — and a live pack filed a broadcast tower that opened
+   * this century under it, so the card typed a brand-new structure as historic
+   * ground. Where the source itself recorded a this-century opening, the
+   * assertion is contradicted by the record's own evidence: the thing is a
+   * modern landmark. Only the claim is corrected — the planning archetype and
+   * the witness requirement stand, because a bare assertion about a modern
+   * building still needs somebody else to vouch for the visit.
+   */
+  if (
+    HISTORIC_ASSERTION_KEYS.has(matchKeyOf(classification.match) ?? '') &&
+    (statedOpeningYear(input.attributes) ?? 0) >= MODERN_OPENING_YEAR
+  ) {
+    return { ...classification, displayKind: 'Landmark' };
+  }
+  /**
+   * A PEAK CLAIM THE RECORD'S OWN ELEVATION CONTRADICTS.
+   *
+   * The same shape as the historic correction above: `peak` and `summit` are
+   * claims about relief, and terrain layers file every named rise under them —
+   * on live metro boards, 26 m and 39–45 m artificial mounds took scenic
+   * "Peak" seats at the summit archetype's weight, each carrying the same
+   * encyclopaedic entry every named rise in a dense mapping does. Where the
+   * source itself recorded the elevation and it is metres-scale, the record
+   * has contradicted its own category's claim. The correction is general and
+   * reads only the record's own number, never a name: the rule drops to the
+   * low-relief grade — a hill's weight and a witness requirement, so a
+   * genuinely visited low rise (an operated lookout, a designated garden
+   * mound) can still earn its seat while an article-only mound ranks as what
+   * it is. A peak that states no elevation is left alone: an absent number is
+   * not a small one.
+   */
+  const elevation = statedElevationMetres(input.attributes);
+  if (
+    PEAK_CLAIM_KEYS.has(matchKeyOf(classification.match) ?? '') &&
+    elevation !== undefined &&
+    elevation < PEAK_MIN_ELEVATION_METRES
+  ) {
+    return {
+      ...classification,
+      displayKind: 'Hill',
+      significanceWeight: LOW_RELIEF_WEIGHT,
+      /*
+       * `landscapeClaim` is deliberately kept: a metres-scale mound is *more*
+       * suspect as terrain, not less, and the extent plausibility gate must
+       * still see the claim — a "mountain" with a one-metre outline stays
+       * refused there, whatever its stated elevation.
+       */
+      requiresSignificanceEvidence: true,
+    };
+  }
+  return classification;
+}
+
+/** The leaf keys whose whole claim is relief. Values, never names. */
+const PEAK_CLAIM_KEYS = new Set(['peak', 'summit']);
+
+/**
+ * Below this stated elevation, a "peak" is a mound. A hundred metres — the
+ * same order as `DESIGNATED_AREA_MIN_METRES` and the landscape-extent floor,
+ * for the same reason: below it the number describes landscaping, not relief.
+ */
+const PEAK_MIN_ELEVATION_METRES = 100;
+
+/** The hill grade the correction demotes to — `hill`'s own published weight. */
+const LOW_RELIEF_WEIGHT = 0.2;
+
+/** The record's own stated elevation, in metres, where the source recorded one. */
+function statedElevationMetres(
+  attributes: Readonly<Record<string, string>> | undefined,
+): number | undefined {
+  const raw = attributes?.ele ?? attributes?.elevation;
+  if (raw === undefined) return undefined;
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function resolveByVocabulary(input: {
+  category: string;
+  path?: readonly string[];
 }): TaxonomyClassification {
   const leaf = normalise(input.category);
-  const direct = BY_CATEGORY[leaf];
-  if (direct) return finalise(direct, { kind: 'source_leaf_category', key: leaf }, leaf);
+  const direct = lookupCategory(leaf);
+  if (direct) return finalise(direct.rule, { kind: 'source_leaf_category', key: direct.key }, leaf);
 
   /**
    * Innermost branch first.
@@ -1130,14 +1583,37 @@ export function classifySourceCategory(input: {
   const path = (input.path ?? []).map(normalise);
   for (let index = path.length - 1; index >= 0; index -= 1) {
     const segment = path[index]!;
-    const bySegment = BY_CATEGORY[segment];
-    if (bySegment) return finalise(bySegment, { kind: 'source_category_path', key: segment }, leaf);
+    const bySegment = lookupCategory(segment);
+    if (bySegment)
+      return finalise(bySegment.rule, { kind: 'source_category_path', key: bySegment.key }, leaf);
     const byBranch = BY_BRANCH[segment];
     if (byBranch) return finalise(byBranch, { kind: 'source_branch', key: segment }, leaf);
   }
 
   const branch = BY_BRANCH[leaf];
   if (branch) return finalise(branch, { kind: 'source_branch', key: leaf }, leaf);
+
+  /**
+   * A DENOMINATIONAL WORSHIP LEAF WITH NO PATH TO CATCH IT.
+   *
+   * The catalogue spells worship buildings `<denomination>_place_of_worship`,
+   * and the path walk above lands every one of them on the neutral
+   * `place_of_worship` node — which is the only honest resolution, because the
+   * denomination half of the word is a claim nothing in a pack can witness and
+   * the one time it was checked against ground truth it was wrong: a country's
+   * most famous Shinto shrine arrived as `christian_place_of_worship`. A
+   * record published with the leaf and *no* branch chain used to fall through
+   * to the unknown-category refusal, so a worship building was excluded
+   * because its catalogue omitted the path. The suffix is the family; the
+   * family's rule is the answer. The denomination itself is read by nothing.
+   */
+  if (leaf.endsWith('_place_of_worship')) {
+    return finalise(
+      BY_CATEGORY.place_of_worship!,
+      { kind: 'source_leaf_category', key: 'place_of_worship' },
+      leaf,
+    );
+  }
 
   /**
    * Unknown, and therefore excluded rather than promoted.
@@ -1147,6 +1623,40 @@ export function classifySourceCategory(input: {
    * nobody knowing what it is.
    */
   return finalise(EXCLUDED, { kind: 'no_recognised_category' }, leaf);
+}
+
+/**
+ * The bare structural-assertion spellings — the entries whose whole content is
+ * "somebody called this historic". The named building kinds (`castle`,
+ * `palace`, `ruins`) are absent deliberately: they say what a thing *is*, and
+ * a dated castle is still a castle.
+ */
+const HISTORIC_ASSERTION_KEYS = new Set([
+  'historic_site',
+  'historical_landmark',
+  'landmark_and_historical_building',
+]);
+
+/**
+ * The year at which "historic" stops being arguable. This century: a structure
+ * whose own record says it opened after this is asserting a history it has
+ * not had, whatever else it may be. A constant rather than a clock, so two
+ * builds of one pack classify identically.
+ */
+const MODERN_OPENING_YEAR = 2000;
+
+/** The first four-digit year in the source's own opening-date tag, if any. */
+function statedOpeningYear(
+  attributes: Readonly<Record<string, string>> | undefined,
+): number | undefined {
+  const raw = attributes?.start_date ?? attributes?.opening_date;
+  if (!raw) return undefined;
+  const match = /(\d{4})/.exec(raw);
+  return match ? Number(match[1]) : undefined;
+}
+
+function matchKeyOf(match: TaxonomyMatch): string | undefined {
+  return match.kind === 'no_recognised_category' ? undefined : match.key;
 }
 
 /**
@@ -1325,11 +1835,71 @@ function finalise(
     requiresSignificanceEvidence: rule.requiresSignificanceEvidence ?? false,
     paidEnclosure: rule.paidEnclosure ?? false,
     landscapeClaim: rule.landscapeClaim ?? false,
+    hazardousAccess: rule.hazardousAccess ?? false,
+    commonplaceNotice: rule.commonplaceNotice ?? false,
   };
+}
+
+/**
+ * Ground attributes that evidence a hazardous approach, whatever the leaf.
+ *
+ * The hazard gate keyed on the glacier/cave leaves alone, and the catalogue
+ * does not: on a live road-country pack a glacier tongue arrived filed under
+ * `national_park` (a tour lister's menu choice) and carded as a plain day
+ * hike, while its land-layer twin said `natural=glacier` in as many words.
+ * The evidenced ground outranks the filing — a record whose own attributes
+ * say ice, cave or crater is a hazardous approach whichever family word the
+ * catalogue chose — and `protect_class` 1a/1b/1 (strict reserves, entry
+ * managed or forbidden) is the same statement made by a protection register.
+ * Evidence only, never inference: an unadorned park stays a park.
+ */
+const HAZARDOUS_GROUND_VALUES = new Set(['glacier', 'cave_entrance', 'cave', 'volcano', 'crater']);
+const STRICT_PROTECTION_CLASSES = new Set(['1', '1a', '1b']);
+
+export function hazardEvidencedGround(
+  attributes: Readonly<Record<string, string>> | undefined,
+): boolean {
+  if (!attributes) return false;
+  const natural = attributes.natural?.trim().toLowerCase();
+  if (natural !== undefined && HAZARDOUS_GROUND_VALUES.has(natural)) return true;
+  const protectClass = attributes.protect_class?.trim().toLowerCase();
+  return protectClass !== undefined && STRICT_PROTECTION_CLASSES.has(protectClass);
 }
 
 function normalise(value: string): string {
   return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+/**
+ * A TABLE KEY FOR A LEAF, TOLERANT OF NUMBER — NEVER OF MEANING.
+ *
+ * The catalogue's vocabulary drifts between releases in exactly one cheap way:
+ * grammatical number. Measured against the live release's own rows, seven
+ * leaves are published *only* in the plural while this table keys the singular
+ * — and one of them is a thermal-bath class whose miss sent a destination's
+ * single most-visited paid attraction to `insufficient_travel_value`, because
+ * an unrecognised leaf falls through to its branch and the branch is refused
+ * without a witness. Adding seven plural keys would fix seven words and leave
+ * the *class* of defect standing for the next release.
+ *
+ * So the lookup, not the table, absorbs number: an exact miss retries the
+ * de-pluralised forms (`_s`, `_es`, `_ies`) and accepts one **only where the
+ * stem is already a key** — the fallback can reach nothing that was not
+ * deliberately written into the table, so it can re-spell a known kind and can
+ * never invent one.
+ */
+function lookupCategory(key: string): { rule: Rule; key: string } | undefined {
+  const direct = BY_CATEGORY[key];
+  if (direct) return { rule: direct, key };
+  const stems: string[] = [];
+  if (key.endsWith('ies')) stems.push(`${key.slice(0, -3)}y`);
+  if (key.endsWith('es')) stems.push(key.slice(0, -2));
+  if (key.endsWith('s')) stems.push(key.slice(0, -1));
+  for (const stem of stems) {
+    const rule = BY_CATEGORY[stem];
+    if (rule) return { rule, key: stem };
+  }
+  return undefined;
 }
 
 /**
@@ -1372,6 +1942,7 @@ const LANDSCAPE_SCALE = new Set([
   'nature_reserve',
   'nature_preserve',
   'protected_area',
+  'natural_monument',
   'park',
   'neighborhood',
   'scenic_drive',
@@ -1385,6 +1956,65 @@ const LANDSCAPE_SCALE = new Set([
 export function isLandscapeScale(input: { category: string; path?: readonly string[] }): boolean {
   if (LANDSCAPE_SCALE.has(normalise(input.category))) return true;
   return (input.path ?? []).some((segment) => LANDSCAPE_SCALE.has(normalise(segment)));
+}
+
+/**
+ * The designated-area family: kinds whose instances exist by *conferral* — a
+ * national park, a reserve, a designated natural landmark.
+ *
+ * Read by the linker's descriptor fold and by nothing that admits or refuses
+ * anything. The family matters there because these are the kinds catalogues
+ * name inconsistently *by construction*: the generic noun is part of the
+ * official designation, not of the proper name, so one source writes the
+ * proper name alone and another writes the proper name plus the designation —
+ * and the same protected ground arrives as two records whose names can never
+ * compare equal. A live country pack seated the same national park twice on
+ * exactly that split.
+ *
+ * Deliberately narrow, and `park` is deliberately *not* here: for a plain
+ * municipal park the generic word is part of the proper name — the famous
+ * royal park is not named by its first word — and treating it as detachable
+ * folded a real metropolis's headline garden onto a differently-catalogued
+ * twin, moving a control board that must not move. A `park`-category record
+ * still joins a designated entity's collapse the way it always could: through
+ * an exact or segmentation-folded name match with any member, which is exactly
+ * how the measured country pack's park-category record already links to its
+ * national park's polygon. Premises kinds (a museum, a memorial) stay out for
+ * the stronger reason: a trailing generic word genuinely distinguishes
+ * neighbours there.
+ */
+const PROTECTED_AREA_KINDS = new Set([
+  'national_park',
+  'state_park',
+  'nature_reserve',
+  'nature_preserve',
+  'protected_area',
+  'natural_monument',
+]);
+
+export function isProtectedAreaKind(input: {
+  category: string;
+  path?: readonly string[];
+}): boolean {
+  if (PROTECTED_AREA_KINDS.has(normalise(input.category))) return true;
+  return (input.path ?? []).some((segment) => PROTECTED_AREA_KINDS.has(normalise(segment)));
+}
+
+/**
+ * Kinds that exist for the *event*, not the place: an exhibition hall, an
+ * event space, a festival ground. Real venues, honestly admitted elsewhere
+ * under their own witness rules — but when the linker decides one of these and
+ * an institution are the same entity, the institution is the identity worth
+ * keeping: an exhibition's title has an end date, and a collapse that lets a
+ * season's listing become the surviving name of a permanent museum has renamed
+ * the museum after one of its shows. Read by the collapse's survivor choice,
+ * and by nothing that admits or refuses anything.
+ */
+const EVENT_VENUE = new Set(['exhibition_and_trade_fair_venue', 'event_venue', 'festival']);
+
+export function isEventVenue(input: { category: string; path?: readonly string[] }): boolean {
+  if (EVENT_VENUE.has(normalise(input.category))) return true;
+  return (input.path ?? []).some((segment) => EVENT_VENUE.has(normalise(segment)));
 }
 
 /** Every leaf and branch the table knows. Used by tests, never by the pipeline. */

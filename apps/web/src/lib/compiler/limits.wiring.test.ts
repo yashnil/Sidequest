@@ -21,9 +21,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * configured override. The override matters as much as the default — a test
  * that only pinned the default would pass against a hardcoded 12.
  *
+ * The last one asserts the return trip, which nothing measured: what a build
+ * *spent* on model calls reaching the day's ledger. It never did without a live
+ * provider stack, so the ledger held no `model_calls` row at all and neither
+ * model ceiling had ever been exercised by anything.
+ *
  * Nothing here reaches a provider. `createOpenProviders` is replaced by a
  * recorder that refuses to build a live stack at all, and `compileRegion` by
- * one that records the budget it was handed and stops.
+ * one that records the budget it was handed and then either stops or returns a
+ * result whose only interesting content is what it cost.
  */
 
 let dir: string;
@@ -57,12 +63,22 @@ vi.mock('../providers/live', async () => {
 /** The budget the runner threads into the compiler, captured at the boundary. */
 const compileCalls: { budget?: { maxModelCalls?: number; maxDurationMs?: number } }[] = [];
 
+/**
+ * What the compiler returns, when a test needs it to return at all.
+ *
+ * Null — the default — throws, which is how the budget tests read an argument
+ * without letting a compilation happen. The ledger test below needs the other
+ * side of the call, because what a run *spent* only exists on its result.
+ */
+let compileOutcome: unknown = null;
+
 vi.mock('@sidequest/compiler', async () => {
   const actual = await import('@sidequest/compiler');
   return {
     ...actual,
     compileRegion: (input: { budget?: { maxModelCalls?: number; maxDurationMs?: number } }) => {
       compileCalls.push(input);
+      if (compileOutcome) return compileOutcome;
       // The runner's own catch path takes it from here: the job fails, the
       // pulse stops, and the test reads what was on its way in.
       throw new Error('captured');
@@ -73,6 +89,7 @@ vi.mock('@sidequest/compiler', async () => {
 const ENV_KEYS = [
   'SIDEQUEST_COMPILER_MAX_AI_CALLS',
   'SIDEQUEST_COMPILER_DEADLINE_MS',
+  'SIDEQUEST_DAILY_MODEL_CALLS',
   'SIDEQUEST_COMPILER_PROVIDER',
   'SIDEQUEST_GEOCODER_PROVIDER',
   'SIDEQUEST_PLACE_BACKBONE',
@@ -85,6 +102,7 @@ beforeEach(() => {
   releaseDatabase();
   openProviderCalls.length = 0;
   compileCalls.length = 0;
+  compileOutcome = null;
   for (const key of ENV_KEYS) delete process.env[key];
   dir = mkdtempSync(join(tmpdir(), 'sidequest-limits-wiring-'));
   process.env.SIDEQUEST_DB_PATH = join(dir, 'test.db');
@@ -202,5 +220,50 @@ describe('both ceilings reach the compiler that prints and obeys them', () => {
     await runCompilation({ trip: getTrip(tripId)!, jobId });
 
     expect(compileCalls[0]!.budget).toEqual({ maxModelCalls: 7, maxDurationMs: 90_000 });
+  });
+
+  /**
+   * AND THE SPEND COMES BACK OUT, WHICH IS THE HALF NOTHING MEASURED.
+   *
+   * The ledger recorded `model_calls` only when the runner had built the *live*
+   * provider stack itself, so every caller that hands it a provider set — the
+   * benchmark driver, the evaluation matrix, every test — spent model calls the
+   * day's ceiling never saw. The consequence was not subtle: the ledger held no
+   * `model_calls` row at all, so both ceilings that govern model spend had never
+   * once been exercised, and a live run was the only way to find out whether
+   * either of them worked.
+   *
+   * The compiler counts the same calls on every path, so this runs on the
+   * fixture stack — where `live` is null by construction — and asserts the
+   * ceiling can now be reached, and refuses, without anything being bought.
+   */
+  it('records what a build spent on the day’s ledger, with no live stack at all', async () => {
+    const { getTrip } = await import('../db/repository');
+    const { runCompilation } = await import('./runner');
+    const { dailySpendGate, dailySpendSoFar } = await import('./daily-ceiling');
+    const { compilationOperationalSchema } = await import('@sidequest/core');
+
+    compileOutcome = {
+      ok: false,
+      code: 'coverage_insufficient',
+      message: 'Nothing to plan on.',
+      operational: compilationOperationalSchema.parse({
+        schemaVersion: 1,
+        budget: { consumed: { maxModelCalls: 9 }, limits: { maxModelCalls: 12 } },
+      }),
+    };
+    process.env.SIDEQUEST_DAILY_MODEL_CALLS = '9';
+
+    const { tripId, jobId } = await seededConfirmedTrip();
+    await runCompilation({ trip: getTrip(tripId)!, jobId });
+
+    expect(dailySpendSoFar('model_calls'), 'the build’s model calls never reached the ledger').toBe(
+      9,
+    );
+    // Nine of nine spent: the next build is refused by a ceiling that has now
+    // been demonstrated to bite, rather than assumed to.
+    const gate = dailySpendGate();
+    expect(gate.allowed).toBe(false);
+    if (!gate.allowed) expect(gate.message).toContain('saved');
   });
 });

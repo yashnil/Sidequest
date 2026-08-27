@@ -518,7 +518,16 @@ describe('scenario 16 — a car-free traveller', () => {
   });
 
   it('is never sent somewhere it cannot walk to', () => {
-    expect(nonFoodErrors(itinerary)).toEqual([]);
+    /*
+     * `coverage_below_pace` is filtered because it is a statement about how full
+     * the trip is, not about where this traveller was sent. A car-free fixture
+     * reaches few places by construction, so the completeness invariant fires on
+     * it correctly; the claim under test — nothing here is out of walking reach
+     * — is untouched.
+     */
+    expect(nonFoodErrors(itinerary).filter((code) => code !== 'coverage_below_pace')).toEqual(
+      [],
+    );
   });
 });
 

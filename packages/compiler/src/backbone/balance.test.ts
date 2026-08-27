@@ -127,6 +127,36 @@ describe('geographic balancing', () => {
     }
   });
 
+  it('gives a dense area its proportional share of the middle, never an equal turn apiece', () => {
+    /*
+     * The Tokyo funnel collapse of 2026-08-13, as a shape. The city-centre cell
+     * held 220 of the outdoor pool's 1,307 candidates — the destination's
+     * headline gardens among them — and a strict one-per-round rotation dealt
+     * it the same single seat per round as a harbour cell holding 20, so a
+     * globally 19th-ranked imperial park lost its seat to a sparse cell's
+     * fourth-best pocket park. The header of `balance.ts` has always promised
+     * the middle is distributed "proportionally to what each area actually
+     * holds"; this pins the implementation to its own sentence.
+     *
+     * 90 dense against five areas of 30, quota 30: an equal rotation gives the
+     * dense area 5 of 30; its proportional share is 90/240 ≈ 11, and the 0.45
+     * ceiling (13) still binds above it.
+     */
+    const items = world({ dense: 90, sparseAreas: 5, perSparse: 30 });
+    const { kept } = balance(items, 30);
+    expect(kept).toHaveLength(30);
+
+    const fromCapital = kept.filter((item) => item.area === 'capital').length;
+    expect(fromCapital).toBeGreaterThanOrEqual(10);
+    expect(fromCapital).toBeLessThanOrEqual(13);
+
+    // The floor survives proportionality: every sparse area is still served.
+    for (let area = 0; area < 5; area += 1) {
+      const fromArea = kept.filter((item) => item.area === `region-${area}`).length;
+      expect(fromArea, `region-${area}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('lets a genuinely single-area region fill the quota, and says that it did', () => {
     /*
      * The mirror-image failure the cap must not cause. A city really is one

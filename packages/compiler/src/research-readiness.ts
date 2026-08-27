@@ -1,3 +1,4 @@
+import { haversineKm } from '@sidequest/geo';
 import {
   RESEARCH_READINESS_VERSION,
   researchLevelFor,
@@ -85,8 +86,30 @@ export interface ReadinessInput {
   exhaustedRepairs?: readonly ResearchRepair[];
   /** Whether the compiled ground still covers the destination's published extent. */
   destinationCoverage?: number;
-  /** Whether the resolved identity and the ground agree. Absent when unmeasurable. */
-  identityAgrees?: boolean;
+  /**
+   * TYPED CONTAINMENT EVIDENCE FOR THE IDENTITY QUESTION, NEVER A VERDICT.
+   *
+   * This was `identityAgrees?: boolean`, and both call sites computed it as
+   * `insideSelected >= membershipDecided / 2` — a majority vote over every
+   * record the overlay judged, which is the whole pack rather than the board.
+   * Counts rather than a boolean because the arithmetic behind an identity claim
+   * is exactly the thing that has to be arguable here, in one place, instead of
+   * being derived twice at the seam.
+   *
+   * `placedInside` is a source's own statement that a record is in the
+   * destination — the three `INSIDE_RELATIONSHIPS`, established from published
+   * division identity or geometry, never from a distance. `refutedElsewhere` is
+   * `outside_scope`, which containment produces only from a levelled
+   * disagreement at a level the destination cannot span. Everything nobody could
+   * place is in neither: an unknown is not evidence about identity in either
+   * direction.
+   *
+   * Absent when the instrument could not answer at all.
+   */
+  identity?: {
+    placedInside: number;
+    refutedElsewhere: number;
+  };
   /** Whether the pack we read was itself incomplete. */
   packPartial: boolean;
 }
@@ -135,6 +158,44 @@ function report(
   };
 }
 
+/**
+ * THE MODES A TRAVELLER IS SHORT OF, IN WORDS RATHER THAN IN IDENTIFIERS.
+ *
+ * `unroutableModes` is a list of internal mode ids and this sentence used to
+ * paste them straight into traveller copy: "This trip needs ferry or public_bus
+ * or rail or shuttle". It went unnoticed because the deficit that produces it
+ * could not fire — `unmeasurableModesFor` compared a car-free reach against the
+ * cap that reach is clamped to — so the string had no readers. Making the
+ * deficit reachable makes this a screen a traveller sees, and §26's rule
+ * applies: no enum values in copy.
+ *
+ * Plural nouns, because the sentence is about a kind of service rather than a
+ * particular one, and an unknown id is passed through unchanged rather than
+ * dropped — a mode we forgot to name is a gap in this map, not a reason to
+ * under-report what a trip is missing.
+ */
+const UNROUTABLE_MODE_WORDS: Record<string, string> = {
+  drive: 'driving',
+  walk: 'walking',
+  rail: 'trains',
+  public_bus: 'buses',
+  shuttle: 'shuttles',
+  /*
+   * "ferry crossings" rather than "ferries": the sentence is about a kind of
+   * service, and the noun a traveller uses for one they might have to catch.
+   */
+  ferry: 'ferry crossings',
+  rideshare: 'taxis',
+  private_transfer: 'private transfers',
+  bicycle: 'cycling',
+};
+
+function describeUnroutableModes(modes: readonly string[]): string {
+  const words = [...new Set(modes.map((mode) => UNROUTABLE_MODE_WORDS[mode] ?? mode))];
+  if (words.length <= 1) return words[0] ?? 'a way of getting about';
+  return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
+}
+
 /** Three-way from a ratio, so every dimension grades the same way. */
 function grade(observed: number, expected: number, partialShare = SUPPLY_PARTIAL_SHARE): ResearchDimensionState {
   if (expected <= 0) return 'not_applicable';
@@ -148,16 +209,53 @@ export function assessResearchReadiness(input: ReadinessInput): DestinationResea
 
   // --- Identity and extent -------------------------------------------------
 
+  /**
+   * A MISMATCH CLAIM NEEDS EVIDENCE ABOUT IDENTITY, NOT ABOUT PROPORTIONS.
+   *
+   * The condition here was a majority share: `insideSelected >=
+   * membershipDecided / 2`, computed at the seam and handed in as a boolean. It
+   * is not a statement about identity at all. A pack is bought over a box drawn
+   * round the traveller's reach, and for a dense metro that box legitimately
+   * covers neighbouring regions — so the overlay reads thousands of records a
+   * source publishes elsewhere, refuses every one of them correctly, and the
+   * correct refusals then outnumber the positives. Three finished,
+   * correctly-resolved city builds (two dense metros and one European capital)
+   * were told "What we found does not look like the place you asked for" as the
+   * first line on the panel, with "we are going back for more" beneath it. The
+   * better containment worked, the likelier the accusation.
+   *
+   * What survives is the one shape that is genuinely about identity: the
+   * instrument answered, and **every** record it could place is published
+   * somewhere else. That is a resolution that landed on a same-named place
+   * somewhere else entirely, and it is the same rule the coverage report already
+   * grades its geography row on — `placed > 0 && inside === 0`, "the instrument
+   * worked and answered somewhere else every time". A single positive placement
+   * refutes it, because a positive is a source's own statement that this record
+   * is in the destination and no share of anything can overrule one.
+   *
+   * The share the old condition graded on is not discarded; it moves to
+   * `source_confidence` below, which is the dimension that is actually about it.
+   */
+  const identity = input.identity;
+  const identityPlacements = identity ? identity.placedInside + identity.refutedElsewhere : 0;
   dimensions.push(
-    input.identityAgrees === undefined
+    identity === undefined || identityPlacements === 0
       ? report('identity_agreement', 'unmeasured', 'We could not check the ground against the place you named.', true)
-      : input.identityAgrees
-        ? report('identity_agreement', 'met', 'The places we found are in the destination you asked for.', true)
-        : report(
+      : identity.placedInside === 0
+        ? report(
             'identity_agreement',
             'unmet',
-            'What we found does not look like the place you asked for.',
+            `Every one of the ${identity.refutedElsewhere} places we could pin down is published in a different country or region from the destination you asked for.`,
             true,
+            0,
+            identity.refutedElsewhere,
+          )
+        : report(
+            'identity_agreement',
+            'met',
+            `${identity.placedInside} of the places we found are published inside the destination you asked for.`,
+            true,
+            identity.placedInside,
           ),
   );
 
@@ -373,7 +471,7 @@ export function assessResearchReadiness(input: ReadinessInput): DestinationResea
       ? report(
           'transport_routeability',
           'unmet',
-          `This trip needs ${input.unroutableModes.join(' or ')}, and we have no way to measure those journeys here.`,
+          `This trip needs ${describeUnroutableModes(input.unroutableModes)}, and we have no way to measure those journeys here.`,
           true,
         )
       : input.routing === undefined
@@ -401,17 +499,48 @@ export function assessResearchReadiness(input: ReadinessInput): DestinationResea
         ),
   );
 
+  /**
+   * WHAT THE MAJORITY SHARE WAS ACTUALLY MEASURING, SAID AS ITSELF.
+   *
+   * "More of what we read belongs to neighbouring areas than to the destination"
+   * is a true observation and it was worth keeping — it is just not a statement
+   * about which place we searched. It is a statement about how much of what we
+   * read is tied to the destination, which is what this dimension already asks
+   * ("More than one catalogue, and membership actually established"). Stated
+   * with both numbers rather than as a verdict, so a traveller can see that a
+   * short board came out of a wide read and ask for the nearby areas instead of
+   * being told the destination is wrong.
+   *
+   * Advisory, and `partial` rather than `unmet`, deliberately: reading wider
+   * than the destination is the ordinary condition of a dense metro and it must
+   * not move the level. Under the old rule it moved the level to `recoverable`
+   * and then, once the repair was spent, towards `blocked`.
+   */
+  const readWiderThanDestination =
+    identity !== undefined &&
+    identity.placedInside > 0 &&
+    identity.refutedElsewhere > identity.placedInside;
+  const sourceClauses = [
+    `${input.sourceCatalogues} ${input.sourceCatalogues === 1 ? 'source' : 'sources'}`,
+  ];
+  if (funnel.membershipUnverified > 0) {
+    sourceClauses.push(`${funnel.membershipUnverified} places we could not pin to an official area`);
+  }
+  if (readWiderThanDestination) {
+    sourceClauses.push(
+      `we read wider than the destination — ${identity!.refutedElsewhere} of what we placed is published in neighbouring areas, so this board is drawn from the ${identity!.placedInside} inside it`,
+    );
+  }
   dimensions.push(
     report(
       'source_confidence',
       input.sourceCatalogues === 0
         ? 'unmeasured'
-        : funnel.visitable > 0 && funnel.membershipUnverified >= funnel.visitable
+        : (funnel.visitable > 0 && funnel.membershipUnverified >= funnel.visitable) ||
+            readWiderThanDestination
           ? 'partial'
           : 'met',
-      funnel.membershipUnverified > 0
-        ? `${input.sourceCatalogues} ${input.sourceCatalogues === 1 ? 'source' : 'sources'}; ${funnel.membershipUnverified} places we could not pin to an official area.`
-        : `${input.sourceCatalogues} ${input.sourceCatalogues === 1 ? 'source' : 'sources'}.`,
+      `${sourceClauses.join('; ')}.`,
       false,
       input.sourceCatalogues,
     ),
@@ -561,8 +690,70 @@ export function withRepairAttempt(
  * Asked of the provider rather than hard-coded, so the day a transit router is
  * configured this returns an empty list and nothing else has to change.
  */
-/** The reach at which a walking trip is self-sufficient. Mirrors the compiler's own. */
-const WALKABLE_REACH_KM = 12;
+/**
+ * HOW FAR THE COMPILED GROUND ACTUALLY EXTENDS FROM ITS CENTRE.
+ *
+ * Read as the two axis half-extents rather than as a corner distance, because
+ * that is the quantity `deriveShape` clips against: a settlement's bounds are
+ * intersected with `±reach` in latitude and longitude, so its half-extents come
+ * out at the reach and its *corner* comes out at reach × √2. Comparing corners
+ * would report every clipped city as bigger than the traveller who defined it.
+ *
+ * Null for a scope that never said, which the caller reads as "not a deficit" —
+ * unknown is not a failure.
+ */
+function groundExtentKm(scope: GeographicScope): number | null {
+  const shape = scope.shape;
+  const centre = { id: 'centre', ...scope.center };
+  const from = (point: { lat: number; lng: number }, id: string): number =>
+    haversineKm(centre, { id, ...point });
+  switch (shape.kind) {
+    case 'radius':
+      return shape.radiusKm;
+    case 'bounds': {
+      const { southWest, northEast } = shape.bounds;
+      return Math.max(
+        from({ lat: northEast.lat, lng: scope.center.lng }, 'n'),
+        from({ lat: southWest.lat, lng: scope.center.lng }, 's'),
+        from({ lat: scope.center.lat, lng: northEast.lng }, 'e'),
+        from({ lat: scope.center.lat, lng: southWest.lng }, 'w'),
+      );
+    }
+    case 'corridor': {
+      /*
+       * A route rather than an area: how far it reaches is its furthest
+       * waypoint plus the half-width either side of the line.
+       */
+      if (shape.waypoints.length === 0) return null;
+      return (
+        Math.max(...shape.waypoints.map((point, index) => from(point, `w${index}`))) +
+        shape.corridorWidthKm / 2
+      );
+    }
+    case 'areas': {
+      /* Several places at once: the furthest edge of the furthest of them. */
+      if (shape.areas.length === 0) return null;
+      return Math.max(
+        ...shape.areas.map((area, index) => from(area.center, `a${index}`) + area.radiusKm),
+      );
+    }
+    default:
+      /* A shape kind added later says nothing here rather than guessing. */
+      return null;
+  }
+}
+
+/**
+ * The margin between "as big as the traveller's reach" and "bigger than it".
+ *
+ * The two numbers are produced by different arithmetic — `clipToReach` works in
+ * degrees against a flat 111 km per degree, this measures a geodesic — so a
+ * shape clipped to exactly the reach reads a fraction of a percent above it. A
+ * knife-edge comparison would turn that rounding into a blocked trip. Ten per
+ * cent is far above the discrepancy and far below any real difference: the case
+ * this has to catch is a container an order of magnitude wider than a walker.
+ */
+const REACH_MARGIN = 1.1;
 
 export function unmeasurableModesFor(
   scope: GeographicScope,
@@ -620,22 +811,64 @@ export function unmeasurableModesFor(
    * genuine transport gap still surfaces through the routeability ratio, which
    * measures what was actually connected.
    */
-  /*
-   * A walker covers the scope when the scope's reach is *small* — at or under
-   * the walkable span. The comparison shipped inverted (`>=`), which read a
-   * sixty-kilometre transit reach as walkable and a six-kilometre weekend as
-   * needing a timetable: a one-night car-free trip reported four missing
-   * transport providers while a rail-dependent fortnight reported none. The
-   * flip point sat at exactly three nights, which is why every fixture that
-   * happened to span three or more kept the suite green over it.
+  /**
+   * THE QUESTION IS THE GROUND AGAINST THE TRAVELLER, NOT THE TRAVELLER AGAINST
+   * A CONSTANT.
+   *
+   * This was `reachRadiusKm <= WALKABLE_REACH_KM`, and `WALKABLE_REACH_KM` was
+   * twelve — a copy of `RADIUS_KM_BY_MODE.walk.cap` in `scope.ts`, which is the
+   * ceiling `deriveScope` clamps a walking trip's reach to. `radiusForTrip`,
+   * the preflight adoption and the extend-reach answer all clamp at
+   * `reach.cap`, so a car-free scope's `reachRadiusKm` is **≤ 12 by
+   * construction**. The test therefore read "12 ≤ 12" for every car-free
+   * traveller and could not be false for the one population it exists to
+   * serve: with no transit provider configured — which is every deployment
+   * today — `unmeasurableModesFor` could not report a missing transit provider
+   * at all. Its `else` branch, the whole scheduled-mode list below, was dead.
+   *
+   * Flipping the comparison to `<` was measured and is not the fix: it blocks
+   * the *default* trip. A traveller who has said nothing about a car gets reach
+   * class `walk` and a reach of exactly twelve, so six pipeline cases in
+   * `must-do-compile.test.ts` went to `blocked` — the Discovery Board withheld
+   * from a walking city break, which is precisely what the comment above warns
+   * against.
+   *
+   * What the deficit actually asks is whether the trip's own ground is bigger
+   * than the way the traveller can move across it, and both halves of that are
+   * on the scope. A city compiled as a twelve-kilometre circle *is* twelve
+   * kilometres of ground, and a walker covers it. An island group compiled at
+   * its unconstrained extent — see `deriveShape`, which stopped letting a
+   * walking speed decide what a destination is — is a hundred and forty, and a
+   * walker plainly does not. Only the second depends on something running to a
+   * timetable, and only the second is reported.
    */
+  const groundKm = groundExtentKm(scope);
   const walkerCanCoverIt =
-    scope.reachRadiusKm === undefined || scope.reachRadiusKm <= WALKABLE_REACH_KM;
-  const leansOn = scope.transport.carAvailable
-    ? ['drive']
-    : walkerCanCoverIt
-      ? ['walk']
-      : scope.transport.allowedModes.filter((mode) => mode !== 'walk' && mode !== 'rideshare');
+    scope.reachRadiusKm === undefined ||
+    groundKm === null ||
+    groundKm <= scope.reachRadiusKm * REACH_MARGIN;
+  /**
+   * NOBODY HAS SAID IS NOT THE SAME ANSWER AS NO CAR.
+   *
+   * `carAvailable` is three-valued and this line read it as two, so a traveller
+   * who had not been asked took the car-free branch. That is the difference
+   * between a deficit and a fabrication: "this trip needs rail or bus, and we
+   * have no way to measure those journeys here" is a true and useful sentence
+   * for somebody who told us they will not drive, and a guess about somebody who
+   * may well be hiring a car — delivered as a `blocked` reading, which withholds
+   * the Discovery Board outright and offers no repair.
+   *
+   * `deriveScope` is explicit that the third state exists for exactly this: "we
+   * have not established this and no car produce different plans and different
+   * sentences". Unstated leans on walking, reports nothing, and the question the
+   * traveller has not answered stays a question.
+   */
+  const leansOn =
+    scope.transport.carAvailable === true
+      ? ['drive']
+      : scope.transport.carAvailable === null || walkerCanCoverIt
+        ? ['walk']
+        : scope.transport.allowedModes.filter((mode) => mode !== 'walk' && mode !== 'rideshare');
 
   const missing = new Set<string>();
   for (const mode of leansOn) {

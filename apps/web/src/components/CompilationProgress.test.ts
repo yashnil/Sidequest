@@ -2,7 +2,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { StageRecord } from '@sidequest/core';
-import { CompilationProgress } from './CompilationProgress';
+import {
+  CompilationProgress,
+  StageDisclosure,
+  lastRecordedInstant,
+  stageStatusLabel,
+} from './CompilationProgress';
 
 /**
  * THE ZOMBIE, ASSERTED.
@@ -192,6 +197,109 @@ describe('a sequential build is narrated one step at a time', () => {
     expect(row, 'a part of the build claims to have taken longer than the build').not.toMatch(
       /steps\s*·/,
     );
+  });
+
+  it('resolves every stage row once nothing is running: no row is left "waiting"', () => {
+    /*
+     * A live trip's build report rendered `waiting — Going back over what we
+     * found` between rows marked done, on a job whose ledger row had recorded
+     * a finish hours earlier — directly under a banner saying the research
+     * "stopped short of the end". A terminal build has nothing left to wait
+     * for, so a queued stage resolves to "not reached" and an open one to
+     * "stopped"; and the same rows keep their honest present tense while a
+     * process genuinely is running.
+     */
+    const mixed: StageRecord[] = [
+      stage('partitioning_scope', 'done'),
+      stage('building_region_pack', 'running'),
+      stage('discovering_candidates', 'waiting'),
+    ];
+    const dead = renderToStaticMarkup(
+      createElement(StageDisclosure, { stages: mixed, live: false }),
+    );
+    expect(dead).not.toContain('>waiting<');
+    expect(dead).not.toContain('>running<');
+    expect(dead).toContain('not reached');
+    expect(dead).toContain('stopped');
+
+    // The control: a build that is genuinely running keeps its queue.
+    const alive = renderToStaticMarkup(
+      createElement(StageDisclosure, { stages: mixed, live: true }),
+    );
+    expect(alive).toContain('>waiting<');
+    expect(alive).toContain('>running<');
+  });
+
+  it('maps only the two open statuses; finished rows keep their own words', () => {
+    expect(stageStatusLabel('waiting', false)).toBe('not reached');
+    expect(stageStatusLabel('running', false)).toBe('stopped');
+    for (const status of ['done', 'skipped', 'failed'] as const) {
+      expect(stageStatusLabel(status, false)).toBe(status);
+      expect(stageStatusLabel(status, true)).toBe(status);
+    }
+    expect(stageStatusLabel('waiting', true)).toBe('waiting');
+    expect(stageStatusLabel('running', true)).toBe('running');
+  });
+
+  it('freezes a dead build’s phase durations at what the build spent, never ticking against now', () => {
+    /*
+     * The live defect, reproduced: job cb08dd94 ran 04:58–05:12 — under
+     * fourteen minutes — and, viewed around 14:30, its stopped stage panel
+     * read "Finding the strongest places · 9h 15m". The phase's elapsed was
+     * computed against the viewer's clock because the phase never finished, so
+     * a terminal build's duration grew for as long as nobody looked at it.
+     *
+     * A terminal build is measured against the last instant it demonstrably
+     * wrote. Here the build started at 04:58, its last stage record landed at
+     * 05:05, and the render happens hours later: the finding phase must claim
+     * the seven minutes it actually spanned, and nothing on the panel may
+     * carry an hours-scale figure.
+     */
+    const html = renderToStaticMarkup(
+      createElement(CompilationProgress, {
+        stages: [
+          stage('discovering_candidates', 'done', {
+            observedStartedAt: '2026-08-25T04:58:59.000Z',
+            observedFinishedAt: '2026-08-25T05:05:00.000Z',
+            outcome: '158 candidates from 6 searches',
+          }),
+          // Started, never finished: the stage the process died inside.
+          stage('deduplicating', 'running', {
+            observedStartedAt: '2026-08-25T05:05:00.000Z',
+          }),
+        ],
+        failed: false,
+        live: false,
+        startedAt: '2026-08-25T04:58:59.000Z',
+        estimate: null,
+      }),
+    );
+    // The frozen figure: the span the build actually wrote, roughly 6 minutes.
+    expect(html).toContain('6m 1s');
+    // Never the wall-clock-since figure, in any unit it could render in.
+    expect(html, 'a dead build must not tick against the viewer’s clock').not.toMatch(/\d+h \d+m/);
+    expect(html).not.toMatch(/\d{3,}m/);
+  });
+
+  it('measures the freeze point from the last thing the build wrote', () => {
+    expect(
+      lastRecordedInstant(
+        [
+          stage('discovering_candidates', 'done', {
+            observedStartedAt: '2026-08-25T04:58:59.000Z',
+            observedFinishedAt: '2026-08-25T05:05:00.000Z',
+          }),
+          stage('deduplicating', 'running', { observedStartedAt: '2026-08-25T05:06:30.000Z' }),
+        ],
+        '2026-08-25T04:58:59.000Z',
+      )?.toISOString(),
+    ).toBe('2026-08-25T05:06:30.000Z');
+    // No timestamps anywhere: nothing honest to measure against.
+    expect(lastRecordedInstant([stage('deduplicating', 'waiting')])).toBeNull();
+    // A build that died before any stage reported still freezes at its start.
+    expect(
+      lastRecordedInstant([], '2026-08-25T04:58:59.000Z')?.toISOString(),
+    ).toBe('2026-08-25T04:58:59.000Z');
   });
 
   it('keeps cache accounting out of the primary card', () => {

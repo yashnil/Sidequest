@@ -15,8 +15,10 @@ import {
   DISCOVERY_MIX_OPTIONS,
   INTEREST_LABELS,
   INTEREST_LEVELS,
+  EXPANSION_CEILING_MINUTES,
   MAX_DECISION_QUESTIONS,
   PACE_OPTIONS,
+  REGIONAL_EXPANSIONS,
   offeredInterestRows,
   regionalExpansionOptions,
   resumeStepIndex,
@@ -38,6 +40,7 @@ import {
   type QuestionnaireContext,
   type QuestionnaireStepId,
   type RegionDecisionQuestionRecord,
+  type RegionalExpansion,
 } from '@sidequest/core';
 import { Badge, ErrorNote, Fieldset, FOCUS_RING, OVERLAY_INPUT, Panel, buttonClass, cx } from './ui';
 import { InterpretationPanel } from './InterpretationPanel';
@@ -98,6 +101,66 @@ function visibleSteps(
 /** Steps where "decide for me" is not an answer: interests is the one step that
  * refuses to advance empty, and the review is a check, not a question. */
 const NO_HANDOVER: readonly QuestionnaireStepId[] = ['interests', 'review'];
+
+/**
+ * CONTRADICTORY MOBILITY ANSWERS ARE A QUESTION, NEVER A SILENT CLAMP.
+ *
+ * A live Iceland trip carried "up to 5 hr at the wheel a day" beside "nothing
+ * further than about an hour from base". The profile maths takes the stricter
+ * of the two (`effectiveDetourMinutes` is a `min`), so the board quietly marked
+ * the destination's headline waterfalls and glacier "Probably skip — past how
+ * far you said you would go" — blaming a willingness to travel the traveller had
+ * explicitly stated, five times over, in the very next answer. Neither answer
+ * is wrong; together they cannot both bind, and the traveller is the only one
+ * entitled to say which one they meant.
+ *
+ * Fires only when the gap is unmistakable: the stated daily wheel time has to
+ * exceed a full out-and-back to the range limit by more than an hour, so the
+ * defaults (150 min against a 60-min range) stay quiet and the factor-of-five
+ * case is loud.
+ */
+const RECONCILE_SLACK_MINUTES = 60;
+
+export interface MobilityReconciliation {
+  /** Minutes at the wheel a single day may hold, as stated. */
+  wheelMinutes: number;
+  /** The one-way range actually binding: min of detour answer and radius ring. */
+  rangeMinutes: number;
+  /** The one-way range the stated driving day could honestly support. */
+  widenedDetourMinutes: number;
+  /** The smallest radius ring that admits that range. */
+  widenedExpansion: RegionalExpansion;
+}
+
+export function mobilityReconciliation(
+  answers: QuestionnaireAnswers,
+): MobilityReconciliation | null {
+  if (!answers.willDrive) return null;
+  if (answers.detourToleranceMinutes <= 0) return null;
+  const rangeMinutes = Math.min(
+    answers.detourToleranceMinutes,
+    EXPANSION_CEILING_MINUTES[answers.regionalExpansion],
+  );
+  if (answers.maxDailyTravelMinutes <= rangeMinutes * 2 + RECONCILE_SLACK_MINUTES) return null;
+
+  const halfDay = Math.floor(answers.maxDailyTravelMinutes / 2 / 15) * 15;
+  const widenedDetourMinutes = Math.min(
+    180,
+    Math.max(halfDay, answers.detourToleranceMinutes),
+  );
+  if (widenedDetourMinutes <= rangeMinutes) return null;
+  const widenedExpansion =
+    REGIONAL_EXPANSIONS.find(
+      (value) => EXPANSION_CEILING_MINUTES[value] >= widenedDetourMinutes,
+    ) ?? 'best_regional';
+
+  return {
+    wheelMinutes: answers.maxDailyTravelMinutes,
+    rangeMinutes,
+    widenedDetourMinutes,
+    widenedExpansion,
+  };
+}
 
 export function QuestionnaireWizard({
   tripId,
@@ -811,6 +874,7 @@ export function QuestionnaireWizard({
               context={context}
               steps={steps}
               onJumpTo={goTo}
+              onUpdate={update}
               prefilled={prefilled.filter((field) => !edited.has(field))}
               durationAdvice={durationAdvice}
               unresolved={interpretation?.set.unresolved ?? []}
@@ -1099,6 +1163,7 @@ function ReviewStep({
   context,
   steps,
   onJumpTo,
+  onUpdate,
   prefilled,
   durationAdvice,
   unresolved,
@@ -1107,10 +1172,21 @@ function ReviewStep({
   context: QuestionnaireContext;
   steps: readonly { id: QuestionnaireStepId; title: string }[];
   onJumpTo: (index: number) => void;
+  /** The wizard's own `update`, so a reconciliation answer is a real edit. */
+  onUpdate: (patch: Partial<QuestionnaireAnswers>) => void;
   prefilled: readonly ComposerAnsweredField[];
   durationAdvice: string | null;
   unresolved: InterpretationSet['unresolved'];
 }) {
+  /*
+   * "Keep the range" is an answer too, and it is remembered for this sitting:
+   * a question somebody has answered must not re-ask itself on the same
+   * screen. It is deliberately *not* persisted — the contradiction is still
+   * true of the stored answers, and a traveller returning tomorrow deserves
+   * the question again rather than a silence they never chose.
+   */
+  const [rangeKept, setRangeKept] = useState(false);
+  const reconcile = mobilityReconciliation(answers);
   const personality = useMemo(() => {
     try {
       return tripPersonality(buildTravelerProfile(answers, context), context.tripDays);
@@ -1257,6 +1333,50 @@ function ReviewStep({
         <Note>
           You asked for a steer on trip length: {durationAdvice}
         </Note>
+      ) : null}
+
+      {/*
+        THE CONTRADICTION, ASKED RATHER THAN RESOLVED IN SILENCE.
+
+        Two of the traveller's own answers cannot both bind, and the maths
+        downstream takes the stricter one — so without this question a person
+        who said "five hours at the wheel a day" watches the destination's
+        headline sights land under "Probably skip", with copy blaming a
+        willingness to travel they never stated. Both buttons are explicit
+        edits; nothing changes until one is pressed.
+      */}
+      {reconcile && !rangeKept ? (
+        <Panel className="border-amber p-5 sm:p-6" testId="mobility-reconciliation">
+          <h3 className="font-display text-lg text-ink">Two of your answers pull against each other</h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+            You said up to {formatMinutes(reconcile.wheelMinutes)} at the wheel in a day, but
+            nothing further than about {formatMinutes(reconcile.rangeMinutes)} from base. As things
+            stand the shorter answer wins: anything past{' '}
+            {formatMinutes(reconcile.rangeMinutes)} away will be marked as beyond your range, even
+            where the driving day you allowed reaches it comfortably. Which did you mean?
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className={buttonClass('secondary')}
+              onClick={() =>
+                onUpdate({
+                  detourToleranceMinutes: reconcile.widenedDetourMinutes,
+                  regionalExpansion: reconcile.widenedExpansion,
+                })
+              }
+            >
+              Widen my range to {formatMinutes(reconcile.widenedDetourMinutes)}
+            </button>
+            <button
+              type="button"
+              className={buttonClass('ghost')}
+              onClick={() => setRangeKept(true)}
+            >
+              Keep it within {formatMinutes(reconcile.rangeMinutes)}
+            </button>
+          </div>
+        </Panel>
       ) : null}
 
       <Panel className="p-5 sm:p-6">

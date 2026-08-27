@@ -12,11 +12,15 @@ import {
   resolutionKey,
   shelfLifeFor,
   scopeFingerprint,
+  countScheduledStops,
   selectBases,
+  straightLineKm,
   subjectKeyFor,
   travelTimeMatrixSchema,
+  type Coordinates,
   type AccessDataset,
   type BaseCandidate,
+  type BookingEvidence,
   COMPILATION_OPERATIONAL_VERSION,
   type CompilationErrorCode,
   type CompilationOperational,
@@ -38,6 +42,7 @@ import {
   type OperatingCalendar,
   type OperatingHoursDataset,
   type Place,
+  type QualityAssessment,
   type Region,
   type RegionEvidence,
   type RegionPack,
@@ -324,6 +329,13 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
    * here: `startedAtMs` above stamps the artifact, and this one bounds spend.
    */
   const ledger = new BudgetLedger(limits, Date.now());
+  /*
+   * When acquisition must hand the build back, in wall-clock terms: the
+   * compilation's own ceiling less a fixed reserve for everything after the
+   * pack — research, routing, weather, assembly. See the getPack call.
+   */
+  const ACQUISITION_STAGE_RESERVE_MS = 240_000;
+  const deadlineAt = Date.now() + limits.maxDurationMs;
 
   const stages: StageRecord[] = [];
   /**
@@ -690,7 +702,18 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       }));
 
       const outcome = await runStage<RegionPackOutcome>('building_region_pack', async () => {
-        const result = await provider.getPack({ scope: input.scope, now: input.now });
+        /*
+         * Acquisition may spend up to the job's own deadline less a reserve
+         * for research, routing and assembly. The reserve is generous (four
+         * minutes) because those stages are network-bound too; a build that
+         * cannot even start them is worse than one with a thinner pack.
+         */
+        const acquisitionDeadline = deadlineAt - ACQUISITION_STAGE_RESERVE_MS;
+        const result = await provider.getPack({
+          scope: input.scope,
+          now: input.now,
+          ...(acquisitionDeadline > Date.now() ? { deadlineMs: acquisitionDeadline } : {}),
+        });
         if (result.kind === 'unavailable') {
           return {
             value: result,
@@ -1113,11 +1136,21 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           unroutableModes: unmeasurableModesFor(input.scope, input.providers),
           bases: expansion.bases.length,
           satellites: expansion.subregions.length,
-          ...(facts.divisionsAvailable === 0 ||
-          facts.scopeIdentityUnknown ||
-          facts.membershipDecided === 0
+          /*
+           * The containment counts, handed over as counts. This computed
+           * `identityAgrees: insideSelected >= membershipDecided / 2` — a
+           * majority share of the whole pack, which is not evidence about
+           * identity; see the dimension itself for what it did to three
+           * correctly-resolved city builds.
+           */
+          ...(facts.divisionsAvailable === 0 || facts.scopeIdentityUnknown
             ? {}
-            : { identityAgrees: facts.insideSelected >= facts.membershipDecided / 2 }),
+            : {
+                identity: {
+                  placedInside: facts.insideSelected,
+                  refutedElsewhere: facts.refutedElsewhere,
+                },
+              }),
           packPartial: facts.packPartial,
           ...(exhausted.length === 0 ? {} : { exhaustedRepairs: exhausted }),
         });
@@ -1455,47 +1488,44 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     // ---- Stage: classify and shortlist ---------------------------------------
     const shortlisted = await runStage('classifying', async () => {
       /**
-       * Ranked by evidence and fit, through the same assessor the board uses.
-       *
-       * The version this replaces added `hiddenGemScore` to a corroboration
-       * score — and `hiddenGemScore` is computed as the *inverse* of how richly
-       * a place is tagged, so the two terms cancelled and the shortlist was very
-       * nearly arbitrary. A live New York compilation shortlisted thirty-six of
-       * ninety-six candidates and thirty-three of those had nothing published
-       * about them at all, while described museums sat below the cut.
+       * Ranked by fit and significance, through the same assessor the board
+       * uses — see `compareShortlist` for the order and its history, which is
+       * two generations of the same defect. The assessor's score is what makes
+       * this the honest cut: fit leads, composed experience significance is
+       * the second term, and metadata completeness holds no share of it.
        *
        * Using the quality assessor here also means one definition of "worth
        * looking at" rather than two that can drift apart.
        */
       const tolerance = detourTolerance(input.profile);
-      const ranked = [...deduped]
-        .map((candidate) => ({
-          candidate,
-          score: assessCandidateQuality({
+      /*
+       * Seats are dealt saturation-aware rather than sliced off one sorted
+       * list — see `cutShortlist` for the park-and-crossing monoculture the
+       * flat slice produced. Fit still leads inside every comparison.
+       */
+      const entries = [...deduped].map((candidate) => {
+        const assessAt = (
+          categoryCount: number,
+        ): ReturnType<typeof assessCandidateQuality> =>
+          assessCandidateQuality({
             place: candidate.place,
             fitScore: roughFit(candidate.place, input.profile),
             detourMinutes: candidate.place.travelFromBase.driveMinutes,
-            categoryCount: 0,
+            categoryCount,
             supersededByParent: false,
             duplicate: false,
             usableOnTripDates: true,
             openingUncertain: true,
             detourToleranceMinutes: tolerance,
-          }).score,
-        }))
-        // Corroboration is still a tiebreak: two providers finding the same
-        // place is real evidence, it is simply not the whole ranking.
-        .sort(
-          (a, b) =>
-            b.score - a.score ||
-            b.candidate.providerRefs.length - a.candidate.providerRefs.length ||
-            a.candidate.place.id.localeCompare(b.candidate.place.id),
-        )
-        .map((entry) => entry.candidate);
-      const allowed = ledger.take('maxShortlistedCandidates', ranked.length);
-      const kept = ranked.slice(0, allowed);
+          });
+        return { candidate, assessment: assessAt(0), reassess: assessAt };
+      });
+      const allowed = ledger.take('maxShortlistedCandidates', entries.length);
+      const kept = cutShortlist(entries, allowed, input.scope.center).map(
+        (entry) => entry.candidate,
+      );
       for (const candidate of kept) facts.push(...candidate.facts);
-      const dropped = ranked.length - kept.length;
+      const dropped = entries.length - kept.length;
       return {
         value: kept,
         outcome: `${kept.length} shortlisted`,
@@ -1687,12 +1717,50 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           }
         : input.scope;
 
+    /**
+     * THE ONE CLOCK EVERY DOWNSTREAM DAYLIGHT NUMBER IS COMPUTED IN.
+     *
+     * `scope` above is the upgraded const, and it was upgraded and then not
+     * read: `buildBases` and the weather-location stage were both still handed
+     * `input.scope`, so a compilation that had *confirmed* a civil zone shipped
+     * bases and forecast points carrying the longitude approximation. Sunrise,
+     * sunset and every daylight judgement built on them are computed from
+     * `WeatherLocation.timeZone` — a fixed `Etc/GMT±N` offset knows nothing
+     * about daylight saving, so the delivered numbers landed one to two hours
+     * out for half the year.
+     *
+     * Both halves of the claim are required, exactly as `isCivilTimeZone`'s own
+     * comment argues: the identifier has to be structurally a civil zone, *and*
+     * its provenance has to be a source that published one. Either alone can be
+     * wrong — a provider can answer `Etc/GMT-3`, and a scope can carry a
+     * civil-looking string nobody can now account for.
+     *
+     * `null` is the honest third answer and is not a failure: a destination
+     * spanning two zones, and one whose zone nobody could resolve, both land
+     * here, and neither may be silently collapsed onto one clock.
+     */
+    const civilZone = ((): string | null => {
+      const zone = singleTimeZone(scope.timeZones);
+      if (zone === null || !isCivilTimeZone(zone)) return null;
+      return timeZoneConfidence(scope.timeZoneBasis ?? 'unknown') === 'authoritative'
+        ? zone
+        : null;
+    })();
+
     const bases = buildBases(
       expansion.bases.map((base) => {
-        const resolved = baseTimeZones.get(base.id);
+        /*
+         * The base's own lookup first, the destination's resolved clock second,
+         * and the adapter's guess only when neither answered. A base the
+         * per-point lookup could not settle used to keep whatever the expansion
+         * adapter had to hand — which is the destination's *approximated* zone
+         * on exactly the runs where the destination's real one had just been
+         * confirmed.
+         */
+        const resolved = baseTimeZones.get(base.id) ?? civilZone;
         return resolved ? { ...base, timeZone: resolved } : base;
       }),
-      input.scope,
+      scope,
       places,
     );
     const food = await runStage('discovering_food', async () => {
@@ -2317,20 +2385,33 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     /**
      * Food, with whatever the research found folded back in.
      *
-     * The food planner refuses to schedule a venue whose hours nobody confirmed,
-     * which is correct and which is why live regions produced no named meals at
-     * all. This is where that changes: a venue whose hours came back from its own
-     * page becomes schedulable, and one whose did not stays honestly unknown.
+     * Every venue here was a research subject — `enriching_priority_candidates`
+     * puts the whole food list in beside the places, and `wantedPathsFor` asks
+     * `food.hours` of each one — so this stage is reading the answer to a
+     * question that was genuinely asked, not declining to ask it. Where a venue's
+     * own page came back with a calendar, it is folded in as `published`; where
+     * nothing did, the venue keeps the `unknown` its record already carried. Most
+     * small venues have no page anybody could retrieve, so most regions land in
+     * the second case, and that is a fact about the world rather than a stage
+     * that gave up.
+     *
+     * What the outcome must therefore not say is that nothing can be planned.
+     * It used to read "no venue hours could be confirmed", which was true and was
+     * also the reason the food pillar produced no named meal on any trip: the
+     * planner treated an unconfirmed door as a refusal, so an honest report of
+     * what research found doubled as the verdict on the whole pillar. The planner
+     * now names an unconfirmed venue and states the doubt, so this counts both
+     * populations and says what each one buys.
      */
     const enrichedFood = await runStage('enriching_food', async () => {
       const byId = new Map(sourcedCalendars.map((calendar) => [calendar.placeId, calendar]));
-      let named = 0;
+      let confirmed = 0;
       const value = food
         .filter((venue) => !blocked.has(venue.id))
         .map((venue) => {
           const calendar = byId.get(venue.id);
           if (!calendar || calendar.kind !== 'scheduled') return venue;
-          named += 1;
+          confirmed += 1;
           return {
             ...venue,
             hours: {
@@ -2342,13 +2423,21 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
             },
           } satisfies FoodVenue;
         });
+      const unconfirmed = value.length - confirmed;
       return {
         value,
         outcome:
-          named > 0
-            ? `${named} venues with hours we can actually plan around`
-            : 'no venue hours could be confirmed',
-        skipped: named === 0,
+          confirmed > 0
+            ? `${confirmed} of ${value.length} venues published hours we could read`
+            : `nobody published hours for any of these ${value.length}, so each is schedulable with that said`,
+        // Nothing was folded in. The venues are still planned around, which is
+        // why the sentence above says so rather than reporting a dead end.
+        skipped: confirmed === 0,
+        ...(confirmed > 0 && unconfirmed > 0
+          ? {
+              note: `The other ${unconfirmed} are schedulable too, with their opening times stated as unknown.`,
+            }
+          : {}),
       };
     });
 
@@ -2432,7 +2521,17 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * plain `let` narrows to `null` at every read site and the code stops
      * compiling for a reason that has nothing to do with what it does.
      */
-    const routed: { interCluster: RoutingMatrixResult | null } = { interCluster: null };
+    const routed: {
+      interCluster: RoutingMatrixResult | null;
+      /**
+       * The activity seats the routing *plan* kept — the board's membership,
+       * decided by the seat-order budget cut before any request is made. Held
+       * apart from `matrix.ids` because the two answer different questions:
+       * the plan says who is on the board, the matrix says whose journeys were
+       * measured, and conflating them is how a routing failure deleted seats.
+       */
+      plannedActivityIds: Set<string>;
+    } = { interCluster: null, plannedActivityIds: new Set() };
 
     const matrix = await runStage('computing_travel_times', async () => {
       const foodForRouting = [...foodPoints.values()].map((point) => ({
@@ -2441,6 +2540,20 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       }));
       const clusters = assignToClusters({ bases, places: openPlaces, food: foodForRouting });
 
+      /**
+       * The routing budget cut removes "the least valuable", and what that
+       * means is the tail of the composed board order — the saturation-aware
+       * seat order `cutShortlist` produced, which `openPlaces` still carries.
+       * It used to read `roughFit`: quantised to five levels, and constant
+       * when no profile was saved, so straight-line proximity was the real
+       * decider inside every band — a stored dense-metro compile kept the 24
+       * candidates nearest the base and dropped the anchors the shortlist had
+       * just seated. Reading the raw score here instead re-ranks the list the
+       * composed cut just balanced and resurrects the same monoculture one
+       * stage later; the seat order is the valuation, so the cut consumes its
+       * tail. Distance remains the tie-break for anything outside it.
+       */
+      const boardSeatOf = new Map(openPlaces.map((place, seat) => [place.id, seat]));
       const run = async (mode: 'car' | 'foot'): Promise<HierarchicalRoutingResult> =>
         routeHierarchically({
           clusters,
@@ -2450,8 +2563,9 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
           mode,
           maxElements: ledger.remaining('maxRouteElements'),
           fitOf: (placeId) => {
-            const place = openPlaces.find((entry) => entry.id === placeId);
-            return place ? roughFit(place, input.profile) : 0;
+            const seat = boardSeatOf.get(placeId);
+            if (seat === undefined) return 0;
+            return (openPlaces.length - seat) / openPlaces.length;
           },
         });
 
@@ -2492,6 +2606,11 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
       ledger.record('maxRouteElements', outcome.requestedPairs);
       for (const entry of outcome.matrix.licences ?? []) licences.set(entry.id, entry);
       routed.interCluster = outcome.interCluster;
+      routed.plannedActivityIds = new Set(
+        outcome.plan.blocks.flatMap((block) =>
+          block.points.filter((point) => point.role === 'activity').map((point) => point.id),
+        ),
+      );
       routingDiagnostics = {
         plannedPairs: outcome.plan.totalPairs,
         flatPairs: outcome.plan.flatPairs,
@@ -2579,10 +2698,35 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     const legFromBase = (placeId: string): { minutes: number; km: number } | null =>
       legBetween(baseOfPlace.get(placeId) ?? bases[0]?.routingId ?? '', placeId);
 
+    /**
+     * BOARD MEMBERSHIP IS THE PLAN'S; ROUTABILITY IS PER JOURNEY.
+     *
+     * This filtered on `routable` — the ids the router could measure — so a
+     * routing failure decided who was on the board: on a live car-free build
+     * one far seat's failing rectangles left the top seats' mutual legs
+     * unmeasured, the largest-routable-core peel removed them, and the stored
+     * region lost its headline anchors to a routing shape artifact while the
+     * far seat survived. Admission and quality decided these seats; the
+     * routing *plan* budgeted them; a journey nobody could measure is a fact
+     * about the journey, carried per stop as an unverified reach the board
+     * and the planner already know how to refuse honestly — never a deletion.
+     *
+     * The plan's activity set still binds: the seats the budget cut left as
+     * unrouted reserve were never board members, and keeping the filter on
+     * *planned* seats is what keeps the board its size instead of the whole
+     * shortlist.
+     */
     const plannable = openPlaces
-      .filter((place) => routable.has(place.id))
+      .filter((place) => routed.plannedActivityIds.has(place.id))
       .map((place) => {
         const leg = legFromBase(place.id);
+        /*
+         * An unmeasured leg keeps the schema's zeros and stays *unmarked* —
+         * `measured` absent is the honest state, and readers must not take
+         * the zeros as a journey. A measured one carries the mode it was
+         * measured in, because a foot matrix's minutes in a field named
+         * `driveMinutes` were read as a drive on a live no-car trip.
+         */
         if (!leg) return place;
         return {
           ...place,
@@ -2590,6 +2734,8 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
             ...place.travelFromBase,
             distanceKm: Math.round(leg.km * 10) / 10,
             driveMinutes: Math.round(leg.minutes),
+            mode: measuredMode,
+            measured: true,
           },
         } satisfies Place;
       });
@@ -2701,9 +2847,10 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
         'We could not work out travel times across this region, so we will not guess at a plan.',
       );
     }
-    if (plannable.length < openPlaces.length) {
+    const unmeasuredSeats = plannable.filter((place) => !routable.has(place.id)).length;
+    if (unmeasuredSeats > 0) {
       warnings.push(
-        `${openPlaces.length - plannable.length} places have no measurable travel time and were left out.`,
+        `${unmeasuredSeats} ${unmeasuredSeats === 1 ? 'place stays' : 'places stay'} on the board with no measured travel time; the journey is marked as not verified rather than guessed at.`,
       );
     }
 
@@ -3067,19 +3214,60 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
     // ---- Stage: weather points -------------------------------------------------
     const weatherLocations = await runStage('resolving_weather_locations', async () => {
       const value = await input.providers.weatherLocations.plan({
-        scope: input.scope,
+        /* The upgraded scope, so the adapter's own zone read starts from the
+         * clock this compilation confirmed rather than the one it began with. */
+        scope,
         places: plannable,
         maxLocations: ledger.remaining('maxWeatherLocations'),
       });
       ledger.take('maxWeatherLocations', value.locations.length);
       gaps.push(...value.gaps);
+      /**
+       * THE ZONE IS RECONCILED HERE, NOT LEFT TO THE ADAPTER.
+       *
+       * `WeatherLocation.timeZone` is the *only* input to sunrise and sunset —
+       * `buildSolarDays` resolves the offset from it and from nothing else — so
+       * whatever this field says is what the traveller is told about the light.
+       * Handing the adapter a better scope is necessary and is not sufficient:
+       * an adapter is an injected boundary, it may read its own diagnostics, and
+       * a shipped one did exactly that and stamped `UTC` on every point. Where
+       * this compilation resolved a civil zone, that zone is what the points
+       * carry, and no adapter is in a position to overrule it.
+       *
+       * Where none was resolved the field cannot be left blank — the schema
+       * requires an identifier and the offset is still the best available — so
+       * the *claim* degrades instead of the value: the point says on its own
+       * `limitation`, which every surface renders, that its daylight numbers are
+       * approximate. A gap is raised beside it so the coverage report counts it
+       * rather than the traveller discovering it at dusk.
+       */
+      const locations = value.locations.map((location) =>
+        civilZone !== null
+          ? { ...location, timeZone: civilZone }
+          : {
+              ...location,
+              limitation: `${location.limitation} The local clock here is not settled to one confirmed civil time zone, so sunrise and sunset are approximations and can be an hour out.`,
+            },
+      );
+      if (civilZone !== null || locations.length === 0) {
+        return {
+          value: locations,
+          outcome:
+            locations.length > 0
+              ? `${locations.length} forecast ${locations.length === 1 ? 'point' : 'points'}`
+              : 'none — this trip will be planned without weather',
+          skipped: locations.length === 0,
+        };
+      }
+      gaps.push({
+        subjectId: scope.destinationCandidateId,
+        reason: 'no_official_source',
+        detail:
+          'The local clock here is not settled to one confirmed civil time zone, so the daylight times on every forecast point are approximations.',
+      });
       return {
-        value: value.locations,
-        outcome:
-          value.locations.length > 0
-            ? `${value.locations.length} forecast ${value.locations.length === 1 ? 'point' : 'points'}`
-            : 'none — this trip will be planned without weather',
-        skipped: value.locations.length === 0,
+        value: locations,
+        outcome: `${locations.length} forecast ${locations.length === 1 ? 'point' : 'points'}, on an unconfirmed clock`,
       };
     });
 
@@ -3102,10 +3290,19 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
      * The order is the precedence: a calendar an operator published beats one we
      * parsed out of a mapper's tag, and both beat the honest blank.
      */
-    const hours = buildHours(input.scope, plannable, [
-      ...sourcedCalendars,
-      ...research.calendars,
-    ]);
+    const hours = buildHours(
+      scope,
+      plannable,
+      [...sourcedCalendars, ...research.calendars],
+      /*
+       * The evidence, so a booking requirement the funnel confirmed survives an
+       * hours record it could not. `buildCalendar` refuses to enforce a schedule
+       * off conflicted or stale hours facts — correctly — and the subject then
+       * fell to a fallback that asserted walk-in entry over the top of a
+       * published reservation rule.
+       */
+      evidence,
+    );
     const access: AccessDataset = {
       regionId: regionIdFor(input.scope),
       points: [],
@@ -3410,11 +3607,21 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
            * Answered from the overlay's own typed verdicts, never from a
            * distance and never from a string comparison here. A record counts as
            * agreement only when containment placed it *positively* inside the
-           * destination's published administrative chain — which is exactly the
-           * question, and is why an archipelago whose second island came back
+           * destination's published administrative chain, and counts as a
+           * refusal only when a source published it in a different country or
+           * region — which is why an archipelago whose second island came back
            * empty and a city whose candidates all sit in a neighbouring
-           * municipality both fail it while a legitimately borough-spread New
-           * York passes.
+           * municipality both fail it while a legitimately borough-spread metro
+           * passes.
+           *
+           * **The verdict is no longer computed here.** This was
+           * `identityAgrees: insideSelected >= membershipDecided / 2`: a
+           * majority share of every record the overlay judged — the whole pack,
+           * bought over a box round the traveller's reach — which says nothing
+           * about identity and accused three finished, correctly-resolved city
+           * builds of finding the wrong place. The counts go over as counts and
+           * the rule lives in one readable place beside the sentence it
+           * produces.
            *
            * Explicitly unknown when the instrument could not answer: no division
            * records to resolve names through, or no scope identity to compare
@@ -3422,13 +3629,13 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
            * level rule entirely, so a hole in our directory cannot read as a
            * verdict about somebody's destination.
            */
-          ...(facts.divisionsAvailable === 0 ||
-          facts.scopeIdentityUnknown ||
-          facts.membershipDecided === 0
+          ...(facts.divisionsAvailable === 0 || facts.scopeIdentityUnknown
             ? {}
             : {
-                identityAgrees:
-                  facts.insideSelected >= facts.membershipDecided / 2,
+                identity: {
+                  placedInside: facts.insideSelected,
+                  refutedElsewhere: facts.refutedElsewhere,
+                },
               }),
           /*
            * Not supplied, and therefore `unmeasured`.
@@ -3688,10 +3895,20 @@ export async function compileRegion(input: CompileInput): Promise<CompileResult>
          * and only the second one lets a screen explain itself.
          */
         transitEvidence,
+        /*
+         * The kind-aware scheduled-stop observation, counted off the pack
+         * layers this build actually read. Guarded on `pack` because the two
+         * absent cases are different sentences: a build with no pack never
+         * looked, and writing a zero for it would convert "nobody said" into
+         * "we read the ground and it holds nothing" — the exact substitution
+         * `ScheduledNetworkPresence` exists to prevent. A pack that was read
+         * and holds no stop persists its zero through the same line.
+         */
+        ...(pack ? { scheduledStops: countScheduledStops(pack.layers) } : {}),
         ...(mustDoCoverage ? { mustDoCoverage } : {}),
         bases: routedBases,
         primaryBaseId: primary.id,
-        subregions: buildSubregions(expansion.subregions, usableBases, plannable),
+        subregions: buildSubregions(expansion.subregions, usableBases, plannable, scope),
         satellites: buildSatellites(plannable, primary, matrix),
         places: plannable,
         access,
@@ -3946,6 +4163,151 @@ function detourTolerance(profile: TravelerProfile | undefined): number {
   return Math.max(20, profile?.detourToleranceMinutes ?? 90);
 }
 
+/** One shortlist candidate beside the assessment that ranks it. */
+export interface ShortlistEntry {
+  candidate: Pick<DiscoveredCandidate, 'providerRefs'> & {
+    place: Pick<Place, 'id'> & { tags?: readonly string[] };
+  };
+  assessment: Pick<QualityAssessment, 'score' | 'signals'>;
+}
+
+/**
+ * THE ORDER THE FINAL BOARD CUT IS MADE IN, STATED ONCE AND EXPORTED.
+ *
+ * The shortlist stage keeps `maxShortlistedCandidates` seats and this
+ * comparator decides who holds them, so what it may read is the §8.3 question.
+ * Two generations of the same defect are why it is a named function rather
+ * than an inline sort:
+ *
+ * - the first shortlist added `hiddenGemScore` to a corroboration count, and
+ *   `hiddenGemScore` was the *inverse* of how richly a place was tagged, so a
+ *   live New York compilation shortlisted thirty-three records with nothing
+ *   published about them while described museums sat below the cut;
+ * - its replacement ranked on the quality score while that score gave metadata
+ *   completeness a quarter-share, and a live Tokyo replay showed memorial
+ *   plaques carrying a website attribute holding seats over the city's
+ *   headline imperial garden.
+ *
+ * The order now: the assessor's score (fit leading, composed experience
+ * significance second — no completeness share, see `assessCandidateQuality`);
+ * then provider corroboration, because two catalogues finding the same place
+ * is a statement about the world; then — and only then — completeness, which
+ * is exactly the §7 rank it deserves: between two candidates the honest
+ * dimensions cannot separate, prefer the one whose practical details are
+ * filled in, because its card can say when it opens. Id last, so the same
+ * inputs always cut the same board.
+ */
+export function compareShortlist(a: ShortlistEntry, b: ShortlistEntry): number {
+  return (
+    compareShortlistSignals(a, b) || a.candidate.place.id.localeCompare(b.candidate.place.id)
+  );
+}
+
+/** The honest steps of the order, without the id — so a caller may add its own
+ *  penultimate tie-break (the saturation-aware cut adds centre distance) while
+ *  the id stays the very last word everywhere. */
+function compareShortlistSignals(a: ShortlistEntry, b: ShortlistEntry): number {
+  return (
+    b.assessment.score - a.assessment.score ||
+    b.candidate.providerRefs.length - a.candidate.providerRefs.length ||
+    b.assessment.signals.evidenceCompleteness - a.assessment.signals.evidenceCompleteness
+  );
+}
+
+/**
+ * One candidate as the saturation-aware cut needs it: the full pre-research
+ * assessment inputs, so a seat can be re-assessed at the saturation the board
+ * has actually reached, plus the coordinates for the last tie-break.
+ */
+export interface SeatCandidate extends ShortlistEntry {
+  candidate: ShortlistEntry['candidate'] & {
+    place: ShortlistEntry['candidate']['place'] &
+      Pick<Place, 'coordinates'> & { category: string };
+  };
+  /** Re-assess this entry at a given board saturation for its category. */
+  reassess: (categoryCount: number) => Pick<QualityAssessment, 'score' | 'signals'>;
+}
+
+/**
+ * THE CUT COMPOSES THE BOARD, USING THE ASSESSOR'S OWN SATURATION SIGNAL.
+ *
+ * `assessCandidateQuality` has always carried a `categorySaturation` penalty —
+ * "how saturated this category already is on the board" — and the classify
+ * stage passed `categoryCount: 0` for every candidate, so the one signal built
+ * to stop a monoculture was structurally silent at the only cut that produces
+ * one. Measured on a stored dense-metro compile: the 45-seat shortlist came
+ * out twenty-two near-identical municipal parks and lawns, six river crossings
+ * and a rail overpass — while the destination's palace and both headline
+ * sanctuaries, each holding a portfolio anchor seat, sat below the cut. §29 G
+ * names this exactly: for a traveller whose stated preferences cannot separate
+ * the candidates, composition has to resolve the cut, not one mechanically
+ * applied score.
+ *
+ * So seats are dealt one at a time. Each seat goes to the strongest remaining
+ * candidate *re-assessed at the saturation the board has actually reached* —
+ * the same assessor, now told the truth about the board. The first parks pay
+ * nothing; the thirteenth pays the saturation share, and the seat it would
+ * have taken goes to the strongest candidate of a kind the board does not yet
+ * have. Fit still leads inside every comparison, so a traveller whose stated
+ * interests genuinely rank a twelfth park above a palace still gets it.
+ *
+ * Ties fall through the shortlist order's own steps — corroboration, then
+ * completeness — and then to **distance from the destination's centre**,
+ * nearest first, before the id. Geometry, not metadata: for candidates nothing
+ * honest can separate, the one at the destination's heart costs the least of
+ * every day it joins, which is the routing layer's own tie-break philosophy
+ * applied one stage earlier. The id stays last so the same inputs always cut
+ * the same board.
+ */
+export function cutShortlist<T extends SeatCandidate>(
+  entries: readonly T[],
+  seats: number,
+  center: Coordinates,
+): T[] {
+  const remaining = [...entries].sort(compareShortlist);
+  const counts = new Map<string, number>();
+  const kmToCenter = new Map<string, number>(
+    remaining.map((entry) => [
+      entry.candidate.place.id,
+      straightLineKm(center, entry.candidate.place.coordinates),
+    ]),
+  );
+  const seated: T[] = [];
+  while (seated.length < seats && remaining.length > 0) {
+    let bestIndex = 0;
+    let best: { entry: T; assessment: Pick<QualityAssessment, 'score' | 'signals'> } | null = null;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const entry = remaining[index]!;
+      const saturated = {
+        candidate: entry.candidate,
+        assessment: entry.reassess(counts.get(entry.candidate.place.category) ?? 0),
+      };
+      if (best === null) {
+        best = { entry, assessment: saturated.assessment };
+        bestIndex = index;
+        continue;
+      }
+      const order =
+        compareShortlistSignals(saturated, {
+          candidate: best.entry.candidate,
+          assessment: best.assessment,
+        }) ||
+        kmToCenter.get(entry.candidate.place.id)! - kmToCenter.get(best.entry.candidate.place.id)! ||
+        entry.candidate.place.id.localeCompare(best.entry.candidate.place.id);
+      if (order < 0) {
+        best = { entry, assessment: saturated.assessment };
+        bestIndex = index;
+      }
+    }
+    const chosen = best!.entry;
+    seated.push(chosen);
+    remaining.splice(bestIndex, 1);
+    const category = chosen.candidate.place.category;
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  return seated;
+}
+
 /**
  * Did the traveller ask for the trip to be built around eating?
  *
@@ -4106,7 +4468,8 @@ const INTEREST_INTENT: Record<string, string> = {
  *   landmark, culture and nature — the three visitable kinds — so it cannot add
  *   a restaurant, and recounting it here would be recounting an untouched number
  *   through a second code path.
- * - `insideSelected`, `membershipDecided`, `divisionsAvailable`,
+ * - `insideSelected`, `membershipDecided`, `refutedElsewhere`,
+ *   `divisionsAvailable`,
  *   `scopeIdentityUnknown`, `membershipUnverified` and `anchorDemotions` are the
  *   containment overlay's own verdicts. The acquire seam runs containment and
  *   does not report the deltas back, so recomputing them here would mean
@@ -4435,7 +4798,34 @@ function buildBases(
   }));
 }
 
-function buildSubregions(
+/**
+ * SUBREGIONS ARE GEOMETRY OR THEY ARE NOTHING.
+ *
+ * The expansion proposes *named* subregions, and on live builds the proposals
+ * arrived with placeholder geometry: every one carried the scope's own centre
+ * and one default radius, and this function then stamped **every place** into
+ * **every subregion** — so a compiled artifact told the traveller a trip's
+ * whole board belonged simultaneously to six differently-named areas whose
+ * shared "centre" was, for one country-breadth build, uninhabited ground
+ * outside the pack's own bounds, with names for regions the compiled trip
+ * cannot reach. Narrative wearing coordinates.
+ *
+ * So membership is now **derived** — a place belongs to a subregion when it
+ * lies inside that subregion's own circle — and a subregion that cannot carry
+ * real geometry is omitted rather than shipped:
+ *
+ * - its centre lies outside the compiled scope's ground (a named area the
+ *   trip cannot reach must not appear to contain it);
+ * - its geometry is indistinguishable from another proposal's (identical
+ *   centres carry no information — that is the placeholder shape itself);
+ * - nothing on the board falls inside it (an empty named circle describes
+ *   the destination, not this trip).
+ *
+ * Omitting is the honest degradation the artifact already supports: an empty
+ * subregion list means "this build could not divide the region", which is
+ * true, where fabricated membership was not.
+ */
+export function buildSubregions(
   candidates: readonly {
     id: string;
     name: string;
@@ -4446,21 +4836,54 @@ function buildSubregions(
   }[],
   bases: readonly BaseCandidate[],
   places: readonly Place[],
+  scope: GeographicScope,
 ): Subregion[] {
-  return candidates.map((subregion) => ({
-    id: subregion.id,
-    name: subregion.name,
-    summary: subregion.summary,
-    center: subregion.center,
-    radiusKm: subregion.radiusKm,
-    entityType: 'subregion' as const,
-    breadth: 'subregion' as const,
-    baseIds: bases.filter((base) => base.subregionId === subregion.id).map((base) => base.id),
-    placeIds: places.map((place) => place.id),
-    suggestedNights: subregion.suggestedNights,
-    bestMonths: [],
-    evidenceFactIds: [],
-  }));
+  const centerKey = (center: { lat: number; lng: number }): string =>
+    `${center.lat.toFixed(4)}:${center.lng.toFixed(4)}`;
+  const centerCounts = new Map<string, number>();
+  for (const subregion of candidates) {
+    const key = centerKey(subregion.center);
+    centerCounts.set(key, (centerCounts.get(key) ?? 0) + 1);
+  }
+
+  const scopeRadiusKm =
+    scope.shape.kind === 'radius' ? scope.shape.radiusKm : (scope.reachRadiusKm ?? 0);
+  const insideScope = (center: { lat: number; lng: number }): boolean => {
+    if (scope.bounds) {
+      return (
+        center.lat >= scope.bounds.southWest.lat &&
+        center.lat <= scope.bounds.northEast.lat &&
+        center.lng >= scope.bounds.southWest.lng &&
+        center.lng <= scope.bounds.northEast.lng
+      );
+    }
+    return straightLineKm(scope.center, center) <= Math.max(scopeRadiusKm, 1);
+  };
+
+  return candidates.flatMap((subregion) => {
+    if ((centerCounts.get(centerKey(subregion.center)) ?? 0) > 1) return [];
+    if (!insideScope(subregion.center)) return [];
+    const memberIds = places
+      .filter((place) => straightLineKm(subregion.center, place.coordinates) <= subregion.radiusKm)
+      .map((place) => place.id);
+    if (memberIds.length === 0) return [];
+    return [
+      {
+        id: subregion.id,
+        name: subregion.name,
+        summary: subregion.summary,
+        center: subregion.center,
+        radiusKm: subregion.radiusKm,
+        entityType: 'subregion' as const,
+        breadth: 'subregion' as const,
+        baseIds: bases.filter((base) => base.subregionId === subregion.id).map((base) => base.id),
+        placeIds: memberIds,
+        suggestedNights: subregion.suggestedNights,
+        bestMonths: [],
+        evidenceFactIds: [],
+      },
+    ];
+  });
 }
 
 function buildSatellites(
@@ -4508,11 +4931,42 @@ function buildSatellites(
  * - `gated`, or unclassified (every stored place from before the field) —
  *   `unknown`, exactly as before. The cautious direction is unchanged: a
  *   museum with no hours record still refuses a seven-p.m. slot.
+ *
+ * ---
+ *
+ * ADMISSION IS A SEPARATE QUESTION FROM HOURS, AND SILENCE ANSWERS NEITHER.
+ *
+ * Both fallbacks used to share one `admission` constant, and that constant is
+ * not a blank — `reservationRequired: false`, `walkInAllowed: true` is the
+ * positive claim that you may turn up and walk in. So the absence of a calendar
+ * was being spent as permission: a gated, ticketed site with no published
+ * schedule went out as a walk-in, with no badge, no booking task and — on the
+ * `open_ground` branch, which suppresses the hours caution because open ground
+ * cannot have hours — no warning of any kind.
+ *
+ * Three answers now, matched to what is actually known:
+ *
+ * - **no gate** (`open_ground`, and nothing on the record contradicting it):
+ *   the positive claim, and warranted. An unfenced river bank really does not
+ *   take reservations, and saying so is not a guess.
+ * - **an admission requirement somebody published**: read off the booking
+ *   evidence this compilation gathered, even when the *hours* evidence was too
+ *   weak to enforce a schedule. Those are different facts with different
+ *   sources; discarding a confirmed "you must book" because nobody published
+ *   opening times is how the two got conflated in the first place.
+ * - **nobody published anything**: the booleans stay at their non-blocking
+ *   value — `walkInAllowed: false` renders as "there is no walk-up entry", a
+ *   false negative that would be a worse lie than the one being fixed, and the
+ *   schema has no third state to write — and the ignorance is stated in
+ *   `admission.note`, which `hours/availability.ts` renders as a caution and
+ *   `schedule.ts` carries onto any booking requirement. An unknown said out
+ *   loud, rather than a permission asserted in silence.
  */
 export function buildHours(
   scope: GeographicScope,
   places: readonly Place[],
   calendars: readonly OperatingCalendar[],
+  evidence?: RegionEvidence,
 ): OperatingHoursDataset {
   // First wins, so the caller's ordering is the precedence. `new Map(...)` over
   // the same list would have let the weakest source overwrite the strongest.
@@ -4520,24 +4974,86 @@ export function buildHours(
   for (const calendar of calendars) {
     if (!byPlace.has(calendar.placeId)) byPlace.set(calendar.placeId, calendar);
   }
-  const noAdmission = {
+  const bookingByPlace = new Map<string, BookingEvidence>();
+  for (const entry of evidence?.places ?? []) {
+    if (entry.booking) bookingByPlace.set(entry.subjectId, entry.booking);
+  }
+
+  /** No gate to be wrong about. A claim, and one the category supports. */
+  const noGate = {
     reservationRequired: false,
     timedEntry: false,
     permitRequired: false,
     walkInAllowed: true,
     capacityLimited: false,
   };
+  /** The same booleans, and an explicit statement that they are not evidence. */
+  const unrecordedAdmission = {
+    ...noGate,
+    note: 'Nobody publishes whether this needs a ticket, a booking or a permit, so do not read the absence of one as permission to walk in.',
+  };
+
+  /**
+   * What the research funnel established about getting in, where it established
+   * anything. `unknown` on every field is the ordinary answer and produces no
+   * calendar of its own — it falls through to the branches below.
+   */
+  const admissionFromEvidence = (
+    placeId: string,
+  ): { admission: typeof noGate & { note?: string; bookingUrl?: string } } | null => {
+    const booking = bookingByPlace.get(placeId);
+    if (!booking) return null;
+    const reservationRequired = booking.reservationRequired === 'yes';
+    const timedEntry = booking.timedEntry === 'yes';
+    const permitRequired = booking.permitRequired === 'yes';
+    if (!reservationRequired && !timedEntry && !permitRequired) return null;
+    return {
+      admission: {
+        /* Timed entry is a reservation for a slot; the schema refuses the pair
+         * the other way round, and it is right to. */
+        reservationRequired: reservationRequired || timedEntry,
+        timedEntry,
+        permitRequired,
+        walkInAllowed: !(reservationRequired || timedEntry),
+        capacityLimited: timedEntry,
+        ...(booking.bookingUrl ? { bookingUrl: booking.bookingUrl } : {}),
+        note: booking.note ?? 'The operator says this has to be arranged in advance.',
+      },
+    };
+  };
+
   return {
     version: OPERATING_HOURS_DATASET_VERSION,
     regionId: regionIdFor(scope),
     calendars: places.map((place) => {
       const found = byPlace.get(place.id);
       if (found) return found;
-      if (place.hoursExpectation === 'open_ground') {
+      const published = admissionFromEvidence(place.id);
+      /**
+       * A published admission requirement outranks the category's own reading of
+       * the ground, in both directions. A record classified as open ground that
+       * somebody sells timed tickets for is not open ground, and the hours are
+       * `unknown` rather than `always_open` — because a place with a ticket desk
+       * has a closing time, whatever its category said.
+       *
+       * A *stated* charge is the same statement in the cheaper form: somebody
+       * charges it, so there is somewhere to charge it at. Stated is the whole
+       * of it — `estimatedDefaults` naming `cost_level` means the number is the
+       * archetype's price band and proves nothing, and an absent array is
+       * unmarked rather than verified, so neither may gate anything. What is
+       * left is a producer that listed its own guesses and did not list this
+       * one, which is a source having published a fee.
+       */
+      const statedCharge =
+        place.costLevel > 0 &&
+        place.estimatedDefaults !== undefined &&
+        !place.estimatedDefaults.includes('cost_level');
+      const gated = published !== null || statedCharge;
+      if (place.hoursExpectation === 'open_ground' && !gated) {
         return {
           kind: 'always_open' as const,
           placeId: place.id,
-          admission: noAdmission,
+          admission: noGate,
           daylightOnly: false,
           note: 'Open ground — no staffed opening hours apply.',
           provenance: {
@@ -4551,7 +5067,7 @@ export function buildHours(
       return {
         kind: 'unknown' as const,
         placeId: place.id,
-        admission: noAdmission,
+        admission: published?.admission ?? unrecordedAdmission,
         daylightOnly: false,
         note: 'We hold no opening-hours record for this place.',
         provenance: {

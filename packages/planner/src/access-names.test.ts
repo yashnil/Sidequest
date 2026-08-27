@@ -67,6 +67,7 @@ function candidatesFor(ids: readonly string[]): PlanningCandidate[] {
   return EASTERN_SIERRA_PLACES.filter((place) => ids.includes(place.id)).map((place) => ({
     place: renamed(place),
     priority: 1,
+    boardPriority: 1,
     manual: false,
     selectionStatus: 'included' as const,
     fitScore: 0.8,

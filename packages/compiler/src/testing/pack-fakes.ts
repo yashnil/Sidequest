@@ -12,6 +12,8 @@ import {
   type PlaceCategory,
   type RegionPack,
   type SourceRecord,
+  snapFoodRouting,
+  MODELLED_WALK_KMH,
 } from '@sidequest/core';
 import { assemblePack } from '../backbone/assemble';
 import { buildInventory, foodVenueFromRecord } from '../backbone/inventory';
@@ -137,6 +139,36 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
       coordinates: { lat: spec.center.lat + delta.lat, lng: spec.center.lng + delta.lng },
       sourceCategory: category,
       sourceCategoryPath: CATEGORY_PATHS[category] ?? [],
+      /**
+       * A DESIGNATED AREA IS GROUND WITH A SHAPE, AND THE FIXTURE HAS TO SAY SO.
+       *
+       * `hasConferredDesignation` requires a status word *and* the outline the
+       * status was conferred on, because on two live packs the word alone was
+       * carried by a brewery, an anime shop and a bench outside a lecture hall
+       * — every one of them a point with a one-metre bounding box. A synthetic
+       * reserve with no outline models one of those, not a reserve, and a world
+       * built from it has no local-significance evidence in it at all.
+       *
+       * A kilometre and a quarter across — standing scale. The designation
+       * channel is graded by the extent it was conferred on (the measured
+       * split on live artifacts: real reserves 1.2–22 km, suburban
+       * micro-designations 204–303 m), so a synthetic reserve has to be the
+       * scale of the real thing for its designation to speak in full.
+       */
+      ...(category === 'nature_reserve'
+        ? {
+            bounds: {
+              southWest: {
+                lat: spec.center.lat + delta.lat - 0.0056,
+                lng: spec.center.lng + delta.lng - 0.0056,
+              },
+              northEast: {
+                lat: spec.center.lat + delta.lat + 0.0056,
+                lng: spec.center.lng + delta.lng + 0.0056,
+              },
+            },
+          }
+        : {}),
       planningRole: 'attraction',
       operatingStatus: 'open',
       // Two thirds carry a site, so the funnel has both cheap and expensive
@@ -183,10 +215,39 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
        * it models a record the product deliberately refuses, and a scenario
        * built on one would be asserting against a population no board sees.
        * The heritage authority that lists it is the witness a real one has.
+       *
+       * The register page carries the site's own name in its address, because
+       * that is what a real heritage register publishes and it is the
+       * distinction the significance model turns on: a URL that merely sits on
+       * a government domain proves who the *operator* is — the NYCHA defect —
+       * while a page addressed to the place by name is a statement about the
+       * place (`authority_page_about_it`). A fixture whose witness could not
+       * pass that test would model the landlord's asset list it exists to be
+       * the opposite of.
+       */
+      /*
+       * A hiking anchor publishes a land-manager page for the same reason, and
+       * it is the same correction rather than convenience.
+       *
+       * A three-hour trail is anchor-grade: the scenario built on it asks
+       * whether a traveller who came to hike is given a hike, so the record has
+       * to be one a board would actually seat. The inventory now withholds an
+       * anchor slot from a subject about which nothing whatever is published —
+       * exactly the population whose live instance held forty-two per cent of a
+       * real trip's activity time while its own description read "nothing beyond
+       * its name and position". A fixture without a witness would model that
+       * record, not a signature trail, and would be asserting against a
+       * population no board seats. Real trails of this size have a land manager
+       * who names them; this is that page, addressed to the trail by name so it
+       * is a statement about the place rather than about whoever owns the land.
        */
       websiteCandidates:
-        !twin && category === 'historic_site'
-          ? [`https://heritage.example.gov/${spec.id}/${index}`]
+        !twin && (category === 'historic_site' || category === 'hiking_trail')
+          ? [
+              `https://${category === 'historic_site' ? 'heritage' : 'landmanager'}.example.gov/${spec.id}/register/${
+                `${spec.name} Feature ${index + 1}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+              }`,
+            ]
           : [],
       // The shared identifier is what makes the link identity rather than a
       // guess, and it is the case a real build hits constantly.
@@ -207,7 +268,19 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
   }
 
   for (let index = 0; index < spec.foodVenues; index += 1) {
-    const delta = spiral(index + 80);
+    /*
+     * Beside the places, because that is where food is.
+     *
+     * These sat eighty turns further out on the same spiral — tens of
+     * kilometres from every attraction and every base — which is a geometry no
+     * city has. It went unnoticed while venues were priced against whichever
+     * node happened to be nearest, however far: the fixture and the provider
+     * were wrong in the same direction. With the door-walk ceiling enforced,
+     * that shape is refused outright and this fixture would carry no food at
+     * all, which is the fixture asserting against a world the product never
+     * sees. Interleaved with the places instead, a short walk from one.
+     */
+    const delta = spiral(index % Math.max(1, spec.placeCount));
     const category = FOOD_CATEGORIES[index % FOOD_CATEGORIES.length]!;
     primary.push({
       id: `places:${spec.id}-food-${index}`,
@@ -263,6 +336,57 @@ export function syntheticPack(spec: SyntheticWorldSpec, scope: GeographicScope):
       sources: [{ dataset: 'primary-catalogue', licenceId: 'CDLA-Permissive-2.0' }],
       cellId,
     });
+  }
+
+  /**
+   * The scheduled-network stops this world's spec opted into, in the shape a
+   * catalogue really publishes them: gateway records whose `sourceCategory` is
+   * the stop kind itself. Absent from every world that does not declare them,
+   * so no existing pack moves by a byte. Placed on their own tight ring around
+   * the centre — a station serves the town — rather than on the attraction
+   * spiral, whose radius at these indices would put a stop two degrees out.
+   */
+  let stopIndex = 0;
+  for (const [kind, count] of Object.entries(spec.scheduledStopRecords ?? {})) {
+    for (let index = 0; index < count; index += 1) {
+      const delta = {
+        lat: 0.0012 * (stopIndex + 1),
+        lng: -0.0012 * (stopIndex + 1),
+      };
+      primary.push({
+        id: `places:${spec.id}-stop-${kind}-${index}`,
+        layerId: 'places',
+        sourceId: `${spec.id}-stop-${kind}-${index}`,
+        name: `${spec.name} ${titleCase(kind)} ${index + 1}`,
+        alternateNames: [],
+        coordinates: { lat: spec.center.lat + delta.lat, lng: spec.center.lng + delta.lng },
+        sourceCategory: kind,
+        sourceCategoryPath: ['travel_and_transportation', kind],
+        planningRole: 'gateway',
+        operatingStatus: 'open',
+        websiteCandidates: [],
+        containment: {
+          countryCode: spec.countryCode,
+          localityName: spec.name,
+          divisionIds: [`div-${spec.id}`],
+        },
+        attributes: {},
+        sources: [
+          { dataset: 'primary-catalogue', licenceId: 'CDLA-Permissive-2.0', recordId: `s${stopIndex}` },
+        ],
+        cellId,
+      });
+      stopIndex += 1;
+    }
+  }
+
+  /*
+   * Records the spec supplies verbatim, stamped into this pack's own layer and
+   * partition cell. See `SyntheticWorldSpec.extraPlaceRecords` for why a
+   * generated population cannot express what these are for.
+   */
+  for (const extra of spec.extraPlaceRecords ?? []) {
+    primary.push({ ...extra, layerId: 'places', cellId });
   }
 
   const closedDelta = spiral(140);
@@ -647,6 +771,7 @@ export function packBackedProviders(
           membershipDecided: overlay.integrity.byRelationship
             .filter((entry) => entry.relationship !== 'membership_unknown')
             .reduce((sum, entry) => sum + entry.count, 0),
+          refutedElsewhere: overlay.integrity.outOfScope,
           divisionsAvailable: overlay.integrity.divisionsAvailable,
           scopeIdentityUnknown: overlay.integrity.scopeIdentityUnknown,
         },
@@ -671,11 +796,26 @@ export function packBackedProviders(
       const venues = inventory.foodRecords
         .slice(0, Math.max(0, maxVenues))
         .map((record) =>
-          foodVenueFromRecord({
-            record,
-            scope,
-            routingId: nearestAnchorId(anchors, record.coordinates) ?? bases[0]?.id ?? spec.id,
-          }),
+          /*
+           * The same ceiling production applies, so the fake provider cannot
+           * build a shape the real one refuses: a venue further from every node
+           * than the schema's door walk allows has no routing id to give, and
+           * the meal falls to the area suggestion exactly as it would live.
+           */
+          ((): ReturnType<typeof foodVenueFromRecord> => {
+            const snapped = snapFoodRouting({
+              coordinates: record.coordinates,
+              anchors,
+              walkKmh: MODELLED_WALK_KMH,
+            });
+            if (!snapped) return null;
+            return foodVenueFromRecord({
+              record,
+              scope,
+              routingId: snapped.routingId,
+              walkMinutesFromRouting: snapped.walkMinutesFromRouting,
+            });
+          })(),
         )
         .filter((venue): venue is NonNullable<typeof venue> => venue !== null);
       return {
@@ -815,24 +955,6 @@ export function packBackedProviders(
   };
 
   return { ...base, regionPack, places, food, constraints };
-}
-
-function nearestAnchorId(
-  anchors: readonly { id: string; coordinates: { lat: number; lng: number } }[],
-  point: { lat: number; lng: number },
-): string | undefined {
-  let best: string | undefined;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const anchor of anchors) {
-    const dLat = anchor.coordinates.lat - point.lat;
-    const dLng = (anchor.coordinates.lng - point.lng) * Math.cos((point.lat * Math.PI) / 180);
-    const distance = dLat * dLat + dLng * dLng;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = anchor.id;
-    }
-  }
-  return best;
 }
 
 /** The scope hash a synthetic pack would be stored under. Used by store tests. */

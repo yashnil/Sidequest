@@ -93,7 +93,15 @@ export type LegRule =
    * `provenance: 'modelled'` and why every surface that prints a duration has to
    * be able to say so.
    */
-  | 'modelled_walk';
+  | 'modelled_walk'
+  /**
+   * The mirror image, for the traveller who declared a car: the only network
+   * anybody measured is the pedestrian one, the walk is past what they said
+   * they would walk, and the distance driven at a cautious pace is the honest
+   * price of the journey they would actually make. See `deriveModelledDrive`.
+   * Also `provenance: 'modelled'`, for the same reason.
+   */
+  | 'modelled_drive';
 
 /** A journey between two points that somebody actually measured. */
 export interface TravelOption {
@@ -143,6 +151,23 @@ export type ResolvedLeg =
   | UnresolvedLeg;
 
 /**
+ * WHETHER A SCHEDULED-TRANSPORT NETWORK WAS SEEN ON THE DESTINATION'S GROUND.
+ *
+ * An *observation about the destination*, never about the traveller and never
+ * about our instruments: 'observed' means the destination evidence itself
+ * records scheduled-transport stops — rail stations, bus stations, ferry
+ * terminals — and 'not_observed' means the same evidence was read and records
+ * none. The caller that compiled or loaded the destination is the only party
+ * who can say which, so the value arrives as data and is never inferred here.
+ *
+ * The third state is the absence of the field, and it is load-bearing exactly
+ * as `TransitEvidence`'s absence is: a caller that did not say has made no
+ * claim, and no rule below may read the silence as either answer. Every caller
+ * that predates this field therefore keeps its exact behaviour.
+ */
+export type ScheduledNetworkPresence = 'observed' | 'not_observed';
+
+/**
  * Everything needed to answer "how do they get from here to there", as data.
  *
  * The planner stays a pure function of what it is handed; nothing in here talks
@@ -161,11 +186,75 @@ export interface TravelKnowledge {
   maxDailyDriveMinutes: number;
   /** Driving plus riding plus walking to reach things. Always the larger cap. */
   maxDailyTransportMinutes: number;
+  /**
+   * Whether the destination's own evidence records a scheduled network.
+   *
+   * Optional, and `null` and absent read identically as "nobody said" —
+   * nobody-said changes nothing anywhere. Optional rather than required so a
+   * knowledge object built by hand before the observation existed (the
+   * planner's own test fixtures do this) keeps compiling with its exact
+   * meaning: it never said, and silence opens no gate.
+   */
+  scheduledNetwork?: ScheduledNetworkPresence | null;
   /** Measured journeys, keyed `from\u0000to`. Built once rather than scanned per leg. */
   journeys: ReadonlyMap<string, TransitJourneyRecord>;
 }
 
 const TRANSIT_MODES: readonly TransportMode[] = ['rail', 'public_bus', 'ferry'];
+
+/**
+ * WHETHER THE MODES THIS TRAVELLER WOULD ACTUALLY USE WERE EVER ASKED ABOUT.
+ *
+ * The one question that decides whether a permission refusal is a *conflict* or
+ * a *gap*, and getting it wrong is what put "No usable route from your base" on
+ * twenty-two of twenty-four cards of a car-free Tokyo board.
+ *
+ * The chain that produces it is not a bug anywhere along its length. The
+ * compiler could not find a continuous walking network across the region, so it
+ * substituted the road one and said so in a warning. `matrixMode` then correctly
+ * declares a road matrix answers for driving, the permission filter correctly
+ * removes driving from a traveller who has no car, and the refusal below
+ * correctly reports that everything measured was refused. What is wrong is the
+ * *sentence*: "the only measured way between these two is by car, which this
+ * trip rules out" reads as a fact about the ground — there is no other way in —
+ * when it is a fact about our instruments. In a city with nine hundred stations,
+ * the traveller can plainly get there; nobody asked a timetable how long it
+ * takes.
+ *
+ * `TransitEvidence.absence` already draws exactly this distinction, in its own
+ * words: "a traveller is owed the difference between 'there are no trains' and
+ * 'we cannot see the trains'". So this reads it rather than restating it.
+ *
+ *   - a measured journey, anywhere in this evidence, or `out_of_coverage` — a
+ *     provider was asked about this ground and answered — means the scheduled
+ *     modes *were* asked about. A refusal is then a genuine conflict, and the
+ *     remedy is a decision the traveller makes.
+ *   - `unsupported`, `budget_exhausted` or `not_needed` is the compilation
+ *     stating, in its own record, that nothing ever asked. The remedy is more
+ *     data, and the honest card says the journey could not be timed.
+ *
+ * **No transit evidence at all keeps the conflict**, and that asymmetry is
+ * deliberate rather than an oversight. This module's standing rule is that an
+ * absent record is never read as a claim; a missing `TransitEvidence` is
+ * therefore not a statement that nothing asked, and softening a refusal on the
+ * strength of a field nobody wrote would be inventing the very reassurance the
+ * softer sentence carries. Where the compilation signed the absence, this reads
+ * it; where it said nothing, the stricter answer stands.
+ *
+ * There is deliberately no test here for whether the traveller would board
+ * anything. `permittedModesFor` grants rail and ferry to everybody and says why
+ * — nothing in the questionnaire asks about them — so anyone who reaches this
+ * refusal at all has a scheduled mode in their permitted set by construction. A
+ * clause guarding against the opposite was written, could not fire, and is not
+ * kept as decoration; the day the questionnaire gates rail, it belongs here.
+ */
+function unaskedScheduledModes(knowledge: TravelKnowledge): boolean {
+  const transit = knowledge.transit;
+  if (!transit) return false;
+  return (
+    transit.measured === 0 && transit.absence !== undefined && transit.absence !== 'out_of_coverage'
+  );
+}
 
 /**
  * One key per ordered pair, with a separator no identifier can contain.
@@ -266,6 +355,12 @@ export function travelKnowledgeFor(
   matrix: TravelTimeMatrix,
   profile: TravelerProfile,
   transit: TransitEvidence | null | undefined,
+  /**
+   * See `ScheduledNetworkPresence`. Optional so that every caller written
+   * before the observation existed keeps compiling and keeps its exact
+   * behaviour: an absent argument stores `null`, and `null` opens no gate.
+   */
+  scheduledNetwork?: ScheduledNetworkPresence | null,
 ): TravelKnowledge {
   const journeys = new Map<string, TransitJourneyRecord>();
   for (const journey of transit?.journeys ?? []) {
@@ -284,7 +379,89 @@ export function travelKnowledgeFor(
     maxDailyDriveMinutes: profile.transport.maxDailyDriveMinutes,
     maxDailyTransportMinutes: profile.transport.maxDailyTransportMinutes,
     journeys,
+    scheduledNetwork: scheduledNetwork ?? null,
   };
+}
+
+/**
+ * A WALK PRICING A TRAVELLER WHOSE OWN MODE NOBODY COULD MEASURE.
+ *
+ * The Tokyo skip list, as a rule. A car-free trip through a served city is
+ * compiled onto the one network anybody measured — the pedestrian one — so
+ * every card prices its journey "on foot from base", and everything past the
+ * walking radius is filed as too far *for a traveller who never intended to
+ * walk it*. The traveller stated a travel-time tolerance, not a walking-time
+ * tolerance; skipping what walking cannot reach converts "we cannot see the
+ * trains" into "the trains do not exist", which is the exact substitution this
+ * module exists to prevent, one layer up from the leg it usually guards.
+ *
+ * True only when all three of these hold, and each is somebody's signed record
+ * rather than an inference:
+ *
+ *   - **the walk is past what the traveller said they would walk** — inside
+ *     that tolerance a walk is simply the journey, and there is nothing to
+ *     soften;
+ *   - **the compilation signed that nothing could measure a scheduled
+ *     journey** — `absence: 'unsupported'` or `'budget_exhausted'` with zero
+ *     journeys measured, which the compiler writes only for a trip that leans
+ *     on scheduled transport. `'not_needed'` is the compilation stating the
+ *     trip is planned around a car and stays out; `'out_of_coverage'` is a
+ *     provider that was asked about this ground and holds nothing, which is
+ *     the closest thing to "there are no trains" a build can attest and keeps
+ *     the walking verdict; a measured journey anywhere in the evidence means
+ *     the evidence, not this gate, is the story; and an absent record is no
+ *     statement at all;
+ *   - **the destination evidence observes a scheduled network** — without
+ *     that observation, softening a walking verdict would promise a transit
+ *     route in a world that may genuinely have none, which is the same lie in
+ *     the other direction.
+ *
+ * What it deliberately is not: a reach answer. The walk stays measured, stays
+ * a walk, and stays on the card; this only says the *verdict* built on it —
+ * how far away this place is for this traveller — cannot honestly be passed.
+ */
+export function transitBlindWalk(knowledge: TravelKnowledge, walkMinutes: number): boolean {
+  if (walkMinutes <= knowledge.maxWalkMinutes) return false;
+  return scheduledTransportUnmeasured(knowledge);
+}
+
+/**
+ * THE TWO CLAUSES OF THE RULE ABOVE THAT ARE FACTS ABOUT THE TRIP, NOT A LEG.
+ *
+ * A bound has to be chosen before any particular walk is in hand — a cap the
+ * planner computes once for a whole resolution, a radius the classifier applies
+ * to every candidate — and the question those callers are asking is the first
+ * two thirds of `transitBlindWalk`: does this compilation sign that nothing
+ * could time a scheduled journey, over ground whose own evidence observes a
+ * scheduled network. The third clause is about one measured walk and belongs
+ * only where one is being judged.
+ *
+ * Split out rather than restated, and read by `transitBlindWalk` itself, so the
+ * board's verdict and the planner's bound cannot come to hold two different
+ * definitions of the same gap.
+ */
+export function scheduledTransportUnmeasured(knowledge: TravelKnowledge): boolean {
+  const transit = knowledge.transit;
+  if (!transit || knowledge.scheduledNetwork !== 'observed') return false;
+  return (
+    transit.measured === 0 &&
+    (transit.absence === 'unsupported' || transit.absence === 'budget_exhausted')
+  );
+}
+
+/**
+ * The honest sentence for a transit-blind walk, minted once.
+ *
+ * Both halves are load-bearing: the first admits what nobody verified without
+ * asserting a train that may not run at a time that suits, and the second
+ * keeps the one measured number on the card, labelled as the walk it is.
+ * Never a fabricated transit time; never a walk relabelled as a ride.
+ */
+export function describeTransitBlindWalk(
+  walkMinutes: number,
+  formatMinutes: (minutes: number) => string,
+): string {
+  return `We could not verify the transit route yet; about ${formatMinutes(walkMinutes)} on foot`;
 }
 
 /**
@@ -513,7 +690,75 @@ export function deriveModelledWalk(
   };
 }
 
-/** `resolveLeg`, then the modelled walk as the answer of last resort. */
+/**
+ * Deliberately slow, like the walking figure above it. Twenty km/h is a dense
+ * urban door-to-door pace — junctions, one-way loops, finding somewhere to put
+ * the car — and it also absorbs the gap between the pedestrian network the
+ * distance was measured on and the longer road a car actually takes. A figure
+ * that overstates a drive delays a traveller; one that understates it strands
+ * them, so the model errs long.
+ */
+export const MODELLED_DRIVE_KMH = 20;
+
+/**
+ * A DRIVE DERIVED FROM A PEDESTRIAN DISTANCE, FOR THE TRAVELLER WHO DRIVES.
+ *
+ * The mirror of `deriveModelledWalk`, and the same contract breach behind it:
+ * the compiler measures the network a trip is made on, and when the stored
+ * matrix is pedestrian while the traveller declared a car, every journey prices
+ * as a walk. On a served board that read as "N min on foot from base" on every
+ * card and "2 hr 6 min each way on foot is past how far you said you would go"
+ * on the skip list — a walking budget attributed to somebody whose stated
+ * budget was minutes at a wheel, with verdicts derived from it.
+ *
+ * The same three invariants as the walk derivation, mirrored:
+ *
+ *   - a pedestrian *time* never stands in for a drive — only the distance is
+ *     read, and only to derive one;
+ *   - the mode is `drive` and the provenance is `modelled`, so no surface can
+ *     present the figure as a measurement;
+ *   - unknown stays unknown — no distance stays a refusal, and a matrix that is
+ *     not pedestrian returns null, because a road matrix already measures
+ *     drives and second-guessing a measurement with a model is the substitution
+ *     this layer exists to stop.
+ *
+ * Null for a traveller whose permitted modes hold no drive: this derivation
+ * exists to price the declared mode, never to invent one. Walk pricing stays
+ * exactly as it was for walkers — the transit-blind gate above is their honest
+ * treatment, and this function is the driver's.
+ */
+export function deriveModelledDrive(
+  knowledge: TravelKnowledge,
+  fromId: string,
+  toId: string,
+): (TravelOption & { mode: 'drive'; provenance: 'modelled' }) | null {
+  if (knowledge.matrix.mode !== 'foot') return null;
+  if (!knowledge.permitted.has('drive')) return null;
+  const measured = tryLeg(knowledge.matrix, fromId, toId);
+  if (!measured || measured.km <= 0) return null;
+  const minutes = Math.ceil((measured.km * 60) / MODELLED_DRIVE_KMH);
+  return {
+    mode: 'drive',
+    minutes,
+    /*
+     * The pedestrian-network distance, carried as the basis of the model — not
+     * a claim about the road, exactly as the modelled walk carries the road
+     * distance it was derived from.
+     */
+    km: measured.km,
+    provenance: 'modelled',
+    source: 'derived from the walking-network distance at a cautious city driving pace',
+  };
+}
+
+/**
+ * `resolveLeg`, then the honest repair for a matrix that measured the wrong
+ * network: the modelled walk when nothing usable was measured at all, and the
+ * modelled drive when the only measured answer is a walk past the traveller's
+ * own walking tolerance and they declared a car. A walk inside that tolerance
+ * stays a walk — driving two streets is not a saving — and a measured ride is
+ * never second-guessed by a model.
+ */
 function resolveReachLeg(
   knowledge: TravelKnowledge,
   fromId: string,
@@ -521,7 +766,17 @@ function resolveReachLeg(
   legal: TransportMode,
 ): ResolvedLeg {
   const resolved = resolveLeg(knowledge, fromId, toId, legal);
-  if (resolved.ok) return resolved;
+  if (resolved.ok) {
+    if (
+      resolved.mode === 'walk' &&
+      resolved.minutes > knowledge.maxWalkMinutes &&
+      knowledge.permitted.has('drive')
+    ) {
+      const drive = deriveModelledDrive(knowledge, fromId, toId);
+      if (drive) return { ok: true, fromId, toId, rule: 'modelled_drive', ...drive };
+    }
+    return resolved;
+  }
   const walk = deriveModelledWalk(knowledge, fromId, toId);
   return walk ? { ok: true, fromId, toId, rule: 'modelled_walk', ...walk } : resolved;
 }
@@ -586,7 +841,42 @@ export function resolveCandidateReach(
 }
 
 /**
+ * HOW FAR THIS TRAVELLER WILL WALK ON A LEG THIS PRODUCT INSTRUCTS.
+ *
+ * The **walking-leg bound**, and the first of the two bounds this module keeps
+ * apart. It answers one question and is spent on nothing else: *how far will
+ * they walk on a leg we lay, and what may we say when we refuse one in walking
+ * terms.* Every leg the itinerary renders as a walk, and every refusal that
+ * quotes a walking clock, is held to it.
+ *
+ * It takes no options, and the omission is the guarantee. The journey bound
+ * below widens for a walk that is only standing in for an unpriced ride — and
+ * the moment that widened figure was spent on this question, a traveller who
+ * had answered twenty-five minutes was handed a per-leg ceiling of a hundred
+ * and twelve and two live car-free itineraries laid legs reading "Walk to X —
+ * 67 min on foot". There is no parameter here that could carry that fact, so
+ * there is no way to widen this bound with it.
+ *
+ * `maxAccessWalkMinutes` is the answer; the driving radius joins it only for a
+ * traveller who drives, for whom the two questions were asked of the same
+ * person about the same journeys.
+ */
+export function walkingLegBoundMinutes(profile: TravelerProfile): number {
+  const drivingRadius = profile.transport.willDrive
+    ? Math.max(1, profile.derived.effectiveDetourMinutes)
+    : 0;
+  return Math.max(drivingRadius, profile.transport.maxAccessWalkMinutes);
+}
+
+/**
  * HOW FAR OUT THIS TRAVELLER WILL GO, IN THE MODE THEY WOULD ACTUALLY GO IN.
+ *
+ * The **journey/reach bound**, and the second of the two. It answers *can this
+ * traveller reach this place at all* — the question candidate feasibility and
+ * detour classification ask — and it is the only one of the two that may be
+ * widened when a walking figure is standing in for a journey nobody could
+ * price. It is never the ceiling on a leg the product instructs on foot; that
+ * is `walkingLegBoundMinutes` above.
  *
  * One radius per traveller was the assumption, and it was wrong in the one place
  * it mattered most. `derived.effectiveDetourMinutes` is a *driving* figure — it
@@ -607,14 +897,57 @@ export function resolveCandidateReach(
  *     can be reached and returned from inside a day they said they would accept.
  *     Never below the driving radius, so this only ever widens;
  *   - a **walk** is bounded by what they said they would walk, and by the
- *     driving radius, whichever is larger.
+ *     driving radius, whichever is larger — unless the walk is only pricing the
+ *     journey because nobody could price the ride, in which case it is bounded
+ *     like the ride. See `transitUnmeasured` below.
+ *
+ * "The driving radius" in the walking rule is the driving radius and not the
+ * stated figure, which are the same number only for somebody who drives. A
+ * traveller with no car answers the one-way slider about trains, buses and
+ * shuttles — the question says so on the screen — and that answer reached this
+ * branch as a walking allowance the moment it stopped being replaced by a
+ * constant. The audited defect it would have re-opened is on the record: an
+ * hour-plus measured walk, each way, day after day, for somebody who had
+ * answered twenty minutes on foot. A ride answer may widen a ride and never a
+ * walk.
  *
  * Nothing here is a distance. The numbers are all the traveller's own answers.
  */
-export function detourToleranceMinutesFor(profile: TravelerProfile, mode: TransportMode): number {
+export function detourToleranceMinutesFor(
+  profile: TravelerProfile,
+  mode: TransportMode,
+  /**
+   * WHETHER THIS WALK IS THE JOURNEY, OR A STAND-IN FOR ONE NOBODY COULD PRICE.
+   *
+   * `transitUnmeasured` is `scheduledTransportUnmeasured(knowledge)`: the
+   * compilation signed that nothing could time a scheduled journey, over ground
+   * whose evidence observes a scheduled network. Where that holds, the walking
+   * figure on a car-free trip is not a walk anybody intends to take — it is the
+   * only network the compiler could route, standing in for the trains the
+   * traveller will actually ride — so bounding it by walking appetite answers a
+   * question about the wrong mode. Two live car-free dense-metro boards priced
+   * every canonical seat at thirty-nine to seventy minutes on foot and refused
+   * each one against a twenty-five minute answer about the last mile from a
+   * stop; one delivered a single scheduled stop out of a twenty-four card board.
+   *
+   * So the bound becomes the ride bound — half the daily transport budget, the
+   * same arithmetic the ride branch below uses — because that is the journey
+   * they will make. The walk keeps its measured minutes on the card as the
+   * honest upper bound; only the verdict about how far away this is changes.
+   *
+   * It widens *this* bound and nothing else. A leg the product instructs on
+   * foot, and a refusal phrased in walking minutes, are held to
+   * `walkingLegBoundMinutes`, which cannot be handed this fact at all.
+   *
+   * Optional, and absent is the walking bound: a caller with no travel
+   * knowledge in hand cannot establish the gap, and an unestablished gap is not
+   * a licence to widen anything.
+   */
+  options?: { transitUnmeasured?: boolean },
+): number {
   const stated = Math.max(1, profile.derived.effectiveDetourMinutes);
   if (mode === 'drive') return stated;
-  if (mode === 'walk') return Math.max(stated, profile.transport.maxAccessWalkMinutes);
+  if (mode === 'walk' && !options?.transitUnmeasured) return walkingLegBoundMinutes(profile);
   /*
    * Half a day's transport, because a detour is a there-and-back. The cap is
    * the traveller's answer to "how much getting about will you accept in a
@@ -625,6 +958,16 @@ export function detourToleranceMinutesFor(profile: TravelerProfile, mode: Transp
    */
   return Math.max(stated, Math.floor(profile.transport.maxDailyTransportMinutes / 2));
 }
+
+/**
+ * The one stretch band both verdicts about a journey must share. The board's
+ * detour classifier permits a journey past the radius above but within
+ * radius × this multiplier as a stretch — further than the traveller said they
+ * would usually go, but a strong enough fit it earns the extra journey — and
+ * the planner's leg resolution accepts the same band, because a board that
+ * promises a stretch the planner refuses is two verdicts about one journey.
+ */
+export const DETOUR_STRETCH_MULTIPLIER = 1.5;
 
 /**
  * HOW A JOURNEY IS MADE, AS A TRAVELLER WOULD SAY IT.
@@ -677,7 +1020,13 @@ export function describeReachFromBase(
   formatMinutes: (minutes: number) => string,
 ): string {
   if (reach.status === 'measured') {
-    return `${formatMinutes(reach.travelMinutes)} ${REACH_MODE_PHRASE[reach.mode]}`;
+    const figure = `${formatMinutes(reach.travelMinutes)} ${REACH_MODE_PHRASE[reach.mode]}`;
+    /*
+     * "About" is what a person says of a figure they worked out rather than
+     * read. A modelled duration must never print with a measurement's
+     * confidence — the same rule the board applies to its own travel phrase.
+     */
+    return reach.provenance === 'modelled' ? `about ${figure}` : figure;
   }
   return reach.status === 'conflict' ? 'No usable route from your base' : 'Journey not verified';
 }
@@ -847,6 +1196,16 @@ export function resolveLeg(
        * payload, one untested renderer away from a screen.
        */
       const named = options.map((option) => REACH_MODE_PHRASE[option.mode]).join(', or ');
+      if (unaskedScheduledModes(knowledge)) {
+        return {
+          ok: false,
+          fromId,
+          toId,
+          reason: 'mode_not_routed',
+          conflict: false,
+          detail: `The only journey anybody measured between these two is ${named}, which this trip rules out — and nothing here could time the trains, buses or ferries it would use instead.`,
+        };
+      }
       return {
         ok: false,
         fromId,
@@ -925,7 +1284,7 @@ export function resolveLeg(
 }
 
 /**
- * WHICH OF A DAY'S FOUR TRAVEL BUCKETS A LEG'S MINUTES BELONG TO.
+ * WHICH OF A DAY'S FIVE TRAVEL BUCKETS A LEG'S MINUTES BELONG TO.
  *
  * One function, imported by the layout that accumulates the totals and by the
  * validator that re-derives them, because the check the validator performs is
@@ -943,10 +1302,25 @@ export function resolveLeg(
  * `bicycle`, `rideshare` and `private_transfer` are riding rather than driving:
  * none of them is time at the wheel, which is the only thing the driving cap
  * bounds.
+ *
+ * `unverified` is the bucket a mode cannot decide, and it is asked first for
+ * that reason. Where a measured walk is standing in for a scheduled journey
+ * nobody could price, the leg's mode is the stand-in rather than the journey:
+ * charging it by that mode booked every minute of a route the product had just
+ * said it could not price as time on foot, and a car-free day reading
+ * `{"walkMinutes":124}` told a traveller who answered twenty-five minutes to
+ * plan two hours of walking. Its own bucket is what lets a total say how long
+ * the day holds for such a leg without saying how it is made.
  */
-export type TravelBucket = 'drive' | 'transit' | 'walk' | 'wait';
+export type TravelBucket = 'drive' | 'transit' | 'walk' | 'wait' | 'unverified';
 
-export function travelBucketFor(mode: TransportMode, role: string): TravelBucket {
+export function travelBucketFor(
+  mode: TransportMode,
+  role: string,
+  /** True only on a leg whose mode stands in for a journey nobody could price. */
+  unverifiedScheduled = false,
+): TravelBucket {
+  if (unverifiedScheduled) return 'unverified';
   if (mode === 'drive') return 'drive';
   if (role === 'wait') return 'wait';
   if (mode === 'walk') return 'walk';

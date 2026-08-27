@@ -8,6 +8,7 @@ import {
   validateWeatherDataset,
   weatherAvailability,
   isSnapshotRenderable,
+  scheduledNetworkFrom,
   type AccessDataset,
   type CompiledRegion,
   type DiscoveryBoard,
@@ -17,6 +18,7 @@ import {
   type Region,
   type RegionRequest,
   type RegionSource,
+  type ScheduledNetworkPresence,
   type TravelerProfile,
   type Trip,
   type WeatherAvailability,
@@ -128,6 +130,20 @@ export interface RegionContext {
    * itinerary — which is the gap this pass closes.
    */
   transit: CompiledRegion['transitEvidence'];
+  /**
+   * Whether the destination's own compiled evidence records a scheduled
+   * transport network — read off the artifact's kind-aware stop count, never
+   * recomputed at render time.
+   *
+   * `null` is "nobody said" and is the reading for every artifact compiled
+   * before the observation existed; it opens no gate anywhere. The distinction
+   * this preserves is the one `ScheduledNetworkPresence` documents: a board
+   * over ground with a hundred rail stations and an unmeasurable timetable
+   * must say "we could not verify the transit route", and a board over ground
+   * with no station at all must keep its walking verdicts — and only the
+   * compilation can tell those two worlds apart.
+   */
+  scheduledNetwork: ScheduledNetworkPresence | null;
   baseId: string;
   /**
    * The multi-base structure, when the artifact carries one.
@@ -296,6 +312,7 @@ export async function resolveTripRegion(trip: Trip): Promise<RegionResolution> {
       food,
       matrix: compiled.travelTimes,
       transit: compiled.transitEvidence,
+      scheduledNetwork: scheduledNetworkFrom(compiled.scheduledStops),
       baseId: primaryBase.routingId,
       basePortfolio: compiled.basePortfolio,
       months,
@@ -428,6 +445,14 @@ export function boardFor(
     travel: {
       matrix: context.matrix,
       transit: context.transit,
+      /*
+       * The artifact's own scheduled-network observation, through to the
+       * board's travel knowledge. This line is what keeps the transit-blind
+       * verdict alive on the live path: without it every card over a served
+       * city priced its unmeasurable journey as a walk and called the walk too
+       * far, while the observation sat one object away on the same context.
+       */
+      scheduledNetwork: context.scheduledNetwork,
       baseId: context.baseId,
       /*
        * Every base the trip sleeps at, so a multi-base board measures each

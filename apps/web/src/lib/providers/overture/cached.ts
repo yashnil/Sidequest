@@ -88,18 +88,51 @@ export function createCachedPackProvider(
       if (!input.forceRefresh && releaseId) {
         const stored = findRegionPack({ scopeHash, catalog: CATALOG_NAME, releaseId });
         if (stored && packMatchesRelease(stored, CATALOG_NAME, releaseId)) {
+          if (stored.state !== 'partial') {
+            input.onProgress?.({
+              state: stored.state,
+              detail: 'regional place data already held',
+            });
+            return { kind: 'ready', pack: stored, source: 'cache' };
+          }
+          /*
+           * A PARTIAL PACK IS A FLOOR, NOT A HIT.
+           *
+           * Reusing it as a hit made one bad build the truth about a
+           * destination for a whole release: a metropolitan build on a slow
+           * link once shipped four of its six layers empty, and every later
+           * build of the same ground would have inherited that emptiness for a
+           * month, because nothing here ever tried again. So a partial pack
+           * triggers a rebuild, bounded by the same budgets as any miss, and
+           * the *better* of the two packs wins — `saveRegionPack` compares and
+           * keeps it, so a rebuild that fares no better costs a build and
+           * changes nothing, and a rebuild on a healthier link completes the
+           * ground.
+           */
           input.onProgress?.({
-            state: stored.state,
-            detail: 'regional place data already held',
+            state: 'partial',
+            detail: 'regional place data held with gaps — reading the missing ground again',
           });
-          return stored.state === 'partial'
-            ? {
-                kind: 'partial',
-                pack: stored,
-                reason:
-                  stored.failure?.detail ?? 'Some areas were not read when this data was prepared.',
-              }
-            : { kind: 'ready', pack: stored, source: 'cache' };
+          const rebuilt = await inner.getPack(input);
+          if (rebuilt.kind === 'ready' || rebuilt.kind === 'partial') {
+            const winner = saveRegionPack(rebuilt.pack);
+            return winner.state === 'partial'
+              ? {
+                  kind: 'partial',
+                  pack: winner,
+                  reason:
+                    winner.failure?.detail ??
+                    'Some areas were not read when this data was prepared.',
+                }
+              : { kind: 'ready', pack: winner, source: 'built' };
+          }
+          /* The rebuild failed outright; the stored partial is still the best truth held. */
+          return {
+            kind: 'partial',
+            pack: stored,
+            reason:
+              stored.failure?.detail ?? 'Some areas were not read when this data was prepared.',
+          };
         }
       }
 

@@ -15,14 +15,25 @@ import { USER_AGENT } from '../nominatim';
  * 2. **Footer read.** Roughly a megabyte of range requests yields every row
  *    group's statistics. A 790 MB file's footer resolves in about a second.
  * 3. **Row-group pruning** on the `bbox` covering columns the format declares.
- *    Over a metro-sized box that is 38 of 512 row groups; over a national park
- *    it is one of 512.
+ *    Measured against the live catalogue over a metropolitan box: 27 of the
+ *    places file's 256 groups, in 1 of its 16 files. This step was never the
+ *    problem and is not what any of the repairs below are about.
  * 4. **Column projection.** Only the columns the normaliser reads are fetched.
+ * 5. **Pricing.** What steps 3 and 4 will cost is then *known exactly* from the
+ *    footer, before a data byte is spent, and the read is bounded by that price
+ *    rather than by a count of anything. See `projectedCostOf`.
  *
  * Every step is capped, and every cap is reported rather than absorbed. A scan
  * that stops because it hit a budget is a normal outcome with a number attached,
  * which is the difference between "we looked at the middle of this" and an empty
  * region that reads as "there is nothing here".
+ *
+ * The counts that used to do the capping — row groups, decoded rows, retained
+ * rows — survive only as backstops against a file that is not what its footer
+ * claims. They were the policy once, and the cost of that was measured: for a
+ * metropolis-sized box the place layer prunes to 27 row groups costing 50 MB
+ * against a 260 MB budget, and a retained-row ceiling stopped it at 11. Nothing
+ * about bytes or time was ever the constraint.
  *
  * Zstandard comes from Node's own `zlib`, which has shipped it since 22.15.
  * Bringing a compression dependency in for something the runtime already does
@@ -30,6 +41,75 @@ import { USER_AGENT } from '../nominatim';
  */
 
 const RANGE_TIMEOUT_MS = 25_000;
+
+/**
+ * Read a response body chunk by chunk, refusing a *stalled* transfer rather
+ * than a slow one.
+ *
+ * `AbortSignal.timeout` on the fetch covered the whole body download, which
+ * makes the timeout a throughput floor in disguise: a 20.7 MB row group — the
+ * largest overlapping a metropolitan box in the current catalogue release —
+ * needs a sustained 0.83 MB/s to finish inside 25 s, and a live build on a
+ * slower link watched that group die as `unreachable` after transferring real
+ * bytes the whole time. The timeout exists to catch a connection that has
+ * stopped answering, so it is applied to the gap between chunks; the layer's
+ * own deadline still bounds the total, checked between chunks, so a slow read
+ * cannot outspend the build either.
+ */
+export async function readBodyWithStallGuard(
+  body: ReadableStream<Uint8Array>,
+  bounds: { stallMs: number; deadlineMs: number; abort: () => void },
+): Promise<Uint8Array> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      if (Date.now() > bounds.deadlineMs) {
+        bounds.abort();
+        throw new ScanError('timeout', 'This region reached its time limit while reading place data.');
+      }
+      let stallTimer: ReturnType<typeof setTimeout> | undefined;
+      let result: ReadableStreamReadResult<Uint8Array>;
+      try {
+        /*
+         * Each read waits for the sooner of the stall bound and the layer
+         * deadline. Bounding by the stall alone let a stream that went silent
+         * hold the read for the full stall window past the deadline — the
+         * between-chunk check above can only fire when a chunk arrives.
+         */
+        const waitMs = Math.min(bounds.stallMs, Math.max(0, bounds.deadlineMs - Date.now()));
+        result = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => {
+            stallTimer = setTimeout(() => {
+              bounds.abort();
+              reject(
+                Date.now() >= bounds.deadlineMs
+                  ? new ScanError('timeout', 'This region reached its time limit while reading place data.')
+                  : new ScanError('unreachable', 'The place data transfer stalled.'),
+              );
+            }, waitMs);
+          }),
+        ]);
+      } finally {
+        clearTimeout(stallTimer);
+      }
+      if (result.done) break;
+      chunks.push(result.value);
+      total += result.value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return joined;
+}
 
 /**
  * A hard ceiling on any single range request.
@@ -60,10 +140,49 @@ export interface BoundingBox {
   north: number;
 }
 
+/**
+ * THE BOUNDS ON ONE SCAN, AND WHICH OF THEM IS THE POLICY.
+ *
+ * Exactly one of these is meant to decide how much of a destination is read:
+ * `maxBytes`. The others are backstops against a file that is not what its own
+ * footer says it is.
+ *
+ * That ordering is the repair of the phase's central defect. Every bound here
+ * used to be a *count* — 40 row groups, 500,000 decoded rows, 120,000 retained
+ * ones — and a count is a proxy for cost that is wrong by an order of magnitude
+ * between one layer and another. A metropolis's whole pruned place inventory is
+ * about 50 MB against a 260 MB budget; it was being cut off at 40% of itself by
+ * a row limit nobody had ever converted into bytes, and the missing 60% held
+ * most of the city's landmarks. Nothing downstream could tell, because a budget
+ * expressed in the wrong unit does not report a shortfall — it reports a number
+ * that looks fine.
+ *
+ * Every field is a ceiling on the **shared running counter**, not a fresh
+ * per-scan allowance, so a caller reading several files for one layer expresses
+ * "this layer may reach here in total" by passing the same numbers each time.
+ */
 export interface ScanBudget {
+  /**
+   * A catastrophic backstop, not a policy knob.
+   *
+   * Row groups are not what a read costs — a group of a divisions file and a
+   * group of a places file differ by more than a factor of ten — so this is set
+   * large enough never to bind on a real destination and exists so a file with
+   * a pathological group count cannot spin.
+   */
   maxRowGroups: number;
+  /** The policy bound. What this read may cost, in the unit it is paid in. */
   maxBytes: number;
+  /** A backstop against a footer whose declared row counts are not the truth. */
   maxFeaturesRead: number;
+  /**
+   * A ceiling on the rows the scan itself holds.
+   *
+   * Inert when the caller supplies a `sink`: it has then taken the heap on
+   * itself — the pack builder's sink evicts by rank rather than growing — and
+   * stopping the scan on a count the caller deliberately holds constant would
+   * abandon the rest of the area for nothing.
+   */
   maxFeaturesRetained: number;
   deadlineMs: number;
 }
@@ -73,6 +192,24 @@ export interface ScanCounters {
   rowGroupsInspected: number;
   rowGroupsRead: number;
   featuresRead: number;
+}
+
+/**
+ * Where accepted rows go when the caller has somewhere better to put them.
+ *
+ * The scan's own array is fine for a layer of a few thousand rows and is the
+ * wrong shape for the one that matters: a dense metropolis's places layer has
+ * about half a million rows inside the box, all of which are decoded, ranked and
+ * then reduced to a couple of thousand. Holding all of them first is a heap
+ * problem, and the previous answer to that heap problem was to *stop reading* —
+ * which is how a budget meant to protect memory became the thing that decided
+ * which half of a city the traveller could see.
+ *
+ * A sink lets the caller keep a bounded, ranked selection as the rows arrive, so
+ * the area can be exhausted at constant memory.
+ */
+export interface RowSink<T> {
+  add: (row: T) => void;
 }
 
 export type ScanStop =
@@ -102,7 +239,46 @@ export type ScanStop =
  */
 export type ScanStratification = 'applied' | 'unavailable' | 'not_required';
 
+/**
+ * WHAT THE READ WAS GOING TO COST, DECIDED BEFORE A DATA BYTE WAS SPENT.
+ *
+ * Every number here comes from the footer, which is already in hand by the time
+ * the first row group is opened. That is the whole point: the question "can we
+ * afford the whole of this destination" is answerable *exactly*, in advance,
+ * and answering it in advance is the difference between reading all of an area
+ * and discovering half-way through that we cannot.
+ *
+ * `shortfallBytes` is the field that has to exist. A truncated read that
+ * reports only "byte budget" tells a reader that something was cut without
+ * saying how much, and a silent truncation of a place inventory is
+ * indistinguishable from a place with nothing in it.
+ */
+export interface ScanReadPlan {
+  /** Row groups this file publishes, in total. */
+  rowGroupsInFile: number;
+  /** Those whose own statistics overlap the requested box. The area, in groups. */
+  rowGroupsOverlapping: number;
+  /** Those the byte allowance could actually pay for, in stratified order. */
+  rowGroupsPlanned: number;
+  /** Rows the planned groups declare they hold. */
+  rowsPlanned: number;
+  /** Exact compressed bytes the projection over the whole overlapping set costs. */
+  projectedBytes: number;
+  /** Exact compressed bytes the planned prefix costs. */
+  plannedBytes: number;
+  /** What the allowance could not cover. Zero when the whole area fit. */
+  shortfallBytes: number;
+}
+
 export interface ScanResult<T> {
+  /**
+   * The rows this scan retained itself.
+   *
+   * Empty when the caller supplied a `sink`, which then holds them. A caller
+   * that always drains this *and* supplies a sink therefore double-counts
+   * nothing, which is what lets an injected reader that predates sinks keep
+   * working unchanged.
+   */
   rows: T[];
   counters: ScanCounters;
   stoppedBecause: ScanStop;
@@ -114,6 +290,21 @@ export interface ScanResult<T> {
    * and those are different claims about the destination.
    */
   stratification: ScanStratification;
+  /**
+   * What this scan planned to read and what it cost.
+   *
+   * Optional because the reader is an injected seam: a test's columnar reader
+   * models rows rather than footers and has no plan to report. Absent means
+   * "not measured", never "nothing was skipped".
+   */
+  plan?: ScanReadPlan;
+  /**
+   * Planned blocks whose transfer or decode failed and were skipped.
+   *
+   * Absent from injected readers. Non-zero means ground the plan paid for was
+   * not read — the layer's completion pass retries, and the pack says so.
+   */
+  transferFailedGroups?: number;
 }
 
 /**
@@ -162,20 +353,46 @@ export async function rangeBuffer(url: string, counters: ScanCounters, budget: S
         throw new ScanError('timeout', 'This region reached its time limit while reading place data.');
       }
 
-      const response = await fetch(url, {
-        headers: {
-          'user-agent': USER_AGENT,
-          range: `bytes=${from}-${to - 1}`,
-        },
-        signal: AbortSignal.timeout(RANGE_TIMEOUT_MS),
-        redirect: 'error',
-      });
+      /*
+       * The 25 s bound applies to reaching the server and to any silence after
+       * that — never to the transfer as a whole. See `readBodyWithStallGuard`:
+       * a whole-body timeout is a throughput floor, and a measured live build
+       * lost an entire ground layer to it on a slow link.
+       */
+      const controller = new AbortController();
+      const headerTimer = setTimeout(() => controller.abort(), RANGE_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          headers: {
+            'user-agent': USER_AGENT,
+            range: `bytes=${from}-${to - 1}`,
+          },
+          signal: controller.signal,
+          redirect: 'error',
+        });
+      } catch (error) {
+        if (error instanceof ScanError) throw error;
+        throw Date.now() > budget.deadlineMs
+          ? new ScanError('timeout', 'This region reached its time limit while reading place data.')
+          : new ScanError('unreachable', 'The place data files did not answer.');
+      } finally {
+        clearTimeout(headerTimer);
+      }
       if (!response.ok && response.status !== 206) {
         throw new ScanError('unreachable', 'The place data files did not answer.');
       }
-      const buffer = await response.arrayBuffer();
-      counters.bytesTransferred += buffer.byteLength;
-      return buffer;
+      const bytes = response.body
+        ? await readBodyWithStallGuard(response.body, {
+            stallMs: RANGE_TIMEOUT_MS,
+            deadlineMs: budget.deadlineMs,
+            abort: () => controller.abort(),
+          })
+        : new Uint8Array(await response.arrayBuffer());
+      counters.bytesTransferred += bytes.byteLength;
+      return bytes.byteLength === bytes.buffer.byteLength && bytes.byteOffset === 0
+        ? (bytes.buffer as ArrayBuffer)
+        : (bytes.buffer as ArrayBuffer).slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     },
   };
 }
@@ -394,6 +611,124 @@ export function stratifyRowGroups(
   return ordered;
 }
 
+// ---------------------------------------------------------------------------
+// Cost, in the unit the read is actually paid in
+// ---------------------------------------------------------------------------
+
+/**
+ * WHAT A PROJECTION OVER A SET OF ROW GROUPS COSTS, EXACTLY, BEFORE PAYING IT.
+ *
+ * The footer publishes `total_compressed_size` for every column chunk of every
+ * row group. Summing the chunks the projection actually asks for gives the byte
+ * cost of the read **to the byte** — not a sample, not an estimate, and not
+ * something that has to be read to be discovered.
+ *
+ * It is exact rather than approximate for a mechanical reason worth writing
+ * down, because it is the assumption that would silently rot: when a projection
+ * is supplied, the reader fetches one range per included column chunk, spanning
+ * exactly that chunk's compressed size, with no coalescing across the gaps. So
+ * this sum is the same arithmetic the reader will do. Remove the projection and
+ * the reader starts merging runs, at which point this becomes a lower bound —
+ * which is why `scanFile` never calls it without one.
+ *
+ * Leaf paths are matched on their **first** element because a projection names
+ * top-level columns and the format stores leaves: `bbox` is published as
+ * `bbox.xmin`, `bbox.xmax`, … and `names` as `names.primary` and friends. That
+ * is also precisely how the reader decides which chunks it needs, so the two
+ * cannot disagree about what is being paid for.
+ */
+export function projectedCostOf(
+  metadata: FileMetaData,
+  groups: readonly RowGroupRange[],
+  columns: readonly string[],
+): number {
+  const projection = new Set(columns);
+  let bytes = 0;
+  for (const group of groups) {
+    bytes += groupCostOf(metadata, group, projection);
+  }
+  return bytes;
+}
+
+function groupCostOf(
+  metadata: FileMetaData,
+  group: RowGroupRange,
+  projection: ReadonlySet<string>,
+): number {
+  const raw = metadata.row_groups[group.index];
+  if (!raw) return 0;
+  let bytes = 0;
+  for (const column of raw.columns) {
+    const path = column.meta_data?.path_in_schema;
+    const head = path?.[0];
+    if (head === undefined || !projection.has(head)) continue;
+    bytes += Number(column.meta_data?.total_compressed_size ?? 0n);
+  }
+  return bytes;
+}
+
+/**
+ * HOW MUCH OF THE AREA THIS READ CAN AFFORD, AND WHAT IT LEAVES BEHIND.
+ *
+ * The ordinary answer is "all of it", and that is the change. The pruned set for
+ * a metropolis is tens of megabytes against a budget of hundreds, so the whole
+ * area is read and the stratified order does not matter at all. It matters only
+ * when the area genuinely costs more than the budget, and then it is what makes
+ * the truncation a spread sample of the destination instead of one corner of it.
+ *
+ * That is the demotion stratification always deserved: the order in which an
+ * exceptional truncation degrades, rather than the normal path.
+ *
+ * When not one group fits, the first is planned anyway. Returning nothing would
+ * turn a thin budget into an empty destination, and the byte source's own hard
+ * cap is still there to refuse the read — which reports a stop with a reason
+ * rather than a layer that silently found nothing.
+ */
+export function planRead(input: {
+  metadata: FileMetaData;
+  /** The overlapping groups, already in stratified order. */
+  ordered: readonly RowGroupRange[];
+  columns: readonly string[];
+  byteAllowance: number;
+}): { groups: RowGroupRange[]; plan: ScanReadPlan } {
+  const projection = new Set(input.columns);
+  const costs = input.ordered.map((group) => groupCostOf(input.metadata, group, projection));
+  const projectedBytes = costs.reduce((sum, cost) => sum + cost, 0);
+
+  const planned: RowGroupRange[] = [];
+  let plannedBytes = 0;
+  if (projectedBytes <= input.byteAllowance) {
+    planned.push(...input.ordered);
+    plannedBytes = projectedBytes;
+  } else {
+    for (const [index, group] of input.ordered.entries()) {
+      const cost = costs[index] ?? 0;
+      if (plannedBytes + cost > input.byteAllowance) break;
+      planned.push(group);
+      plannedBytes += cost;
+    }
+    const first = input.ordered[0];
+    if (planned.length === 0 && first) {
+      planned.push(first);
+      plannedBytes = costs[0] ?? 0;
+    }
+  }
+
+  const rowsPlanned = planned.reduce((sum, group) => sum + (group.end - group.start), 0);
+  return {
+    groups: planned,
+    plan: {
+      rowGroupsInFile: input.metadata.row_groups.length,
+      rowGroupsOverlapping: input.ordered.length,
+      rowGroupsPlanned: planned.length,
+      rowsPlanned,
+      projectedBytes,
+      plannedBytes,
+      shortfallBytes: Math.max(0, projectedBytes - plannedBytes),
+    },
+  };
+}
+
 export interface ScanRequest<T> {
   url: string;
   box: BoundingBox;
@@ -404,21 +739,51 @@ export interface ScanRequest<T> {
   counters: ScanCounters;
   /** Returns null to drop a row. Runs inside the budget, so keep it cheap. */
   accept: (row: Record<string, unknown>) => T | null;
+  /** Where accepted rows go. Omit and the scan holds them itself. See `RowSink`. */
+  sink?: RowSink<T>;
   signal?: AbortSignal;
 }
 
 /**
  * Scan one file for one box.
  *
+ * The order of operations is the design, so it is worth stating plainly:
+ *
+ * 1. prune row groups on their own published statistics — exact, and free;
+ * 2. put what survives into stratified order;
+ * 3. **price the whole pruned set from the footer**, before spending a byte;
+ * 4. read all of it when it fits the allowance, and the affordable prefix of
+ *    the stratified order when it does not — saying, in bytes, what was left.
+ *
+ * Step 3 is the one that was missing, and its absence is the phase's central
+ * defect. Without a price, the only way to bound a read is to count something —
+ * row groups, decoded rows, retained rows — and every one of those counts was
+ * set from a guess about a different destination. A metropolis's whole pruned
+ * place inventory prices at about 50 MB against a 260 MB budget: affordable
+ * several times over, and cut off at eleven of twenty-seven row groups by a
+ * retained-row ceiling that had nothing to do with what the read cost.
+ *
  * Row groups are read in *stratified* order — spread across the requested box —
  * never in file order. File order was tried first, on the argument that the
  * format's spatial coherence makes a truncated read a contiguous gap; the live
  * consequence was that "contiguous" meant one corner of a metropolis, with
- * every famous anchor outside it unread. See `stratifyRowGroups`.
+ * every famous anchor outside it unread. See `stratifyRowGroups`. With the whole
+ * area now normally affordable, that order decides nothing in the ordinary case
+ * and everything in the exceptional one, which is where it belongs.
  */
 export async function scanFile<T>(request: ScanRequest<T>): Promise<ScanResult<T>> {
   const { budget, counters } = request;
   const rows: T[] = [];
+  /*
+   * A caller with a sink holds the rows; this scan then holds none, and the
+   * retained ceiling below is about *our* heap rather than theirs.
+   */
+  const hold = request.sink
+    ? (row: T): void => request.sink!.add(row)
+    : (row: T): void => {
+        rows.push(row);
+      };
+  const held = request.sink ? (): number => 0 : (): number => rows.length;
 
   const buffer = await rangeBuffer(request.url, counters, budget);
 
@@ -441,12 +806,51 @@ export async function scanFile<T>(request: ScanRequest<T>): Promise<ScanResult<T
 
   const overlapping = overlappingRowGroups(metadata, request.box);
   const stratification = stratificationOf(metadata, overlapping, request.box);
-  const groups = stratifyRowGroups(metadata, overlapping, request.box);
+  const ordered = stratifyRowGroups(metadata, overlapping, request.box);
   counters.rowGroupsInspected += metadata.row_groups.length;
 
   const columns = request.columns.filter((column) => present.has(column));
 
-  let stoppedBecause: ScanStop = 'complete';
+  /*
+   * The allowance is what is left of the ceiling *now*, after the footer, so a
+   * second file in the same layer is priced against what the first actually
+   * spent rather than against the ceiling both were handed.
+   */
+  const { groups, plan } = planRead({
+    metadata,
+    ordered,
+    columns,
+    byteAllowance: Math.max(0, budget.maxBytes - counters.bytesTransferred),
+  });
+
+  /*
+   * A footer that lies is the only thing left to guard against, so the decoded
+   * row limit is the plan's own declared row count rather than a global figure.
+   * Global was the defect: one budget of 500,000 decoded rows shared by six
+   * layers, spent entirely by the first dense one, leaving the layers that carry
+   * a national park's whole inventory with nothing — starved by a number that
+   * was never about them.
+   */
+  const featureCeiling = Math.min(
+    budget.maxFeaturesRead,
+    counters.featuresRead + plan.rowsPlanned,
+  );
+
+  /* Planned less than the area, and said so in bytes rather than in silence. */
+  let stoppedBecause: ScanStop = plan.shortfallBytes > 0 ? 'byte_budget' : 'complete';
+  /*
+   * Blocks whose transfer or decode failed, skipped rather than fatal.
+   *
+   * One stalled range used to abandon every remaining planned group of the
+   * file — measured across a night of live builds on a flaky link: layers
+   * arrived at a third of their plan with the stop mislabelled `byte_budget`
+   * (the catch below folded every non-timeout refusal into it), and the packs
+   * never left `partial` across six rebuild rounds. Each range is its own
+   * request on its own connection, so the next group is unaffected by this
+   * one's death; the hole is counted, reported, and retried by the layer's
+   * completion pass rather than silently widened.
+   */
+  let transferFailedGroups = 0;
   for (const group of groups) {
     if (request.signal?.aborted) {
       stoppedBecause = 'time_budget';
@@ -456,11 +860,11 @@ export async function scanFile<T>(request: ScanRequest<T>): Promise<ScanResult<T
       stoppedBecause = 'row_group_budget';
       break;
     }
-    if (counters.featuresRead >= budget.maxFeaturesRead) {
+    if (counters.featuresRead >= featureCeiling) {
       stoppedBecause = 'feature_budget';
       break;
     }
-    if (rows.length >= budget.maxFeaturesRetained) {
+    if (held() >= budget.maxFeaturesRetained) {
       stoppedBecause = 'retained_budget';
       break;
     }
@@ -480,29 +884,38 @@ export async function scanFile<T>(request: ScanRequest<T>): Promise<ScanResult<T
         columns: [...columns],
       })) as Record<string, unknown>[];
     } catch (error) {
-      if (error instanceof ScanError) {
-        // A budget refusal inside the byte source stops the scan honestly rather
-        // than propagating as a read failure that would discard what we have.
-        stoppedBecause = error.code === 'timeout' ? 'time_budget' : 'byte_budget';
+      if (error instanceof ScanError && error.code === 'timeout') {
+        stoppedBecause = 'time_budget';
         break;
       }
-      throw new ScanError('malformed', 'A block of the place data could not be decoded.');
+      if (
+        error instanceof ScanError &&
+        error.code === 'too_large' &&
+        /data-transfer limit/.test(error.message)
+      ) {
+        // The genuine budget refusal from the byte source: an honest stop.
+        stoppedBecause = 'byte_budget';
+        break;
+      }
+      /* A dead transfer or an undecodable block: one group's failure. */
+      transferFailedGroups += 1;
+      continue;
     }
 
     counters.rowGroupsRead += 1;
     counters.featuresRead += batch.length;
 
     for (const row of batch) {
-      if (rows.length >= budget.maxFeaturesRetained) {
+      if (held() >= budget.maxFeaturesRetained) {
         stoppedBecause = 'retained_budget';
         break;
       }
       const accepted = request.accept(row);
-      if (accepted !== null) rows.push(accepted);
+      if (accepted !== null) hold(accepted);
     }
   }
 
-  return { rows, counters, stoppedBecause, stratification };
+  return { rows, counters, stoppedBecause, stratification, plan, transferFailedGroups };
 }
 
 /**

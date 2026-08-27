@@ -59,6 +59,54 @@ describe('candidates from an OSM record', () => {
     expect(resolveDisplayName({ candidates: [], fallback: 'Fallback' }).display).toBe('Fallback');
   });
 
+  it('never leads with a variant positively tagged as a third language', () => {
+    /*
+     * The share-page shape: a record whose only tagged name is a Vietnamese
+     * translation. A tag naming another language is a positive statement that
+     * this is not the interface's name for the place, so it may not lead —
+     * the caller's fallback does.
+     */
+    const resolved = resolveDisplayName({
+      candidates: candidatesFromNominatim({
+        namedetails: { 'name:vi': 'Hoàng cung Aohama' },
+      }),
+      fallback: 'Aohama Palace',
+    });
+    expect(resolved.display).toBe('Aohama Palace');
+  });
+
+  it('lets the local primary lead as itself over a third-language tag', () => {
+    const resolved = resolveDisplayName({
+      candidates: candidatesFromNominatim({
+        namedetails: { name: '青浜宮殿', 'name:vi': 'Hoàng cung Aohama' },
+      }),
+      fallback: 'x',
+    });
+    expect(resolved.display).toBe('青浜宮殿');
+  });
+
+  it('refuses an untagged alias the classifier reads as another language', () => {
+    /* Untagged names may lead — unless the refusal net can read them. */
+    const resolved = resolveDisplayName({
+      candidates: candidatesFromNominatim({
+        namedetails: { alt_name: 'Jardin de Aohama' },
+      }),
+      fallback: 'Aohama Garden',
+    });
+    expect(resolved.display).toBe('Aohama Garden');
+  });
+
+  it('splits a semicolon-joined tag and selects among the parts', () => {
+    const resolved = resolveDisplayName({
+      candidates: candidatesFromNominatim({
+        namedetails: { name: '青浜園', 'name:en': 'Aohama Garden;Aohama Gardens' },
+      }),
+      fallback: 'x',
+    });
+    expect(resolved.display).toBe('Aohama Garden');
+    expect(resolved.local).toBe('青浜園');
+  });
+
   it('sanitises a hostile alias before it can reach a heading', () => {
     const resolved = resolveDisplayName({
       candidates: candidatesFromNominatim({

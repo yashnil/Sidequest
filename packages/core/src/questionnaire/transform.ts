@@ -17,6 +17,7 @@ import {
 } from '../schemas/profile';
 import {
   availableRegionalExpansions,
+  carFreeReachMinutes,
   EXPANSION_CEILING_MINUTES,
   isQuestionVisible,
   NO_CAR_DETOUR_MINUTES,
@@ -308,16 +309,29 @@ export function deriveProfileValues(
 
   const ceiling = EXPANSION_CEILING_MINUTES[answers.regionalExpansion];
   const halfDayCap = Math.floor(answers.maxDailyTravelMinutes / 2);
+  const stated = answers.detourToleranceMinutes > 0 ? answers.detourToleranceMinutes : ceiling;
+  /*
+   * ONE ANSWER, TWO CAPS, AND THE ANSWER SURVIVES EITHER WAY.
+   *
+   * A traveller with no car answered "furthest you would travel one way for one
+   * stop" on the same 15–180 slider a driver sees, and answered the ring
+   * question on an offer that already reaches `carFreeReachMinutes()`. Both
+   * answers were then discarded and replaced by the constant below, so the
+   * questionnaire and this function contradicted each other on the same screen:
+   * the region step offered an hour out by public transport and the profile
+   * recorded twenty minutes. Every radius derived from this — the board's detour
+   * class, the fit score's detour term, the pre-selection, the planner's walking
+   * bound — then held a car-free trip to a walk-out radius nobody chose.
+   *
+   * So the shape is the driver's shape, with the one cap that differs: a ride is
+   * bounded by half the car-free transport budget rather than by half a day at
+   * the wheel, because a detour is a there-and-back. `NO_CAR_DETOUR_MINUTES` is
+   * the floor and not the value — an untouched slider on a stay-in-town ring
+   * still yields today's walk-out radius, and nothing can push it below that.
+   */
   const effectiveDetourMinutes = answers.willDrive
-    ? Math.max(
-        0,
-        Math.min(
-          ceiling,
-          answers.detourToleranceMinutes > 0 ? answers.detourToleranceMinutes : ceiling,
-          halfDayCap,
-        ),
-      )
-    : NO_CAR_DETOUR_MINUTES;
+    ? Math.max(0, Math.min(ceiling, stated, halfDayCap))
+    : Math.max(NO_CAR_DETOUR_MINUTES, Math.min(ceiling, stated, carFreeReachMinutes()));
 
   // What suits them, capped by what they can actually do. Scoring peaks here
   // rather than at the ceiling, so "I can handle a hard day" never turns into

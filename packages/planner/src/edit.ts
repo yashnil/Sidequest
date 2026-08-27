@@ -18,7 +18,7 @@ import {
   type AccessUnit,
 } from './access';
 import { chooseBackups, summariseDayWeather, type BackupCandidate } from './backups';
-import { resolveCandidates } from './candidates';
+import { pinnedPriority, resolveCandidates } from './candidates';
 import { buildFoodPlan } from './food-plan';
 import { resolveFood, type FoodContext } from './food';
 import { couldVisitOnDate, hoursKey, resolveOperatingHours, type PlaceDayHours } from './hours';
@@ -107,10 +107,13 @@ function editWorld(input: PlannerInput): EditWorld {
   const config = resolveConfig(input.config);
   const knowledge = travelKnowledgeFor(input.matrix, input.profile, input.transit);
   const plannedDays = buildDailyWindows(input.basics, input.profile, config);
-  const { eligible } = resolveCandidates(input.candidates, input.selections, input.matrix, {
-    knowledge,
-    baseId: input.baseId,
-  });
+  const { eligible } = resolveCandidates(
+    input.candidates,
+    input.selections,
+    input.matrix,
+    { knowledge, baseId: input.baseId },
+    input.profile,
+  );
 
   /**
    * The board's unused supply, as plannable candidates.
@@ -134,10 +137,13 @@ function editWorld(input: PlannerInput): EditWorld {
       source: 'auto',
       updatedAt: '1970-01-01T00:00:00.000Z',
     }));
-  const { eligible: supply } = resolveCandidates(input.candidates, synthetic, input.matrix, {
-    knowledge,
-    baseId: input.baseId,
-  });
+  const { eligible: supply } = resolveCandidates(
+    input.candidates,
+    synthetic,
+    input.matrix,
+    { knowledge, baseId: input.baseId },
+    input.profile,
+  );
 
   /**
    * Locks, applied here for the same reason `planTrip` applies them: a pinned
@@ -149,15 +155,17 @@ function editWorld(input: PlannerInput): EditWorld {
    * take it off the day, and leave the pin sitting in the database pointing at a
    * day that no longer holds it. The next rebuild read the pin and undid the
    * ease.
+   *
+   * The lift itself is `pinnedPriority`, shared with `planTrip`, because this
+   * line was a hand-written `10_000 + fitScore` and that is the board's *old*
+   * order: an edit that pinned a stop re-ranked it by match alone while every
+   * unpinned stop around it kept the composed key, so the plan and the board
+   * disagreed about exactly the place the traveller had just insisted on.
    */
   const lockedPlaceIds = new Set((input.locks ?? []).map((lock) => lock.placeId));
   const promote = (candidate: PlanningCandidate): PlanningCandidate =>
     lockedPlaceIds.has(candidate.place.id)
-      ? {
-          ...candidate,
-          manual: true,
-          priority: Math.max(candidate.priority, 10_000 + candidate.fitScore),
-        }
+      ? { ...candidate, manual: true, priority: pinnedPriority(candidate) }
       : candidate;
   const eligibleLocked = eligible.map(promote);
   const supplyLocked = supply.map(promote);
@@ -500,7 +508,7 @@ function rebuildDay(
     context,
     placed,
     layout,
-    summariseDayTransport(scheduled, layout, input.access),
+    summariseDayTransport(scheduled, layout, input.access, world.knowledge.permitted),
     weatherSummary,
   );
   return { day, layout, scheduled, placed, droppedByLayout };
@@ -562,6 +570,7 @@ function assemble(
     matrixNote: input.matrix.provenance.note,
     matrixProvenance: input.matrix.provenance.kind,
     matrixMode: input.matrix.mode,
+    ...(input.transit ? { transit: input.transit } : {}),
   });
 
   const issues: ValidationIssue[] = [
@@ -809,13 +818,128 @@ function feasibleReplacements(
         (candidate.primaryInterest !== undefined && interests.has(candidate.primaryInterest)) ||
         candidate.matchedInterests.some((interest) => interests.has(interest)),
     )
-    .sort((a, b) => b.fitScore - a.fitScore || a.place.id.localeCompare(b.place.id));
+    /*
+     * The board's order, not a second one. This sorted on `fitScore`, so the
+     * menu ranked the region's alternatives by match alone while every card the
+     * traveller had just been reading was ranked by band and then by how much
+     * each place matters — the §10 disagreement, in the one list whose whole
+     * job is to say "here is what else your board holds".
+     */
+    .sort((a, b) => b.boardPriority - a.boardPriority || a.place.id.localeCompare(b.place.id));
 }
+
+/**
+ * ONE SWAP, APPLIED, ALL THE WAY TO A PLAN THAT WOULD BE SAVED.
+ *
+ * Shared by the mutation and by the offer generator, and that sharing is the
+ * point rather than a tidy-up. Everything that can refuse a swap lives past
+ * this line: `packDay`'s caps, the day's own clock, and `assemble`'s gate on
+ * the validator. `feasibleReplacements` above knows none of it — it judges each
+ * candidate on its own against the *whole* day window, as though the day were
+ * empty — so an offer list built from it alone is a list of places that would
+ * fit a day the traveller does not have.
+ */
+function applyReplacement(
+  input: PlannerInput,
+  world: EditWorld,
+  itinerary: Itinerary,
+  day: ItineraryDay,
+  dayCandidates: readonly PlanningCandidate[],
+  outgoing: { placeId: string; title: string },
+  replacement: PlanningCandidate,
+): ItineraryEditResult {
+  const dayNumber = day.dayNumber;
+  const replacementId = replacement.place.id;
+  const next = [
+    ...dayCandidates.filter((candidate) => candidate.place.id !== outgoing.placeId),
+    /* The traveller chose it by name; it packs like a hand-pick. */
+    { ...replacement, manual: true, priority: pinnedPriority(replacement) },
+  ];
+
+  const rebuilt = rebuildDay(input, world, dayNumber, next, scheduledOutside(itinerary, dayNumber));
+  if ('error' in rebuilt) return { ok: false, message: rebuilt.error };
+  if (!rebuilt.placed.some((candidate) => candidate.place.id === replacementId)) {
+    const why = rebuilt.droppedByLayout.find(
+      (entry) => entry.candidate.place.id === replacementId,
+    );
+    return {
+      ok: false,
+      message:
+        why?.message ??
+        `${displayNameOf(replacement.place)} cannot be fitted into day ${dayNumber} as it stands.`,
+    };
+  }
+
+  const newDays = splice(itinerary.days, rebuilt.day);
+  const unscheduled = reconcileUnscheduled(
+    itinerary,
+    newDays,
+    new Set([outgoing.placeId]),
+    rebuilt.droppedByLayout
+      .filter((entry) => entry.candidate.place.id !== replacementId)
+      .map(({ candidate, message }) => ({
+        placeId: candidate.place.id,
+        name: displayNameOf(candidate.place),
+        wasManual: candidate.manual,
+        reasonCode: 'hours_do_not_fit' as const,
+        reason: message,
+        suggestedRemedy: 'Drop something else from that day, or give the trip another day.',
+      })),
+  );
+  return assemble(
+    input,
+    world,
+    itinerary,
+    newDays,
+    unscheduled,
+    `You swapped ${outgoing.title} for ${displayNameOf(replacement.place)} on day ${dayNumber}.`,
+    dayNumber,
+  );
+}
+
+/**
+ * HOW MANY REPLACEMENTS ARE TRIED BEFORE THE MENU GIVES UP.
+ *
+ * A ceiling on work, not on honesty: the loop stops early the moment it has
+ * enough offers, and this only bounds the case where a day is so full that
+ * nothing fits. Twenty-four rebuilds of one day is a few tens of milliseconds
+ * on the compiled regions the product ships, and the alternative — an unbounded
+ * scan of a metropolitan board's supply — would make opening a menu the slowest
+ * thing in the product.
+ *
+ * Stopping early can under-offer, and that is the direction to err in. A
+ * replacement that exists past the budget and is never shown costs the
+ * traveller one option they did not know about. One that is shown and always
+ * fails costs them their trust in every other row of the menu.
+ */
+const MAX_SWAP_TRIALS = 24;
 
 /**
  * Context-aware replacements: same day, same time-window, comparable effort,
  * overlapping interests, reachable and open on that date, drawn from the same
  * compiled region's unused board supply. §11.3: never a generic list.
+ *
+ * AND EVERY ONE OF THEM APPLIES.
+ *
+ * `feasibleReplacements` judges a candidate the way a board does — is this
+ * place open that day, is there a way in, is it no harder than what it
+ * replaces — and a day is not a board. It already holds three other stops, a
+ * drive budget that is two thirds spent and a flight at five. Measured across a
+ * twenty-four scenario sweep of the golden region, **228 of the 676
+ * replacements this menu offered could not be applied**, and 26 menus were
+ * dead in full: every row an error toast, including departure days where the
+ * traveller got four options and four refusals.
+ *
+ * So the offer is now the *outcome* of the swap rather than a prediction about
+ * it: each candidate is applied against the stored plan, in board order, and
+ * only the ones that come back a plan we would save are offered. Refusals are
+ * still worth having at the mutation — a menu can go stale in an open tab —
+ * but no longer at the rate of one row in three.
+ *
+ * The cost is real and it is bounded: at most `MAX_SWAP_TRIALS` one-day
+ * rebuilds, stopping at `limit` offers, on a path that runs when a traveller
+ * opens one menu. An offer list nobody can act on is not cheaper, it is just
+ * quicker to be wrong.
  */
 export function swapAlternativesForStop(
   input: PlannerInput,
@@ -826,20 +950,39 @@ export function swapAlternativesForStop(
 ): SwapAlternative[] {
   const day = itinerary.days.find((entry) => entry.dayNumber === dayNumber);
   if (!day) return [];
+  const outgoing = day.items.find((item) => item.kind === 'activity' && item.placeId === placeId);
+  if (!outgoing) return [];
   const world = editWorld(input);
   const dayWorld = dayWorldFor(input, world, dayNumber, []);
   if (!dayWorld) return [];
+  const current = candidatesOnDay(world, day);
+  if (!current.ok) return [];
 
-  return feasibleReplacements(input, world, itinerary, day, dayWorld, placeId)
-    .slice(0, limit)
-    .map((candidate) => ({
+  const offers: SwapAlternative[] = [];
+  let tried = 0;
+  for (const candidate of feasibleReplacements(input, world, itinerary, day, dayWorld, placeId)) {
+    if (offers.length >= limit || tried >= MAX_SWAP_TRIALS) break;
+    tried += 1;
+    const outcome = applyReplacement(
+      input,
+      world,
+      itinerary,
+      day,
+      current.candidates,
+      { placeId, title: outgoing.title },
+      candidate,
+    );
+    if (!outcome.ok) continue;
+    offers.push({
       placeId: candidate.place.id,
       name: displayNameOf(candidate.place),
       fitScore: candidate.fitScore,
       reason: candidate.primaryInterest
         ? `Matches your interest in ${INTEREST_LABELS[candidate.primaryInterest].toLowerCase()}, and it works on this day.`
         : 'Reachable and open on this day, and fits how you said you travel.',
-    }));
+    });
+  }
+  return offers;
 }
 
 export function swapStopOnDay(
@@ -893,50 +1036,14 @@ export function swapStopOnDay(
 
   const current = candidatesOnDay(world, day);
   if (!current.ok) return current;
-  const next = [
-    ...current.candidates.filter((candidate) => candidate.place.id !== placeId),
-    /* The traveller chose it by name; it packs like a hand-pick. */
-    { ...replacement, manual: true, priority: Math.max(replacement.priority, 10_000) },
-  ];
-
-  const rebuilt = rebuildDay(input, world, dayNumber, next, scheduledOutside(itinerary, dayNumber));
-  if ('error' in rebuilt) return { ok: false, message: rebuilt.error };
-  if (!rebuilt.placed.some((candidate) => candidate.place.id === replacementId)) {
-    const why = rebuilt.droppedByLayout.find(
-      (entry) => entry.candidate.place.id === replacementId,
-    );
-    return {
-      ok: false,
-      message:
-        why?.message ??
-        `${displayNameOf(replacement.place)} cannot be fitted into day ${dayNumber} as it stands.`,
-    };
-  }
-
-  const newDays = splice(itinerary.days, rebuilt.day);
-  const unscheduled = reconcileUnscheduled(
-    itinerary,
-    newDays,
-    new Set([placeId]),
-    rebuilt.droppedByLayout
-      .filter((entry) => entry.candidate.place.id !== replacementId)
-      .map(({ candidate, message }) => ({
-        placeId: candidate.place.id,
-        name: displayNameOf(candidate.place),
-        wasManual: candidate.manual,
-        reasonCode: 'hours_do_not_fit' as const,
-        reason: message,
-        suggestedRemedy: 'Drop something else from that day, or give the trip another day.',
-      })),
-  );
-  return assemble(
+  return applyReplacement(
     input,
     world,
     itinerary,
-    newDays,
-    unscheduled,
-    `You swapped ${outgoing.title} for ${displayNameOf(replacement.place)} on day ${dayNumber}.`,
-    dayNumber,
+    day,
+    current.candidates,
+    { placeId, title: outgoing.title },
+    replacement,
   );
 }
 
@@ -1022,6 +1129,23 @@ export function easeDay(
   }
   if (!rebuilt) {
     return { ok: false, message: `Day ${dayNumber} could not be made easier without emptying it.` };
+  }
+  /**
+   * "Easier" means a lighter band, not merely fewer stops. The loop above can
+   * exhaust every removable stop and still hold a day whose remaining stop is
+   * what makes it heavy — and returning `ok` with the same intensity is the
+   * one answer this edit's contract does not allow: the traveller asked for an
+   * easier day and would get a shorter equally-heavy one with no sentence
+   * saying why. Say plainly that the day's weight is not in its removable
+   * stops.
+   */
+  if (!target.has(rebuilt.day.intensity)) {
+    return {
+      ok: false,
+      message:
+        `Day ${dayNumber} stays ${rebuilt.day.intensity} even with its removable stops taken off — ` +
+        'what remains is what makes it heavy. Remove or unlock a stop directly if you want it lighter.',
+    };
   }
 
   const newDays = splice(itinerary.days, rebuilt.day);

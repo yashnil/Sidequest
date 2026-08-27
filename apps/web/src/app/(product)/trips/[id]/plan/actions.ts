@@ -1,6 +1,5 @@
 'use server';
 
-import { after } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
@@ -9,7 +8,6 @@ import {
   FEATURE_TYPE_ENTITY,
   assessConfidence,
   candidateById,
-  COMPILATION_ERROR_COPY,
   countNights,
   datesInWindow,
   MAX_TRIP_NIGHTS,
@@ -18,7 +16,6 @@ import {
   decideInterpretation,
   displayStages,
   isAbandoned,
-  isRetryable,
   isTerminal,
   unansweredRequired,
   type ClarificationSet,
@@ -41,10 +38,12 @@ import {
 } from '@sidequest/compiler';
 import { capabilityRegistry } from '@/lib/capabilities';
 import { compilerProviderChoice, compilerProviders, providerReadiness } from '@/lib/compiler/providers';
-import { activeJobFor, runCompilation, startCompilation } from '@/lib/compiler/runner';
+import { activeJobFor, startCompilation } from '@/lib/compiler/runner';
+import { dispatchCompilation, pumpCompilationQueue } from '@/lib/compiler/queue';
 import {
   getIntent,
   getLatestJob,
+  queuePositionFor,
   reclaimAbandonedJob,
   requestCancel,
   saveClarifications,
@@ -55,8 +54,9 @@ import {
   saveSelectedCandidate,
   saveSelectedDestination,
 } from '@/lib/db/compiler-repository';
-import { compilerIsolationMode, launchCompilationWorker } from '@/lib/compiler/worker/launch';
+import { compilationVerdict } from '@/lib/compiler/verdict';
 import { callerKey, guardAction } from '@/lib/net/caller';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { reserveModelCalls } from '@/lib/compiler/daily-ceiling';
 import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
 import { destinationDivisionIds } from '@/lib/destinations/identity';
@@ -131,6 +131,14 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
+  /*
+   * Ownership before anything is read or spent, on this and every action
+   * below: the trip id is the owner's edit capability, never a share link.
+   * The rule and its one internal-caller exemption live in
+   * `lib/net/trip-access`.
+   */
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const intent = getIntent(tripId);
   const query = intent?.destinationQuery?.trim();
@@ -231,6 +239,8 @@ export async function selectInterpretationAction(
   }
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const intent = getIntent(tripId);
   if (!intent?.resolution) return { ok: false, error: 'We have not read that destination yet.' };
@@ -270,6 +280,8 @@ export async function saveClarificationAnswersAction(
   }
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const stamp = new Date().toISOString();
   const next: ClarificationSet = {
@@ -291,29 +303,21 @@ export async function saveClarificationAnswersAction(
 }
 
 /**
- * Derive the scope from the interpretation and the answers, and store it.
+ * THE ONE DERIVATION, USED AT PROPOSAL TIME AND AT PROFILE-DELTA RE-DERIVATION.
  *
- * Not confirmed by this: the traveller sees it first. `saveScope` bumps the
- * revision, which travels into the fingerprint, so editing an answer and coming
- * back cannot silently adopt the artifact compiled from the previous answer.
+ * Extracted so the staleness guard below cannot drift from the proposal: both
+ * read the same candidate, the same clarifications, the same preflight anchor
+ * and — decisively — the profile AS IT EXISTS AT CALL TIME. The live flow
+ * derives and stores the scope proposal before any questionnaire exists, so a
+ * scope that reads the profile only at proposal time reads nothing, forever.
  */
-export async function proposeScopeAction(tripId: string): Promise<ActionResult> {
-  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
-  const trip = getTrip(tripId);
-  if (!trip) return { ok: false, error: 'We could not find that trip.' };
-
-  const intent = getIntent(tripId);
-  if (!intent) return { ok: false, error: 'We could not find that trip.' };
-
-  const candidate = activeCandidate(intent);
-  if (!candidate) return { ok: false, error: 'We do not know where you mean yet.' };
-
-  if (unansweredRequired(intent.clarifications).length > 0) {
-    return { ok: false, error: 'There are still a couple of questions to answer.' };
-  }
-
-  const profile = getProfile(tripId);
-  const scope = deriveScope({
+function deriveTripScope(
+  trip: NonNullable<ReturnType<typeof getTrip>>,
+  intent: NonNullable<ReturnType<typeof getIntent>>,
+  candidate: NonNullable<ReturnType<typeof activeCandidate>>,
+) {
+  const profile = getProfile(trip.id);
+  return deriveScope({
     candidate,
     clarifications: intent.clarifications,
     /*
@@ -346,6 +350,21 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
       ? {}
       : { preflightReachKm: preflightReachFor(intent, candidate.id)! }),
     /*
+     * THE PART THE PREFLIGHT CHOSE, HANDED TO THE THING THAT NARROWS.
+     *
+     * "One area, in depth" is only ever offered over a preflight structure that
+     * has already chosen its first base — so when the traveller accepts it, the
+     * answer to "which area" exists and is stored. This is the only line that
+     * carries it across. Without it, a narrowed country was centred on the
+     * candidate's geometric centre — for a real car-free trip, a twelve-
+     * kilometre walking circle of uninhabited highland two hundred kilometres
+     * from the base the same screen had proposed. Same destination-key guard as
+     * the reach above, for the same reason.
+     */
+    ...(preflightAnchorFor(intent, candidate.id) === undefined
+      ? {}
+      : { preflightAnchor: preflightAnchorFor(intent, candidate.id)! }),
+    /*
      * WHETHER A TRANSIT JOURNEY CAN BE MEASURED, ASKED OF THE BROKER.
      *
      * `deriveScope` has taken this parameter since the reach split and no
@@ -359,15 +378,94 @@ export async function proposeScopeAction(tripId: string): Promise<ActionResult> 
     revision: intent.scopeRevision + 1,
   });
 
+}
+
+/**
+ * Derive the scope from the interpretation and the answers, and store it.
+ *
+ * Not confirmed by this: the traveller sees it first. `saveScope` bumps the
+ * revision, which travels into the fingerprint, so editing an answer and coming
+ * back cannot silently adopt the artifact compiled from the previous answer.
+ */
+export async function proposeScopeAction(tripId: string): Promise<ActionResult> {
+  if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+
+  const intent = getIntent(tripId);
+  if (!intent) return { ok: false, error: 'We could not find that trip.' };
+
+  const candidate = activeCandidate(intent);
+  if (!candidate) return { ok: false, error: 'We do not know where you mean yet.' };
+
+  if (unansweredRequired(intent.clarifications).length > 0) {
+    return { ok: false, error: 'There are still a couple of questions to answer.' };
+  }
+
+  const scope = deriveTripScope(trip, intent, candidate);
   saveScope(tripId, scope);
   revalidatePath(`/trips/${tripId}/plan`);
   return { ok: true };
 }
 
+/**
+ * RE-DERIVE THE SCOPE WHEN THE PROFILE HAS MATERIALISED SINCE IT WAS DERIVED.
+ *
+ * The live flow's ordering is destination and dates first, questionnaire
+ * after: the scope proposal is derived and persisted at the first plan visit,
+ * before any profile exists, and "Build the region" reuses the stored
+ * proposal. A profile-aware derivation that runs only at proposal time is
+ * therefore unreachable for every real traveller — verified on a live build
+ * where a stored driving profile predated the build and the compiled region
+ * still carried the profile-blind day reach. The trigger is the *delta*, not
+ * the visit: `derivedFromProfile` records what the stored scope was derived
+ * from, so this runs at most once per trip, exactly when a questionnaire has
+ * appeared since the proposal.
+ *
+ * Honesty at the confirmation seam: when the re-derived ground actually
+ * differs, the stored proposal is replaced UNCONFIRMED and the caller refuses
+ * with a sentence saying why — the traveller confirms the region they can
+ * see, never one that silently widened after they read it. When the ground
+ * comes out identical (most trips), nothing is rewritten and the flow
+ * proceeds without friction.
+ */
+function rederiveScopeIfProfileAppeared(
+  trip: NonNullable<ReturnType<typeof getTrip>>,
+  intent: NonNullable<ReturnType<typeof getIntent>>,
+): { ok: true } | { ok: false; error: string } {
+  if (!intent.scope || intent.scope.derivedFromProfile === true) return { ok: true };
+  if (!getProfile(trip.id)) return { ok: true };
+  const candidate = activeCandidate(intent);
+  if (!candidate) return { ok: true };
+
+  const rederived = deriveTripScope(trip, intent, candidate);
+  const groundChanged =
+    JSON.stringify(rederived.shape) !== JSON.stringify(intent.scope.shape) ||
+    rederived.reachRadiusKm !== intent.scope.reachRadiusKm;
+  if (!groundChanged) return { ok: true };
+
+  saveScope(trip.id, rederived);
+  revalidatePath(`/trips/${trip.id}/plan`);
+  return {
+    ok: false,
+    error:
+      'Your questionnaire answers changed how far this trip can reach, so we updated the proposed region — please look it over and confirm it again.',
+  };
+}
+
 export async function confirmScopeAction(tripId: string): Promise<ActionResult> {
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   const intent = getIntent(tripId);
   if (!intent?.scope) return { ok: false, error: 'There is no region to confirm yet.' };
+
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip.' };
+  const fresh = rederiveScopeIfProfileAppeared(trip, intent);
+  if (!fresh.ok) return fresh;
 
   const fits = scopeFitsTrip(intent.scope);
   if (!fits.fits) return { ok: false, error: fits.reason ?? 'That region does not fit this trip.' };
@@ -393,12 +491,20 @@ export async function confirmScopeAction(tripId: string): Promise<ActionResult> 
  * The work runs in a spawned compile worker by default — a compilation used to
  * run on this process's event loop and froze every route for the length of the
  * build. `after()` remains only as the inline fallback, for environments that
- * cannot spawn and for `SIDEQUEST_COMPILER_ISOLATION=inline`.
+ * cannot spawn and for `SIDEQUEST_COMPILER_ISOLATION=inline`. Both live in
+ * `lib/compiler/queue` now, because a build admitted from the queue has to be
+ * started exactly the way one that never waited is.
+ *
+ * Three answers rather than two, and the middle one is new: started, *queued*
+ * behind the deployment's one build slot, or — only once the queue itself is
+ * full — refused with a sentence that says so.
  */
 export async function startCompilationAction(tripId: string): Promise<ActionResult> {
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   /*
    * Adoption before the limiter, because adoption is free. A second click on a
@@ -414,10 +520,29 @@ export async function startCompilationAction(tripId: string): Promise<ActionResu
     return { ok: true };
   }
 
+  /*
+   * The build must never spend money on a scope the traveller's own
+   * questionnaire has since invalidated — the same guard the confirm action
+   * runs, for the path where a stale confirmed proposal is built directly.
+   */
+  const intentForScope = getIntent(tripId);
+  if (intentForScope) {
+    const fresh = rederiveScopeIfProfileAppeared(trip, intentForScope);
+    if (!fresh.ok) return fresh;
+  }
+
   // Before `startCompilation`, which is the thing that can create a billable
   // job: a refused request must refuse before anything exists to pay for.
   const limited = await rateGuard('compile_start');
   if (limited) return { ok: false, error: limited };
+
+  /*
+   * Sweep before asking for capacity, so this traveller is measured against
+   * what is genuinely running rather than against a slot held by a worker that
+   * died while nobody had its page open. It also lets an arriving press pay for
+   * the admission of whoever was already in line ahead of them.
+   */
+  pumpCompilationQueue();
 
   /*
    * The caller travels with the start, so the day's allowance is spent against
@@ -436,32 +561,19 @@ export async function startCompilationAction(tripId: string): Promise<ActionResu
     return { ok: true };
   }
 
-  const jobId = outcome.jobId;
-  const isolation = compilerIsolationMode();
-  const launched =
-    isolation === 'process'
-      ? launchCompilationWorker({ tripId, jobId })
-      : { launched: false as const, reason: 'inline isolation configured' };
-
-  if (!launched.launched) {
-    if (isolation === 'process') {
-      // The fallback is a degradation worth a log line: the build still runs,
-      // but on this event loop, which is the exact condition the worker exists
-      // to end.
-      console.error('Compile worker could not be spawned; running inline', {
-        tripId,
-        jobId,
-        reason: launched.reason,
-      });
-    }
-    after(async () => {
-      try {
-        await runCompilation({ trip, jobId });
-      } catch (error) {
-        console.error('Compilation runner failed', { tripId, jobId, error });
-      }
-    });
+  /*
+   * ACCEPTED, AND WAITING FOR THE ONE BUILD SLOT.
+   *
+   * Not an error and not a start: nothing is dispatched here, because the whole
+   * point is that nothing may be. The row exists, the progress screen renders
+   * the place in line, and `pumpCompilationQueue` starts it when the slot frees.
+   */
+  if (outcome.kind === 'queued') {
+    revalidatePath(`/trips/${tripId}/plan`);
+    return { ok: true };
   }
+
+  dispatchCompilation({ tripId, jobId: outcome.jobId });
 
   revalidatePath(`/trips/${tripId}/plan`);
   return { ok: true };
@@ -470,6 +582,8 @@ export async function startCompilationAction(tripId: string): Promise<ActionResu
 /** Explicit, and only from a terminal state. A retry is never automatic. */
 export async function retryCompilationAction(tripId: string): Promise<ActionResult> {
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   const job = getLatestJob(tripId);
   /*
    * An abandoned job is terminal for this purpose, and saying so here is what
@@ -495,7 +609,17 @@ export async function retryCompilationAction(tripId: string): Promise<ActionResu
  */
 export async function cancelCompilationAction(tripId: string): Promise<ActionResult> {
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   requestCancel(tripId);
+  /*
+   * The slot is free from this write, not from whenever the worker notices —
+   * `requestCancel` flips the row terminal in the same call — so the next build
+   * in line starts now rather than a poll later. It also covers the traveller
+   * who cancels a *queued* build: their place in line is given up, and whoever
+   * was behind them moves up.
+   */
+  pumpCompilationQueue();
   revalidatePath(`/trips/${tripId}/plan`);
   return { ok: true };
 }
@@ -539,6 +663,17 @@ export interface CompilationSnapshot {
    * nothing on screen and is worth keeping in the type.
    */
   estimate?: RemainingEstimate | null;
+  /**
+   * Where this build stands in line, counting from one — and absent whenever it
+   * is not waiting, which is the normal case.
+   *
+   * `queued` alone cannot carry this. It has always been the state of a job in
+   * the instant before its worker picks it up, so a screen reading it as "in a
+   * queue" would say so briefly on every single build. Present means genuinely
+   * parked: nothing has been dispatched for this job, and this is how many
+   * builds have to end before it starts.
+   */
+  queuePosition?: number;
 }
 
 /**
@@ -550,6 +685,14 @@ export interface CompilationSnapshot {
  */
 export async function compilationSnapshotAction(tripId: string): Promise<CompilationSnapshot> {
   if (!tripIdSchema.safeParse(tripId).success) {
+    return { state: 'none', stages: [], retryable: false };
+  }
+  /*
+   * A foreign poll gets the no-job answer, not a refusal sentence: this is a
+   * read, and "nothing here" is the same thing the page's 404 already says.
+   * It also keeps the reclaim write below out of a stranger's reach.
+   */
+  if (await tripAccessRefusal(tripId)) {
     return { state: 'none', stages: [], retryable: false };
   }
 
@@ -565,6 +708,23 @@ export async function compilationSnapshotAction(tripId: string): Promise<Compila
    * returning process from arguing with it.
    */
   reclaimAbandonedJob(tripId, new Date());
+
+  /**
+   * AND THE QUEUE IS MOVED HERE, WHICH IS WHERE SOMEBODY IS ACTUALLY LOOKING.
+   *
+   * A worker exiting pumps the queue in the same process that launched it, but
+   * that is not the only way a slot frees: a build cancelled from another tab, a
+   * worker reaped after the web process restarted, a slot released by the
+   * heartbeat sweep above. This poll is the one thing that reliably runs while
+   * anybody is waiting — every 1.2 s from the waiting traveller's own page — so
+   * it is what guarantees a queued build eventually starts rather than sitting
+   * behind a slot nobody noticed was empty.
+   *
+   * It is not this trip's queue. The pump is deployment-wide by nature, so the
+   * traveller watching a running build is also the one advancing the line behind
+   * it; that is the point, and it costs one indexed count per poll.
+   */
+  pumpCompilationQueue();
 
   const job = getLatestJob(tripId);
   if (!job) return { state: 'none', stages: [], retryable: false };
@@ -629,23 +789,51 @@ export async function compilationSnapshotAction(tripId: string): Promise<Compila
   const abandoned = isAbandoned(job, new Date());
   const state: CompilationState = abandoned ? 'failed' : job.state;
 
+  /*
+   * Null for every build that is not parked, which is every build that is
+   * actually being worked on. See `CompilationSnapshot.queuePosition`.
+   */
+  const queuePosition = queuePositionFor(job.id);
+
+  /**
+   * The failure's copy and retryability, decided by the one verdict function
+   * the server render also calls. The code alone misstated two live failure
+   * classes — a catalogue outage told as "not enough here to plan on", and a
+   * wall-clock kill told as "we ran out of lookups" — so both surfaces read
+   * the code, the detail and the stage records together. See
+   * `lib/compiler/verdict.ts`.
+   */
+  const verdict = job.errorCode
+    ? compilationVerdict({
+        errorCode: job.errorCode,
+        errorDetail: job.errorDetail,
+        stages: job.stages,
+      })
+    : null;
+
   return {
     state,
     stages,
-    ...(job.errorCode
-      ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] }
+    ...(verdict
+      ? { errorMessage: verdict.message }
       : abandoned
         ? {
             errorMessage:
               'That build stopped without finishing — the server it was running on went away. Nothing was lost; starting it again picks up everything we had already read.',
           }
         : {}),
-    retryable: job.errorCode ? isRetryable(job.errorCode) : state === 'failed',
+    retryable: verdict ? verdict.retryable : state === 'failed',
     ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
     startedAt: job.startedAt,
     ...(provisionalBoardId ? { provisionalBoardId } : {}),
     ...(reused?.outcome ? { reusedSummary: reused.outcome } : {}),
     estimate,
+    /*
+     * Read after the pump above, deliberately: if this poll is the one that
+     * admitted the job, the honest answer is "not waiting any more" rather than
+     * a position taken a few statements earlier.
+     */
+    ...(queuePosition !== null ? { queuePosition } : {}),
   };
 }
 
@@ -727,6 +915,27 @@ function preflightReachFor(
   return typeof reach === 'number' && reach > 0 ? reach : undefined;
 }
 
+/**
+ * The first base of the stored preflight's route — the part "one area" means.
+ *
+ * Same identity guard as `preflightReachFor` above, and the same reason: a
+ * preflight for a destination the traveller has since abandoned is not evidence
+ * about this one. The first route entry rather than the gateway, because the
+ * route is the structure's own ordering of where the trip actually stays and
+ * the gateway is only where it enters.
+ */
+function preflightAnchorFor(
+  intent: { preflight?: TripPreflight | null | undefined },
+  candidateId: string,
+): { id: string; name: string; center: { lat: number; lng: number } } | undefined {
+  const preflight = intent.preflight;
+  if (!preflight) return undefined;
+  const key = preflight.destinationKey;
+  if (key !== candidateId && key !== `resolver:${candidateId}`) return undefined;
+  const part = preflight.portfolio?.route[0];
+  return part ? { id: part.id, name: part.name, center: part.center } : undefined;
+}
+
 function candidateFromSelected(destination: SelectedDestination): DestinationCandidate {
   const entityType = FEATURE_TYPE_ENTITY[destination.featureType];
   return {
@@ -804,6 +1013,8 @@ export async function ensurePreflightAction(tripId: string): Promise<ActionResul
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const destination = intent.selectedDestination;
   if (!destination) return { ok: false, error: 'We do not know where you mean yet.' };
@@ -979,6 +1190,8 @@ export async function adoptDateWindowAction(
   const trip = getTrip(tripId);
   const intent = getIntent(tripId);
   if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   if (!Number.isInteger(month) || month < 1 || month > 12) {
     return { ok: false, error: 'That is not a month we offered.' };
   }
@@ -1007,6 +1220,8 @@ export async function adoptTripLengthAction(
   const trip = getTrip(tripId);
   const intent = getIntent(tripId);
   if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   if (!Number.isInteger(nights) || nights < 1 || nights > MAX_TRIP_NIGHTS) {
     return { ok: false, error: 'That is not a length we offered.' };
   }
@@ -1075,6 +1290,8 @@ export async function applyStrategyAction(tripId: string, strategyId: string): P
   }
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   /*
    * An empty strategy is a real answer, not a missing one.
@@ -1204,6 +1421,8 @@ export async function reopenPreflightAction(tripId: string): Promise<ActionResul
   if (!tripIdSchema.safeParse(tripId).success) return MALFORMED_REQUEST;
   const intent = getIntent(tripId);
   if (!intent) return { ok: false, error: 'We could not find that trip.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   if (!intent.composer) {
     return { ok: false, error: 'There is nothing to go back to on this trip.' };
   }

@@ -127,18 +127,21 @@ function composerFor(mustDo: string): TripComposerAnswers {
 async function tripNeedingAReading(mustDo = UNRESOLVED): Promise<string> {
   const { createTrip } = await import('@/lib/db/repository');
   const { saveComposerAnswers } = await import('@/lib/db/compiler-repository');
-  const trip = createTrip({
-    mode: 'known_destination',
-    destinationInput: 'Somewhere',
-    regionId: 'dynamic',
-    startDate: '2026-09-01',
-    endDate: '2026-09-05',
-    arrivalTime: '15:00',
-    departureTime: '11:00',
-    adults: 2,
-    children: 0,
-    travelerNeeds: [],
-  });
+  const trip = createTrip(
+    {
+      mode: 'known_destination',
+      destinationInput: 'Somewhere',
+      regionId: 'dynamic',
+      startDate: '2026-09-01',
+      endDate: '2026-09-05',
+      arrivalTime: '15:00',
+      departureTime: '11:00',
+      adults: 2,
+      children: 0,
+      travelerNeeds: [],
+  },
+    'test-browser',
+  );
   saveComposerAnswers(trip.id, composerFor(mustDo));
   return trip.id;
 }

@@ -1,7 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CLARIFICATION_SET_VERSION, type ClarificationSet } from '@sidequest/core';
-import { deriveScope } from '@sidequest/compiler';
+import { buildInventory, deriveScope } from '@sidequest/compiler';
 import { SYNTHETIC_WORLDS, syntheticCandidate, syntheticPack } from '@sidequest/compiler/testing';
+import {
+  foodDoorWalkMinutes,
+  foodRoutingSnapKm,
+  MODELLED_WALK_KMH,
+  type GeographicScope,
+  type RegionPack,
+  type SourceRecord,
+} from '@sidequest/core';
 import { createOpenProviders } from './live';
 
 /**
@@ -53,7 +61,57 @@ function worldFixture(key: keyof typeof SYNTHETIC_WORLDS) {
     }),
     confirmedByUser: true,
   };
-  return { spec, scope, pack: syntheticPack(spec, scope) };
+  return { spec, scope, pack: withFoodInWalkingDistance(syntheticPack(spec, scope), scope) };
+}
+
+/**
+ * THE FIXTURE'S FOOD, PUT WHERE FOOD IS.
+ *
+ * `syntheticPack` lays its venues on the same spiral as its places but eighty
+ * turns further out, so every one of them lands between 60 and 115 km from the
+ * region centre and 25 to 60 km from the nearest place — a "city" whose every
+ * restaurant is an hour's drive outside it. That was invisible while a venue
+ * could be snapped onto any node however far away; it is the exact geometry the
+ * door-walk ceiling now refuses, so a pack in that shape holds no routable venue
+ * at all and the two tests below would be asserting against an empty answer for
+ * a reason that has nothing to do with what either of them is about.
+ *
+ * So the venues are moved into the centre they belong to — a food quarter, 0.2
+ * to 1.4 km out, which is the shape `walkMinutesFromRouting` was written for.
+ * Nothing else about the records changes; the venue that has to be *out* of
+ * reach is placed deliberately, per test, rather than by fixture accident.
+ */
+function withFoodInWalkingDistance(pack: RegionPack, scope: GeographicScope): RegionPack {
+  /*
+   * Which records this pack's *own* inventory will treat as food — not which
+   * ones carry `planningRole: 'food'`. Three of the fifteen it returns here are
+   * markets filed as attractions, and leaving those where they were is what a
+   * first attempt at this helper did: three venues past the ceiling, an
+   * unroutable gap ahead of the shortfall gap, and a test failing for a reason
+   * it was not about.
+   */
+  const foodIds = new Set(buildInventory({ pack, scope }).foodRecords.map((record) => record.id));
+  const center = scope.center;
+  let index = 0;
+  return {
+    ...pack,
+    layers: pack.layers.map((layer) => ({
+      ...layer,
+      records: layer.records.map((record) => {
+        if (!foodIds.has(record.id)) return record;
+        const angle = index * 2.399963229728653;
+        const radius = 0.002 + index * 0.0008;
+        index += 1;
+        return {
+          ...record,
+          coordinates: {
+            lat: center.lat + Math.cos(angle) * radius,
+            lng: center.lng + Math.sin(angle) * radius,
+          },
+        };
+      }),
+    })),
+  };
 }
 
 describe('food does not stop at whatever the pack happened to hold', () => {
@@ -199,5 +257,173 @@ describe('a deficit-directed look reads the pack again rather than giving up', (
 
     expect(acquired.candidates).toEqual([]);
     expect(acquired.gaps[0]?.reason).toBe('provider_error');
+  });
+});
+
+/**
+ * ---- THE LEG THAT NAMED ONE PLACE AND TIMED ANOTHER -----------------------
+ *
+ * The evidence class, from the founder journeys: a metro day rendered
+ * `Walk to <venue>` with `minutes: 8, km: 0.661, provenance: 'measured'` and a
+ * `toId` belonging to a **park** 4.80 km from that venue's own record. Four of
+ * four named-restaurant approach legs were wrong the same way, and a second row
+ * carried the *identical* minutes and kilometres for a venue 3.27 km from the
+ * same anchor.
+ *
+ * Two lines of code produced it. A compiled venue took `nearestAnchor(...)?.id`
+ * with no distance ceiling — the anchors being the bases plus two dozen compiled
+ * places, so in a metropolis the nearest is routinely kilometres off — and the
+ * door walk was then hard-coded to `0`, which is what let the anchor's own
+ * travel time render as a door-to-door measurement under the venue's name.
+ *
+ * These run the real provider, on a real pack, through the same
+ * `providers.food.discover` the compiler calls.
+ */
+
+/** 0.005° of latitude — 0.56 km, and eight minutes on foot at the modelled pace. */
+const NEAR_DEGREES = 0.005;
+/** 0.0432° — 4.80 km, the distance the live venue sat from the park it was priced at. */
+const FAR_DEGREES = 0.0432;
+
+/**
+ * One food record placed a stated number of degrees due north of the base, and
+ * nothing else touched. Placed rather than nudged: the fixture has already moved
+ * every venue into the centre, so an offset on top of that is a distance nobody
+ * in the test can state.
+ */
+function relocated(
+  pack: RegionPack,
+  base: { lat: number; lng: number },
+  moves: ReadonlyMap<string, number>,
+): RegionPack {
+  return {
+    ...pack,
+    layers: pack.layers.map((layer) => ({
+      ...layer,
+      records: layer.records.map((record: SourceRecord) => {
+        const north = moves.get(record.id);
+        return north === undefined
+          ? record
+          : { ...record, coordinates: { lat: base.lat + north, lng: base.lng } };
+      }),
+    })),
+  };
+}
+
+/** Degrees of latitude to kilometres, at the earth radius `haversineKm` uses. */
+const KM_PER_DEGREE = 111.19493;
+
+/** How far a venue ended up from the only node in the test, in kilometres. */
+function kmFromBase(point: { lat: number; lng: number }, base: { lat: number; lng: number }): number {
+  return (
+    Math.hypot(point.lat - base.lat, (point.lng - base.lng) * Math.cos((base.lat * Math.PI) / 180)) *
+    KM_PER_DEGREE
+  );
+}
+
+/**
+ * The record ids that actually become venues on this path, read back off the
+ * provider rather than guessed from the pack.
+ *
+ * The inventory's food records are not all venues: three of the fifteen here are
+ * markets, and `foodVenueFromRecord` refuses a provisioning stop whose hours
+ * nobody confirmed. Picking a record straight off the inventory picked one of
+ * those first, so the "refused" venue was one the path would have dropped
+ * anyway — a test that passes without the ceiling doing anything.
+ */
+async function routableRecordIds(): Promise<string[]> {
+  const { scope, pack } = worldFixture('transit_city');
+  const { providers } = createOpenProviders({ maxModelCalls: 0 });
+  const result = await providers.food.discover({
+    scope,
+    places: [],
+    bases: [{ id: 'base-1', coordinates: scope.center }],
+    maxVenues: 50,
+    pack,
+  });
+  return result.venues.map((venue) => venue.id.replace(/^food-/, ''));
+}
+
+describe('a venue is only priced against a node it is beside', () => {
+  /**
+   * The base is the only anchor, so "nearest" and "the base" are the same node
+   * and the ceiling is the only thing that can separate them — which is the
+   * shape the defect needs: with no ceiling, the far venue takes `base-1` and
+   * renders the base's travel time as a walk to its door.
+   */
+  async function discoverWith(moves: ReadonlyMap<string, number>) {
+    const { scope, pack } = worldFixture('transit_city');
+    const { providers } = createOpenProviders({ maxModelCalls: 0 });
+    const result = await providers.food.discover({
+      scope,
+      places: [],
+      bases: [{ id: 'base-1', coordinates: scope.center }],
+      maxVenues: 50,
+      pack: relocated(pack, scope.center, moves),
+    });
+    return { scope, result };
+  }
+
+  it('refuses the nearest node when the nearest node is 4.8 km away', async () => {
+    const farRecordId = (await routableRecordIds())[0]!;
+    const { scope, result } = await discoverWith(new Map([[farRecordId, FAR_DEGREES]]));
+
+    /*
+     * Not carried with `base-1` on it, and not carried at all: `routingId` is
+     * required by the schema and every consumer prices a leg to it, so a venue
+     * we cannot price honestly leaves the routable pool. The planner's
+     * area-level suggestion is what the traveller sees instead — a smaller
+     * claim, and a true one.
+     */
+    expect(result.venues.map((venue) => venue.id)).not.toContain(`food-${farRecordId}`);
+    /*
+     * And nothing measured can be composed to it: the ids that survive are all
+     * ids of venues within a door walk of the node they carry, so there is no
+     * row anywhere that pairs this venue's name with another place's minutes.
+     */
+    for (const venue of result.venues) {
+      expect(venue.routingId).toBe('base-1');
+      expect(kmFromBase(venue.coordinates, scope.center)).toBeLessThanOrEqual(
+        foodRoutingSnapKm(MODELLED_WALK_KMH),
+      );
+    }
+    // The refusal is stated rather than silent.
+    const gap = result.gaps.find((entry) => /further from anything this trip routes through/.test(entry.detail));
+    expect(gap).toBeDefined();
+  });
+
+  it('keeps a venue that really is beside the node, and charges the walk it really is', async () => {
+    const nearRecordId = (await routableRecordIds())[1]!;
+    const { result } = await discoverWith(new Map([[nearRecordId, NEAR_DEGREES]]));
+
+    const near = result.venues.find((venue) => venue.id === `food-${nearRecordId}`);
+    expect(near).toBeDefined();
+    expect(near!.routingId).toBe('base-1');
+    /*
+     * Eight minutes — the same number the broken leg printed for a venue 4.80 km
+     * out, except this one is what 0.56 km actually costs on foot. The old code
+     * wrote `walkMinutesFromRouting: 0` here regardless.
+     */
+    expect(near!.walkMinutesFromRouting).toBe(8);
+    expect(near!.walkMinutesFromRouting).toBe(
+      foodDoorWalkMinutes(NEAR_DEGREES * KM_PER_DEGREE, MODELLED_WALK_KMH),
+    );
+  });
+
+  it('never writes a door walk of zero for a venue that is not at its node', async () => {
+    const { scope, result } = await discoverWith(new Map());
+
+    expect(result.venues.length).toBeGreaterThan(1);
+    for (const venue of result.venues) {
+      const km = kmFromBase(venue.coordinates, scope.center);
+      /*
+       * Every venue in this fixture sits 0.2–1.4 km from the base, so every one
+       * of them owes a walk. A hard-coded zero — which is what both live food
+       * paths wrote — fails here on the first venue.
+       */
+      expect(km).toBeGreaterThan(0);
+      expect(venue.walkMinutesFromRouting).toBeGreaterThan(0);
+      expect(venue.walkMinutesFromRouting).toBe(foodDoorWalkMinutes(km, MODELLED_WALK_KMH));
+    }
   });
 });

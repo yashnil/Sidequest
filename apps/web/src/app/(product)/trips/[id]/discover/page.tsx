@@ -20,17 +20,17 @@ import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard'
 import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
 import { Panel, buttonClass } from '@/components/ui';
 import { MustDoPanel } from '@/components/MustDoPanel';
-import { ResearchReadinessPanel } from '@/components/ResearchReadinessPanel';
-import { getIntent } from '@/lib/db/compiler-repository';
+import { ResearchReadinessPanel, coverageStoppedEarly } from '@/components/ResearchReadinessPanel';
+import { getIntent, getLatestJob } from '@/lib/db/compiler-repository';
 import { formatDateRange, formatMinutes } from '@/lib/format';
 import {
   getFoodSelections,
   getProfile,
   getSelections,
-  getTrip,
   hasItinerary,
   getReadiness,
 } from '@/lib/db/repository';
+import { ownedTrip } from '@/lib/net/trip-access';
 import {
   getAcknowledgements,
   getReconciliationFor,
@@ -69,7 +69,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const trip = getTrip(id);
+  const trip = await ownedTrip(id);
   return {
     title: trip
       ? `${trip.basics.destinationInput} — Discovery board — Sidequest`
@@ -79,7 +79,11 @@ export async function generateMetadata({
 
 export default async function DiscoverPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const trip = getTrip(id);
+  /*
+   * The owner's trip or nothing — a foreign browser sees a missing trip, the
+   * same boundary every trip door holds. See `lib/net/trip-access`.
+   */
+  const trip = await ownedTrip(id);
   if (!trip) notFound();
 
   const profile = getProfile(id);
@@ -93,7 +97,12 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const board = boardFor(trip, profile, resolved.context);
   const compiled = compiledRegionFor(id);
   const attributions = compiled?.sourceManifest.attributions ?? [];
-  const suggestion = autoSelect({ candidates: board.candidates, profile, tripDays: days });
+  const suggestion = autoSelect({
+    candidates: board.candidates,
+    profile,
+    tripDays: days,
+    transitUnmeasured: board.transitUnmeasured,
+  });
   const personality = tripPersonality(profile, days);
 
   const planned = hasItinerary(id);
@@ -226,6 +235,18 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
     decisions: getIntent(id)?.composer?.mustDoDecisions ?? [],
   });
   const readiness = settled.readiness;
+  /*
+   * Whether the build behind this artifact stopped on its own budget, so a
+   * `thin` reading can be attributed honestly — "we stopped before reading
+   * everything" rather than "the world publishes little". Read from the
+   * artifact's own coverage report first; the job row is consulted only when
+   * it is the job that produced *this* artifact, so a later failed rebuild
+   * cannot recolour the board on screen.
+   */
+  const latestJob = getLatestJob(id);
+  const buildStoppedEarly =
+    coverageStoppedEarly(compiled?.coverage ?? null) ||
+    (latestJob?.state === 'partial' && latestJob.compiledRegionId === compiled?.id);
 
   const integrity = readBoardIntegrity({
     board,
@@ -427,7 +448,13 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
             first place nine hundred pixels down a desktop screen.
           */}
           <BoardBackstage className="mt-4">
-            {readiness ? <ResearchReadinessPanel tripId={id} readiness={readiness} /> : null}
+            {readiness ? (
+              <ResearchReadinessPanel
+                tripId={id}
+                readiness={readiness}
+                buildStoppedEarly={buildStoppedEarly}
+              />
+            ) : null}
 
             <div>
               <h2 className="font-display text-lg text-ink">What we searched</h2>

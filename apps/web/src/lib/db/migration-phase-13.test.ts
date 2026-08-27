@@ -225,8 +225,14 @@ describe('a Phase 12 database upgraded to Phase 13', () => {
     const addedToTrips = Object.keys(tripAfter).filter(
       (column) => !(column in (tripBefore as Record<string, unknown>)),
     );
-    expect(addedToTrips).toEqual(['owner_token']);
+    expect(addedToTrips).toEqual(['owner_token', 'share_token']);
     expect(tripAfter.owner_token).toBeNull();
+    /*
+     * Null is `share_token`'s default too, and just as load-bearing: null means
+     * "never shared", so a legacy trip acquires no public link until its owner
+     * explicitly mints one.
+     */
+    expect(tripAfter.share_token).toBeNull();
 
     /*
      * ADDITIVE COLUMNS ARE THE ONE THING THAT MAY DIFFER — AND ONLY AT THEIR

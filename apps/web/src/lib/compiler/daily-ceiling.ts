@@ -45,10 +45,49 @@ import { getDb } from '../db/client';
  * global ceiling stays exactly as it was, as the hard stop on the bill.
  *
  * A caller key is whatever the request layer can honestly attribute (see
- * `lib/net/caller`). When it can attribute nothing — an internal caller, a
- * test, a background job — only the global ceiling applies, because inventing
- * an identity would create a per-caller allowance per request, which is worse
- * than none.
+ * `lib/net/caller`). There are three cases and they are not two:
+ *
+ * - **a key** — charge the deployment and that caller;
+ * - **`null`, a request nobody could attribute** — charge the deployment and
+ *   the *shared unattributed pool*, because the alternative is what shipped:
+ *   declining the session cookie was strictly better than presenting one, since
+ *   an anonymous caller was charged only globally and had the entire day's
+ *   allowance to themselves while an honest browser had a fraction of it. One
+ *   pool for everybody who cannot be told apart is the honest reading of "we do
+ *   not know who this is", and there is nothing in it to rotate;
+ * - **absent** — not a request at all: a worker, the benchmark driver, a test.
+ *   Only the global ceiling applies. Inventing an identity there would hand
+ *   every internal call its own allowance, which is worse than none.
+ *
+ * ---
+ *
+ * **WHAT THE NUMBERS ASSUME, WRITTEN DOWN SO THEY CAN BE ARGUED WITH.**
+ *
+ * The defaults were 20 builds and 300 model calls a day, which is not a
+ * launch: a hundred signed-up travellers exhaust twenty builds before lunch,
+ * and the first hundred people to try a product are exactly the ones who must
+ * not be told to come back tomorrow. The model behind the numbers below:
+ *
+ * - a launch cohort of ~100 travellers; on the busiest day roughly a quarter
+ *   of them open the product;
+ * - a traveller who plans a trip builds once and rebuilds once after changing
+ *   something — two live builds — and a handful of enthusiasts run four to six;
+ * - so ~55 builds on a peak day. **60** is the ceiling, round and above it.
+ * - each build is capped at `modelCallCeiling()` (12) model calls, so builds
+ *   alone can reach 720; the questionnaire and plan screens interpret free text
+ *   at ~2 calls per traveller, another ~50. **800** is the ceiling.
+ * - a caller's share is a **tenth** rather than a quarter. Six builds a day
+ *   from one browser is more than the previous quarter-of-twenty allowed
+ *   (five), so no honest traveller is worse off — and it now takes at least ten
+ *   distinct browsers to exhaust the day rather than four.
+ *
+ * These are *availability* controls, and only the global ones are security
+ * controls: a caller who declines identity joins the unattributed pool, but
+ * nothing here can tell two anonymous callers apart. What actually bounds an
+ * anonymous flood is the three fences that take no identity at all — the global
+ * ceilings here, the deployment rate fence in `lib/net/rate-limit`, and the
+ * concurrency bound in `limits.ts`, which together cap the day's spend at these
+ * numbers no matter how many identities anybody rotates through.
  */
 
 const TABLE_SQL = `CREATE TABLE IF NOT EXISTS daily_provider_spend (
@@ -60,20 +99,30 @@ const TABLE_SQL = `CREATE TABLE IF NOT EXISTS daily_provider_spend (
 
 export type DailySpendCounter = 'live_compilations' | 'model_calls';
 
-const DEFAULT_DAILY_LIVE_COMPILATIONS = 20;
-const DEFAULT_DAILY_MODEL_CALLS = 300;
+/** Sized for the launch cohort. The arithmetic is in the header. */
+const DEFAULT_DAILY_LIVE_COMPILATIONS = 60;
+const DEFAULT_DAILY_MODEL_CALLS = 800;
 
 /**
  * A caller's share of the day, as a fraction of the deployment's ceiling.
  *
- * A quarter rather than a tenth: the intended cohort is small, the normal
- * traveller starts one or two builds, and a share so tight that an ordinary
- * second attempt is refused would be the same defect in the other direction.
- * Rounded up and floored at one, so a caller is never refused before they have
- * spent anything — a ceiling of zero for everybody is not a fair share, it is
- * a closed product.
+ * A tenth of a cohort-sized ceiling, which is both more allowance and more
+ * protection than the quarter of a tiny one it replaces: six builds a day from
+ * one browser rather than five, and ten distinct browsers to exhaust the day
+ * rather than four. Rounded up and floored at one, so a caller is never refused
+ * before they have spent anything — a ceiling of zero for everybody is not a
+ * fair share, it is a closed product.
  */
-const PER_CALLER_SHARE = 0.25;
+const PER_CALLER_SHARE = 0.1;
+
+/**
+ * The one bucket every request nobody could attribute is charged to.
+ *
+ * Not an identity and not a guess: it is the statement that these requests
+ * cannot be told apart, so they share one allowance between them. The `@`
+ * prefix cannot collide with a real key, which is always `ip:…` or `session:…`.
+ */
+const UNATTRIBUTED_CALLER = '@unattributed';
 
 function perCallerCeiling(globalCeiling: number): number {
   return Math.max(1, Math.ceil(globalCeiling * PER_CALLER_SHARE));
@@ -91,6 +140,17 @@ function perCallerCeiling(globalCeiling: number): number {
  */
 function callerCounter(counter: DailySpendCounter, caller: string): string {
   return `${counter}@${caller.slice(0, 96)}`;
+}
+
+/**
+ * Which caller row a spend belongs to, or null for "no caller row at all".
+ *
+ * The whole distinction between `null` and absent lives here, and it is the one
+ * thing that stops declining a cookie being a discount. See the header.
+ */
+function chargeKey(caller: string | null | undefined): string | null {
+  if (caller === undefined) return null;
+  return caller ?? UNATTRIBUTED_CALLER;
 }
 
 function ceilingFrom(name: string, fallback: number): number {
@@ -136,7 +196,8 @@ export function recordDailySpend(
     // The caller's own row, so one visitor's share can run out while the
     // deployment's has not. Written in the same call as the global one because
     // a spend recorded against only one of them is a ceiling that lies.
-    if (caller) write.run(day, callerCounter(counter, caller), rounded);
+    const key = chargeKey(caller);
+    if (key) write.run(day, callerCounter(counter, key), rounded);
   } catch (error) {
     // A ledger that cannot be written is a ceiling that cannot be trusted; the
     // gate below fails closed for the same reason, so the money stays bounded.
@@ -151,9 +212,10 @@ export function dailySpendSoFar(
 ): number {
   const db = getDb();
   db.exec(TABLE_SQL);
+  const keyed = chargeKey(caller);
   const row = db
     .prepare('SELECT amount FROM daily_provider_spend WHERE day = ? AND counter = ?')
-    .get(dayOf(now), caller ? callerCounter(counter, caller) : counter) as
+    .get(dayOf(now), keyed ? callerCounter(counter, keyed) : counter) as
     | { amount: number }
     | undefined;
   return row?.amount ?? 0;
@@ -196,16 +258,20 @@ const SHARE_REACHED_MESSAGE =
  * rather than told the deployment is exhausted — which, in the case this order
  * matters for, it is not.
  */
-export function dailySpendGate(now = new Date(), caller?: string | null): DailySpendDecision {
+export function dailySpendGate(
+  now = new Date(),
+  caller?: string | null,
+): DailySpendDecision {
   try {
-    if (caller) {
+    const keyed = chargeKey(caller);
+    if (keyed) {
       if (
-        dailySpendSoFar('live_compilations', now, caller) >=
+        dailySpendSoFar('live_compilations', now, keyed) >=
         perCallerCeiling(dailyLiveCompilationCeiling())
       ) {
         return { allowed: false, message: SHARE_REACHED_MESSAGE };
       }
-      if (dailySpendSoFar('model_calls', now, caller) >= perCallerCeiling(dailyModelCallCeiling())) {
+      if (dailySpendSoFar('model_calls', now, keyed) >= perCallerCeiling(dailyModelCallCeiling())) {
         return { allowed: false, message: SHARE_REACHED_MESSAGE };
       }
     }
@@ -254,7 +320,10 @@ export function reserveModelCalls(
   options: { now?: Date; caller?: string | null } = {},
 ): DailySpendDecision {
   const now = options.now ?? new Date();
-  const caller = options.caller ?? null;
+  // Threaded rather than defaulted: `null` and absent mean different things
+  // here, and collapsing them would put every internal reservation into the
+  // shared unattributed pool. See `chargeKey`.
+  const caller = options.caller;
   const decision = dailySpendGate(now, caller);
   if (!decision.allowed) return decision;
   recordDailySpend('model_calls', count, now, caller);

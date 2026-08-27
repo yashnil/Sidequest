@@ -270,9 +270,22 @@ export interface DivisionEntry {
   chain: readonly string[];
   evidence: GeographicEvidence;
   bounds?: GeoBounds;
+  /** The representative point the source published for this division. */
+  coordinates?: Coordinates;
   /** Box area in square degrees. Ordering only — never a membership input. */
   area: number;
 }
+
+/**
+ * The fewest published child points a measured extent may be built from.
+ *
+ * Two, because it is the structural minimum at which an extent has any area at
+ * all — one point spans nothing — and not more, because any higher number would
+ * be a tuned threshold. A two-point extent is a thin rectangle and covers very
+ * little, which is the fail-closed direction: sparse sampling produces a small
+ * claim, never a large one.
+ */
+const MEASURED_EXTENT_MIN_CONTRIBUTORS = 2;
 
 /** Which of our levels a source's division subtype corresponds to. */
 const DIVISION_SUBTYPE_LEVELS: Record<string, GeographicLevel> = {
@@ -308,9 +321,30 @@ export class DivisionDirectory {
   private readonly byId = new Map<string, DivisionEntry>();
   private readonly byNormalisedName = new Map<string, DivisionEntry[]>();
   private readonly boxes: DivisionEntry[] = [];
+  /**
+   * Extents *measured from published child points*, not published as boxes.
+   *
+   * The probe over stored packs found the divisions layer publishing points —
+   * every retained division's own box is a few metres across — so `covering`
+   * answers for essentially nothing. But the same layer publishes, for every
+   * leaf it keeps, a full parent chain: 68 neighbourhoods of one ward each name
+   * the ward, and their points *sample the ward's ground*. The bounding box of a
+   * division's own published children is therefore a measured extent for it, on
+   * published evidence only.
+   *
+   * Deliberately built from **direct children alone** (`chain[-2]`), never from
+   * deeper descendants. Aggregating grandchildren reconstructs a metropolis or
+   * a country from a scatter of leaves, and a metropolis-sized bounding box
+   * covers ground in the *next* first-level division over — measured on a real
+   * dense-metro pack, where the whole-region cloud covered a famous theme park
+   * that is genuinely in the neighbouring prefecture. One level of aggregation
+   * keeps the sampled ground and the claimed ground the same order of size.
+   */
+  private readonly measured: DivisionEntry[] = [];
 
   static from(records: readonly SourceRecord[]): DivisionDirectory {
     const directory = new DivisionDirectory();
+    const children = new Map<string, { chain: readonly string[]; points: Coordinates[] }>();
     for (const record of records) {
       if (record.planningRole !== 'administrative') continue;
       const subtype = record.attributes.subtype;
@@ -331,13 +365,78 @@ export class DivisionDirectory {
         chain: chain.length > 0 ? chain : [ownId],
         evidence: evidenceFromDivision(record, subtype),
         ...(record.bounds ? { bounds: record.bounds } : {}),
+        coordinates: record.coordinates,
         area: record.bounds
           ? Math.abs(record.bounds.northEast.lat - record.bounds.southWest.lat) *
             Math.abs(record.bounds.northEast.lng - record.bounds.southWest.lng)
           : Number.POSITIVE_INFINITY,
       };
       directory.add(entry);
+
+      /* This record's point is a sample of its direct parent's ground. */
+      if (chain.length >= 2) {
+        const parentId = chain[chain.length - 2]!;
+        const bucket = children.get(parentId);
+        if (bucket) {
+          /*
+           * The parent's ancestry, agreed by every contributor: the longest
+           * common prefix of their chains, exactly as `namedDivisionChains`
+           * computes a locality's. Contributors that disagree about the
+           * parentage shorten what is claimed rather than one of them winning.
+           */
+          const prefix = chain.slice(0, chain.length - 1);
+          let common = 0;
+          while (
+            common < bucket.chain.length &&
+            common < prefix.length &&
+            bucket.chain[common] === prefix[common]
+          ) {
+            common += 1;
+          }
+          bucket.chain = bucket.chain.slice(0, common);
+          bucket.points.push(record.coordinates);
+        } else {
+          children.set(parentId, {
+            chain: chain.slice(0, chain.length - 1),
+            points: [record.coordinates],
+          });
+        }
+      }
     }
+
+    for (const [parentId, bucket] of children) {
+      if (bucket.points.length < MEASURED_EXTENT_MIN_CONTRIBUTORS) continue;
+      /* Disagreement that truncated the ancestry above the parent removes the
+       * one identifier the extent would be evidence *of*. Nothing to claim. */
+      if (bucket.chain[bucket.chain.length - 1] !== parentId) continue;
+      const lats = bucket.points.map((point) => point.lat);
+      const lngs = bucket.points.map((point) => point.lng);
+      const bounds: GeoBounds = {
+        southWest: { lat: Math.min(...lats), lng: Math.min(...lngs) },
+        northEast: { lat: Math.max(...lats), lng: Math.max(...lngs) },
+      };
+      const area =
+        (bounds.northEast.lat - bounds.southWest.lat) *
+        (bounds.northEast.lng - bounds.southWest.lng);
+      /* Points on a shared line span no ground. A degenerate extent claims none. */
+      if (area <= 0) continue;
+      directory.measured.push({
+        id: parentId,
+        name: directory.byId.get(parentId)?.name ?? parentId,
+        aliases: [],
+        chain: bucket.chain,
+        /*
+         * Division identifiers and nothing else. The identifiers are what every
+         * contributor published; a name or a code would be this code guessing
+         * which of the contributors' levels describes the parent. Less claimed,
+         * nothing invented.
+         */
+        evidence: { ...EMPTY_GEOGRAPHIC_EVIDENCE, divisionIds: [...bucket.chain] },
+        bounds,
+        area,
+      });
+    }
+    directory.measured.sort((a, b) => a.area - b.area || a.id.localeCompare(b.id));
     directory.boxes.sort((a, b) => a.area - b.area);
     return directory;
   }
@@ -392,6 +491,52 @@ export class DivisionDirectory {
   /** Divisions whose published box contains this point, smallest first. */
   covering(point: Coordinates): DivisionEntry[] {
     return this.boxes.filter((entry) => entry.bounds && boundsContain(entry.bounds, point));
+  }
+
+  /**
+   * Divisions whose **measured** extent contains this point, smallest first.
+   *
+   * A separate lookup from `covering` on purpose. A published box is a source's
+   * own statement about a division's shape; a measured extent is the bounding
+   * box of its published children's points, which over-approximates near its
+   * corners. The candidate-side geometry pass may read both, because there the
+   * asymmetry holds — geometry supports a positive and can never refuse. The
+   * scope-side passes (`resolveScopeEvidence`, `selectDivisions`) read only
+   * `covering`: a destination identified with a division because a *measured*
+   * cloud covered its centre is precisely the guess `selectDivisions` refuses
+   * to make for a park, and this split is what keeps that refusal intact.
+   */
+  coveringMeasured(point: Coordinates): DivisionEntry[] {
+    return this.measured.filter((entry) => entry.bounds && boundsContain(entry.bounds, point));
+  }
+
+  /**
+   * The measured extent held for one division, whether or not it covers a point.
+   *
+   * The complement of `coveringMeasured`, and it exists so a caller can ask the
+   * prior question: *is any ground known for this division at all?* A caller
+   * that only knows "the point is not inside" cannot tell an absent extent from
+   * a failed containment, and answering the second when the truth is the first
+   * turns a gap in the divisions layer into a claim about a record. Only ever
+   * read to decide whether a geometric verdict is available.
+   */
+  measuredExtentOf(id: string): GeoBounds | undefined {
+    return this.measured.find((entry) => entry.id === id)?.bounds;
+  }
+
+  /**
+   * Divisions whose own published point sits inside the given extent.
+   *
+   * The reverse of `covering`, for the records that carry the polygon: a
+   * supplemental-layer feature publishes a real boundary and no address at all,
+   * and a division standing inside that boundary is the divisions layer saying
+   * whose ground the feature spans. Points, not boxes, on the reading side —
+   * a division's published box is its point anyway.
+   */
+  containedIn(bounds: GeoBounds): DivisionEntry[] {
+    return [...this.byId.values()]
+      .filter((entry) => entry.coordinates && boundsContain(bounds, entry.coordinates))
+      .sort((a, b) => a.id.localeCompare(b.id));
   }
 }
 
@@ -770,7 +915,7 @@ export function decideContainment(
    */
   const named = resolveByName(evidence, context);
   const publishedEvidence = named ? mergeGeographicEvidence(evidence, named.evidence) : evidence;
-  const byBox = resolveByBox(subject.coordinates, context);
+  const byBox = resolveByBox(subject.coordinates, context, subject.bounds);
   const candidateEvidence = byBox
     ? mergeGeographicEvidence(publishedEvidence, byBox.evidence)
     : publishedEvidence;
@@ -891,7 +1036,9 @@ export function decideContainment(
     return build(
       context.regionIsMembership ? 'inside_selected_region' : 'inside_selected_division',
       'selected_division_geometry',
-      'Inside the published boundary of a division the destination is part of.',
+      byBox.via === 'covering_box'
+        ? 'Inside the published boundary of a division the destination is part of.'
+        : 'On ground the destination’s own divisions place inside it — its geometry and their published points overlap.',
     );
   }
 
@@ -1057,7 +1204,7 @@ function includedAreaFor(
 
 interface DirectoryResolution {
   evidence: GeographicEvidence;
-  via: 'covering_box' | 'published_name';
+  via: 'covering_box' | 'published_name' | 'measured_extent';
   matchesScope: boolean;
 }
 
@@ -1158,26 +1305,75 @@ function resolveByName(
  * Kept as its own function because a box match is a *geometric* answer and
  * deserves its own evidence basis, and because the assemble path resolves boxes
  * for records it has not yet turned into subjects.
+ *
+ * Three geometric readings, strongest first, all positive-only:
+ *
+ * 1. **A published division box containing the candidate's point.** The
+ *    original pass, a source's own statement about the division's shape. On the
+ *    catalogues measured so far it almost never fires, because the divisions
+ *    layer publishes points dressed as boxes a few metres across.
+ * 2. **A published division point inside the candidate's own boundary.** The
+ *    reverse reading, for the records that carry the polygon: the supplemental
+ *    layers publish a real extent and no address, no chain and no locality —
+ *    measured on a fresh dense-metro pack, 1,627 of 1,627 supplemental records
+ *    carry not one administrative name. A division standing inside that extent
+ *    is the divisions layer saying whose ground the feature covers.
+ * 3. **A measured extent of a division containing the candidate's point.** The
+ *    ground a division's own published children sample (see the directory).
+ *    Held to a stricter match than the other two: the covering division must be
+ *    a *proper descendant* of a selected division, never a selected division
+ *    itself. Reconstructing the destination's own border from a scatter of
+ *    child points is the largest claim from the sparsest sampling — the
+ *    measured failure is a whole-metro cloud covering a theme park in the next
+ *    prefecture — while a subdivision's cloud claims ground the same order of
+ *    size as what it sampled. The destination's own extent, where it exists,
+ *    arrives as `context.boundary`; it is not invented here.
+ *
+ * None of this reaches the evidence set allowed to refuse: geometry supports a
+ * positive and can never refute, which is the asymmetry the header states.
  */
 export function resolveByBox(
   point: Coordinates,
   context: ScopeContainmentContext,
+  bounds?: GeoBounds,
 ): DirectoryResolution | null {
   const directory = context.directory;
   if (!directory || directory.size === 0) return null;
+  const selected = context.selectedDivisionIds;
+
   const covering = directory.covering(point);
-  if (covering.length === 0) return null;
-  const innermost = covering[0]!;
+  const within = bounds ? directory.containedIn(bounds) : [];
+  const sampled = directory.coveringMeasured(point);
+  if (covering.length === 0 && within.length === 0 && sampled.length === 0) return null;
+
+  const inSelected = (ids: readonly string[]): boolean =>
+    selected.length > 0 && ids.some((id) => selected.includes(id));
   const matchesScope =
-    context.selectedDivisionIds.length > 0 &&
-    covering.some((entry) => context.selectedDivisionIds.some((id) => entry.chain.includes(id)));
-  const evidence = covering
-    .map((entry) => entry.evidence)
-    .reduce(mergeGeographicEvidence, {
-      ...EMPTY_GEOGRAPHIC_EVIDENCE,
-      divisionIds: [...innermost.chain],
-    });
-  return { evidence, via: 'covering_box', matchesScope };
+    covering.some((entry) => inSelected(entry.chain)) ||
+    within.some((entry) => inSelected(entry.chain)) ||
+    /* Proper descendant only: everything above the division's own identifier. */
+    sampled.some((entry) => inSelected(entry.chain.slice(0, -1)));
+
+  const innermost = covering[0];
+  const evidence = [
+    ...covering.map((entry) => entry.evidence),
+    /*
+     * Identifiers only from the two new readings. A covering *published* box
+     * merges the division's full evidence, as it always has; a polygon overlap
+     * or a measured cloud says whose ground this is and nothing about what the
+     * record's own address would say.
+     */
+    ...within.map((entry) => ({ ...EMPTY_GEOGRAPHIC_EVIDENCE, divisionIds: [...entry.chain] })),
+    ...sampled.map((entry) => ({ ...EMPTY_GEOGRAPHIC_EVIDENCE, divisionIds: [...entry.chain] })),
+  ].reduce(mergeGeographicEvidence, {
+    ...EMPTY_GEOGRAPHIC_EVIDENCE,
+    divisionIds: innermost ? [...innermost.chain] : [],
+  });
+  return {
+    evidence,
+    via: covering.length > 0 ? 'covering_box' : 'measured_extent',
+    matchesScope,
+  };
 }
 
 // ---------------------------------------------------------------------------

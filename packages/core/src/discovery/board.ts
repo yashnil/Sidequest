@@ -16,8 +16,10 @@ import type { TravelTimeMatrix } from '@sidequest/geo';
 import type { TransitEvidence } from '../schemas/compiled-region';
 import {
   detourToleranceMinutesFor,
+  scheduledTransportUnmeasured,
   travelKnowledgeFor,
   type ReachFromBase,
+  type ScheduledNetworkPresence,
 } from '../travel/reach';
 import type { TravelerNeed } from '../schemas/trip';
 import { isVisitableRole, PLANNING_ROLES, type PlanningRole } from '../schemas/region-pack';
@@ -32,10 +34,17 @@ import type { SeasonAssessment } from '../region/season';
 import {
   calibrateBandDistribution,
   scorePlace,
+  FIT_BAND_METER,
   type BlockerCode,
   type FitAssessment,
 } from '../scoring/fit';
-import { assessCandidateQuality, type CandidateOutcome, type QualityAssessment } from '../quality/candidate';
+import {
+  assessCandidateQuality,
+  type CandidateOutcome,
+  type QualityAssessment,
+  type ReasonBasis,
+} from '../quality/candidate';
+import { standsAsEstablishedName } from '../quality/significance';
 import { evidenceFor, type PlaceEvidence, type RegionEvidence } from '../schemas/evidence';
 
 export interface DiscoveryCandidate {
@@ -52,6 +61,14 @@ export interface DiscoveryCandidate {
   evidence?: PlaceEvidence;
   /** Evidence-driven quality, and the sentence that explains the verdict. */
   quality: QualityAssessment;
+  /**
+   * Where this card sits on the board, and the two dimensions that decided it.
+   *
+   * Carried rather than derived at the sort so that the ordering is inspectable:
+   * a card can say *why* it is above another one, and a test can assert on the
+   * parts instead of on the outcome of a comparator.
+   */
+  ordering: BoardOrdering;
   detourClass: DetourClass;
   /**
    * ONE-WAY TIME FROM THE BASE, IN THE MODE THAT WOULD ACTUALLY BE USED.
@@ -317,6 +334,444 @@ export function partitionBoardPlaces(places: readonly Place[]): {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The order of the list, composed from two dimensions that stay apart
+// ---------------------------------------------------------------------------
+
+/**
+ * WHERE SIGNIFICANCE FINALLY REACHES THE TRAVELLER.
+ *
+ * `quality/significance.ts` composes one number for "does this place matter",
+ * the compiler writes it onto every record it ranks, and until this section
+ * existed no traveller-facing list read it. The board sorted by `fit.score`
+ * alone, so two candidates identical in every personal dimension and wildly
+ * apart in local standing came out indistinguishable.
+ *
+ * Measured on the stored Tokyo artifact (Overture release 2026-07-22.0, 24
+ * cards, six days). The eight cards at ranks 8–15 were anonymous galleries the
+ * *fit scorer itself* had capped at "Good fit" for having established nothing —
+ * no knowledge base, no corroborating catalogue, no authority — and they
+ * outranked every card the same scorer called "Strong fit". Institute for
+ * Nature Study, significance 0.76, sat 16th of 24. Tokyo Dome City Attractions,
+ * significance 0.76 and ten minutes from the bed, sat 24th of 24, last. The
+ * order of the list contradicted the label printed on the cards.
+ *
+ * THE RULE, AND WHY IT IS A COMPOSITION RATHER THAN A BLEND.
+ *
+ * §9 asks for dimensions that stay distinct and interpretable, and the tempting
+ * repair — weight `experienceSignificance` into `fit.score` as a tenth factor —
+ * was measured and refused: the nine match factors occupy 0.75–1.0 for anything
+ * worth showing while significance occupies 0.12–0.76 on real records, so
+ * averaging the two deflates every compiled candidate and costs a planned day a
+ * stop. `significance-is-not-fit` in `fit.test.ts` fails if anyone tries it.
+ *
+ * So the two are composed *here*, where ordering happens, in one lexicographic
+ * rule:
+ *
+ *   1. **The band**, which is the verdict the traveller is actually shown.
+ *   2. **Significance and fit together**, inside that band.
+ *   3. The id, so the board never reshuffles between two renders.
+ *
+ * Putting the band first is what makes this safe, and it is the guard against
+ * the failure this change could otherwise create. No amount of standing lifts a
+ * card above one the scorer rates higher: a famous place that does not suit this
+ * traveller still loses, structurally rather than by choice of weight. It also
+ * ends a second contradiction for free — the fit scorer's own evidence cap now
+ * decides position as well as label, so a card that reads "Good fit" can no
+ * longer sit above one that reads "Strong fit".
+ */
+
+/**
+ * How much of the within-band key significance may move.
+ *
+ * Generous on purpose. Inside one band the remaining difference in `fit.score`
+ * is below the resolution the product claims for it — `FIT_BAND_METER` is
+ * documented "deliberately coarse — the underlying score is not that precise" —
+ * so ordering ties in the coarse verdict by how much each place matters is the
+ * whole point rather than a nudge. Fit stays in the key underneath, which is
+ * what separates two places of equal standing.
+ */
+export const SIGNIFICANCE_ORDERING_SHARE = 0.3;
+
+/**
+ * The point on the 0–1 scale that neither lifts a card nor drops one.
+ *
+ * The scale's own midpoint rather than any pack's median, so this does not have
+ * to be recalibrated against whatever was last compiled.
+ */
+export const NEUTRAL_SIGNIFICANCE = 0.5;
+
+/**
+ * THE RESOLUTION SIGNIFICANCE IS ALLOWED TO CLAIM.
+ *
+ * A tenth, and the coarseness is the point. The composed figure is a category
+ * prior plus a unioned evidence channel; on live packs it lands on values a
+ * hundredth apart — 0.59 against 0.60 — that carry no information whatsoever
+ * about which place a traveller would rather see. Ordering on a difference that
+ * small is §8.3's metadata heuristic wearing a decimal point: it reshuffles a
+ * board on arithmetic nobody could defend to the person reading it, and the
+ * §29 B evaluation caught it doing exactly that, demoting the region's most
+ * established place two positions past a feature 0.01 above it.
+ *
+ * So the lean is quantised before it is spent. Two places whose significance
+ * differs by less than a step order by fit and then by id, exactly as they did
+ * before this existed; a step apart is a real difference and is acted on. The
+ * same reasoning `expectCrowd` states for using bands rather than a scale, and
+ * the same reasoning `FIT_BAND_METER` states for being deliberately coarse.
+ */
+export const SIGNIFICANCE_STEP = 0.1;
+
+/**
+ * How far this place sits from the middle of the significance scale, or nothing.
+ *
+ * `null` is load-bearing and must never become a zero-valued *score*: an
+ * authored region carries no `experienceSignificance` at all, and reading that
+ * absence as "this place does not matter" would push every hand-curated place
+ * to the bottom of its band on the strength of a field nobody filled in. It
+ * reads instead as no opinion — a board where nothing carries the field orders
+ * exactly as it did before this existed.
+ *
+ * Exported because auto-pick reads the same lean against its own share. One
+ * definition of the dimension, two callers, so the board and the pre-selection
+ * cannot come to different views of which place matters more.
+ */
+export function significanceLean(place: Pick<Place, 'experienceSignificance'>): number | null {
+  const value = place.experienceSignificance;
+  if (value === undefined) return null;
+  const steps = Math.round(Math.min(1, Math.max(0, value)) / SIGNIFICANCE_STEP);
+  return steps * SIGNIFICANCE_STEP - NEUTRAL_SIGNIFICANCE;
+}
+
+/**
+ * WHICH WAY "HOW MUCH EACH PLACE MATTERS" LEANS FOR *THIS* TRAVELLER.
+ *
+ * The within-band significance lift existed to order fit-ties toward the
+ * established, and it was worth the same +`SIGNIFICANCE_ORDERING_SHARE · lean`
+ * to every traveller — including the one who had just answered "mostly hidden
+ * gems". The §29 B evaluation caught the consequence on a compiled board: a
+ * hidden-leaning preference dropped the most established place's *score*, and
+ * its *rank* did not move, because the preference-driven fit delta was smaller
+ * than the preference-blind ordering lift holding the card at the head of its
+ * band. §29 B's guarantee is that famous sights can be deprioritised by
+ * preference — ranking, not just scoring — so the lift's direction now follows
+ * the traveller's own discovery answer.
+ *
+ * The pivot is the scale's midpoint, matching `NEUTRAL_SIGNIFICANCE`'s own
+ * rationale: a `hiddenGemTarget` above 0.5 is a traveller who asked for the
+ * finds, and among places their fit cannot separate, the *less* established
+ * one reads first — the same magnitude, leaning the other way. At or below the
+ * midpoint (classics-minded and balanced alike) the order is exactly what it
+ * has always been. A step function rather than a slope for the reason
+ * `SIGNIFICANCE_STEP` is a step: the answer behind the number is a four-rung
+ * choice, and a continuous multiplier would order boards on distinctions the
+ * questionnaire cannot express.
+ */
+export function establishedOrderingLean(
+  profile: Pick<TravelerProfile, 'derived'>,
+): 1 | -1 {
+  return profile.derived.hiddenGemTarget > NEUTRAL_SIGNIFICANCE ? -1 : 1;
+}
+
+/**
+ * WHAT AN UNTIMED JOURNEY COSTS THE ORDER, AND WHY IT IS EXACTLY THIS MUCH.
+ *
+ * §9.1 asks that a top pick mean something. On the stored post-fix Tokyo board —
+ * car-free, road matrix by substitution, no transit provider — the two cards at
+ * the head of the list were both journeys nobody could establish, while the two
+ * stops the traveller could walk to in nineteen and twenty-four minutes sat
+ * third and fourth. Nothing about the ranking was arbitrary: the fit scorer
+ * cannot see reach, so the order was decided entirely by terms that are blind to
+ * whether the traveller can get there.
+ *
+ * The cost is `SIGNIFICANCE_ORDERING_SHARE / 2` — the most that local standing
+ * can ever move a card — so the rule states in one sentence: *being somewhere we
+ * can get you is worth as much as being the best-known place in the region, and
+ * no more.* Two dimensions the traveller can weigh against each other, neither
+ * able to swamp the other.
+ *
+ * Three things it deliberately is not:
+ *
+ *   - **not a verdict.** `worthDetourLabel` still refuses to call an unmeasured
+ *     journey far, `classifyDetour` still refuses to call it too far, and the
+ *     card keeps its band, its badges and its place on the board. This decides
+ *     which of two cards the traveller reads first, nothing else.
+ *   - **not a band change.** The band leads the comparator and normalises ahead
+ *     of this in `boardPriorityOf`, so no amount of reach lifts a card over one
+ *     the scorer rates higher — the same structural guarantee significance gets.
+ *   - **not a charge on distance.** A measured two-hour journey pays nothing
+ *     here. The question is whether anybody established the journey at all.
+ */
+export const UNVERIFIED_REACH_ORDERING_COST = SIGNIFICANCE_ORDERING_SHARE / 2;
+
+export interface BoardOrdering {
+  /**
+   * The band's rank, from `FIT_BAND_METER`. Higher is better, and it is total.
+   *
+   * Read from the meter rather than from a list declared here so that a band
+   * added to the scorer gets an ordering without anybody remembering to come
+   * back. It also subsumes the "unworkable sorts last" rule the sort used to
+   * carry as a special case: `not_workable` is the bottom of that meter.
+   */
+  bandRank: number;
+  /** 0–1. `fit.score` on the scale every term here is expressed in. */
+  fitShare: number;
+  /** The recorded 0–1 significance, or `null` where nothing established one. */
+  significance: number | null;
+  /** What that is worth to the order. Exactly 0 where significance is absent. */
+  significanceLift: number;
+  /**
+   * What an unestablished journey costs, as a non-positive number.
+   *
+   * Exactly 0 for a card at the base, for a card with a resolved journey, and
+   * for a caller that did not say — an absent reach is "we were not told",
+   * which leans neither way, exactly as an absent significance does.
+   */
+  reachLift: number;
+  /**
+   * `fitShare + significanceLift + reachLift`. Only ever compared inside one
+   * band.
+   */
+  withinBand: number;
+}
+
+/**
+ * THE WITHIN-BAND KEY IS QUANTISED, AND IT IS ABOUT BINARY FLOATS, NOT TASTE.
+ *
+ * `fitShare` is an integer score over a hundred and `significanceLift` is an
+ * already-quantised lean times a constant, so in exact arithmetic every
+ * `withinBand` on a board is a clean multiple of a hundredth. In binary they are
+ * not: on the stored Tokyo artifact `0.81 + 0.03` came out `0.8400000000000001`
+ * and outranked a card whose `0.84` was exact — a real position on a real board
+ * decided by the last bit of a double.
+ *
+ * That would be untidy on its own. What makes it a defect is the planner: it
+ * sorts on a scalar, so `boardPriorityOf` folds these two terms into one number,
+ * and a difference of one part in 10^16 does not survive the fold. The
+ * comparator would then act on a distinction the scalar cannot see, and the trip
+ * would come out in a different order from the board — the exact disagreement
+ * this section exists to end, reintroduced by arithmetic.
+ *
+ * A millionth is far finer than either term can express, so this removes the
+ * representation error and nothing else.
+ */
+const ORDERING_QUANTUM = 1e-6;
+
+export function boardOrderingOf(input: {
+  place: Place;
+  fit: FitAssessment;
+  /**
+   * The journey this card is an answer about, where the caller has one.
+   *
+   * Optional so that every existing caller keeps compiling and keeps its exact
+   * order — and because the absence is meaningful in the same way
+   * `experienceSignificance`'s is. A caller that does not pass a reach has not
+   * said the journey is unknown; it has said nothing, and nothing costs nothing.
+   * `buildDiscoveryBoard` and the planner both pass the whole candidate, so the
+   * two surfaces that have to agree do agree by construction.
+   */
+  reach?: ReachFromBase;
+  /** `base` exempts a card: there is no journey from the bed to the bed. */
+  detourClass?: DetourClass;
+  /**
+   * Which way the lift leans for this traveller — `establishedOrderingLean`.
+   *
+   * Optional, defaulting to the established-first direction every caller has
+   * always had, so a caller that says nothing keeps its exact order. The two
+   * surfaces that must agree — the board and the planner's priority — both
+   * derive it from the same profile through the same function.
+   */
+  establishedLean?: 1 | -1;
+}): BoardOrdering {
+  const lean = significanceLean(input.place);
+  const fitShare = input.fit.score / 100;
+  const significanceLift =
+    SIGNIFICANCE_ORDERING_SHARE * (lean ?? 0) * (input.establishedLean ?? 1);
+  const reachLift =
+    input.reach !== undefined &&
+    input.detourClass !== 'base' &&
+    input.reach.status !== 'measured'
+      ? -UNVERIFIED_REACH_ORDERING_COST
+      : 0;
+  return {
+    bandRank: FIT_BAND_METER[input.fit.band],
+    fitShare,
+    significance: input.place.experienceSignificance ?? null,
+    significanceLift,
+    reachLift,
+    withinBand:
+      Math.round((fitShare + significanceLift + reachLift) / ORDERING_QUANTUM) * ORDERING_QUANTUM,
+  };
+}
+
+/** The board's order, as a comparator, so every reader of it agrees. */
+export function compareBoardOrder(a: DiscoveryCandidate, b: DiscoveryCandidate): number {
+  return (
+    b.ordering.bandRank - a.ordering.bandRank ||
+    b.ordering.withinBand - a.ordering.withinBand ||
+    a.place.id.localeCompare(b.place.id)
+  );
+}
+
+/** Rungs on the band meter, counting `not_workable`. Read, never assumed. */
+const BAND_RUNGS = Math.max(...Object.values(FIT_BAND_METER)) + 1;
+
+/**
+ * How far below zero `withinBand` can fall: the significance lean at its most
+ * negative, plus the whole of the untimed-journey cost.
+ *
+ * Derived rather than written down, because the normalisation below has to
+ * agree with the terms exactly. A hand-kept constant that fell behind a third
+ * term would clamp a real card to zero and silently flatten the bottom of every
+ * band into one value.
+ */
+const WITHIN_BAND_FLOOR = SIGNIFICANCE_ORDERING_SHARE / 2 + UNVERIFIED_REACH_ORDERING_COST;
+
+/**
+ * The full width `withinBand` can occupy: one whole fit, plus the lean upward,
+ * plus everything below zero. Named so that widening any ordering term cannot
+ * silently let a within-band difference reach across a band boundary.
+ */
+const WITHIN_BAND_WIDTH = 1 + SIGNIFICANCE_ORDERING_SHARE / 2 + WITHIN_BAND_FLOOR;
+
+/**
+ * THE SAME ORDER, AS ONE NUMBER, FOR THE READER THAT CANNOT TAKE A COMPARATOR.
+ *
+ * `compareBoardOrder` is the authority and the planner cannot use it: a planning
+ * queue carries a scalar `priority`, sorted and re-sorted in five places, and
+ * offset by the band the traveller's own choice puts a place in. So the board's
+ * two terms are composed into one figure here — once, beside the comparator they
+ * come from — rather than half-copied into `packages/planner/src/candidates.ts`,
+ * which is what that file did: `base + candidate.fit.score`, so inside a
+ * priority band the plan ordered by match alone while the board ordered by band
+ * and then by how much each place matters. Two orders, one traveller, and the
+ * trip disagreed with the board it was built from.
+ *
+ * Two properties, and both are load-bearing:
+ *
+ *   - **It agrees with the comparator, exactly.** `withinBand` is normalised
+ *     against its own full width before it is added, so no amount of standing
+ *     can lift a card over one the scorer bands higher — the same structural
+ *     guarantee `compareBoardOrder` gets from lexicographic ordering, bought
+ *     here arithmetically because a scalar has no second key.
+ *   - **It stays on `fit.score`'s scale.** 0–100, deliberately, because the
+ *     planner adds this to selection-band offsets a thousand apart and because
+ *     `plan.ts` and `edit.ts` promote a pinned place with `10_000 + fitScore`.
+ *     A term on any other scale would quietly reorder pinned places against
+ *     unpinned ones from two files this change does not touch.
+ */
+export function boardPriorityOf(ordering: BoardOrdering): number {
+  const within = Math.min(
+    1,
+    Math.max(0, (ordering.withinBand + WITHIN_BAND_FLOOR) / WITHIN_BAND_WIDTH),
+  );
+  return ((ordering.bandRank + within) / BAND_RUNGS) * 100;
+}
+
+// ---------------------------------------------------------------------------
+// Which heading a card sits under, and how much of the board one may hold
+// ---------------------------------------------------------------------------
+
+/**
+ * THE LARGEST SHARE OF A BOARD ONE HEADING MAY HOLD BEFORE IT STOPS GROUPING.
+ *
+ * §10.2 asks for traveller-friendly groups that mean something. A group means
+ * something by *dividing* — and a live Tokyo board had 13 of its 24 cards under
+ * "Rainy days and easy days", because `groupsFor` files anything sheltered and
+ * easy-going there and in a dense city almost everything is both. A metropolis
+ * read as a shelf of rainy-day reserves. Nothing about any individual card was
+ * wrong; the heading simply carried no information, in the same way §9.1's
+ * twenty-four "Top pick" labels carried none.
+ *
+ * So the guard is the same guard, one layer along from `MAX_TOP_BAND_SHARE`,
+ * and the share is lower for a reason rather than by taste. A label is a verdict
+ * each card earns on its own, so most of a board may honestly share one; a group
+ * is a *partition*, and with three or more headings in play a third is already
+ * the most any one of them can hold and still be a part rather than the whole.
+ *
+ * What it does **not** do is invent a distinction the data does not support.
+ * Over the cap, the lowest-ordered members move to the heading they would have
+ * had otherwise — which is a claim their card already supports — and the cards
+ * that keep the heading are the ones the board ranks highest, so the reserve
+ * shelf holds the best reserves rather than an arbitrary eight.
+ *
+ * And it is bounded by honesty rather than applied blindly. A heading only sheds
+ * where the card underneath it has a *second true* heading to move to, which
+ * `groupsFor` declares per card; the verdict groups and the residual distance
+ * groups declare none and keep everything they hold. So this cannot promise that
+ * no heading ever dominates — a destination where most places genuinely cannot
+ * be verified will say so on most of its cards, and should. What it promises is
+ * that no heading dominates a board *while a truer one was available*.
+ */
+export const MAX_BOARD_GROUP_SHARE = 1 / 3;
+
+/**
+ * A group has to be over the share *and* hold more than a few cards.
+ *
+ * The same floor `SHARED_MIN_CARDS` uses one layer up in
+ * `apps/web/src/components/BoardCopy.ts`, and for the same reason: on a board of
+ * six, three cards under one heading is a group and not a takeover, and a bare
+ * share test would shred small boards into headings of two.
+ */
+export const MIN_CARDS_TO_SWALLOW_A_BOARD = 3;
+
+/**
+ * A card, and the headings it could honestly sit under, best first.
+ *
+ * A single-entry list is the load-bearing case: it says this card has **no**
+ * second true heading, so the guard may never move it. That is how the two
+ * verdict groups — "Probably skip" and "Worth checking first" — stay honest on a
+ * board where most cards genuinely are one or the other, and it is how the
+ * residual distance groups avoid being demoted into a claim about shelter that
+ * nobody established.
+ */
+export interface BoardGroupChoice {
+  id: string;
+  groups: readonly BoardGroup[];
+}
+
+/**
+ * Settle every card into one heading, with no heading swallowing the board.
+ *
+ * `choices` arrives in board order, and that is what decides who moves: the
+ * excess comes off the tail, so a demotion is always of the cards the board
+ * itself ranks lowest. Deterministic, and a group with nothing movable in it
+ * keeps every card it has — an honest over-full group beats a dishonest tidy one.
+ */
+export function calibrateBoardGroups(
+  choices: readonly BoardGroupChoice[],
+): Map<string, BoardGroup> {
+  const assigned = new Map(choices.map((choice) => [choice.id, choice.groups[0]!]));
+  if (choices.length === 0) return assigned;
+
+  const cap = Math.max(
+    MIN_CARDS_TO_SWALLOW_A_BOARD,
+    Math.floor(choices.length * MAX_BOARD_GROUP_SHARE),
+  );
+
+  /*
+   * Holders are re-read per group rather than counted once, exactly as the band
+   * calibration re-reads its own: a group that has just received an overflow is
+   * a different group, and deciding from a stale count is how a fix for one
+   * heading creates the same defect in the one below it.
+   */
+  for (const group of BOARD_GROUPS) {
+    const holders = choices.filter((choice) => assigned.get(choice.id) === group);
+    if (holders.length <= cap) continue;
+    const movable = holders.filter((choice) => nextGroup(choice, group) !== group);
+    for (const choice of movable.slice(-(holders.length - cap))) {
+      assigned.set(choice.id, nextGroup(choice, group));
+    }
+  }
+
+  return assigned;
+}
+
+/** The next heading down this card's own list, or the same one where none is left. */
+function nextGroup(choice: BoardGroupChoice, current: BoardGroup): BoardGroup {
+  const at = choice.groups.indexOf(current);
+  return at < 0 ? current : (choice.groups[at + 1] ?? current);
+}
+
 export interface DiscoveryBoard {
   expansion: RegionExpansion;
   candidates: DiscoveryCandidate[];
@@ -328,6 +783,17 @@ export interface DiscoveryBoard {
    * different product from a board of six.
    */
   integrity: BoardIntegrity;
+  /**
+   * Whether every walking figure on this board is standing in for a scheduled
+   * journey nobody could time — `scheduledTransportUnmeasured`, asked of this
+   * board's own travel knowledge.
+   *
+   * Carried out of the board because the pre-selection has to bound a walk the
+   * same way the classifier and the planner do, and it is handed candidates
+   * rather than knowledge. A fact about the destination's evidence, so it sits
+   * on the board rather than on a card.
+   */
+  transitUnmeasured: boolean;
 }
 
 export interface BuildBoardInput {
@@ -368,6 +834,14 @@ export interface BuildBoardInput {
     baseId: string;
     /** Every base the trip sleeps at, for a multi-base trip. See `ExpansionInput`. */
     baseIds?: readonly string[];
+    /**
+     * Whether the destination's own evidence records a scheduled network —
+     * see `ScheduledNetworkPresence` in the reach module. Optional, and the
+     * absence is "nobody said": every caller written before the observation
+     * existed keeps its exact board. It is a fact about the ground, supplied
+     * by whoever read the destination evidence, never inferred here.
+     */
+    scheduledNetwork?: ScheduledNetworkPresence | null;
   };
 }
 
@@ -391,7 +865,21 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
    * not decide which modes this traveller may board and does not read a
    * timetable; it asks, and everything below reads the answer.
    */
-  const knowledge = travelKnowledgeFor(travel.matrix, profile, travel.transit);
+  const knowledge = travelKnowledgeFor(
+    travel.matrix,
+    profile,
+    travel.transit,
+    travel.scheduledNetwork,
+  );
+  /*
+   * Whether a walking figure on this board is a walk or a stand-in for the
+   * scheduled journey nobody could time, asked once from the same predicate the
+   * detour classifier and the planner's walking cap read. Carried out on the
+   * board because the pre-selection has to bound such a walk exactly as the
+   * planner will and is handed candidates rather than knowledge. See
+   * `scheduledTransportUnmeasured`.
+   */
+  const transitUnmeasured = scheduledTransportUnmeasured(knowledge);
 
   /*
    * The role gate runs before the expansion, not after.
@@ -463,7 +951,15 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
   const rawFits = assessments.map((assessment) => scorePlace(assessment, { profile, travelerNeeds }));
   const calibrated = calibrateBandDistribution(rawFits);
 
-  const candidates: DiscoveryCandidate[] = assessments
+  /**
+   * Each card's own heading preferences, kept beside the cards rather than on
+   * them: they are an input to the board-wide settlement below and mean nothing
+   * once it has run, and a card carrying both its preferences and its answer
+   * would give two readers two ways to ask the same question.
+   */
+  const groupChoices = new Map<string, readonly BoardGroup[]>();
+
+  const ranked: DiscoveryCandidate[] = assessments
     .map((assessment, index) => {
       const fit = calibrated[index]!;
       const placeEvidence = evidenceFor(evidence, assessment.place.id);
@@ -491,11 +987,20 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
          * An unresolved journey passes no minutes at all. The quality layer
          * treats that as "no distance verdict available" rather than as a zero,
          * because a zero would make every unroutable place look adjacent.
+         *
+         * A journey *classed* unknown passes none either, and the two cases
+         * are one rule: `unknown` means no distance verdict can honestly be
+         * passed. The second case is the transit-blind walk — a measured
+         * walking figure on a trip whose scheduled modes nobody could time —
+         * and handing quality those minutes would let it re-derive from raw
+         * arithmetic the exact "past how far you said you would go" skip
+         * verdict the classifier just declined to pass. The walk itself stays
+         * on the card via `travelMinutesFromBase`, as a walk.
          */
-        ...(assessment.travelMinutesFromBase === null
+        ...(assessment.travelMinutesFromBase === null || assessment.detourClass === 'unknown'
           ? {}
           : { detourMinutes: assessment.travelMinutesFromBase }),
-        ...(assessment.travelModeFromBase === null
+        ...(assessment.travelModeFromBase === null || assessment.detourClass === 'unknown'
           ? {}
           : { detourMode: assessment.travelModeFromBase }),
         categoryCount: seen,
@@ -508,12 +1013,35 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
           profile,
           assessment.travelModeFromBase ?? 'drive',
         ),
+        /*
+         * Only this layer holds the fact, so only this layer can supply it: the
+         * one measured journey is a walk, and it is standing in for a scheduled
+         * route nobody could time. Without it the skip sentence is built from
+         * the two things that are untrue about such a journey — a walking clock
+         * for a ride, and "you said" for an answer that ruled nothing out.
+         */
+        journeyUnverified: transitUnmeasured && assessment.travelModeFromBase === 'walk',
       });
+      const groups = groupsFor(
+        assessment.place,
+        fit.band,
+        quality.outcome,
+        quality.reasonBasis,
+        assessment.detourClass,
+      );
+      groupChoices.set(assessment.place.id, groups);
       return {
         place: assessment.place,
         fit,
         ...(placeEvidence ? { evidence: placeEvidence } : {}),
         quality,
+        ordering: boardOrderingOf({
+          place: assessment.place,
+          fit,
+          reach: assessment.reach,
+          detourClass: assessment.detourClass,
+          establishedLean: establishedOrderingLean(profile),
+        }),
         detourClass: assessment.detourClass,
         travelMinutesFromBase: assessment.travelMinutesFromBase,
         travelModeFromBase: assessment.travelModeFromBase,
@@ -530,61 +1058,101 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
           daylightOnly: assessment.operating.daylightOnly,
         }),
         worthDetour: worthDetourLabel(assessment.detourClass, fit.band),
-        group: groupFor(assessment.place, fit.band, quality.outcome, assessment.detourClass),
+        group: groups[0]!,
       };
     })
-    // Anything you cannot actually do sorts below everything you can, however
-    // well it scored on paper. Then highest fit first, with id as a stable
-    // tiebreak so the board never reshuffles between renders.
-    .sort(
-      (a, b) =>
-        Number(a.fit.band === 'not_workable') - Number(b.fit.band === 'not_workable') ||
-        b.fit.score - a.fit.score ||
-        a.place.id.localeCompare(b.place.id),
-    );
+    /*
+     * The band the traveller is shown, then how much each place matters, then
+     * how well it suits them. See `compareBoardOrder`: anything unworkable is
+     * the bottom of the meter and still sorts below everything you can do.
+     */
+    .sort(compareBoardOrder);
+
+  /*
+   * Headings are settled *after* the sort, because the guard on a group's share
+   * spends the board's own order: over the cap, the cards it ranks lowest are
+   * the ones that move. Ordering first is what makes that sentence true.
+   */
+  const settled = calibrateBoardGroups(
+    ranked.map((candidate) => ({
+      id: candidate.place.id,
+      groups: groupChoices.get(candidate.place.id) ?? [candidate.group],
+    })),
+  );
+  const candidates: DiscoveryCandidate[] = ranked.map((candidate) => ({
+    ...candidate,
+    group: settled.get(candidate.place.id) ?? candidate.group,
+  }));
 
   const groups = BOARD_GROUPS.map((group) => ({
     group,
     candidates: candidates.filter((candidate) => candidate.group === group),
   })).filter((entry) => entry.candidates.length > 0);
 
-  return { expansion, candidates, groups, integrity };
+  return { expansion, candidates, groups, integrity, transitUnmeasured };
 }
 
 /**
- * Each candidate lands in exactly one group. The order of these checks is the
- * priority: a weak fit is called out as such no matter how famous it is, and a
- * genuine hidden gem is never buried under the classics.
+ * Every heading this candidate could honestly sit under, best first.
+ *
+ * The order of these checks is the editorial priority: a weak fit is called out
+ * as such no matter how famous it is, and a genuine hidden gem is never buried
+ * under the classics.
+ *
+ * WHY THIS RETURNS A LIST RATHER THAN A HEADING.
+ *
+ * It used to return one, and the first branch that matched was final — which is
+ * how "Rainy days and easy days" came to hold 13 of a live Tokyo board's 24
+ * cards: the shelter-and-effort test is checked before the two distance groups,
+ * and in a dense city almost everything is indoors and easy going. The rule was
+ * right about each card and useless across all of them.
+ *
+ * A list separates the two questions that were tangled together. *Which heading
+ * suits this card best* is decided here, per card, from the place. *Whether that
+ * heading is still saying anything* is a property of the whole board and is
+ * decided by `calibrateBoardGroups`, which needs somewhere true to move a card
+ * to — and this is where that second truth is stated. A single-entry list means
+ * there is no second true heading and the card must not be moved.
  */
-function groupFor(
+function groupsFor(
   place: Place,
   band: FitAssessment['band'],
   outcome: CandidateOutcome,
+  /** Which of the three claims the quality layer's sentence makes. */
+  reasonBasis: ReasonBasis,
   /**
    * How far out this is *for this traveller*, in the mode they would make the
    * journey in. Read by the two groups whose headings talk about distance.
    */
   detourClass: DetourClass,
-): BoardGroup {
-  if (band === 'not_workable' || band === 'weak') return 'weak_fit';
+): readonly BoardGroup[] {
   /**
-   * Evidence outcomes that override the fit-based grouping, and only these two.
+   * Evidence outcomes go under the evidence heading, whatever the band says.
    *
-   * Everything else the quality layer decides is already expressible as fit or
-   * as a badge; these two are not, because they are statements about *our*
+   * This tested the band first and sent every `weak` card to `weak_fit`, then
+   * routed only `low_confidence` to `needs_verification` — while its own
+   * comment named the reason the split exists ("statements about *our*
    * knowledge rather than about the place, and a traveller acts on them
-   * differently.
+   * differently"). `insufficient_evidence` and the unpriced-journey form of
+   * `not_worth_detour` are the same kind of statement and were going to the
+   * other heading, so "Probably skip · a poor match for this trip" stood over
+   * "Too little is published about this" and over "we could not confirm any
+   * route here". Both sentences say we did not check; neither says we weighed
+   * it and it lost.
+   *
+   * `reasonBasis` decides it rather than the outcome list, so the heading a
+   * card lands under and the sentence printed on it are two readings of one
+   * value and cannot come apart again.
+   *
+   * Still a verdict with no fallback, on purpose. A board where most places
+   * genuinely cannot be verified must say so on most of its cards; moving the
+   * excess under a cheerful heading to flatten a distribution would trade a
+   * dull board for a dishonest one.
    */
-  if (outcome === 'insufficient_evidence' || outcome === 'not_worth_detour') return 'weak_fit';
-  if (outcome === 'low_confidence') return 'needs_verification';
-  if (place.hiddenGemScore >= 0.6) return 'hidden_gems';
-  if (place.popularityScore >= 0.7) return 'must_see_classics';
-  if (
-    place.weather.poorWeatherBackup &&
-    (place.physicalIntensity === 'none' || place.physicalIntensity === 'easy')
-  ) {
-    return 'low_effort_backups';
-  }
+  if (reasonBasis === 'evidence_gap') return ['needs_verification'];
+  if (band === 'not_workable' || band === 'weak') return ['weak_fit'];
+  if (outcome === 'not_worth_detour') return ['weak_fit'];
+
   /**
    * THE LAST TWO GROUPS ARE ABOUT DISTANCE, SO THEY ARE DECIDED BY DISTANCE.
    *
@@ -602,9 +1170,69 @@ function groupFor(
    * exactly the population the further-out heading describes. An unmeasured
    * journey is not evidence of distance in either direction and stays with the
    * near group, whose heading no longer claims one.
+   *
+   * Distance is also the one thing known about every card, which is what makes
+   * it the fallback below.
    */
-  if (detourClass === 'stretch' || detourClass === 'too_far') return 'scenic_detours';
-  return 'nearby_side_quests';
+  const byDistance: BoardGroup =
+    detourClass === 'stretch' || detourClass === 'too_far' ? 'scenic_detours' : 'nearby_side_quests';
+
+  /*
+   * WHICH HEADINGS HAVE A SECOND TRUE ONE UNDER THEM, AND WHICH DO NOT.
+   *
+   * Only the reserve shelf does, and the asymmetry is a fact about the copy
+   * rather than a preference about distributions. "Easy wins · smaller stops
+   * that slot into a day rather than reshaping it" is true of anything the
+   * backup branch admits — the branch tests for `none` or `easy` going, which is
+   * what a small stop *is* — and it is flatly false of a must-see classic, which
+   * is the stop a day is built around. Demoting a classic to flatten a
+   * distribution would produce exactly the heading-contradicts-contents failure
+   * the distance split above exists to end.
+   *
+   * So a gem and a classic say one thing and say it however much of the board
+   * agrees: a destination that really is mostly quiet finds should read that way.
+   * The reserve shelf is the one heading that makes a claim about the *trip* —
+   * hold this back for when the weather turns — and the one a board can
+   * therefore be wrong about as a whole.
+   */
+  if (place.hiddenGemScore >= 0.6) return ['hidden_gems'];
+  /*
+   * A classics seat requires standing the evidence actually bought, and the
+   * whole of that condition lives in `standsAsEstablishedName` — the same
+   * function the fit scorer's "one of the established names here" line reads,
+   * because the heading and the caption assert the same thing and two copies
+   * of one rule are two rules. It refuses a bounded standing, a prominence
+   * below the widely-noted bar, and a prominence nothing pointing at the place
+   * ever established.
+   *
+   * That third refusal used to be "no observed `globalProminence`", and the
+   * delivered boards showed what it actually selected for: it is true of a ward
+   * park whose catalogue row a mapper linked and false of the destination's
+   * principal temple, so "Classics worth your time — the well-known ones"
+   * rendered **empty on both metro boards**, and on the third it rendered over
+   * exactly one card, a suburban pond, while the destination's famous sites sat
+   * elsewhere on the same board. It now turns on `prominenceBasis`, so a
+   * standing that was withheld and independently established qualifies and a
+   * standing that was merely substituted does not.
+   *
+   * A refused card keeps its seat and falls through to the groups whose
+   * headings it can honestly stand under; if no card earns the heading, the
+   * group holds nothing and `buildDiscoveryBoard` drops it — the filter on
+   * `candidates.length > 0` where the groups are assembled — which is the same
+   * "never render an empty group" rule every other heading follows. Famous is
+   * not mandatory, so a board with no classics is a true board, not a broken
+   * one.
+   */
+  if (standsAsEstablishedName(place)) {
+    return ['must_see_classics'];
+  }
+  if (
+    place.weather.poorWeatherBackup &&
+    (place.physicalIntensity === 'none' || place.physicalIntensity === 'easy')
+  ) {
+    return ['low_effort_backups', byDistance];
+  }
+  return [byDistance];
 }
 
 // ---------------------------------------------------------------------------

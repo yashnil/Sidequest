@@ -246,7 +246,23 @@ export default defineConfig({
     // budget switch is read from the environment. Pinned here as well as
     // defaulted in code, so that a future change to the default cannot make a
     // browser run reach a model.
-    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} ANTHROPIC_API_KEY= SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
+    // The action fences stand down, for the eighth time and a reason with a
+    // different shape: the suite drives hundreds of synthetic journeys through
+    // one address in minutes, which is — by the fences' own definition — the
+    // loop they exist to refuse. Left up, they refuse a different dozen tests
+    // each run; sized to fit, they would refuse nobody real. The fences keep
+    // their named unit tests, where the rules are exercised explicitly.
+    // And the `Secure` attribute off the ownership cookie, which is the one pin
+    // here that is not about money. `npm run start` is `next start`, which is
+    // NODE_ENV=production, and this suite drives it over `http://127.0.0.1` —
+    // so the attribute the deployment must carry would be set on a plaintext
+    // origin, where whether the cookie is stored at all comes down to a
+    // browser's loopback-is-trustworthy policy rather than to anything in this
+    // repository. Every journey here creates a trip and then opens it, and trip
+    // ownership *is* that cookie, so a policy change in Chromium would take the
+    // whole suite red for a reason no failure message would name. Pinned rather
+    // than left to luck; see `secureCookiesEnabled` in lib/net/caller.ts.
+    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

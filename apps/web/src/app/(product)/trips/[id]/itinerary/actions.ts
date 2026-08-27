@@ -14,14 +14,26 @@ import {
 import { type BuildResult, buildItinerary, plannerInputForTrip } from '@/lib/planning/build';
 import {
   clearItineraryLock,
+  ensureShareToken,
   getItinerary,
   getTrip,
   saveItinerary,
   setItineraryLock,
   setSelection,
+  tripOwnerToken,
 } from '@/lib/db/repository';
+import { sessionToken } from '@/lib/net/caller';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 export type { BuildResult } from '@/lib/planning/build';
+
+/*
+ * Every action in this file edits or rebuilds somebody's plan, so every one
+ * starts with the same question `deleteTripAction` and `createShareLinkAction`
+ * already ask: does the asking browser own this trip? The check lives in
+ * `lib/net/trip-access`; the read-only /share/<token> view is the one door
+ * that stays open without it.
+ */
 
 /**
  * Builds and stores the itinerary, then navigates to it.
@@ -33,6 +45,9 @@ export type { BuildResult } from '@/lib/planning/build';
  * was not.
  */
 export async function buildItineraryAction(tripId: string): Promise<BuildResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+
   const result = await buildItinerary(tripId);
   if (!result.ok) return result;
 
@@ -74,6 +89,11 @@ async function editContext(
   | { ok: true; input: PlannerInput; itinerary: Itinerary }
   | { ok: false; error: string }
 > {
+  // The one seam all four edit actions share, so the owner check cannot be
+  // forgotten by the next edit verb somebody adds to this file.
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+
   const assembled = await plannerInputForTrip(tripId);
   if (!assembled.ok) return { ok: false, error: assembled.error };
   let itinerary;
@@ -165,6 +185,47 @@ export async function easeDayAction(tripId: string, dayNumber: number): Promise<
   return persistEdit(tripId, easeDay(context.input, context.itinerary, dayNumber));
 }
 
+export interface ShareLinkResult {
+  ok: boolean;
+  error?: string;
+  /** The share path — `/share/<token>` — for the client to complete with its origin. */
+  path?: string;
+}
+
+/**
+ * ONLY THE BROWSER THAT MADE A TRIP MAY PUT IT ON A PUBLIC LINK.
+ *
+ * The same rule, boundary and refusal as `deleteTripAction`, because minting a
+ * share link is the other irreversible thing a trip id must not be enough for:
+ * this phase ships no revocation, so a link minted for the wrong caller is a
+ * permanent public copy of somebody's holiday. A trip with no owner is refused
+ * too, and `mint: false` for the same reason as deletion — a request about to
+ * be refused should leave nothing behind, not even a cookie.
+ *
+ * Idempotent by construction: the token is minted once and every later press
+ * returns the link already in circulation, so sharing twice cannot quietly
+ * break the copy a friend already has.
+ */
+export async function createShareLinkAction(tripId: string): Promise<ShareLinkResult> {
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+
+  const owner = tripOwnerToken(tripId);
+  const asking = await sessionToken({ mint: false });
+  if (!owner || !asking || owner !== asking) {
+    return {
+      ok: false,
+      error: 'This trip was made in a different browser, so only that browser can share it.',
+    };
+  }
+
+  const token = ensureShareToken(tripId);
+  if (!token) {
+    return { ok: false, error: 'We could not make a link just then. Nothing was lost — try again.' };
+  }
+  return { ok: true, path: `/share/${token}` };
+}
+
 /**
  * A lock is persistence plus a promise, not a replan: the plan already has the
  * stop where the traveller wants it. The next rebuild reads the pin.
@@ -177,6 +238,8 @@ export async function toggleLockAction(
 ): Promise<EditActionResult> {
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   if (locked) setItineraryLock(tripId, placeId, dayNumber);
   else clearItineraryLock(tripId, placeId);
   revalidatePath(`/trips/${tripId}/itinerary`);

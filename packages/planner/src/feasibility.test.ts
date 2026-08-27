@@ -30,6 +30,7 @@ function candidate(
   return {
     place: { ...place, id, name: `Place ${id}` },
     priority: 3,
+    boardPriority: 3,
     manual,
     selectionStatus: 'included',
     fitScore: 80,

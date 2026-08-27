@@ -124,8 +124,37 @@ export function validateDayFood(
       }
     }
 
-    // --- Provenance -------------------------------------------------------
-    if (food.stopKind === 'venue' && food.venueName && !food.hours) {
+    /*
+     * --- The door nobody wrote down ---------------------------------------
+     *
+     * Same channel as an estimated closing time, because it is the same kind of
+     * statement — what we hold about this venue's hours and where it came from —
+     * and a second code would give the traveller two words for one doubt. What
+     * the sentence may never contain is a time: there is not one.
+     */
+    if (food.hoursUnknown && food.stopKind === 'venue') {
+      issues.push({
+        code: 'food_hours_unverified',
+        severity: 'warning',
+        message: `Nobody publishes hours for ${food.venueName ?? item.title} that we could read, so the hour on day ${day.dayNumber} is the meal's rather than theirs. Check before you go, and have a second option in mind.`,
+        dayNumber: day.dayNumber,
+      });
+    }
+
+    /**
+     * --- Provenance -------------------------------------------------------
+     *
+     * A name with nothing at all behind it, which is still an error.
+     *
+     * `hoursUnknown` is the exemption and it is the whole of §8's naming rule:
+     * a venue whose own record answers "we could not read an opening time" has
+     * been sourced — it has a name, a position and a provenance — and what is
+     * missing is a calendar, which the caution above states. Before that
+     * distinction existed this branch fired on every such venue, so the only way
+     * to satisfy the validator was to withhold the name, which is how three
+     * delivered trips came to hold thirty-one meals and no places.
+     */
+    if (food.stopKind === 'venue' && food.venueName && !food.hours && !food.hoursUnknown) {
       issues.push({
         code: 'food_venue_missing_provenance',
         severity: 'error',
@@ -256,10 +285,26 @@ export function validateDayFood(
     meals.length > 0 &&
     !meals.some((item) => item.food?.stopKind === 'venue' || item.food?.stopKind === 'packed')
   ) {
+    /*
+     * The same finding, told at whichever resolution the day actually reached.
+     * A day that fell back to an area has been given somewhere to go and the
+     * warning says what is missing from it; a day with no area at all is the
+     * older, blunter case and keeps the older, blunter sentence.
+     */
+    const areas = [
+      ...new Set(
+        meals
+          .map((item) => item.food?.areaName)
+          .filter((name): name is string => name !== undefined),
+      ),
+    ];
     issues.push({
       code: 'no_verified_food_option',
       severity: 'warning',
-      message: `Nothing we can vouch for was open and near enough to day ${day.dayNumber}'s route, so its meals are time held rather than places. You will be picking somewhere yourself.`,
+      message:
+        areas.length > 0
+          ? `Nothing we can vouch for was open and near enough to day ${day.dayNumber}'s route, so its meals point at ${areas.join(' and ')} rather than at a place. Which one is yours to pick.`
+          : `Nothing we can vouch for was open and near enough to day ${day.dayNumber}'s route, so its meals are time held rather than places. You will be picking somewhere yourself.`,
       dayNumber: day.dayNumber,
     });
   }

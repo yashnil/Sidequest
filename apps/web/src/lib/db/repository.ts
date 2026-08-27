@@ -1,5 +1,5 @@
 import 'server-only';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   discoverySelectionSchema,
   foodSelectionSchema,
@@ -207,8 +207,10 @@ export function getTrip(id: string): Trip | null {
  *
  * **A null owner token lists nothing.** Not everything: rows written before
  * this column existed cannot be attributed to a browser, so showing them to
- * whoever arrives next would be exactly the leak this closes. They are still
- * reachable by their own unguessable URL, which is how a trip is shared.
+ * whoever arrives next would be exactly the leak this closes. They answer to
+ * nobody at the trip doors either — `lib/net/trip-access` refuses what cannot
+ * be claimed — so an unowned row is reachable only through a share token its
+ * owner minted while it still had one.
  */
 export function listTrips(ownerToken: string | null): Trip[] {
   if (!ownerToken) return [];
@@ -221,16 +223,61 @@ export function listTrips(ownerToken: string | null): Trip[] {
 /**
  * Who made this trip, or null when nobody can be said to have.
  *
- * Separate from `getTrip` because reading a trip and *acting* on it are
- * different questions. A trip is reachable by its unguessable id — that is the
- * share link, and it is deliberate — while a destructive action has to know
- * whose it is.
+ * Separate from `getTrip` because reading a row and *authorising* a caller are
+ * different questions. The trip id is the owner's capability and must never be
+ * treated as shareable: every `/trips/{id}` page and mutating action checks
+ * this token against the session cookie (`lib/net/trip-access`), and
+ * `/share/<token>` is the one surface that shows a plan to anybody else.
  */
 export function tripOwnerToken(id: string): string | null {
   const row = getDb().prepare('SELECT owner_token FROM trips WHERE id = ?').get(id) as
     | { owner_token: string | null }
     | undefined;
   return row?.owner_token ?? null;
+}
+
+/**
+ * THE SHARE TOKEN, MINTED ONCE AND KEPT.
+ *
+ * The token is the share link's entire security model — no accounts, so nothing
+ * else stands between a stranger and this plan — which sets both properties
+ * here. It is 128 bits of crypto randomness in a URL-safe alphabet, because a
+ * guessable token is an open trip. And it is minted exactly once: the guarded
+ * UPDATE writes only into NULL, so two tabs pressing Share race to a single
+ * winner and a second press next week returns the link somebody already sent
+ * rather than silently killing it.
+ *
+ * Null for a trip that does not exist. Never minted on read paths — only the
+ * owner's explicit Share creates one, so an unshared trip stays unshared.
+ */
+export function ensureShareToken(tripId: string): string | null {
+  const db = getDb();
+  db.prepare('UPDATE trips SET share_token = ? WHERE id = ? AND share_token IS NULL').run(
+    randomBytes(16).toString('base64url'),
+    tripId,
+  );
+  const row = db.prepare('SELECT share_token FROM trips WHERE id = ?').get(tripId) as
+    | { share_token: string | null }
+    | undefined;
+  return row?.share_token ?? null;
+}
+
+/**
+ * The trip a share token opens, or null.
+ *
+ * Resolution answers to the token *alone*. There is deliberately no id
+ * fallback, no prefix match and no normalisation: a lookup that also honoured
+ * trip ids would turn every id into a working share link with no share ever
+ * created, which is the enumeration door §22 exists to keep shut. The empty
+ * string is refused before the database is asked, so no probe can meet the
+ * NULL every unshared trip holds.
+ */
+export function tripForShareToken(token: string): Trip | null {
+  if (!token) return null;
+  const row = getDb().prepare('SELECT * FROM trips WHERE share_token = ?').get(token) as
+    | TripRow
+    | undefined;
+  return row ? rowToTrip(row) : null;
 }
 
 /**

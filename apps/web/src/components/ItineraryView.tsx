@@ -45,7 +45,9 @@ import {
   PrintExpand,
   StopEditMenu,
 } from '@/app/(product)/trips/[id]/itinerary/edit-controls';
+import { ShareControl } from '@/app/(product)/trips/[id]/itinerary/share-controls';
 import {
+  isMachineWeatherLabel,
   roundedDuration,
   roundedMinuteOfDay,
   travellerVoice,
@@ -234,7 +236,17 @@ export function ItineraryView({
    * evidence has nothing to prepare for beyond what the days already say.
    */
   preparation: PreparationItem[];
-  tripId: string;
+  /**
+   * The trip's id — or nothing, and the absence is the read-only mode.
+   *
+   * Every owner surface is addressed by this id: the board, the questionnaire,
+   * the calendar export, the per-stop edits. The share page therefore does not
+   * pass it, and everything owner-only below is gated on its presence — so the
+   * shared document *cannot* contain the key to the owner surfaces, rather
+   * than merely choosing not to show it. A separate `readOnly` flag would be
+   * a second thing to keep true; the id's absence is the fact itself.
+   */
+  tripId?: string;
   dateLabel: string;
   /**
    * The base's resolved name, read from the compiled region at render time.
@@ -314,7 +326,9 @@ export function ItineraryView({
   return (
     <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-14">
       <header className="border-b border-rule pb-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Your trip</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">
+          {tripId ? 'Your trip' : 'Shared with you'}
+        </p>
         <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-5xl">
           <PlaceName entity={baseEntity} />
         </h1>
@@ -332,20 +346,25 @@ export function ItineraryView({
 
         <div className="mt-6 flex flex-wrap gap-2 print:hidden">
           <PrintButton />
-          {/*
-            A plain download link, not an action: the route builds the file on
-            request and the browser saves it. Calendar apps open .ics natively.
-          */}
-          <a
-            href={`/trips/${tripId}/itinerary/calendar`}
-            download
-            className={buttonClass('secondary', 'sm')}
-          >
-            Calendar file (.ics)
-          </a>
-          <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
-            Back to the board
-          </Link>
+          {tripId ? (
+            <>
+              {/*
+                A plain download link, not an action: the route builds the file on
+                request and the browser saves it. Calendar apps open .ics natively.
+              */}
+              <a
+                href={`/trips/${tripId}/itinerary/calendar`}
+                download
+                className={buttonClass('secondary', 'sm')}
+              >
+                Calendar file (.ics)
+              </a>
+              <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
+                Back to the board
+              </Link>
+              <ShareControl tripId={tripId} />
+            </>
+          ) : null}
         </div>
         {/* Opens every collapsed disclosure for print, closes them after. */}
         <PrintExpand />
@@ -374,15 +393,25 @@ export function ItineraryView({
               </li>
             ))}
           </ul>
-          {/* Every route here goes somewhere that can actually resolve it. */}
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
-              Change what is on the board
-            </Link>
-            <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('secondary', 'sm')}>
-              Change how you are getting around
-            </Link>
-          </div>
+          {/*
+            Every route here goes somewhere that can actually resolve it — so
+            on the shared, read-only copy there is nowhere to send anybody, and
+            the list stands on its own as the honest account of what is not in
+            the plan.
+          */}
+          {tripId ? (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
+                Change what is on the board
+              </Link>
+              <Link
+                href={`/trips/${tripId}/questionnaire`}
+                className={buttonClass('secondary', 'sm')}
+              >
+                Change how you are getting around
+              </Link>
+            </div>
+          ) : null}
         </Panel>
       ) : null}
 
@@ -677,8 +706,19 @@ function WeatherPlan({ itinerary, timeZone }: { itinerary: Itinerary; timeZone?:
       */}
       {points.length > 0 && kinds.some((kind) => kind !== 'unavailable') ? (
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-          Taken at {points.length === 1 ? 'one point' : `${points.length} separate points`}:{' '}
-          {points.join(', ')}. Somewhere that spans a range of elevations or a coastline
+          {/*
+            The count is real information — the region was not treated as one
+            number — and it stays. The *names* are only printed when they name
+            something: the forecast layer mints "Forecast point 3", an index a
+            traveller cannot put on a map, and a live plan listed two of them
+            here verbatim. See `isMachineWeatherLabel`.
+          */}
+          Taken at {points.length === 1 ? 'one point' : `${points.length} separate points`}
+          {(() => {
+            const named = points.filter((point) => !isMachineWeatherLabel(point));
+            return named.length > 0 ? `: ${named.join(', ')}` : ' across the area';
+          })()}
+          . Somewhere that spans a range of elevations or a coastline
           can differ by several degrees across it, so one number for the whole region would
           be wrong at both ends.
         </p>
@@ -786,6 +826,20 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
         {totals.walkMinutes > 0 ? (
           <Metric label="On foot to reach things">{span(totals.walkMinutes)}</Metric>
         ) : null}
+        {/*
+          THE MINUTES THAT BELONG TO NO MODE.
+
+          This panel read "ON FOOT TO REACH THINGS 6 hr 10 min" on a trip whose
+          long legs were every one of them a walking figure standing in for a
+          train nobody could time — the same total the day headers, the split
+          line and the trip summary all repeated, to a traveller who had said
+          they would walk twenty-five minutes. Those minutes are real and the
+          plan holds them, so they are still measured here; what they are not is
+          a mode, and this is the row that says so instead of the one above.
+        */}
+        {totals.unverifiedMinutes > 0 ? (
+          <Metric label="Held for unverified journeys">{span(totals.unverifiedMinutes)}</Metric>
+        ) : null}
         {totals.driveKm >= 0.5 ? (
           <Metric label="Road distance">{Math.round(totals.driveKm)} km</Metric>
         ) : null}
@@ -875,6 +929,16 @@ function Metric({ label, children }: { label: string; children: React.ReactNode 
  * leg nobody timed now says nobody timed it, and says what would fix that.
  */
 function travelProvenanceLabel(travel: TravelSegment): string {
+  /*
+   * Asked before the provenance, because on this one leg the provenance is
+   * about the wrong journey. "Modelled travel time" is true of the walk and
+   * says nothing about the scheduled route the walk stands in for — and the
+   * walking figure is the one real number on the row, so what it needs is the
+   * question it answers, not the confidence behind it.
+   */
+  if (travel.unverifiedScheduled) {
+    return 'route not verified — the walking time shown is the upper bound we hold for it';
+  }
   switch (travel.provenance) {
     case 'measured':
       return 'measured travel time';
@@ -922,6 +986,15 @@ function DayTransport({ day }: { day: ItineraryDay }) {
     totals.transitMinutes > 0 ? `${span(totals.transitMinutes)} riding` : null,
     totals.walkMinutes > 0 ? `${span(totals.walkMinutes)} walking there` : null,
     totals.waitMinutes > 0 ? `${span(totals.waitMinutes)} waiting` : null,
+    /*
+     * Its own clause, in the day's own breakdown, because the breakdown is
+     * where a reader goes to find out what the travelling figure above is made
+     * of. A day that held two hours for journeys nobody could price read "2 hr
+     * walking there" here, which is the one thing those minutes are not.
+     */
+    totals.unverifiedMinutes > 0
+      ? `${span(totals.unverifiedMinutes)} held for journeys we could not verify`
+      : null,
   ].filter((entry): entry is string => entry !== null);
 
   return (
@@ -963,7 +1036,7 @@ function DayTransport({ day }: { day: ItineraryDay }) {
       ) : null}
       {transport.parkingNotes.map((note) => (
         <p key={note} className="mt-1 text-xs leading-relaxed text-ink-faint">
-          {note}
+          {travellerVoice(note)}
         </p>
       ))}
       {/*
@@ -979,14 +1052,21 @@ function DayTransport({ day }: { day: ItineraryDay }) {
           </summary>
           <ul className="mt-2 space-y-1 leading-relaxed text-ink-muted">
             {transport.accessNotes.map((note) => (
-              <li key={note}>{note}</li>
+              <li key={note}>{travellerVoice(note)}</li>
             ))}
           </ul>
         </details>
       ) : null}
       {transport.verifyBeforeTravel.length > 0 ? (
         <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-          Check before you go: {transport.verifyBeforeTravel.join(' ')}
+          {/*
+            Through `travellerVoice`, because these sentences are stored on the
+            artifact in the data layer's own words — a live plan printed "We
+            know a routing engine can reach this" here. The translation keeps
+            every claim and re-addresses it to the person travelling.
+          */}
+          Check before you go:{' '}
+          {transport.verifyBeforeTravel.map((note) => travellerVoice(note)).join(' ')}
         </p>
       ) : null}
     </div>
@@ -1007,7 +1087,14 @@ function accessSequence(day: ItineraryDay): string[] {
     }
     if (item.kind !== 'travel' || !item.travel) continue;
     const { mode, role } = item.travel;
-    if (role === 'wait') push('board');
+    /*
+     * A leg whose mode is a stand-in has no step name in the mode vocabulary,
+     * so it takes the mode-free one. The strip is read as the thing to execute
+     * — "walk → visit → walk back" told somebody to set off on foot for a
+     * journey the row above it had just said nobody could price.
+     */
+    if (item.travel.unverifiedScheduled) push(role === 'return' ? 'travel back' : 'travel');
+    else if (role === 'wait') push('board');
     else if (role === 'walk') push('walk');
     // "back" comes from the leg's own role, not from whether anything has been
     // visited yet — otherwise every hop between two stops reads as a return.
@@ -1125,7 +1212,12 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
               ? 'Historical pattern'
               : 'No weather data'}
         </Badge>
-        {weather.locationLabel ? (
+        {/*
+          Only a label that names somewhere. "Forecast point 3" is a build
+          index — it told a live traveller nothing and read as engineering on
+          every day badge, so a machine-minted label renders as silence.
+        */}
+        {weather.locationLabel && !isMachineWeatherLabel(weather.locationLabel) ? (
           <span className="text-xs text-ink-faint">{weather.locationLabel}</span>
         ) : null}
         {stale ? <Badge tone="amber">Read a while ago</Badge> : null}
@@ -1196,7 +1288,8 @@ function DayCard({
   day: ItineraryDay;
   renderedAt: number;
   coordinates: Record<string, { lat: number; lng: number }>;
-  tripId: string;
+  /** Absent on the shared, read-only copy. See `ItineraryView`. */
+  tripId?: string;
   lockedPlaceIds: ReadonlySet<string>;
   /** Licensed photographs by place id, read from a table by the page. */
   images: Record<string, ImageRecord>;
@@ -1229,7 +1322,20 @@ function DayCard({
     })
     .filter((stop): stop is { id: string; name: string; lat: number; lng: number } => stop !== null);
 
-  const links = dayRouteLinks(stops, mapModeFor(day.transport.modes));
+  /*
+   * A day holding a journey nobody could price asks the map for transit.
+   *
+   * `day.transport.modes` carries no mode for such a leg — there is none to
+   * carry — and the fallback below is walking, which would hand the traveller
+   * an hour of walking directions for the exact journey this page has just told
+   * them we could not time. A map app can price that route live, which is the
+   * one thing this build could not do; asking it for the network we believe is
+   * there beats asking it to route somebody on foot around it.
+   */
+  const links = dayRouteLinks(
+    stops,
+    day.totals.unverifiedMinutes > 0 ? 'transit' : mapModeFor(day.transport.modes),
+  );
 
   /*
    * Everything the day needs in order to look like itself rather than like the
@@ -1330,7 +1436,7 @@ function DayCard({
             One honest verb, only on days it can act on. A light day offered
             "make this easier" is a button that can only apologise.
           */}
-          {day.intensity !== 'light' && day.totals.activityMinutes > 0 ? (
+          {tripId && day.intensity !== 'light' && day.totals.activityMinutes > 0 ? (
             <EaseDayButton tripId={tripId} dayNumber={day.dayNumber} />
           ) : null}
         </div>
@@ -1415,7 +1521,7 @@ function DayCard({
                   {...(identity.hero.category ? { category: identity.hero.category } : {})}
                 />
                 <p className="mt-1.5 text-[11px] leading-snug text-ink-faint">
-                  {identity.hero.name}, on this day. <ImageCredit image={identity.hero.image} as="p" className="mt-0 inline" />
+                  {identity.hero.name}, on this day. <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" />
                 </p>
               </div>
             ) : null}
@@ -1459,7 +1565,7 @@ function DayCard({
                   ? { rationale: rationale[item.placeId]! }
                   : {})}
                 menu={
-                  item.kind === 'activity' && item.placeId ? (
+                  tripId && item.kind === 'activity' && item.placeId ? (
                     <StopEditMenu
                       tripId={tripId}
                       dayNumber={day.dayNumber}
@@ -1595,6 +1701,17 @@ function FoodDetail({ food }: { food: ScheduledFood }) {
           {clock(food.hours.closeMinute, 'earlier')}
           {food.hours.periodLabel ? ` · ${food.hours.periodLabel}` : ''}
           {food.hours.confidence !== 'published' ? ' · closing time is ours, not theirs' : ''}
+        </p>
+      ) : null}
+
+      {/*
+        The line that stands where an opening window would, and says the one
+        thing there is to say instead. No clock on it, because there is no clock
+        to put there — the hour on the row is the meal's, not the venue's.
+      */}
+      {food.hoursUnknown ? (
+        <p className="mt-1 text-xs text-ink-faint">
+          Nobody publishes hours for this that we could read. Check before you go.
         </p>
       ) : null}
 
@@ -1903,7 +2020,19 @@ function TimelineRow({
           </h3>
           {item.travel ? (
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
-              {TRANSPORT_MODE_LABELS[item.travel.mode]}
+              {/*
+                THE CHIP THAT CONTRADICTED THE TITLE BESIDE IT.
+
+                The row already reads "Travel to X" rather than "Walk to X",
+                because the mode on a proxy leg is a stand-in for a scheduled
+                journey nobody could price. This chip read the raw mode and put
+                WALK a centimetre to its right — the reviewer read it off the
+                screen. A leg with no known mode gets the product's existing
+                phrase for that state instead of a mode it does not have.
+              */}
+              {item.travel.unverifiedScheduled
+                ? 'Journey not verified'
+                : TRANSPORT_MODE_LABELS[item.travel.mode]}
             </span>
           ) : item.food ? (
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">

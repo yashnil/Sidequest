@@ -5,6 +5,7 @@ import {
   carFreeReachMinutes,
   EXPANSION_CEILING_MINUTES,
   isQuestionVisible,
+  NO_CAR_DETOUR_MINUTES,
   type QuestionnaireContext,
 } from './definition';
 import { buildTravelerProfile, defaultAnswers, normalizeAnswers } from './transform';
@@ -292,13 +293,98 @@ describe('profile transformation', () => {
       ).derived.effectiveDetourMinutes,
     ).toBe(60);
 
-    // No car collapses the region to the town itself.
+    /*
+     * The expectation here was 20 — the car-free constant, applied whatever the
+     * traveller had answered. It moved because that constant is now the floor
+     * under their answers rather than a replacement for them; the case below
+     * pins the floor itself, which is the part of the old claim that was true.
+     * Sixty is this fixture's own stated one-way tolerance, inside a
+     * sixty-five-minute ring and inside the car-free reach.
+     */
     expect(
       buildTravelerProfile(
         answers({ ...MAMMOTH_HIKER_ANSWERS, willDrive: false }),
         ctx(),
       ).derived.effectiveDetourMinutes,
-    ).toBe(20);
+    ).toBe(60);
+  });
+
+  /**
+   * THE NON-DRIVER'S OWN TRAVEL ANSWER, WHICH THE PROFILE USED TO THROW AWAY.
+   *
+   * The questionnaire puts both questions to somebody with no car: the ring
+   * ("how far from your base") on an offer that reaches `carFreeReachMinutes()`,
+   * and the one-way slider ("furthest you would travel one way for one stop —
+   * by train, bus or shuttle"). Both answers were discarded and replaced by
+   * `NO_CAR_DETOUR_MINUTES`, so the region step offered an hour out by public
+   * transport while the profile recorded twenty minutes, and every radius
+   * derived from the profile held a car-free trip to a walk-out constant.
+   *
+   * The live evidence class this sits under is a car-free dense-metro board
+   * whose every canonical seat was thirty-nine to seventy measured walking
+   * minutes from base and was refused on a last-mile answer.
+   */
+  it('keeps a non-driver’s stated one-way travel answer, bounded by the car-free reach', () => {
+    const carFree = (overrides: Parameters<typeof answers>[0] = {}) =>
+      buildTravelerProfile(
+        answers({ ...MAMMOTH_HIKER_ANSWERS, willDrive: false, ...overrides }),
+        ctx(),
+      ).derived.effectiveDetourMinutes;
+
+    /* Their slider, honoured, where the ring they chose leaves room for it. */
+    expect(carFree({ regionalExpansion: 'nearby_60', detourToleranceMinutes: 45 })).toBe(45);
+    /* And their ring, which binds when it is the tighter of the two. */
+    expect(carFree({ regionalExpansion: 'nearby_30', detourToleranceMinutes: 60 })).toBe(35);
+    /*
+     * Never past what a car-free day can actually reach and return from. The
+     * ring is clamped to `nearby_60` for a non-driver by `normalizeAnswers`, so
+     * this is the widest answer the questionnaire can produce; the bound is
+     * asserted against the function the region step reads rather than a literal.
+     */
+    expect(carFree({ regionalExpansion: 'best_regional', detourToleranceMinutes: 180 })).toBe(
+      Math.min(EXPANSION_CEILING_MINUTES.nearby_60, carFreeReachMinutes()),
+    );
+  });
+
+  /** An untouched slider still yields the walk-out radius, and never less. */
+  it('floors an unanswered non-driver at the car-free walk-out radius', () => {
+    const stayInTown = buildTravelerProfile(
+      answers({
+        ...MAMMOTH_HIKER_ANSWERS,
+        willDrive: false,
+        regionalExpansion: 'destination_only',
+        detourToleranceMinutes: 0,
+      }),
+      ctx(),
+    );
+    expect(EXPANSION_CEILING_MINUTES.destination_only).toBeLessThan(NO_CAR_DETOUR_MINUTES);
+    expect(stayInTown.derived.effectiveDetourMinutes).toBe(NO_CAR_DETOUR_MINUTES);
+  });
+
+  /**
+   * The control on the pair above: nothing about a driver's radius moved. Every
+   * combination the driving branch can be handed — the ring binding, the slider
+   * binding, the half-day cap binding, and a slider nobody touched — is the
+   * same arithmetic it always was.
+   */
+  it('leaves a driver’s radius exactly where it was', () => {
+    const driving = (overrides: Parameters<typeof answers>[0]) =>
+      buildTravelerProfile(answers({ ...MAMMOTH_HIKER_ANSWERS, ...overrides }), ctx()).derived
+        .effectiveDetourMinutes;
+
+    expect(driving({ regionalExpansion: 'nearby_30', detourToleranceMinutes: 60 })).toBe(35);
+    expect(driving({ regionalExpansion: 'nearby_120', detourToleranceMinutes: 45 })).toBe(45);
+    expect(
+      driving({
+        regionalExpansion: 'best_regional',
+        detourToleranceMinutes: 180,
+        maxDailyTravelMinutes: 120,
+      }),
+    ).toBe(60);
+    /* An untouched slider falls back to the ring, not to a floor. */
+    expect(driving({ regionalExpansion: 'destination_only', detourToleranceMinutes: 0 })).toBe(
+      EXPANSION_CEILING_MINUTES.destination_only,
+    );
   });
 
   it('sets the famous/hidden target from the discovery mix', () => {

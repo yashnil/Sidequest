@@ -142,6 +142,44 @@ describe('the reach a preview publishes is the reach a build uses', () => {
     expect(narrowed.reachRadiusKm!).toBeLessThan(notNarrowed.reachRadiusKm!);
   });
 
+  it('centres a narrowed build on the part the preview chose', () => {
+    /*
+     * The other half of ignoring the preview's *reach* when narrowed: the
+     * preview's chosen *part* is exactly what "one area" means, and dropping it
+     * with the reach is how a car-free country trip compiled a walking circle
+     * on the country's empty centroid — two hundred kilometres from the base
+     * the preflight had already named.
+     */
+    const portfolio = buildRegionPortfolio({
+      entries: SPREAD,
+      mode: 'walk',
+      nights: 6,
+      destinationName: 'Testland',
+    });
+    const part = portfolio.route[0]!;
+
+    const scope = deriveScope({
+      candidate: syntheticCandidate(SYNTHETIC_WORLDS.broad_country!),
+      clarifications: {
+        schemaVersion: CLARIFICATION_SET_VERSION,
+        questions: [],
+        answers: [
+          { questionId: QUESTION_IDS.breadthStrategy, values: ['one_area'], answeredAt: 'x' },
+          { questionId: QUESTION_IDS.carAvailable, values: ['no'], answeredAt: 'x' },
+        ],
+      },
+      nights: 6,
+      revision: 1,
+      preflightAnchor: { id: part.id, name: part.name, center: part.center },
+    });
+
+    expect(scope.shape.kind).toBe('radius');
+    if (scope.shape.kind === 'radius') {
+      expect(scope.shape.center).toEqual(part.center);
+    }
+    expect(scope.rationale).toContain(part.name);
+  });
+
   it('falls back to its own derivation when no preview reach exists', () => {
     /* An older trip, or a destination with no index coverage, must still work. */
     const scope = deriveScope({

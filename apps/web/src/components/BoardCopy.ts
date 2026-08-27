@@ -103,6 +103,51 @@ export const BOARD_GROUP_HEADINGS: Record<BoardGroup, { title: string; blurb: st
 };
 
 // ---------------------------------------------------------------------------
+// One weather story per page
+// ---------------------------------------------------------------------------
+
+/**
+ * ONE ABSENT DATASET, ONE STORY.
+ *
+ * A live Iceland board told two: a banner reading "We could not reach a weather
+ * source for your dates" — an outage claim — while the weather panel at the
+ * bottom of the same page said "Weather: not fetched … Fetch the weather" — a
+ * deliberate-choice claim with a button. Both described the same absence. The
+ * card-level sentence is composed in core, where the per-day evidence is known
+ * (`kind: 'unavailable'`), but that evidence kind covers two different truths:
+ * a fetch that failed, and a fetch nobody has asked for yet. Only this page
+ * knows which — `weatherFreshness === 'not_fetched'` is the page saying no
+ * snapshot row exists — so this is where the story is reconciled.
+ *
+ * The outage sentences are pinned verbatim from `core/weather/board.ts`; if
+ * they are reworded there, `board-copy.test.ts` fails loudly rather than the
+ * two stories quietly returning.
+ */
+export const WEATHER_OUTAGE_NOTES: readonly string[] = [
+  'We could not reach a weather source for your dates, so nothing here has been checked against one.',
+  'We could not get weather for every one of your dates, so part of this has not been checked against anything.',
+];
+
+/** The honest sentence when the dataset is absent by choice, not by failure. */
+export const WEATHER_NOT_FETCHED_NOTE =
+  'We have not fetched the weather for this trip yet, so nothing here has been checked against a forecast — the weather panel below can fetch it.';
+
+/**
+ * The note a board may honestly show, given what the page knows about why the
+ * weather is absent. Anything that is not an outage sentence passes through
+ * untouched, and a board whose snapshot genuinely failed keeps the outage
+ * wording — that story is true there, and the panel reports the failed attempt
+ * beside its button.
+ */
+export function honestWeatherNote(
+  note: string,
+  freshness: 'fresh' | 'stale' | 'expired' | 'not_fetched' | undefined,
+): string {
+  if (freshness !== 'not_fetched') return note;
+  return WEATHER_OUTAGE_NOTES.includes(note) ? WEATHER_NOT_FETCHED_NOTE : note;
+}
+
+// ---------------------------------------------------------------------------
 // Facts that belong to the board rather than to a card
 // ---------------------------------------------------------------------------
 

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { TripComposer } from '@/components/TripComposer';
-import { getTrip } from '@/lib/db/repository';
+import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { buttonClass } from '@/components/ui';
 
@@ -32,7 +32,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const trip = getTrip(id);
+  const trip = await ownedTrip(id);
   return {
     title: trip
       ? `${trip.basics.destinationInput} — Change this trip — Sidequest`
@@ -42,7 +42,11 @@ export async function generateMetadata({
 
 export default async function EditTripPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const trip = getTrip(id);
+  /*
+   * The owner's trip or nothing — a foreign browser sees a missing trip, the
+   * same boundary every trip door holds. See `lib/net/trip-access`.
+   */
+  const trip = await ownedTrip(id);
   if (!trip) notFound();
 
   const intent = getIntent(id);

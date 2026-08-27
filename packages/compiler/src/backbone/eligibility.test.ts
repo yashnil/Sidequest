@@ -37,6 +37,8 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   viewpoint: 'scenic',
   scenic_lookout: 'scenic',
   observation_deck: 'scenic',
+  observatory: 'scenic',
+  communication_tower: 'scenic',
   scenic_point_of_interest: 'scenic',
   peak: 'scenic',
   summit: 'scenic',
@@ -50,6 +52,8 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   nature_reserve: 'outdoor',
   nature_preserve: 'outdoor',
   protected_area: 'outdoor',
+  natural_monument: 'scenic',
+  wildlife_sanctuary: 'outdoor',
   botanical_garden: 'outdoor',
   garden: 'outdoor',
   hiking_trail: 'outdoor',
@@ -90,17 +94,24 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   planetarium: 'itinerary_anchor',
   library: 'cultural',
   theatre: 'itinerary_anchor',
+  theatre_venue: 'itinerary_anchor',
   concert_hall: 'itinerary_anchor',
+  exhibition_and_trade_fair_venue: 'itinerary_anchor',
   historic_site: 'cultural',
   historical_landmark: 'cultural',
   archaeological_site: 'cultural',
   castle: 'itinerary_anchor',
+  palace: 'itinerary_anchor',
   fort: 'cultural',
   ruins: 'cultural',
   monument: 'cultural',
   memorial: 'side_quest',
+  memorial_site: 'side_quest',
+  memorial_park: 'side_quest',
+  sculpture_statue: 'side_quest',
   landmark_and_historical_building: 'cultural',
-  place_of_worship: 'support_stop',
+  // A worship building: an experience kind, witness-gated at the inventory.
+  place_of_worship: 'cultural',
   church: 'cultural',
   cathedral: 'cultural',
   basilica: 'cultural',
@@ -127,6 +138,8 @@ const EXPECTED_ROLE: Record<string, CandidateRole> = {
   bazaar: 'market',
   night_market: 'market',
   flea_market: 'market',
+  // A health-food shop under the market node: provisions, never a board card.
+  health_market: 'food_support',
   neighborhood: 'itinerary_anchor',
   plaza: 'side_quest',
   pedestrian: 'insufficient_travel_value',
@@ -368,7 +381,7 @@ describe('role eligibility over the complete category vocabulary', () => {
   const everyKey = [...leaves, ...branches];
 
   it('covers every key the taxonomy knows, and nothing it does not', () => {
-    expect(everyKey.length).toBe(239);
+    expect(everyKey.length).toBe(250);
     expect([...everyKey].sort()).toEqual(Object.keys(EXPECTED_ROLE).sort());
   });
 
@@ -630,9 +643,12 @@ describe('what may not override a role', () => {
     const parking = assessRoleEligibility({ sourceCategory: 'parking', name: 'A Named Car Park' });
     expect(airport.eligibility.attractionPortfolio).toBe(false);
     expect(parking.eligibility.attractionPortfolio).toBe(false);
-    // The only fields the assessment reads, spelled out so adding a seventh is a
-    // deliberate act rather than a convenience.
-    const accepted = ['sourceCategory', 'sourceCategoryPath', 'name', 'operatingStatus', 'packRole', 'superseded'];
+    // The only fields the assessment reads, spelled out so adding an eighth is a
+    // deliberate act rather than a convenience. `placeAttested` was the
+    // deliberate seventh: a statement somebody outside the record made about
+    // the place — the same class of witness `requiresSignificanceEvidence`
+    // reads — and still not a traveller, a score or an attribute count.
+    const accepted = ['sourceCategory', 'sourceCategoryPath', 'name', 'operatingStatus', 'packRole', 'superseded', 'placeAttested'];
     expect(accepted).not.toContain('profile');
     expect(accepted).not.toContain('fitScore');
     expect(accepted).not.toContain('popularity');
@@ -666,6 +682,109 @@ describe('what may not override a role', () => {
     });
     expect(assessment.role).toBe('transport');
     expect(assessment.eligibility.provisionalBoard).toBe(false);
+  });
+});
+
+describe('the branch-match rescue: evidence heard before the refusal, never instead of a floor', () => {
+  /**
+   * THE ONE PLACE EVIDENCE USED TO ARRIVE AFTER THE FILTER.
+   *
+   * "A branch is not a permission" refuses every record whose leaf the table
+   * does not know, and for the unwitnessed crowd — gyms, arcades, fortune
+   * tellers — that refusal is the product working. But the refusal ran before
+   * any evidence could be heard, and a fresh dense-metro audit proved the
+   * cost: a real market record published under a bare entertainment leaf died
+   * as `insufficient_travel_value` while carrying the exact place-attesting
+   * witness the significance gate one step downstream exists to accept.
+   *
+   * The rescue is deliberately narrow. It fires only on a `source_branch`
+   * match of a visitable family, only with a witness that attests *the place*
+   * (never an operator's asset list, never a shared name), and it lands on
+   * `discovery` — the honest tier for "real, vouched for, and the source never
+   * named the kind". Every taxonomy floor stays a floor.
+   */
+  const witnessed = (overrides: Partial<SourceRecord> = {}) =>
+    placeRecord({
+      sourceId: 'witnessed-hall',
+      name: 'A Named Market Hall',
+      sourceCategory: 'a_leaf_no_table_has_seen',
+      sourceCategoryPath: ['arts_and_entertainment', 'a_leaf_no_table_has_seen'],
+      wikidataId: 'Q999001',
+      ...overrides,
+    });
+
+  it('rescues a witnessed branch match to discovery', () => {
+    const assessment = assessRecordEligibility(witnessed());
+    expect(assessment.role).toBe('discovery');
+    expect(assessment.roleBasis.match.kind).toBe('source_branch');
+    expect(assessment.eligibility.provisionalBoard).toBe(true);
+    expect(assessment.eligibility.attractionPortfolio).toBe(true);
+    /* The confidence is still the branch's own: a rescue is not a leaf match. */
+    const leaf = assessRecordEligibility(placeRecord({ sourceCategory: 'museum', name: 'A Named Museum' }));
+    expect(assessment.roleConfidence).toBeLessThan(leaf.roleConfidence);
+  });
+
+  it('still refuses the unwitnessed twin: the gym, the arcade, the unknown leaf', () => {
+    const twin = witnessed({ sourceId: 'unwitnessed-hall' });
+    delete (twin as { wikidataId?: string }).wikidataId;
+    const assessment = assessRecordEligibility(twin);
+    expect(assessment.role).toBe('insufficient_travel_value');
+    expect(assessment.eligibility.provisionalBoard).toBe(false);
+
+    /* The leaf-refused local amenities never reach the rescue: a leaf match is
+     * not a branch match, however well the world has written about the gym. */
+    for (const category of ['gym', 'arcade', 'office']) {
+      const local = assessRecordEligibility(
+        placeRecord({ sourceCategory: category, name: 'A Named Local Amenity', wikidataId: 'Q999002' }),
+      );
+      expect(local.role, category).toBe('generic_commercial');
+      expect(local.eligibility.provisionalBoard, category).toBe(false);
+    }
+  });
+
+  it('cannot appeal a taxonomy floor: a witnessed commerce or transport branch stays refused', () => {
+    const office = assessRecordEligibility(
+      witnessed({ sourceCategoryPath: ['services_and_business', 'a_leaf_no_table_has_seen'] }),
+    );
+    expect(office.role).toBe('generic_commercial');
+    expect(office.eligibility.provisionalBoard).toBe(false);
+
+    const shuttle = assessRecordEligibility(
+      witnessed({ sourceCategoryPath: ['travel_and_transportation', 'a_leaf_no_table_has_seen'] }),
+    );
+    expect(shuttle.role).toBe('transport');
+    expect(shuttle.eligibility.provisionalBoard).toBe(false);
+
+    /* And no family at all leaves nothing to admit, witness or no witness. */
+    const unplaced = assessRecordEligibility(witnessed({ sourceCategoryPath: [] }));
+    expect(unplaced.role).toBe('insufficient_travel_value');
+  });
+
+  it('hears only witnesses that attest the place, never a landlord or a name', () => {
+    /* An operator's own domain — a public body listing an asset — is not a
+     * statement about the place, and rescues nothing. */
+    const operatorOnly = witnessed({ websiteCandidates: ['https://parks.gov.aa/assets/list'] });
+    delete (operatorOnly as { wikidataId?: string }).wikidataId;
+    expect(assessRecordEligibility(operatorOnly).role).toBe('insufficient_travel_value');
+
+    /* An authority page addressed to the record by name is one, and does. */
+    const namedByAuthority = witnessed({
+      websiteCandidates: ['https://parks.gov.aa/sites/anamedmarkethall.html'],
+    });
+    delete (namedByAuthority as { wikidataId?: string }).wikidataId;
+    expect(assessRecordEligibility(namedByAuthority).role).toBe('discovery');
+  });
+
+  it('lets a caller with richer context state the witness directly', () => {
+    /* The inventory sees cross-layer corroboration and twin-resolved
+     * knowledge-base entries this record-local read cannot; the option is the
+     * seam that context arrives through — in both directions. */
+    const twin = witnessed({ sourceId: 'context-hall' });
+    delete (twin as { wikidataId?: string }).wikidataId;
+    expect(assessRecordEligibility(twin, { placeAttested: true }).role).toBe('discovery');
+    expect(assessRecordEligibility(witnessed(), { placeAttested: false }).role).toBe(
+      'insufficient_travel_value',
+    );
   });
 });
 
@@ -726,6 +845,105 @@ describe('refusals that have nothing to do with the category', () => {
     );
     expect(assessment.role).toBe('gateway');
     expect(assessment.eligibility.provisionalBoard).toBe(false);
+  });
+});
+
+describe('names that declare an entity rather than a place', () => {
+  /**
+   * THE PERSON/COMPANY EXCLUSION EXISTS, AND IT NEVER FIRED — BECAUSE IT READS
+   * THE CATEGORY, AND THE CATEGORY ASSERTED A MARKET.
+   *
+   * A live dense-metro board's rainy-day shelf held a trading company whose
+   * name opens with the abbreviated 株式会社 every company registry writes,
+   * filed by the catalogue under a market leaf — and beside it a metropolitan
+   * *wholesale* market, a business-to-business facility a traveller cannot
+   * walk into, filed as a public market. `person` and `company` are category
+   * words, so a company-shaped record wearing a market word sailed past them.
+   *
+   * A legal form and a trade designation are vocabulary, not names: they mean
+   * the same thing in every city on earth. No proper name appears below —
+   * every fixture is synthetic — because the defect is a class of *word*, not
+   * a place.
+   */
+  it('refuses a company-registry name however the catalogue filed it', () => {
+    const spellings = [
+      '(株)ある商事',
+      '（株）ある商事',
+      '㈱ある商事',
+      '株式会社ある商会',
+      'ある商会株式会社',
+      '有限会社ある物産',
+      'A Named Trading Co., Ltd.',
+      'A Named Trading Ltd',
+    ];
+    for (const name of spellings) {
+      const onMarket = assessRoleEligibility({ sourceCategory: 'public_market', name });
+      expect(onMarket.role, name).toBe('generic_commercial');
+      expect(onMarket.roleBasis.decidedBy, name).toBe('record_name_form');
+      expect(onMarket.eligibility.provisionalBoard, name).toBe(false);
+      expect(onMarket.eligibility.attractionPortfolio, name).toBe(false);
+      /* The gate holds across every traveller-visitable kind, not just markets. */
+      const onMuseum = assessRoleEligibility({ sourceCategory: 'museum', name });
+      expect(onMuseum.role, name).toBe('generic_commercial');
+    }
+  });
+
+  it('does not read a syllable as a legal form, and leaves non-visitable roles alone', () => {
+    /* 株 alone is a plant's stock; only the registry forms fire. */
+    for (const name of ['ある株苗店', '株のいけす', 'Incantation Hall', 'The Golden Gmbhaus']) {
+      expect(assessRoleEligibility({ sourceCategory: 'public_market', name }).role, name).toBe('market');
+    }
+    /* A kitchen operated by a limited company still serves lunch: meals were
+     * never board cards, so the gate has nothing to protect there. */
+    const kitchen = assessRoleEligibility({ sourceCategory: 'restaurant', name: '(株)ある食堂' });
+    expect(kitchen.role).toBe('food');
+    expect(kitchen.eligibility.foodPortfolio).toBe(true);
+  });
+
+  it('refuses a wholesale market without a witness, and hears one with it', () => {
+    for (const name of ['ある中央卸売市場食肉市場', 'A Named Wholesale Market']) {
+      const unwitnessed = assessRoleEligibility({ sourceCategory: 'public_market', name });
+      expect(unwitnessed.role, name).toBe('generic_commercial');
+      expect(unwitnessed.roleBasis.decidedBy, name).toBe('record_name_form');
+      expect(unwitnessed.eligibility.provisionalBoard, name).toBe(false);
+      /* The rare wholesale market the world has written about — the kind with
+       * a public viewing deck — is a destination, and stays one. */
+      const witnessed = assessRoleEligibility({ sourceCategory: 'public_market', name, placeAttested: true });
+      expect(witnessed.role, name).toBe('market');
+      expect(witnessed.eligibility.provisionalBoard, name).toBe(true);
+    }
+    /* The trade word is only read for the market archetype: a museum *about*
+     * wholesale trade keeps its museum word. */
+    expect(
+      assessRoleEligibility({ sourceCategory: 'museum', name: 'ある卸売の歴史館' }).role,
+    ).toBe('itinerary_anchor');
+  });
+
+  /**
+   * THE REGRESSION THE GATES MUST NOT CAUSE: THE FUNNEL'S MARKET HIT SURVIVES.
+   *
+   * The canonical-recall funnel credits a dense metropolis's famous outer
+   * market through a named shop inside it — a plain shop name, a directory
+   * page for a website, no knowledge-base row. That is the *weakest-evidenced
+   * genuine market record the product must keep*, so it is pinned here as a
+   * synthetic structural equivalent: if either name gate ever widens to
+   * ordinary shop names, or the market kinds ever demand a witness wholesale,
+   * this fails before a board loses the destination's market.
+   */
+  it('keeps a named shop in a public market on the board: the funnel-hit shape survives', () => {
+    const shop = placeRecord({
+      sourceId: 'market-shop',
+      name: 'ある園ある本店',
+      sourceCategory: 'public_market',
+      sourceCategoryPath: ['shopping', 'market', 'public_market'],
+      planningRole: 'market',
+      websiteCandidates: ['http://www.example-market.or.jp/search/shoplist/cat-e/cat-17/160.html'],
+    });
+    const assessment = assessRecordEligibility(shop);
+    expect(assessment.role).toBe('market');
+    expect(assessment.eligibility.provisionalBoard).toBe(true);
+    expect(assessment.eligibility.attractionPortfolio).toBe(true);
+    expect(assessment.eligibility.foodPortfolio).toBe(true);
   });
 });
 

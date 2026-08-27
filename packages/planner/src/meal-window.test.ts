@@ -33,7 +33,16 @@ const INTENSITIES: readonly QuestionnaireAnswers['dailyIntensity'][] = [
 const DEPARTURES = ['09:00', '12:00', '15:00', '17:00', '20:00'] as const;
 
 describe('meals sit inside their own windows', () => {
-  it('never schedules a block in a slot the clock has already left', () => {
+  /*
+   * A declared budget, because this one test is a sweep rather than a case: it
+   * plans a trip for every pace against every departure time and checks every
+   * meal block in every plan. Measured on an idle machine it runs in 1.24 s
+   * (three consecutive runs, 1.24/1.25/1.26); measured while the rest of the
+   * repository's suites ran alongside it, 6.6 s — five times the wall clock for
+   * exactly the same work, and past vitest's five-second default. The budget is
+   * this test's alone; the suite default is untouched.
+   */
+  it('never schedules a block in a slot the clock has already left', { timeout: 30_000 }, () => {
     const offences: string[] = [];
     let plans = 0;
     let mealsSeen = 0;

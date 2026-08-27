@@ -54,6 +54,88 @@ export interface NormalizeContext {
   containmentFor: (point: { lat: number; lng: number }) => RecordContainment;
 }
 
+/**
+ * THE PLACE PROJECTION, AND THE THREE COLUMNS THAT ARE NOT READ FROM IT.
+ *
+ * ## `wikidata` — because there is none
+ *
+ * This theme publishes **no place-level `wikidata` leaf and no `source_tags`
+ * map**. Verified against the real catalogue (release 2026-07-22.0, anonymous
+ * range reads of the footer schema): the places file's 52 column paths contain
+ * `brand.wikidata` and nothing else matching. So `normalizePlace` below cannot
+ * set `wikidataId`, cannot set `attributes.wikipedia`, and no widening of this
+ * list would let it — the columns are absent from the source, not from us.
+ *
+ * That is worth stating here because everything downstream reads the absence as
+ * a measurement. Counted over every in-box row of three real metro boxes:
+ *
+ * | box    | place rows | with a knowledge-base id | with an encyclopaedia article |
+ * |--------|-----------:|-------------------------:|------------------------------:|
+ * | Tokyo  |    272,018 |                        0 |                             0 |
+ * | Osaka  |     92,042 |                        0 |                             0 |
+ * | Lisbon |     43,228 |                        0 |                             0 |
+ *
+ * The supplemental geography layers below **do** publish it — see
+ * `FEATURE_COLUMNS` — and the compiler carries a twin's evidence across where a
+ * name, a kind and a position all agree. See `resolveKnowledgeBaseEvidence`.
+ *
+ * ## `brand` — because it is evidence about a company, not about a place
+ *
+ * `brand.wikidata` is the one knowledge-base identifier this theme does publish,
+ * and it is deliberately not read. A Starbucks is not significant because
+ * Starbucks has an encyclopaedia entry; the entry is about the chain, and the
+ * thing in front of the traveller is one of thirty thousand outlets.
+ *
+ * The measurement is what settles it rather than the argument. `brand.wikidata`
+ * is present on **4.74%** of Tokyo's in-box rows (13,201), 5.57% of Osaka's and
+ * 0.71% of Lisbon's, while genuine place-level knowledge-base evidence reaches
+ * single digits per pack. Admitting it — even as a separate, weaker channel —
+ * would make a corporate identifier outnumber every real signal by three orders
+ * of magnitude and *become* the knowledge-base channel, which is precisely §8.3's
+ * "do not let one source become global truth" and §4's café-outranking-a-temple.
+ *
+ * If a future slice wants brand identity for another purpose — deduplicating
+ * chains, say — it must arrive under its own name and must not reach
+ * `assessPlaceStanding`.
+ *
+ * ## `categories.alternate` — because it is a search facet, not a designation
+ *
+ * `categories` is projected for its `primary` leaf, and the `alternate` list
+ * beside it is deliberately never read. It is the most tempting column in the
+ * file: it is present on **63.8%** of Tokyo's in-box rows and **74.7%** of
+ * Lisbon's, and routing it into the classifying values would raise the
+ * conferred-designation channel roughly sevenfold on one and fourteenfold on the
+ * other (Tokyo 24 designated rows → 187, Lisbon 3 → 42).
+ *
+ * Each of the 163 new rows was traced back to the value that fired it and the
+ * category the source itself gives it, and the channel would be firing on the
+ * wrong thing. The list is what a *search* would match this row under, not what
+ * an authority conferred on it, and the two diverge exactly where a name happens
+ * to contain a word:
+ *
+ * | value fired        | Tokyo | what is actually in it                                     |
+ * |--------------------|------:|------------------------------------------------------------|
+ * | `wildlife_sanctuary` |  69 | 42 companies, clubs and shops — a condominium management association, a chamber of commerce, a camera society, a nightclub |
+ * | `national_park`      |  67 | 56 municipal parks including a children's playground; a newspaper's head office; travel agencies selling trips to national parks |
+ * | `nature_reserve`     |  28 | 23 municipal parks, a bridge, a riverbank |
+ *
+ * Lisbon says the same thing in another language: `national_park` fires on a
+ * dental clinic, a hospital, a restaurant and the parish office of *Parque das
+ * Nações*; `wildlife_sanctuary` fires on two kindergartens (*Jardim de
+ * Infância*), a convent, a food company and the National Pensions Centre.
+ *
+ * A designation is a decision somebody published — a boundary drawn, a listing
+ * entered — which is the whole reason `hasDesignatedStatus` treats it as local
+ * significance. Feeding this column into it would put a preschool and a
+ * playground into the same evidence channel a national park uses, and a channel
+ * that fires on the wrong thing is worse than one that does not fire. Narrowing
+ * it does not rescue it either: restricting to rows whose primary category is
+ * already an area keeps the systematic error — 56 neighbourhood parks reading as
+ * national parks — and only removes the absurd ones.
+ *
+ * `taxonomy.alternates`, the modern column beside it, is published empty: 0 of
+ * 342,536 Tokyo in-box rows and 0 of 44,386 Lisbon ones.
+ */
 const PLACE_COLUMNS = [
   'id',
   'names',
@@ -251,18 +333,29 @@ interface NamesValue {
  * rendered into a page and is written by strangers; the schema's `httpUrlSchema`
  * lesson applies to text too.
  */
-function readNames(value: unknown): { primary: string; alternates: string[] } | null {
+function readNames(
+  value: unknown,
+): { primary: string; alternates: string[]; english?: string } | null {
   if (!value || typeof value !== 'object') return null;
   const names = value as NamesValue;
   const primary = cleanText(names.primary);
   if (!primary) return null;
 
   const alternates = new Set<string>();
+  let english: string | null = null;
   const common = names.common;
   if (common && typeof common === 'object') {
-    for (const entry of Object.values(common as Record<string, unknown>)) {
+    for (const [language, entry] of Object.entries(common as Record<string, unknown>)) {
       const text = cleanText(entry);
-      if (text && text !== primary) alternates.add(text);
+      if (!text || text === primary) continue;
+      /*
+       * The `en` key is the one translation the interface language needs, and
+       * `Object.values` used to throw it away with its tag — a four-alternate
+       * cap then sliced off the only Latin alias of a CJK-named landmark, and
+       * the board rendered the record in a script its traveller cannot read.
+       */
+      if (language === 'en' && english === null) english = text;
+      alternates.add(text);
     }
   }
   if (Array.isArray(names.rules)) {
@@ -278,8 +371,17 @@ function readNames(value: unknown): { primary: string; alternates: string[] } | 
    * Alternates exist so a record named in one script in one layer links to the
    * same record named in another script in a different layer. Four covers that;
    * forty is a translation table stored on every row of a dense city's pack.
+   * Within the cap, the English name first and Latin-script names before the
+   * rest — the cap must never be what erases the one alias a display layer can
+   * use.
    */
-  return { primary, alternates: [...alternates].slice(0, 4) };
+  const hasLatin = (text: string): boolean => /[A-Za-z]/.test(text);
+  const ordered = [
+    ...(english ? [english] : []),
+    ...[...alternates].filter((text) => text !== english && hasLatin(text)),
+    ...[...alternates].filter((text) => text !== english && !hasLatin(text)),
+  ];
+  return { primary, alternates: ordered.slice(0, 4), ...(english ? { english } : {}) };
 }
 
 export function cleanText(value: unknown): string | null {
@@ -391,6 +493,17 @@ export function readWebsites(value: unknown): string[] {
  * making research cheaper: `website` and `operator` say whose page to look for,
  * `opening_hours` is a published schedule, `fee` and `access` change whether you
  * can get in, `ele` and `seasonal` change when.
+ *
+ * The designation-bearing keys — `boundary`, `heritage`, `protect_class`,
+ * `protection_title`, `site_type`, `landuse` — earn theirs differently: they
+ * are the columns a *conferred status* arrives in. The significance model's
+ * designation channel reads classifying values (`hasConferredDesignation`),
+ * and the inventory's classifying-value list already names every one of these
+ * keys — but a key this allowlist dropped could never reach it, so a reserve
+ * whose boundary somebody surveyed normalised identically to an unremarkable
+ * lawn. Measured on a real four-cell metropolitan read of the geography
+ * themes: 170 rows carry at least one of them, and none survived. These are
+ * status columns, not name lists — nothing here is destination-specific.
  */
 const KEPT_TAGS = new Set([
   'opening_hours',
@@ -415,6 +528,12 @@ const KEPT_TAGS = new Set([
   'historic',
   'natural',
   'amenity',
+  'boundary',
+  'heritage',
+  'protect_class',
+  'protection_title',
+  'site_type',
+  'landuse',
 ]);
 
 function readTags(value: unknown): Record<string, string> {
@@ -479,6 +598,13 @@ function normalizePlace(
 
   const attributes: Record<string, string> = {};
   if (websites.length > 0) attributes.website = websites[0]!;
+  /*
+   * The source's own `en` translation, kept with its tag. The alternates list
+   * loses tags by design; the display layer's brand-spelling tier needs to know
+   * WHICH alias the source asserts is English, not merely that a Latin string
+   * exists. Stored as an attribute so no schema moves.
+   */
+  if (names.english) attributes['name:en'] = names.english;
 
   return {
     id: `${context.layerId}:${id}`,

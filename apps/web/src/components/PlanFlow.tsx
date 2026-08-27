@@ -31,7 +31,8 @@ import {
   type MustDoCoverage,
 } from '@sidequest/core';
 import { MustDoPanel } from './MustDoPanel';
-import { ResearchReadinessPanel } from './ResearchReadinessPanel';
+import { ResearchReadinessPanel, coverageStoppedEarly } from './ResearchReadinessPanel';
+import { travellerVoice } from './plan-language';
 import {
   Badge,
   buttonClass,
@@ -1308,6 +1309,27 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
    */
   const buildIsLive = live.state === 'queued' || live.state === 'running';
 
+  /**
+   * WAITING FOR A SLOT IS NOT THE SAME AS BEING WORKED ON, AND MUST NOT LOOK IT.
+   *
+   * The deployment builds one region at a time. A press that arrives while
+   * somebody else's build is running used to be refused outright — no line, no
+   * retry, on the one action in this product that costs money — and the fix is a
+   * queue, which creates a state this screen has never had to render: accepted,
+   * nothing dispatched, nothing to report progress on.
+   *
+   * `queued` cannot be that signal on its own: it is also the state of every
+   * build in the instant before its worker picks it up, so keying off it would
+   * flash "waiting in line" on runs that never waited. `queuePosition` is
+   * present only when the job is genuinely parked.
+   *
+   * The phase cards are deliberately not rendered here. Every one of them would
+   * read "Waiting", under a header saying "Getting started…", over a build that
+   * has not started and will not for some minutes — five rows of present tense
+   * for something that has not begun.
+   */
+  const waitingInLine = live.queuePosition !== undefined && live.queuePosition > 0;
+
   return (
     <div className="max-w-3xl">
       {failed ? (
@@ -1324,7 +1346,7 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
         button as the only control. This is the state, not a variant of the
         running one.
       */}
-      {!buildIsLive && !notStarted && !failed ? (
+      {!buildIsLive && !notStarted && !failed && !waitingInLine ? (
         <Panel className="mb-5 border-amber bg-amber-soft p-4">
           <p className="text-sm leading-relaxed text-ink">
             This build finished with gaps rather than running to the end. What it did find is
@@ -1342,14 +1364,49 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
         </Panel>
       ) : null}
 
-      <CompilationProgress
-        stages={live.stages}
-        failed={failed}
-        live={buildIsLive}
-        {...(live.startedAt ? { startedAt: live.startedAt } : {})}
-        estimate={live.estimate ?? null}
-        {...(live.reusedSummary ? { reusedSummary: live.reusedSummary } : {})}
-      />
+      {waitingInLine ? (
+        <Panel className="p-5" testId="build-queued">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge tone="blue">In line</Badge>
+            <span className="font-medium text-ink" aria-live="polite">
+              {/*
+                The place, said as a place. "Position 1 of 3" is a queue-server
+                noun; "next" and "one build ahead" are what a person waiting
+                actually wants to know.
+              */}
+              {live.queuePosition === 1
+                ? 'Yours is next to build'
+                : `There ${live.queuePosition === 2 ? 'is 1 build' : `are ${live.queuePosition! - 1} builds`} ahead of yours`}
+            </span>
+          </div>
+          <p className="measure mt-3 text-sm leading-relaxed text-ink-muted">
+            Sidequest researches one trip at a time, so the map and place services it reads are
+            not overrun. Yours is saved and holds its place — it starts on its own as soon as the
+            one in front finishes, and this page will move by itself.
+          </p>
+          {/*
+            An interval a person can plan around, from the one number this
+            product actually knows: builds take minutes, not seconds. No
+            countdown and no percentage — the same rule the progress screen
+            keeps, for the same reason. A build's length depends on how much a
+            provider makes us wait, and a clock ticking towards a moment nobody
+            can predict is a lie told with an animation.
+          */}
+          <p className="measure mt-2 text-sm leading-relaxed text-ink-faint">
+            Each build takes several minutes. You can close this page and come back — nothing is
+            lost, and your place is kept.
+          </p>
+        </Panel>
+      ) : (
+        <CompilationProgress
+          stages={live.stages}
+          failed={failed}
+          live={buildIsLive}
+          {...(live.startedAt ? { startedAt: live.startedAt } : {})}
+          estimate={live.estimate ?? null}
+          {...(live.reusedSummary ? { reusedSummary: live.reusedSummary } : {})}
+        />
+      )}
 
       {/*
         THE PROMISE, KEPT.
@@ -1405,7 +1462,13 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
             disabled={pending}
             onClick={() => onRun(() => cancelCompilationAction(tripId), 'We could not stop that.')}
           >
-            Stop this build
+            {/*
+              "Stop this build" over a build that has not started is an offer to
+              stop something that is not happening. The same action either way —
+              a queued job is cancelled by exactly the write a running one is —
+              said in the tense that is true.
+            */}
+            {waitingInLine ? 'Leave the queue' : 'Stop this build'}
           </button>
         ) : null}
 
@@ -1481,9 +1544,14 @@ function RegionDataPanel({ data }: { data: NonNullable<PlanFlowProps['regionData
             }
           />
         </dl>
-        <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
-          {data.packId} · {data.contentHash}
-        </p>
+        {/*
+          The raw pack id and content hash used to be printed here —
+          `v6|v6/overture:…/35.5688/139.6308/… · 45e0e395434a6e83` on a live
+          plan. They are the build's fingerprint, not a traveller's fact, and
+          every question they answer ("which snapshot, prepared when, complete
+          or not") is already answered above in words. They live on the stored
+          artifact for whoever operates the system.
+        */}
       </Panel>
     </details>
   );
@@ -1625,15 +1693,22 @@ function RoutingPanel({ diagnostics }: { diagnostics: RoutingDiagnostics }) {
         <dl className="space-y-3 text-sm">
           <Row label="Areas" value={`${diagnostics.clusters}`} />
           <Row
-            label="Legs measured"
-            value={`${diagnostics.requestedPairs} across ${diagnostics.providerCalls} request${diagnostics.providerCalls === 1 ? '' : 's'}`}
+            label="Journeys measured"
+            value={`${diagnostics.requestedPairs} between the places on this trip`}
           />
+          {/*
+            "Skipped 1470 pairs between areas nothing would ever read" was the
+            routing planner talking to its own maintainers on a traveller
+            page. The fact worth keeping is that measuring was bounded to
+            journeys a day could actually contain — said in journeys, not
+            pairs.
+          */}
           <Row
-            label="Skipped"
+            label="Not measured"
             value={
               saved > 0
-                ? `${saved} pairs between areas nothing would ever read`
-                : 'Nothing — every pair was worth measuring'
+                ? `${saved} journeys between places no day of this trip would combine`
+                : 'Nothing — every journey was worth measuring'
             }
           />
           {diagnostics.composedPairs > 0 ? (
@@ -1646,7 +1721,9 @@ function RoutingPanel({ diagnostics }: { diagnostics: RoutingDiagnostics }) {
         {diagnostics.reductions.length > 0 ? (
           <ul className="mt-3 space-y-1 text-xs leading-relaxed text-ink-muted">
             {diagnostics.reductions.slice(0, 4).map((reason) => (
-              <li key={reason}>{reason}</li>
+              // Stored planner prose, re-addressed to the reader. See
+              // `plan-language.ts` — a claim is never weakened there.
+              <li key={reason}>{travellerVoice(reason)}</li>
             ))}
           </ul>
         ) : null}
@@ -1779,7 +1856,19 @@ function ReadyStep({
       */}
       {researchReadiness ? (
         <div className="mt-8">
-          <ResearchReadinessPanel tripId={tripId} readiness={researchReadiness} />
+          {/*
+            The panel is told *why* coverage might be thin, from the two facts
+            this screen already renders three sections apart: the job stopped
+            at `partial`, or the artifact's own coverage report recorded a
+            budget stop. Without this the panel blamed the world ("not much
+            published about this place") on the very page whose build report
+            said "we stopped early because this trip ran out of lookups".
+          */}
+          <ResearchReadinessPanel
+            tripId={tripId}
+            readiness={researchReadiness}
+            buildStoppedEarly={snapshot.state === 'partial' || coverageStoppedEarly(coverage)}
+          />
         </div>
       ) : null}
 
@@ -1903,8 +1992,10 @@ function ReadyStep({
 
             {compiledSummary.sourceTimestamps.length > 0 ? (
               <ul className="mt-4 space-y-1 text-[11px] leading-relaxed text-ink-faint">
-                {compiledSummary.sourceTimestamps.slice(0, 4).map((entry) => (
-                  <li key={entry.label}>
+                {compiledSummary.sourceTimestamps.slice(0, 4).map((entry, index) => (
+                  // Indexed key: labels are now bare place names, and two
+                  // places may honestly share one.
+                  <li key={`${entry.label}-${index}`}>
                     {entry.url ? (
                       <a
                         href={entry.url}
@@ -1975,7 +2066,16 @@ function ReadyStep({
                   </p>
                 ) : null}
                 <div className="mt-2">
-                  <StageDisclosure stages={snapshot.stages} />
+                  {/*
+                    A record of a finished build, so the rows resolve: stages
+                    the partial cut never reached read "not reached", never a
+                    "waiting" that contradicts the stopped-early banner above.
+                    Live only during a rebuild that is genuinely running.
+                  */}
+                  <StageDisclosure
+                    stages={snapshot.stages}
+                    live={snapshot.state === 'running' || snapshot.state === 'queued'}
+                  />
                 </div>
               </div>
             ) : null}

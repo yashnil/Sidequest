@@ -14,6 +14,14 @@ import {
 import { POI_BASE_FIELDS } from './poi';
 import { placeWeatherProfileSchema } from './weather';
 import { displayNameSchema } from '../naming/display-name';
+/*
+ * The standing model's own vocabulary, imported rather than restated: a second
+ * copy of these three words here is a second place they can drift apart. The
+ * dependency runs one way — `quality/significance.ts` takes only the `Place`
+ * *type* from this file, which erases — so nothing circular is created at
+ * runtime.
+ */
+import { PROMINENCE_BASES } from '../quality/significance';
 
 /**
  * When the place itself is reachable at all — the snow gate, not the shuttle.
@@ -75,9 +83,29 @@ export type AccessGroup = z.infer<typeof accessGroupSchema>;
 
 export const travelFromBaseSchema = z.object({
   distanceKm: z.number().min(0),
+  /**
+   * Minutes from base **in the mode the matrix was measured in** — see `mode`.
+   * The field name predates multi-mode measurement and is kept for artifact
+   * compatibility; a consumer that needs the mode reads it off `mode` and must
+   * not assume a car.
+   */
   driveMinutes: z.number().int().min(0),
   /** True when the drive itself is part of the appeal, not just transit cost. */
   driveIsScenic: z.boolean().default(false),
+  /**
+   * The mode the minutes above were measured in. Absent on records written
+   * before the field existed, and on legs nobody measured.
+   */
+  mode: z.enum(['car', 'foot']).optional(),
+  /**
+   * True only when a routing engine actually measured this leg. **Absent means
+   * the zeros above are placeholders, not measurements** — a compiled place
+   * whose journey could not be measured keeps the schema-required zeros and
+   * says so here, and every consumer that would read `0` as "no journey at
+   * all" must check this first. The board's reach machinery resolves journeys
+   * independently; this marker is for readers of the stored artifact.
+   */
+  measured: z.boolean().optional(),
 });
 export type TravelFromBase = z.infer<typeof travelFromBaseSchema>;
 
@@ -112,6 +140,17 @@ export const placeSchema = z.object({
    */
   experienceSignificance: z.number().min(0).max(1).optional(),
   /**
+   * True when the witness bound capped this place's evidence contribution:
+   * its kind demanded more than encyclopaedic notice and nothing certified
+   * the visit — no posted hours or fee, no standing designation, no authority
+   * page, no graded ground witnesses. A rank the model itself refused to let
+   * the evidence buy must not be presented as established standing, so the
+   * "established names" caption and the classics group both require this to
+   * be absent or false. Absent on stored places from before the distinction
+   * existed, which reads as "not bounded" — exactly today's behaviour.
+   */
+  significanceBounded: z.boolean().optional(),
+  /**
    * What kind of hours question this place can even have.
    *
    * `gated` — somebody opens and closes it, so unknown hours are a real gap to
@@ -128,6 +167,25 @@ export const placeSchema = z.object({
    * river. Absent on stored places from before the distinction existed.
    */
   durationBasis: z.enum(['category_estimate', 'source_stated']).optional(),
+  /**
+   * WHICH OF THIS RECORD'S PRACTICAL FIELDS ARE THE CATEGORY'S GUESS.
+   *
+   * The schema requires an access block, a season, an intensity, a crowd level
+   * and a cost on every place, and a producer that has no evidence fills them
+   * from the category archetype — which is honest as a prior and a lie as a
+   * printed fact: a live road-region board stored a highland ice field as
+   * paved, easy, open all year and busy, because the archetype's defaults were
+   * serialized with nothing marking them as defaults. Each name listed here
+   * says "the corresponding field is a category estimate, not a fact about
+   * this place" — the same contract `durationBasis: 'category_estimate'`
+   * already states for the duration — so a card can render "not verified"
+   * instead of the guess. Absent entries mean the producer had real evidence
+   * (or predate the field, which readers must treat as unmarked, not as
+   * verified).
+   */
+  estimatedDefaults: z
+    .array(z.enum(['access', 'seasonal_access', 'physical_intensity', 'crowd_level', 'cost_level']))
+    .optional(),
   /**
    * Interests this place genuinely satisfies, ordered by how central each one is
    * to the place itself. Order is load-bearing: the first entry the traveller
@@ -149,13 +207,19 @@ export const placeSchema = z.object({
    */
   crowdLevel: crowdLevelSchema,
   /**
-   * 0-1 how well known the place is. **A derived read of `globalProminence`.**
+   * 0-1 how well known the place is. **A derived read of the standing.**
    *
    * Kept because the board, the autoselector, the fit scorer and the coverage
-   * report all read it and none of them can express an absence. It carries
-   * `UNKNOWN_PROMINENCE_READ` when no knowledge base mentions the place, so a
-   * low value here means "unnoticed *or* unobserved" — `globalProminence` is the
-   * field that tells those apart. Produced by `standingFields`, never by hand.
+   * report all read it and none of them can express an absence. `prominenceRead`
+   * produces it: the world's notice where that was observed, otherwise what the
+   * region's own authorities, designations and ground established, otherwise
+   * `WITHHELD_PROMINENCE_READ`. It used to floor at that constant the moment a
+   * knowledge-base tag was missing, which read absence of evidence as evidence
+   * of obscurity and put a metropolis's principal castle under a municipal
+   * sports park. A low value here still means "unnoticed *or* unobserved" —
+   * `globalProminence` is the field that tells those apart, and
+   * `standsAsEstablishedName` is what any consumer claiming standing must ask.
+   * Produced by `standingFields`, never by hand.
    */
   popularityScore: z.number().min(0).max(1),
   /**
@@ -174,6 +238,27 @@ export const placeSchema = z.object({
    * must never be written as `0` or `0.5`. A place with no evidence at all is not
    * a hidden gem; it is a place we know nothing about.
    */
+  /**
+   * WHICH QUESTION `popularityScore` ANSWERED — see `PROMINENCE_BASES`.
+   *
+   * `observed` is a notice read; `withheld` is a standing something pointing at
+   * this place established while nobody ever put the notice question; and
+   * `unestablished` is a landlord's front door, a shared administrative name,
+   * or nothing at all beyond a name and a position.
+   *
+   * Carried because two consumers act on the difference and both were reading
+   * the wrong fact off `globalProminence`: the classics seat and the
+   * established-names caption (`standsAsEstablishedName`), which asserted
+   * standing over a ward park and refused it to a destination's principal
+   * temple, and the anchor-slot condition (`standingWasEstablished`), which did
+   * not exist and let a record with no evidence beyond its name and position
+   * hold 42% of a trip's activity time.
+   *
+   * Absent on places stored before the distinction existed, and every consumer
+   * falls back to the fields it does carry — an old artifact reads exactly as
+   * it did. Produced by `standingFields`, never by hand.
+   */
+  prominenceBasis: z.enum(PROMINENCE_BASES).optional(),
   /** 0-1 knowledge-base breadth only. Never an attribute count. */
   globalProminence: z.number().min(0).max(1).optional(),
   /** 0-1 official publication, conferred designation, the region's own naming. */

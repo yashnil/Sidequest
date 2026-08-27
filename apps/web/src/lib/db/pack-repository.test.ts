@@ -16,6 +16,7 @@ import {
   findStaleRegionPack,
   getRegionPack,
   listRegionPacks,
+  packRowId,
   pruneRegionPacks,
   readScopeGround,
   saveRegionPack,
@@ -28,7 +29,16 @@ import {
  * pack is named by a compiled region, so it has to be immutable; it is shared
  * between trips, so it has to survive one of them being deleted; and it is
  * expensive, so two racing builds must end up with one row rather than two.
+ *
+ * Packs are compared by content hash rather than by the id the builder passed:
+ * the store names a row after the ground, the schema and the release, which is
+ * the defect the last section of this file exists for.
  */
+
+/** The id the builder used to mint, and the collision it caused. */
+function livePackId(releaseId: string): string {
+  return `pack-relation/1-${releaseId}`;
+}
 
 let directory: string;
 
@@ -74,6 +84,8 @@ function packFor(input: {
   scope?: GeographicScope;
   names?: string[];
   createdAt?: string;
+  /** Cells the build could not read; a non-empty list makes the pack `partial`. */
+  failedCellIds?: string[];
 }): RegionPack {
   const scope = input.scope ?? scopeFor();
   const names = input.names ?? ['Harbour Museum'];
@@ -111,7 +123,7 @@ function packFor(input: {
         records,
         featuresRead: records.length * 3,
         featuresRetained: records.length,
-        failedCellIds: [],
+        failedCellIds: input.failedCellIds ?? [],
       },
     ],
     diagnostics: {
@@ -156,9 +168,11 @@ describe('region pack storage', () => {
       catalog: 'overture',
       releaseId: '2026-07-22.0',
     });
-    expect(found?.id).toBe('pack-1');
     expect(found?.contentHash).toBe(pack.contentHash);
-    expect(getRegionPack('pack-1')?.id).toBe('pack-1');
+    // The row is named after the ground it covers, and the stored pack carries
+    // that name — so a compiled region naming a pack names something findable.
+    expect(found?.id).toBe(packRowId(pack));
+    expect(getRegionPack(packRowId(pack))?.contentHash).toBe(pack.contentHash);
   });
 
   it('does not offer a pack from a different release as a fresh hit', () => {
@@ -169,7 +183,77 @@ describe('region pack storage', () => {
       findRegionPack({ scopeHash: pack.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' }),
     ).toBeNull();
     // It is still reachable as the deliberate last resort, which the caller labels.
-    expect(findStaleRegionPack(pack.scopeHash)?.id).toBe('pack-old');
+    expect(findStaleRegionPack(pack.scopeHash)?.contentHash).toBe(pack.contentHash);
+  });
+
+  it('lets a build that finally read the ground replace a stored partial of the same identity', () => {
+    /*
+     * The row id is the identity of the ground, so a time-starved build and the
+     * rebuild that completes it collide on id — and `INSERT OR IGNORE` alone
+     * kept the starved one for the whole release. Measured live: a metropolitan
+     * pack shipped four of six layers empty on a slow link, and no later build
+     * could displace it.
+     */
+    const starved = packFor({
+      id: 'pack-starved',
+      releaseId: '2026-07-22.0',
+      names: ['Only Survivor'],
+      failedCellIds: ['g-0-0'],
+    });
+    expect(starved.state).toBe('partial');
+    saveRegionPack(starved);
+
+    const completed = packFor({
+      id: 'pack-completed',
+      releaseId: '2026-07-22.0',
+      names: ['Harbour Museum', 'Old Fort', 'Grand Market'],
+    });
+    expect(completed.state).toBe('ready');
+    const stored = saveRegionPack(completed);
+
+    expect(stored.contentHash).toBe(completed.contentHash);
+    const found = findRegionPack({
+      scopeHash: completed.scopeHash,
+      catalog: 'overture',
+      releaseId: '2026-07-22.0',
+    });
+    expect(found?.contentHash).toBe(completed.contentHash);
+    expect(found?.state).toBe('ready');
+    /* Same identity, one row: the completion replaces, it does not accumulate. */
+    expect(listRegionPacks().filter((row) => row.id === stored.id)).toHaveLength(1);
+  });
+
+  it('lets a fuller partial replace a thinner partial, and nothing replace a ready pack', () => {
+    const thin = packFor({
+      id: 'pack-thin',
+      releaseId: '2026-07-22.0',
+      names: ['One'],
+      failedCellIds: ['g-0-0'],
+    });
+    saveRegionPack(thin);
+
+    const fuller = packFor({
+      id: 'pack-fuller',
+      releaseId: '2026-07-22.0',
+      names: ['One', 'Two', 'Three'],
+      failedCellIds: ['g-0-0'],
+    });
+    const afterFuller = saveRegionPack(fuller);
+    expect(afterFuller.contentHash).toBe(fuller.contentHash);
+
+    const ready = packFor({ id: 'pack-ready', releaseId: '2026-07-22.0', names: ['One', 'Two'] });
+    saveRegionPack(ready);
+
+    /* A later, thinner build must not displace the ready pack — in either state. */
+    const relapse = packFor({
+      id: 'pack-relapse',
+      releaseId: '2026-07-22.0',
+      names: ['Only'],
+      failedCellIds: ['g-0-0'],
+    });
+    const afterRelapse = saveRegionPack(relapse);
+    expect(afterRelapse.contentHash).toBe(ready.contentHash);
+    expect(afterRelapse.state).toBe('ready');
   });
 
   it('coalesces two builds racing for the same ground and release', () => {
@@ -181,14 +265,16 @@ describe('region pack storage', () => {
 
     // The loser reads back the winner rather than overwriting it, so a compiled
     // region can never name a pack that was replaced underneath it.
-    expect(storedFirst.id).toBe('pack-a');
-    expect(storedSecond.id).toBe('pack-a');
+    expect(storedFirst.contentHash).toBe(first.contentHash);
+    expect(storedSecond.contentHash).toBe(first.contentHash);
+    expect(storedSecond.id).toBe(storedFirst.id);
     expect(listRegionPacks().filter((row) => row.state === 'ready')).toHaveLength(1);
   });
 
   it('never lets a failed build replace a usable pack', () => {
-    saveRegionPack(packFor({ id: 'pack-good', releaseId: '2026-07-22.0' }));
-    const bad = packFor({ id: 'pack-bad', releaseId: '2026-07-22.0' });
+    const good = packFor({ id: 'pack-good', releaseId: '2026-07-22.0' });
+    saveRegionPack(good);
+    const bad = packFor({ id: 'pack-bad', releaseId: '2026-07-22.0', names: ['Nothing'] });
     saveRegionPack({ ...bad, state: 'failed', failure: { code: 'x', detail: 'Nothing came back.' } });
 
     const found = findRegionPack({
@@ -196,7 +282,7 @@ describe('region pack storage', () => {
       catalog: 'overture',
       releaseId: '2026-07-22.0',
     });
-    expect(found?.id).toBe('pack-good');
+    expect(found?.contentHash).toBe(good.contentHash);
   });
 
   it('treats a corrupt payload as absent rather than crashing a compilation', () => {
@@ -204,18 +290,20 @@ describe('region pack storage', () => {
     saveRegionPack(pack);
     getDb()
       .prepare('UPDATE region_packs SET payload_json = ? WHERE id = ?')
-      .run('{"schemaVersion":1,"id":', 'pack-corrupt');
+      .run('{"schemaVersion":1,"id":', packRowId(pack));
 
     expect(
       findRegionPack({ scopeHash: pack.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' }),
     ).toBeNull();
-    expect(getRegionPack('pack-corrupt')).toBeNull();
+    expect(getRegionPack(packRowId(pack))).toBeNull();
   });
 
   it('ignores a pack written under a schema version this build cannot read', () => {
     const pack = packFor({ id: 'pack-future', releaseId: '2026-07-22.0' });
     saveRegionPack(pack);
-    getDb().prepare('UPDATE region_packs SET schema_version = 99 WHERE id = ?').run('pack-future');
+    getDb()
+      .prepare('UPDATE region_packs SET schema_version = 99 WHERE id = ?')
+      .run(packRowId(pack));
 
     expect(
       findRegionPack({ scopeHash: pack.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' }),
@@ -253,8 +341,8 @@ describe('region pack storage', () => {
     expect(other.scopeHash).toBe(pack.scopeHash);
     expect(
       findRegionPack({ scopeHash: other.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' })
-        ?.id,
-    ).toBe('pack-shared');
+        ?.contentHash,
+    ).toBe(pack.contentHash);
   });
 
   /**
@@ -289,8 +377,8 @@ describe('region pack storage', () => {
         scopeHash: tighter.scopeHash,
         catalog: 'overture',
         releaseId: '2026-07-22.0',
-      })?.id,
-    ).toBe('pack-wide');
+      })?.contentHash,
+    ).toBe(stored.contentHash);
   });
 
   it('does not answer a wider scope from a pack that covers less ground', () => {
@@ -334,6 +422,82 @@ describe('region pack storage', () => {
         releaseId: '2026-07-22.0',
       }),
     ).toBeNull();
+  });
+
+  /**
+   * THE CACHE THAT NEVER WROTE.
+   *
+   * The builder minted `pack-{destinationCandidateId}-{releaseId}`, and that
+   * string carries neither the schema version nor the bounds while the scope
+   * hash carries both. Both tests below reproduce the live id exactly, because
+   * the collision *is* the defect: with the builder's id as the primary key,
+   * `INSERT OR IGNORE` silently discarded the new pack and the next build paid
+   * the whole acquisition again.
+   *
+   * Nothing about the loss was visible from inside the build that suffered it —
+   * the writer reads back, finds a row it cannot parse, and returns its own
+   * in-memory pack — which is why this survived a live compilation of two
+   * continents without anybody noticing the store was empty afterwards.
+   */
+  it('stores a fresh pack over a row this build can no longer read', () => {
+    const pack = packFor({ id: livePackId('2026-07-22.0'), releaseId: '2026-07-22.0' });
+
+    // What an earlier release of this product left behind: the same id, an
+    // older schema, and therefore a different scope hash.
+    getDb()
+      .prepare(
+        `INSERT INTO region_packs
+           (id, scope_hash, catalog, release_id, schema_version, state, content_hash,
+            record_count, payload_json, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        livePackId('2026-07-22.0'),
+        'v3/relation/1/40.6000/-74.1000/40.8000/-73.9000',
+        'overture',
+        '2026-07-22.0',
+        3,
+        'ready',
+        'content-hash-from-an-older-schema',
+        1,
+        '{"schemaVersion":3}',
+        '2026-07-01T00:00:00.000Z',
+      );
+
+    saveRegionPack(pack);
+
+    expect(
+      findRegionPack({ scopeHash: pack.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' })
+        ?.contentHash,
+    ).toBe(pack.contentHash);
+  });
+
+  it('keeps two packs for one destination when they describe different ground', () => {
+    const shared = livePackId('2026-07-22.0');
+    const narrow = packFor({ id: shared, releaseId: '2026-07-22.0', names: ['Narrow'] });
+    const wide = packFor({
+      id: shared,
+      releaseId: '2026-07-22.0',
+      names: ['Wide'],
+      scope: scopeFor({
+        shape: {
+          kind: 'bounds',
+          bounds: { southWest: { lat: 40.4, lng: -74.3 }, northEast: { lat: 41.0, lng: -73.7 } },
+        },
+      }),
+    });
+    // Precondition: one destination, one release, two boxes — which is the
+    // ordinary case, because the box is derived from the traveller.
+    expect(wide.scopeHash).not.toBe(narrow.scopeHash);
+
+    saveRegionPack(narrow);
+    saveRegionPack(wide);
+
+    expect(listRegionPacks()).toHaveLength(2);
+    expect(
+      findRegionPack({ scopeHash: wide.scopeHash, catalog: 'overture', releaseId: '2026-07-22.0' })
+        ?.contentHash,
+    ).toBe(wide.contentHash);
   });
 
   it('reads a ground identity that contains slashes of its own', () => {

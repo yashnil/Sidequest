@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import {
+  mayShowItinerary,
   PLANNER_READINESS_LEVEL_LABELS,
   PLANNER_REMEDY_LABELS,
   ruledOutRemedies,
@@ -123,7 +124,24 @@ export function PlannerReadinessPanel({ readiness }: { readiness: PlannerReadine
         the thing they are looking for. Nothing about the panel's visual weight
         changes; `text-lg` is stated, not inherited from the tag.
       */}
-      <h2 className="font-display text-lg text-ink">We did not build a plan</h2>
+      {/*
+        THE HEADING HAS TO MATCH WHETHER A PLAN EXISTS.
+
+        This panel is shown for every level except `ready`, and since readiness
+        learned to judge completeness that includes plans which were built and
+        are too thin to be a trip — a six-day trip holding one stop is now
+        `insufficient` rather than a cheerful `ready_with_cautions`. Heading that
+        "We did not build a plan" over a board whose itinerary link works is the
+        same class of contradiction the level was fixed to remove.
+
+        `mayShowItinerary` is the one place the "is there a plan at all" rule
+        lives, so the heading reads it rather than inventing a second test.
+      */}
+      <h2 className="font-display text-lg text-ink">
+        {mayShowItinerary(readiness)
+          ? 'Your plan is thinner than your trip'
+          : 'We did not build a plan'}
+      </h2>
       <p className="text-xs uppercase tracking-[0.12em] text-ink-faint" data-testid="readiness-level">
         {PLANNER_READINESS_LEVEL_LABELS[readiness.level]}
       </p>
@@ -280,7 +298,12 @@ const BLOCKER_LABELS: Record<string, string> = {
   seasonally_closed: 'out of season on your dates',
   not_feasible: 'ruled out by the answers you gave',
   no_time_left: 'no day had the hours and travel budget for them',
-  exceeds_daily_travel: 'further to reach and return than you will drive in a day',
+  /*
+   * Mode-neutral: this clause is rendered over a trip whose own itinerary page
+   * may say "This plan assumes no car", and telling that traveller what they
+   * "will drive" is the same error as offering them a bigger driving limit.
+   */
+  exceeds_daily_travel: 'further to reach and return than a day of this trip holds',
   exceeds_intensity: 'harder going than you asked for',
   frequency_reached: 'more of that kind of thing than you wanted',
   lower_priority: 'maybes that the definite choices crowded out',

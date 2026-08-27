@@ -17,11 +17,16 @@ import { scopeFitsTrip } from '@sidequest/compiler';
 import { PlanFlow, type PlanStep } from '@/components/PlanFlow';
 import { TripContextBar } from '@/components/TripContextBar';
 import { providerReadiness } from '@/lib/compiler/readiness';
-import { getIntent, getLatestJob, getLatestWorkPlan } from '@/lib/db/compiler-repository';
-import { getTrip } from '@/lib/db/repository';
+import {
+  getIntent,
+  getLatestJob,
+  getLatestWorkPlan,
+  queuePositionFor,
+} from '@/lib/db/compiler-repository';
+import { ownedTrip } from '@/lib/net/trip-access';
 import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
 import type { CompilationSnapshot } from './actions';
-import { COMPILATION_ERROR_COPY, isRetryable } from '@sidequest/core';
+import { compilationVerdict } from '@/lib/compiler/verdict';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +45,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const trip = getTrip(id);
+  const trip = await ownedTrip(id);
   return {
     /*
      * The destination first, like every other trip route.
@@ -64,7 +69,11 @@ export async function generateMetadata({
  */
 export default async function PlanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const trip = getTrip(id);
+  /*
+   * The owner's trip or nothing — a foreign browser sees a missing trip, the
+   * same boundary every trip door holds. See `lib/net/trip-access`.
+   */
+  const trip = await ownedTrip(id);
   if (!trip) notFound();
 
   // A trip against an authored region never enters this flow.
@@ -116,21 +125,36 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
    */
   const abandoned = job ? isAbandoned(job, new Date()) : false;
 
+  /**
+   * WHAT A FAILED BUILD SAYS AND WHETHER IT MAY OFFER A RETRY — ONE DECIDER.
+   *
+   * `compilationVerdict` reads the code, the detail and the stage records
+   * together, because the code alone told two lies on live builds: a catalogue
+   * outage read as a verdict about the destination, and a wall-clock kill read
+   * as an exhausted lookup ledger. The poll (`compilationSnapshotAction`) calls
+   * the same function, so the first paint and every refresh agree.
+   */
+  const verdict = job?.errorCode
+    ? compilationVerdict({
+        errorCode: job.errorCode,
+        errorDetail: job.errorDetail,
+        stages: job.stages,
+      })
+    : null;
+
   const snapshot: CompilationSnapshot = job
     ? {
         state: abandoned ? 'failed' : job.state,
         stages: displayStages(job),
-        ...(job.errorCode
-          ? { errorMessage: COMPILATION_ERROR_COPY[job.errorCode] }
+        ...(verdict
+          ? { errorMessage: verdict.message }
           : abandoned
             ? {
                 errorMessage:
                   'This build stopped before it finished — the machine it was running on went away. Nothing was lost; starting it again picks up everything we had already read.',
               }
             : {}),
-        retryable: job.errorCode
-          ? isRetryable(job.errorCode)
-          : abandoned || job.state === 'failed',
+        retryable: verdict ? verdict.retryable : abandoned || job.state === 'failed',
         ...(job.compiledRegionId ? { compiledRegionId: job.compiledRegionId } : {}),
         /*
          * So the elapsed clock is right on the first paint rather than blank
@@ -142,6 +166,13 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
          * that the very next poll will supply.
          */
         startedAt: job.startedAt,
+        /*
+         * So a parked build says "waiting for a free slot" on the first paint
+         * rather than "Getting started…" until the first poll a second later.
+         * `waitingSince` is the row's own answer to "has anything been
+         * dispatched for this"; the position is what the poll then keeps fresh.
+         */
+        ...(job.waitingSince ? { queuePosition: queuePositionFor(job.id) ?? 1 } : {}),
       }
     : { state: 'none', stages: [], retryable: false };
 
@@ -216,7 +247,11 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                   // present tense the progress card was corrected for.
                   abandoned || (job && job.state !== 'queued' && job.state !== 'running')
                   ? 'Stopped'
-                  : 'Building'
+                  : // And "Building" over a build nothing has been dispatched
+                    // for is the same overclaim one step earlier.
+                    job?.waitingSince
+                    ? 'Waiting'
+                    : 'Building'
                 : 'Planning',
         }}
       />
@@ -272,12 +307,15 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
               subregionCount: compiled.subregions.length,
               satelliteCount: compiled.satellites.length,
               // Provenance a reader can follow back, which is what makes an
-              // attribution meaningful rather than decorative.
+              // attribution meaningful rather than decorative. The label is
+              // the place's name alone: the raw element id — a bare UUID on
+              // the catalogue this ships with — told a traveller nothing, and
+              // the link underneath still reaches the exact source record.
               sourceTimestamps: compiled.places
                 .filter((place) => place.source.element !== undefined)
                 .slice(0, 6)
                 .map((place) => ({
-                  label: `${place.name} — ${place.source.element!.elementId}`,
+                  label: place.name,
                   ...(place.source.element!.url ? { url: place.source.element!.url } : {}),
                   ...(place.source.element!.sourceTimestamp
                     ? { at: place.source.element!.sourceTimestamp }

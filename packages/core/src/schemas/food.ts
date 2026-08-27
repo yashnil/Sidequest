@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { haversineKm } from '@sidequest/geo';
 import { monthDaySchema } from './calendar';
 import { httpUrlSchema, minuteOfDaySchema } from './common';
 import { operatingPeriodSchema } from './hours';
@@ -390,6 +391,140 @@ export type FoodOpeningCalendar = z.infer<typeof foodOpeningCalendarSchema>;
 // The venue
 // ---------------------------------------------------------------------------
 
+/**
+ * THE DOOR WALK IS THE WHOLE OF WHAT SHARING A ROUTING NODE MEANS.
+ *
+ * `walkMinutesFromRouting` below is bounded at twenty minutes because the node
+ * and the door are meant to be two points on one main street — "authored, and
+ * small by construction". That bound is also, read the other way, the *only*
+ * statement this schema makes about how far a venue may be from the node it is
+ * priced against, so it is named once here and both readings use it.
+ *
+ * The reading was missing, and four of four named-restaurant legs in the founder
+ * journeys were wrong because of it. One compiled venue was snapped onto a park
+ * 4.80 km away — the nearest thing already in the matrix — and the day rendered
+ * "8 min on foot, in the model" against it with `provenance: 'measured'`: the
+ * park's travel time, printed under the venue's name. A second venue 3.27 km
+ * from the same park carried the identical minutes and kilometres.
+ */
+export const FOOD_DOOR_WALK_MAX_MINUTES = 20;
+
+/**
+ * The same contract in kilometres, at whatever pace the caller models walks
+ * with — `MODELLED_WALK_KMH` for every caller in this repository.
+ *
+ * Taken as an argument rather than imported so the schema layer keeps stating
+ * the contract and nothing else: the pace belongs to the travel layer, and a
+ * second copy of it here is how two answers to one question start.
+ */
+export function foodRoutingSnapKm(walkKmh: number): number {
+  return (FOOD_DOOR_WALK_MAX_MINUTES * walkKmh) / 60;
+}
+
+/**
+ * The walk from the node to the door, from the distance actually between them.
+ *
+ * Both live food paths hard-coded this to zero, which is what let a leg to a
+ * venue kilometres from its node read as a door-to-door measurement. Rounded up,
+ * like every other modelled walk: a number that understates a walk puts a
+ * traveller at a door after it shut.
+ *
+ * Clamped at the contract's own maximum only to absorb float error exactly at
+ * the ceiling — `1.5 km` at `4.5 km/h` evaluates to `20.000000000000004`
+ * minutes. A venue past the ceiling is refused by `snapFoodRouting`, never
+ * clamped into range.
+ */
+export function foodDoorWalkMinutes(km: number, walkKmh: number): number {
+  return Math.min(FOOD_DOOR_WALK_MAX_MINUTES, Math.ceil((km * 60) / walkKmh));
+}
+
+/**
+ * THE NODE A VENUE MAY SHARE, OR NOTHING.
+ *
+ * Nearest rather than first: a two-base trip would otherwise price every
+ * restaurant against the first base, including the ones across a fjord from it.
+ * But nearest is not on its own a licence to snap — the anchors are the bases
+ * plus the couple of dozen compiled places, so in a metropolis the nearest one
+ * is routinely three to sixteen kilometres away, and snapping there prices the
+ * meal at the anchor's travel time under the venue's name.
+ *
+ * So the ceiling is the door-walk contract above, converted to distance. Past
+ * it there is no honest node for this venue and the caller is handed `null`
+ * rather than a plausible-looking one; inventing a matrix row for the venue
+ * would grow the matrix by one row per restaurant, which is the cost this whole
+ * mechanism exists to avoid.
+ */
+export function snapFoodRouting(input: {
+  coordinates: { lat: number; lng: number };
+  anchors: readonly { id: string; coordinates: { lat: number; lng: number } }[];
+  walkKmh: number;
+}): { routingId: string; walkMinutesFromRouting: number; km: number } | null {
+  const door = { id: 'door', ...input.coordinates };
+  let best: { id: string; km: number } | undefined;
+  for (const anchor of input.anchors) {
+    const km = haversineKm({ id: anchor.id, ...anchor.coordinates }, door);
+    if (!best || km < best.km) best = { id: anchor.id, km };
+  }
+  if (!best) return null;
+  if (best.km > foodRoutingSnapKm(input.walkKmh)) return null;
+  return {
+    routingId: best.id,
+    walkMinutesFromRouting: foodDoorWalkMinutes(best.km, input.walkKmh),
+    km: best.km,
+  };
+}
+
+/**
+ * The same contract, enforced where a region's food is assembled.
+ *
+ * A venue may only carry a routing id it is within one door walk of. `snapFoodRouting`
+ * is the only sanctioned way to choose one, and this is the assertion that says
+ * so at the boundary: a venue built some other way — a second provider path, a
+ * fixture, a later edit that reaches for `nearestAnchor` again — cannot be
+ * stored with a node kilometres from its door without failing here first.
+ *
+ * Throws rather than filters. A stored region carrying this defect renders a
+ * measured travel time to the wrong place, which is worse than a compilation
+ * that stops and says why.
+ */
+export function assertFoodRoutingWithinDoorWalk(input: {
+  venues: readonly {
+    id: string;
+    coordinates: { lat: number; lng: number };
+    routingId: string;
+    walkMinutesFromRouting?: number;
+  }[];
+  anchors: readonly { id: string; coordinates: { lat: number; lng: number } }[];
+  walkKmh: number;
+}): void {
+  const ceilingKm = foodRoutingSnapKm(input.walkKmh);
+  const byId = new Map(input.anchors.map((anchor) => [anchor.id, anchor.coordinates]));
+  const offenders: string[] = [];
+  for (const venue of input.venues) {
+    const node = byId.get(venue.routingId);
+    if (!node) {
+      offenders.push(`"${venue.id}" is priced against "${venue.routingId}", which is not a node`);
+      continue;
+    }
+    const km = haversineKm({ id: venue.routingId, ...node }, { id: venue.id, ...venue.coordinates });
+    if (km > ceilingKm) {
+      offenders.push(
+        `"${venue.id}" is ${km.toFixed(2)} km from "${venue.routingId}", past the ${ceilingKm.toFixed(2)} km a ${FOOD_DOOR_WALK_MAX_MINUTES}-minute door walk allows`,
+      );
+      continue;
+    }
+    const walk = venue.walkMinutesFromRouting ?? 0;
+    if (walk !== foodDoorWalkMinutes(km, input.walkKmh)) {
+      offenders.push(
+        `"${venue.id}" is ${km.toFixed(2)} km from its node but records a ${walk}-minute walk to the door`,
+      );
+    }
+  }
+  if (offenders.length > 0) {
+    throw new Error(`Food venues are priced against nodes they are not beside:\n- ${offenders.join('\n- ')}`);
+  }
+}
+
 export const foodVenueSchema = z
   .object({
     ...POI_BASE_FIELDS,
@@ -425,11 +560,18 @@ export const foodVenueSchema = z
      * exactly the same machinery as a drive to a lake, rather than by a
      * straight-line distance dressed up as a road time. Several venues share one
      * routing node, which is honest at this model's resolution — a corridor
-     * model cannot tell one end of a main street from the other.
+     * model cannot tell one end of a main street from the other. It is not
+     * honest at any distance: `snapFoodRouting` is the only sanctioned way to
+     * choose one, and it refuses beyond `FOOD_DOOR_WALK_MAX_MINUTES` on foot.
      */
     routingId: z.string().min(1),
-    /** From the routing node to the door. Authored, and small by construction. */
-    walkMinutesFromRouting: z.number().int().min(0).max(20).default(0),
+    /**
+     * From the routing node to the door. Small by construction — and the bound
+     * is `FOOD_DOOR_WALK_MAX_MINUTES` rather than a literal because
+     * `snapFoodRouting` reads the same number as a distance ceiling on which
+     * node a venue may share at all. One contract, one place it is stated.
+     */
+    walkMinutesFromRouting: z.number().int().min(0).max(FOOD_DOOR_WALK_MAX_MINUTES).default(0),
   })
   .superRefine((venue, ctx) => {
     if (venue.provisioning !== 'none' && venue.hours.kind === 'unknown') {
@@ -634,6 +776,30 @@ export const scheduledFoodSchema = z.object({
   /** Set when the traveller declared a need this venue has nothing on record for. */
   dietaryUnverified: z.array(dietaryNeedSchema).default([]),
   hours: scheduledFoodHoursSchema.optional(),
+  /**
+   * Nobody published an opening time for this venue that anybody could read.
+   *
+   * Not the same statement as `hours` being absent, and the difference is the
+   * whole of the naming rule. An absent `hours` on a named venue is a name with
+   * nothing behind it, which the validator refuses. This says the venue's own
+   * record answered "unknown" — which is a caution to state, never a reason to
+   * withhold who they are. Every venue a live compilation stores carries
+   * `hours: { kind: 'unknown' }`, so treating that as a refusal produced
+   * thirty-one time-held meals across three trips and not one named place.
+   *
+   * Carried on the item rather than re-derived, because a stored plan has no
+   * way back to the venue record it was built from.
+   */
+  hoursUnknown: z.boolean().default(false),
+  /**
+   * An area named instead of a venue, when naming one would have outrun the
+   * evidence.
+   *
+   * Read off the region's own localities and the day's own cluster — never
+   * invented — so a meal that cannot be a place is still somewhere to go rather
+   * than a bare hour with a meal's name on it.
+   */
+  areaName: z.string().min(1).optional(),
   routeContext: foodRouteContextSchema,
   /**
    * The walk between the routing node and the door, one way.
@@ -650,7 +816,7 @@ export const scheduledFoodSchema = z.object({
    * existed genuinely does not know its walk, and assuming zero there would
    * silently revive the same off-by-one in the other direction.
    */
-  walkMinutesFromRouting: z.number().int().min(0).max(20).optional(),
+  walkMinutesFromRouting: z.number().int().min(0).max(FOOD_DOOR_WALK_MAX_MINUTES).optional(),
   /** Extra minutes on the road this stop cost, over going straight on. */
   detourMinutes: z.number().int().min(0).default(0),
   /** On a grocery stop: which day the supplies are for. */

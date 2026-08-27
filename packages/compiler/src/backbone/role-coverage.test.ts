@@ -145,6 +145,8 @@ const ROLE_SENSITIVE_SLOTS: readonly CandidateRole[] = ['side_quest', 'gateway',
  * destination. The only shape that reaches `classic`, and no leaf has it.
  */
 const GATED_SHORT_URBAN: TaxonomyClassification = {
+  hazardousAccess: false,
+  commonplaceNotice: false,
   role: 'attraction',
   subrole: 'urban_place',
   match: { kind: 'source_leaf_category', key: 'a_gated_short_urban_leaf' },
@@ -1087,6 +1089,8 @@ describe('a utility role floors a visitable archetype', () => {
   ): TaxonomyClassification => ({
     role,
     subrole,
+    hazardousAccess: false,
+    commonplaceNotice: false,
     match: { kind: 'source_leaf_category', key: 'a_leaf' },
     category: 'day_hike',
     interests: ['hiking'],

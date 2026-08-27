@@ -108,23 +108,51 @@ export const CLASS_INTEREST_PACKS: Record<DestinationClass, readonly Interest[]>
  *    classifier's own verdict and is always trusted.
  * 2. `categories` / `displayKinds` — the planning category, and the truthful
  *    noun a card prints when the category's label would be a lie.
- * 3. `sourceKeywords` — substrings of the source's own leaf category, which
+ * 3. `sourceKeywords` — whole tokens of the source's own leaf category, which
  *    every compiled place carries as its first tag (`places=shinto_shrine`).
  *    This is the only channel with the resolution to tell a shrine from a
  *    castle, because the thirteen-value planning vocabulary cannot.
  *
  * Keywords, not exact categories, and deliberately: the backing catalogue holds
  * several hundred leaf categories and grows, so a fixed list would silently
- * stop recognising things. A substring is a weaker claim and the right one —
- * `shrine` matches `shinto_shrine`, `buddhist_temple` matches `temple`, and
+ * stop recognising things. A keyword is a weaker claim and the right one —
+ * `shrine` matches `shinto_shrine`, `temple` matches `buddhist_temple`, and
  * nothing in this file has to know which country it is looking at.
+ *
+ * TOKENS, NEVER RAW SUBSTRINGS, AND THE COMPOUNDS A TOKEN STILL GETS WRONG.
+ *
+ * The keywords were matched with `String.includes`, and a leaf category is a
+ * snake_case compound, so a keyword was read out of the middle of an unrelated
+ * word: measured over the 220 leaves the classifier recognises, `market`
+ * matched `supermarket`, `quarter` matched `corporate_headquarters`, and `park`
+ * matched `bicycle_parking` — a grocery run, an office and a bike rack claimed
+ * as a market, a neighbourhood and a green space. `namesKind` matches whole
+ * tokens instead, and a multi-token keyword matches a contiguous run, so
+ * `hot_spring` still names one kind rather than two words that co-occur.
+ *
+ * A token boundary is not enough on its own, because the catalogue publishes
+ * compounds whose head noun is the keyword and whose kind is not: an
+ * `amusement_park` is a ticketed enclosure, not somewhere to take an easy walk,
+ * and on the live boards of 2026-08-26 two of them — one under each of two
+ * destinations — carried `easy_nature_walks` and were sold to the traveller as
+ * that interest delivered. `sourceExclusions` names those compounds. Leaves,
+ * never places: the same list is right in every country, which is the same bar
+ * every other row in this table is held to.
  */
 export interface InterestEvidenceRule {
   categories?: readonly PlaceCategory[];
   /** Compared case-insensitively against `Place.displayKind`. */
   displayKinds?: readonly string[];
-  /** Compared case-insensitively as substrings of the source category tag. */
+  /** Compared case-insensitively as whole tokens of the source category tag. */
   sourceKeywords?: readonly string[];
+  /**
+   * Leaf categories this interest's keywords match and must not claim.
+   *
+   * A compound whose head noun is one of the keywords while its kind is
+   * something else. Checked before the keywords, so an excluded leaf reaches no
+   * keyword at all.
+   */
+  sourceExclusions?: readonly string[];
 }
 
 export const INTEREST_EVIDENCE: Record<Interest, InterestEvidenceRule> = {
@@ -137,6 +165,14 @@ export const INTEREST_EVIDENCE: Record<Interest, InterestEvidenceRule> = {
     categories: ['easy_walk'],
     displayKinds: ['forest', 'hill'],
     sourceKeywords: ['park', 'garden', 'promenade', 'boardwalk', 'nature'],
+    /*
+     * The `*_park` compounds that are not green space. All three are the
+     * catalogue's ticketed-enclosure family — the taxonomy already marks them
+     * `paidEnclosure` — and a memorial park is a monument, which is the kind
+     * its own `national_monument` category and its `history_and_culture` stamp
+     * both already say.
+     */
+    sourceExclusions: ['amusement_park', 'theme_park', 'water_park', 'memorial_park'],
   },
   scenic_viewpoints: {
     categories: ['viewpoint', 'gondola_or_tram'],
@@ -162,13 +198,22 @@ export const INTEREST_EVIDENCE: Record<Interest, InterestEvidenceRule> = {
   },
   hot_springs: {
     categories: ['hot_spring'],
-    sourceKeywords: ['hot_spring', 'onsen', 'thermal_bath', 'hot_bath'],
+    /* Both numbers: the catalogue publishes `hot_spring` and `hot_springs`. */
+    sourceKeywords: ['hot_spring', 'hot_springs', 'onsen', 'thermal_bath', 'hot_bath'],
   },
   history_and_culture: {
     categories: ['historic_site', 'museum', 'national_monument'],
+    /*
+     * `historical` and `archaeological` are spelled out beside their stems.
+     * Under the old substring match the stems reached them from inside the
+     * longer word; a token match does not, and the leaves
+     * `historical_landmark`, `landmark_and_historical_building` and
+     * `archaeological_site` are ones the classifier recognises.
+     */
     sourceKeywords: [
       'museum',
       'historic',
+      'historical',
       'heritage',
       'castle',
       'temple',
@@ -178,12 +223,21 @@ export const INTEREST_EVIDENCE: Record<Interest, InterestEvidenceRule> = {
       'monument',
       'palace',
       'ruins',
-      'archaeolog',
+      'archaeological',
     ],
   },
   food_and_towns: {
     categories: ['town_and_food'],
-    sourceKeywords: ['restaurant', 'market', 'cafe', 'bakery', 'brewery', 'winery', 'food'],
+    sourceKeywords: [
+      'restaurant',
+      'market',
+      'marketplace',
+      'cafe',
+      'bakery',
+      'brewery',
+      'winery',
+      'food',
+    ],
   },
   /*
    * Piggybacks on what you would photograph rather than on a "photography"
@@ -201,9 +255,21 @@ export const INTEREST_EVIDENCE: Record<Interest, InterestEvidenceRule> = {
    * inferring it from "this is rural" would put a stargazing row in front of
    * travellers we have nothing to schedule for it. An authored region that tags
    * its places with the interest still offers it, via the tag channel.
+   *
+   * `observatory` was one of these keywords and is not one of these things.
+   * The word is what a global place catalogue publishes for an **observation
+   * deck** — the compiler's taxonomy says so where it classifies the leaf, and
+   * classifies it as a viewpoint on exactly that reading. So every ticketed
+   * daytime deck in the catalogue was stamped with a night-sky interest and
+   * then sold as one: on the live board of 2026-08-26 a destination's
+   * principal observation tower carried `stargazing` and told a traveller who
+   * had graded it that this was that interest delivered. A deck with a lift and
+   * a gift shop is not an answer to "where can I see the stars", and where the
+   * catalogue gives us no way to tell an astronomical observatory from a
+   * viewing platform the honest output is no claim at all.
    */
   stargazing: {
-    sourceKeywords: ['observatory', 'dark_sky', 'planetarium'],
+    sourceKeywords: ['dark_sky', 'planetarium'],
   },
   museums_and_galleries: {
     categories: ['museum'],
@@ -246,7 +312,15 @@ export const INTEREST_EVIDENCE: Record<Interest, InterestEvidenceRule> = {
     ],
   },
   markets_and_street_food: {
-    sourceKeywords: ['market', 'bazaar', 'arcade', 'food_hall', 'food_court', 'street_food'],
+    sourceKeywords: [
+      'market',
+      'marketplace',
+      'bazaar',
+      'arcade',
+      'food_hall',
+      'food_court',
+      'street_food',
+    ],
   },
   beaches_and_swimming: {
     displayKinds: ['beach', 'bay', 'lagoon'],

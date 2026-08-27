@@ -13,7 +13,7 @@ import { ShortlistView } from '@/components/ShortlistView';
 import { DecisionRevise } from '@/components/DecisionRevise';
 import { buttonClass } from '@/components/ui';
 import { ShortlistImagery } from './ShortlistImagery';
-import { getDecisionSession } from '@/lib/db/decision-repository';
+import { ownedDecisionSession } from '@/lib/net/decision-access';
 import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { isClimateEnabled } from '@/lib/providers/switches';
@@ -45,7 +45,14 @@ export default async function DecideSessionPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = getDecisionSession(id);
+  /*
+   * The owner's decision or nothing — a foreign browser sees a missing page,
+   * the same boundary every trip door holds. What somebody is deciding between
+   * is the most traveller-specific thing this product stores, and the
+   * `/decide/<id>` URL must not be a second, mutable share surface.
+   * See `lib/net/decision-access`.
+   */
+  const session = await ownedDecisionSession(id);
   if (!session) notFound();
 
   /*

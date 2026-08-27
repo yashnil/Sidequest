@@ -13,8 +13,16 @@ import {
   context,
   profile,
 } from '@sidequest/core/testing';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DiscoveryBoardView, type SerializedGroup } from './DiscoveryBoardView';
-import { sharedBoardFacts } from './BoardCopy';
+import {
+  WEATHER_NOT_FETCHED_NOTE,
+  WEATHER_OUTAGE_NOTES,
+  honestWeatherNote,
+  sharedBoardFacts,
+} from './BoardCopy';
 
 /*
  * The board imports its server actions for the three buttons on every card. They
@@ -313,5 +321,87 @@ describe('the board is not twenty-four copies of one card', () => {
     expect(firstCard).toBeGreaterThan(-1);
     expect(map).toBeGreaterThan(-1);
     expect(firstCard, 'the map still comes before the first place').toBeLessThan(map);
+  });
+});
+
+/**
+ * ONE WEATHER STORY PER PAGE.
+ *
+ * A live Iceland board told two stories about one absent dataset: a banner
+ * claiming "We could not reach a weather source for your dates" — an outage —
+ * while the weather panel on the same page said "not fetched" and offered a
+ * fetch button. The card sentence is composed in core from per-day evidence
+ * that cannot tell a failed fetch from a fetch nobody asked for; only the page
+ * knows which (`weatherFreshness === 'not_fetched'` means no snapshot row
+ * exists), so the page reconciles the words before anything renders them.
+ */
+describe('an unfetched forecast is one story, not an outage claim beside a fetch button', () => {
+  const OUTAGE =
+    'We could not reach a weather source for your dates, so nothing here has been checked against one.';
+
+  /** Every card carrying the outage sentence, as core writes it for absent evidence. */
+  const OUTAGE_GROUPS: SerializedGroup[] = GROUPS.map((entry) => ({
+    ...entry,
+    candidates: entry.candidates.map((candidate) => ({
+      ...candidate,
+      weather: { ...candidate.weather, note: OUTAGE },
+    })),
+  }));
+
+  function renderWithFreshness(freshness: 'not_fetched' | 'fresh'): string {
+    return renderToStaticMarkup(
+      createElement(DiscoveryBoardView, {
+        tripId: 'trip-weather-story',
+        groups: OUTAGE_GROUPS,
+        initialSelections: {},
+        autoPickNotes: [],
+        hasItinerary: false,
+        weatherBackups: null,
+        weatherFreshness: freshness,
+        base: { name: 'Mammoth Lakes', coordinates: { lat: 37.6485, lng: -118.9721 } },
+      }),
+    );
+  }
+
+  it('tells the not-fetched truth when no snapshot exists, and points at the button that fixes it', () => {
+    const html = renderWithFreshness('not_fetched');
+    expect(html, 'the outage claim must not render over a dataset nobody fetched').not.toContain(
+      'could not reach a weather source',
+    );
+    expect(html).toContain('We have not fetched the weather for this trip yet');
+    expect(html).toContain('the weather panel below can fetch it');
+  });
+
+  it('keeps the outage story when a snapshot exists and the absence really was a failure', () => {
+    const html = renderWithFreshness('fresh');
+    expect(html).toContain('could not reach a weather source');
+    expect(html).not.toContain('We have not fetched the weather for this trip yet');
+  });
+
+  it('pins the outage sentences to the ones core actually composes', () => {
+    /*
+     * `honestWeatherNote` recognises the outage sentences verbatim. If core
+     * rewords them, recognition silently stops and the two stories return —
+     * so the literals are asserted against core's own source, and a reword
+     * breaks this test instead of the page.
+     */
+    const boardSource = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../../packages/core/src/weather/board.ts',
+      ),
+      'utf8',
+    );
+    for (const note of WEATHER_OUTAGE_NOTES) {
+      expect(boardSource).toContain(note);
+    }
+  });
+
+  it('maps only the outage sentences, and only for the unfetched case', () => {
+    expect(honestWeatherNote(OUTAGE, 'not_fetched')).toBe(WEATHER_NOT_FETCHED_NOTE);
+    expect(honestWeatherNote(OUTAGE, 'fresh')).toBe(OUTAGE);
+    expect(honestWeatherNote(OUTAGE, undefined)).toBe(OUTAGE);
+    const forecastNote = 'Thursday looks like the day for this one in the current forecast.';
+    expect(honestWeatherNote(forecastNote, 'not_fetched')).toBe(forecastNote);
   });
 });

@@ -6,9 +6,10 @@ import {
   type PhysicalIntensity,
 } from '../schemas/common';
 import type { Place } from '../schemas/place';
-import { WIDELY_NOTED_PROMINENCE } from '../quality/significance';
+import { standsAsEstablishedName, WIDELY_NOTED_PROMINENCE } from '../quality/significance';
 import type { TravelerProfile } from '../schemas/profile';
 import type { TravelerNeed } from '../schemas/trip';
+import { kindEvidences, namesOwnKind } from '../interests/offer';
 import type { SatelliteAssessment } from '../region/expansion';
 import { describeOpenSeason } from '../region/season';
 import type { AccessBlockerCode } from '../access/feasibility';
@@ -28,6 +29,34 @@ import { detourToleranceMinutesFor, REACH_MODE_PHRASE } from '../travel/reach';
  *    the feature vector a learned ranker would consume later.
  */
 
+/**
+ * THE DIMENSIONS OF *MATCH*. SIGNIFICANCE IS NOT ONE OF THEM, AND MAY NOT BE.
+ *
+ * §9 asks for a ranking whose dimensions stay distinct — personal fit, local
+ * significance, uniqueness, hiddenness, evidence quality, logistics, season,
+ * budget, frequency — and specifically forbids collapsing them into one opaque
+ * notion. Everything in this list answers *does this suit you*. How much a place
+ * matters in its own right is a different question with a different answer, it
+ * is composed in `quality/significance.ts#composeExperienceSignificance`, and it
+ * travels beside the fit rather than inside it.
+ *
+ * That boundary was tested rather than assumed. Adding `experienceSignificance`
+ * here as a tenth weighted factor — bounded at 0.1, renormalised so an authored
+ * place with no such field scored exactly as before — made the product strictly
+ * worse, and the reason is a scale mismatch rather than a bug. The nine factors
+ * above occupy 0.75–1.0 for any candidate worth showing; significance occupies
+ * 0.12–0.6 for real records, because most of the scale is reserved for places
+ * the world has actually written about. Averaging the two deflates every
+ * compiled candidate by the gap. Measured on the §29 B dense-city world: the
+ * board's three `strong` cards all fell to `good` or `optional`, and the plan
+ * lost a stop — days of 2,3,2 became 2,2,2, which is a thinner trip bought with
+ * no gain in ordering.
+ *
+ * `interestMatch` is where the traveller's *category preference* lives, and it
+ * is a preference of theirs rather than a prior about kinds — so nothing in this
+ * file multiplies a score by a category weight, and `significance-is-not-fit` in
+ * `fit.test.ts` fails if anything starts to.
+ */
 export const FIT_FACTORS = [
   'interestMatch',
   'detourFit',
@@ -525,10 +554,20 @@ export function scorePlace(
    * provider failure into a verdict about the place. 0.6 sits between "inside
    * the radius" and "past it", which is exactly what "we do not know" means
    * here.
+   *
+   * A journey *classed* unknown scores neutrally for the same reason and by the
+   * same rule, and the quality layer already draws the line in these words. The
+   * case is the transit-blind walk: a measured walking figure on a trip whose
+   * scheduled modes nobody could time. Dividing those minutes by any radius
+   * re-derives, from raw arithmetic, the distance verdict the classifier
+   * declined to pass — on a live car-free dense-metro board that arrived as a
+   * ten-point penalty and a `weak` band on every canonical seat, each one a
+   * thirty-nine to seventy minute walk standing in for a train. The walk itself
+   * stays on the card as a walk.
    */
   let detourFit: number;
   if (detourClass === 'base') detourFit = 1;
-  else if (travelMinutes === null) detourFit = 0.6;
+  else if (travelMinutes === null || detourClass === 'unknown') detourFit = 0.6;
   else {
     const ratio = travelMinutes / radius;
     detourFit = ratio <= 0.5 ? 1 : ratio <= 1 ? 0.85 : ratio <= 1.5 ? 0.45 : 0.15;
@@ -628,7 +667,7 @@ export function scorePlace(
     factors,
     features,
     blockers,
-    reasons: buildReasons({ place, assessment, context, features, best, band }),
+    reasons: buildReasons({ place, assessment, context, features, band }),
     cautions: dedupe([...cautions, ...(place.logisticsNote ? [place.logisticsNote] : [])]),
     matchedInterests: levels
       .filter(({ level }) => LEVEL_WEIGHT[level] >= 0.6)
@@ -656,8 +695,56 @@ interface ReasonInput {
   assessment: SatelliteAssessment;
   context: ScoringContext;
   features: Record<FitFactorId, number>;
-  best: { interest: Interest; level: InterestLevel } | undefined;
   band: FitBand;
+}
+
+/**
+ * THE INTEREST A REASON MAY NAME: GRADED BY THE TRAVELLER, CARRIED BY THE KIND.
+ *
+ * The sentence this feeds says "you marked X … and that is what this delivers",
+ * and its second clause is a claim about the record's own kind. On a live board
+ * that claim was made from the stamped interest alone, and stamps arrive
+ * through the thirteen-value category bucket — so a theme park filed under the
+ * food category told a food-graded traveller that a theme park was their food
+ * interest delivered, and an easy city park was dressed as a core
+ * scenic-viewpoint pick. Field-backed in form, false in substance.
+ *
+ * So where a record names its own kind (`namesOwnKind` — the display noun or
+ * the source's leaf category, which every compiled place carries), the named
+ * interest must be one that kind actually evidences (`kindEvidences`). The
+ * first qualifying graded interest in the place's own order keeps the
+ * "leads with" semantics the reason tests pin. An authored place names no
+ * kind and keeps the curated behaviour — its interests were written by the
+ * same hand as its category. Where nothing qualifies, no interest is named,
+ * and the reason falls through to the standing, trade-off and locality lines
+ * that are true of any record.
+ */
+function spokenInterestFor(
+  place: Place,
+  profile: TravelerProfile,
+): { interest: Interest; level: InterestLevel } | undefined {
+  const graded = place.interests
+    .map((interest) => ({
+      interest,
+      level: profile.interests[interest] ?? ('low' as InterestLevel),
+    }))
+    .filter(({ level }) => LEVEL_WEIGHT[level] >= 0.6);
+  if (!namesOwnKind(place)) return graded[0];
+  return graded.find(({ interest }) => kindEvidences(place, interest));
+}
+
+/**
+ * Whether a description says anything.
+ *
+ * The bare-stub form — an article, a noun phrase, a full stop — is exactly
+ * what §8.7 names, and it is what a compiler emits for a record it knows
+ * nothing about. The length floor catches the same shape with a couple of
+ * extra words. Kept in step with `BoardCopy.ts#substantive`, which applies the
+ * same bar to the card's fallback line.
+ */
+function substantiveDescription(description: string): boolean {
+  if (description.length < 45) return false;
+  return !/^an?\s+[a-z\s]+\.\s*$/i.test(description);
 }
 
 /**
@@ -665,70 +752,116 @@ interface ReasonInput {
  * so the explanation cannot drift from the ranking. When a place does not fit,
  * this says that plainly instead of manufacturing enthusiasm.
  *
- * One rule with no exceptions: **the interest sentence never stands alone.**
- * "You like viewpoints; this is a viewpoint" is a tautology wearing a
- * personalisation badge — it restates the category match the score already
- * counted and tells the traveller nothing they could not see from the card's
- * own caption. So the interest reason is kept only when at least one *other*
- * dimension (crowds, distance, effort, cost, weather resilience) has something
- * concrete to say beside it; a card with only the tautology available says
- * nothing, which is honest.
+ * A REASON LEADS WITH THE STRONGEST TRUE CONNECTION, AND EVERY CLAUSE HAS A
+ * BACKING FIELD.
+ *
+ * Measured on a live Tokyo board: of twenty-one card reasons, eleven were the
+ * logistics-only travel-time form, six were a locality line, and two named a
+ * graded interest. The material for better sentences was already in this
+ * function's inputs — the graded levels, the place's own description, its
+ * standing, the detour verdict — but the interest sentence was identical on
+ * every card sharing a grade, and the board's one-sentence-per-card rule
+ * (`whysForBoard`) then discarded every copy after the first. What survived on
+ * most cards was the one line unique to each: its travel time.
+ *
+ * The hierarchy, strongest first, each clause guarded by the field that makes
+ * it true:
+ *
+ *   1. The traveller's graded interest, by name, with what this place offers
+ *      for it — the place's own description, which makes the sentence concrete
+ *      and different on every card. Composed only when the description says
+ *      something (§8.7's bare-stub forms do not qualify): "you like X and this
+ *      is X" with no offer named is the §9.2 tautology however it is phrased.
+ *      And only when the record's own kind carries the interest — a claim
+ *      stamped through the category bucket is how a theme park came to be
+ *      "delivered" as food (`spokenInterestFor`).
+ *   2. The earned detour, when the classifier called the journey a stretch and
+ *      the scorer still called the match strong — the most specific fact about
+ *      such a candidate is why it is on the board at all.
+ *   3. Established standing, when the record establishes it and the traveller
+ *      asked for names at all.
+ *   4. The specific trade-off the scorer found — a quiet find for a
+ *      crowd-avoider, a stop off the standard loop for a hidden-gem lean,
+ *      effort that lines up, a free stop on a tight budget.
+ *   5. Logistics. Appended after the personal case, and allowed to lead only
+ *      when nothing personal is true — nearness is a fact worth one line,
+ *      never the whole argument.
  */
 function buildReasons(input: ReasonInput): string[] {
-  const { place, assessment, context, features, best, band } = input;
+  const { place, assessment, context, features, band } = input;
   const { profile } = context;
-  const reasons: string[] = [];
 
-  if (band === 'not_workable') return reasons;
+  if (band === 'not_workable') return [];
 
-  const interestReason =
-    best && LEVEL_WEIGHT[best.level] >= 0.6
-      ? `You marked ${INTEREST_LABELS[best.interest].toLowerCase()} as "${INTEREST_LEVEL_LABELS[
-          best.level
-        ].toLowerCase()}", and that is what this delivers.`
-      : undefined;
+  const connections: string[] = [];
 
-  if (features.crowdComfort >= 0.95 && profile.crowdTolerance === 'avoid_crowds') {
-    reasons.push('Stays quiet even in season, which matters more to you than a famous name.');
-  }
-
-  if (features.hiddenGemAlignment >= 0.8 && place.hiddenGemScore >= 0.6) {
-    reasons.push('Well off the standard loop — the kind of find you said you wanted.');
-  } else if (
-    features.hiddenGemAlignment >= 0.8 &&
-    place.popularityScore >= WIDELY_NOTED_PROMINENCE &&
-    profile.discoveryMix === 'mostly_classics'
-  ) {
-    reasons.push('One of the names people come here for, and you wanted the highlights.');
-  } else if (features.hiddenGemAlignment >= 0.85 && profile.discoveryMix === 'balanced') {
-    reasons.push('Sits right in the middle of famous and quiet, which is the mix you asked for.');
-  }
-
-  if (assessment.detourClass === 'base') {
-    reasons.push('Minutes from where you are staying, so it fits any day.');
-  } else if (features.detourFit >= 0.85 && assessment.reach.status === 'measured') {
-    /*
-     * The mode and the radius both come from the resolved journey. The sentence
-     * used to read "45 min out, inside the 20 min detour you were happy with" —
-     * a contradiction in its own clause — because the minutes were the walk and
-     * the radius was the car-free constant.
-     */
-    const mode = assessment.reach.mode;
-    reasons.push(
-      `${assessment.reach.travelMinutes} min ${REACH_MODE_PHRASE[mode]}, inside the ${detourToleranceMinutesFor(profile, mode)} min you were happy to travel.`,
+  // 1 — the graded interest, connected to what the place concretely offers.
+  //     Named only where the record's own kind carries the interest — see
+  //     `spokenInterestFor` for the bucket-laundered claims this refuses.
+  const offer = place.shortDescription.trim();
+  const spoken = spokenInterestFor(place, profile);
+  if (spoken && substantiveDescription(offer)) {
+    connections.push(
+      `You marked ${INTEREST_LABELS[spoken.interest].toLowerCase()} as "${INTEREST_LEVEL_LABELS[
+        spoken.level
+      ].toLowerCase()}", and that is what this delivers: ${offer.endsWith('.') ? offer : `${offer}.`}`,
     );
   }
 
+  // 2 — the earned detour. The most specific fact about a stretch candidate is
+  //     why it is on the board at all, so it outranks the generic standing line.
+  if (
+    assessment.detourClass === 'stretch' &&
+    assessment.reach.status === 'measured' &&
+    (band === 'top_pick' || band === 'strong')
+  ) {
+    /*
+     * "Stretch" is the detour classifier's own verdict — past the radius the
+     * traveller stated, short of unreachable — and the band beside it is the
+     * scorer still calling the match strong. Only that pair earns the label.
+     */
+    connections.push(
+      `${assessment.reach.travelMinutes} min ${REACH_MODE_PHRASE[assessment.reach.mode]} — further than you said you would usually go, but a strong enough fit that it earns the extra travel.`,
+    );
+  }
+
+  // 3 — established standing, for a traveller who wants the names at all.
+  //     `standsAsEstablishedName` holds the whole condition, and the board's
+  //     classics group reads the same function: this clause and that heading
+  //     make the identical claim about the identical record, and while each
+  //     kept its own copy they were free to disagree — which is how a live
+  //     board captioned a suburban lake and a small municipal beach as the
+  //     names a destination is known for while its famous waterfall rendered
+  //     under "Probably skip".
+  if (standsAsEstablishedName(place) && profile.discoveryMix !== 'deep_cuts') {
+    connections.push(
+      profile.discoveryMix === 'mostly_classics'
+        ? 'One of the names people come here for, and you wanted the highlights.'
+        : 'One of the established names here — the kind of stop this area is known for.',
+    );
+  }
+
+  // 4 — the specific trade-offs the scorer actually found.
+  if (features.crowdComfort >= 0.95 && profile.crowdTolerance === 'avoid_crowds') {
+    connections.push('Stays quiet even in season, which matters more to you than a famous name.');
+  }
+
+  if (features.hiddenGemAlignment >= 0.8 && place.hiddenGemScore >= 0.6) {
+    connections.push('Well off the standard loop — the kind of find you said you wanted.');
+  } else if (features.hiddenGemAlignment >= 0.85 && profile.discoveryMix === 'balanced') {
+    connections.push('Sits right in the middle of famous and quiet, which is the mix you asked for.');
+  }
+
   if (features.intensityFit >= 1 && place.physicalIntensity !== 'none') {
-    reasons.push(`Effort level lines up with the ${profile.dailyIntensity} days you asked for.`);
+    connections.push(`Effort level lines up with the ${profile.dailyIntensity} days you asked for.`);
   }
 
   if (place.costLevel === 0 && profile.budgetStyle === 'budget') {
-    reasons.push('Free, which keeps the trip inside the budget you set.');
+    connections.push('Free, which keeps the trip inside the budget you set.');
   }
 
   if (place.weather.poorWeatherBackup) {
-    reasons.push('Holds up even if the weather turns.');
+    connections.push('Holds up even if the weather turns.');
   }
 
   if (
@@ -737,17 +870,27 @@ function buildReasons(input: ReasonInput): string[] {
     place.travelFromBase.driveIsScenic &&
     LEVEL_WEIGHT[profile.interests.scenic_drives ?? 'low'] >= 0.6
   ) {
-    reasons.push('The drive there is part of the appeal, and you wanted scenic driving.');
+    connections.push('The drive there is part of the appeal, and you wanted scenic driving.');
   }
 
-  /*
-   * The interest sentence joins only in company. On its own it is the §9.2
-   * tautology, and an empty list is the honest output for a candidate about
-   * which the only true personal statement is its own category.
-   */
-  const grounded = dedupe(reasons);
-  if (interestReason && grounded.length > 0) grounded.unshift(interestReason);
-  return grounded.slice(0, 3);
+  // 5 — logistics, appended. An empty personal case is the one time it leads.
+  const logistics: string[] = [];
+  if (assessment.detourClass === 'base') {
+    logistics.push('Minutes from where you are staying, so it fits any day.');
+  } else if (features.detourFit >= 0.85 && assessment.reach.status === 'measured') {
+    /*
+     * The mode and the radius both come from the resolved journey. The sentence
+     * used to read "45 min out, inside the 20 min detour you were happy with" —
+     * a contradiction in its own clause — because the minutes were the walk and
+     * the radius was the car-free constant.
+     */
+    const mode = assessment.reach.mode;
+    logistics.push(
+      `${assessment.reach.travelMinutes} min ${REACH_MODE_PHRASE[mode]}, inside the ${detourToleranceMinutesFor(profile, mode)} min you were happy to travel.`,
+    );
+  }
+
+  return [...dedupe(connections).slice(0, 2), ...logistics.slice(0, 1)];
 }
 
 /**

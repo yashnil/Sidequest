@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { planTrip } from './plan';
 import { easeDay, removeStopFromDay, swapAlternativesForStop, swapStopOnDay } from './edit';
 import { buildScenario } from './testing/scenario';
-import type { Itinerary } from '@sidequest/core';
+import { compareBoardOrder, type Itinerary } from '@sidequest/core';
+import { EASTERN_SIERRA_PLACES } from '@sidequest/core/data';
 
 /**
  * PR-EDIT-01/02/04: A TRIP CAN BE ALTERED WITHOUT RESTARTING, AND A LOCAL EDIT
@@ -134,6 +135,73 @@ describe('swap offers', () => {
       const after = result.itinerary.days.find((entry) => entry.dayNumber === before.dayNumber)!;
       expect(JSON.stringify(after)).toBe(JSON.stringify(before));
     }
+  });
+
+  /**
+   * THE MENU IS THE BOARD'S LIST, IN THE BOARD'S ORDER.
+   *
+   * `feasibleReplacements` sorted on `fitScore`, so the one list whose entire
+   * job is to say "here is what else your board holds" ranked those places by
+   * match alone, while every card the traveller had just been reading was ranked
+   * by band and then by how much each place matters. It also decides *which*
+   * five are shown, so the disagreement was not only an ordering: a place the
+   * board put fourth could fall out of a five-row menu altogether.
+   *
+   * Standing is written across the region in four steps because the authored
+   * fixture carries none, and on a board where nothing carries it the two orders
+   * coincide and this would pass over the defect — the same lever
+   * `candidates.test.ts` uses for the planning queue.
+   */
+  it('lists replacements in the board’s order, not by fit score', () => {
+    const steps = [0.1, 0.4, 0.6, 0.9];
+    const input = buildScenario({
+      places: EASTERN_SIERRA_PLACES.map((place, index) => ({
+        ...place,
+        experienceSignificance: steps[index % steps.length]!,
+      })),
+    });
+    const result = planTrip(input);
+    expect(result.ok, result.ok ? '' : result.message).toBe(true);
+    if (!result.ok) return;
+
+    const boardById = new Map(input.candidates.map((entry) => [entry.place.id, entry]));
+    let discriminating = 0;
+    const wrong: string[] = [];
+    for (const day of result.itinerary.days) {
+      for (const item of day.items) {
+        if (item.kind !== 'activity' || !item.placeId) continue;
+        const offered = swapAlternativesForStop(
+          input,
+          result.itinerary,
+          day.dayNumber,
+          item.placeId,
+        ).map((offer) => offer.placeId);
+        if (offered.length < 2) continue;
+
+        const asBoarded = [...offered].sort((a, b) =>
+          compareBoardOrder(boardById.get(a)!, boardById.get(b)!),
+        );
+        const byFit = [...offered].sort(
+          (a, b) =>
+            boardById.get(b)!.fit.score - boardById.get(a)!.fit.score || a.localeCompare(b),
+        );
+        /* Only the menus where the two keys actually disagree prove anything. */
+        if (JSON.stringify(asBoarded) !== JSON.stringify(byFit)) discriminating += 1;
+        if (JSON.stringify(offered) !== JSON.stringify(asBoarded)) {
+          wrong.push(
+            `day ${day.dayNumber} ${item.title}: offered [${offered.join(', ')}], the board reads [${asBoarded.join(', ')}]`,
+          );
+        }
+      }
+    }
+
+    expect(
+      discriminating,
+      'no menu here separates the board’s key from fit alone, so this proves nothing',
+    ).toBeGreaterThan(0);
+    expect(wrong, `${wrong.length} swap menus contradicted the board:\n${wrong.join('\n')}`).toEqual(
+      [],
+    );
   });
 });
 
@@ -280,5 +348,74 @@ describe('locks across a rebuild', () => {
       if (entry.dayNumber === scenario.fromDay) continue;
       expect(entry.items.some((item) => item.placeId === scenario.placeId)).toBe(false);
     }
+  });
+
+  /**
+   * WHICH PIN WINS THE LAST SLOT IS THE BOARD'S ANSWER, NOT A SECOND ONE.
+   *
+   * The lift into the manual band was `10_000 + fitScore`, written out by hand
+   * here and in `edit.ts`. That is the board's key from before it began
+   * composing standing into its order — so the moment two pins competed for one
+   * slot, the plan resolved them by match alone while the board that produced
+   * them had resolved them the other way, and nothing on either screen said why.
+   *
+   * The scenario is a one-day trip whose window holds exactly one stop, with
+   * both places pinned to it. The two are three points apart in match and a
+   * band-mate in every other respect, and the one the region is known for is the
+   * one behind on match — so the two keys give opposite answers and the day can
+   * only satisfy one of them.
+   */
+  it('gives the day’s only slot to the pin the board ranked first, not the higher fit score', () => {
+    const better = 'panorama-gondola';
+    const higherFit = 'hot-creek-geologic-site';
+    const places = EASTERN_SIERRA_PLACES.map((place) =>
+      place.id === better
+        ? { ...place, experienceSignificance: 0.9 }
+        : place.id === higherFit
+          ? { ...place, experienceSignificance: 0.5 }
+          : place,
+    );
+
+    const scenario = buildScenario({
+      places,
+      basics: { startDate: '2026-08-13', endDate: '2026-08-13' },
+    });
+    const chosen = [higherFit, better].map((placeId) => ({
+      placeId,
+      status: 'included' as const,
+      source: 'auto' as const,
+      updatedAt: '2026-07-30T00:00:00.000Z',
+    }));
+    const boarded = chosen.map(
+      (entry) => scenario.candidates.find((candidate) => candidate.place.id === entry.placeId)!,
+    );
+    expect(boarded.every(Boolean), 'the authored region no longer holds this pair').toBe(true);
+    expect(
+      { fit: boarded.map((candidate) => candidate.fit.score), band: boarded.map((c) => c.fit.band) },
+      'the pair no longer sits three points apart inside one band, so the two keys now agree',
+    ).toEqual({ fit: [84, 81], band: ['strong', 'strong'] });
+    expect([...boarded].sort(compareBoardOrder)[0]!.place.id).toBe(better);
+
+    const result = planTrip({
+      ...scenario,
+      selections: chosen,
+      locks: chosen.map((entry) => ({ placeId: entry.placeId, dayNumber: 1 })),
+    });
+    expect(result.ok, result.ok ? '' : result.message).toBe(true);
+    if (!result.ok) return;
+
+    const scheduled = result.itinerary.days
+      .flatMap((day) => day.items)
+      .filter((item) => item.kind === 'activity' && item.placeId)
+      .map((item) => item.placeId!);
+    expect(
+      scheduled.length,
+      'the day now holds both, so nothing here is choosing between the two keys',
+    ).toBe(1);
+    expect(
+      scheduled,
+      'the trip kept the higher match where the board it was built from ranked the other first',
+    ).toEqual([better]);
+    expect(result.itinerary.unscheduled.map((entry) => entry.placeId)).toEqual([higherFit]);
   });
 });

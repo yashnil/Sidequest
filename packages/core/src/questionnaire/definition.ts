@@ -281,7 +281,17 @@ export const EXPANSION_CEILING_MINUTES: Record<RegionalExpansion, number> = {
   best_regional: 165,
 };
 
-/** Without a car, the walk-out radius: the base town and its trolley stops. */
+/**
+ * Without a car, the walk-out radius: the base town and its nearest stops.
+ *
+ * A floor rather than a value. It was the whole of a car-free traveller's
+ * `effectiveDetourMinutes`, which threw away the two answers they had actually
+ * given — the one-way travel slider and the regional ring, both of which the
+ * questionnaire puts in front of a non-driver and the second of which is
+ * offered out to `carFreeReachMinutes()`. It now sits underneath those answers:
+ * a traveller who said nothing keeps exactly this radius, and no answer can
+ * take them below it.
+ */
 export const NO_CAR_DETOUR_MINUTES = 20;
 
 /**

@@ -111,12 +111,25 @@ const CLASSICS_THRESHOLD = 0.7;
 /**
  * Designated by an authority, and in no encyclopaedia: locally significant,
  * globally unnoticed. The definition of the thing the board is looking for.
+ *
+ * The outline is not decoration. A designation is a boundary somebody drew, and
+ * `hasConferredDesignation` requires one — because the status word alone is a
+ * category, and on two live packs the same word was carried by a brewery, an
+ * anime shop and a bench. A kilometre and a half of traced ground is what
+ * makes this fixture a reserve rather than a row filed under the reserve
+ * heading — standing scale, since the designation channel is graded by the
+ * extent it was conferred on and a pocket boundary no longer speaks at the
+ * full designation weight.
  */
 const LOCALLY_DESIGNATED = record({
   id: 'places:reserve',
   name: 'Back Valley Nature Reserve',
   sourceCategory: 'nature_reserve',
   sourceCategoryPath: ['geographic_entities', 'protected_area', 'nature_reserve'],
+  bounds: {
+    southWest: { lat: 40.696, lng: -74.005 },
+    northEast: { lat: 40.71, lng: -73.995 },
+  },
 });
 
 /** A name and a coordinate. Nobody has published anything about it, anywhere. */

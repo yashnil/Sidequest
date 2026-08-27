@@ -5,8 +5,11 @@ import {
   assessPlaceStanding,
   standingFields,
   DESTINATION_RESOLUTION_VERSION,
+  assertFoodRoutingWithinDoorWalk,
   foodDistinctiveness,
   foodNameCounts,
+  MODELLED_WALK_KMH,
+  snapFoodRouting,
   licence,
   matchesAcquisitionIntent,
   normalizeDestinationQuery,
@@ -70,6 +73,7 @@ import type {
   TransitRoutingProvider,
   WeatherLocationProvider,
 } from '@sidequest/compiler';
+import { assessEntityAgreement } from './entity-agreement';
 import {
   extractReadableText,
   fetchIfAllowed,
@@ -301,6 +305,13 @@ function portfolioFactsFrom(
     membershipDecided: overlay.integrity.byRelationship
       .filter((entry) => entry.relationship !== 'membership_unknown')
       .reduce((sum, entry) => sum + entry.count, 0),
+    /*
+     * Read off the overlay's own count of refusals rather than subtracted from
+     * the decided total. A subtraction counts gateways, expansion members and
+     * satellites as refusals, and all three are outside because something asked
+     * for them.
+     */
+    refutedElsewhere: overlay.integrity.outOfScope,
     divisionsAvailable: overlay.integrity.divisionsAvailable,
     scopeIdentityUnknown: overlay.integrity.scopeIdentityUnknown,
   };
@@ -444,31 +455,41 @@ function toCandidate(
 }
 
 /**
- * The routing node a venue is priced against.
+ * The routing node a venue is priced against, or nothing.
  *
  * A food venue shares a node with whatever is nearest that the matrix already
  * has — which is what stops a meal detour being a straight-line guess dressed up
  * as a road time, and what keeps the matrix from growing by one row per
- * restaurant. Nearest rather than first: a two-base trip would otherwise price
- * every restaurant against the first base, including the ones across a fjord
- * from it.
+ * restaurant. This used to be all of the rule, and nearest with no ceiling is
+ * not a rule at all: the anchors are the bases plus the couple of dozen compiled
+ * places, so a venue with nothing near it was still snapped onto whatever was
+ * least far and the day printed that node's travel time under the venue's name.
+ *
+ * `snapFoodRouting` owns both halves now — the nearest node *and* the door-walk
+ * distance it has to be inside — so the two food paths below cannot disagree
+ * about which venues are routable.
  */
-function nearestAnchor(
+function snapVenue(
   anchors: readonly { id: string; coordinates: { lat: number; lng: number } }[],
   point: { lat: number; lng: number },
-): { id: string } | undefined {
-  let best: { id: string } | undefined;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const anchor of anchors) {
-    const dLat = anchor.coordinates.lat - point.lat;
-    const dLng = (anchor.coordinates.lng - point.lng) * Math.cos((point.lat * Math.PI) / 180);
-    const distance = dLat * dLat + dLng * dLng;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = anchor;
-    }
-  }
-  return best;
+): { routingId: string; walkMinutesFromRouting: number } | null {
+  return snapFoodRouting({ coordinates: point, anchors, walkKmh: MODELLED_WALK_KMH });
+}
+
+/**
+ * What a venue with no node in reach costs the traveller, said once.
+ *
+ * It leaves the routable pool: `FoodVenue.routingId` is required, and rightly —
+ * every consumer of a venue prices a leg to it — so a venue we cannot price is
+ * not a venue this stage may hand on. The planner already renders the fallback,
+ * naming the area rather than a place, which is a smaller claim and a true one.
+ */
+function unroutableFoodGap(count: number): ProviderGap {
+  return {
+    subjectId: 'food',
+    reason: 'not_found',
+    detail: `${count} ${count === 1 ? 'place' : 'places'} to eat sit further from anything this trip routes through than a short walk, so we could not say what reaching them costs and left them out.`,
+  };
 }
 
 /** Roughly 5 km at the equator: small enough that `way` geometry is affordable. */
@@ -1939,10 +1960,17 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
   async function acquireFoodNearBases(input: {
     scope: GeographicScope;
     bases: readonly { id: string; coordinates: { lat: number; lng: number } }[];
+    /**
+     * Every node the matrix will hold, not only the bases a box was drawn
+     * around. The box is `FOOD_BOX_DEGREES` — about five kilometres — so a venue
+     * at its edge is nowhere near the base at its centre, and the base is not
+     * necessarily the nearest node to it either.
+     */
+    anchors: readonly { id: string; coordinates: { lat: number; lng: number } }[];
     maxVenues: number;
     exclude: ReadonlySet<string>;
   }): Promise<{ venues: FoodVenue[]; gaps: ProviderGap[]; calls: number }> {
-    const { scope, bases, maxVenues } = input;
+    const { scope, bases, anchors, maxVenues } = input;
     const gaps: ProviderGap[] = [];
     const venues: FoodVenue[] = [];
     if (maxVenues <= 0) return { venues, gaps, calls: 0 };
@@ -1965,6 +1993,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
      * border will otherwise return.
      */
     let refusedFood = 0;
+    let unroutable = 0;
     const foodOverlay = buildTripScopeOverlay({ scope, records: [], roleEligible });
 
     for (const base of bases) {
@@ -1992,8 +2021,24 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           if (venues.length >= maxVenues) break;
           const normalized = normalizeElement(element);
           if (!normalized || seen.has(normalized.elementId)) continue;
-          const venue = toFoodVenue(normalized, scope, base.id);
-          if (!venue || input.exclude.has(venue.id)) continue;
+          /*
+           * The base the box was drawn around is not automatically this venue's
+           * node. `base.id` was passed unconditionally, so a venue at the far
+           * corner of a five-kilometre box was priced against the middle of it
+           * and the day quoted the base's own travel time as a walk to the door.
+           */
+          const snap = snapVenue(anchors, normalized.coordinates);
+          if (!snap) {
+            unroutable += 1;
+            continue;
+          }
+          const built = toFoodVenue(normalized, scope, snap.routingId);
+          if (!built) continue;
+          const venue: FoodVenue = {
+            ...built,
+            walkMinutesFromRouting: snap.walkMinutesFromRouting,
+          };
+          if (input.exclude.has(venue.id)) continue;
           const decision = admitLateCandidate(foodOverlay, {
             id: `food:${normalized.elementId}`,
             coordinates: normalized.coordinates,
@@ -2018,6 +2063,8 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       }
     }
 
+    if (unroutable > 0) gaps.push(unroutableFoodGap(unroutable));
+
     if (refusedFood > 0) {
       gaps.push({
         subjectId: 'food',
@@ -2032,6 +2079,37 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
   const food: FoodDiscoveryProvider = {
     name: 'region-pack-food',
     async discover({ scope, bases, maxVenues, pack, places: knownPlaces }) {
+      /**
+       * A venue is priced at the nearest thing already in the matrix.
+       *
+       * Bases *and* places, not just bases: a café beside a trailhead is a
+       * lunch stop on the way up, and pricing it against a hotel eleven
+       * kilometres away turns a two-minute detour into a day's worth of
+       * driving. Reusing an existing node also keeps the matrix the same size,
+       * which is the expensive part.
+       */
+      const anchors = [
+        ...bases.map((base) => ({ id: base.id, coordinates: base.coordinates })),
+        ...knownPlaces.map((place) => ({ id: place.id, coordinates: place.coordinates })),
+      ];
+      /**
+       * THE CONTRACT, ENFORCED WHERE THE REGION'S FOOD IS ASSEMBLED.
+       *
+       * Every venue leaving this stage carries a node it is within one door walk
+       * of, and a door walk that is the distance to that node. Both food paths
+       * below already hold to it by construction; this is the assertion that
+       * makes a third path, or a later edit that reaches for a bare nearest
+       * anchor again, fail here instead of shipping a measured travel time to
+       * somewhere the traveller is not going.
+       */
+      const checked = (result: { venues: FoodVenue[]; gaps: ProviderGap[]; calls: number }) => {
+        assertFoodRoutingWithinDoorWalk({
+          venues: result.venues,
+          anchors,
+          walkKmh: MODELLED_WALK_KMH,
+        });
+        return result;
+      };
       /**
        * Food out of the same pack the attractions came from.
        *
@@ -2055,19 +2133,6 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
         const venues: FoodVenue[] = [];
         const gaps: ProviderGap[] = [];
         /**
-         * A venue is priced at the nearest thing already in the matrix.
-         *
-         * Bases *and* places, not just bases: a café beside a trailhead is a
-         * lunch stop on the way up, and pricing it against a hotel eleven
-         * kilometres away turns a two-minute detour into a day's worth of
-         * driving. Reusing an existing node also keeps the matrix the same size,
-         * which is the expensive part.
-         */
-        const anchors = [
-          ...bases.map((base) => ({ id: base.id, coordinates: base.coordinates })),
-          ...knownPlaces.map((place) => ({ id: place.id, coordinates: place.coordinates })),
-        ];
-        /**
          * EVERY CANDIDATE FIRST, THEN THE CEILING — and the order is the fix.
          *
          * This used to walk `foodRecords` in the inventory's own order and stop
@@ -2085,14 +2150,31 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
          * local kitchen merely by being read off disk first.
          */
         const pool: FoodVenue[] = [];
+        let unroutable = 0;
         for (const record of inventory.foodRecords) {
-          const nearest = nearestAnchor(anchors, record.coordinates);
-          const venue = foodVenueFromRecord({
-            record,
-            scope,
-            routingId: nearest?.id ?? bases[0]?.id ?? scope.destinationCandidateId,
-          });
-          if (!venue) continue;
+          /*
+           * No node within a door walk, no venue. The fallback this replaced —
+           * `nearest?.id ?? bases[0]?.id` — had no ceiling at either step, so a
+           * record with nothing near it was priced against the least distant
+           * anchor or, failing that, against the first base outright.
+           */
+          const snap = snapVenue(anchors, record.coordinates);
+          if (!snap) {
+            unroutable += 1;
+            continue;
+          }
+          const built = foodVenueFromRecord({ record, scope, routingId: snap.routingId });
+          if (!built) continue;
+          /*
+           * `foodVenueFromRecord` writes a zero door walk it has no way to know
+           * — it is handed a node id and never the distance to it. The real
+           * figure is the one thing that makes the leg to this venue honest, so
+           * it is applied here, where the distance was measured.
+           */
+          const venue: FoodVenue = {
+            ...built,
+            walkMinutesFromRouting: snap.walkMinutesFromRouting,
+          };
           /*
            * The open-knowledge identifier, carried onto the venue the same way
            * the attraction side carries it. Without this the distinctiveness
@@ -2114,6 +2196,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
               b.quality.score - a.quality.score || a.venue.name.localeCompare(b.venue.name),
           );
         venues.push(...ranked.slice(0, Math.max(0, maxVenues)).map((entry) => entry.venue));
+        if (unroutable > 0) gaps.push(unroutableFoodGap(unroutable));
 
         /**
          * ---- THE PACK IS A FLOOR, NOT A CEILING --------------------------
@@ -2136,12 +2219,13 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           const topUp = await acquireFoodNearBases({
             scope,
             bases,
+            anchors,
             maxVenues: maxVenues - venues.length,
             exclude: new Set(venues.map((venue) => venue.id)),
           });
           venues.push(...topUp.venues);
           gaps.push(...topUp.gaps);
-          if (topUp.venues.length > 0) return { venues, gaps, calls: topUp.calls };
+          if (topUp.venues.length > 0) return checked({ venues, gaps, calls: topUp.calls });
         }
 
         if (venues.length === 0) {
@@ -2163,7 +2247,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             detail: `The place data holds ${venues.length} ${venues.length === 1 ? 'place' : 'places'} to eat inside this region, and there is no second map service switched on to look further.`,
           });
         }
-        return { venues, gaps, calls: 0 };
+        return checked({ venues, gaps, calls: 0 });
       }
 
       if (!isPoiProviderEnabled()) {
@@ -2191,6 +2275,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       const acquired = await acquireFoodNearBases({
         scope,
         bases,
+        anchors,
         maxVenues,
         exclude: new Set<string>(),
       });
@@ -2201,7 +2286,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           detail: 'The map data has no named places to eat near any of the bases we chose.',
         });
       }
-      return { venues: acquired.venues, gaps: acquired.gaps, calls: acquired.calls };
+      return checked({ venues: acquired.venues, gaps: acquired.gaps, calls: acquired.calls });
     },
   };
 
@@ -2499,6 +2584,48 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
       const claims: ExtractedClaim[] = [];
       const gaps: ProviderGap[] = [];
       const subjectIndex = new Map(subjects.map((subject, index) => [subject.id, index]));
+      const subjectsById = new Map(subjects.map((subject) => [subject.id, subject]));
+
+      /**
+       * ENTITY AGREEMENT, BEFORE ANY FACT IS BORN — the namesake gate.
+       *
+       * The funnel upstream of this point binds pages to subjects by *name*: a
+       * search result whose title contains a distinctive word matches, a
+       * `website` tag is trusted outright. On a live artifact that attached a
+       * municipal community centre's weekday hours, weekend closures and
+       * lunch-ordering rules to a same-named protected headland — promoted to
+       * "(Verified)", and obeyed by the planner, which then refused to schedule
+       * an outdoor nature reserve on weekends.
+       *
+       * So every document is judged against its subject before a claim can come
+       * out of it — the structured-data path and the model path alike, because
+       * the community centre published `openingHoursSpecification` too. A
+       * conflicted document produces no claims, is never sent to the model
+       * (a page we will not believe is not worth paying to read), and leaves an
+       * honest gap: the subject keeps "nobody confirmed its hours", which is
+       * true, instead of a namesake's timetable, which is false.
+       */
+      const conflicted = new Map<number, string>();
+      for (const [index, document] of documents.entries()) {
+        const subject = subjectsById.get(document.subjectId);
+        if (!subject) continue;
+        const verdict = assessEntityAgreement({
+          subject: { name: subject.name, kind: subject.kind, coordinates: subject.coordinates },
+          document: {
+            title: document.title,
+            text: document.text,
+            structuredData: document.structuredData,
+          },
+        });
+        if (verdict.agreement === 'namesake_conflict') {
+          conflicted.set(index, verdict.detail);
+          gaps.push({
+            subjectId: document.subjectId,
+            reason: 'insufficient_evidence',
+            detail: verdict.detail,
+          });
+        }
+      }
 
       /**
        * DETERMINISTIC FIRST, AND THE MODEL ONLY FOR WHAT IS LEFT.
@@ -2520,6 +2647,8 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
 
       const needsModel: { index: number; document: RetrievedDocument }[] = [];
       for (const [index, document] of documents.entries()) {
+        /* A namesake's page yields nothing — not hours, not a model call. */
+        if (conflicted.has(index)) continue;
         const resolved = new Set<FactPath>();
         const hours = hoursFromJsonLd(document.structuredData);
         if (hours) {
@@ -2563,6 +2692,9 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
             // A fact whose page and subject disagree is a mis-attribution, and
             // mis-attributed evidence is worse than missing evidence.
             if (!document || !subject || document.subjectId !== subject.id) continue;
+            // Belt to the queue's braces: a conflicted document was never sent,
+            // but a claim indexed against one must still be impossible.
+            if (conflicted.has(fact.sourceIndex)) continue;
             claims.push({
               subjectId: subject.id,
               documentIndex: fact.sourceIndex,
@@ -2864,9 +2996,9 @@ export { openProvidersEnabled, missingProviderSwitches } from './switches';
  * was unaffected — but the fallback branch admits a record on
  * `provisionalBoardEligible` alone, and a boolean no role has ever narrowed is
  * not a permission. The fallback's own selectors are curated to attraction tags,
- * yet `place_of_worship` is among them and the taxonomy calls it a support stop,
- * so the storefront-congregation shape was reachable there with no role
- * permission consulted.
+ * yet `place_of_worship` is among them and the taxonomy witness-gates it (an
+ * evidence-bearing temple admits; an unwitnessed storefront congregation does
+ * not), so that shape was reachable there with no role permission consulted.
  *
  * Deliberately the *coarse* predicate — "is this eligible for anything at all" —
  * matching what `buildInventory` passes. A finer answer belongs to the layer

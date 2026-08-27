@@ -204,11 +204,39 @@ describe('a car-free traveller, and the five ways a journey can end', () => {
     expect(e.worthDetour).not.toBe('too_far_for_this_trip');
     expect(e.worthDetour).toBe('reach_unverified');
 
+    /**
+     * WHAT AUTO-PICK DOES WITH IT, AND WHY THIS ASSERTION MOVED.
+     *
+     * It read `not.toContain` and `reason: 'reach_unverified'`, which encoded an
+     * unconditional refusal. A fresh reviewer found what that costs on the
+     * destination class it matters most for: a car-free metropolis whose walking
+     * network could not be routed is compiled against the road network by loud
+     * substitution, so *every* pair on the board is a road duration this
+     * traveller may not use — and the refusal returned one pick out of twelve
+     * slots over a board of twenty-four real places. An unconditional rule
+     * against an unknown is a rule that can decline to do anything at all.
+     *
+     * So the refusal is now a preference, and the preference is what this
+     * asserts. It is strictly more than the old rule constrained:
+     *
+     *   1. every journey we *could* stand behind is taken first, and
+     *   2. an untimed stop is taken only after them, and
+     *   3. the selection says out loud that it did.
+     *
+     * The unconditional refusal survives where it is still true — see the
+     * `conflict` control below, which no pass will ever take.
+     */
     const auto = autoSelect({ candidates: board.candidates, profile, tripDays: 3 });
-    expect(auto.selectedIds).not.toContain(IDS.candidateE);
+    expect(auto.selectedIds).toContain(IDS.candidateE);
+    /* Last, behind every stop whose journey somebody measured. */
+    expect(auto.selectedIds[auto.selectedIds.length - 1]).toBe(IDS.candidateE);
+    for (const placeId of auto.selectedIds.slice(0, -1)) {
+      expect(candidate(board, placeId).reach.status).toBe('measured');
+    }
     expect(
-      auto.excluded.find((entry) => entry.placeId === IDS.candidateE)?.reason,
-    ).toBe('reach_unverified');
+      auto.notes.some((note) => /nothing here could time the way/i.test(note)),
+      'auto-pick took a stop nobody could time and said nothing about it',
+    ).toBe(true);
   });
 });
 

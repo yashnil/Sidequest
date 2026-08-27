@@ -105,7 +105,12 @@ export function DecisionComposer(props: DecisionComposerProps) {
         else props.onSaved?.();
         return;
       }
-      await startDecisionAction(answers);
+      /*
+       * On success the action redirects (which throws, and Next follows it);
+       * a returned value is always a refusal — the rate fence saying wait.
+       */
+      const started = await startDecisionAction(answers);
+      if (started && !started.ok) setError(started.error ?? 'We could not start that just now.');
     });
   }
 

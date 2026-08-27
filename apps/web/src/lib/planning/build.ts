@@ -104,6 +104,12 @@ export async function plannerInputForTrip(
       selections: getSelections(tripId),
       matrix: context.matrix,
       ...(context.transit ? { transit: context.transit } : {}),
+      /*
+       * Beside the timetables, and needed even when there are none: it is what
+       * tells the planner whether a long measured walk is the journey or is
+       * only pricing one nobody could measure.
+       */
+      scheduledNetwork: context.scheduledNetwork,
       access: context.access,
       hours: context.hours,
       weather: context.weather,
@@ -199,6 +205,12 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
       // trips, which is the ordinary case: a trip planned around a car buys no
       // timetables at all.
       ...(context.transit ? { transit: context.transit } : {}),
+      /*
+       * Beside the timetables, and needed even when there are none: it is what
+       * tells the planner whether a long measured walk is the journey or is
+       * only pricing one nobody could measure.
+       */
+      scheduledNetwork: context.scheduledNetwork,
       access: context.access,
       hours: context.hours,
       weather: context.weather,

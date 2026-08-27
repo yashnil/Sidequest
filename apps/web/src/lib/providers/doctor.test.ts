@@ -23,7 +23,13 @@ const SECRET = 'sk-ant-doctor-must-never-print-this-0123456789';
 
 function runDoctor(
   env: Record<string, string>,
-  args: string[] = ['--sidequest-env-file=none'],
+  /*
+   * `--sidequest-compile-logs=none` for the same hermeticity reason as the env
+   * file: the doctor now reads the newest compile log for a recorded credential
+   * rejection, and this machine's real logs must not steer a test. The
+   * compile-log tests below pass their own directory instead.
+   */
+  args: string[] = ['--sidequest-env-file=none', '--sidequest-compile-logs=none'],
 ): { code: number; out: string } {
   /*
    * A clean environment rather than an inherited one. A developer with real
@@ -383,7 +389,7 @@ describe('the configuration doctor', () => {
           '',
         ].join('\n'),
       );
-      const { code, out } = runDoctor({}, [`--sidequest-env-file=${file}`]);
+      const { code, out } = runDoctor({}, [`--sidequest-env-file=${file}`, '--sidequest-compile-logs=none']);
       // The verdicts must match what the app itself would see at runtime.
       expect(code).toBe(0);
       expect(out).toContain('Compilation mode: open');
@@ -406,6 +412,7 @@ describe('the configuration doctor', () => {
       writeFileSync(file, 'SIDEQUEST_COMPILER_PROVIDER=open\n');
       const { out } = runDoctor({ SIDEQUEST_COMPILER_PROVIDER: 'fixture' }, [
         `--sidequest-env-file=${file}`,
+        '--sidequest-compile-logs=none',
       ]);
       expect(out).toContain('Compilation mode: fixture');
     } finally {
@@ -414,7 +421,86 @@ describe('the configuration doctor', () => {
   });
 
   it('names the missing env file rather than silently answering for a bare shell', () => {
-    const { out } = runDoctor({}, ['--sidequest-env-file=/nonexistent/.env.local']);
+    const { out } = runDoctor({}, ['--sidequest-env-file=/nonexistent/.env.local', '--sidequest-compile-logs=none']);
     expect(out).toContain('not found — shell environment only');
+  });
+});
+
+/**
+ * THE ONE RECORDED OBSERVATION THE DOCTOR MAY REPORT.
+ *
+ * Twelve live builds ran against a rejected key and the only trace was a 401
+ * line in per-job logs nobody was watching. The doctor cannot make a live call,
+ * but it can read what the last build wrote — and only the last: after the key
+ * is fixed, one healthy build must clear the warning, or a month of old 401s
+ * shouts for ever at a deployment that has already acted.
+ */
+describe('the last live build’s credential verdict', () => {
+  async function withLogs(
+    files: { name: string; content: string; ageMs: number }[],
+    run: (dir: string) => void,
+  ): Promise<void> {
+    const { mkdtempSync, writeFileSync, utimesSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'sidequest-doctor-logs-'));
+    try {
+      for (const file of files) {
+        const path = join(dir, file.name);
+        writeFileSync(path, file.content);
+        const stamp = (Date.now() - file.ageMs) / 1000;
+        utimesSync(path, stamp, stamp);
+      }
+      run(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const REJECTION =
+    "Research model call failed { status: 401, type: 'authentication_error' }\n" +
+    'Research model credentials rejected\n';
+
+  it('reports a rejection recorded in the newest log, loudly and by file name', async () => {
+    await withLogs(
+      [{ name: 'aaaa.log', content: `worker starting\n${REJECTION}`, ageMs: 0 }],
+      (dir) => {
+        const { out } = runDoctor(FULLY_CONFIGURED, [
+          '--sidequest-env-file=none',
+          `--sidequest-compile-logs=${dir}`,
+        ]);
+        expect(out).toContain('Last live build');
+        expect(out).toContain('REJECTED by the provider (aaaa.log)');
+        expect(out).toContain('replaces the key');
+      },
+    );
+  });
+
+  it('clears once the newest log is clean, whatever the older ones recorded', async () => {
+    await withLogs(
+      [
+        { name: 'old-rejected.log', content: REJECTION, ageMs: 60_000 },
+        { name: 'new-healthy.log', content: 'worker starting\nextracted 12 facts\n', ageMs: 0 },
+      ],
+      (dir) => {
+        const { out } = runDoctor(FULLY_CONFIGURED, [
+          '--sidequest-env-file=none',
+          `--sidequest-compile-logs=${dir}`,
+        ]);
+        expect(out).toContain('no rejection recorded (new-healthy.log)');
+        expect(out).not.toContain('REJECTED by the provider');
+      },
+    );
+  });
+
+  it('says plainly when nothing has ever built, and never fails the run for it', async () => {
+    await withLogs([], (dir) => {
+      const { code, out } = runDoctor(FULLY_CONFIGURED, [
+        '--sidequest-env-file=none',
+        `--sidequest-compile-logs=${dir}`,
+      ]);
+      expect(out).toContain('No compile logs on disk');
+      expect(code).toBe(0);
+    });
   });
 });

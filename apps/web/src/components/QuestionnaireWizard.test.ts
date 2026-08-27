@@ -18,7 +18,7 @@ import {
   type QuestionnaireStepId,
   type RegionDecisionQuestionRecord,
 } from '@sidequest/core';
-import { QuestionnaireWizard } from './QuestionnaireWizard';
+import { QuestionnaireWizard, mobilityReconciliation } from './QuestionnaireWizard';
 
 /**
  * THE ENGINE WAS BUILT AND THE SCREEN NEVER READ IT.
@@ -330,5 +330,87 @@ describe('the questionnaire page supplies what the wizard renders', () => {
   it('passes the compiled region’s Stage B questions to the wizard', () => {
     expect(PAGE).toContain('decisionQuestions={');
     expect(PAGE).toContain('resolved.context.region.decisionQuestions');
+  });
+});
+
+/**
+ * CONTRADICTORY MOBILITY ANSWERS BECOME A QUESTION, NEVER A SILENT CLAMP.
+ *
+ * A live Iceland trip stored "300 min at the wheel a day" beside a 60-minute
+ * range. The profile maths takes the stricter answer (`effectiveDetourMinutes`
+ * is a min), so the board marked Gullfoss, Seljalandsfoss and Sólheimajökull
+ * "Probably skip — past how far you said you would go" — a sentence blaming
+ * the traveller for a limit they had contradicted in their very next answer,
+ * with nothing anywhere asking which of the two they meant. The review step is
+ * the last honest moment before research spends, so that is where the question
+ * lives.
+ */
+describe('the review step surfaces contradictory mobility answers as a question', () => {
+  const contradictory = (): QuestionnaireAnswers => ({
+    ...defaultAnswers(context()),
+    willDrive: true,
+    maxDailyTravelMinutes: 300,
+    detourToleranceMinutes: 60,
+    regionalExpansion: 'nearby_60',
+  });
+
+  it('asks the reconciliation question on the live case: 300 min at the wheel against a 60-min range', () => {
+    const markup = render({ context: context(), answers: contradictory(), step: 'review' });
+    expect(markup).toContain('mobility-reconciliation');
+    expect(markup).toContain('Two of your answers pull against each other');
+    // Both stated values, in the traveller's units, so the question is checkable.
+    expect(markup).toContain('5 hr at the wheel');
+    expect(markup).toContain('about 1 hr from base');
+    // Both ways out are explicit choices; neither is pre-applied.
+    expect(markup).toContain('Widen my range to 2 hr 30 min');
+    expect(markup).toContain('Keep it within 1 hr');
+  });
+
+  it('stays quiet on the defaults — an ordinary traveller is not accused of contradiction', () => {
+    const markup = render({ context: context(), step: 'review' });
+    expect(markup).not.toContain('mobility-reconciliation');
+  });
+
+  it('stays quiet without a car, where the wheel-time answer does not exist', () => {
+    const markup = render({
+      context: context(),
+      answers: { ...contradictory(), willDrive: false },
+      step: 'review',
+    });
+    expect(markup).not.toContain('mobility-reconciliation');
+  });
+
+  it('fires only past a full out-and-back plus an hour, and computes an honest widening', () => {
+    const base = contradictory();
+    // 300 against min(60, 65) = 60: 300 > 180 — fires, widened to half a day.
+    expect(mobilityReconciliation(base)).toEqual({
+      wheelMinutes: 300,
+      rangeMinutes: 60,
+      widenedDetourMinutes: 150,
+      widenedExpansion: 'best_regional',
+    });
+    // The defaults: 150 against 60 is within 2×range + 60 — silence.
+    expect(mobilityReconciliation({ ...base, maxDailyTravelMinutes: 150 })).toBeNull();
+    // Exactly at the boundary is still consistent enough to leave alone.
+    expect(mobilityReconciliation({ ...base, maxDailyTravelMinutes: 180 })).toBeNull();
+    // The binding range is the radius ring where it is tighter than the slider.
+    expect(
+      mobilityReconciliation({
+        ...base,
+        detourToleranceMinutes: 180,
+        regionalExpansion: 'nearby_30',
+      }),
+    ).toMatchObject({ rangeMinutes: 35, widenedDetourMinutes: 180 });
+  });
+
+  it('the widening it offers actually resolves the contradiction', () => {
+    const before = contradictory();
+    const offer = mobilityReconciliation(before)!;
+    const after = {
+      ...before,
+      detourToleranceMinutes: offer.widenedDetourMinutes,
+      regionalExpansion: offer.widenedExpansion,
+    };
+    expect(mobilityReconciliation(after)).toBeNull();
   });
 });

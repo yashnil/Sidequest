@@ -420,3 +420,275 @@ describe('the destination’s own identity', () => {
     );
   });
 });
+
+/**
+ * THE LAYERS THAT PUBLISH GEOMETRY AND NO ADDRESS.
+ *
+ * Measured on the fresh dense-metro pack of 2026-07-22: all 1,627 supplemental
+ * records (land, water, land_use, infrastructure) publish a real polygon extent
+ * and **not one administrative name** — no locality, no region, no chain. The
+ * name-recovery above has nothing to read, the divisions layer's own boxes are
+ * points a few metres across so `covering` never fires, and a city has no
+ * published boundary of its own. So every park, garden and zoo the geographic
+ * layers carry fell to `membership_unknown`, 638 attractions were demoted out
+ * of the anchor slot, and the city's real parks lost their board seats to
+ * whatever the place catalogue happened to misfile.
+ *
+ * What the pack *does* hold is the divisions layer's leaves, each publishing a
+ * full parent chain — so a ward's own children sample the ward's ground. These
+ * fixtures are that shape: point-box leaf divisions spread in two dimensions,
+ * and supplemental records carrying only geometry.
+ */
+function eastNorthOf(kmEast: number, kmNorth: number): { lat: number; lng: number } {
+  return {
+    lat: CENTRE.lat + kmNorth / KM_PER_DEGREE_LAT,
+    lng: CENTRE.lng + kmEast / (KM_PER_DEGREE_LAT * Math.cos((CENTRE.lat * Math.PI) / 180)),
+  };
+}
+
+/** A leaf division at an explicit point, still a point-box like the real layer. */
+function leafAt(input: {
+  id: string;
+  name: string;
+  locality: string;
+  chain: string[];
+  point: { lat: number; lng: number };
+  regionName?: string;
+}): SourceRecord {
+  return {
+    ...leaf({
+      id: input.id,
+      name: input.name,
+      locality: input.locality,
+      chain: input.chain,
+      km: 0,
+      ...(input.regionName ? { regionName: input.regionName } : {}),
+    }),
+    coordinates: input.point,
+    bounds: {
+      southWest: { lat: input.point.lat, lng: input.point.lng },
+      northEast: { lat: input.point.lat + 0.00001, lng: input.point.lng + 0.00001 },
+    },
+  };
+}
+
+/** A supplemental-layer record: a polygon, a point, and no address at all. */
+function supplemental(input: {
+  id: string;
+  name: string;
+  point: { lat: number; lng: number };
+  bounds?: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } };
+  regionName?: string;
+}): SourceRecord {
+  return {
+    id: `land_use:${input.id}`,
+    layerId: 'land_use',
+    sourceId: input.id,
+    name: input.name,
+    alternateNames: [],
+    coordinates: input.point,
+    ...(input.bounds ? { bounds: input.bounds } : {}),
+    sourceCategory: 'park',
+    sourceCategoryPath: ['park'],
+    planningRole: 'outdoor',
+    websiteCandidates: [],
+    containment: { ...(input.regionName ? { regionName: input.regionName } : {}), divisionIds: [] },
+    attributes: {},
+    sources: [{ dataset: 'OpenStreetMap', licenceId: 'ODbL-1.0' }],
+    cellId: 'g-0-0',
+  };
+}
+
+/** A ward of the destination, sampled by three of its own leaves in two dimensions. */
+function harbourWardLeaves(): SourceRecord[] {
+  const chain = (own: string) => ['div-country', 'div-city', 'div-ward-harbour', own];
+  return [
+    leafAt({
+      id: 'leaf-h1',
+      name: 'West Basin',
+      locality: 'Harbour Ward',
+      chain: chain('div-leaf-h1'),
+      point: eastNorthOf(-3, 3),
+    }),
+    leafAt({
+      id: 'leaf-h2',
+      name: 'East Basin',
+      locality: 'Harbour Ward',
+      chain: chain('div-leaf-h2'),
+      point: eastNorthOf(3, 5),
+    }),
+    leafAt({
+      id: 'leaf-h3',
+      name: 'Mid Basin',
+      locality: 'Harbour Ward',
+      chain: chain('div-leaf-h3'),
+      point: eastNorthOf(0, 4),
+    }),
+  ];
+}
+
+/** A ward of the *adjacent* first-level division, sampled the same way. */
+function farWardLeaves(): SourceRecord[] {
+  const chain = (own: string) => ['div-country', 'div-other-region', 'div-ward-far', own];
+  return [
+    leafAt({
+      id: 'leaf-f1',
+      name: 'Far West Quarter',
+      locality: 'Far Ward',
+      chain: chain('div-leaf-f1'),
+      point: eastNorthOf(-2, 29),
+      regionName: 'AA-AR',
+    }),
+    leafAt({
+      id: 'leaf-f2',
+      name: 'Far East Quarter',
+      locality: 'Far Ward',
+      chain: chain('div-leaf-f2'),
+      point: eastNorthOf(2, 31),
+      regionName: 'AA-AR',
+    }),
+  ];
+}
+
+function boxAround(point: { lat: number; lng: number }, km: number) {
+  const dLat = km / KM_PER_DEGREE_LAT;
+  const dLng = km / (KM_PER_DEGREE_LAT * Math.cos((CENTRE.lat * Math.PI) / 180));
+  return {
+    southWest: { lat: point.lat - dLat, lng: point.lng - dLng },
+    northEast: { lat: point.lat + dLat, lng: point.lng + dLng },
+  };
+}
+
+describe('membership for the layers that publish geometry and no address', () => {
+  const ground = [destinationDivision(), ...harbourWardLeaves(), ...farWardLeaves()];
+
+  it('places a polygon on ground the destination’s own subdivisions sample inside it', () => {
+    /*
+     * The park's point sits amid the ward's own leaves; its polygon is small
+     * enough to contain none of them, so the measured extent is the only thing
+     * that can answer — which is the real distribution.
+     */
+    const park = supplemental({
+      id: 'ward-park',
+      name: 'Harbour Common',
+      point: eastNorthOf(0.5, 4),
+      bounds: boxAround(eastNorthOf(0.5, 4), 0.3),
+    });
+    const overlay = buildTripScopeOverlay({ scope: cityScope(), records: [...ground, park] });
+    const decision = overlay.decisions.get('land_use:ward-park');
+    expect(decision?.relationship).toBe('inside_selected_division');
+    expect(decision?.basis).toBe('selected_division_geometry');
+    expect(decision?.eligibility.finalBoardEligible).toBe(true);
+  });
+
+  it('reads a division standing inside the record’s own boundary as whose ground it covers', () => {
+    /*
+     * The reverse direction: the polygon's representative point is outside the
+     * ward's sampled cloud, but the polygon itself contains one of the ward's
+     * published leaf points — the divisions layer standing inside the feature.
+     */
+    const park = supplemental({
+      id: 'spanning-park',
+      name: 'Basin Reach',
+      point: eastNorthOf(3, 8),
+      bounds: {
+        southWest: eastNorthOf(2, 4.5),
+        northEast: eastNorthOf(4, 9),
+      },
+    });
+    const overlay = buildTripScopeOverlay({ scope: cityScope(), records: [...ground, park] });
+    const decision = overlay.decisions.get('land_use:spanning-park');
+    expect(decision?.relationship).toBe('inside_selected_division');
+    expect(decision?.basis).toBe('selected_division_geometry');
+  });
+
+  it('leaves a record with no usable geometry unknown, so the fail-closed contract stays true', () => {
+    const bare = supplemental({
+      id: 'unplaceable',
+      name: 'Nameless Green',
+      point: eastNorthOf(0, 60),
+    });
+    const overlay = buildTripScopeOverlay({ scope: cityScope(), records: [...ground, bare] });
+    const decision = overlay.decisions.get('land_use:unplaceable');
+    expect(decision?.relationship).toBe('membership_unknown');
+    expect(decision?.eligibility.finalBoardEligible).toBe(false);
+    expect(decision?.eligibility.plannerEligible).toBe(false);
+  });
+
+  it('keeps a polygon on another division’s sampled ground out of the destination', () => {
+    /*
+     * Same record shape, same mechanism, the other side of the border: the far
+     * ward's leaves sample its ground just as densely, and their chains run
+     * under a different first-level division. Geometry is positive-only, so the
+     * answer is the honest unknown — off the final board — not an exclusion.
+     */
+    const park = supplemental({
+      id: 'far-park',
+      name: 'Far Meadow',
+      point: eastNorthOf(0, 30),
+      bounds: boxAround(eastNorthOf(0, 30), 0.3),
+    });
+    const overlay = buildTripScopeOverlay({ scope: cityScope(), records: [...ground, park] });
+    const decision = overlay.decisions.get('land_use:far-park');
+    expect(decision?.relationship).toBe('membership_unknown');
+    expect(decision?.eligibility.finalBoardEligible).toBe(false);
+  });
+
+  it('never lets geometry overrule a published refusal', () => {
+    /*
+     * A record standing on the destination's own sampled ground whose source
+     * places it in the adjacent first-level division. The disagreement decides,
+     * before any positive is looked for — the same asymmetry the whole layer
+     * rests on: geometry supports, names refuse.
+     */
+    const misfiled = supplemental({
+      id: 'misfiled',
+      name: 'Contested Green',
+      point: eastNorthOf(0.5, 4),
+      bounds: boxAround(eastNorthOf(0.5, 4), 0.3),
+      regionName: 'AA-AR',
+    });
+    const overlay = buildTripScopeOverlay({ scope: cityScope(), records: [...ground, misfiled] });
+    expect(overlay.decisions.get('land_use:misfiled')?.relationship).toBe('outside_scope');
+  });
+
+  it('does not reconstruct the destination’s own extent from its children', () => {
+    /*
+     * The guard the mechanism carries. A subdivision's measured extent claims
+     * ground the same order of size as what its children sampled; the
+     * *destination's* own extent, rebuilt from a scatter of child points, is
+     * the largest claim from the sparsest sampling — on the real pack, the
+     * whole-metro cloud covered a theme park in the neighbouring prefecture.
+     * So a covering measured extent admits only as a proper descendant of a
+     * selected division, never as the selected division itself.
+     */
+    const cityChildren = [
+      leafAt({
+        id: 'sub-a',
+        name: 'North Annex',
+        locality: 'Selected City',
+        chain: ['div-country', 'div-city', 'div-sub-a'],
+        point: eastNorthOf(-8, 12),
+      }),
+      leafAt({
+        id: 'sub-b',
+        name: 'South Annex',
+        locality: 'Selected City',
+        chain: ['div-country', 'div-city', 'div-sub-b'],
+        point: eastNorthOf(8, -12),
+      }),
+    ];
+    /* Inside the two annexes' joint bounding box, outside every ward's own. */
+    const between = supplemental({
+      id: 'between',
+      name: 'Between Green',
+      point: eastNorthOf(4, -6),
+      bounds: boxAround(eastNorthOf(4, -6), 0.3),
+    });
+    const overlay = buildTripScopeOverlay({
+      scope: cityScope(),
+      records: [destinationDivision(), ...cityChildren, between],
+    });
+    expect(overlay.decisions.get('land_use:between')?.relationship).toBe('membership_unknown');
+  });
+});

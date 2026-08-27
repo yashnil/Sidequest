@@ -13,7 +13,9 @@ import type { TransportMode } from '../schemas/access';
 import {
   dailyCapFor,
   detourToleranceMinutesFor,
+  DETOUR_STRETCH_MULTIPLIER,
   resolveCandidateReach,
+  transitBlindWalk,
   type ReachFromBase,
   type TravelKnowledge,
 } from '../travel/reach';
@@ -180,7 +182,7 @@ export function expandRegion(input: ExpansionInput): RegionExpansion {
       });
       return {
         place,
-        detourClass: classifyDetour(place, reach, profile, placeAccess),
+        detourClass: classifyDetour(place, reach, profile, placeAccess, travel.knowledge),
         travelMinutesFromBase: reach.status === 'measured' ? reach.travelMinutes : null,
         travelModeFromBase: reach.status === 'measured' ? reach.mode : null,
         reach,
@@ -341,6 +343,43 @@ function unknownCalendarFor(placeId: string) {
  *      the clock agrees, and the traveller already told us how far they walk. A
  *      walk past that is a stretch at best — never promoted to comfortable.
  *
+ * And one verdict rules 3 and 4 may not pass at all, which is why it is asked
+ * before either of them. Where the walk that priced this journey is standing in
+ * for scheduled transport nobody could measure — `transitBlindWalk`: the
+ * compilation signed the gap, the destination evidence observes a scheduled
+ * network, and the walk is past what the traveller said they would walk — a
+ * radius verdict is a verdict about the wrong mode in *either* direction, and
+ * the honest class is `unknown`. The Tokyo skip list is the witness: "1 hr
+ * 42 min each way on foot is past how far you said you would go", over a city
+ * whose own pack records a hundred-odd railway stations, for a traveller who
+ * chose public transport. The walk survives on the card as a walk; only the
+ * distance *verdict* is withheld, and withholding it is what keeps the card
+ * saying the transit route is unverified rather than quoting a walking clock as
+ * this traveller's distance. Rule 2 still runs first, so a walk past what any
+ * day of this trip holds stays `too_far` whatever the network — the planner's
+ * settled caps would refuse it on the same arithmetic, and softening it here
+ * would put a card on the board the plan must always take back.
+ *
+ * What a withheld verdict is emphatically not is a refusal, and the surfaces
+ * that must *act* on one of these journeys — the pre-selection, the scheduler's
+ * walking cap — bound it by the ride budget through
+ * `detourToleranceMinutesFor(profile, 'walk', { transitUnmeasured })`, because
+ * the journey the traveller will make is the ride. Bounding it by walking
+ * appetite is what refused every canonical seat on two live car-free
+ * dense-metro boards, each one priced at thirty-nine to seventy measured
+ * walking minutes against a twenty-five minute answer about the last mile from
+ * a stop, and left one of them with a single scheduled stop out of twenty-four
+ * cards.
+ *
+ * Every radius on this page is the **journey bound**, and that is the only
+ * question asked here: how far away is this, for a traveller who will make the
+ * journey however they make it. It is not the ceiling on a leg the itinerary
+ * tells somebody to walk — that is `walkingLegBoundMinutes`, a separate
+ * function taking no evidence at all, so the widening above cannot reach it.
+ * When one number answered both, the widened figure arrived at the scheduler as
+ * a walking allowance and laid hour-long walks for a traveller who had answered
+ * twenty-five minutes.
+ *
  * Nothing here reads a kilometre. Distance survives as a card fact, not as a
  * verdict: the transport network decides how far away somewhere is.
  */
@@ -349,6 +388,7 @@ function classifyDetour(
   reach: ReachFromBase,
   profile: TravelerProfile,
   access: PlaceAccessAssessment,
+  knowledge: TravelKnowledge,
 ): DetourClass {
   if (place.relationship === 'base') return 'base';
 
@@ -384,6 +424,22 @@ function classifyDetour(
   if (dailyCap > 0 && reach.roundTripMinutes > dailyCap) return 'too_far';
 
   /*
+   * The one case no radius may decide, and it is asked before any of them are.
+   * See the header: a walking figure standing in for unmeasurable scheduled
+   * transport is not this traveller's distance, and `unknown` is what unknown is
+   * called.
+   *
+   * It sat *below* the radius rules, where it only ever caught what the walking
+   * radius had already refused. That position was safe only while a car-free
+   * traveller's radius was a twenty-minute constant. Their stated one-way travel
+   * answer now reaches it, so a seventy-minute stand-in walk would fall inside a
+   * sixty-minute radius and be handed a confident "in tolerance" — a distance
+   * verdict about a mode nobody measured, in place of the withheld one, and the
+   * card would drop the sentence saying the transit route is unverified.
+   */
+  if (reach.mode === 'walk' && transitBlindWalk(knowledge, reach.travelMinutes)) return 'unknown';
+
+  /*
    * The same substituted mode the cap used, so one journey is never bounded by
    * one mode's budget and measured against another mode's radius. A road ride
    * on a shuttle is bounded like a ride and given a ride's radius.
@@ -393,7 +449,7 @@ function classifyDetour(
     reach.mode === 'walk' && reach.travelMinutes > profile.transport.maxAccessWalkMinutes;
 
   if (reach.travelMinutes <= radius) return walkedTooFar ? 'stretch' : 'in_tolerance';
-  if (reach.travelMinutes <= radius * 1.5) return 'stretch';
+  if (reach.travelMinutes <= radius * DETOUR_STRETCH_MULTIPLIER) return 'stretch';
   return 'too_far';
 }
 

@@ -1,0 +1,14 @@
+Research model call failed {
+  status: 401,
+  type: 'authentication_error',
+  requestId: 'req_011Ce1Au96ottqobrBE4RZAM',
+  promptVersion: 'expand-region/2026-07-31.1',
+  providerMessage: '401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011Ce1Au96ottqobrBE4RZAM"}'
+}
+Research model call failed {
+  status: 401,
+  type: 'authentication_error',
+  requestId: 'req_011Ce1AudLw3xwyjiXgm7PUQ',
+  promptVersion: 'extract-facts/2026-08-01.1',
+  providerMessage: '401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"},"request_id":"req_011Ce1AudLw3xwyjiXgm7PUQ"}'
+}

@@ -74,6 +74,7 @@ export function buildFoodPlan(input: {
   return {
     headline: headlineFor({
       named: meals.filter(({ item }) => item.food?.stopKind === 'venue').length,
+      areaOnly: meals.filter(({ item }) => item.food?.areaName !== undefined).length,
       specialMealsPlanned,
       packedDays: packedDayNumbers.length,
       hasData: input.dataset !== null && input.dataset.venues.length > 0,
@@ -111,6 +112,7 @@ export function buildFoodPlan(input: {
 
 function headlineFor(input: {
   named: number;
+  areaOnly: number;
   specialMealsPlanned: number;
   packedDays: number;
   hasData: boolean;
@@ -119,7 +121,15 @@ function headlineFor(input: {
     return 'We have no food data for this region, so every meal below is time held rather than somewhere named.';
   }
   if (input.named === 0) {
-    return 'Nothing we can verify fitted the routes these days take, so the meals are time held rather than places.';
+    /*
+     * Two different findings, and the old copy told the worse one for both. A
+     * plan that could not name anywhere but could say which part of town to eat
+     * in has given the traveller something to act on, and reporting it as time
+     * held understates it in exactly the direction that loses trust.
+     */
+    return input.areaOnly > 0
+      ? `Nothing we can verify fitted the routes these days take, so the meals point at an area rather than at a place — ${input.areaOnly} of them.`
+      : 'Nothing we can verify fitted the routes these days take, so the meals are time held rather than places.';
   }
   const parts = [`${input.named} named ${input.named === 1 ? 'meal' : 'meals'}`];
   if (input.specialMealsPlanned > 0) {

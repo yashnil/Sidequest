@@ -1,6 +1,8 @@
 import {
   assessConfidence,
   breadthRank,
+  DAY_REACH_KM,
+  TRANSFER_SPEED_KMH,
   GEOGRAPHIC_SCOPE_VERSION,
   reachClassFor,
   resolveTimeZones,
@@ -80,6 +82,29 @@ export interface ScopeInput {
    * why it is still clamped.
    */
   preflightReachKm?: number;
+  /**
+   * THE PART THE PREFLIGHT STRUCTURE CHOSE, FOR WHEN THE TRAVELLER NARROWS.
+   *
+   * "One area, in depth" replaces a container with a part, and a part has to be
+   * *somewhere*. This input is the answer to which somewhere: the first base of
+   * the preflight portfolio's route — the settlement the structure already
+   * chose, showed the traveller, and wrote a reason for.
+   *
+   * A live car-free country trip found what its absence costs. The traveller
+   * accepted "one area, in depth"; the preflight had chosen the capital as the
+   * one base, seven nights, "the densest part of the region"; and `deriveScope`,
+   * with no parameter to receive any of that, centred the narrowed radius on
+   * `candidate.center` — the country's geometric centroid, two hundred
+   * kilometres away in uninhabited highland. The compiled board held seven
+   * glacial streams and no food, and the readiness system could only say so
+   * after the compile was spent.
+   *
+   * Absent when no preflight ran or its portfolio found nowhere to base a trip
+   * from. A narrowed *container* without this cannot say which part it means,
+   * and `scopeFitsTrip` refuses it before any money is spent rather than
+   * compiling a circle around a centroid.
+   */
+  preflightAnchor?: { id: string; name: string; center: { lat: number; lng: number } };
   /**
    * Whether anything configured can measure a public-transport journey.
    *
@@ -164,12 +189,85 @@ function divisionIdentityFor(
  */
 const MULTI_PART_BREADTHS: readonly ScopeBreadth[] = ['subregion', 'region', 'country', 'multi_country'];
 
+/**
+ * A destination that is a set of parts rather than one place, on this trip.
+ *
+ * `narrowed` is half the test and not a detail: a traveller who has said "just
+ * one area of this" has replaced the container with a part, and a part is a
+ * place — reach may size it exactly as it sizes a city.
+ */
+function isContainer(candidate: DestinationCandidate, narrowed: boolean): boolean {
+  return !narrowed && MULTI_PART_BREADTHS.includes(candidate.breadth);
+}
+
 function deriveShape(
   candidate: DestinationCandidate,
   radiusKm: number,
+  /**
+   * The ground this trip could cover if getting about were not the constraint.
+   *
+   * Read only for a container with no published edges. See the note below the
+   * bounds branch for why a walking speed may not decide what a destination is.
+   */
+  unconstrainedRadiusKm: number,
   narrowed: boolean,
+  /** The named part a narrowing resolves to. See `ScopeInput.preflightAnchor`. */
+  part: { id: string; name: string; center: { lat: number; lng: number } } | undefined,
 ): ScopeShape {
-  if (candidate.bounds && !narrowed) {
+  if (narrowed) {
+    /**
+     * NARROWING IS AN ANSWER TO "WHICH PART", NOT ONLY TO "HOW MUCH".
+     *
+     * This branch used to be one line at the bottom — the traveller's reach as
+     * a radius around `candidate.center` — and for a container that centre is
+     * the geometric centroid, which is a fact about a bounding box and not a
+     * place anybody chose. A car-free country trip compiled twelve kilometres
+     * of uninhabited highland that way while the preflight's chosen capital sat
+     * unread in the stored portfolio. §12.1 bans the result in as many words:
+     * a country may not be clipped to a city-sized walk radius.
+     *
+     * So the part leads, when one is resolved. The area is centred on it, and —
+     * the same defect with a car, from the same line — the ground is kept
+     * inside the destination's own published edges: a six-night drive radius
+     * turned "a single part" of a city into 168 km of neighbouring prefectures
+     * because nothing intersected the narrowed radius with anything.
+     */
+    if (part) {
+      if (candidate.bounds) {
+        return { kind: 'bounds', bounds: clipToReach(candidate.bounds, part.center, radiusKm) };
+      }
+      return { kind: 'radius', center: part.center, radiusKm };
+    }
+    /**
+     * Narrowed, and nothing resolved which part.
+     *
+     * For a container that is an unanswerable state rather than a small trip:
+     * the only centre on offer is the centroid, and a circle there is the
+     * banned shape. The container's own ground stands — exactly what the
+     * un-narrowed branches below derive — and the breadth stays undemoted, so
+     * `scopeFitsTrip` refuses the confirm before a compile is bought instead
+     * of a readiness deficit arriving after one.
+     */
+    if (MULTI_PART_BREADTHS.includes(candidate.breadth)) {
+      if (candidate.bounds) {
+        return { kind: 'bounds', bounds: candidate.bounds };
+      }
+      return {
+        kind: 'radius',
+        center: candidate.center,
+        radiusKm: Math.max(radiusKm, unconstrainedRadiusKm),
+      };
+    }
+    /**
+     * A narrowed settlement is one place either way: reach narrows it around
+     * its own centre, inside its own edges when anybody published them.
+     */
+    if (candidate.bounds) {
+      return { kind: 'bounds', bounds: clipToReach(candidate.bounds, candidate.center, radiusKm) };
+    }
+    return { kind: 'radius', center: candidate.center, radiusKm };
+  }
+  if (candidate.bounds) {
     /**
      * A published boundary, clipped to what the trip can actually reach —
      * but only where clipping narrows a place rather than dismembering one.
@@ -201,13 +299,55 @@ function deriveShape(
      * A country whose parts a walker cannot cross becomes a readiness and
      * transport problem, stated, rather than a smaller country, unstated.
      */
-    if (MULTI_PART_BREADTHS.includes(candidate.breadth)) {
+    if (isContainer(candidate, narrowed)) {
       return { kind: 'bounds', bounds: candidate.bounds };
     }
     const clipped = clipToReach(candidate.bounds, candidate.center, radiusKm);
     return { kind: 'bounds', bounds: clipped };
   }
-  return { kind: 'radius', center: candidate.center, radiusKm };
+  /**
+   * THE SAME RULE WHERE NOBODY PUBLISHED EDGES, WHICH IS VERY NEARLY ALWAYS.
+   *
+   * The guard above shipped inside the bounds branch, and measured against the
+   * live destination index it could not run for the destinations it was written
+   * for. **38,909 of 38,909 counties carry no bounds**, as do 53,542 of 53,542
+   * towns, 12,080 of 12,080 cities and every district; and `county`, `island`,
+   * `national_park` and `protected_area` all resolve to breadth `subregion` —
+   * the first entry in `MULTI_PART_BREADTHS`. So a traveller who picked an
+   * island group or a national park out of the suggestion list reached this
+   * line, not the one above it, and their destination became a circle whose
+   * radius is a *walking* speed multiplied by their nights: twelve kilometres.
+   *
+   * That is the archipelago failure the guard was written to stop, arriving
+   * through the other branch. The second island is outside the compiled ground
+   * before a record is read, nothing says so, and §12.1 forbids it in as many
+   * words — "an island group losing an island before research starts", "a
+   * transit destination being treated as a walking-only circle".
+   *
+   * So the container rule is stated once and applies to both shapes: a
+   * traveller's reach narrows a *place* and never decides what a *set of places*
+   * is. With edges, the edges stand unclipped. Without them, the circle is sized
+   * by the trip — the same nights-times-reach arithmetic, taken at the widest
+   * reach class rather than at this traveller's — so a car-free archipelago
+   * compiles the same ground a driven one does.
+   *
+   * `Math.max` rather than a replacement, because a preflight structure or an
+   * accepted "make room for it" may already have asked for more, and this exists
+   * to stop reach *shrinking* a container, never to cap it.
+   *
+   * What does not change is the traveller: `reachRadiusKm` still carries their
+   * real reach, base selection still reads it, the daily travel caps are
+   * untouched, and `boundaryEvidence` still says `reach_circle` so no consumer
+   * can mistake this for a border. A container a walker cannot cross stays a
+   * transport problem, stated — not a smaller container, unstated.
+   */
+  return {
+    kind: 'radius',
+    center: candidate.center,
+    radiusKm: isContainer(candidate, narrowed)
+      ? Math.max(radiusKm, unconstrainedRadiusKm)
+      : radiusKm,
+  };
 }
 
 /** Latitude degrees per kilometre. Longitude is scaled by the cosine. */
@@ -402,10 +542,20 @@ export function deriveScope(input: ScopeInput): GeographicScope {
    * and stretching the scope to match the name is how a compiler spends its
    * whole budget on ground the traveller will never see.
    */
-  const derivedRadiusKm = Math.min(
-    reach.cap,
-    Math.max(reach.perNight, reach.perNight * (nights + 1)),
-  );
+  const radiusForTrip = (band: { perNight: number; cap: number }): number =>
+    Math.min(band.cap, Math.max(band.perNight, band.perNight * (nights + 1)));
+  const derivedRadiusKm = radiusForTrip(reach);
+  /**
+   * The same arithmetic with the mode taken out of it.
+   *
+   * Used only by `deriveShape`, and only for a destination that is a set of
+   * parts. It is still "a radius that grows with the trip, not with the
+   * destination" — the same nights, the same table — asked at the widest reach
+   * class, which is the honest answer to "how much of this could a trip of this
+   * length be about" once how the traveller gets around is no longer allowed to
+   * answer what the destination is.
+   */
+  const unconstrainedRadiusKm = radiusForTrip(RADIUS_KM_BY_MODE.drive);
 
   /**
    * THE REACH THE TRAVELLER WAS ALREADY SHOWN WINS.
@@ -440,6 +590,56 @@ export function deriveScope(input: ScopeInput): GeographicScope {
       : derivedRadiusKm;
 
   /**
+   * NARROWING ALSO CHANGES WHAT THE RADIUS *MEANS*.
+   *
+   * The nights-times-reach table above answers "how much ground can a trip of
+   * this length cover moving across parts". A traveller who chose one area from
+   * one base is not moving across parts: their trip is day trips out and back,
+   * and a day's ground is the day reach — the same figure the preflight's own
+   * clustering uses. Without this, six driven nights made "a single part" of a
+   * city 168 km across, which is not a part of anything.
+   *
+   * `Math.min`, because a short trip's own arithmetic may already be smaller
+   * and narrowing must never widen anything.
+   */
+  /**
+   * A DAY'S GROUND IS THE TRAVELLER'S OWN, WHERE THEY STATED IT.
+   *
+   * `DAY_REACH_KM` is the table's generic day — and for a driving traveller
+   * narrowing a *container* destination to one base, the generic day quietly
+   * overruled their own answer: a seven-night car trip anchored on a country's
+   * capital was clipped to the 70 km constant while the standard day-trip
+   * circuit for exactly that shape of trip sits beyond it, so the compiled
+   * pack excluded half the destination's canonical ground and the recall
+   * instrument's denominator shrank with it. Their questionnaire already
+   * says how long they will drive in a day: half of it outbound at the
+   * transfer speed the region model itself uses is the radius their own
+   * answer implies. Clamped by the mode's cap so a generous answer cannot buy
+   * an unbounded compilation, floored at the table's constant so a cautious
+   * answer keeps today's ground, and applied only where the destination is a
+   * container of parts — a traveller narrowing a *city* is not asking for its
+   * hinterland, however far they would drive.
+   */
+  const statedDayReachKm =
+    reachClass === 'drive' &&
+    MULTI_PART_BREADTHS.includes(candidate.breadth) &&
+    input.profile !== undefined
+      ? Math.min(
+          reach.cap,
+          Math.max(
+            DAY_REACH_KM[reachClass],
+            Math.round(
+              ((input.profile.transport.maxDailyDriveMinutes / 2) / 60) *
+                TRANSFER_SPEED_KMH[reachClass],
+            ),
+          ),
+        )
+      : DAY_REACH_KM[reachClass];
+  const narrowedFromPreflight = narrowed
+    ? Math.min(fromPreflight, statedDayReachKm)
+    : fromPreflight;
+
+  /**
    * The other adaptive answer that has to land somewhere.
    *
    * `adaptive.extend-reach` is asked only when the structure dropped an area
@@ -453,8 +653,8 @@ export function deriveScope(input: ScopeInput): GeographicScope {
   const reachAnswer = singleAnswer(clarifications, ADAPTIVE_QUESTION_IDS.extendReach);
   const radiusKm =
     reachAnswer === 'include'
-      ? Math.min(reach.cap, Math.round(fromPreflight * 1.5))
-      : fromPreflight;
+      ? Math.min(reach.cap, Math.round(narrowedFromPreflight * 1.5))
+      : narrowedFromPreflight;
 
   const allowedModes: TransportMode[] = carAvailable
     ? ['drive', 'walk', 'shuttle', 'public_bus', 'rail']
@@ -464,7 +664,14 @@ export function deriveScope(input: ScopeInput): GeographicScope {
   const signals: ConfidenceSignal[] = [...candidate.confidence.signals];
   if (!signals.includes('user_confirmed')) signals.push('user_confirmed');
 
-  const shape = deriveShape(candidate, radiusKm, narrowed);
+  /**
+   * The part a narrowing resolves to — read only when narrowing, because the
+   * preflight's first base is a fact about the structure the traveller was
+   * shown, and an un-narrowed trip is built on the whole of it.
+   */
+  const part = narrowed ? input.preflightAnchor : undefined;
+
+  const shape = deriveShape(candidate, radiusKm, unconstrainedRadiusKm, narrowed, part);
   /*
    * A resolver-supplied source promotes the same zones from "published" to
    * "provider_resolved", which is the difference between a value that travelled
@@ -491,7 +698,15 @@ export function deriveScope(input: ScopeInput): GeographicScope {
     destinationCandidateId: candidate.id,
     destinationName: candidate.displayName,
     destinationEntityType: candidate.entityType,
-    breadth: narrowed && breadthRank(candidate.breadth) > breadthRank('subregion')
+    /*
+     * Demoted only when the narrowing actually *resolved* to a part. A country
+     * narrowed to a named settlement is a subregion trip; a country narrowed to
+     * nothing in particular is still a country, and leaving it one is what lets
+     * `scopeFitsTrip`'s country-from-one-base rule refuse the confirm — the
+     * demotion used to defeat that guard, and the centroid circle it waved
+     * through cost a real compile before anything said a word.
+     */
+    breadth: narrowed && part !== undefined && breadthRank(candidate.breadth) > breadthRank('subregion')
       ? 'subregion'
       : candidate.breadth,
     center: candidate.center,
@@ -504,7 +719,13 @@ export function deriveScope(input: ScopeInput): GeographicScope {
      * consumer that needs a *border* can now tell that it has been handed a
      * circle, instead of discovering it by admitting a county 166 km away.
      */
-    boundaryEvidence: (candidate.bounds && !narrowed ? 'measured_extent' : 'reach_circle') as
+    /*
+     * Read off the shape rather than re-deriving the branch: a narrowed area
+     * clipped inside a published extent is the same operation as a city clipped
+     * to reach, and calling it a circle would make containment throw away the
+     * one boundary it could have used.
+     */
+    boundaryEvidence: (shape.kind === 'bounds' ? 'measured_extent' : 'reach_circle') as
       | 'published_boundary'
       | 'measured_extent'
       | 'reach_circle',
@@ -580,7 +801,23 @@ export function deriveScope(input: ScopeInput): GeographicScope {
     ...(zones.source ? { timeZoneSource: zones.source } : {}),
     ...(zones.resolvedAt ? { timeZoneResolvedAt: zones.resolvedAt } : {}),
     shape,
-    includedAreas: [],
+    /**
+     * The resolved part, kept on the scope by name.
+     *
+     * This is what stops "one area" being anonymous downstream: the confirm
+     * screen can name it, and it sits in the fingerprint's `in:` segment, so a
+     * different chosen part can never silently reuse this part's artifact.
+     */
+    includedAreas: part
+      ? [
+          {
+            id: part.id,
+            name: part.name,
+            center: part.center,
+            note: `The part of ${candidate.displayName} this trip settles into.`,
+          },
+        ]
+      : [],
     excludedAreas: [],
     gateways: [],
     transport: {
@@ -593,7 +830,8 @@ export function deriveScope(input: ScopeInput): GeographicScope {
     },
     maxBaseChanges,
     nights,
-    rationale: describeScope(candidate, radiusKm, narrowed, maxBaseChanges),
+    rationale: describeScope(candidate, radiusKm, narrowed, maxBaseChanges, part?.name),
+    derivedFromProfile: input.profile !== undefined,
     confidence: assessConfidence(signals),
     decidedBy: clarifications.answers.map((answer) => ({
       questionId: answer.questionId,
@@ -614,6 +852,7 @@ function describeScope(
   radiusKm: number,
   narrowed: boolean,
   maxBaseChanges: number,
+  partName?: string,
 ): string {
   const reach = `about ${Math.round(radiusKm)} km out`;
   const bases =
@@ -621,6 +860,15 @@ function describeScope(
       ? 'from one base'
       : `across up to ${maxBaseChanges + 1} bases`;
   if (narrowed) {
+    /*
+     * Named, never anonymous. "A single part of" a country told a traveller
+     * nothing they could check; "the capital and around" is a sentence they
+     * can refuse. The anonymous wording survives only for the unresolved case,
+     * which `scopeFitsTrip` refuses to confirm anyway.
+     */
+    if (partName) {
+      return `${partName} and around — one part of ${candidate.displayName}, ${reach}, ${bases}.`;
+    }
     return `A single part of ${candidate.displayName}, ${reach}, ${bases}.`;
   }
   return `${candidate.qualifiedName}, ${reach}, ${bases}.`;

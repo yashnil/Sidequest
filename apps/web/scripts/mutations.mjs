@@ -37,8 +37,8 @@ export const MUTATIONS = [
     edits: [
       {
         file: 'packages/core/src/quality/significance.ts',
-        find: 'return round(clamp01(clamp01(input.categoryWeight) * (0.3 + 0.7 * (established ?? 0))));',
-        replace: 'return round(clamp01(0.5 * (established === undefined ? 1 : 1)));',
+        find: '    score: round(clamp01(kindContribution + evidenceContribution)),',
+        replace: '    score: round(clamp01(0.5 + 0 * (kindContribution + evidenceContribution))),',
       },
     ],
     tests: [
@@ -54,8 +54,8 @@ export const MUTATIONS = [
     edits: [
       {
         file: 'packages/core/src/quality/significance.ts',
-        find: 'return round(clamp01(clamp01(input.categoryWeight) * (0.3 + 0.7 * (established ?? 0))));',
-        replace: 'return round(clamp01(input.standing.evidenceRichness ?? (established ?? 0)));',
+        find: '    score: round(clamp01(kindContribution + evidenceContribution)),',
+        replace: '    score: round(clamp01(standing.evidenceRichness)),',
       },
     ],
     tests: [
@@ -71,9 +71,30 @@ export const MUTATIONS = [
       'The kind stops mattering: a slope and a museum start from the same base, so anything with a scrap of evidence outranks an unevidenced anchor.',
     edits: [
       {
+        /*
+         * RE-ANCHORED. This class spent a whole phase matching zero times.
+         *
+         * `kindContribution` grew a floor — `prior === 0 ? 0 : Math.max(…,
+         * SCORE_STEP)` — so that a travel experience of the lightest kind never
+         * rounds to the same zero as a thing that is not an experience at all.
+         * The old one-term anchor stopped matching the moment that landed, and
+         * the harness reported STALE: neither caught nor survived, and quiet
+         * enough that the §30 table read as complete. That is the second anchor
+         * in this project to go stale across a refactor, which is why the runner
+         * now shouts UNMEASURED rather than printing a row.
+         *
+         * The regression is unchanged against the new shape: strip `prior` from
+         * the product and the kind stops mattering, so a slope and a museum
+         * start from the same base and anything with a scrap of evidence
+         * outranks an unevidenced anchor. The floor and the zero case are left
+         * exactly as they are, so the only thing this changes is the one thing
+         * the contract line is about.
+         */
         file: 'packages/core/src/quality/significance.ts',
-        find: 'return round(clamp01(clamp01(input.categoryWeight) * (0.3 + 0.7 * (established ?? 0))));',
-        replace: 'return round(clamp01(0.3 + 0.7 * (established ?? 0)));',
+        find:
+          '  const kindContribution = prior === 0 ? 0 : Math.max(round(prior * KIND_ONLY_SHARE), SCORE_STEP);',
+        replace:
+          '  const kindContribution = prior === 0 ? 0 : Math.max(round(KIND_ONLY_SHARE), SCORE_STEP);',
       },
     ],
     tests: [
@@ -156,10 +177,16 @@ export const MUTATIONS = [
          * clause with sourced facts. Dropping the facts is the same regression
          * against the new shape: every description collapses to the bare
          * category form §8.7 bans.
+         *
+         * Re-anchored again when `describedFacts` lost its `standing` argument
+         * — the witness fallback it fed was removed, because a sentence naming
+         * where the record came from is not a description of the place. The
+         * mutation is unchanged in meaning: drop the sourced facts and every
+         * description is its opening clause, including the records that have a
+         * designation, an operator or an extent to state.
          */
         file: 'packages/compiler/src/backbone/inventory.ts',
-        find:
-          "  return [opening, ...describedFacts(record, names, standing)].join(' ').slice(0, 280);",
+        find: "  return [opening, ...describedFacts(record, names)].join(' ').slice(0, 280);",
         replace: "  return [opening].join(' ').slice(0, 280);",
       },
     ],
@@ -191,7 +218,15 @@ export const MUTATIONS = [
         replace: 'const calibrated = rawFits.map((entry) => entry);',
       },
     ],
-    tests: ['packages/core/src/discovery/board.test.ts', 'packages/core/src/scoring/fit.test.ts'],
+    tests: [
+      /*
+       * `discovery.test.ts`, not `board.test.ts`. The latter has not existed for
+       * some time and vitest says nothing about a filter that matches no file,
+       * so this class was being judged on half the selection it declared.
+       */
+      'packages/core/src/discovery/discovery.test.ts',
+      'packages/core/src/scoring/fit.test.ts',
+    ],
   },
   {
     id: 'M08-hours-warning-on-every-feature',
@@ -258,7 +293,10 @@ export const MUTATIONS = [
     ],
     tests: [
       'packages/planner/src/planner.test.ts',
-      'packages/core/src/discovery/autoselect.test.ts',
+      /* The auto-selection suite lives in `discovery.test.ts`; there is no
+         `autoselect.test.ts` and there has not been one. */
+      'packages/core/src/discovery/discovery.test.ts',
+      'packages/core/src/discovery/autoselect-portfolio.test.ts',
     ],
   },
   {
@@ -282,15 +320,26 @@ export const MUTATIONS = [
        * against a smaller surface, and it is where the contract's "stops
        * charging an interest at all" is now true or false.
        */
+      /*
+       * Re-anchored a second time, for the same reason as the first: the
+       * shared ledger moved up into core (`scoring/frequency.ts`) so the
+       * auto-pick, the packer and the validator all read one definition.
+       * Charging nothing at the push is "stops charging an interest at all"
+       * against the whole product at once.
+       */
       {
-        file: 'packages/planner/src/frequency.ts',
-        find: "  if (primary === undefined || typeof caps[primary] !== 'number') return [];",
-        replace: "  if (primary === undefined || typeof caps[primary] === 'number') return [];",
+        file: 'packages/core/src/scoring/frequency.ts',
+        find: '      costs.push([interest, 1]);',
+        replace: '      void interest;',
       },
     ],
     tests: [
       'packages/planner/src/frequency-budget.test.ts',
-      'packages/core/src/discovery/autoselect.test.ts',
+      'packages/planner/src/frequency.test.ts',
+      /* The auto-selection suite lives in `discovery.test.ts`; there is no
+         `autoselect.test.ts` and there has not been one. */
+      'packages/core/src/discovery/discovery.test.ts',
+      'packages/core/src/discovery/autoselect-portfolio.test.ts',
     ],
   },
   {
@@ -503,6 +552,107 @@ export const MUTATIONS = [
     ],
   },
   {
+    id: 'M24-category-weight-caps-significance',
+    contract:
+      'restore the multiplicative category ceiling, so evidence can never lift a place past the best its kind is allowed to score (§16B, §8.3)',
+    detail:
+      "Significance goes back to `f(categoryWeight) × g(evidence)`: the evidence contribution is scaled by the kind's own weight, which is what makes the weight a ceiling rather than a prior. A famous instance of a modest kind — an encyclopaedically documented urban park — falls below an anonymous record filed under a heavier word, which is the absence a §16 reviewer measured on a live Osaka board.",
+    edits: [
+      {
+        file: 'packages/core/src/quality/significance.ts',
+        find: '  const openEvidenceContribution = round(established * ESTABLISHED_SHARE * evidenceAdmission);',
+        replace:
+          '  const openEvidenceContribution = round(prior * established * ESTABLISHED_SHARE * evidenceAdmission);',
+      },
+    ],
+    tests: [
+      'packages/core/src/quality/significance.test.ts',
+      'packages/compiler/src/backbone/significance-ranking.test.ts',
+    ],
+  },
+  {
+    id: 'M25-shortlist-discards-by-a-round-index',
+    contract:
+      'let the shortlist silently discard records the quotas had already chosen — the DROP direction of `interleaveByRole`\'s "a permutation of its input, by construction"',
+    detail:
+      'The round loop stops one record short, which is the phase\'s own defect in its own shape: on the live Tokyo pack a round index discarded 59 records the quotas had already selected, four of the six canonical attractions among them. The old assertions covered the other direction — no duplicates, never over the ceiling — and a drop is invisible to both.',
+    edits: [
+      {
+        /*
+         * A round index rather than a filter, deliberately. The bug was not a
+         * predicate that rejected something; it was arithmetic about when the
+         * loop had emitted enough, and the record it lost was one nothing had
+         * any opinion about. That is what makes the loss silent, and it is the
+         * shape a guard has to be sensitive to.
+         */
+        file: 'packages/compiler/src/backbone/inventory.ts',
+        find: '  for (let round = 0; ordered.length < records.length; round += 1) {\n    let progressed = false;\n    for (const bucket of buckets) {\n      const next = bucket[round];\n      if (!next) continue;\n      ordered.push(next);\n      progressed = true;\n    }\n    if (!progressed) break;\n  }\n  return ordered;\n}\n\n/**\n * The order records are considered in, and it is not a fit score.',
+        replace:
+          '  for (let round = 0; ordered.length + 1 < records.length; round += 1) {\n    let progressed = false;\n    for (const bucket of buckets) {\n      const next = bucket[round];\n      if (!next) continue;\n      ordered.push(next);\n      progressed = true;\n    }\n    if (!progressed) break;\n  }\n  return ordered;\n}\n\n/**\n * The order records are considered in, and it is not a fit score.',
+      },
+    ],
+    tests: ['packages/compiler/src/backbone/backbone.test.ts'],
+  },
+  {
+    id: 'M26-board-priority-escapes-its-band',
+    contract:
+      'let a lower-banded card outrank a higher-banded one in the planner (§16B presentation/planning agreement)',
+    detail:
+      '`boardPriorityOf` stops normalising `withinBand` against its own width before folding it into the band rank. The comparator is untouched and every board still renders in the right order; only the scalar the planner sorts on changes, so the trip comes out in a different order from the board it was built from.',
+    edits: [
+      {
+        file: 'packages/core/src/discovery/board.ts',
+        find:
+          '  const within = Math.min(\n    1,\n    Math.max(0, (ordering.withinBand + WITHIN_BAND_FLOOR) / WITHIN_BAND_WIDTH),\n  );',
+        replace: '  const within = ordering.withinBand + WITHIN_BAND_FLOOR;',
+      },
+    ],
+    tests: [
+      'packages/core/src/discovery/discovery.test.ts',
+      'packages/planner/src/candidates.test.ts',
+    ],
+  },
+  {
+    id: 'M27-autopick-forgets-the-travellers-own-choices',
+    contract:
+      "ignore user rejection feedback during auto-pick — the wiring half (§30 class 11, at the call site)",
+    detail:
+      'M11 mutates the planner\'s reading of an exclusion. This mutates whether auto-pick is ever *told* what the traveller decided: the action stops assembling `decided`, so the pass spends slots on places the store then refuses to write and reports a selection that did not happen.',
+    edits: [
+      {
+        file: 'apps/web/src/app/(product)/trips/[id]/discover/actions.ts',
+        find: "      if (stored.source === 'user') decided[stored.placeId] = stored.status;",
+        replace:
+          "      if (stored.source === 'user' && stored.source !== 'user') decided[stored.placeId] = stored.status;",
+      },
+    ],
+    tests: [
+      'apps/web/src/app/(product)/trips/[id]/discover/actions.autopick.test.ts',
+      /* The auto-selection suite lives in `discovery.test.ts`; there is no
+         `autoselect.test.ts` and there has not been one. */
+      'packages/core/src/discovery/discovery.test.ts',
+      'packages/core/src/discovery/autoselect-portfolio.test.ts',
+    ],
+  },
+  {
+    id: 'M28-completeness-buys-board-seats',
+    contract:
+      'give metadata completeness back its quarter-share of the final board cut (§16B stage 8d, §8.3)',
+    detail:
+      "The candidate quality score swaps its significance term back for `evidenceCompleteness`, which is the arithmetic the 8d fix removed: the classify/shortlist stage ranks the final board cut on this score, so a fully-detailed generic record out-seats a thin-metadata significant one again. Measured on the live Tokyo pack of 2026-08-13: memorial statues carrying a website attribute held shortlist seats at 0.671 while Shinjuku Gyoen (composed significance 0.81) was cut at 0.571. Completeness keeps its verification-label and tie-break jobs either way; only its share of the rank is in question.",
+    edits: [
+      {
+        file: 'packages/core/src/quality/candidate.ts',
+        find: '    significance * 0.25 +',
+        replace: '    evidenceCompleteness * 0.25 +',
+      },
+    ],
+    tests: [
+      'packages/core/src/quality/quality.test.ts',
+      'packages/compiler/src/shortlist.test.ts',
+    ],
+  },
+  {
     id: 'M23-weather-silently-off',
     contract: 'switch live weather off while the doctor keeps reporting it live (PR-PROV-01)',
     detail:
@@ -515,5 +665,104 @@ export const MUTATIONS = [
       },
     ],
     tests: ['apps/web/src/lib/providers/doctor.test.ts'],
+  },
+  {
+    id: 'M29-minted-notice-saturates-prominence',
+    contract:
+      'let presence alone saturate prominence again, so a knowledge-base tag means the same thing for a landmark and for a municipal park (§8.3, §16)',
+    detail:
+      "The notice-magnitude gate opens fully for every record: the union of the three presence channels is admitted in full whether or not anything says how big the noticed thing is. That is the shape three delivered boards shipped — a municipal sports park at 0.70, a city tower at 0.79, a suburban park twenty kilometres out at 0.79, a famous waterfall at 0.79, indistinguishable — and it is what put a suburban lake and a small municipal beach under \"Classics worth your time\" while a world-famous waterfall rendered under \"Probably skip\". Nothing else about the model moves: the presence channels, the local channels and the composition are untouched.",
+    edits: [
+      {
+        file: 'packages/core/src/quality/significance.ts',
+        find:
+          '    UNMAGNIFIED_NOTICE_ADMISSION + (1 - UNMAGNIFIED_NOTICE_ADMISSION) * (magnitude ?? 0);',
+        replace: '    UNMAGNIFIED_NOTICE_ADMISSION + (1 - UNMAGNIFIED_NOTICE_ADMISSION) * 1;',
+      },
+    ],
+    tests: [
+      'packages/core/src/quality/significance.test.ts',
+      'packages/core/src/discovery/discovery.test.ts',
+    ],
+  },
+  {
+    id: 'M30-missing-tag-reads-as-obscurity',
+    contract:
+      'read a missing knowledge-base tag as evidence of obscurity again, rather than as a withheld standing (§8.3)',
+    detail:
+      "`prominenceRead` stops letting the channels that did speak answer, so any record whose own catalogue row carries no identifier is floored — outranking nothing and outranked by everything, whatever the region's authorities, designations and ground established about it. Measured on a delivered board: a metropolis's principal castle read 0.15 with `globalProminence` absent and lost its seat, beneath a municipal sports park at 0.70 whose row happened to carry the tag.",
+    edits: [
+      {
+        /*
+         * RE-ANCHORED. The old anchor was the `??` chain this class deleted a
+         * term from, and that chain no longer exists: substituting the local
+         * union onto the notice axis was itself the narrowed form of the same
+         * defect, so `prominenceRead` is now a switch over `prominenceBasisOf`
+         * and the withheld case has a band of its own. The regression is
+         * unchanged against the new shape — the withheld arm stops answering
+         * and falls to the floor — and the observed and unestablished arms are
+         * left exactly as they are, so the only thing this changes is the one
+         * thing the contract line is about.
+         */
+        file: 'packages/core/src/quality/significance.ts',
+        find: '      return withheldStandingRead(standing.localSignificance!);',
+        replace: '      return WITHHELD_PROMINENCE_READ;',
+      },
+    ],
+    tests: [
+      'packages/core/src/quality/significance.test.ts',
+      'packages/core/src/discovery/discovery.test.ts',
+    ],
+  },
+  {
+    /**
+     * THE NARROWED FORM OF M30, WHICH THE DELIVERED BOARD STILL SHIPPED.
+     *
+     * M30's own fix — letting the local channels answer where the notice
+     * question was never put — passed its tests while the board still
+     * inverted, because a local weight projected onto the notice axis lands
+     * *inside* the presence band. So the class needs its own row: this is the
+     * shape that shipped, and it must be caught by the production-path tests
+     * rather than by a fixture comparison.
+     */
+    id: 'M31-withheld-read-substituted-onto-the-notice-axis',
+    contract:
+      'project a withheld standing back onto the notice axis, where notice minted for a whole class already sits above it (§8.3, §16)',
+    detail:
+      "The withheld band collapses back to the raw local union, so a record whose notice nobody ever observed is ranked on the scale presence bits are minted on. Measured on the boards delivered 2026-08-26: the destination's principal temple, shrine, palace and castle all read 0.35 — one local channel — beneath a ward park at 0.57, a cruise terminal at 0.57, a suburban zoo at 0.60 and a flood-basin park at 0.69, and \"Classics worth your time\" rendered empty on both metro boards because 0.69 was the highest any card reached.",
+    edits: [
+      {
+        file: 'packages/core/src/quality/significance.ts',
+        find: '      return withheldStandingRead(standing.localSignificance!);',
+        replace: '      return standing.localSignificance!;',
+      },
+    ],
+    tests: [
+      'packages/core/src/quality/significance.test.ts',
+      'packages/core/src/discovery/discovery.test.ts',
+    ],
+  },
+  {
+    /**
+     * THE ANCHOR SLOT'S EVIDENCE CONDITION, WHICH NOTHING ASKED FOR AT ALL.
+     *
+     * A live compile gave a record with no evidence beyond its name and its
+     * position a 240-minute block holding 42% of a trip's activity time, and
+     * computed the readiness verdict over it. There was no rule to weaken —
+     * this class exists so that removing the one there now is caught.
+     */
+    id: 'M32-anchor-slot-needs-no-evidence',
+    contract:
+      'let auto-pick build a day around a record nothing whatever is published about (§7, §17 step 8)',
+    detail:
+      "The anchor slot's evidence condition stops firing, so a record whose own compiled description reads \"Nothing beyond its name and position is published about it\" — no notice observed, no local standing, source confidence 0.41 — is pre-selected into a 240-minute slot exactly as it was on the delivered board.",
+    edits: [
+      {
+        file: 'packages/core/src/discovery/autoselect.ts',
+        find: '    nothingIsPublishedAboutIt(candidate.place)',
+        replace: '    nothingIsPublishedAboutIt(candidate.place) && false',
+      },
+    ],
+    tests: ['packages/core/src/discovery/discovery.test.ts'],
   },
 ];

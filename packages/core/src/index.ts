@@ -90,6 +90,7 @@ export * from './weather/snapshot';
 export * from './weather/solar';
 
 export * from './travel/reach';
+export * from './travel/scheduled-stops';
 
 export * from './region/season';
 export * from './region/expansion';
@@ -122,6 +123,7 @@ export * from './destinations/provider';
 export * from './quality/candidate';
 
 export * from './scoring/fit';
+export * from './scoring/frequency';
 
 export * from './discovery/board';
 export * from './discovery/autoselect';

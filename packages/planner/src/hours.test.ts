@@ -707,8 +707,24 @@ describe('Manzanar — an outdoor site and a staffed facility, modelled apart', 
       ],
     });
     expect(visitOf(legacy, 'manzanar-historic-site')).toBeDefined();
-    expect(errors(legacy)).toEqual([]);
-    expect(legacy.status).not.toBe('needs_decision');
+    /*
+     * One selection over three days is a legitimately thin trip, and since the
+     * readiness invariant learned to judge completeness the plan says so with a
+     * `coverage_below_pace` finding and a `needs_decision` header. Both are
+     * correct here and neither is what this test is about: it asks whether a
+     * selection stored before the split still resolves to something real, so it
+     * filters that one finding out rather than asserting the old always-ready
+     * behaviour it never meant to pin. Filtered rather than asserted, because
+     * whether a one-stop trip clears the completeness bar depends on how many
+     * days this fixture can fill — which is `readiness.test.ts`'s subject, not
+     * this one's, and pinning it here made this test fail for a correction made
+     * two files away.
+     */
+    expect(
+      errors(legacy)
+        .map((issue) => issue.code)
+        .filter((code) => code !== 'coverage_below_pace'),
+    ).toEqual([]);
   });
 
   it('marks the grounds as daylight-limited without inventing a sunset', () => {

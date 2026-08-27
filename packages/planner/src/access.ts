@@ -17,7 +17,7 @@ import {
 } from '@sidequest/core';
 import { hasPoint, type TravelTimeMatrix } from '@sidequest/geo';
 import type { TravelKnowledge } from './travel';
-import { modelledWalkCapMinutes, resolvePlannerLeg } from './modelled-walk';
+import { plannerLegBounds, resolvePlannerLeg, type PlannerLegBounds } from './modelled-walk';
 import {
   corroboratingKm,
   impossibleSpeed,
@@ -193,20 +193,26 @@ export interface ResolveAccessInput {
 export function resolveAccess(input: ResolveAccessInput): Map<string, UnitAccess> {
   const capability = capabilityFromProfile(input.profile);
   /**
-   * The traveller's own walking radius, computed once for the whole resolution.
+   * The traveller's own bounds, computed once for the whole resolution.
    *
-   * This is what bounds a *derived* walk when the matrix measured the wrong
-   * network — see `modelled-walk.ts` for why a modelled long walk is refused
-   * where a measured one would be offered.
+   * Two of them, kept apart: the journey bound this probe spends on "is there a
+   * way in at all", and the walking bound any leg laid on foot is held to. See
+   * `PlannerLegBounds` for why one number could not answer both. A hand-built
+   * input with no travel evidence keeps the walking radius for both, because
+   * nothing there establishes the gap.
+   *
+   * No drive overhead is passed. This is a feasibility probe and not a
+   * timetable: the mode a leg is finally made in is settled where it is
+   * actually booked, against the allowance that layout actually spends.
    */
-  const walkCapMinutes = modelledWalkCapMinutes(input.profile);
+  const bounds = plannerLegBounds(input.profile, input.travel?.knowledge);
   const resolved = new Map<string, UnitAccess>();
 
   for (const unit of input.units) {
     for (const date of input.dates) {
       resolved.set(
         accessKey(unit.key, date),
-        resolveUnitOnDate(unit, date, input, capability, walkCapMinutes),
+        resolveUnitOnDate(unit, date, input, capability, bounds),
       );
     }
   }
@@ -222,7 +228,7 @@ function resolveUnitOnDate(
   date: string,
   input: ResolveAccessInput,
   capability: AccessCapability,
-  walkCapMinutes: number,
+  bounds: PlannerLegBounds,
 ): UnitAccess {
   const { dataset } = input;
   // Every member must be covered by the unit's rule, which is how the unit was
@@ -276,7 +282,7 @@ function resolveUnitOnDate(
     service: best.service,
     dataset,
     matrix: input.matrix,
-    walkCapMinutes,
+    bounds,
     ...(input.travel ? { travel: input.travel } : {}),
   });
   if ('blocked' in option) {
@@ -292,10 +298,10 @@ function buildOption(args: {
   service: TransportService | undefined;
   dataset: AccessDataset;
   matrix: TravelTimeMatrix;
-  walkCapMinutes: number;
+  bounds: PlannerLegBounds;
   travel?: { knowledge: TravelKnowledge; baseId: string };
 }): AccessOption | { blocked: AccessBlocker } {
-  const { unit, date, rule, service, dataset, matrix, walkCapMinutes, travel } = args;
+  const { unit, date, rule, service, dataset, matrix, bounds, travel } = args;
   /**
    * The gateway belongs to the service, not to the rule.
    *
@@ -359,11 +365,13 @@ function buildOption(args: {
    * distance is honestly walkable, and refuses per-stop, by name, where it is
    * not.
    */
-  const measurableAnotherWay =
-    travel !== undefined &&
-    resolvePlannerLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode, {
-      walkCapMinutes,
-    }).ok;
+  const wayInFromBase =
+    travel !== undefined
+      ? resolvePlannerLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode, {
+          bounds,
+        })
+      : null;
+  const measurableAnotherWay = wayInFromBase?.ok ?? false;
 
   if (
     !matrixCoversMode(matrix, rule.approachMode) &&
@@ -375,15 +383,9 @@ function buildOption(args: {
      * distance is one the traveller can weigh; "we have no travel data" sent
      * them to retry something that would never go differently.
      */
-    const refused =
-      travel !== undefined
-        ? resolvePlannerLeg(travel.knowledge, travel.baseId, gatewayRoutingId, rule.approachMode, {
-            walkCapMinutes,
-          })
-        : null;
-    if (refused && !refused.ok && refused.conflict) {
+    if (wayInFromBase && !wayInFromBase.ok && wayInFromBase.conflict) {
       return {
-        blocked: { code: 'walk_too_long', message: `${memberName}: ${refused.detail}` },
+        blocked: { code: 'walk_too_long', message: `${memberName}: ${wayInFromBase.detail}` },
       };
     }
     return {
@@ -391,6 +393,35 @@ function buildOption(args: {
         code: 'no_access_data',
         message: `We have no travel data for the way in to ${memberName}.`,
       },
+    };
+  }
+
+  /*
+   * A CONFLICT REFUSAL BLOCKS THE STOP EVEN WHEN THE MATRIX COVERS THE MODE.
+   *
+   * The branch above only ran when the matrix could not measure the approach,
+   * so its refusal was about the *absence* of an answer. A pedestrian matrix
+   * that measures the walk perfectly well is the other case: the number
+   * exists, and the traveller's own answer rules it out — a sixty-five-minute
+   * measured walk against a stated twenty-five. Without this, that stop
+   * survived here and was scheduled with the over-limit leg on it; the daily
+   * budget was the only thing that could ever say no. The refusal is
+   * per-stop, carries the resolver's own sentence naming the answer to
+   * change, and files under the same transport-conflict code as every other
+   * "your answers rule this out" — never under a data gap.
+   *
+   * Only when the matrix covers the mode: when it does not, the branch above
+   * has already spoken, and a rule with an *authored* approach allowance is
+   * entitled to it — the impossible-speed check below is that path's guard.
+   */
+  if (
+    matrixCoversMode(matrix, rule.approachMode) &&
+    wayInFromBase &&
+    !wayInFromBase.ok &&
+    wayInFromBase.conflict
+  ) {
+    return {
+      blocked: { code: 'walk_too_long', message: `${memberName}: ${wayInFromBase.detail}` },
     };
   }
 
@@ -711,6 +742,17 @@ export function summariseDayTransport(
     modes: TransportMode[];
   },
   dataset: AccessDataset,
+  /**
+   * The modes this trip may use at all — `permittedModesFor` on the traveller's
+   * own answers. The fallbacks below used to invent modes outside it: an empty
+   * day wrote `primaryMode: 'drive'` on a trip whose traveller declared no car,
+   * because "drive" was the hard-coded end of the chain. A mode the trip cannot
+   * legally use is unwritable here, whatever the day holds.
+   *
+   * Optional so a caller built before the set existed keeps compiling; absent
+   * keeps the old chain, which is the pre-existing behaviour and nothing worse.
+   */
+  permitted?: ReadonlySet<TransportMode>,
 ): {
   primaryMode: TransportMode;
   modes: TransportMode[];
@@ -742,15 +784,38 @@ export function summariseDayTransport(
     ),
   ];
 
+  /*
+   * The day's own riding mode when it rides and no authored service names one:
+   * a measured metro leg arrives with no service record, and the old
+   * `?? 'shuttle'` invented a vehicle no leg used.
+   */
+  const riddenMode = layout.modes.find(
+    (mode) =>
+      mode === 'rail' ||
+      mode === 'public_bus' ||
+      mode === 'ferry' ||
+      mode === 'shuttle' ||
+      mode === 'rideshare' ||
+      mode === 'private_transfer',
+  );
+  /*
+   * A day with no travel at all — arrival, departure, a day spent at base —
+   * still writes a primary mode, and it has to be one this trip may use.
+   * 'drive' was unconditional here, which stamped a car onto the empty days of
+   * a trip whose scope has none. Walking is the one mode every profile
+   * permits, so it is the honest resting value for a car-free trip.
+   */
+  const idleMode: TransportMode = permitted === undefined || permitted.has('drive') ? 'drive' : 'walk';
+
   return {
     primaryMode:
       layout.driveMinutes >= layout.transitMinutes && layout.driveMinutes > 0
         ? 'drive'
         : layout.transitMinutes > 0
-          ? (services[0]?.mode ?? 'shuttle')
+          ? (services[0]?.mode ?? riddenMode ?? 'shuttle')
           : layout.walkMinutes > 0
             ? 'walk'
-            : 'drive',
+            : idleMode,
     modes: layout.modes,
     serviceIds: [...new Set(services.map((service) => service.id))].sort(),
     ...(tightest

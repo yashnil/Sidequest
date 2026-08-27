@@ -34,6 +34,22 @@ const TABLE_SQL = `CREATE TABLE IF NOT EXISTS rate_limit_buckets (
   refilled_at TEXT NOT NULL
 )`;
 
+/**
+ * The suffix that names a bucket nobody is allowed to address.
+ *
+ * The `@` is load-bearing: every identity this app derives is `ip:…` or
+ * `session:…` (see `lib/net/caller`), so no caller can compose a key that lands
+ * in a shared fence's bucket, and no caller can be handed one by accident.
+ * Rows with this suffix are exempt from the eviction sweep below.
+ */
+const SHARED_FENCE_IDENTITY = '@deployment';
+const SHARED_FENCE_PATTERN = `%:${SHARED_FENCE_IDENTITY}`;
+
+/** The deployment-wide bucket for one action kind. Takes no identity at all. */
+function sharedFenceKey(kind: string): string {
+  return `${kind}:${SHARED_FENCE_IDENTITY}`;
+}
+
 export interface RateLimitRule {
   /** Burst size: how many actions may land before the clock matters. */
   capacity: number;
@@ -93,11 +109,25 @@ export function takeRateToken(key: string, rule: RateLimitRule, now = new Date()
      * Bounded, like the provider cache: a scanner cycling through spoofed
      * addresses must not grow this table without limit. Oldest-refilled rows
      * are the ones no live client is using.
+     *
+     * THE SHARED FENCES ARE EXEMPT, AND THAT EXEMPTION IS THE WHOLE POINT OF
+     * THEM. A drained bucket stops being refilled — that is what "drained"
+     * means — so its `refilled_at` freezes at the moment it ran out and it
+     * sinks in this ordering as fresh rows arrive. The one control this
+     * deployment has that no rotation escapes was therefore *deleted* by
+     * rotation: five thousand fresh identities aged the deployment bucket out
+     * of the table, and a missing row reads as a full one. A row nobody can
+     * address by rotating into it is also a row nobody can grow, so there is
+     * nothing to bound.
      */
     db.prepare(
-      `DELETE FROM rate_limit_buckets WHERE bucket_key IN (
-         SELECT bucket_key FROM rate_limit_buckets ORDER BY refilled_at DESC LIMIT -1 OFFSET 5000)`,
-    ).run();
+      `DELETE FROM rate_limit_buckets
+        WHERE bucket_key NOT LIKE ? ESCAPE '\\'
+          AND bucket_key IN (
+            SELECT bucket_key FROM rate_limit_buckets
+              WHERE bucket_key NOT LIKE ? ESCAPE '\\'
+              ORDER BY refilled_at DESC LIMIT -1 OFFSET 5000)`,
+    ).run(SHARED_FENCE_PATTERN, SHARED_FENCE_PATTERN);
 
     return { allowed: true };
   } catch (error) {
@@ -188,9 +218,61 @@ export const ACTION_RATE_RULES = {
   preflight: { capacity: 8, refillPerMinute: 4 },
   /** One billed model call that reads the traveller's own free text. */
   interpret_text: { capacity: 4, refillPerMinute: 2 },
+  /**
+   * Writes a decision-session row per call. Local work only, but it was the
+   * one scriptable loop outside every fence: two hundred POSTs were two
+   * hundred rows and two hundred redirects with no refusal at any layer.
+   * Sized for a person changing their mind, not for a loop.
+   */
+  decide_start: { capacity: 5, refillPerMinute: 2 },
+  /**
+   * Writes a trips row plus its composer answers per call — the same shape as
+   * `decide_start`, on the trips surface, and the last anonymous row-writing
+   * loop left outside the fences: a cookie-less script POSTing
+   * `createTripFromComposer` wrote a row and got a redirect on every call,
+   * with no refusal at any layer, and nothing ever sweeps trips.
+   *
+   * Sized for a shared *address*, not for one person: creation runs before any
+   * cookie exists, so the ip bucket is the only one that can refuse a script —
+   * and the same bucket is every household behind a CGNAT, every office NAT,
+   * and a browser-test run, none of which is a loop. `takeRateTokens` promises
+   * that separate buckets keep one traveller from being throttled by another
+   * behind the same NAT; a person-sized ip allowance broke that promise on the
+   * one action everybody's first visit performs. The row is cheap and every
+   * expensive step downstream carries its own fence, so the shared-address
+   * allowance is generous here and the deployment-wide fence still bounds the
+   * total.
+   */
+  trip_create: { capacity: 12, refillPerMinute: 6 },
+  /**
+   * Ranks the world against the answers: local reads plus up to a dozen
+   * climate lookups per call, and the imagery pass that follows reaches a
+   * volunteer-run image service. Both actions draw from this one bucket —
+   * they are two halves of the same button press.
+   */
+  decide_shortlist: { capacity: 6, refillPerMinute: 3 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type GuardedActionKind = keyof typeof ACTION_RATE_RULES;
+
+/**
+ * THE ONE ENVIRONMENT WHERE THE FENCES STAND DOWN, AND WHY THAT IS HONEST.
+ *
+ * The browser suite drives hundreds of synthetic journeys through one address
+ * in minutes — by the fences' own definition it *is* the loop they exist to
+ * stop, and no per-caller sizing can admit it while still refusing a real one.
+ * Sizing the product's fences to the suite would hollow them; leaving them on
+ * makes the flagship gate assert on bucket arithmetic instead of on product
+ * behaviour, with a different dozen tests refused each run. So the end-to-end
+ * server pins this switch alongside its fixture providers, the same bargain as
+ * `SIDEQUEST_WEATHER_PROVIDER=fixture`: the mechanism under test is the
+ * product, and the fences keep their own named unit tests where the rules are
+ * exercised explicitly. Anything but the exact string leaves every fence up,
+ * so production cannot drift into this by accident.
+ */
+function fencesDisabledForTesting(): boolean {
+  return process.env.SIDEQUEST_ACTION_FENCES === 'off';
+}
 
 /**
  * HOW MANY CALLERS' WORTH OF WORK THE WHOLE DEPLOYMENT WILL DO AT ONCE.
@@ -237,12 +319,13 @@ export function takeActionTokens(
   rule: RateLimitRule,
   now = new Date(),
 ): ActionRateDecision {
+  if (fencesDisabledForTesting()) return { allowed: true };
   const caller = takeRateTokens(kind, identities, rule, now);
   if (!caller.allowed) {
     return { allowed: false, retryAfterSeconds: caller.retryAfterSeconds, scope: 'caller' };
   }
 
-  const shared = takeRateToken(`${kind}:deployment`, deploymentRule(kind), now);
+  const shared = takeRateToken(sharedFenceKey(kind), deploymentRule(kind), now);
   if (!shared.allowed) {
     return { allowed: false, retryAfterSeconds: shared.retryAfterSeconds, scope: 'deployment' };
   }
@@ -264,13 +347,14 @@ export function peekActionTokens(
   rule: RateLimitRule,
   now = new Date(),
 ): ActionRateDecision {
+  if (fencesDisabledForTesting()) return { allowed: true };
   for (const identity of identities) {
     const decision = inspectRateToken(`${kind}:${identity}`, rule, now);
     if (!decision.allowed) {
       return { allowed: false, retryAfterSeconds: decision.retryAfterSeconds, scope: 'caller' };
     }
   }
-  const shared = inspectRateToken(`${kind}:deployment`, deploymentRule(kind), now);
+  const shared = inspectRateToken(sharedFenceKey(kind), deploymentRule(kind), now);
   if (!shared.allowed) {
     return { allowed: false, retryAfterSeconds: shared.retryAfterSeconds, scope: 'deployment' };
   }

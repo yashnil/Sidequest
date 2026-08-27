@@ -253,6 +253,20 @@ describe('the planner is unchanged by the existence of a benchmark', () => {
     'now',
     'profile',
     'region',
+    /*
+     * Whether the compiled evidence counted any scheduled stop, added in the
+     * Phase 16 walking/detour split.
+     *
+     * The list is meant to cost an edit, and this is that edit. It is the fact
+     * that tells the planner whether a long measured walk is the journey or is
+     * only pricing a scheduled one nobody could time — and it is not derivable
+     * from anything else the planner holds, which is why it had to become an
+     * input rather than a derivation. Like `transit`, it widens what the planner
+     * may read and gives neither benchmark arm anything the other lacks: both
+     * are handed the same compiled artifact and read the same observation off
+     * it.
+     */
+    'scheduledNetwork',
     'selections',
     /**
      * Measured public-transport journeys, added deliberately in Phase 15C.

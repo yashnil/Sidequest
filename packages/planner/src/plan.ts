@@ -32,7 +32,7 @@ import {
   withinFrequencyCaps,
 } from './frequency';
 import { assessMustDoFeasibility } from './feasibility';
-import { resolveCandidates } from './candidates';
+import { pinnedPriority, resolveCandidates } from './candidates';
 import {
   couldVisitOnDate,
   hoursKey,
@@ -58,7 +58,7 @@ import {
   type PackOptions,
 } from './schedule';
 import { buildTransportStrategy } from './strategy';
-import { modelledWalkCapMinutes, plannerReachResolves } from './modelled-walk';
+import { plannerLegBounds, plannerReachResolves } from './modelled-walk';
 import { reachFromBase, travelKnowledgeFor } from './travel';
 
 /**
@@ -70,7 +70,7 @@ interface RoundTrip {
   driveCap: number;
   transportCap: number;
 }
-import { buildPlannerReadiness } from './readiness';
+import { buildPlannerReadiness, coverageOf } from './readiness';
 import { blockingIssues, statusFor, validateItinerary, validateStrategy } from './validate';
 import {
   narrowByDaylight,
@@ -141,13 +141,19 @@ export function planTrip(input: PlannerInput): PlanResult {
    * said they would and would not do — and rebuilding it per day would be the
    * same answer computed five times.
    */
-  const travelKnowledge = travelKnowledgeFor(input.matrix, input.profile, input.transit);
+  const travelKnowledge = travelKnowledgeFor(
+    input.matrix,
+    input.profile,
+    input.transit,
+    input.scheduledNetwork,
+  );
 
   const resolved = resolveCandidates(
     input.candidates,
     input.selections,
     input.matrix,
     { knowledge: travelKnowledge, baseId: input.baseId },
+    input.profile,
   );
   const rejected = resolved.rejected;
   /**
@@ -157,11 +163,16 @@ export function planTrip(input: PlannerInput): PlanResult {
    * this" and a rebuild that quietly drops it for an auto-pick has broken a
    * promise. The day it is held to is enforced after assignment, below; here
    * it only outranks.
+   *
+   * `pinnedPriority` rather than an arithmetic expression written out here,
+   * because this line used to be one — `10_000 + fitScore` — and that reverted
+   * the pinned place, alone among the candidates, to the order the board
+   * stopped using when it began composing significance into its key.
    */
   const lockedDayByPlace = new Map((input.locks ?? []).map((lock) => [lock.placeId, lock.dayNumber]));
   const eligible = resolved.eligible.map((candidate) =>
     lockedDayByPlace.has(candidate.place.id)
-      ? { ...candidate, manual: true, priority: Math.max(candidate.priority, 10_000 + candidate.fitScore) }
+      ? { ...candidate, manual: true, priority: pinnedPriority(candidate) }
       : candidate,
   );
   const unscheduled: UnscheduledPlace[] = [...rejected];
@@ -255,7 +266,9 @@ export function planTrip(input: PlannerInput): PlanResult {
       reachable.push(candidate);
       continue;
     }
-    unscheduled.push(accessBlocked(candidate, unit, accessByUnitDate, dates));
+    unscheduled.push(
+      accessBlocked(candidate, unit, accessByUnitDate, dates, input.profile.transport.willDrive),
+    );
   }
 
   /**
@@ -270,12 +283,12 @@ export function planTrip(input: PlannerInput): PlanResult {
    * journey (or an honest derived walk) resolves from the base, or when the
    * access data itself established a way in.
    */
-  const walkCap = modelledWalkCapMinutes(input.profile);
+  const reachBounds = plannerLegBounds(input.profile, travelKnowledge);
   const reachableIds = new Set(reachable.map((candidate) => candidate.place.id));
   const measurableCount = eligible.filter(
     (candidate) =>
       reachableIds.has(candidate.place.id) ||
-      plannerReachResolves(travelKnowledge, input.baseId, candidate.place.id, walkCap),
+      plannerReachResolves(travelKnowledge, input.baseId, candidate.place.id, reachBounds),
   ).length;
 
   // --- Hours: which places are open, on which dates, within reach ----------
@@ -582,7 +595,6 @@ export function planTrip(input: PlannerInput): PlanResult {
    * viewpoints and the validator's caution, which is the honest response to a
    * traveller contradicting their own questionnaire.
    */
-  const frequencyCaps = input.profile.derived.frequencyCaps;
   const interestSpend = new Map<string, number>();
 
   const withinFrequencyBudget = (
@@ -594,14 +606,14 @@ export function planTrip(input: PlannerInput): PlanResult {
     for (const [interest, count] of provisional) {
       spent.set(interest, (spent.get(interest) ?? 0) + count);
     }
-    return withinFrequencyCaps(candidate.place, frequencyCaps, spent);
+    return withinFrequencyCaps(candidate.place, input.profile, spent);
   };
 
   /** Charged only once a stop is really on a day, so an overflow costs nothing. */
   const chargeFrequency = (candidates: readonly PlanningCandidate[]): void => {
     for (const candidate of candidates) {
       if (candidate.manual) continue;
-      chargeFrequencyCost(candidate.place, frequencyCaps, interestSpend);
+      chargeFrequencyCost(candidate.place, input.profile, interestSpend);
     }
   };
 
@@ -688,7 +700,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     for (const candidate of assignment.candidates) {
       if (withinFrequencyBudget(candidate, provisional)) {
         if (!candidate.manual) {
-          chargeFrequencyCost(candidate.place, frequencyCaps, provisional);
+          chargeFrequencyCost(candidate.place, input.profile, provisional);
         }
         offered.push(candidate);
       } else {
@@ -798,7 +810,7 @@ export function planTrip(input: PlannerInput): PlanResult {
      * to raise a limit that was never the problem.
      */
     const interest =
-      bindingInterestOf(candidate.place, frequencyCaps, interestSpend) ??
+      bindingInterestOf(candidate.place, input.profile, interestSpend) ??
       candidate.place.interests[0] ??
       'this kind of thing';
     unscheduled.push({
@@ -806,7 +818,7 @@ export function planTrip(input: PlannerInput): PlanResult {
       name: displayNameOf(candidate.place),
       wasManual: candidate.manual,
       reasonCode: 'frequency_reached',
-      reason: `You asked for ${frequencyCaps[interest as keyof typeof frequencyCaps] ?? 0} of these on this trip, and the board offered more ${interest.replace(/_/g, ' ')} than that.`,
+      reason: `You asked for ${input.profile.derived.frequencyCaps[interest as keyof typeof input.profile.derived.frequencyCaps] ?? 0} of these on this trip, and the board offered more ${interest.replace(/_/g, ' ')} than that.`,
       suggestedRemedy:
         'Say you want more of this kind of thing, or pick this one by hand on the board.',
     });
@@ -1034,7 +1046,7 @@ export function planTrip(input: PlannerInput): PlanResult {
         context,
         plan.accepted.filter((candidate) => placed.has(candidate.place.id)),
         layout,
-        summariseDayTransport(scheduled, layout, input.access),
+        summariseDayTransport(scheduled, layout, input.access, travelKnowledge.permitted),
         weatherForDay(plan, onDay, scheduledEverywhere(plans)),
       );
 
@@ -1344,6 +1356,18 @@ export function planTrip(input: PlannerInput): PlanResult {
     (sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length,
     0,
   );
+  /**
+   * How many days of the trip actually got something, counted once.
+   *
+   * The count of stops and the count of days holding them are different facts —
+   * six stops on one day and six stops across six days are the same number and
+   * not the same trip — and the readiness level, the itinerary's status and the
+   * sentence a traveller reads must all be levelled from the same measurement of
+   * the second. Live plans were failing on it: "1 stop across 1 of 6 days".
+   */
+  const daysWithActivity = built.filter((day) =>
+    day.items.some((item) => item.kind === 'activity'),
+  ).length;
 
   /**
    * A plan with no stops is not a plan, and must never be returned as one.
@@ -1366,19 +1390,30 @@ export function planTrip(input: PlannerInput): PlanResult {
    * breakdown is that "nothing has a travel time" and "everything is shut" both
    * end at zero and want completely different responses from the traveller.
    */
+  const funnelFor = (scheduled: number) => ({
+    considered: input.candidates.length,
+    selected: input.selections.filter((selection) => selection.status !== 'excluded').length,
+    eligible: measurableCount,
+    accessFeasible: reachable.length,
+    hoursFeasible: plannable.length,
+    feasible: plannable.length,
+    scheduled,
+  });
+
   const readinessFor = (scheduled: number): PlannerReadiness =>
     buildPlannerReadiness({
-      funnel: {
-        considered: input.candidates.length,
-        selected: input.selections.filter((selection) => selection.status !== 'excluded').length,
-        eligible: measurableCount,
-        accessFeasible: reachable.length,
-        hoursFeasible: plannable.length,
-        feasible: plannable.length,
-        scheduled,
-      },
+      funnel: funnelFor(scheduled),
       unscheduled: dedupeUnscheduled(unscheduled),
       dayCount: days.length,
+      /*
+       * Both halves of the completeness invariant come from here, because this
+       * is where the traveller and the built days are both in hand. A readiness
+       * record without them can still say what was lost and cannot say whether
+       * what is left is a trip — which is exactly the blindness that let a
+       * six-day plan holding one stop read as ready.
+       */
+      profile: input.profile,
+      daysWithActivity,
       daysWithFullMeals: built.filter(
         (day) => day.food.slots.length > 0 && day.food.reservations.length > 0,
       ).length,
@@ -1444,8 +1479,35 @@ export function planTrip(input: PlannerInput): PlanResult {
     matrixNote: input.matrix.provenance.note,
     matrixProvenance: input.matrix.provenance.kind,
     matrixMode: input.matrix.mode,
+    ...(input.transit ? { transit: input.transit } : {}),
   });
   issues = [...issues, ...validateStrategy(transportStrategy, built)];
+
+  /**
+   * THE COVERAGE VERDICT, WHERE THE ITINERARY'S OWN STATUS CAN SEE IT.
+   *
+   * `statusFor` reads severities, and severities came only from conflicts — so a
+   * plan holding one stop across six days had nothing wrong with it and was
+   * headed "Ready, with cautions / The plan works". Readiness now knows better
+   * (`coverageOf`), and the two surfaces must not disagree about one plan: the
+   * shortfall is raised here as the issue it is, which carries it into
+   * `itinerary.status` and into the issue list a traveller can read, from the
+   * same single measurement the board's panel is levelled from.
+   */
+  const coverage = coverageOf({
+    funnel: funnelFor(scheduledCount),
+    unscheduled: dedupeUnscheduled(unscheduled),
+    dayCount: days.length,
+    profile: input.profile,
+    daysWithActivity,
+  });
+  if (coverage?.short) {
+    issues.push({
+      code: 'coverage_below_pace',
+      severity: 'error',
+      message: `This plan holds ${scheduledCount} ${scheduledCount === 1 ? 'stop' : 'stops'} across ${coverage.daysWithActivity} of your ${days.length} days. At the pace you asked for these dates have room for around ${Math.round(coverage.pacedStops)}, so there is not yet enough here to plan a trip around.`,
+    });
+  }
 
   /**
    * A successful plan has no unresolved errors in it. That was not true.
@@ -1592,6 +1654,8 @@ function accessBlocked(
   unit: AccessUnit | undefined,
   resolved: ReadonlyMap<string, { available: boolean; blockers?: { code: string; message: string }[] }>,
   dates: readonly string[],
+  /** Whether a vehicle is on offer at all, so a remedy is never one they ruled out. */
+  hasCar: boolean,
 ): UnscheduledPlace {
   const blockers = unit
     ? dates.flatMap((date) => {
@@ -1609,7 +1673,7 @@ function accessBlocked(
     reason:
       first?.message ??
       'We have no record of a way to reach this on your dates, so we will not put it on a day.',
-    suggestedRemedy: remedyForAccess(first?.code),
+    suggestedRemedy: remedyForAccess(first?.code, hasCar),
   };
 }
 
@@ -1723,14 +1787,26 @@ function reasonCodeForAccess(code: string | undefined): UnscheduledPlace['reason
   }
 }
 
-function remedyForAccess(code: string | undefined): string | undefined {
+function remedyForAccess(code: string | undefined, hasCar: boolean): string | undefined {
   switch (code) {
     case 'service_out_of_season':
       return 'Move your dates into the season the service runs, or drop this from the board.';
     case 'service_not_operating':
       return 'Shift a day so it lands on a day the service runs.';
     case 'needs_private_vehicle':
-      return 'This needs a vehicle. Renting one would open up most of the region.';
+      /*
+       * A REMEDY IS SOMETHING THIS TRAVELLER CAN ACTUALLY DO.
+       *
+       * "Renting one would open up most of the region" is useful to somebody
+       * weighing a hire car and useless to somebody who has already said they
+       * are not driving — for them it is the same class of answer as telling a
+       * car-free trip to raise its daily driving limit. What is left for them
+       * is the fact and the one decision that follows from it, which is the
+       * honest half of the same sentence.
+       */
+      return hasCar
+        ? 'This needs a vehicle. Renting one would open up most of the region.'
+        : 'Nothing scheduled goes there and a vehicle is the only way in, so this is one to drop.';
     case 'shuttle_declined':
       return 'Say you are willing to use a shuttle, if you are — it is the only way in here.';
     case 'walk_too_long':
@@ -1896,6 +1972,15 @@ export function summarise(
     0,
   );
   const walkMinutes = days.reduce((sum, day) => sum + day.totals.walkMinutes, 0);
+  /**
+   * Held for journeys nobody could price, and named as that rather than pooled.
+   *
+   * Pooling them into the walking figure is the sentence a live plan opened
+   * with: "6 hr 46 min on foot to reach them", over a trip whose every long leg
+   * was a proxy for a train. The minutes are real and belong in the summary;
+   * what they are not is a mode.
+   */
+  const unverifiedMinutes = days.reduce((sum, day) => sum + day.totals.unverifiedMinutes, 0);
   const parts = [
     `${scheduled} ${scheduled === 1 ? 'stop' : 'stops'} across ${activeDays} of ${days.length} days`,
   ];
@@ -1906,6 +1991,9 @@ export function summarise(
     parts.push(`${spanOf(rideMinutes)} riding to reach them`);
   } else if (walkMinutes > 0) {
     parts.push(`${spanOf(walkMinutes)} on foot to reach them`);
+  }
+  if (unverifiedMinutes > 0) {
+    parts.push(`${spanOf(unverifiedMinutes)} held for journeys we could not verify`);
   }
   if (unscheduled > 0) parts.push(`${unscheduled} left off, each with a reason`);
   return `${parts.join(', ')}.`;

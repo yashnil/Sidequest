@@ -35,6 +35,7 @@ const ENV_KEYS = [
   ...Object.keys(OPEN_STACK),
   'SIDEQUEST_DAILY_LIVE_COMPILATIONS',
   'SIDEQUEST_DAILY_MODEL_CALLS',
+  'SIDEQUEST_MAX_CONCURRENT_COMPILATIONS',
 ];
 
 beforeEach(() => {
@@ -54,7 +55,7 @@ afterEach(() => {
 });
 
 /** Seeded under the fixture stack; the scope does not depend on the provider. */
-async function seededConfirmedTrip(): Promise<{ tripId: string }> {
+async function seededConfirmedTrip(destination = 'Harbour City'): Promise<{ tripId: string }> {
   const { createTrip } = await import('../db/repository');
   const repo = await import('../db/compiler-repository');
   const { compilerProviders } = await import('./providers');
@@ -62,7 +63,7 @@ async function seededConfirmedTrip(): Promise<{ tripId: string }> {
 
   const trip = createTrip({
     mode: 'known_destination',
-    destinationInput: 'Harbour City',
+    destinationInput: destination,
     regionId: 'open-world',
     startDate: '2026-09-01',
     endDate: '2026-09-04',
@@ -72,9 +73,9 @@ async function seededConfirmedTrip(): Promise<{ tripId: string }> {
     children: 0,
     travelerNeeds: [],
   });
-  repo.saveDestinationQuery(trip.id, 'known_destination', 'Harbour City');
+  repo.saveDestinationQuery(trip.id, 'known_destination', destination);
   const { providers } = compilerProviders();
-  const resolution = await providers.resolver.resolve({ query: 'Harbour City', now: new Date() });
+  const resolution = await providers.resolver.resolve({ query: destination, now: new Date() });
   repo.saveResolution(trip.id, resolution);
   const candidate = resolution.candidates[0]!;
   repo.saveSelectedCandidate(trip.id, candidate.id);
@@ -157,5 +158,74 @@ describe('startCompilation and the daily ceiling', () => {
      */
     const second = startCompilation(getTrip(tripId)!);
     expect(second.kind).toBe('already_running');
+  });
+});
+
+/**
+ * HOW MANY BUILDS AT ONCE, WHICH WAS NOT BOUNDED BY ANYTHING.
+ *
+ * The unique job index bounds builds *per trip*; nothing bounded them in total,
+ * so fifty trips were fifty simultaneous worker processes. That is a cost
+ * problem and, worse, a politeness one: every outbound gate this app owns is a
+ * promise chain in module scope, and those modules claim "concurrency collapses
+ * to a queue no matter how many compilations are running". They were right until
+ * the compile worker moved that state into one process per build, after which N
+ * builds meant N times the rate this application promised four volunteer-run
+ * services.
+ */
+describe('startCompilation and the concurrency bound', () => {
+  it('never starts a second concurrent live build, and queues it instead', async () => {
+    const { tripId: first } = await seededConfirmedTrip('Harbour City');
+    const { tripId: second } = await seededConfirmedTrip('Old Harbour');
+    const { getTrip } = await import('../db/repository');
+    const { startCompilation } = await import('./runner');
+    const { occupiedCompilationSlots } = await import('../db/compiler-repository');
+
+    goOpen();
+    expect(startCompilation(getTrip(first)!).kind).toBe('started');
+
+    /*
+     * The bound is what this test is about and it still holds: the second trip
+     * does not get a concurrent build. What it gets instead is the correction —
+     * it used to be `blocked`, which meant a third of a launch cohort's presses
+     * were turned away on the most expensive action in the product with no line
+     * and no retry. The queue's own behaviour, bound and honesty live in
+     * `queue.test.ts`; what belongs here is that nothing started.
+     */
+    const outcome = startCompilation(getTrip(second)!);
+    expect(outcome.kind, 'a second trip started a second concurrent live build').toBe('queued');
+    expect(occupiedCompilationSlots(new Date()), 'two builds hold slots at once').toBe(1);
+  });
+
+  it('lets an operator who has moved off the shared services raise it', async () => {
+    const { tripId: first } = await seededConfirmedTrip('Harbour City');
+    const { tripId: second } = await seededConfirmedTrip('Old Harbour');
+    const { getTrip } = await import('../db/repository');
+    const { startCompilation } = await import('./runner');
+
+    goOpen();
+    process.env.SIDEQUEST_MAX_CONCURRENT_COMPILATIONS = '2';
+    expect(startCompilation(getTrip(first)!).kind).toBe('started');
+    expect(startCompilation(getTrip(second)!).kind).toBe('started');
+  });
+
+  it('never counts a build whose process is gone against the deployment', async () => {
+    const { HEARTBEAT_TIMEOUT_MS } = await import('@sidequest/core');
+    const { tripId: first } = await seededConfirmedTrip('Harbour City');
+    const { tripId: second } = await seededConfirmedTrip('Old Harbour');
+    const { getTrip } = await import('../db/repository');
+    const { startCompilation } = await import('./runner');
+
+    goOpen();
+    const now = new Date();
+    expect(startCompilation(getTrip(first)!, now).kind).toBe('started');
+
+    /*
+     * The slot must not be held by a corpse. Without the heartbeat cut-off, one
+     * process killed mid-build locks the whole deployment out of compiling until
+     * somebody happens to open that trip's page and reclaim it.
+     */
+    const later = new Date(now.getTime() + HEARTBEAT_TIMEOUT_MS + 1_000);
+    expect(startCompilation(getTrip(second)!, later).kind).toBe('started');
   });
 });

@@ -4,6 +4,7 @@ import {
   foodDistinctiveness,
   foodNameCounts,
   mealCharacterOf,
+  MEAL_SLOTS,
   needsExplicitEvidence,
   PRICE_BAND_ORDER,
   venueCanProvision,
@@ -85,6 +86,22 @@ export const LONG_DAY_WITHOUT_FOOD_MINUTES = 9 * 60;
  * evening rather than a stop on the way to something else. It is still a
  * ceiling, and the traveller's own tolerance still caps it.
  */
+/**
+ * HOW OFTEN ONE VENUE MAY BE NAMED BEFORE THE TRIP STOPS LOOKING PLANNED.
+ *
+ * The soft penalty below (`usedVenues`) orders the shortlist; it cannot bound
+ * it, because a region that yields one usable door hands that door every slot
+ * however heavily it is penalised. A live car-free metropolitan trip named the
+ * same cafe **six times** — lunch and dinner, three days running — and every
+ * one of those rows was individually defensible.
+ *
+ * Two, because a place worth returning to once is a real holiday and a third
+ * visit is the product having nothing else to say. Past it the venue stops
+ * being nameable and the slot falls to the area suggestion, which is the honest
+ * answer: we know the neighbourhood, we do not know a second door.
+ */
+export const MAX_TIMES_ONE_VENUE_IS_NAMED = 2;
+
 export const MAX_FOOD_DETOUR_MINUTES = 20;
 export const MAX_SPECIAL_MEAL_DETOUR_MINUTES = 35;
 
@@ -107,6 +124,24 @@ export const PACKED_MEAL_MINUTES = 30;
 // Pre-layout: what does each day need, and from what may it choose?
 // ---------------------------------------------------------------------------
 
+/**
+ * WHERE TO EAT, WHEN NOTHING SPECIFIC CAN BE NAMED.
+ *
+ * The product's own stated fallback, and the thing that stands between a
+ * traveller and a bare block headed "Lunch". Every field is read off data the
+ * region already carries — the localities on its venue records and on the day's
+ * own stops — so an area is a place that exists rather than a phrase.
+ *
+ * `countBySlot` is a count of *our index*, never of the ground, and the copy
+ * that renders it says so. Zero is a real answer and produces a different
+ * sentence: naming an area we hold nothing in would be the same overreach in a
+ * larger unit.
+ */
+export interface FoodArea {
+  name: string;
+  countBySlot: Readonly<Record<MealSlot, number>>;
+}
+
 export interface DaySlotPlan {
   slot: MealSlot;
   /** Ranked venue ids to try, best first. Empty is a real answer. */
@@ -125,8 +160,24 @@ export interface FoodDayPlan {
   hours: ReadonlyMap<string, VenueDayHours>;
   /** Nothing verified sits near this day's stops. */
   remote: boolean;
+  /**
+   * The area a meal falls back to when no venue can be named.
+   *
+   * Null only where there is nothing to read one off — no venues in reach and no
+   * locality on the day's own stops — which is the case that has to keep saying
+   * plainly that we have nothing, rather than inventing somewhere to send
+   * somebody.
+   */
+  area: FoodArea | null;
   /** The agency's own words about there being no food out there, when we have them. */
   gapNote: string | null;
+  /**
+   * Our own index falling short of the ground, in the compiler's words —
+   * "we could not verify places to eat here", never "there are none". Carried
+   * separately from `gapNote` because the two license different behaviour: a
+   * gap note justifies a packed lunch, a coverage note only a caution.
+   */
+  coverageNote: string | null;
   /** Buy supplies today, for this day number. Null when there is nothing to buy. */
   provisionForDay: number | null;
   /** This day eats supplies bought on that day. */
@@ -200,13 +251,18 @@ export function resolveFood(input: ResolveFoodInput): FoodContext {
    * `chooseFoodStop` is left with no memory at all.
    */
   const usedVenues = new Set<string>();
+  /** How many slots each venue has already been named for, across the whole trip. */
+  const namedCounts = new Map<string, number>();
   let specialsLeft = profile.food.specialMealBudget;
 
   const ordered = [...input.days].sort((a, b) => a.day.dayNumber - b.day.dayNumber);
 
   // Which days cannot feed themselves, worked out first so the day before one
   // knows it has shopping to do.
-  const remoteByDay = new Map<number, { remote: boolean; gapNote: string | null }>();
+  const remoteByDay = new Map<
+    number,
+    { remote: boolean; gapNote: string | null; coverageNote: string | null }
+  >();
   for (const entry of ordered) {
     remoteByDay.set(entry.day.dayNumber, assessRemoteness(entry.candidates, dataset));
   }
@@ -218,6 +274,7 @@ export function resolveFood(input: ResolveFoodInput): FoodContext {
 
     const remote = remoteByDay.get(day.dayNumber)?.remote ?? false;
     const gapNote = remoteByDay.get(day.dayNumber)?.gapNote ?? null;
+    const coverageNote = remoteByDay.get(day.dayNumber)?.coverageNote ?? null;
     const nodes = routingNodesFor(candidates, baseId);
 
     const discouraged = new Set(usedVenues);
@@ -239,17 +296,21 @@ export function resolveFood(input: ResolveFoodInput): FoodContext {
         baseId,
         wanted,
         usedVenues,
+        namedCounts,
         allowSpecial: isSpecial,
       });
 
-      const tookSpecial = isSpecial && shortlist.some((id) => isSpecialGrade(usable, id));
+      const tookSpecial = isSpecial && shortlist.some((id) => isSpecialGrade(usable, id, hours));
       if (tookSpecial) specialsLeft -= 1;
 
       // Only the head of the list is treated as spoken for. Reserving the whole
       // shortlist would leave later days with nothing when the region has three
       // dinner options and the trip has four nights.
       const head = shortlist[0];
-      if (head !== undefined) usedVenues.add(head);
+      if (head !== undefined) {
+        usedVenues.add(head);
+        namedCounts.set(head, (namedCounts.get(head) ?? 0) + 1);
+      }
 
       slots.push({
         slot,
@@ -266,7 +327,9 @@ export function resolveFood(input: ResolveFoodInput): FoodContext {
       slots,
       hours,
       remote,
+      area: areaForDay(candidates, usable, matrix, nodes),
       gapNote,
+      coverageNote,
       provisionForDay: null,
       provisionedOnDay: null,
       provisioningShortlist: [],
@@ -365,9 +428,98 @@ function nearestNodeMinutes(
   return best;
 }
 
-function isSpecialGrade(venues: readonly FoodVenue[], venueId: string): boolean {
+/**
+ * Near enough to this day that a venue is worth ranking at all.
+ *
+ * Deliberately wider than any ceiling a meal is actually held to, because it is
+ * measured against the *geographic* day assignment the packer then trims. Named
+ * once so the shortlist filter and the area count are the same number by
+ * construction: an area that claims four options must be counting the four the
+ * ranking would have offered.
+ */
+const NEAR_THE_DAY_MINUTES = MAX_SPECIAL_MEAL_DETOUR_MINUTES + 20;
+
+/**
+ * The area this day's meals fall back to, and how much of our index sits in it.
+ *
+ * Read in two passes, strongest evidence first. The venues actually within reach
+ * of the day's route answer it best — their locality is where the traveller
+ * would be eating, and it is the same set the shortlist was drawn from. Where
+ * none are in reach, the day's own stops answer it instead, and the counts come
+ * out zero, which is a different sentence and the honest one.
+ *
+ * Nothing is composed here. The name is a locality some record published; where
+ * no record published one, this returns null and the meal goes on saying we have
+ * nothing rather than inventing a neighbourhood to send somebody to.
+ */
+function areaForDay(
+  candidates: readonly PlanningCandidate[],
+  venues: readonly FoodVenue[],
+  matrix: TravelTimeMatrix,
+  nodes: readonly string[],
+): FoodArea | null {
+  const near = venues.filter((venue) => {
+    const minutes = nearestNodeMinutes(matrix, nodes, venue.routingId);
+    return minutes !== null && minutes <= NEAR_THE_DAY_MINUTES;
+  });
+
+  const name =
+    modalLocality(near.map((venue) => venue.locality)) ??
+    modalLocality(candidates.map((candidate) => candidate.place.locality));
+  if (name === null) return null;
+
+  const inArea = near.filter((venue) => venue.locality === name);
+  const countBySlot = {} as Record<MealSlot, number>;
+  for (const slot of MEAL_SLOTS) {
+    countBySlot[slot] = inArea.filter((venue) => venueServes(venue, slot)).length;
+  }
+  return { name, countBySlot };
+}
+
+/**
+ * The commonest locality, ties broken by name so a plan cannot vary between runs.
+ *
+ * Typed as possibly-absent although both schemas require a locality of at least
+ * one character. A candidate reaches the planner through a board rather than
+ * through a parse, and the first run of this threw on a stop that carried an
+ * access block and nothing else — a missing locality is a reason to have no area
+ * to name, never a reason for the food layer to stop the plan.
+ */
+function modalLocality(localities: readonly (string | undefined)[]): string | null {
+  const counts = new Map<string, number>();
+  for (const locality of localities) {
+    const name = locality?.trim() ?? '';
+    if (name.length === 0) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return ranked[0]?.[0] ?? null;
+}
+
+/**
+ * Whether this venue may be the trip's one occasion.
+ *
+ * The one place where an unconfirmed door is genuinely disqualifying, and the
+ * boundary is worth stating: an ordinary lunch behind an unknown opening time
+ * costs a traveller a walk and a second choice, while the evening somebody
+ * asked to be different costs them the evening. So the caution is enough
+ * everywhere else and is not enough here — which is also why an unconfirmed
+ * venue is never admitted above the everyday price band.
+ */
+function canHoldOccasion(venue: FoodVenue, allowSpecial: boolean, hoursUnknown: boolean): boolean {
+  return (
+    allowSpecial && !hoursUnknown && PRICE_BAND_ORDER[venue.priceBand] >= PRICE_BAND_ORDER.upscale
+  );
+}
+
+function isSpecialGrade(
+  venues: readonly FoodVenue[],
+  venueId: string,
+  hours: ReadonlyMap<string, VenueDayHours>,
+): boolean {
   const venue = venues.find((entry) => entry.id === venueId);
-  return venue !== undefined && PRICE_BAND_ORDER[venue.priceBand] >= PRICE_BAND_ORDER.upscale;
+  if (!venue) return false;
+  return canHoldOccasion(venue, true, hours.get(venueId)?.status === 'unknown');
 }
 
 interface RankInput {
@@ -380,6 +532,8 @@ interface RankInput {
   baseId: string;
   wanted: ReadonlySet<string>;
   usedVenues: ReadonlySet<string>;
+  /** Slots each venue has already been named for. See `MAX_TIMES_ONE_VENUE_IS_NAMED`. */
+  namedCounts?: ReadonlyMap<string, number>;
   allowSpecial: boolean;
 }
 
@@ -400,6 +554,7 @@ interface RankInput {
  */
 function rankVenues(input: RankInput): string[] {
   const { slot, venues, hours, profile, matrix, nodes, wanted, usedVenues, allowSpecial } = input;
+  const namedCounts = input.namedCounts;
   const needs = profile.food.dietaryNeeds;
   const everyday = PRICE_BAND_ORDER[profile.food.everydayPriceBand];
   /*
@@ -414,10 +569,36 @@ function rankVenues(input: RankInput): string[] {
 
   for (const venue of venues) {
     if (!venueServes(venue, slot)) continue;
+    /*
+     * A gate rather than a penalty, and the only one variety gets.
+     *
+     * `usedVenues` below is a preference and behaves like one: where a region
+     * yields a single usable door, every alternative is already refused and the
+     * penalty reorders a list of one. That is how a live trip came to name the
+     * same cafe for lunch and dinner on three consecutive days. Past the cap the
+     * venue is simply not a candidate, and the slot falls through to the area
+     * suggestion — which says the true thing, that we know the neighbourhood
+     * and not a second door.
+     */
+    if ((namedCounts?.get(venue.id) ?? 0) >= MAX_TIMES_ONE_VENUE_IS_NAMED) continue;
     const dayHours = hours.get(venue.id);
-    // A restaurant whose hours nobody has confirmed is a coin toss at the door.
-    // Unlike a roadside viewpoint, there is nothing to salvage from being wrong.
-    if (!dayHours || dayHours.status === 'unknown' || dayHours.status === 'closed') continue;
+    if (!dayHours || dayHours.status === 'closed') continue;
+    /**
+     * An unconfirmed door is a caution, never a disqualification.
+     *
+     * This line used to drop `unknown` alongside `closed`, on the reasoning that
+     * a restaurant nobody has confirmed is a coin toss at the door. The measured
+     * consequence: every venue a live compilation stores carries
+     * `hours: { kind: 'unknown' }`, so the gate removed the whole pool — three
+     * founder trips, thirty-one meals, not one of them a place. A shut door on
+     * a date is a matter of record and still removes the venue; a door nobody
+     * wrote down is a sentence we owe the traveller, and the attraction side has
+     * said so since `placeVisit` stopped treating unknown hours as closed.
+     *
+     * The penalty below is what keeps it a last resort rather than a peer: any
+     * venue with a real calendar outranks every venue without one.
+     */
+    const hoursUnknown = dayHours.status === 'unknown';
 
     const dietary = assessDietary(venue, needs);
     if (dietary.blocked.length > 0) continue;
@@ -433,13 +614,18 @@ function rankVenues(input: RankInput): string[] {
      * nearer. The real ceiling is applied at layout time against the real
      * position, where it can be answered honestly.
      */
-    if (detour > MAX_SPECIAL_MEAL_DETOUR_MINUTES + 20) continue;
+    if (detour > NEAR_THE_DAY_MINUTES) continue;
 
     const band = PRICE_BAND_ORDER[venue.priceBand];
     // The budget rule, and the reason liking fine dining does not produce four
     // fine dinners: above the everyday band is only reachable on a slot the
     // special-meal quota has actually opened.
-    if (band > everyday && !allowSpecial) continue;
+    //
+    // `canHoldOccasion` is on this line rather than beside the bonus below
+    // because the two have to agree: a venue admitted above the everyday band
+    // and then not marked as the occasion would be scheduled over budget and
+    // then reported for it.
+    if (band > everyday && !canHoldOccasion(venue, allowSpecial, hoursUnknown)) continue;
 
     let score = 0;
     if (wanted.has(venue.id)) score += 1000;
@@ -451,7 +637,7 @@ function rankVenues(input: RankInput): string[] {
     // an occasion. Weighted above everything except a venue the traveller asked
     // for by name, so the one evening they said should be different is not lost
     // to a taqueria two minutes nearer.
-    if (allowSpecial && band >= PRICE_BAND_ORDER.upscale) score += 500;
+    if (canHoldOccasion(venue, allowSpecial, hoursUnknown)) score += 500;
     if (!allowSpecial && band === everyday) score += 30;
     if (!allowSpecial && band < everyday) score += 10;
     if (venue.localSpecialty) score += 45;
@@ -464,6 +650,13 @@ function rankVenues(input: RankInput): string[] {
      */
     score += Math.round(foodDistinctiveness(venue, distinctiveness).score * 60);
     if (usedVenues.has(venue.id)) score -= 400;
+    /*
+     * Large enough that a venue with a calendar beats every venue without one,
+     * whatever else is true of them, and small enough that it cannot overturn
+     * the traveller's own pick. It is a preference, not a gate: the gate above
+     * is `closed`, which is a matter of record.
+     */
+    if (hoursUnknown) score -= 300;
     if (venue.hours.hoursConfidence !== 'published') score -= 25;
     if (venue.reservation.requirement === 'required') score -= 60;
     score -= detour * 2;
@@ -495,15 +688,46 @@ function rankVenues(input: RankInput): string[] {
  * question the planner actually needs answered is "is there a legal venue on
  * this route?", and that has an exact answer at layout time — where it is asked.
  */
+/**
+ * A gap record is not one statement — it is two, told apart by who is speaking.
+ *
+ * An `official` or `authored` gap is somebody with standing asserting a fact
+ * about the ground: the agency wrote down that there is nothing to eat in the
+ * valley, or a curator did. That is the claim that justifies a packed lunch.
+ * An `estimated` gap is this product counting what its own index holds — the
+ * compiler writes one whenever verified food coverage falls short of what a
+ * trip of this length would draw on, including in the middle of a city with a
+ * restaurant on every corner. Treating that as remoteness put "carried food,
+ * because there is nothing verified to buy where this day goes" on a live
+ * dense-metro plan, day after day. A shortfall in our index is a caution to
+ * surface, never a remoteness verdict.
+ */
+function gapAttestsTheGround(gap: FoodDataset['gaps'][number]): boolean {
+  return gap.provenance.kind === 'official' || gap.provenance.kind === 'authored';
+}
+
 function assessRemoteness(
   candidates: readonly PlanningCandidate[],
   dataset: FoodDataset,
-): { remote: boolean; gapNote: string | null } {
-  if (candidates.length === 0) return { remote: false, gapNote: null };
-  const gap = dataset.gaps.find((entry) =>
+): { remote: boolean; gapNote: string | null; coverageNote: string | null } {
+  if (candidates.length === 0) return { remote: false, gapNote: null, coverageNote: null };
+  const matching = dataset.gaps.filter((entry) =>
     candidates.some((candidate) => entry.placeIds.includes(candidate.place.id)),
   );
-  return { remote: gap !== undefined, gapNote: gap?.note ?? null };
+  const attested = matching.find(gapAttestsTheGround);
+  /*
+   * The compiled places carry their own remoteness flag — no services at or
+   * near the stop — and a day whose every stop says so is remote whether or
+   * not anybody wrote a gap for it. `every`, not `some`: one wild stop on a
+   * day that comes back through town is a day that can still buy lunch.
+   */
+  const allStopsRemote = candidates.every(
+    (candidate) => candidate.place.access.remoteNoServices,
+  );
+  if (attested || allStopsRemote) {
+    return { remote: true, gapNote: attested?.note ?? null, coverageNote: null };
+  }
+  return { remote: false, gapNote: null, coverageNote: matching[0]?.note ?? null };
 }
 
 /**
@@ -588,19 +812,21 @@ function rankProvisioning(
     .map((entry) => entry.id);
 }
 
+/**
+ * Why somewhere the traveller asked for is not on the plan.
+ *
+ * The unconfirmed-hours branch this used to have was the naming refusal wearing
+ * a reason: "we will not build a day around a door we cannot confirm is open"
+ * described a policy that no longer exists, and it was the answer given for
+ * every venue in a live region. A venue with no calendar is schedulable now, so
+ * the only remaining answers are the two true ones — it is shut on all of these
+ * dates, or no day's route came close enough.
+ */
 function unusedChoiceReason(venue: FoodVenue, byDay: ReadonlyMap<number, FoodDayPlan>): string {
-  const everOpen = [...byDay.values()].some((plan) => {
-    const status = plan.hours.get(venue.id)?.status;
-    return status === 'open' || status === 'always_open';
-  });
-  if (!everOpen) {
-    const anyUnknown = [...byDay.values()].some(
-      (plan) => plan.hours.get(venue.id)?.status === 'unknown',
-    );
-    return anyUnknown
-      ? `Nobody publishes hours for ${venue.name}, and we will not build a day around a door we cannot confirm is open.`
-      : `${venue.name} is shut on every day of this trip.`;
-  }
+  const everSchedulable = [...byDay.values()].some(
+    (plan) => plan.hours.get(venue.id)?.status !== 'closed',
+  );
+  if (!everSchedulable) return `${venue.name} is shut on every day of this trip.`;
   return `${venue.name} did not fit any day's route inside the detour we hold meals to.`;
 }
 
@@ -716,6 +942,13 @@ export function chooseFoodStop(request: FoodChoiceRequest): FoodChoice | null {
       // On a special slot the occasion outranks the route entirely, within the
       // ceiling the ceiling already imposed.
       Number(b.choice.food.isSpecialMeal) - Number(a.choice.food.isSpecialMeal) ||
+      /*
+       * A door somebody wrote down beats a door nobody did, before the route
+       * gets a say. The ranking already prefers one heavily, but this sort can
+       * overturn the ranking on a five-minute band, and "closer" is not worth
+       * trading a known opening time for.
+       */
+      Number(a.choice.food.hoursUnknown) - Number(b.choice.food.hoursUnknown) ||
       // Somewhere new, when two options are otherwise the same answer.
       Number(request.plan.discouraged.has(a.choice.venue.id)) -
         Number(request.plan.discouraged.has(b.choice.venue.id)) ||
@@ -762,12 +995,37 @@ function evaluate(
     stopKind === 'grocery' ? request.latest : window.latest + service,
   );
 
-  const start = earliestMealStart({
-    hours,
-    minutes: service,
-    earliest,
-    latest: latestFinish,
-  });
+  /**
+   * WHEN THE MEAL STARTS, AND WHOSE CLOCK SAID SO.
+   *
+   * With a calendar behind it, the venue's own hours decide, exactly as before.
+   *
+   * With no calendar, the *meal window* decides — and that is not the venue's
+   * timetable narrowed to something plausible, which would be inventing an
+   * opening time. `earliest` and `latestFinish` above are the product's own
+   * definition of when this meal is that meal, intersected with where the
+   * traveller actually is. Nothing about the door is asserted: `evidence` stays
+   * absent, `opensAtMinute` stays null so no row can print a wait for an hour
+   * nobody published, and `hoursUnknown` carries the fact to every surface that
+   * renders the meal.
+   *
+   * A provisioning stop never reaches this branch — the food schema refuses a
+   * venue relied on for supplies without confirmed hours, because a shop that
+   * turns out to be shut strands the whole of the next day rather than costing
+   * one meal.
+   */
+  const hoursUnknown = hours.status === 'unknown';
+  if (hoursUnknown && stopKind === 'grocery') return null;
+  const start = hoursUnknown
+    ? earliest + service <= latestFinish
+      ? earliest
+      : null
+    : earliestMealStart({
+        hours,
+        minutes: service,
+        earliest,
+        latest: latestFinish,
+      });
   if (start === null) return null;
 
   // Going straight on would have cost this. Everything above it is the detour,
@@ -825,9 +1083,10 @@ function evaluate(
     dietary: dietary.supported as DietaryClaim[],
     dietaryUnverified: dietary.unverified as DietaryNeed[],
     ...(evidence ? { hours: evidence } : {}),
+    hoursUnknown,
     routeContext: routeContextFor(request, venue, detour),
     detourMinutes: detour,
-    isSpecialMeal: isSpecial && PRICE_BAND_ORDER[venue.priceBand] >= PRICE_BAND_ORDER.upscale,
+    isSpecialMeal: canHoldOccasion(venue, isSpecial, hoursUnknown),
     fromUserChoice: request.plan.userChosen.has(venue.id),
     alternatives: [],
   };
@@ -974,7 +1233,11 @@ export function alternativesFor(input: {
     const venue = input.dataset.venues.find((entry) => entry.id === venueId);
     if (!venue) continue;
     const hours = input.plan.hours.get(venueId);
-    if (!hours || hours.status === 'closed' || hours.status === 'unknown') continue;
+    // Shut on the date is a matter of record and disqualifies. Unconfirmed is
+    // the same caution the chosen venue may itself be carrying, and `tradeoffFor`
+    // states it — offering only confirmed runners-up beside an unconfirmed pick
+    // would be the same withholding this file exists to stop.
+    if (!hours || hours.status === 'closed') continue;
     const leg = hop(input.matrix, input.fromRoutingId, venue.routingId);
     if (!leg) continue;
     out.push({
@@ -991,6 +1254,12 @@ export function alternativesFor(input: {
 }
 
 function tradeoffFor(venue: FoodVenue, minutes: number): string {
+  // Before the confidence branches, because a venue with no calendar at all also
+  // reads `unverified` and the listing sentence below would be describing hours
+  // nobody wrote down.
+  if (venue.hours.kind === 'unknown') {
+    return `${minutes} min away, and nobody publishes hours for it that we could read.`;
+  }
   if (venue.reservation.requirement === 'required') {
     return `${minutes} min away, and you would have to book it yourself.`;
   }

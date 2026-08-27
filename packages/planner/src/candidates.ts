@@ -1,7 +1,19 @@
-import { displayNameOf } from '@sidequest/core';
+import {
+  boardOrderingOf,
+  boardPriorityOf,
+  displayNameOf,
+  establishedOrderingLean,
+  INTEREST_EVIDENCE,
+  INTERESTS,
+  kindEvidences,
+  namesOwnKind,
+  type TravelerProfile,
+} from '@sidequest/core';
 import type {
   DiscoveryCandidate,
   DiscoverySelection,
+  Interest,
+  Place,
   UnscheduledPlace,
   UnscheduledReasonCode,
 } from '@sidequest/core';
@@ -30,15 +42,35 @@ export interface ResolvedCandidates {
 }
 
 /**
- * Priority bands. The gaps are wide enough that fit score can order places
- * *within* a band but can never let an auto-pick outrank something the traveller
- * asked for by hand.
+ * Priority bands. The gaps are wide enough that the board's own order can rank
+ * places *within* a band but can never let an auto-pick outrank something the
+ * traveller asked for by hand.
  */
 const PRIORITY_BASE = {
   manual_included: 10_000,
   auto_included: 5_000,
   maybe: 1_000,
 } as const;
+
+/**
+ * A CANDIDATE LIFTED INTO THE MANUAL BAND, KEEPING ITS PLACE IN THE BOARD'S ORDER.
+ *
+ * Pinning a stop and choosing a replacement by name are both "plan this as if
+ * the traveller had picked it by hand", and both used to be written out by hand
+ * at their own call site: `10_000 + fitScore` in `plan.ts` and in `edit.ts`'s
+ * lock promotion, a bare `10_000` in its swap. All three threw the composed key
+ * away — the first two for `fit.score`, which is the order the board stopped
+ * using the moment significance entered it, and the third for nothing at all,
+ * which flattened every hand-picked swap onto one number.
+ *
+ * One function, three callers, so the band offset and the within-band term
+ * cannot come apart again. `Math.max` because a place already in this band —
+ * hand-included on the board and then pinned — must not be *demoted* by being
+ * promoted.
+ */
+export function pinnedPriority(candidate: PlanningCandidate): number {
+  return Math.max(candidate.priority, PRIORITY_BASE.manual_included + candidate.boardPriority);
+}
 
 /**
  * The reason code for a selection whose candidate is not in the pool.
@@ -54,6 +86,65 @@ const PRIORITY_BASE = {
  * code is a one-line change at one site.
  */
 const CANDIDATE_WITHDRAWN_CODE: UnscheduledReasonCode = 'selection_not_on_board';
+
+/**
+ * THE INTEREST THE PLAN MAY SPEAK FOR THIS PLACE — HELD TO THE PLACE'S OWN KIND.
+ *
+ * `fit.primaryInterest` is graded by the traveller but stamped through the
+ * thirteen-value category bucket, and a bucket launders: a theme park files
+ * under the food-and-towns category and, on a live plan, arrived carrying
+ * `easy_nature_walks` — so its card read "Matches your interest in easy nature
+ * walks" and its day was themed "Easy nature walks", over a seven-hour
+ * amusement park. Every planner sentence built on this field claims that the
+ * place *is* the interest, which is a claim about the record's own kind.
+ *
+ * So the interest the planner speaks has to be one the record's own identity
+ * backs, and the kind channel alone is not enough to establish that. The
+ * source-keyword channel matches substrings by design — `geolog` has to catch
+ * `geology` — which means `theme_park` and `amusement_park` both contain
+ * `park` and "evidence" an easy nature walk by the very channel that exists to
+ * stop bucket-laundering. So a second witness is required when the channels
+ * disagree:
+ *
+ *   - the *planning category itself* backs the interest → speak it. The
+ *     thirteen-value bucket is coarse, but where it and the stamp agree —
+ *     an `easy_walk` stamped `easy_nature_walks` — there is nothing to doubt;
+ *   - the kind channels back it **and** the category is not positively
+ *     claimed by a different interest → speak it. This is the case the
+ *     category cannot see (`stargazing` has no category of its own);
+ *   - otherwise say nothing. A theme park files under the food-and-towns
+ *     category, which is `food_and_towns`' own ground — a nature-walk claim
+ *     over it is exactly the contradiction the traveller laughed at. No
+ *     substitute is hunted for, because a different interest the traveller
+ *     never graded would be a different lie; the copy falls through to
+ *     sentences that are true of any record.
+ *
+ * An authored place names no kind and keeps the curated verdict — its
+ * interests and its category were written by the same hand.
+ *
+ * Deliberately only the *spoken* field. Frequency caps charge
+ * `place.interests` directly and scoring is the board's; nothing about which
+ * day a stop lands on changes here — only what the plan says about it.
+ */
+function categoryBacks(category: Place['category'], interest: Interest): boolean {
+  return INTEREST_EVIDENCE[interest].categories?.includes(category) ?? false;
+}
+
+function categoryClaimedByAnother(category: Place['category'], interest: Interest): boolean {
+  return INTERESTS.some((other) => other !== interest && categoryBacks(category, other));
+}
+
+function spokenInterestFor(candidate: DiscoveryCandidate): Interest | undefined {
+  const primary = candidate.fit.primaryInterest;
+  if (!primary) return undefined;
+  const { place } = candidate;
+  if (!namesOwnKind(place)) return primary;
+  if (categoryBacks(place.category, primary)) return primary;
+  if (kindEvidences(place, primary) && !categoryClaimedByAnother(place.category, primary)) {
+    return primary;
+  }
+  return undefined;
+}
 
 /**
  * Turns board selections into a planning queue.
@@ -88,6 +179,14 @@ export function resolveCandidates(
    * matrix-derived figure rather than nothing.
    */
   reach?: { knowledge: TravelKnowledge; baseId: string },
+  /**
+   * The traveller whose board this plan is built from, for the one ordering
+   * term that depends on them: which way the significance lift leans. Optional
+   * so a hand-built test input keeps the established-first order it always
+   * had; `planTrip` always passes it, so the plan and the board agree about
+   * the traveller by construction.
+   */
+  profile?: Pick<TravelerProfile, 'derived' | 'transport'>,
 ): ResolvedCandidates {
   const byPlaceId = new Map(selections.map((selection) => [selection.placeId, selection]));
   const candidateIds = new Set(candidates.map((candidate) => candidate.place.id));
@@ -110,7 +209,7 @@ export function resolveCandidates(
         wasManual: manual,
         reasonCode: reasonCodeForBlocker(blocker?.code),
         reason: blocker?.message ?? 'This one will not work on your dates or with your answers.',
-        ...remedyFor(blocker?.code),
+        ...remedyFor(blocker?.code, profile?.transport.willDrive ?? false),
       });
       continue;
     }
@@ -160,9 +259,47 @@ export function resolveCandidates(
      */
     const reached = reach ? reachFromBase(reach.knowledge, reach.baseId, candidate.place.id) : null;
 
+    const boardPriority = boardPriorityOf(
+      boardOrderingOf({
+        ...candidate,
+        ...(profile ? { establishedLean: establishedOrderingLean(profile) } : {}),
+      }),
+    );
+
+    const spokenInterest = spokenInterestFor(candidate);
+
     eligible.push({
       place: candidate.place,
-      priority: base + candidate.fit.score,
+      /**
+       * THE ORDER THE TRAVELLER WAS JUST SHOWN, NOT A SECOND ONE.
+       *
+       * This was `base + candidate.fit.score`, and it stopped agreeing with the
+       * board the moment the board composed its order out of two terms. Inside
+       * one selection band the plan ranked by match alone while the board ranked
+       * by the label it printed and then by how much each place matters — so of
+       * two candidates the fit scorer could not separate, the board put one
+       * first and the trip put the other first, with nothing anywhere saying
+       * why. It is the §10 complaint in its most literal form: the plan
+       * disagreeing with the board it was built from.
+       *
+       * `boardPriorityOf` is the board's own composed key, exported from where
+       * the comparator lives, and it stays on `fit.score`'s 0–100 scale — so the
+       * band offsets above keep their meaning.
+       *
+       * The key is rebuilt from the place and the fit rather than read off
+       * `candidate.ordering`, for the same reason `reached` is resolved below:
+       * `boardOrderingOf` is a pure function of exactly those two, so the
+       * rebuild is the board's answer by construction, and it cannot inherit a
+       * carried key that describes some earlier version of the card.
+       *
+       * It is also kept on the candidate below, because the band offset is not
+       * the last word on priority: a pin lifts a place into the manual band, and
+       * a promotion that re-derived the within-band term from `fitScore` would
+       * undo this composition for precisely the places the traveller cared most
+       * about.
+       */
+      priority: base + boardPriority,
+      boardPriority,
       manual,
       selectionStatus: selection.status,
       fitScore: candidate.fit.score,
@@ -195,7 +332,7 @@ export function resolveCandidates(
        * told us they have no car.
        */
       travelModeFromBase: reached?.ok ? reached.mode : matrixTravelMode(matrix, reach !== undefined),
-      ...(candidate.fit.primaryInterest ? { primaryInterest: candidate.fit.primaryInterest } : {}),
+      ...(spokenInterest ? { primaryInterest: spokenInterest } : {}),
     });
   }
 
@@ -267,7 +404,16 @@ function reasonCodeForBlocker(code: string | undefined): UnscheduledReasonCode {
 }
 
 /** The smallest change that would make this schedulable, where one exists. */
-function remedyFor(code: string | undefined): { suggestedRemedy?: string } {
+/**
+ * `hasCar` decides one clause, and defaults to false when no profile was given.
+ *
+ * The conservative default is deliberate: with nothing known about the
+ * traveller, proposing they acquire a vehicle is the one answer that can
+ * contradict something they already said, and "this is one to drop" cannot.
+ * `planTrip` always passes a profile, so only hand-built inputs take the
+ * default.
+ */
+function remedyFor(code: string | undefined, hasCar: boolean): { suggestedRemedy?: string } {
   switch (code) {
     case 'closed_on_your_dates':
       return { suggestedRemedy: 'Move your dates into its open season, or drop it from the board.' };
@@ -283,7 +429,11 @@ function remedyFor(code: string | undefined): { suggestedRemedy?: string } {
     case 'too_strenuous':
       return { suggestedRemedy: 'Raise the effort level you are happy with, or pick a gentler alternative from the board.' };
     case 'needs_car':
-      return { suggestedRemedy: 'This needs a vehicle. Renting one would open up most of the region.' };
+      return {
+        suggestedRemedy: hasCar
+          ? 'This needs a vehicle. Renting one would open up most of the region.'
+          : 'Nothing scheduled goes there and a vehicle is the only way in, so this is one to drop.',
+      };
     case 'service_unavailable':
       return { suggestedRemedy: 'Move your dates into the season the service runs, or drop it.' };
     case 'mode_declined':

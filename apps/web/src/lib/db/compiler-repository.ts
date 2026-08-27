@@ -22,6 +22,7 @@ import {
   tripPreflightSchema,
   geographicScopeSchema,
   isAbandoned,
+  HEARTBEAT_TIMEOUT_MS,
   scopeFingerprint,
   type ClarificationSet,
   type CompilationErrorCode,
@@ -319,6 +320,144 @@ export function getActiveJob(tripId: string): CompilationJob | null {
   return row ? rowToJob(row) : null;
 }
 
+/**
+ * How many of the deployment's build slots are taken right now, across every
+ * trip.
+ *
+ * Counted in SQL rather than by decoding rows, because the caller asks this on
+ * the way into a build and the answer is a number rather than a set.
+ *
+ * Two exclusions, and each is a slot that would otherwise be held by nothing:
+ *
+ * - **A cold heartbeat.** The same cut-off `isAbandoned` applies. Without it,
+ *   one process killed mid-build holds a slot until somebody opens that trip's
+ *   page and reclaims it.
+ * - **A parked job.** `waiting_since` is set on jobs the queue has *not*
+ *   dispatched; counting them would make the queue its own backpressure — one
+ *   waiting build would occupy the only slot and nothing would ever start.
+ */
+export function occupiedCompilationSlots(now: Date): number {
+  const cutoff = new Date(now.getTime() - HEARTBEAT_TIMEOUT_MS).toISOString();
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS live FROM compilation_jobs
+        WHERE state IN ('queued','running')
+          AND waiting_since IS NULL
+          AND heartbeat_at >= ?`,
+    )
+    .get(cutoff) as { live: number } | undefined;
+  return row?.live ?? 0;
+}
+
+/** How many builds are parked waiting for a slot, across every trip. */
+export function queuedCompilationDepth(): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS waiting FROM compilation_jobs
+        WHERE state = 'queued' AND waiting_since IS NOT NULL`,
+    )
+    .get() as { waiting: number } | undefined;
+  return row?.waiting ?? 0;
+}
+
+/**
+ * THE ORDER OF THE LINE, AND WHY IT NEEDS A SECOND KEY.
+ *
+ * `waiting_since` first: first in, first served, and a traveller who has
+ * already waited longest must not be overtaken by a fresher press. It is not
+ * enough on its own — the stamp is an ISO string with millisecond resolution,
+ * and two presses that land in the same millisecond tie. A tie is not a
+ * cosmetic problem: both jobs read as position 1, so two people are told they
+ * are next and one of them is wrong.
+ *
+ * `rowid` breaks it, because SQLite hands them out in insertion order, which is
+ * exactly the order the queue means by "first". Every query that reads or walks
+ * the line uses this pair, so the head of the queue and the position reported
+ * for a job cannot disagree.
+ */
+const QUEUE_ORDER = 'waiting_since ASC, rowid ASC';
+
+/**
+ * Where this job stands in line, counting from one — or null if it is not in
+ * line at all.
+ */
+export function queuePositionFor(jobId: string): number | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT waiting_since, rowid AS row_id FROM compilation_jobs
+        WHERE id = ? AND state = 'queued' AND waiting_since IS NOT NULL`,
+    )
+    .get(jobId) as { waiting_since: string; row_id: number } | undefined;
+  if (!row) return null;
+
+  const ahead = db
+    .prepare(
+      `SELECT COUNT(*) AS ahead FROM compilation_jobs
+        WHERE state = 'queued' AND waiting_since IS NOT NULL
+          AND (waiting_since < ? OR (waiting_since = ? AND rowid < ?))`,
+    )
+    .get(row.waiting_since, row.waiting_since, row.row_id) as { ahead: number } | undefined;
+  return (ahead?.ahead ?? 0) + 1;
+}
+
+/** The job at the head of the queue, or nothing when nobody is waiting. */
+export function nextQueuedCompilation(): CompilationJob | null {
+  const row = getDb()
+    .prepare(
+      `SELECT * FROM compilation_jobs
+        WHERE state = 'queued' AND waiting_since IS NOT NULL
+        ORDER BY ${QUEUE_ORDER} LIMIT 1`,
+    )
+    .get() as JobRow | undefined;
+  return row ? rowToJob(row) : null;
+}
+
+/**
+ * Take a parked job out of the queue so a worker can be dispatched for it.
+ *
+ * Returns whether *this* caller won it, and the whole point is that only one
+ * can. The pump runs from every snapshot poll, every build press and every
+ * worker exit, so several callers routinely reach the head of the queue within
+ * the same second; the guarded UPDATE is what stops two of them dispatching two
+ * workers for one job. A loser gets `false` and dispatches nothing.
+ *
+ * The heartbeat is restamped here because this is the instant the job acquires
+ * a process — from now on silence means what `isAbandoned` assumes it means,
+ * and a job admitted with a stale beat from when it was parked would be
+ * reclaimed as a corpse before its worker had finished starting.
+ */
+export function admitQueuedCompilation(jobId: string, now: Date): boolean {
+  const stamp = now.toISOString();
+  return (
+    getDb()
+      .prepare(
+        `UPDATE compilation_jobs
+            SET waiting_since = NULL, updated_at = ?, heartbeat_at = ?
+          WHERE id = ? AND state = 'queued' AND waiting_since IS NOT NULL`,
+      )
+      .run(stamp, stamp, jobId).changes > 0
+  );
+}
+
+/**
+ * Every parked job that has waited longer than this deployment will promise.
+ *
+ * Read rather than written, so the caller decides the verdict and one code path
+ * writes terminal states. See `queueWaitCeilingMs` for where the number comes
+ * from, and `isAbandoned` for why the heartbeat cannot answer this instead.
+ */
+export function overdueQueuedCompilations(now: Date, ceilingMs: number): CompilationJob[] {
+  const cutoff = new Date(now.getTime() - ceilingMs).toISOString();
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM compilation_jobs
+        WHERE state = 'queued' AND waiting_since IS NOT NULL AND waiting_since < ?`,
+    )
+    .all(cutoff) as JobRow[];
+  return rows.map(rowToJob).filter((job): job is CompilationJob => job !== null);
+}
+
 export type StartJobResult =
   | { kind: 'started'; job: CompilationJob }
   | { kind: 'already_running'; job: CompilationJob };
@@ -339,6 +478,13 @@ export function startJob(input: {
   tripId: string;
   scopeFingerprint: string;
   now: Date;
+  /**
+   * True when the deployment's build slots are full and this job is joining the
+   * queue instead of being dispatched. The row is identical either way — same
+   * state, same dedup index, same cancellation — and the only difference is
+   * that nothing is coming for it yet, which is what `waiting_since` records.
+   */
+  waiting?: boolean;
 }): StartJobResult {
   const db = getDb();
   const existing = getActiveJob(input.tripId);
@@ -351,7 +497,12 @@ export function startJob(input: {
      * still said `running` kept an elapsed clock counting on screen — and the
      * code is `compilation_interrupted`, which is the honest one: the build was
      * not wrong, its process died, and a retry resumes from the shared store.
+     *
+     * The stop request comes first, because the process this row belonged to may
+     * be stalled rather than dead and is about to have a second one started
+     * alongside it.
      */
+    requestStop(existing.id, input.now);
     failJob({
       jobId: existing.id,
       code: 'compilation_interrupted',
@@ -372,6 +523,7 @@ export function startJob(input: {
     startedAt: stamp,
     updatedAt: stamp,
     heartbeatAt: stamp,
+    ...(input.waiting ? { waitingSince: stamp } : {}),
     cancelRequested: false,
     correlationId: randomUUID(),
   };
@@ -380,8 +532,8 @@ export function startJob(input: {
     db.prepare(
       `INSERT INTO compilation_jobs
          (id, trip_id, scope_fingerprint, state, stage, stages_json,
-          started_at, updated_at, heartbeat_at, cancel_requested, correlation_id)
-       VALUES (?, ?, ?, ?, ?, '[]', ?, ?, ?, 0, ?)`,
+          started_at, updated_at, heartbeat_at, waiting_since, cancel_requested, correlation_id)
+       VALUES (?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, 0, ?)`,
     ).run(
       job.id,
       job.tripId,
@@ -391,6 +543,7 @@ export function startJob(input: {
       job.startedAt,
       job.updatedAt,
       job.heartbeatAt,
+      job.waitingSince ?? null,
       job.correlationId,
     );
   } catch {
@@ -403,13 +556,32 @@ export function startJob(input: {
   return { kind: 'started', job };
 }
 
-export function markJobRunning(jobId: string, now: Date): void {
+/**
+ * The queued job this process is now working on — unless somebody already
+ * ended it.
+ *
+ * STOP WAS REVERSED. This was an unguarded `UPDATE ... SET state = 'running'`,
+ * so the one write in the state machine that did not respect a terminal state
+ * was the write that runs *first*. `requestCancel` flips a job to `cancelled`
+ * the moment the traveller presses Stop; a worker still starting up then wrote
+ * `running` straight over it, the pulse — which stops on a terminal state —
+ * saw a healthy job, and a cancelled build spent its entire budget and was
+ * eligible to complete, because `completeJob` only refuses over a state that
+ * was still there when it looked.
+ *
+ * Returns whether it took the job. `false` means the row ended before this
+ * process started, and the only correct thing to do with it is stop.
+ */
+export function markJobRunning(jobId: string, now: Date): boolean {
   const stamp = now.toISOString();
-  getDb()
-    .prepare(
-      `UPDATE compilation_jobs SET state = 'running', updated_at = ?, heartbeat_at = ? WHERE id = ?`,
-    )
-    .run(stamp, stamp, jobId);
+  return (
+    getDb()
+      .prepare(
+        `UPDATE compilation_jobs SET state = 'running', updated_at = ?, heartbeat_at = ?
+          WHERE id = ? AND state IN ('queued', 'running')`,
+      )
+      .run(stamp, stamp, jobId).changes > 0
+  );
 }
 
 /** One stage completed. Written as it happens, so a refresh sees real progress. */
@@ -436,6 +608,28 @@ export function recordStage(jobId: string, stage: StageRecord, now: Date): void 
 export function heartbeat(jobId: string, now: Date): void {
   getDb()
     .prepare('UPDATE compilation_jobs SET heartbeat_at = ? WHERE id = ?')
+    .run(now.toISOString(), jobId);
+}
+
+/**
+ * ASK THE PROCESS BEHIND THIS JOB TO STOP.
+ *
+ * The flag is the only channel there is: a build runs in a worker process this
+ * one cannot signal, and it polls this row on its pulse. `requestCancel` writes
+ * it for a traveller pressing Stop — by trip, because that is what it is given —
+ * and the two *disown* paths write it by job id for the same reason, because
+ * disowning a job and stopping it are different acts and only the first of them
+ * was ever performed.
+ *
+ * A RECLAIMED BUILD WAS DISOWNED AND LEFT RUNNING. Reclaim flips a silent job
+ * to `compilation_interrupted` so the screen stops calling it alive, and the
+ * next request starts a fresh build. Nothing told the original process — which,
+ * in the case reclaim exists for, is stalled rather than dead — so two paid
+ * workers compiled one trip against the same providers.
+ */
+function requestStop(jobId: string, now: Date): void {
+  getDb()
+    .prepare(`UPDATE compilation_jobs SET cancel_requested = 1, updated_at = ? WHERE id = ?`)
     .run(now.toISOString(), jobId);
 }
 
@@ -738,16 +932,67 @@ export function failJob(input: {
  * longest single call the pipeline may make, and if the worker nonetheless
  * returns from the dead, `completeJob`/`failJob` refuse to overwrite the
  * terminal state this wrote.
+ *
+ * And it is *asked to stop* rather than only refused, because refusing its
+ * writes does not stop it spending: a stalled worker that came back would carry
+ * on paying providers for a build nobody will adopt, next to the replacement
+ * build the traveller has already been given. See `requestStop`.
  */
 export function reclaimAbandonedJob(tripId: string, now = new Date()): boolean {
   const active = getActiveJob(tripId);
   if (!active || !isAbandoned(active, now)) return false;
+  return reclaimJob(active, now);
+}
+
+/** The one write that ends a silent job, so the two callers cannot drift. */
+function reclaimJob(job: CompilationJob, now: Date): boolean {
+  requestStop(job.id, now);
   return failJob({
-    jobId: active.id,
+    jobId: job.id,
     code: 'compilation_interrupted',
     detail: 'The process running this compilation stopped answering.',
     now,
   });
+}
+
+/**
+ * THE SAME RECLAIM, ASKED ABOUT THE DEPLOYMENT RATHER THAN ABOUT ONE TRIP.
+ *
+ * `reclaimAbandonedJob` is driven by whoever opens *that* trip's page, which is
+ * exactly the person who cannot be relied upon to exist: the traveller whose
+ * worker died is the one who gave up and closed the tab. Their row then holds
+ * the deployment's only build slot, and the queue behind it waits for a corpse.
+ *
+ * Deliberately an extension of the existing mechanism rather than a second one:
+ * the same `isAbandoned` threshold, the same stop request, the same
+ * `compilation_interrupted` verdict, the same terminal-write guards. All this
+ * adds is that nobody has to be looking at the right page.
+ *
+ * Slot accounting does not depend on this — `occupiedCompilationSlots` already
+ * ignores a cold heartbeat, so a queued build starts without waiting for the
+ * sweep. What the sweep fixes is the *row*: without it the dead job stays
+ * `running` for ever and its trip can never start another build.
+ */
+export function reclaimAbandonedCompilations(now = new Date()): number {
+  const cutoff = new Date(now.getTime() - HEARTBEAT_TIMEOUT_MS).toISOString();
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM compilation_jobs
+        WHERE state IN ('queued','running')
+          AND waiting_since IS NULL
+          AND heartbeat_at < ?`,
+    )
+    .all(cutoff) as JobRow[];
+
+  let reclaimed = 0;
+  for (const row of rows) {
+    const job = rowToJob(row);
+    // Re-asked through `isAbandoned` rather than trusted from the SQL, so the
+    // one definition of "gone" stays in one place.
+    if (!job || !isAbandoned(job, now)) continue;
+    if (reclaimJob(job, now)) reclaimed += 1;
+  }
+  return reclaimed;
 }
 
 export function setJobStage(jobId: string, stage: CompilationStage, now: Date): void {

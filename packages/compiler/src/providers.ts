@@ -187,6 +187,16 @@ export interface DiscoveryResult {
      */
     insideSelected: number;
     membershipDecided: number;
+    /**
+     * Records a source publishes in a different country or region from the
+     * destination — the overlay's `outside_scope`, which is produced only by a
+     * levelled disagreement and never by a distance.
+     *
+     * Separate from `membershipDecided - insideSelected`, which also sweeps up
+     * gateways, expansion members and satellites — all of them legitimately
+     * outside and none of them evidence that we searched the wrong place.
+     */
+    refutedElsewhere: number;
     divisionsAvailable: number;
     scopeIdentityUnknown: boolean;
   };

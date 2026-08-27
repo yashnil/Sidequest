@@ -175,7 +175,20 @@ describe('an itinerary that says it succeeded', () => {
      * checked.
      */
     if (result.ok) {
-      const correctness = result.itinerary.issues.filter((issue) => issue.severity === 'error');
+      /*
+       * `coverage_below_pace` is excluded because it is not a correctness
+       * error, and this branch is about correctness.
+       *
+       * It is a `REQUEST_NOT_MET_CODES` finding — the days that were built are
+       * right and there are too few stops on them to call the result a trip —
+       * and this fixture is a two-place probe of a seasonal closure, which is a
+       * legitimately thin trip. The expectation moved when the readiness
+       * invariant learned that feasibility is not completeness; what this test
+       * guards, that a shipped plan carries no *broken* day, is unchanged.
+       */
+      const correctness = result.itinerary.issues.filter(
+        (issue) => issue.severity === 'error' && issue.code !== 'coverage_below_pace',
+      );
       expect(correctness).toEqual([]);
       /* A shipped plan has days in it. An empty itinerary is not a success. */
       expect(result.itinerary.days.length).toBeGreaterThan(0);

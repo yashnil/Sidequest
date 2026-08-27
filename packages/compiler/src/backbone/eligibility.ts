@@ -1,4 +1,10 @@
-import { isVisitableRole, type PlanningRole, type SourceRecord } from '@sidequest/core';
+import {
+  assessPlaceStanding,
+  hasSignificanceEvidence,
+  isVisitableRole,
+  type PlanningRole,
+  type SourceRecord,
+} from '@sidequest/core';
 import {
   classifySourceCategory,
   type TaxonomyClassification,
@@ -370,6 +376,10 @@ export const ROLE_REJECTION_REASONS = [
   'superseded_by_link',
   /** The record has no name a traveller could be shown. */
   'no_usable_name',
+  /** The record's own name is a company registration, not a place. */
+  'company_form_name',
+  /** The record's own name declares wholesale trade, and nothing vouches otherwise. */
+  'wholesale_trade_name',
   /** Short and ungated: a stop, never a morning. */
   'cannot_hold_a_day',
   /** The taxonomy already refused this record, and a refusal is a floor. */
@@ -396,6 +406,8 @@ export interface RoleBasis {
     | 'record_operating_status'
     | 'link_resolution'
     | 'missing_identity'
+    /** The record's own name declares a non-visitable entity. See `resolveRole`. */
+    | 'record_name_form'
     | 'stored_pack_role'
     | 'source_category';
   /** How the source's own vocabulary matched. */
@@ -443,6 +455,12 @@ export interface RoleEligibilityInput {
   sourceCategory: string;
   /** The source's category path, outermost first. */
   sourceCategoryPath?: readonly string[];
+  /**
+   * The record's own planning attributes, passed through to the taxonomy for
+   * its record-contradicts-claim checks (a "historic" site whose own recorded
+   * opening is this century). Never read here, and never a score.
+   */
+  attributes?: Readonly<Record<string, string>>;
   /** The record's name, so an unnamed record can be refused rather than shown. */
   name?: string;
   /** The source's own status. Never guessed, and honoured when present. */
@@ -474,6 +492,27 @@ export interface RoleEligibilityInput {
   packRole?: PlanningRole;
   /** True when link resolution decided another record carries this entity. */
   superseded?: boolean;
+  /**
+   * True when a significance channel that attests **the place itself** has
+   * fired for this record — an encyclopaedic entry, an encyclopaedic article, a
+   * second catalogue, a conferred designation, an authority's page addressed to
+   * it by name. Never an operator channel and never a name channel: those
+   * attest who runs a thing and what it is called, which is not what a
+   * contested branch guess needs vouched for.
+   *
+   * This is the one admissible seventh input, and it does not breach the "no
+   * scores" rule above because it is not a score: it is the same class of
+   * statement-by-somebody-else that `requiresSignificanceEvidence` already
+   * reads one gate later, arriving one gate earlier. A branch-matched record —
+   * the source named a family, not a thing — used to be refused before any
+   * evidence could be heard, and a fresh dense-metro audit showed what that
+   * eats: a real market published under a bare entertainment leaf died as
+   * `insufficient_travel_value` while carrying the exact witness the evidence
+   * gate downstream would have accepted. Prominence, completeness and interest
+   * still have no path in; a statement the wider world made about the place now
+   * does.
+   */
+  placeAttested?: boolean;
 }
 
 /**
@@ -507,6 +546,7 @@ export function assessRoleEligibility(input: RoleEligibilityInput): CandidateEli
   const taxonomy = classifySourceCategory({
     category: input.sourceCategory,
     ...(input.sourceCategoryPath ? { path: input.sourceCategoryPath } : {}),
+    ...(input.attributes ? { attributes: input.attributes } : {}),
   });
 
   const resolved = resolveRole(input, taxonomy);
@@ -525,18 +565,50 @@ export function assessRoleEligibility(input: RoleEligibilityInput): CandidateEli
   };
 }
 
+/**
+ * The witness a record carries on its own row, read through the significance
+ * model rather than reimplemented beside it.
+ *
+ * Two channels are reachable from a bare `SourceRecord`, and both attest the
+ * place: a knowledge-base entry (the record's own open identifier or
+ * encyclopaedia link — the same read the pack retention layer makes) and an
+ * authority's page addressed to the record by name. `assessPlaceStanding`
+ * decides which statements fire and `hasSignificanceEvidence` refuses the
+ * operator and name channels, so the "never a landlord's front door" rule is
+ * enforced by the model that owns it — a government URL that merely lists the
+ * record fires `authority_publication` and rescues nothing.
+ *
+ * Deliberately narrower than the inventory's own standing, which also sees
+ * cross-layer corroboration and twin-resolved knowledge-base entries — context
+ * a per-record function cannot have. A caller that holds that context passes
+ * the richer answer through `options.placeAttested`; this is the floor, not
+ * the ceiling.
+ */
+function recordCarriesPlaceWitness(record: SourceRecord): boolean {
+  return hasSignificanceEvidence(
+    assessPlaceStanding({
+      inKnowledgeBase:
+        record.wikidataId !== undefined || record.attributes.wikipedia !== undefined,
+      publishedSites: record.websiteCandidates,
+      subjectName: record.name,
+    }),
+  );
+}
+
 /** The same assessment, read straight off a normalised pack record. */
 export function assessRecordEligibility(
   record: SourceRecord,
-  options?: { superseded?: boolean },
+  options?: { superseded?: boolean; placeAttested?: boolean },
 ): CandidateEligibility {
   return assessRoleEligibility({
     sourceCategory: record.sourceCategory,
     sourceCategoryPath: record.sourceCategoryPath,
+    attributes: record.attributes,
     name: record.name,
     ...(record.operatingStatus ? { operatingStatus: record.operatingStatus } : {}),
     packRole: record.planningRole,
     ...(options?.superseded ? { superseded: true } : {}),
+    placeAttested: options?.placeAttested ?? recordCarriesPlaceWitness(record),
   });
 }
 
@@ -615,11 +687,114 @@ function resolveRole(
   }
 
   const confidence = CONFIDENCE_BY_MATCH[taxonomy.match.kind];
-  return {
-    ...roleForClassification(taxonomy),
-    confidence,
-    decidedBy: 'source_category',
-  };
+  const resolved = roleForClassification(taxonomy, {
+    placeAttested: input.placeAttested === true,
+  });
+
+  /**
+   * A NAME THAT DECLARES AN ENTITY OUTVOTES A CATEGORY THAT CLAIMS A PLACE —
+   * BUT ONLY WHERE A TRAVELLER WOULD BE SENT THERE.
+   *
+   * The taxonomy has excluded `person` and `company` since a live board
+   * carried one of each, and the exclusion fires on the *category*. It never
+   * fired on the record whose category asserts a market while its name is a
+   * company registration: a live dense-metro board's rainy-day shelf held a
+   * trading company — `(株)…`, the abbreviated 株式会社 every Japanese company
+   * registry writes — filed by the catalogue under a market leaf, and beside
+   * it the metropolitan *wholesale* meat market, a business-to-business
+   * facility a traveller cannot walk into, filed as a public market.
+   *
+   * Both facts are legible in the record's own name, and neither is a name in
+   * the forbidden sense: a legal form (株式会社, Co., Ltd, GmbH) and a trade
+   * designation (卸売, wholesale) are vocabulary words that mean the same
+   * thing in every city on earth, exactly like the category table's keys —
+   * the same class of read as the existing rule that a record named after its
+   * own category is a database row. Nothing here matches a proper name, and
+   * the check cannot live in `taxonomy.ts`, whose contract is that it never
+   * reads a name at all.
+   *
+   * Two boundaries keep the gate narrow. It runs only where the category
+   * resolved to a traveller-visitable role — a meal or a support stop keeps
+   * its role, because a kitchen operated by a limited company still serves
+   * lunch and was never a board card. And the wholesale read applies only to
+   * the market archetype, where retail-versus-wholesale is the live
+   * ambiguity, and it hears a place-attesting witness first: the rare
+   * wholesale market the world has written about — the kind with a public
+   * viewing deck — is a destination, and stays one.
+   */
+  if (ATTRACTION_ROLE_SET.has(resolved.role)) {
+    if (declaresCompanyForm(name)) {
+      return {
+        role: 'generic_commercial',
+        confidence: 1,
+        decidedBy: 'record_name_form',
+        reason: 'company_form_name',
+      };
+    }
+    if (
+      taxonomy.subrole === 'market' &&
+      declaresWholesaleTrade(name) &&
+      input.placeAttested !== true
+    ) {
+      return {
+        role: 'generic_commercial',
+        confidence: 1,
+        decidedBy: 'record_name_form',
+        reason: 'wholesale_trade_name',
+      };
+    }
+  }
+
+  return { ...resolved, confidence, decidedBy: 'source_category' };
+}
+
+/**
+ * Legal-form designators, at the edge of a name where a registry writes them.
+ *
+ * Every pattern is a corporate legal form from a public registry's own
+ * vocabulary — never a trade name, never a place word. Anchored to the start
+ * or end of the name because that is where a registry-style row carries them
+ * ("(株)X", "X株式会社", "X Co., Ltd."), and because anchoring is what keeps a
+ * name that merely *contains* a syllable — 株 alone is a plant's stock —
+ * from firing. The Latin-script forms must follow a space or stand alone, so
+ * "Thing" does not end in "inc" and a pub named "The Crown" cannot be caught.
+ */
+const COMPANY_FORM_PATTERNS: readonly RegExp[] = [
+  /^(?:株式会社|有限会社|合同会社|合資会社|合名会社)/u,
+  /(?:株式会社|有限会社|合同会社|合資会社|合名会社)$/u,
+  /^[(（]株[)）]/u,
+  /[(（]株[)）]$/u,
+  /^[(（]有[)）]/u,
+  /[(（]有[)）]$/u,
+  /^[㈱㈲㈾]/u,
+  /[㈱㈲㈾]$/u,
+  /(?:^|\s)(?:co\.?,?\s?ltd\.?|ltd\.?|inc\.?|llc\.?|gmbh|k\.k\.|s\.a\.|s\.r\.l\.|b\.v\.|pty\.?\s?ltd\.?)$/iu,
+];
+
+function declaresCompanyForm(name: string): boolean {
+  const trimmed = name.trim();
+  return COMPANY_FORM_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+/**
+ * Wholesale-trade designators, anywhere in the name.
+ *
+ * Unanchored, unlike the legal forms, because institutions write the word in
+ * the middle: a central wholesale market's official name is `…中央卸売市場…`.
+ * The word is a trade designation, not a proper name, and it is only ever
+ * read for the market archetype — a museum *about* wholesale trade keeps its
+ * museum word — and only when no place-attesting witness says the facility is
+ * a destination despite its trade.
+ */
+const WHOLESALE_TRADE_PATTERNS: readonly RegExp[] = [
+  /卸売/u,
+  /(?:^|[\s(（])wholesales?(?:[\s)）]|$)/iu,
+  /(?:^|[\s(（])wholesalers?(?:[\s)）]|$)/iu,
+];
+
+function declaresWholesaleTrade(name: string): boolean {
+  const trimmed = name.trim();
+  return WHOLESALE_TRADE_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
 /**
@@ -637,6 +812,7 @@ function resolveRole(
  */
 export function roleForClassification(
   taxonomy: TaxonomyClassification,
+  witness?: { placeAttested?: boolean },
 ): { role: CandidateRole; reason: RoleRejectionReason } {
   /**
    * The taxonomy's own refusal is a floor, and this is the line that makes it
@@ -716,7 +892,10 @@ export function roleForClassification(
       if (!isVisitableRole(taxonomy.role)) return utilityRoleFor(taxonomy.role);
       return taxonomy.subrole === 'market'
         ? { role: 'market', reason: 'food_category' }
-        : { role: attractionRole(taxonomy), reason: 'cannot_hold_a_day' };
+        : {
+            role: attractionRole(taxonomy, witness?.placeAttested === true),
+            reason: 'cannot_hold_a_day',
+          };
   }
 }
 
@@ -771,6 +950,7 @@ function utilityRoleFor(
  */
 function attractionRole(
   taxonomy: TaxonomyClassification,
+  placeAttested: boolean,
 ): AttractionRole | 'insufficient_travel_value' {
   // 1. A side quest is defined by not being able to hold a day. It wins first,
   //    so no later rule can hand it a morning.
@@ -818,6 +998,34 @@ function attractionRole(
     taxonomy.match.kind === 'source_branch' ||
     taxonomy.match.kind === 'no_recognised_category'
   ) {
+    /*
+     * THE ONE APPEAL A BRANCH MATCH HAS, AND WHO IS ALLOWED TO MAKE IT.
+     *
+     * The refusal above is right about the record on its own: a branch is not
+     * a permission, and an unlisted leaf under `active_life` is a gym until
+     * something says otherwise. But "something says otherwise" is exactly what
+     * a place-attesting witness is — the wider world wrote about this one
+     * record — and the refusal used to run before any evidence could be heard,
+     * which is the one place in the pipeline where evidence arrived after the
+     * filter and could not rescue. A fresh dense-metro audit found real
+     * subjects dying of it: a genuine market published under a bare
+     * entertainment leaf, refused with the very witness the significance gate
+     * one step downstream exists to accept.
+     *
+     * So a *witnessed* branch match is `discovery` — the honest tier for
+     * "real, vouched for, and the source never named the kind" — while the
+     * unwitnessed crowd keeps the refusal: the gym, the arcade and the
+     * fortune teller carry no statement by anybody else, so nothing changes
+     * for them. Two boundaries hold the rescue tight. The witness must attest
+     * the place (see `placeAttested`: never an operator's asset list, never a
+     * shared name). And it applies only where the branch itself is a
+     * visitable family — the taxonomy's own refusals (`excluded`, commerce,
+     * transport) returned above this function and remain floors no evidence
+     * can appeal, so a well-documented insurance office is still an insurance
+     * office. `no_recognised_category` stays refused too: with no family at
+     * all there is no archetype to borrow, so there is nothing to admit.
+     */
+    if (placeAttested && taxonomy.match.kind === 'source_branch') return 'discovery';
     return 'insufficient_travel_value';
   }
 

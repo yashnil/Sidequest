@@ -32,7 +32,8 @@ import {
 } from '@/lib/db/compiler-repository';
 import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
-import { sessionToken } from '@/lib/net/caller';
+import { guardAction, sessionToken } from '@/lib/net/caller';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 /**
  * TURNING A COMPOSER INTO A TRIP.
@@ -291,6 +292,24 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
   if (!reading.ok) return { ok: false, href: '', fieldErrors: reading.fieldErrors };
   const { input, answers, destination, region, basics } = reading;
 
+  /**
+   * THE FENCE IN FRONT OF THE ROW, NOT JUST IN FRONT OF THE SPEND.
+   *
+   * This was the one anonymous write loop outside the rate fences: every call
+   * writes a trips row plus composer answers and returns a redirect, nothing
+   * refuses at any layer, and nothing ever sweeps trips — a live database was
+   * already carrying dozens of ownerless rows no guard will ever list or
+   * delete. `decide_start` was fenced for exactly this shape ("two hundred
+   * POSTs were two hundred rows"); the trips surface now draws from the same
+   * machinery.
+   *
+   * After validation on purpose: a person correcting form errors resubmits,
+   * and a refused *invalid* payload writes nothing anyway — the token is spent
+   * where the row would be written.
+   */
+  const refusal = await guardAction('trip_create');
+  if (refusal) return { ok: false, href: '', error: refusal };
+
   let tripId: string;
   try {
     /*
@@ -342,6 +361,12 @@ export async function updateTripFromComposer(
   const existingTrip = getTrip(tripId);
   const existing = getIntent(tripId);
   if (!existingTrip) return { ok: false, href: '', error: 'We could not find that trip.' };
+  /*
+   * Only the browser that made a trip may rewrite it — the same boundary the
+   * delete and share doors hold. See `lib/net/trip-access`.
+   */
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, href: '', error: refusal };
 
   /**
    * NOT WHILE A BUILD IS RUNNING.

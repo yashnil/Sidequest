@@ -65,7 +65,6 @@ export interface RegionIntegrityIssue {
     | 'place_without_weather_location'
     | 'place_in_multiple_weather_locations'
     | 'weather_location_claims_unknown_place'
-    | 'place_missing_from_matrix'
     | 'base_missing_from_matrix'
     | 'primary_base_not_in_bases'
     | 'food_venue_missing_from_matrix'
@@ -97,9 +96,9 @@ export class RegionIntegrityError extends Error {
  * weather location claims falls back to whichever forecast a consumer reaches
  * for first. A place with no hours record is one the planner has to guess about,
  * and the guess it would make — "open whenever you like" — is the one that puts
- * somebody at a locked door. A place missing from the matrix throws at the
- * moment a day is laid out, which in the old code was outside every `try` and
- * went straight to a 500.
+ * somebody at a locked door. A base or food venue missing from the matrix
+ * breaks day layout and detour pricing; a *place* missing from it is a
+ * different sentence — see the matrix block below.
  */
 export function checkRegionIntegrity(region: CompiledRegion): RegionIntegrityIssue[] {
   const issues: RegionIntegrityIssue[] = [];
@@ -164,12 +163,22 @@ export function checkRegionIntegrity(region: CompiledRegion): RegionIntegrityIss
       .sort(),
   );
 
-  // The matrix. A missing row is a throw at day-layout time, not a warning.
-  push(
-    'place_missing_from_matrix',
-    'These have no travel-time row, so a day containing one cannot be laid out.',
-    placeIds.filter((id) => !matrixIds.has(id)).sort(),
-  );
+  /**
+   * The matrix — for bases and food, whose absence still breaks the machinery.
+   *
+   * A *place* absent from the matrix is deliberately not an issue any more.
+   * It used to be ("a missing row is a throw at day-layout time"), and the
+   * compiler honoured it by deleting every unmeasured place from the stored
+   * region — so on a live car-free build a routing shape artifact deleted the
+   * destination's walkable anchors from the traveller's board. Board
+   * membership is an admission decision; a journey nobody could measure is a
+   * per-stop fact the board renders as an unverified reach and the planner
+   * refuses per stop through the same reach machinery — a stop with no row
+   * resolves `unmeasured` before any day is laid out, so the throw this rule
+   * guarded against cannot be reached. Bases and food venues keep the strict
+   * rule: a day genuinely cannot start from, end at, or price a detour to a
+   * point with no row.
+   */
   push(
     'base_missing_from_matrix',
     'A base with no travel-time row cannot start or end a day.',

@@ -141,6 +141,18 @@ export interface RegionPackProvider {
     forceRefresh?: boolean;
     onProgress?: (progress: PackProgress) => void;
     signal?: AbortSignal;
+    /**
+     * The wall-clock instant the CALLER can afford acquisition until —
+     * typically the job's own deadline less a reserve for the stages after
+     * acquisition. Optional: absent, the provider's internal window arithmetic
+     * alone bounds the read, exactly as before this field existed. Present, it
+     * lets a completion pass keep buying windows for starved ground on a slow
+     * link instead of shipping a strictly worse pack while the job's real
+     * budget sits unspent — measured live: at ~0.4 MB/s a metropolis needs
+     * ~6–8 minutes of reading against a job deadline of twelve, and two fixed
+     * 100 s windows failed twelve consecutive rebuild rounds.
+     */
+    deadlineMs?: number;
   }): Promise<RegionPackOutcome>;
 }
 

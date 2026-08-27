@@ -9,9 +9,11 @@ import type { GeoBounds, GeographicScope, PackCell, PartitionPlan } from '@sideq
  * copying it into the new backbone would have carried the defect forward.
  *
  * What replaces it: a scope of any size becomes a set of bounded cells, each
- * small enough to scan and each carrying a priority so that a budget which
- * cannot cover every cell covers the ones nearest the traveller first. A partial
- * partition is a normal outcome with a number attached, not a failure.
+ * small enough to scan and each carrying a priority so that reads happen
+ * nearest the traveller first. The priority orders work; it never drops
+ * ground — every cell of a real scope is emitted, affordability is decided by
+ * the byte-priced scan, and only the `MAX_CELLS` memory backstop can truncate
+ * a (degenerate) partition, with the count recorded.
  *
  * Three properties this has to hold, and every one of them is tested:
  *
@@ -78,14 +80,30 @@ export function cellSizeFor(spanDegrees: number): number {
 export const CELL_OVERLAP_DEGREES = 0.005;
 
 /**
- * The global ceiling on cells for one pack build.
+ * The ceiling on cells for one pack build — a memory backstop, and it must
+ * never be read as a budget again.
  *
- * A country-sized scope would otherwise produce thousands. Beyond this the plan
- * keeps the highest-priority cells and records how many it dropped, so the pack
- * can say "we looked at the middle of this, not the edges" rather than implying
- * it read the lot.
+ * It was 24, and 24 was a budget: a read-cost proxy from before the scan
+ * priced its reads. A country-breadth scope partitions to about 45 cells, the
+ * cap kept the ones nearest the centroid, and for a coastal country that is
+ * the empty interior — the build dropped the edge cells holding the
+ * destination's biggest city, and every subject there was *never scheduled to
+ * be read*. No ranking, retention or budget downstream can recover ground the
+ * partition refused to look at.
+ *
+ * Cell count is not the read cost. The scan prices every read from the
+ * parquet footers before spending a byte (`projectedCostOf`), so a cell whose
+ * ground the source has nothing in costs ~nothing — the cost is overlapping
+ * compressed bytes, and the byte budget already bounds those. What a cell
+ * *does* cost is memory and bookkeeping: the plan is stored on the pack, and
+ * the extraction keeps per-cell structures. So a hard ceiling survives as a
+ * backstop against a degenerate scope — a geocoder bbox spanning a hemisphere
+ * — set an order of magnitude above the largest measured real destination
+ * grid (a 220 km country reach circle partitions to 45 cells). When it bites,
+ * the plan still keeps the cells nearest the traveller first and records how
+ * many it dropped, because that remains the honest degraded state.
  */
-export const MAX_CELLS = 24;
+export const MAX_CELLS = 512;
 
 /** Latitude degrees per kilometre. Longitude is scaled by the cosine below. */
 const KM_PER_DEGREE_LAT = 111;
@@ -183,12 +201,14 @@ function scopeCentre(scope: GeographicScope): { lat: number; lng: number } {
 }
 
 /**
- * Cells nearest the middle first, then the global cap, then the overlap.
+ * Cells nearest the middle first, then the backstop, then the overlap.
  *
- * Priority before truncation is the whole point: a budget that runs out should
- * cost a traveller the far corner of their region, not the town they are
- * sleeping in. Distance is measured on the cell centre, and ties break on the id
- * so that two runs order identically.
+ * Priority is a **read-order hint**: a byte budget that runs out mid-read
+ * should have spent what it had nearest the traveller first. It is not a
+ * licence to drop ground — every cell of a real scope is emitted, and the
+ * slice below is the memory backstop (`MAX_CELLS`), which no real destination
+ * grid reaches. Distance is measured on the cell centre, and ties break on
+ * the id so that two runs order identically.
  */
 function finalise(
   strategy: PartitionPlan['strategy'],

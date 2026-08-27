@@ -89,6 +89,10 @@ const ENV_KEYS = [
 beforeEach(() => {
   releaseDatabase();
   jar.clear();
+  // One stable browser identity: the ownership boundary refuses a request
+  // presenting no cookie, and every guard below is measured on an owner's
+  // ordinary presses. The per-caller ledger test keys on this same value.
+  jar.set('sidequest_session', 'test-browser');
   for (const key of ENV_KEYS) delete process.env[key];
   dir = mkdtempSync(join(tmpdir(), 'sidequest-action-guards-'));
   process.env.SIDEQUEST_DB_PATH = join(dir, 'test.db');
@@ -106,18 +110,21 @@ afterEach(() => {
 async function seededTrip(): Promise<string> {
   const { createTrip } = await import('@/lib/db/repository');
   const repo = await import('@/lib/db/compiler-repository');
-  const trip = createTrip({
-    mode: 'known_destination',
-    destinationInput: 'Harbour City',
-    regionId: 'open-world',
-    startDate: '2026-09-01',
-    endDate: '2026-09-04',
-    arrivalTime: '10:00',
-    departureTime: '18:00',
-    adults: 2,
-    children: 0,
-    travelerNeeds: [],
-  });
+  const trip = createTrip(
+    {
+      mode: 'known_destination',
+      destinationInput: 'Harbour City',
+      regionId: 'open-world',
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      arrivalTime: '10:00',
+      departureTime: '18:00',
+      adults: 2,
+      children: 0,
+      travelerNeeds: [],
+    },
+    'test-browser',
+  );
   repo.saveDestinationQuery(trip.id, 'known_destination', 'Harbour City');
   return trip.id;
 }

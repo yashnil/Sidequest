@@ -4,7 +4,8 @@ import type { ProvisionalIntent } from '@sidequest/core';
 import { ProvisionalBoardView } from '@/components/ProvisionalBoardView';
 import { getProvisionalBoard, getProvisionalSelections } from '@/lib/db/provisional-repository';
 import { getLatestJob } from '@/lib/db/compiler-repository';
-import { getTrip } from '@/lib/db/repository';
+import { ownedTrip } from '@/lib/net/trip-access';
+import { compiledRegionFor } from '@/lib/region';
 import { countTripDays, isTerminal } from '@sidequest/core';
 
 /**
@@ -31,7 +32,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const trip = getTrip(id);
+  const trip = await ownedTrip(id);
   return {
     title: trip
       ? `${trip.basics.destinationInput} — First look — Sidequest`
@@ -45,7 +46,11 @@ export default async function ProvisionalBoardPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const trip = getTrip(id);
+  /*
+   * The owner's trip or nothing — a foreign browser sees a missing trip, the
+   * same boundary every trip door holds. See `lib/net/trip-access`.
+   */
+  const trip = await ownedTrip(id);
   if (!trip) notFound();
 
   const board = getProvisionalBoard(id);
@@ -58,6 +63,15 @@ export default async function ProvisionalBoardPage({
 
   const job = getLatestJob(id);
   const stillRunning = job !== null && !isTerminal(job.state);
+  /*
+   * Whether the *finished* board exists yet — the thing the closing panel can
+   * honestly point at. The previous copy announced a board "below" that was
+   * not below: this page is the provisional board, and what checking produces
+   * lives on `/discover`. A finished check with no artifact is a build that
+   * failed, and the way forward for that is the progress screen, not a link
+   * to a board that is not there.
+   */
+  const finishedBoardReady = compiledRegionFor(id) !== null;
 
   const selections: Record<string, ProvisionalIntent | undefined> = {};
   for (const selection of getProvisionalSelections(id)) {
@@ -88,6 +102,7 @@ export default async function ProvisionalBoardPage({
           board={board}
           selections={selections}
           stillRunning={stillRunning}
+          finishedBoardReady={finishedBoardReady}
           /*
            * What "enough" is measured against. Read off the trip rather than
            * assumed, because the same forty places are generous for a weekend

@@ -51,6 +51,7 @@ import {
   type StructuredModel,
 } from '@/lib/providers/interpretation-model';
 import { boardFor, resolveTripRegion } from '@/lib/region';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { callerKey, chargeAction, checkAction } from '@/lib/net/caller';
 import { dailySpendGate, recordDailySpend } from '@/lib/compiler/daily-ceiling';
 
@@ -96,6 +97,10 @@ export async function saveDraftAction(
       : step;
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+    // Answers belong to the browser that made the trip — same boundary as
+    // every other trip door. See `lib/net/trip-access`.
+    const refusal = await tripAccessRefusal(tripId);
+    if (refusal) return { ok: false, error: refusal };
     saveAnswers(tripId, parsed.data, ordinal);
     return { ok: true };
   } catch (error) {
@@ -110,6 +115,8 @@ export async function completeQuestionnaireAction(
 ): Promise<SaveResult> {
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const parsed = validatedQuestionnaireAnswersSchema.safeParse(answers);
   if (!parsed.success) {
@@ -153,7 +160,12 @@ export async function completeQuestionnaireAction(
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
       const board = boardFor(trip, profile, resolved.context);
-      const selection = autoSelect({ candidates: board.candidates, profile, tripDays });
+      const selection = autoSelect({
+        candidates: board.candidates,
+        profile,
+        tripDays,
+        transitUnmeasured: board.transitUnmeasured,
+      });
       replaceAutoSelections(tripId, selection.selectedIds);
       boardIsUsable = true;
     }
@@ -220,6 +232,8 @@ export async function confirmInterpretationAction(
   tripId: string,
   keptChipIds: string[],
 ): Promise<{ ok: boolean; error?: string }> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
   const intent = getIntent(tripId);
   const composer = intent?.composer;
   if (!composer?.interpretation) {
@@ -334,6 +348,10 @@ export async function readUnresolvedTextAction(tripId: string): Promise<ReadRest
   const limited = await checkAction('interpret_text');
   if (limited) return { ok: false, error: limited };
   const caller = await callerKey();
+  // With the other awaits, above the synchronous prefix the lease's docblock
+  // depends on — ownership must not be the await that reopens that window.
+  const ownership = await tripAccessRefusal(tripId);
+  if (ownership) return { ok: false, error: ownership };
 
   const intent = getIntent(tripId);
   const composer = intent?.composer;

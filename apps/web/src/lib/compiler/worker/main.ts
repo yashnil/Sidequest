@@ -22,6 +22,7 @@ import { failJob, getJob } from '../../db/compiler-repository';
 import { getTrip } from '../../db/repository';
 import { runCompilation } from '../runner';
 import { compileDeadlineMs, DEADLINE_GRACE_MS } from '../limits';
+import { TIME_CEILING_DETAIL_PREFIX } from '../verdict';
 
 function argValue(argv: readonly string[], name: string): string | null {
   const prefix = `--${name}=`;
@@ -63,10 +64,17 @@ export async function workerMain(argv: readonly string[]): Promise<number> {
   const deadline = compileDeadlineMs();
   const killer = setTimeout(() => {
     try {
+      /*
+       * The detail leads with `TIME_CEILING_DETAIL_PREFIX` on purpose: it is
+       * how the verdict layer tells a clock-killed build apart from a genuinely
+       * exhausted lookup ledger, which share this error code. The first is
+       * transient — a warm retry usually finishes — and the traveller copy and
+       * the retry offer both hang on the distinction. See `../verdict.ts`.
+       */
       failJob({
         jobId,
         code: 'budget_exhausted',
-        detail: `Stopped at the overall time ceiling: the build ran past ${formatCompilationDuration(
+        detail: `${TIME_CEILING_DETAIL_PREFIX}: the build ran past ${formatCompilationDuration(
           Math.round(deadline / 1000),
         )} and its grace period without reaching a checkpoint.`,
         now: new Date(),

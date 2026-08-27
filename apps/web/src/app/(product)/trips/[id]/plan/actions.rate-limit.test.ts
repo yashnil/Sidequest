@@ -99,18 +99,24 @@ async function seededConfirmedTrip(): Promise<string> {
   const { compilerProviders } = await import('@/lib/compiler/providers');
   const { deriveScope, rebuildClarificationSet } = await import('@sidequest/compiler');
 
-  const trip = createTrip({
-    mode: 'known_destination',
-    destinationInput: 'Harbour City',
-    regionId: 'open-world',
-    startDate: '2026-09-01',
-    endDate: '2026-09-04',
-    arrivalTime: '10:00',
-    departureTime: '18:00',
-    adults: 2,
-    children: 0,
-    travelerNeeds: [],
-  });
+  const trip = createTrip(
+    {
+      mode: 'known_destination',
+      destinationInput: 'Harbour City',
+      regionId: 'open-world',
+      startDate: '2026-09-01',
+      endDate: '2026-09-04',
+      arrivalTime: '10:00',
+      departureTime: '18:00',
+      adults: 2,
+      children: 0,
+      travelerNeeds: [],
+    },
+    // Owned by the browser the cookie stub names: since the ownership
+    // boundary landed, an unowned trip is refused before the limiter — and
+    // the limiter is what this file measures.
+    'session-under-test',
+  );
   repo.saveDestinationQuery(trip.id, 'known_destination', 'Harbour City');
   const { providers } = compilerProviders();
   const resolution = await providers.resolver.resolve({ query: 'Harbour City', now: new Date() });
@@ -204,18 +210,21 @@ describe('resolveDestinationAction and the rate limit in front of the geocoder',
     const capacity = ACTION_RATE_RULES.destination_resolve.capacity;
     const trips: string[] = [];
     for (let index = 0; index <= capacity; index += 1) {
-      const trip = createTrip({
-        mode: 'known_destination',
-        destinationInput: 'Harbour City',
-        regionId: 'open-world',
-        startDate: '2026-09-01',
-        endDate: '2026-09-04',
-        arrivalTime: '10:00',
-        departureTime: '18:00',
-        adults: 2,
-        children: 0,
-        travelerNeeds: [],
-      });
+      const trip = createTrip(
+        {
+          mode: 'known_destination',
+          destinationInput: 'Harbour City',
+          regionId: 'open-world',
+          startDate: '2026-09-01',
+          endDate: '2026-09-04',
+          arrivalTime: '10:00',
+          departureTime: '18:00',
+          adults: 2,
+          children: 0,
+          travelerNeeds: [],
+        },
+        'session-under-test',
+      );
       repo.saveDestinationQuery(trip.id, 'known_destination', 'Harbour City');
       trips.push(trip.id);
     }

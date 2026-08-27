@@ -19,10 +19,13 @@ import type {
   OperatingHoursDataset,
   Place,
   QuestionnaireContext,
+  Region,
+  ScheduledNetworkPresence,
   TransitEvidence,
   TravelerNeed,
   WeatherDataset,
 } from '@sidequest/core';
+import type { TravelTimeMatrix } from '@sidequest/geo';
 import type { PlannerInput } from '../types';
 import {
   EASTERN_SIERRA,
@@ -147,10 +150,79 @@ export interface ScenarioOptions {
    * board and planner both see exactly the road matrix they always did.
    */
   transit?: TransitEvidence;
+  /**
+   * Whether the destination's own evidence records a scheduled network.
+   *
+   * Threaded to the board *and* to the planner from one place, because the two
+   * deciding it differently is the exact drift this builder exists to catch:
+   * the board's detour class and the planner's journey bound are the same
+   * verdict about the same journey. Absent is "nobody said", which is what
+   * every scenario written before the observation existed keeps.
+   */
+  scheduledNetwork?: ScheduledNetworkPresence | null;
+  /**
+   * WHICH FIXTURE WORLD THIS SCENARIO IS SET IN.
+   *
+   * Added because the shape that had to be tested could not be expressed:
+   * every founder journey behind the walking-bound defects is car-free, in a
+   * region whose evidence observes a scheduled network nobody could time, on a
+   * pedestrian matrix — and this builder was welded to a road region with a car
+   * and no timetables. A test that hand-builds its own board and its own
+   * planner input to get there proves nothing about the wiring, which is the
+   * failure the last wave shipped.
+   *
+   * Absent is the road region, unchanged in every particular.
+   */
+  world?: ScenarioWorld;
 }
 
+/**
+ * Everything a scenario needs that is a property of the destination rather than
+ * of the traveller.
+ *
+ * A world is swapped whole. Swapping half of one — new places against the old
+ * matrix, say — is how a fixture comes to describe a region nobody could
+ * travel, so the pieces that have to agree with each other are declared
+ * together and handed over together.
+ */
+export interface ScenarioWorld {
+  basics: TripBasics;
+  region: Region;
+  places: Place[];
+  access: AccessDataset;
+  hours: OperatingHoursDataset;
+  baseId: string;
+  /** Built per scenario, so the board's copy and the planner's cannot drift. */
+  matrix: () => TravelTimeMatrix;
+  weather: (dates: readonly string[], now: Date) => WeatherDataset;
+  /** Null for a world that bought no food data, which reads differently. */
+  food: FoodDataset | null;
+  /** The answers this world's traveller gives, before any caller override. */
+  answers: Partial<QuestionnaireAnswers>;
+}
+
+export const EASTERN_SIERRA_WORLD: ScenarioWorld = {
+  basics: AUGUST_BASICS,
+  region: EASTERN_SIERRA,
+  places: EASTERN_SIERRA_PLACES,
+  access: EASTERN_SIERRA_ACCESS,
+  hours: EASTERN_SIERRA_HOURS,
+  baseId: EASTERN_SIERRA_BASE_ID,
+  matrix: easternSierraTravelMatrix,
+  weather: (dates, now) =>
+    buildFixtureWeather({
+      regionId: EASTERN_SIERRA.id,
+      locations: EASTERN_SIERRA_WEATHER_LOCATIONS,
+      dates: [...dates],
+      now,
+    }),
+  food: EASTERN_SIERRA_FOOD,
+  answers: MAMMOTH_HIKER,
+};
+
 export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
-  const basics: TripBasics = { ...AUGUST_BASICS, ...options.basics };
+  const world = options.world ?? EASTERN_SIERRA_WORLD;
+  const basics: TripBasics = { ...world.basics, ...options.basics };
   const travelerNeeds = options.travelerNeeds ?? [];
   const tripDays = countTripDays(basics.startDate, basics.endDate);
   const context: QuestionnaireContext = { travelerNeeds, tripDays };
@@ -158,25 +230,18 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
   const base = defaultAnswers(context);
   const merged: QuestionnaireAnswers = {
     ...base,
-    ...MAMMOTH_HIKER,
+    ...world.answers,
     ...options.answers,
     interests: {
       ...base.interests,
-      ...MAMMOTH_HIKER.interests,
+      ...world.answers.interests,
       ...options.answers?.interests,
     },
   };
   const profile = buildTravelerProfile(merged, context);
 
   const now = options.now ?? FIXED_NOW;
-  const weather =
-    options.weather ??
-    buildFixtureWeather({
-      regionId: EASTERN_SIERRA.id,
-      locations: EASTERN_SIERRA_WEATHER_LOCATIONS,
-      dates: tripDates(basics.startDate, basics.endDate),
-      now,
-    });
+  const weather = options.weather ?? world.weather(tripDates(basics.startDate, basics.endDate), now);
 
   /*
    * One matrix, built once, handed to the board *and* to the planner below.
@@ -185,22 +250,25 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
    * from one source cannot drift, and drift between the board's world and the
    * planner's is the whole class of defect this file exists to catch.
    */
-  const matrix = easternSierraTravelMatrix();
+  const matrix = world.matrix();
 
   const board = buildDiscoveryBoard({
-    region: EASTERN_SIERRA,
-    places: options.places ?? EASTERN_SIERRA_PLACES,
+    region: world.region,
+    places: options.places ?? world.places,
     profile,
     months: tripMonths(basics.startDate, basics.endDate),
     dates: tripDates(basics.startDate, basics.endDate),
-    access: options.access ?? EASTERN_SIERRA_ACCESS,
-    hours: options.hours ?? EASTERN_SIERRA_HOURS,
+    access: options.access ?? world.access,
+    hours: options.hours ?? world.hours,
     weather,
     travelerNeeds,
     travel: {
       matrix,
       ...(options.transit === undefined ? {} : { transit: options.transit }),
-      baseId: EASTERN_SIERRA_BASE_ID,
+      baseId: world.baseId,
+      ...(options.scheduledNetwork === undefined
+        ? {}
+        : { scheduledNetwork: options.scheduledNetwork }),
     },
   });
 
@@ -208,7 +276,12 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
   if (options.selections) {
     selections = options.selections;
   } else {
-    const auto = autoSelect({ candidates: board.candidates, profile, tripDays });
+    const auto = autoSelect({
+      candidates: board.candidates,
+      profile,
+      tripDays,
+      transitUnmeasured: board.transitUnmeasured,
+    });
     selections = auto.selectedIds.map((placeId) => ({
       placeId,
       status: 'included' as const,
@@ -240,22 +313,27 @@ export function buildScenario(options: ScenarioOptions = {}): PlannerInput {
     else selections.push(row);
   }
 
+  const food = options.food === null ? null : (options.food ?? world.food);
+
   return {
     tripId: 'trip-fixture',
     basics,
     profile,
-    region: EASTERN_SIERRA,
+    region: world.region,
     candidates: board.candidates,
     selections,
     matrix,
     ...(options.transit === undefined ? {} : { transit: options.transit }),
-    access: options.access ?? EASTERN_SIERRA_ACCESS,
-    hours: options.hours ?? EASTERN_SIERRA_HOURS,
+    access: options.access ?? world.access,
+    hours: options.hours ?? world.hours,
     weather,
-    ...(options.food === null ? {} : { food: options.food ?? EASTERN_SIERRA_FOOD }),
+    ...(food ? { food } : {}),
     ...(options.foodSelections ? { foodSelections: options.foodSelections } : {}),
+    ...(options.scheduledNetwork === undefined
+      ? {}
+      : { scheduledNetwork: options.scheduledNetwork }),
     now,
-    baseId: EASTERN_SIERRA_BASE_ID,
+    baseId: world.baseId,
     generatedAt: '2026-07-30T12:00:00.000Z',
   };
 }

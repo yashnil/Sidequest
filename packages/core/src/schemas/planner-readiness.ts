@@ -51,7 +51,18 @@ export const PLANNER_READINESS_LEVELS = [
   'ready',
   /** Something was placed, and less than was asked for. Usable, and honest. */
   'partial',
-  /** Nothing could be placed. The itinerary is withheld. */
+  /**
+   * Not enough to plan on: nothing was placed, or so little across so few days
+   * that the result is not a trip.
+   *
+   * Widened from "nothing was placed" deliberately. A six-day plan holding one
+   * stop, with five days reading "An open day … Nothing scheduled", is not a
+   * milder version of a full trip — it is the same answer as zero with one stop
+   * on it, and it was reading as `ready` because the only completeness question
+   * anybody asked was how much of the *selection* survived. The itinerary is
+   * still withheld only at zero (`mayShowItinerary`); above it the plan is shown
+   * and this level is what stops any surface calling it finished.
+   */
   'insufficient',
   /** Nothing could be measured, because something upstream did not answer. */
   'infrastructure_failure',

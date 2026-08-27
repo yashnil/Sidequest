@@ -151,6 +151,27 @@ export const travelSegmentSchema = z
     provenance: z.enum(['measured', 'modelled', 'official', 'estimated', 'unmeasured']),
     /** Required exactly when `provenance` is `unmeasured`. */
     unmeasuredReason: unmeasuredTravelReasonSchema.optional(),
+    /**
+     * SET WHEN `mode` ABOVE IS A STAND-IN RATHER THAN THE JOURNEY.
+     *
+     * A car-free trip through a served region whose scheduled journeys nobody
+     * could time is priced on the only network anybody measured — the
+     * pedestrian one. The resolver keeps that walk rather than inventing a
+     * train, so `mode` reads `walk` and `minutes` is the measured walk: an
+     * honest upper bound on a journey the traveller will make by rail.
+     *
+     * The flag is what stops every reader downstream taking the stand-in for
+     * the fact. Without it the only surface that knew was the row title, and
+     * the mode chip beside it said WALK, the day booked all of it to
+     * `walkMinutes`, and five separate strings told somebody who answered
+     * twenty-five minutes to plan two hours on their feet. Anything that
+     * classifies, totals or describes a leg by its mode must ask this first.
+     *
+     * Optional rather than defaulted, like `daylightOnly` above: absent means
+     * the mode is the journey, and every ordinary leg on every timeline would
+     * otherwise have to carry a `false` that says nothing.
+     */
+    unverifiedScheduled: z.literal(true).optional(),
   })
   .refine((leg) => (leg.provenance === 'unmeasured') === (leg.minutes === null), {
     message: 'A leg has a duration when and only when somebody measured or published one',
@@ -163,6 +184,16 @@ export const travelSegmentSchema = z
   .refine((leg) => leg.provenance === 'unmeasured' || leg.unmeasuredReason === undefined, {
     message: 'A leg with a duration cannot also carry a reason for having none',
     path: ['unmeasuredReason'],
+  })
+  /*
+   * A measured walk is not a measurement of the journey it stands in for, so no
+   * screen may put a measurement's confidence behind a duration for a route
+   * nobody could confirm. `modelled` is the only honest label for it, and
+   * refusing the plan at the door is cheaper than finding out from a badge.
+   */
+  .refine((leg) => leg.unverifiedScheduled !== true || leg.provenance === 'modelled', {
+    message: 'A journey nobody could verify cannot carry a measurement’s confidence',
+    path: ['provenance'],
   });
 export type TravelSegment = z.infer<typeof travelSegmentSchema>;
 
@@ -366,6 +397,26 @@ export const dayTotalsSchema = z
     /** On foot to reach something, not on foot as the activity itself. */
     walkMinutes: z.number().int().min(0),
     waitMinutes: z.number().int().min(0),
+    /**
+     * TIME THE DAY HOLDS FOR A JOURNEY NOBODY COULD PRICE.
+     *
+     * Its own bucket because none of the four above can hold it honestly. The
+     * minutes are real — the schedule reserves them and the traveller loses
+     * them — but the mode they were measured in is a stand-in: a walk priced on
+     * the only network anybody measured, standing in for a scheduled journey
+     * the compilation signed it could not time. Booking them to `walkMinutes`
+     * was the audited defect: a car-free day stored
+     * `{"travelMinutes":124,"walkMinutes":124}` for a traveller who answered
+     * twenty-five minutes, and every surface reading that total repeated it.
+     *
+     * It still sums into `travelMinutes`, because the day genuinely spends it.
+     * What it must never do is join a total that names a mode.
+     *
+     * Defaulted rather than required at the door, so a plan stored before this
+     * bucket existed still reads back — every leg on one was classified by its
+     * mode, which is the same as having none of these minutes.
+     */
+    unverifiedMinutes: z.number().int().min(0).default(0),
     /** Road distance only. A shuttle ride adds minutes here, not kilometres. */
     travelKm: z.number().min(0),
     freeMinutes: z.number().int().min(0),
@@ -384,7 +435,11 @@ export const dayTotalsSchema = z
   .refine(
     (totals) =>
       totals.travelMinutes ===
-      totals.driveMinutes + totals.transitMinutes + totals.walkMinutes + totals.waitMinutes,
+      totals.driveMinutes +
+        totals.transitMinutes +
+        totals.walkMinutes +
+        totals.waitMinutes +
+        totals.unverifiedMinutes,
     {
       message: 'Total transport time must be the sum of its parts',
       path: ['travelMinutes'],
@@ -583,12 +638,14 @@ export const transportStrategySchema = z.object({
   transitSummary: z.string().min(1),
   seasonalWarnings: z.array(z.string().min(1)).default([]),
   verifyBeforeTravel: z.array(z.string().min(1)).default([]),
-  /** Totals across the whole trip, in the same four buckets as a day. */
+  /** Totals across the whole trip, in the same five buckets as a day. */
   totals: z.object({
     driveMinutes: z.number().int().min(0),
     transitMinutes: z.number().int().min(0),
     walkMinutes: z.number().int().min(0),
     waitMinutes: z.number().int().min(0),
+    /** See `dayTotalsSchema.unverifiedMinutes`. Never folded into the four. */
+    unverifiedMinutes: z.number().int().min(0).default(0),
     driveKm: z.number().min(0),
   }),
   /** Says in one line where the numbers came from. Never omitted. */
@@ -670,6 +727,22 @@ export const VALIDATION_ISSUE_CODES = [
   'base_not_returned',
   'inconsistent_timestamps',
   'empty_itinerary',
+  /**
+   * Days were built and too little went on them to call the result a trip.
+   *
+   * Its own code rather than a second reading of `empty_itinerary`, because the
+   * two are different states with the same cause and only one of them withholds
+   * the plan: nothing scheduled is a refusal, and one stop across six days is a
+   * plan that exists and cannot be presented as finished. A live build produced
+   * the second and headed it "Ready, with cautions", because the status came
+   * from conflicts alone and no conflict had occurred — every day was internally
+   * valid and five of them were empty.
+   *
+   * A `REQUEST_NOT_MET_CODES` error, deliberately: the days that were built are
+   * correct, so refusing the whole trip would replace a thin plan with no plan,
+   * and the traveller is the one who decides what to do about it.
+   */
+  'coverage_below_pace',
   // --- Transportation and access ---------------------------------------
   'required_mode_unavailable',
   'service_out_of_season',
@@ -1009,8 +1082,16 @@ export function itineraryStructureFingerprint(itinerary: Itinerary): string {
             item.placeId ?? '-',
             item.startMinute,
             item.endMinute,
+            /*
+             * Whether the mode is the journey is part of the commitment, so it
+             * is fingerprinted beside it: this function's charter names
+             * "quietly turning a shuttle ride into a drive" as the thing it
+             * exists to stop, and turning a journey nobody could price back
+             * into a walk is the same move. Appended only where it is set, so
+             * every ordinary leg fingerprints exactly as it always did.
+             */
             item.travel
-              ? `${item.travel.mode}/${item.travel.role}/${item.travel.fromId}>${item.travel.toId}`
+              ? `${item.travel.mode}${item.travel.unverifiedScheduled ? '~unverified' : ''}/${item.travel.role}/${item.travel.fromId}>${item.travel.toId}`
               : '-',
             item.hours
               ? `${item.hours.openMinute}-${item.hours.closeMinute}/${item.hours.lastAdmissionMinute ?? '-'}`

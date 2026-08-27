@@ -230,7 +230,20 @@ export function CompilationProgress({
     return () => clearInterval(timer);
   }, [live]);
 
-  const phases = narrateOneAtATime(groupStages(stages, now));
+  /*
+   * THE CLOCK A DEAD BUILD'S DURATIONS ARE MEASURED AGAINST IS THE BUILD'S OWN.
+   *
+   * `groupStages` computes a running phase's elapsed against the clock it is
+   * handed. Handing it the ticking client clock is right while a process is
+   * alive and produced "Finding the strongest places · 9h 15m" on a build that
+   * ran fourteen minutes and stopped nine hours before somebody opened the
+   * page: the unfinished phase's elapsed was wall-clock-since-start, live and
+   * ticking, on a terminal job. So a build nothing is running is measured
+   * against the last instant it demonstrably wrote — its durations freeze at
+   * what the build actually spent, and can never tick again.
+   */
+  const clock = live ? now : (lastRecordedInstant(stages, startedAt) ?? now);
+  const phases = narrateOneAtATime(groupStages(stages, clock));
 
   /*
    * The identity of the run this panel is describing.
@@ -257,9 +270,15 @@ export function CompilationProgress({
    * screen looks like a much worse bug than it is.
    */
   const startedMs = startedAt ? Date.parse(startedAt) : Number.NaN;
+  /*
+   * Against the same clock as the phases: on a live build that is the ticking
+   * client clock, on a dead one it is the last instant the build wrote — so
+   * "a part cannot be longer than the whole" below compares a frozen part with
+   * a frozen whole rather than with nine hours of nobody looking.
+   */
   const totalElapsed = Number.isNaN(startedMs)
     ? null
-    : Math.max(0, Math.round((now.getTime() - startedMs) / 1000));
+    : Math.max(0, Math.round((clock.getTime() - startedMs) / 1000));
 
   /*
    * A stopped build reports when it stopped, not how long it has been stopped.
@@ -410,13 +429,19 @@ export function CompilationProgress({
                   the whole of it had run for two minutes.
 
                   A part cannot be longer than the whole, and that is a check
-                  the page can actually make, so it makes it.
+                  the page can actually make, so it makes it. There is no null
+                  escape hatch any more: a build with no known start has no
+                  provable whole, and a duration that cannot be checked against
+                  the whole is not rendered — that unguarded path is exactly how
+                  a stopped build once ticked "9h 15m" against the viewer's
+                  clock.
                 */}
                 <span className="shrink-0 text-xs text-ink-faint">
                   {phase.done} of {phase.total} steps
                   {phase.elapsedSeconds !== undefined &&
                   phase.elapsedSeconds > 1 &&
-                  (totalElapsed === null || phase.elapsedSeconds <= totalElapsed)
+                  totalElapsed !== null &&
+                  phase.elapsedSeconds <= totalElapsed
                     ? ` · ${formatElapsed(phase.elapsedSeconds)}`
                     : ''}
                 </span>
@@ -459,7 +484,7 @@ export function CompilationProgress({
         </Panel>
       ) : null}
 
-      <StageDisclosure stages={stages} {...(reusedSummary ? { reusedSummary } : {})} />
+      <StageDisclosure stages={stages} live={live} {...(reusedSummary ? { reusedSummary } : {})} />
 
       {/*
         The reassurance is only true while the build is alive. Telling somebody
@@ -478,6 +503,33 @@ export function CompilationProgress({
 }
 
 /**
+ * THE LAST INSTANT A BUILD DEMONSTRABLY WROTE ANYTHING.
+ *
+ * The freeze point for a terminal build's durations. The observed pair is
+ * preferred where it exists, exactly as `groupStages` prefers it; the injected
+ * pair is the fallback for rows recorded before the split; the job's own
+ * `startedAt` is the floor for a build that died before any stage reported.
+ * Null only when there is no timestamp anywhere, in which case the caller has
+ * nothing honest to measure against and shows no durations at all.
+ */
+export function lastRecordedInstant(
+  stages: readonly StageRecord[],
+  startedAt?: string,
+): Date | null {
+  const instants = stages
+    .flatMap((record) => [
+      record.observedFinishedAt ?? record.finishedAt,
+      record.observedStartedAt ?? record.startedAt,
+    ])
+    .map((value) => (value ? Date.parse(value) : Number.NaN))
+    .filter((value) => !Number.isNaN(value));
+  const startedMs = startedAt ? Date.parse(startedAt) : Number.NaN;
+  if (!Number.isNaN(startedMs)) instants.push(startedMs);
+  if (instants.length === 0) return null;
+  return new Date(Math.max(...instants));
+}
+
+/**
  * What a stage with no registry entry is called on screen.
  *
  * Unreachable through the typed path — `StageRecord.stage` is the registry's
@@ -486,6 +538,27 @@ export function CompilationProgress({
  * reaches a screen. It says nothing rather than saying an identifier.
  */
 const UNREGISTERED_STAGE = 'A step of the build';
+
+/**
+ * A STAGE'S STATUS WORD, WITH THE TENSE THE JOB'S LIVENESS DECIDES.
+ *
+ * A stage record cannot know whether the process that wrote it is still alive,
+ * so a build left at `partial` rendered `waiting — Going back over what we
+ * found` between rows marked done, hours after its own ledger row recorded a
+ * finish — the page claiming "still waiting" and "stopped" at once. The phase
+ * cards were taught this distinction (`STOPPED_PHASE_LABEL`); the stage rows
+ * in the disclosure were not.
+ *
+ * On a build nothing is running, every row resolves: a queued stage was never
+ * reached and says so, an open one stopped part-way. Nothing may read
+ * `waiting` when there is nothing left to wait for.
+ */
+export function stageStatusLabel(status: StageRecord['status'], live: boolean): string {
+  if (live) return status;
+  if (status === 'waiting') return 'not reached';
+  if (status === 'running') return 'stopped';
+  return status;
+}
 
 /**
  * EVERY STAGE, WITH THE TIME IT ACTUALLY TOOK.
@@ -502,9 +575,16 @@ const UNREGISTERED_STAGE = 'A step of the build';
  */
 export function StageDisclosure({
   stages,
+  live,
   reusedSummary,
 }: {
   stages: StageRecord[];
+  /**
+   * Whether a process is still working on this build. Decides the stage rows'
+   * tense: a terminal build has no `waiting` rows, only `not reached` ones.
+   * Required rather than defaulted so a third call site cannot forget it.
+   */
+  live: boolean;
   /**
    * What this build did not have to buy, in the reusing stage's own words.
    *
@@ -543,7 +623,9 @@ export function StageDisclosure({
               const measured = observedDurationMs(stage);
               return (
                 <li key={stage.stage} className="flex items-baseline gap-3 text-sm">
-                  <span className="w-16 shrink-0 text-xs text-ink-faint">{stage.status}</span>
+                  <span className="w-16 shrink-0 text-xs text-ink-faint">
+                    {stageStatusLabel(stage.status, live)}
+                  </span>
                   <span className="min-w-0 flex-1">
                     {/*
                       The registry's label, or an honest placeholder — never the

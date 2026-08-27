@@ -145,6 +145,50 @@ export type RoutingDiagnostics = z.infer<typeof routingDiagnosticsSchema>;
 
 export const COMPILED_REGION_VERSION = 1 as const;
 
+/**
+ * The counting rule behind a persisted scheduled-stop observation.
+ *
+ * Versioned separately from the artifact schema because the two change for
+ * different reasons: the artifact's shape is a parsing contract, while this
+ * number names *what was counted*. If the counting rule ever changes — a new
+ * kind admitted, a different closed-stop policy — the new counts are a
+ * different claim, and a reader that only knows this rule must treat them as
+ * "nobody said" rather than quietly reinterpret them. `scheduledNetworkFrom`
+ * in `travel/scheduled-stops.ts` is that reader.
+ */
+export const SCHEDULED_STOP_OBSERVATION_VERSION = 1 as const;
+
+/**
+ * HOW MANY SCHEDULED-NETWORK STOPS THE DESTINATION EVIDENCE RECORDS, BY KIND.
+ *
+ * The observation `ScheduledNetworkPresence` (travel/reach.ts) says only the
+ * compiler can make, persisted so the live path can read it. Until this field
+ * existed the compiled artifact held one kinds-blind gateway count, so a
+ * destination whose ground records a hundred rail stations and one whose ways
+ * in are two airports and a harbour were the same number — and the
+ * transit-blind verdict stayed dead code on the live path for want of the one
+ * fact it turns on.
+ *
+ * `byKind` is keyed by the **source vocabulary's own category strings** —
+ * `railway_station`, `train_station`, `bus_station`, `ferry_terminal` — kept
+ * permissive here because which kinds exist is the counting rule's knowledge
+ * (see `SCHEDULED_STOP_KINDS`), not the parser's. The counts are of source
+ * *records* as the pack layers hold them, not of deduplicated stations: two
+ * catalogues each recording one station legitimately count twice, because the
+ * claim this backs is presence, never size.
+ *
+ * `total` is precomputed and stored so no reader re-derives it differently.
+ */
+export const scheduledStopObservationSchema = z.object({
+  /** Which counting rule produced this. See the version constant above. */
+  version: z.number().int().min(1),
+  /** Record counts keyed by the source's own category string. */
+  byKind: z.record(z.string().min(1), z.number().int().nonnegative()),
+  /** The sum over `byKind`, stored rather than re-derived. */
+  total: z.number().int().nonnegative(),
+});
+export type ScheduledStopObservation = z.infer<typeof scheduledStopObservationSchema>;
+
 /** What a base is for. A trip has one primary base; the rest hang off it. */
 export const BASE_ROLES = [
   'primary_base',
@@ -805,6 +849,19 @@ export const compiledRegionSchema = z.object({
    * substitution the two fields are separate to prevent.
    */
   transitEvidence: transitEvidenceSchema.optional(),
+
+  /**
+   * The kind-aware scheduled-stop count the pack layers held at compile time.
+   *
+   * Optional, and the absence is load-bearing exactly as `transitEvidence`'s
+   * is: every artifact compiled before this existed — and every build that had
+   * no region pack to read — carries nothing here, which must be read as
+   * "nobody said" and never as a counted zero. A counted zero is itself
+   * persisted (`total: 0`), because "the evidence was read and records no
+   * scheduled stop" is a claim worth keeping and the absence is not allowed to
+   * impersonate it.
+   */
+  scheduledStops: scheduledStopObservationSchema.optional(),
 
   /**
    * The multi-base structure this region was routed and planned as.
