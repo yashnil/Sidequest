@@ -460,7 +460,22 @@ export function scheduledTransportUnmeasured(knowledge: TravelKnowledge): boolea
 export function describeTransitBlindWalk(
   walkMinutes: number,
   formatMinutes: (minutes: number) => string,
+  options?: { pastDayBudget?: boolean },
 ): string {
+  /*
+   * The same sentence with the refusal in it, for the journey the day cannot
+   * hold at walking pace.
+   *
+   * Without this branch the two facts reached the traveller as two
+   * contradictory sentences on one card: a confident "2 hr 17 min on foot from
+   * base" beside "we cannot say how far away it really is". Both were derived
+   * from the same walk; only the second was true about the journey. Said
+   * together and in that order — what nobody verified first, then what the one
+   * priced option would cost — the card makes one claim instead of two.
+   */
+  if (options?.pastDayBudget === true) {
+    return `We could not verify the transit route yet; on foot it would be about ${formatMinutes(walkMinutes)} each way, more than a day here can hold`;
+  }
   return `We could not verify the transit route yet; about ${formatMinutes(walkMinutes)} on foot`;
 }
 

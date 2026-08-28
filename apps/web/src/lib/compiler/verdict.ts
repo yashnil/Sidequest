@@ -144,6 +144,31 @@ export function compilationVerdict(job: {
     };
   }
 
+  /**
+   * A BUILD THE TRAVELLER STOPPED IS THE MOST RESTARTABLE THING HERE.
+   *
+   * `isRetryable` answers a different question from this field, and conflating
+   * them left a one-way door. It asks whether a *failure* was transient and
+   * worth another attempt on its own merits — and a cancellation is not a
+   * failure at all, so it answers no, correctly. This field decides whether the
+   * screen offers the traveller the button, and there the answer is obviously
+   * yes: they pressed stop, and picking it up again is the whole reason they
+   * would come back.
+   *
+   * What the conflation produced: pressing "Stop this build" left the plan
+   * screen on its `compiling` step forever with no retry control, while the
+   * trip list labelled the same trip "You stopped this" and offered "Pick it up
+   * again" — pointing at a screen with no way to do it. `retryCompilationAction`
+   * accepts a cancelled job already; there was simply no button.
+   */
+  if (job.errorCode === 'cancelled_by_user') {
+    return {
+      cause: job.errorCode,
+      message: COMPILATION_ERROR_COPY[job.errorCode],
+      retryable: true,
+    };
+  }
+
   return {
     cause: job.errorCode,
     message: COMPILATION_ERROR_COPY[job.errorCode],

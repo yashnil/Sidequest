@@ -147,10 +147,21 @@ describe('the fence a rotating header cannot escape', () => {
 });
 
 describe('the caller key the daily ledger charges', () => {
-  it('is the browser session when there is no trustworthy address', async () => {
-    const { callerKey } = await import('./caller');
+  it('is the browser session once the browser has kept one, and nothing before', async () => {
+    const { callerKey, sessionToken } = await import('./caller');
+    /*
+     * The first request carries no cookie, and a cookie the server would mint
+     * for it is not an identity: a caller that discards every `Set-Cookie`
+     * would otherwise be handed a fresh signed identity — and a fresh personal
+     * allowance — on every request, which is the per-caller fence opening for
+     * the one caller it exists to close on.
+     */
+    expect(await callerKey()).toBeNull();
+
+    const minted = await sessionToken({ mint: true });
+    expect(minted).not.toBeNull();
     const first = await callerKey();
-    expect(first).toMatch(/^session:/);
+    expect(first).toBe(`session:${minted}`);
     // Stable across requests from the same browser, which is what makes a
     // per-caller daily share mean anything.
     expect(await callerKey()).toBe(first);

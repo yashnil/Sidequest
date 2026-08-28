@@ -77,6 +77,7 @@ function realItinerary(): Itinerary {
       },
       preferenceSignals: [],
       pace: 'balanced',
+      freeTime: 'balanced',
       dayStart: 'early',
       dailyIntensity: 'moderate',
       budgetStyle: 'midrange',

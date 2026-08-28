@@ -340,6 +340,97 @@ describe('a leg short enough that walking beats parking', () => {
     }
   });
 
+  /**
+   * THE CAR STAYS WHERE IT WAS LEFT.
+   *
+   * The vehicle was moved on the access rule's *declared* mode, so the moment a
+   * shorter measured walk won an approach the car was recorded as having driven
+   * there. A delivered road day walked to two city squares and then "drove"
+   * from the second, with no leg back to the vehicle anywhere in it: not
+   * executable as printed, and short by the walk nobody booked.
+   */
+  it('does not drive on from a stop it walked to without going back for the car', () => {
+    /*
+     * Two days rather than four, so the packer has to put the walked stop and a
+     * driven one on the same day — which is the only shape that can show this.
+     * With one stop a day the traveller always returns to base before the next
+     * drive and the car's recorded position never matters.
+     */
+    const plan = planTrip(
+      buildScenario({
+        world: COMPACT_TOWN,
+        answers: ANSWERS,
+        basics: { startDate: '2026-08-12', endDate: '2026-08-13' },
+        manualIncludes: [IDS.adjacent, IDS.acrossTown, IDS.outOfTown],
+      }),
+    );
+    expect(plan.ok, plan.ok ? '' : plan.message).toBe(true);
+    if (!plan.ok) return;
+
+    /*
+     * A drive can only set off from somewhere the car actually is: the base, or
+     * a place a previous drive leg arrived at. Under the defect the car was
+     * recorded at a square the traveller had *walked* to, so the day either
+     * drove out of it — a vehicle that teleported — or booked a "walk back to
+     * the car" to a car park nobody had ever driven to.
+     */
+    for (const day of plan.itinerary.days) {
+      const drivenTo = new Set<string>([day.baseId]);
+      for (const item of day.items) {
+        if (item.kind !== 'travel' || !item.travel) continue;
+        if (item.travel.mode === 'drive') {
+          expect(
+            drivenTo.has(item.travel.fromId),
+            `day ${day.dayNumber}: "${item.title}" drives out of ${item.travel.fromId}, where no car ever arrived`,
+          ).toBe(true);
+          drivenTo.add(item.travel.toId);
+        }
+      }
+    }
+  });
+
+  /**
+   * A stop this plan reached on foot is not a stop a car-free trip would lose.
+   *
+   * The without-a-car sentence counted from the access dataset alone, which
+   * says which *published services* reach a place and nothing about a walk —
+   * a walk needs no rule. Every access rule in this world is `drive`, and the
+   * planner walks to the adjacent square anyway, which is precisely the shape
+   * the delivered contradiction had.
+   */
+  it('does not count a stop it walked to among those a car-free trip would lose', () => {
+    const plan = planTrip(scenario());
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+
+    const walkedTo = new Set(
+      plan.itinerary.days.flatMap((day) =>
+        day.items
+          .filter((item) => item.travel !== undefined && item.travel.mode !== 'drive')
+          .map((item) => item.travel!.toId),
+      ),
+    );
+    expect(
+      walkedTo.has(IDS.adjacent),
+      'the scenario must walk to the adjacent square or it asserts nothing',
+    ).toBe(true);
+
+    const sentence = plan.itinerary.transportStrategy.withoutPrimary ?? '';
+    const claimed = /(\d+) of the (\d+) stops/.exec(sentence);
+    const scheduled = new Set(
+      plan.itinerary.days.flatMap((day) =>
+        day.items.filter((item) => item.placeId).map((item) => item.placeId!),
+      ),
+    );
+    const reachedOnFoot = [...scheduled].filter((id) => walkedTo.has(id));
+    expect(reachedOnFoot.length).toBeGreaterThan(0);
+    if (!claimed) return; // "Every stop is also reachable without a car" — the other sentence.
+    expect(
+      Number(claimed[1]),
+      `${sentence} — but ${reachedOnFoot.length} of them were reached without one`,
+    ).toBeLessThanOrEqual(Number(claimed[2]) - reachedOnFoot.length);
+  });
+
   it('leaves a leg walking plainly loses as the measured drive it is', () => {
     const plan = planTrip(scenario());
     expect(plan.ok).toBe(true);

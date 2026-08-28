@@ -202,20 +202,10 @@ export async function itineraryViewModel(
            * sentence stays one the model actually computed about *that* place.
            */
           const used = new Set<string>();
-          for (const candidate of board.candidates) {
-            const why = candidate.fit.reasons.find((reason) => !used.has(reason))
-              ?? candidate.fit.reasons[0];
-            if (why) used.add(why);
-            rationale[candidate.place.id] = {
-              /*
-               * The name the board showed, so the plan and the board agree on
-               * what a place is called. See `StopRationale.name`.
-               */
-              name: displayNameOf(candidate.place),
-              ...(why ? { why } : {}),
-              category: candidate.place.category,
-              facets: stopFacets(candidate),
-            };
+          for (const [placeId, entry] of Object.entries(
+            stopRationaleFor(board.candidates, used),
+          )) {
+            rationale[placeId] = entry;
           }
         } catch (error) {
           console.error('Worth-skipping supply could not be derived', error);
@@ -319,6 +309,42 @@ export async function itineraryViewModel(
 }
 
 /**
+ * THE PER-STOP BLOCK EVERY STOP CARD READS, COMPOSED ONCE.
+ *
+ * Extracted from the body of `itineraryViewModel` so the rendered page can be
+ * driven in a test with the same blocks a traveller gets. It was inline, and
+ * the page's own catch-all — the one that refuses any sentence billing an
+ * unpriceable journey to somebody's feet — was therefore blind to a whole
+ * surface: a delivered itinerary printed "57 min on foot from your base" in a
+ * stop's facets, between the two sentences that had just qualified the same
+ * figure as an unverified journey.
+ *
+ * `used` is the board's own no-two-cards-say-the-same-thing set, threaded
+ * rather than recreated so the page and the board stay in step.
+ */
+export function stopRationaleFor(
+  candidates: readonly DiscoveryCandidate[],
+  used: Set<string> = new Set(),
+): Record<string, StopRationale> {
+  const rationale: Record<string, StopRationale> = {};
+  for (const candidate of candidates) {
+    const why = candidate.fit.reasons.find((reason) => !used.has(reason)) ?? candidate.fit.reasons[0];
+    if (why) used.add(why);
+    rationale[candidate.place.id] = {
+      /*
+       * The name the board showed, so the plan and the board agree on what a
+       * place is called. See `StopRationale.name`.
+       */
+      name: displayNameOf(candidate.place),
+      ...(why ? { why } : {}),
+      category: candidate.place.category,
+      facets: stopFacets(candidate),
+    };
+  }
+  return rationale;
+}
+
+/**
  * THE FACTS THAT TELL TWO STOPS APART WHEN THEY FIT FOR THE SAME REASON.
  *
  * Deliberately short and deliberately concrete: how far out it is, whether it is
@@ -329,7 +355,27 @@ export async function itineraryViewModel(
  */
 function stopFacets(candidate: DiscoveryCandidate): string[] {
   const facets: string[] = [];
-  if (candidate.reach.status === 'measured' && candidate.reach.travelMinutes > 0) {
+  /*
+   * THE ONE FACET THAT COULD CONTRADICT THE ROW ABOVE IT.
+   *
+   * "57 min on foot from your base" is a plain statement about a walk, and on a
+   * car-free trip whose scheduled journeys nobody could time it is a stand-in
+   * for a train — which the travel row directly above this card already says,
+   * twice, in the words "journey not verified" and "the walking time shown is
+   * the upper bound we hold for it". A delivered itinerary printed all three on
+   * one screen: two hedged sentences and, between them, a confident one.
+   *
+   * `journeyProxy` is the fact both surfaces read; the board's own travel
+   * phrase was corrected first and this one was missed. A facet exists to tell
+   * two stops apart, and a figure the page has just finished qualifying cannot
+   * do that — so it is dropped rather than restated, and the row above keeps
+   * the whole of the claim.
+   */
+  if (
+    candidate.reach.status === 'measured' &&
+    candidate.reach.travelMinutes > 0 &&
+    !candidate.journeyProxy
+  ) {
     facets.push(
       `${formatMinutes(candidate.reach.travelMinutes)} ${REACH_MODE_PHRASE[candidate.reach.mode]} from your base`,
     );

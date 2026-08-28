@@ -364,7 +364,12 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
     center: { lat: 39.5, lng: -106.0 },
     entityType: 'subregion',
     breadth: 'region',
-    placeCount: 8,
+    // Enough to do for the trip's length. The point of this world is the drive,
+    // so its research reading has to come out clean — a supply thin enough to
+    // trip `experience_supply` would report a research problem on a destination
+    // whose only problem is that it is far away, and no amount of further
+    // research moves a three-and-a-half-hour leg.
+    placeCount: 10,
     baseCount: 1,
     subregionCount: 0,
     primaryMode: 'drive',

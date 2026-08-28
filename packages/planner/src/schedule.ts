@@ -34,11 +34,17 @@ import {
   narrowByDaylight,
   type PlaceDayWeather,
 } from './weather';
-import { weatherPenaltyAt, type MealSlot, type ScheduledFood } from '@sidequest/core';
+import {
+  weatherPenaltyAt,
+  type FoodDataset,
+  type MealSlot,
+  type ScheduledFood,
+} from '@sidequest/core';
 import {
   alternativesFor,
   chooseFoodStop,
   chooseProvisioningStop,
+  foodAreaAt,
   PACKED_MEAL_MINUTES,
   type FoodArea,
   type FoodChoice,
@@ -184,6 +190,36 @@ export interface LayoutContext {
    * absence.
    */
   food: FoodContext | null;
+  /**
+   * The region's food records, independent of what this day may eat.
+   *
+   * Two different questions were riding on one field. `food` is *this day's
+   * plan* — which venues it may name, in which slots — and a day whose named
+   * venues would cost it a stop legitimately loses it. But "where is the
+   * traveller standing when this meal falls, and what do we hold near there" is
+   * a question about the region and the route, and it has an answer on every
+   * day of every trip in a region with any food data at all. Reading it off the
+   * plan meant a yielded day printed bare blocks headed "Lunch" and "Dinner"
+   * with "Back at base, nothing booked" under them, in a metropolis whose own
+   * index held fourteen venues.
+   *
+   * Null only where the region really has none, which is the case that must go
+   * on saying so plainly.
+   */
+  foodDataset: FoodDataset | null;
+}
+
+/**
+ * Whether an item is something the day actually asks of the traveller.
+ *
+ * Free time is not, and a held meal block with no venue behind it is not — both
+ * are the day saying the hours are theirs, in more words. A *named* meal is,
+ * and so is any leg laid to reach one.
+ */
+function isSomethingOnTheDay(item: ItineraryItem): boolean {
+  if (item.kind === 'activity') return true;
+  if (item.kind === 'travel') return true;
+  return item.kind === 'meal' && item.food?.stopKind === 'venue';
 }
 
 /**
@@ -510,14 +546,60 @@ export function layoutDay(
   const pushUnnamedMeal = (
     slot: MealSlot,
     start: number,
-    input: { title: string; reason: string; areaReason: (area: FoodArea) => string },
+    input: {
+      title: string;
+      reason: string;
+      areaReason: (area: FoodArea) => string;
+      /**
+       * WHERE THE TRAVELLER IS WHEN THIS BLOCK IS LAID, FROM THE CALLER.
+       *
+       * The layout's `atRoutingId` and `atName` are two witnesses to one fact
+       * and they are not written together: the unit loop advances the *name* on
+       * arrival at a gateway and leaves the *id* on the previous unit's exit
+       * until the whole unit is done. So a meal laid in between was titled
+       * after one place and measured at another — a delivered day counted
+       * "3 places we hold within reach of <the museum>" from a square four
+       * kilometres away — and a meal laid before the day's first stop ended
+       * read `atBase: true`, which turns "near X" into "around X" and quotes
+       * the base's own venue count over a stop a hundred kilometres out.
+       *
+       * That is the shape of the defect this fallback was rewritten to end, so
+       * the anchor is an argument rather than a global. Absent only where the
+       * caller genuinely means "wherever the layout has got to" — the base-side
+       * branches at the top and tail of the day, where the two witnesses agree
+       * by construction.
+       */
+      at?: { routingId: string; name: string };
+    },
   ): number => {
+    const anchorId = input.at?.routingId ?? atRoutingId;
+    const anchorName = input.at?.name ?? atName;
     const minutes = config.unplannedMealMinutes[slot];
-    const area = foodPlan?.area ?? null;
+    /*
+     * WHERE THIS MEAL IS, ASKED OF WHERE THE TRAVELLER IS STANDING.
+     *
+     * It used to read `foodPlan.area`, a single value computed once for the
+     * whole day — and computed from a node set the base is always in, so it was
+     * always the base's own municipality. A live journey printed "Lunch around
+     * Reykjavík" for a traveller at a reserve sixty kilometres up the coast,
+     * directly above the sentence saying none of our venues "worked from where
+     * the day actually is at this hour". The layout has tracked `atRoutingId`
+     * and `atName` since it was written; nothing asked them.
+     */
+    const area =
+      context.foodDataset !== null
+        ? foodAreaAt({
+            routingId: anchorId,
+            name: anchorName,
+            atBase: anchorId === baseId,
+            venues: context.foodDataset.venues,
+            matrix,
+          })
+        : null;
     items.push({
       ...mealItem(
         day.dayNumber,
-        area ? `${input.title} around ${area.name}` : input.title,
+        area ? `${input.title} ${area.atBase ? 'around' : 'near'} ${area.name}` : input.title,
         start,
         minutes,
         area ? input.areaReason(area) : input.reason,
@@ -529,7 +611,12 @@ export function layoutDay(
         dietaryUnverified: [],
         hoursUnknown: false,
         ...(area ? { areaName: area.name } : {}),
-        routeContext: 'at_base',
+        /*
+         * Where this block sits on the day's route, said truthfully. Hard-coded
+         * `at_base` claimed the traveller was at their hotel for every held
+         * meal, including the ones laid at a stop an hour away.
+         */
+        routeContext: anchorId === baseId ? 'at_base' : 'on_route',
         detourMinutes: 0,
         isSpecialMeal: false,
         fromUserChoice: false,
@@ -550,10 +637,11 @@ export function layoutDay(
   const areaReasonFor = (slot: MealSlot) => (area: FoodArea) => {
     const count = area.countBySlot[slot];
     const label = MEAL_SLOT_LABELS[slot].toLowerCase();
+    const where = `${area.atBase ? 'around' : 'near'} ${area.name}`;
     if (count === 0) {
-      return `Nothing we hold near where this day goes serves ${label}, so this is time held around ${area.name} and the choice of where is yours.`;
+      return `We hold nothing serving ${label} within reach of ${area.name}, so this is time held ${where} and the choice of where is yours.`;
     }
-    return `${count} ${count === 1 ? 'place' : 'places'} we hold near this day's cluster ${count === 1 ? 'serves' : 'serve'} ${label}, and none of them worked from where the day actually is at this hour — so this is ${area.name} rather than somewhere named.`;
+    return `${count} ${count === 1 ? 'place' : 'places'} we hold within reach of ${area.name} ${count === 1 ? 'serves' : 'serve'} ${label}, and none of them could be fitted at this hour — so this is time held ${where} rather than somewhere named.`;
   };
 
   const foodRequest = (
@@ -569,6 +657,7 @@ export function layoutDay(
     plan: foodPlan!,
     profile: context.profile,
     dataset: context.food!.dataset,
+    namedOnSettledDays: context.food!.namedOnSettledDays,
     matrix,
     fromRoutingId,
     toRoutingId,
@@ -742,6 +831,12 @@ export function layoutDay(
           ? 'Nothing open near this stretch of the day fitted, so this is time set aside rather than somewhere named.'
           : 'Slotted in before the next stop rather than skipped.',
         areaReason: areaReasonFor('lunch'),
+        /*
+         * The anchor this call already carries, which it used to discard. It is
+         * the stop the lunch is actually beside; the layout's own globals are
+         * mid-flight here and disagree with each other.
+         */
+        at: { routingId: fromId, name: fromName },
       });
       lunchInserted = true;
       return;
@@ -1075,13 +1170,37 @@ export function layoutDay(
           continue;
         }
         const hop = after;
-        const hopIsDrive = hop.mode === 'drive';
+        /**
+         * A JOURNEY OF NOTHING IS NOT A JOURNEY, AND IT DOES NOT NEED PARKING.
+         *
+         * The traveller can already be standing on the next stop's routing node
+         * — a venue snapped to it for lunch is the ordinary way — and the
+         * matrix then answers zero for the hop. The layout still emitted a
+         * travel row and, because the mode was `drive`, still booked the
+         * parking allowance on top: a delivered day printed "Drive to <the
+         * museum>" over fifteen minutes and no distance at all.
+         *
+         * Nothing is lost by leaving it out. The position is already right, and
+         * a row saying a car was driven nowhere is worse than silence.
+         *
+         * Held by `closure-invariants.test.ts` as a property over every journey
+         * it drives, and **not** by a §30 mutation: no synthetic world snaps a
+         * venue onto a later stop's own routing node, so no fixture reaches this
+         * branch. The defect was observed on a live compile, and claiming a
+         * guarded mutation over a branch the fixtures cannot enter would be the
+         * green-test-protecting-nothing failure this suite exists to refuse.
+         */
+        const hopIsNothing = hop.minutes <= 0 && (hop.km ?? 0) <= 0;
+        const hopIsDrive = hop.mode === 'drive' && !hopIsNothing;
         const hopBuffer = hopIsDrive ? config.bufferMinutes : 0;
         // Transition slack rides on the travel block rather than sitting as an
         // invisible gap: parking, boots, and getting going are real minutes.
         const duration = hop.minutes + hopBuffer;
         const toName = gatewayLabel(option, members);
-        items.push({
+        if (hopIsNothing) {
+          hasLeftBase = true;
+        } else {
+          items.push({
           id: `travel-${day.dayNumber}-${sequence++}`,
           kind: 'travel',
           title: hopTitle(hop, `to ${toName}`),
@@ -1102,25 +1221,26 @@ export function layoutDay(
             provenance: hop.provenance,
             ...unverifiedScheduledMark(hop),
           },
-        });
-        cursor += duration;
-        charge(hop.mode, 'approach', hop.minutes, hop.km ?? 0, isUnverifiedScheduledJourney(hop));
-        if (hopIsDrive) {
-          homeward = null;
-          vehicleAt = option.gatewayRoutingId;
-        } else {
-          /**
-           * The way back, in the mode the way out was made in.
-           *
-           * A walk out of base has to be walked back and a metro ride out is a
-           * metro ride back, and the return leg used to be a copy of a constant.
-           * The duration here is only the allowance of last resort: the return is
-           * re-resolved at the point it is actually scheduled, from wherever the
-           * day has got to by then.
-           */
-          homeward = { mode: hop.mode, minutes: hop.minutes };
+          });
+          cursor += duration;
+          charge(hop.mode, 'approach', hop.minutes, hop.km ?? 0, isUnverifiedScheduledJourney(hop));
+          if (hopIsDrive) {
+            homeward = null;
+            vehicleAt = option.gatewayRoutingId;
+          } else {
+            /**
+             * The way back, in the mode the way out was made in.
+             *
+             * A walk out of base has to be walked back and a metro ride out is
+             * a metro ride back, and the return leg used to be a copy of a
+             * constant. The duration here is only the allowance of last resort:
+             * the return is re-resolved at the point it is actually scheduled,
+             * from wherever the day has got to by then.
+             */
+            homeward = { mode: hop.mode, minutes: hop.minutes };
+          }
+          hasLeftBase = true;
         }
-        hasLeftBase = true;
       }
     } else if (atRoutingId !== option.gatewayRoutingId && option.approachMinutes > 0) {
       if (option.service && !hasLeftBase) {
@@ -1566,9 +1686,23 @@ export function layoutDay(
     const exitedFrom = option.service ? option.exitRoutingId : (previous?.place.id ?? option.exitRoutingId);
     atRoutingId = exitedFrom;
     atName = option.service ? option.gatewayName : previous ? nameOf(previous.place) : atName;
-    // The car moves with the traveller only when the traveller drove it. Keyed on
-    // the mode rather than on "was this measured", now that walks are measured.
-    if (!option.service && option.approachMode === 'drive') vehicleAt = exitedFrom;
+    /*
+     * THE CAR MOVES WITH THE TRAVELLER ONLY IF IT CAME WITH THEM.
+     *
+     * This read `option.approachMode`, which is the mode the *access rule*
+     * declares — not the mode the leg was actually laid in. The two part
+     * whenever a shorter measured walk wins the approach (`resolvePlannerLeg`,
+     * and the mode-switch policy beside it), and then the car was recorded as
+     * having driven to a place the traveller walked to. A delivered road day
+     * walked to two city squares and then "drove" from the second, with no leg
+     * back to the vehicle anywhere in the day: not executable as printed, and
+     * short by the walk nobody booked.
+     *
+     * `vehicleAt === option.gatewayRoutingId` is the fact itself rather than a
+     * second opinion about it — the car is at the gateway only if a driven
+     * approach put it there, which is exactly the branch above that writes it.
+     */
+    if (!option.service && vehicleAt === option.gatewayRoutingId) vehicleAt = exitedFrom;
   }
 
   /**
@@ -2928,7 +3062,7 @@ export function buildDay(
 
   if (day.window.usableMinutes === 0) {
     warnings.push('There are no usable hours on this day once travel in or out is accounted for.');
-  } else if (accepted.length === 0) {
+  } else if (accepted.length === 0 && !layout.items.some(isSomethingOnTheDay)) {
     /**
      * An empty day with hours in it says why, once, in its own voice.
      *
@@ -2936,6 +3070,13 @@ export function buildDay(
      * day 4 sits silent — two statements a reader has to reconcile themselves.
      * The warning and the totals now tell one story: the hours are real, the
      * stops are elsewhere, and the reason is the supply rather than the clock.
+     *
+     * "Empty" has to mean the timeline, not the *activity* count. It meant the
+     * second, and meals and their travel are laid out after the activities are
+     * counted — so a delivered arrival evening printed "Nothing is scheduled on
+     * this day … the hours are yours" in an amber block immediately beneath a
+     * booked drive and a ninety-five-minute named dinner. The hours were not
+     * theirs between six and twenty to eight.
      */
     warnings.push(
       'Nothing is scheduled on this day. Everything you picked either fitted better on another day or could not be reached on this one — the hours are yours.',
@@ -3211,8 +3352,16 @@ export function themeFor(
       b.travelMinutesFromBase - a.travelMinutesFromBase || a.place.id.localeCompare(b.place.id),
   )[0];
 
+  /*
+   * The base is the fallback, and it has to be: `locality` is optional on a
+   * place, and a stored four-day plan carried two day headings reading
+   * "History & culture around undefined" — the literal word, in the largest
+   * type on the day. Naming the base instead is the honest answer, because the
+   * base is where that day starts and ends whatever the far stop is called.
+   */
+  const farAreaName = farthest?.place.locality?.trim();
   const area =
-    farthest && farthest.travelMinutesFromBase > 20 ? farthest.place.locality : baseName;
+    farthest && farthest.travelMinutesFromBase > 20 && farAreaName ? farAreaName : baseName;
   /*
    * When no candidate carries a speakable interest — the kind gate in
    * `resolveCandidates` withholds one whose category contradicts it — the

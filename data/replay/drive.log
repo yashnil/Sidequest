@@ -1,0 +1,23 @@
+
+
+########## metro-a-tokyo — Tokyo, Japan REUSING compiled trip=d257acf3-4a6c-4bf3-b737-ad3519ae0b90
+questionnaire: {"ok":true,"via":"redirect"}
+autoPick: ok=true  selected=
+build: {"ok":true}
+rendered 13389 chars -> metro-a-tokyo.txt
+readiness: "insufficient" warnings=[]
+
+
+########## metro-b-osaka — Osaka, Japan REUSING compiled trip=a4f91691-0542-4d72-891a-b1282b819616
+questionnaire: {"ok":true,"via":"redirect"}
+autoPick: ok=true  selected=
+build: {"ok":true}
+rendered 20159 chars -> metro-b-osaka.txt
+readiness: "partial" warnings=[]
+
+
+########## country-iceland — Iceland REUSING compiled trip=5dd39df1-f9e2-4e8f-a12a-22898a526bb6
+questionnaire: {"ok":true,"via":"redirect"}
+autoPick: ok=true  selected=
+build: {"ok":false,"error":"We could not put a single stop into a day, so there is no plan to show you. What blocked it is below."}
+readiness: "infrastructure_failure" warnings=[]

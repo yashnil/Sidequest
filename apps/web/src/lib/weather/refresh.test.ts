@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { weatherAvailability, weatherCoverageOf, weatherPanelCopy } from '@sidequest/core';
+import type { WeatherFetchTarget } from './refresh';
 
 /**
  * A REFRESH THAT FAILS LEAVES A TRACE, AND ONE THAT RETURNS NOTHING SAYS SO.
@@ -168,6 +169,75 @@ describe('recording a refresh outcome', () => {
     expect(second.refresh.message).toBe('Second outage.');
     expect(second.fetchedAt).toBe(first.fetchedAt);
     expect(second.dataset).toEqual(first.dataset);
+  });
+});
+
+/** The one target both cases below fetch for. */
+const WEATHER_TARGET = {
+  tripId: 'trip-1',
+  scopeKey: 'scope-1',
+  dates: DATES,
+  compiled: {
+    region: { id: 'region-1' },
+    weatherLocations: LOCATIONS,
+  },
+} as unknown as WeatherFetchTarget;
+
+describe('an empty dataset, and which of the two kinds it is', () => {
+  /**
+   * A PROVIDER THAT REFUSED IS NOT A PROVIDER THAT HAD NOTHING.
+   *
+   * `resolveTripWeather` never throws — it degrades — so the catch in
+   * `fetchWeatherSnapshot` is unreachable for an outage, and the last step used
+   * to hand back the **`off` provider's** dataset: the one written for a
+   * deployment that has deliberately switched weather off. Every empty dataset
+   * therefore arrived as "we asked and got nothing usable for your dates",
+   * which is a statement about the sources and was false about a source that
+   * had answered 429.
+   *
+   * Measured on three regions built back to back: two exhausted the free
+   * archive tier's rate limit, and both trips reported a successful fetch with
+   * nothing in it — on the one panel whose job is to tell somebody whether
+   * pressing the button again would help.
+   */
+  it('reports a refused fetch as a failure, not as an empty answer', async () => {
+    const repo = await repository();
+    const { fetchWeatherSnapshot } = await import('./refresh');
+
+    process.env.SIDEQUEST_WEATHER_PROVIDER = 'openmeteo';
+    const failing = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{"error":true,"reason":"Too many requests"}', { status: 429 }),
+    );
+    try {
+      const outcome = await fetchWeatherSnapshot(WEATHER_TARGET);
+      expect(outcome).toEqual({ ok: false, reason: 'provider_failed' });
+      const stored = repo.getWeatherSnapshot('trip-1', 'scope-1');
+      expect(stored?.refresh.status).toBe('failed');
+      expect(
+        stored?.dataset.days.every(
+          (day) => day.kind === 'unavailable' && day.reason === 'provider_error',
+        ),
+        'every day has to say the source was unreachable rather than that it had nothing',
+      ).toBe(true);
+    } finally {
+      failing.mockRestore();
+      delete process.env.SIDEQUEST_WEATHER_PROVIDER;
+    }
+  });
+
+  /** And the other kind still reads as the other kind. */
+  it('reports weather switched off as an empty answer, not as a failure', async () => {
+    await repository();
+    const { fetchWeatherSnapshot } = await import('./refresh');
+    process.env.SIDEQUEST_WEATHER_PROVIDER = 'off';
+    try {
+      expect(await fetchWeatherSnapshot(WEATHER_TARGET)).toEqual({
+        ok: true,
+        reason: 'nothing_available',
+      });
+    } finally {
+      delete process.env.SIDEQUEST_WEATHER_PROVIDER;
+    }
   });
 });
 

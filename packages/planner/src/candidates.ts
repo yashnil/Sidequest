@@ -137,6 +137,29 @@ function categoryClaimedByAnother(category: Place['category'], interest: Interes
 function spokenInterestFor(candidate: DiscoveryCandidate): Interest | undefined {
   const primary = candidate.fit.primaryInterest;
   if (!primary) return undefined;
+  /**
+   * AND THE TRAVELLER HAS TO HAVE ASKED FOR IT.
+   *
+   * Everything below establishes that the *place* is the interest. The sentence
+   * this field becomes — "Matches your interest in X" — makes a second claim on
+   * top of that, about the person: that X is something they said they wanted.
+   * Nothing was checking it.
+   *
+   * `primaryInterest` falls back to the place's best-graded interest whatever
+   * that grade is (`scoring/fit.ts`), and `low` is shown to the traveller as
+   * "Only if it is right there". So a delivered Osaka plan told a traveller who
+   * had graded photography and easy nature walks at `low` that a viewpoint
+   * "matches your interest in sunrise & sunset photography", and themed a whole
+   * day "Easy nature walks around Osaka" — while the board's own fit record for
+   * both places carried `matchedInterests: []`.
+   *
+   * `matchedInterests` is that record: the interests this place carries that
+   * the traveller graded at `occasional` or above. Reading it here keeps one
+   * definition of a match instead of a second, looser one — and leaves
+   * `primaryInterest` alone for the board's frequency budgets, which charge
+   * what a place *is* regardless of how it was graded.
+   */
+  if (!candidate.fit.matchedInterests.includes(primary)) return undefined;
   const { place } = candidate;
   if (!namesOwnKind(place)) return primary;
   if (categoryBacks(place.category, primary)) return primary;

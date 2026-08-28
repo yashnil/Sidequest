@@ -810,10 +810,77 @@ describe('the transport strategy', () => {
     expect(strategy.dataDisclosure).toMatch(/not measured/);
   });
 
+  /**
+   * A PROVENANCE LINE ABOUT LEGS THIS PLAN MAY NOT HAVE.
+   *
+   * "Service times come from the operators' published timetables on the dates
+   * recorded against each one" was appended unconditionally, and all three
+   * delivered journeys carried `serviceIds: []` and `transitMinutes: 0` on
+   * every one of their twenty-two days. The transport panel — the surface whose
+   * job is to say the product never invents a journey it could not measure —
+   * therefore printed "we cannot check timetables, so the times shown are on
+   * foot" and, three lines lower, that the service times came off timetables.
+   */
+  it('claims a timetable only where the plan actually rides one', () => {
+    const itinerary = plan();
+    const rides = itinerary.days.reduce(
+      (count, day) => count + day.transport.serviceIds.length,
+      0,
+    );
+    const disclosure = itinerary.transportStrategy.dataDisclosure;
+    if (rides === 0) {
+      expect(disclosure, `no day rides a service, yet: "${disclosure}"`).not.toMatch(
+        /Service times come from/,
+      );
+    } else {
+      expect(disclosure).toMatch(/Service times come from/);
+    }
+  });
+
   it('says what a car-free version of the same trip would lose', () => {
     const strategy = plan().transportStrategy;
     expect(strategy.withoutPrimary).toBeDefined();
     expect(strategy.withoutPrimary).toMatch(/without a vehicle/i);
+  });
+
+  /**
+   * THE PLAN'S OWN LEGS ARE EVIDENCE ABOUT THE PLAN.
+   *
+   * The count came from the access dataset alone, which says which *published
+   * services* reach a place and says nothing about a stop the planner walked to
+   * — a walk needs no rule. So a delivered road itinerary announced "9 of the 9
+   * stops on this plan become unreachable" on a page whose own day cards walked
+   * to three of them, seventeen, seven and thirteen minutes from the base the
+   * same sentence then offered as what survives. The error is in the expensive
+   * direction: it tells a traveller a hire car is load-bearing for a plan that
+   * walks to a third of itself.
+   */
+  it('does not count a stop this plan reached on foot as one a car-free trip loses', () => {
+    const itinerary = plan();
+    const walked = new Set(
+      itinerary.days.flatMap((day) =>
+        day.items
+          .filter((item) => item.travel !== undefined && item.travel.mode !== 'drive')
+          .map((item) => item.travel!.toId),
+      ),
+    );
+    const scheduled = new Set(
+      itinerary.days.flatMap((day) =>
+        day.items.filter((item) => item.placeId).map((item) => item.placeId!),
+      ),
+    );
+    const reachedOnFoot = [...scheduled].filter((id) => walked.has(id));
+    expect(
+      reachedOnFoot.length,
+      'this scenario must reach at least one stop without a car or it asserts nothing',
+    ).toBeGreaterThan(0);
+
+    const claimed = /(\d+) of the (\d+) stops/.exec(itinerary.transportStrategy.withoutPrimary ?? '');
+    if (!claimed) return; // Every stop survives; the other sentence, and not this one.
+    expect(
+      Number(claimed[1]),
+      `${claimed[1]} of ${claimed[2]} stops are said to need a car, and ${reachedOnFoot.length} were reached without one`,
+    ).toBeLessThanOrEqual(Number(claimed[2]) - reachedOnFoot.length);
   });
 
   it('reports no alternative rather than inventing one', () => {

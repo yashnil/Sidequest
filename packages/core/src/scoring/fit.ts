@@ -734,13 +734,61 @@ function spokenInterestFor(
 }
 
 /**
+ * CLAUSES THAT DESCRIBE OUR RECORD RATHER THAN THE PLACE.
+ *
+ * The compiler's fallback description is a category noun followed by whatever
+ * the source record happened to carry, and three of those clauses are about the
+ * record: the local name (which the card already prints under the heading), the
+ * body that manages it, and a sentence named after the map data (duplicated by
+ * the cost chip beside it). `describedFacts` states the rule they break in its
+ * own header — *never provenance; every entry restates something a source
+ * recorded about the place*.
+ *
+ * They are stripped **here**, in core, rather than at one render site, because
+ * they reach a traveller by more than one route and the first repair only
+ * closed the quiet one. A delivered board suppressed the small secondary line
+ * on five of twenty-four Tokyo cards and seven of twenty-four Osaka cards while
+ * the card's *headline* argument printed the identical paragraph in full —
+ * "…and that is what this delivers: An easy walk. Known locally as X. Run by Y.
+ * The map data records a charge to enter. Mapped at roughly 1000 m across."
+ * That line is composed from `place.shortDescription` right here.
+ *
+ * The measurement is kept but may not stand alone: how big a thing is belongs
+ * on a description that earned its place and may not *be* one.
+ */
+const RECORD_CLAUSES: readonly RegExp[] = [
+  /\bKnown locally as [^.]*\.\s*/g,
+  /\bRun by [^.]*\.\s*/g,
+  /\bThe map data records [^.]*\.\s*/g,
+];
+
+const MEASUREMENT_CLAUSE = /\bMapped at roughly [^.]*\.\s*/g;
+
+/**
+ * The part of a compiled description that is about the place, or null when
+ * nothing substantive is left.
+ *
+ * One implementation for every surface that prints a description to a
+ * traveller: the fit reason below, the card's fallback line, and anything that
+ * follows them. Two copies of this rule are how the headline and the secondary
+ * line came to disagree about the same sentence.
+ */
+export function descriptionAboutThePlace(description: string): string | null {
+  let text = description.trim();
+  for (const pattern of RECORD_CLAUSES) text = text.replace(pattern, '');
+  text = text.replace(/\s{2,}/g, ' ').trim();
+  return substantiveDescription(text.replace(MEASUREMENT_CLAUSE, '').trim()) ? text : null;
+}
+
+/**
  * Whether a description says anything.
  *
  * The bare-stub form — an article, a noun phrase, a full stop — is exactly
  * what §8.7 names, and it is what a compiler emits for a record it knows
  * nothing about. The length floor catches the same shape with a couple of
- * extra words. Kept in step with `BoardCopy.ts#substantive`, which applies the
- * same bar to the card's fallback line.
+ * extra words. Applied by `descriptionAboutThePlace` to what is *left* after
+ * the record clauses come out, because those clauses are precisely what pushed
+ * a stub past it.
  */
 function substantiveDescription(description: string): boolean {
   if (description.length < 45) return false;
@@ -798,9 +846,9 @@ function buildReasons(input: ReasonInput): string[] {
   // 1 — the graded interest, connected to what the place concretely offers.
   //     Named only where the record's own kind carries the interest — see
   //     `spokenInterestFor` for the bucket-laundered claims this refuses.
-  const offer = place.shortDescription.trim();
+  const offer = descriptionAboutThePlace(place.shortDescription);
   const spoken = spokenInterestFor(place, profile);
-  if (spoken && substantiveDescription(offer)) {
+  if (spoken && offer !== null) {
     connections.push(
       `You marked ${INTEREST_LABELS[spoken.interest].toLowerCase()} as "${INTEREST_LEVEL_LABELS[
         spoken.level

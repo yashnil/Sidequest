@@ -82,6 +82,69 @@ const DRIVE_ONLY_PLACES = [
   place('p4', { category: 'geothermal' }),
 ];
 
+describe('the evidence a question interrupts somebody with', () => {
+  /**
+   * A CLOCK IS EVIDENCE ONLY WHERE IT IS THIS TRAVELLER'S OWN JOURNEY.
+   *
+   * `travelFromBase.driveMinutes` is not a driving figure — its own schema says
+   * the name predates multi-mode measurement — and on a car-free compile every
+   * record carries a *walking* proxy for a journey nobody could time. The
+   * long-day question printed it bare: "13 of the strongest options sit 275
+   * minutes or so away, one way", on the first screen of the journey, about
+   * places twelve kilometres from a metropolitan base, to press the traveller
+   * into raising a transport limit.
+   *
+   * The question is still worth asking — those places really are a day out —
+   * so what changes is the evidence: a distance, which is true in every mode.
+   */
+  const FAR_ON_FOOT = [
+    place('f1', {
+      category: 'viewpoint',
+      relationship: 'satellite',
+      travelFromBase: { distanceKm: 27.5, driveMinutes: 275, driveIsScenic: false, mode: 'foot' as const, measured: true },
+    }),
+    place('f2', {
+      category: 'viewpoint',
+      relationship: 'satellite',
+      travelFromBase: { distanceKm: 19, driveMinutes: 190, driveIsScenic: false, mode: 'foot' as const, measured: true },
+    }),
+  ];
+
+  it('never quotes a walking clock as how far away something is', () => {
+    const questions = decisionQuestionsFor({
+      places: FAR_ON_FOOT,
+      access: dataset([rule('r-foot', ['f1', 'f2'], 'walk')]),
+      carAvailable: false,
+      secondaryBaseMinutes: [],
+    });
+    const dayTrip = questions.find((question) => question.id === 'long_day_trip');
+    expect(dayTrip, 'the question must still be asked').toBeDefined();
+    expect(dayTrip!.evidence).not.toContain('275');
+    expect(dayTrip!.evidence).not.toContain('minutes');
+    /* And it says the thing that is true in any mode. */
+    expect(dayTrip!.evidence).toMatch(/28 km out/);
+    expect(dayTrip!.evidence).toMatch(/could not time the journey/);
+  });
+
+  it('still quotes the clock where the traveller will drive it', () => {
+    const driven = [
+      place('d1', {
+        category: 'viewpoint',
+        relationship: 'satellite',
+        travelFromBase: { distanceKm: 90, driveMinutes: 100, driveIsScenic: false, mode: 'car' as const, measured: true },
+      }),
+    ];
+    const questions = decisionQuestionsFor({
+      places: driven,
+      access: dataset([rule('r-road', ['d1'], 'drive')]),
+      carAvailable: true,
+      secondaryBaseMinutes: [],
+    });
+    const dayTrip = questions.find((question) => question.id === 'long_day_trip');
+    expect(dayTrip!.evidence).toContain('100 minutes');
+  });
+});
+
 describe('a follow-up is asked only when the answer changes something', () => {
   it('does not ask a walkable region about a hire car', () => {
     /*

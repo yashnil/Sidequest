@@ -535,6 +535,7 @@ export interface ComposerCarriedAnswers {
   budget?: string | undefined;
   crowdTolerance?: string | undefined;
   outdoorIntensity?: string | undefined;
+  freeTime?: string | undefined;
 }
 
 export function applyComposer(
@@ -557,6 +558,19 @@ export function applyComposer(
     next.willDrive = true;
   }
 
+  /*
+   * The free-time answer, which the composer has always asked and nothing has
+   * ever read. It is the second half of "how full should this trip be" — pace
+   * answers how much a day can hold, this answers how much of it they wanted
+   * filled — and without it the readiness verdict had to guess with a constant.
+   */
+  if (
+    composer.freeTime === 'packed' ||
+    composer.freeTime === 'balanced' ||
+    composer.freeTime === 'lots'
+  ) {
+    next.freeTime = composer.freeTime;
+  }
   if (composer.pace === 'slow') next.pace = 'slow';
   else if (composer.pace === 'balanced') next.pace = 'balanced';
   else if (composer.pace === 'packed') next.pace = 'fast';

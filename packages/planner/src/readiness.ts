@@ -1,6 +1,7 @@
 import {
   PLANNER_READINESS_VERSION,
   plannerReadinessSchema,
+  type FreeTimeAppetite,
   type PlannerFunnel,
   type PlannerReadiness,
   type PlannerReadinessLevel,
@@ -110,8 +111,22 @@ const RULED_OUT: Record<(typeof REMEDY_ORDER)[number], string> = {
   adjust_transport: 'Your travel limits are not what stopped these.',
   adjust_scope: 'The region is not what stopped these.',
   choose_manually: 'Choosing by hand would hit the same blocker.',
-  more_days:
-    'More days would not help: not one of these fits inside a single day as it stands, so a longer trip has nowhere to put them either.',
+  /*
+   * NAMES NOTHING ABOUT THE PLACES, BECAUSE IT HAS CHECKED NOTHING ABOUT THEM.
+   *
+   * This said "not one of these fits inside a single day as it stands", which
+   * is a specific factual claim about the traveller's own named places — and it
+   * was printed whenever `more_days` failed to answer the dominant blocker,
+   * whatever that blocker was. On three delivered journeys it appeared over
+   * "we have no travel time recorded" and over a stop whose *own* unscheduled
+   * note read "those days were already full" and suggested freeing one up: a
+   * day-capacity problem, which more days plainly could answer, declared
+   * impossible on a ground that was false.
+   *
+   * A remedy that does not apply should say that it does not apply. It has no
+   * business asserting anything else.
+   */
+  more_days: 'More days would not change what is stopping these.',
   refresh_evidence: 'This is not an evidence gap — we know enough, and the answer is no.',
   retry: 'Nothing here failed transiently, so building again would produce the same result.',
 };
@@ -144,6 +159,33 @@ export interface ReadinessInput {
    * days").
    */
   daysWithActivity?: number;
+  /**
+   * Days this trip could actually put something on, from the planner's own
+   * windows rather than from arithmetic on the date range.
+   *
+   * `dayCount - 2` was the stand-in, and it is a *guess about the shape* rather
+   * than a reading of it: an arrival at four and a departure at nine leave two
+   * part-days, an arrival at nine and a departure at eight leave none. Worse,
+   * the stand-in was compared against a `daysWithActivity` counted over **every**
+   * day including those edges, so one stop laid on the arrival evening paid for
+   * one of the inner days it had subtracted, and a six-day plan with a single
+   * activity on each of four inner days cleared a distribution test it should
+   * have failed.
+   *
+   * Absent means the caller did not measure it, and the date arithmetic is used
+   * — the conservative reading, and exactly what every existing caller gets.
+   */
+  usableDays?: number;
+  /**
+   * Days that could hold a stop at all, by the planner's own floor.
+   *
+   * The denominator for *distribution*, which is a different question from
+   * volume and needs a count rather than a capacity ratio: a departure morning
+   * with nothing on it is not a gap in the trip.
+   */
+  anchorableDays?: number;
+  /** Of those, how many ended up with at least one experience on them. */
+  usableDaysWithActivity?: number;
 }
 
 /**
@@ -183,17 +225,58 @@ export interface PlanCoverage {
   plannableDays: number;
   /** What their stated pace says those days would hold. Never rounded up into a promise. */
   pacedStops: number;
-  /** The number this plan had to reach, from that pace and those days. */
-  bar: number;
+  /**
+   * The share of that volume *this* traveller asked to have filled.
+   *
+   * From their own free-time answer, so the two questions stay separate: pace
+   * says how much a day can hold, free time says how much of it they wanted
+   * used. One constant answering both for everybody is what let a plan holding
+   * two fifths of its paced volume read "Ready — the plan works".
+   */
+  expectedShare: number;
+  /** The volume this plan had to reach to be *complete*: pace × days × share. */
+  expected: number;
+  /**
+   * The volume below which this is not a trip at all, whatever the shape.
+   *
+   * Deliberately a different and much lower number from `expected`, because the
+   * two verdicts are different claims: "there is not enough here to plan around"
+   * and "this is less than you asked for" send a traveller to different places.
+   */
+  floor: number;
   scheduled: number;
   daysWithActivity: number;
+  /** Days that could hold a stop at all — the denominator for distribution. */
+  anchorableDays: number;
+  /** Of the days that could hold something, how many did. */
+  usableDaysWithActivity: number;
   /** Every day the trip could fill has something on it. */
   everyDayAnchored: boolean;
-  /** Below the pace's ceiling, and spread across the days anyway. Asked for, not failed. */
+  /** Spread across every day it could fill, and holding what they asked for. */
   spacious: boolean;
+  /** Short of what this traveller asked their days to hold. Usable, not finished. */
+  incomplete: boolean;
   /** Too little, across too few days, to call this a trip. */
   short: boolean;
 }
+
+/**
+ * How full a finished trip is, per free-time answer.
+ *
+ * Three numbers rather than one, and each is a reading of an answer the
+ * traveller gave rather than a threshold chosen here: somebody who asked for a
+ * packed trip is not finished at two thirds, and somebody who asked for lots of
+ * room is finished well below their pace's ceiling. `balanced` sits between
+ * them.
+ *
+ * Never 1: a plan is not required to exhaust the ceiling of its own ambition,
+ * and a bar nothing can clear is not a bar.
+ */
+export const EXPECTED_SHARE_BY_FREE_TIME: Record<FreeTimeAppetite, number> = {
+  packed: 0.85,
+  balanced: 0.65,
+  lots: 0.45,
+};
 
 export function coverageOf(input: ReadinessInput): PlanCoverage | null {
   const profile = input.profile;
@@ -211,11 +294,18 @@ export function coverageOf(input: ReadinessInput): PlanCoverage | null {
    * as "not enough here to plan a trip around". Two edges cost two part-days,
    * not one, and the planner already draws that line.
    */
-  const plannableDays = input.dayCount <= 2 ? Math.max(1, input.dayCount - 1) : input.dayCount - 2;
+  const plannableDays =
+    input.usableDays !== undefined
+      ? input.usableDays
+      : input.dayCount <= 2
+        ? Math.max(1, input.dayCount - 1)
+        : input.dayCount - 2;
   if (plannableDays <= 0) return null;
 
   const pacedStops = plannableDays * profile.derived.activitySlotsPerDay;
-  const bar = Math.max(1, Math.ceil(pacedStops / 2));
+  const expectedShare = EXPECTED_SHARE_BY_FREE_TIME[profile.freeTime];
+  const expected = Math.max(1, Math.ceil(pacedStops * expectedShare));
+  const floor = Math.max(1, Math.ceil(pacedStops / 2));
   const scheduled = input.funnel.scheduled;
   /*
    * Unmeasured days cannot anchor anything. A caller that did not count them
@@ -223,8 +313,46 @@ export function coverageOf(input: ReadinessInput): PlanCoverage | null {
    * it can call a plan short, never call a short one spacious.
    */
   const daysWithActivity = input.daysWithActivity ?? 0;
+  /*
+   * Counted over the same population `plannableDays` describes.
+   *
+   * `daysWithActivity` counts *every* day, edges included, and comparing it
+   * against a figure the edges had already been subtracted from is a category
+   * error that a live plan cashed in: one stop on the arrival evening paid for
+   * one of the four inner days, so four inner days holding one activity each
+   * cleared the test with three of them still holding five empty hours.
+   */
+  const usableDaysWithActivity = input.usableDaysWithActivity ?? daysWithActivity;
+  const anchorableDays = input.anchorableDays ?? Math.ceil(plannableDays);
+  /**
+   * WHY "EVERYTHING THEY PICKED IS IN THE PLAN" IS NOT COMPLETENESS.
+   *
+   * There was a carve-out here — complete when every selected place landed and
+   * every fillable day was anchored — and an independent review measured what
+   * it actually did. `everyDayAnchored` needs **one** activity per day, and
+   * auto-pick scales its target to what the region supplied, so
+   * `scheduled === selected` is the ordinary outcome rather than the exception:
+   * on the delivered six-day metropolitan shape it waived the volume test *and*
+   * the floor, so five stops — below the "not enough here to plan a trip
+   * around" line — read `ready`, and `spacious` then appended the sentence
+   * saying the empty afternoons were the pace the traveller asked for. They had
+   * answered `balanced`.
+   *
+   * The header above this function refuses the naked version of the carve-out
+   * for exactly this reason, and pairing it with a one-stop-a-day distribution
+   * test was not enough to make it safe. So there is no carve-out: completeness
+   * is measured against the traveller's own paced volume, and distribution
+   * separates a spacious plan from a thin one *inside* the complete band rather
+   * than in place of it.
+   *
+   * What a traveller whose every pick landed sees instead is `partial` with the
+   * shortfall in their own units and `choose_manually` marked as the thing that
+   * would help — which is true, actionable, and what "there is still room in
+   * these days" means.
+   */
   const everyDayAnchored =
-    input.daysWithActivity !== undefined && daysWithActivity >= plannableDays;
+    (input.usableDaysWithActivity !== undefined || input.daysWithActivity !== undefined) &&
+    usableDaysWithActivity >= anchorableDays;
 
   /*
    * DELIBERATELY NOT CONDITIONED ON WHAT THE TRAVELLER SELECTED.
@@ -242,12 +370,33 @@ export function coverageOf(input: ReadinessInput): PlanCoverage | null {
   return {
     plannableDays,
     pacedStops,
-    bar,
+    expectedShare,
+    expected,
+    floor,
     scheduled,
     daysWithActivity,
+    anchorableDays,
+    usableDaysWithActivity,
     everyDayAnchored,
-    spacious: everyDayAnchored && scheduled < pacedStops,
-    short: scheduled < bar && !everyDayAnchored,
+    /*
+     * WHY BEING SPREAD OUT IS NO LONGER A SUBSTITUTE FOR BEING FULL.
+     *
+     * `everyDayAnchored` used to be an *escape* from the volume test, and the
+     * argument for it was that a traveller who asked for a spacious trip and
+     * got one anchor a day has a trip. Half of that is right and the other half
+     * double-counted: a slow pace has already lowered `pacedStops`, so letting
+     * distribution waive the volume bar as well spent the same preference
+     * twice — and three delivered plans holding 42%, 56% and 58% of their own
+     * paced volume, one of them with five unfilled daylight hours on every
+     * inner day, all read "Ready".
+     *
+     * So distribution is now a *qualifier*: it is what separates a spacious
+     * trip from a thin one at the same count, and it cannot make a plan that
+     * fell short of what the traveller asked for into a finished one.
+     */
+    spacious: everyDayAnchored && scheduled >= expected && scheduled < pacedStops,
+    incomplete: scheduled < expected,
+    short: scheduled < floor && !everyDayAnchored,
   };
 }
 
@@ -390,12 +539,47 @@ export function buildPlannerReadiness(input: ReadinessInput): PlannerReadiness {
 
   const constraints = input.profile ? hardConstraintsOf(input.profile) : null;
 
+  /**
+   * THE ONE ACTION THAT CLOSES A SHORTFALL, WHERE THE PANEL CAN SEE IT.
+   *
+   * Every remedy is derived from the *blockers* — why the places that did not
+   * make it did not make it — and on a plan whose problem is that too little
+   * was chosen there are no blockers to derive one from. So the panel read
+   * "what would not help" six times over a trip whose gap one press on the
+   * board would close, and the only sentence naming that press was buried in
+   * the summary paragraph.
+   *
+   * `choose_manually` is exactly the right action and it is not a blocker
+   * remedy here, so the wording changes with the reason: picking by hand
+   * because auto-pick could not lay a set out is a different sentence from
+   * picking by hand because there is room for more.
+   */
+  const shortfallOnly = coverageOf(input)?.incomplete === true && dominantCodes.size === 0;
+
   const remedies: PlannerRemedyAssessment[] = REMEDY_ORDER.map((remedy) => {
-    const answers = ANSWERS[remedy].some((code) => dominantCodes.has(code));
+    const answers =
+      ANSWERS[remedy].some((code) => dominantCodes.has(code)) ||
+      /*
+       * `!nothingFitted`, and that guard is the whole of it.
+       *
+       * "There is room in these days for more than is in the plan" is a
+       * sentence about a plan. On a country trip whose every one of thirteen
+       * selections came back `missing_travel_data`, nothing was scheduled at
+       * all — and the panel still marked picking more from the board as likely
+       * to help, beside five remedies it had just ruled out. A traveller who
+       * takes that advice picks more places from the same board, off the same
+       * unmeasured matrix, and gets the same empty plan. The remedy that
+       * actually applies there is `retry`, which `ANSWERS` already maps
+       * `missing_travel_data` to.
+       */
+      (remedy === 'choose_manually' && !nothingFitted && coverageOf(input)?.incomplete === true);
     const wouldHelp = remedy === 'more_days' ? answers && !nothingFitted : answers;
-    const proposal = remedy === 'adjust_transport'
-      ? transportDetail(input, dominantCodes, constraints)
-      : DETAIL[remedy];
+    const proposal =
+      remedy === 'adjust_transport'
+        ? transportDetail(input, dominantCodes, constraints)
+        : remedy === 'choose_manually' && (shortfallOnly || !ANSWERS.choose_manually.some((code) => dominantCodes.has(code)))
+          ? 'Add a few more from the board — there is room in these days for more than is in the plan.'
+          : DETAIL[remedy];
     /*
      * The net, over every remedy rather than only the one that broke.
      *
@@ -471,6 +655,41 @@ export function decideLevel(
    */
   const placedShare = funnel.selected === 0 ? 1 : funnel.scheduled / funnel.selected;
   if (placedShare < 0.5) return 'partial';
+  /*
+   * A plan holding less than the traveller asked their days to hold is
+   * *partly* plannable, whatever else went right.
+   *
+   * This is the difference between feasible and complete, and it is the whole
+   * of the defect three independent reviewers found: every stop that got in was
+   * reachable, open and laid out, so every feasibility gate passed and the
+   * verdict read "Ready — the plan works" over a trip carrying two fifths of
+   * its own paced volume and, on one journey, a day with nothing on it at all.
+   * Feasibility is a statement about the stops that are here; completeness is a
+   * statement about the trip, and only the second is what a traveller means when
+   * they ask whether the plan is done.
+   */
+  if (coverage?.incomplete) return 'partial';
+  /**
+   * A DAY WITH NOTHING ON IT IS NOT A FINISHED TRIP, AT ANY VOLUME.
+   *
+   * The paragraph above says this verdict is `partial` "when a day of the trip
+   * ended up with nothing on it", and until this line nothing tested it.
+   * `everyDayAnchored` was read only from inside `spacious` and `short`, both of
+   * which sit off the path to `ready` — so the verdict was decided on volume
+   * alone, and volume cannot see distribution.
+   *
+   * A real ten-day Mammoth plan for a traveller answering slow pace and lots of
+   * free time scheduled eight stops over days 1–6 and left days 7, 8, 9 and 10
+   * completely empty — 585, 585, 553 and 435 free minutes with nothing in them.
+   * Eight stops clears both `expected` and `floor`, so `incomplete` was false,
+   * and the plan read `ready` under the summary "All 8 places you picked are in
+   * the plan." No completeness warning fired either, because `plan.ts` gates it
+   * on the same two booleans. Neither surface said a word about four blank days.
+   *
+   * `anchorableDays` already excludes arrival and departure, so a light edge day
+   * is not caught here — only a day the trip could have filled and did not.
+   */
+  if (coverage && !coverage.everyDayAnchored) return 'partial';
   return 'ready';
 }
 
@@ -537,12 +756,44 @@ function summarise(
   const spacious = coverage?.spacious
     ? ' Every day of the trip has something on it, and the room around it is the pace you asked for.'
     : '';
+  /*
+   * THE SHORTFALL, NAMED RATHER THAN DESCRIBED AS THE PACING THEY ASKED FOR.
+   *
+   * The sentence above is true only of a plan that reached what the traveller
+   * asked their days to hold. Said over one that did not — which is what
+   * happened, because distribution alone used to satisfy the test — it tells a
+   * traveller looking at five empty daylight hours that the emptiness is their
+   * own preference. This says the opposite thing, in the same unit, and points
+   * at the one action that changes it.
+   */
+  /*
+   * SAID AS SPREAD, NOT AS A SECOND DAY FRACTION.
+   *
+   * `anchorableDays` excludes arrival and departure by construction, and the
+   * itinerary's own summary counts every day of the trip — so a live Osaka
+   * plan carried "This fills 4 of the 4 days the trip can use" on the board the
+   * traveller presses Build from, and "8 stops across 6 of 6 days" on the plan
+   * that came back, having put a stop on all six. Both true, one screen apart,
+   * with nothing to tell a traveller they are counting different sets.
+   *
+   * `plan.ts` made this same correction to the itinerary's coverage warning;
+   * this is the other half, on the earlier screen. The volume gap is the thing
+   * this sentence exists to say and stays in figures.
+   */
+  const spread =
+    coverage && coverage.usableDaysWithActivity >= coverage.anchorableDays
+      ? 'every day it can build one around'
+      : `${coverage?.usableDaysWithActivity} of the ${coverage?.anchorableDays} ${coverage?.anchorableDays === 1 ? 'day' : 'days'} it can build one around`;
+  const shortfall =
+    coverage?.incomplete === true
+      ? ` That puts something on ${spread}, with room for around ${coverage.expected} stops at the pace and free time you asked for. Adding more from the board is what closes the gap.`
+      : '';
   if (funnel.scheduled < funnel.selected) {
     const lead = dominant[0];
     const blocker = lead ? phraseFor(lead.reasonCode, constraints) : 'they did not fit';
-    return `${funnel.scheduled} of the ${funnel.selected} places you picked are in the plan. The rest are out because ${blocker}.${spacious}`;
+    return `${funnel.scheduled} of the ${funnel.selected} places you picked are in the plan. The rest are out because ${blocker}.${spacious}${shortfall}`;
   }
-  return `All ${funnel.scheduled} places you picked are in the plan.${spacious}`;
+  return `All ${funnel.scheduled} places you picked are in the plan.${spacious}${shortfall}`;
 }
 
 /**

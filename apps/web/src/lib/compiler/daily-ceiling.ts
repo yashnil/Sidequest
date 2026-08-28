@@ -129,6 +129,14 @@ function perCallerCeiling(globalCeiling: number): number {
 }
 
 /**
+ * One caller's share of a given ceiling, exported so a test can assert against
+ * the policy rather than against a number copied out of it.
+ */
+export function perCallerShareOf(globalCeiling: number): number {
+  return perCallerCeiling(globalCeiling);
+}
+
+/**
  * The caller's row key, in the same `counter` column.
  *
  * The table is created here rather than in `schema.ts`, and it already exists
@@ -202,6 +210,45 @@ export function recordDailySpend(
     // A ledger that cannot be written is a ceiling that cannot be trusted; the
     // gate below fails closed for the same reason, so the money stays bounded.
     console.error('Could not record daily provider spend', { counter, error });
+  }
+}
+
+/**
+ * GIVING BACK A RESERVE THE BUILD NEVER SPENT.
+ *
+ * The live-compilation unit is booked at the press, and that is deliberate: a
+ * ceiling discovered by crossing it is not a ceiling, and a queued build is one
+ * build that will run. What was missing is the other half. A build that fails
+ * before it reaches a provider — a rejected research credential, a scope that
+ * vanished, a worker that could not start — has cost the deployment nothing and
+ * still cost the traveller one of the six builds their browser gets in a day.
+ * On a deployment whose credential is rejected, *every* build fails that way,
+ * so a traveller is locked out for twenty-four hours by a product that never
+ * did any work for them.
+ *
+ * Only ever called where nothing was spent, and it is the caller's job to know
+ * that: a build that reached a provider and then failed has been paid for, and
+ * refunding it would be a ceiling that lies in the expensive direction. Both
+ * rows move together, exactly as the charge did, so the deployment total and
+ * the caller total cannot drift apart.
+ *
+ * Floored at zero rather than allowed to go negative, because a ledger that can
+ * be pushed below zero is a ledger somebody can mint allowance in.
+ */
+export function refundLiveCompilation(now = new Date(), caller?: string | null): void {
+  try {
+    const db = getDb();
+    db.exec(TABLE_SQL);
+    const day = dayOf(now);
+    const give = db.prepare(
+      `UPDATE daily_provider_spend SET amount = MAX(0, amount - 1)
+       WHERE day = ? AND counter = ?`,
+    );
+    give.run(day, 'live_compilations');
+    const key = chargeKey(caller);
+    if (key) give.run(day, callerCounter('live_compilations', key));
+  } catch (error) {
+    console.error('Could not refund a daily live-compilation reserve', { error });
   }
 }
 

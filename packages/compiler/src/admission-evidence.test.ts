@@ -6,6 +6,7 @@ import {
   type Place,
 } from '@sidequest/core';
 import { buildHours, compileRegion } from './compile';
+import { classifySourceCategory } from './backbone/taxonomy';
 import { deriveScope } from './scope';
 import {
   SYNTHETIC_WORLDS,
@@ -246,6 +247,35 @@ describe('genuinely open ground', () => {
        */
       expect(assessOperatingHours({ calendar, dates: DATES }).cautions.join(' ')).not.toContain(
         'needs a ticket',
+      );
+    }
+  });
+
+  it('never claims walk-in entry for a kind that is as often a facility', async () => {
+    /*
+     * THE DELIVERED DEFECT, AT THE LEAF THAT CAUSED IT.
+     *
+     * A commercial thermal spa — booking-only, timed entry, hard capacity caps —
+     * shared a taxonomy leaf with a hot spring in a river bed, and the leaf said
+     * `plausiblyGated: false`. That is what puts a record on the `open_ground`
+     * branch, which does not stay silent: it writes `walkInAllowed: true,
+     * reservationRequired: false` and suppresses the hours caution. The plan
+     * booked a fifty-three kilometre drive to a door the traveller would be
+     * refused at, with no badge, no caution and an empty booking list.
+     *
+     * The record's own price could not save it: a fee tag is the only thing that
+     * keeps `cost_level` off `estimatedDefaults`, and every place in that region
+     * listed it.
+     */
+    const spring = classifySourceCategory({ category: 'hot_spring' });
+    expect(spring.plausiblyGated, 'a hot spring may not vouch for its own gate').toBe(true);
+
+    const region = await compile(SYNTHETIC_WORLDS.remote_road!);
+    const openGround = region.places.filter((place) => place.hoursExpectation === 'open_ground');
+    expect(openGround.length).toBeGreaterThan(0);
+    for (const place of openGround) {
+      expect(place.category, `${place.name} is a hot spring on the open-ground branch`).not.toBe(
+        'hot_spring',
       );
     }
   });

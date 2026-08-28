@@ -1,0 +1,236 @@
+Your trip
+ Shinjuku 
+ 2026-09-14–2026-09-19 · 6 days · based in Shinjuku 
+ Needs a decision Something you asked for cannot be scheduled as things stand. Your call. 
+ 3 stops across 3 of 6 days, 2 hr 51 min on foot to reach them, 2 left off, each with a reason.
+ Calendar file (.ics) Back to the board Share this plan 
+ Getting around
+ On foot for now — public transport is not verified here yet
+ Walk no practical alternative Easy-going days Hands-on logistics 
+ On foot to reach things 2 hr 55 min 
+ Why this way
+ Public transport is not verified here yet — nothing in this build can measure a scheduled journey — so every leg is priced as the measured walk, and what was scheduled is what fits on foot.
+ Parking Nothing on this plan needs a parking space. 
+ Public transport Public transport is not verified here yet — we cannot check timetables, so the times shown are on foot. 
+ Without a car This plan assumes no car. Anything that needs one has been left out rather than offered and then withdrawn. 
+ Check these before you book
+ These change year to year. We have not checked today’s conditions.
+ We know a routing engine can reach this, not that it is open to the public on your dates. Check before you go.
+ Walking times are measured. Measured against the road network.
+ Weather
+ No weather data 
+ We could not reach a weather source for your dates, so nothing in this plan has been placed against one. Rebuild closer to the time.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available. Conditions change; we have not checked today.
+ Eating
+ Nothing we can verify fitted the routes these days take, so the meals point at an area rather than at a place — 16 of them.
+ Casual most of the time, with the budget saved for the one that is worth it.
+ Meals meant to be an event 0 of 1 
+ Days you pick yourself 1, 2, 3, 4, 5, 6 
+ Read from 13 venues in this region, mostly off their own pages, on the dates recorded against each one. Opening hours here change more than anything else we hold — several of these publish an opening time and nothing else — so treat a closing time as ours unless the venue is named as the source. We have not checked today.
+ Day 1 Mon 14 Sept An open day 
+ Day 2 Tue 15 Sept History & culture around Tokyo 
+ Day 3 Wed 16 Sept History & culture around Tokyo 
+ Day 4 Thu 17 Sept Hot spring around Shinjuku 
+ Day 5 Fri 18 Sept An open day 
+ Day 6 Sat 19 Sept An open day 
+ Day 1 · Mon 14 Sept 
+ 12:00 – 19:00 
+ An open day · based in Shinjuku 
+ light day 
+ 5 hr 15 min free
+ No weather data 
+ We have no weather for this day, so nothing here was placed against it.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Arriving at 11:00, so the day starts after you have landed and settled.
+ Nothing scheduled. On an arrival or departure day that is usually the honest answer.
+ Nothing is scheduled on this day. Everything you picked either fitted better on another day or could not be reached on this one — the hours are yours.
+ Day 2 · Tue 15 Sept 
+ 09:00 – 19:00 
+ History & culture around Tokyo · based in Shinjuku 
+ light day 1 hr 10 min travelling 1 hr 10 min on foot 
+ 1 hr 15 min at stops · 5 hr 20 min free
+ walk 
+ → visit 
+ → walk back 
+ 1 hr 10 min walking there
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ 11 more places to eat turned up here that we could not measure a journey to, so we have left them out rather than guess at the detour.
+ 09:00 30 min 
+ Breakfast around Shinjuku
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ 09:30 35 min 
+ Walk to Popularity Gallery and Studio
+ Walk 
+ 35 min on foot, measured between the two points.
+ Shinjuku → Popularity Gallery and Studio · 3 km · measured travel time
+ 10:05 1 hr 15 min 
+ Popularity Gallery and Studio
+ No weather data 
+ Holds up even if the weather turns.
+ Matches your interest in history & culture.
+ holds up in poor weather
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 11:20 35 min 
+ Walk back to Shinjuku
+ Walk 
+ 35 min back to Shinjuku.
+ Popularity Gallery and Studio → Shinjuku · 3 km · measured travel time
+ 11:55 45 min 
+ Lunch around Shinjuku
+ Lunch · Time held 
+ We hold nothing serving lunch within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ 12:40 5 hr 20 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Shinjuku
+ Dinner · Time held 
+ We hold nothing serving dinner within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ Day 3 · Wed 16 Sept 
+ 09:00 – 19:00 
+ History & culture around Tokyo · based in Shinjuku 
+ light day 1 hr 5 min travelling 1 hr 5 min on foot 
+ 45 min at stops · 5 hr 45 min free
+ walk 
+ → visit 
+ → walk back 
+ 1 hr 5 min walking there
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ 11 more places to eat turned up here that we could not measure a journey to, so we have left them out rather than guess at the detour.
+ 09:00 30 min 
+ Breakfast around Shinjuku
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ 09:30 35 min 
+ Walk to 明治神宮
+ Walk 
+ 31 min on foot, measured between the two points.
+ Shinjuku → 明治神宮 · 2 km · measured travel time
+ 10:05 45 min 
+ 明治神宮
+ easy No weather data 
+ One of the established names here — the kind of stop this area is known for.
+ Matches your interest in history & culture.
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 10:50 35 min 
+ Walk back to Shinjuku
+ Walk 
+ 31 min back to Shinjuku.
+ 明治神宮 → Shinjuku · 2 km · measured travel time
+ 11:30 45 min 
+ Lunch around Shinjuku
+ Lunch · Time held 
+ We hold nothing serving lunch within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ 12:15 5 hr 45 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Shinjuku
+ Dinner · Time held 
+ We hold nothing serving dinner within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ Day 4 · Thu 17 Sept 
+ 09:00 – 19:00 
+ Hot spring around Shinjuku · based in Shinjuku 
+ light day 40 min travelling 40 min on foot 
+ 1 hr 30 min at stops · 5 hr 35 min free
+ walk 
+ → visit 
+ → walk back 
+ 40 min walking there
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ 11 more places to eat turned up here that we could not measure a journey to, so we have left them out rather than guess at the detour.
+ 09:00 30 min 
+ Breakfast around Shinjuku
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ 09:30 20 min 
+ Walk to 大星湯
+ Walk 
+ 19 min on foot, measured between the two points.
+ Shinjuku → 大星湯 · 2 km · measured travel time
+ 09:50 1 hr 30 min 
+ 大星湯
+ easy No weather data 
+ 19 min on foot, inside the 25 min you were happy to travel.
+ A strong fit for how you said you travel.
+ 19 min on foot from your base
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 11:20 20 min 
+ Walk back to Shinjuku
+ Walk 
+ 20 min back to Shinjuku.
+ 大星湯 → Shinjuku · 2 km · measured travel time
+ 11:40 45 min 
+ Lunch around Shinjuku
+ Lunch · Time held 
+ We hold nothing serving lunch within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ 12:25 5 hr 35 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Shinjuku
+ Dinner · Time held 
+ We hold nothing serving dinner within reach of Shinjuku, so this is time held around Shinjuku and the choice of where is yours.
+ Day 5 · Fri 18 Sept 
+ 09:00 – 19:00 
+ An open day · based in Shinjuku 
+ light day 
+ 7 hr 45 min free
+ No weather data 
+ We have no weather for this day, so nothing here was placed against it.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Nothing scheduled, and this is not an arrival or departure day. Everything you picked fitted better on another day or could not be reached on this one — the hours are yours. What was left off, and why, is at the foot of this plan.
+ Nothing is scheduled on this day. Everything you picked either fitted better on another day or could not be reached on this one — the hours are yours.
+ Day 6 · Sat 19 Sept 
+ 09:00 – 16:30 
+ An open day · based in Shinjuku 
+ light day 
+ 6 hr 15 min free
+ No weather data 
+ We have no weather for this day, so nothing here was placed against it.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Leaving at 18:00, so this day wraps up early.
+ Nothing scheduled. On an arrival or departure day that is usually the honest answer.
+ Nothing is scheduled on this day. Everything you picked either fitted better on another day or could not be reached on this one — the hours are yours.
+ Keep these flexible
+ Each of these carries something the plan cannot promise — weather, unverified details, or a booking still in your hands. Hold them loosely and the trip bends instead of breaking.
+ Popularity Gallery and Studio · day 2 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ 明治神宮 · day 3 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ 大星湯 · day 4 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ Left off, and why
+ These were on your board and are not in the plan. Each one says what stopped it — nothing is hidden.
+ Daiba 6 We have no travel time recorded to this place, so we cannot fit it into a day honestly. 
+ 金神の滝 We have no travel time recorded to this place, so we cannot fit it into a day honestly. 
+ Worth reading
+ ▲ Nothing we can vouch for was open and near enough to day 1's route, so its meals point at Shinjuku rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for Popularity Gallery and Studio. Check them before you rely on day 2. 
+ ▲ We could not get weather for day 2, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 2's route, so its meals point at Shinjuku rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for 明治神宮. Check them before you rely on day 3. 
+ ▲ We could not get weather for day 3, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 3's route, so its meals point at Shinjuku rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for 大星湯. Check them before you rely on day 4. 
+ ▲ We could not get weather for day 4, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 4's route, so its meals point at Shinjuku rather than at a place. Which one is yours to pick. 
+ ▲ Nothing we can vouch for was open and near enough to day 5's route, so its meals point at Shinjuku rather than at a place. Which one is yours to pick. 
+ ▲ Nothing we can vouch for was open and near enough to day 6's route, so its meals point at Shinjuku rather than at a place. Which one is yours to pick. 
+ ▲ This plan holds 3 stops across 3 of your 6 days. At the pace you asked for these dates have room for around 16, so there is not yet enough here to plan a trip around.

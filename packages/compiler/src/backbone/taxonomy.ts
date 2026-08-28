@@ -329,6 +329,20 @@ const HISTORIC: Rule = {
   plausiblyGated: true,
 };
 
+/** A cave, for both spellings of the leaf. See the entries that use it. */
+const CAVE: Rule = {
+  ...HIKE,
+  category: 'geothermal',
+  interests: ['geology_and_geothermal', 'scenic_viewpoints'],
+  typicalDurationMinutes: 90,
+  exposure: 'sheltered_outdoor',
+  visibilityDependent: false,
+  plausiblyGated: true,
+  costLevel: 2,
+  hazardousAccess: true,
+  displayKind: 'Cave',
+};
+
 const TOWN: Rule = {
   subrole: 'urban_place',
   category: 'town_and_food',
@@ -399,6 +413,28 @@ const MONUMENT: Rule = {
   plausiblyGated: true,
 };
 
+/**
+ * A HOT SPRING IS AS OFTEN A FACILITY AS A HOLE IN THE GROUND.
+ *
+ * `plausiblyGated` was `false`, which is what puts a record on the compiler's
+ * `open_ground` branch — and that branch does not merely stay silent, it writes
+ * the *positive* claim `walkInAllowed: true, reservationRequired: false` and
+ * suppresses the hours caution, on the stated grounds that "an unfenced river
+ * bank really does not take reservations". True of a river bank; a leaf that
+ * covers both a wild spring and a commercial spa cannot claim it.
+ *
+ * A delivered road itinerary drove fifty-three kilometres to a booking-only,
+ * timed-entry, capacity-capped thermal spa carrying `always_open`, no badge, no
+ * caution and an empty booking list — a door the traveller would be refused at.
+ * The record's own `costLevel` could not save it: a fee tag is the only thing
+ * that keeps `cost_level` off `estimatedDefaults`, and every one of that
+ * region's places listed it.
+ *
+ * `plausiblyGated` does not assert a gate. It withholds the claim that there is
+ * none, so a spring nobody fences gets "we could not confirm whether this needs
+ * a ticket" — which costs a traveller a moment and is true — instead of a
+ * permission the record never gave.
+ */
 const HOT_SPRING: Rule = {
   subrole: 'outdoor_nature',
   category: 'hot_spring',
@@ -410,7 +446,7 @@ const HOT_SPRING: Rule = {
   poorWeatherBackup: false,
   costLevel: 1,
   significanceWeight: 0.6,
-  plausiblyGated: false,
+  plausiblyGated: true,
 };
 
 const SCENIC_ROUTE: Rule = {
@@ -722,8 +758,20 @@ const BY_CATEGORY: Record<string, Rule> = {
   hill: { ...OUTDOOR_VIEW, displayKind: 'Hill', significanceWeight: 0.2 },
   mountain_range: { ...OUTDOOR_VIEW, significanceWeight: 0.5, landscapeClaim: true },
   dune: WALK,
-  cave: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false, plausiblyGated: true, costLevel: 2, hazardousAccess: true, displayKind: 'Cave' },
-  cave_entrance: { ...HIKE, exposure: 'sheltered_outdoor', visibilityDependent: false, hazardousAccess: true, displayKind: 'Cave', plausiblyGated: true, costLevel: 2 },
+  /*
+   * A cave is geology and it is not a day hike. `HIKE` gave it the hiking
+   * interest and a three-hour default, so a lava tube read as a day's walking
+   * to a traveller who had asked for neither.
+   *
+   * Both leaves, from one constant. The first repair changed `cave` and left
+   * `cave_entrance` on the line below it still spreading `HIKE` — and
+   * `cave_entrance` is the key the delivered road journey actually carried, so
+   * the fix went in and the defect shipped: "Hiking around Iceland", a
+   * three-hour block, "Matches your interest in hiking", over a lava tube. Two
+   * spellings of one thing cannot hold two rules.
+   */
+  cave: CAVE,
+  cave_entrance: CAVE,
 
   /**
    * Water, and every entry says what it is.
@@ -1091,7 +1139,25 @@ const BY_CATEGORY: Record<string, Rule> = {
    */
   health_market: { ...SUPPORT, subrole: 'provisioning', typicalDurationMinutes: 20 },
   neighborhood: { ...TOWN, typicalDurationMinutes: 120, displayKind: 'Neighbourhood' },
-  plaza: { ...TOWN, typicalDurationMinutes: 45, exposure: 'exposed_outdoor', poorWeatherBackup: false, plausiblyGated: false, displayKind: 'Plaza', significanceWeight: 0.3 },
+  /*
+   * A SQUARE IS SOMETHING YOU STAND IN, NOT SOMEWHERE YOU EAT.
+   *
+   * It inherited `TOWN`'s whole rule — `category: 'town_and_food'` and
+   * `interests: ['food_and_towns']` — which is right for a market street or a
+   * neighbourhood and false of a paved public space. A delivered plan spent a
+   * whole day on three adjoining squares five hundred metres apart and headed
+   * it "Food & local eating", because the only interest the three of them
+   * offered was one none of them serves.
+   *
+   * The category moves as well as the list, and it has to: `food_and_towns`
+   * claims `town_and_food` in the interest vocabulary's own evidence table, so
+   * a leaf that kept the category would go on offering food however its own
+   * list read — and `interest-parity.test.ts` exists to make exactly that
+   * disagreement impossible. `historic_site` is what a named civic square is,
+   * and it is what the vocabulary already says: `architecture_and_landmarks`
+   * has listed `plaza` among its display kinds all along.
+   */
+  plaza: { ...TOWN, category: 'historic_site', interests: ['history_and_culture', 'scenic_viewpoints'], typicalDurationMinutes: 45, exposure: 'exposed_outdoor', poorWeatherBackup: false, plausiblyGated: false, displayKind: 'Plaza', significanceWeight: 0.3 },
   /**
    * `pedestrian` is a container, not a destination.
    *

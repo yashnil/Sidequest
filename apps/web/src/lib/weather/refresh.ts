@@ -100,6 +100,15 @@ export async function fetchWeatherSnapshot(
      * the record says "fetched" about an absence — which is what it did.
      */
     const coverage = weatherCoverageOf(dataset);
+    /*
+     * Whether the emptiness is an outage. Read off the days' own reason rather
+     * than inferred from the count: `provider_error` is the word the schema
+     * carries for a source that refused, and `not_configured` is the word for a
+     * deployment that switched weather off.
+     */
+    const refused = dataset.days.some(
+      (day) => day.kind === 'unavailable' && day.reason === 'provider_error',
+    );
     const completedAt = new Date();
 
     saveWeatherSnapshot(
@@ -119,21 +128,33 @@ export async function fetchWeatherSnapshot(
          */
         model: null,
         refresh: {
-          status: coverage === 'none' ? 'returned_nothing' : 'succeeded',
+          status: coverage === 'none' ? (refused ? 'failed' : 'returned_nothing') : 'succeeded',
           requestedAt: requestedAt.toISOString(),
           completedAt: completedAt.toISOString(),
           ...(coverage === 'none'
             ? {
-                message:
-                  'We asked and got nothing usable for your dates. That is a statement about our sources rather than about the weather.',
+                message: refused
+                  ? 'The weather source did not answer. Building again may go differently.'
+                  : 'We asked and got nothing usable for your dates. That is a statement about our sources rather than about the weather.',
               }
             : {}),
         },
       }),
     );
-    return coverage === 'none'
-      ? { ok: true, reason: 'nothing_available' }
-      : { ok: true, reason: 'fetched' };
+    if (coverage !== 'none') return { ok: true, reason: 'fetched' };
+    /*
+     * TWO EMPTY DATASETS THAT MEAN OPPOSITE THINGS.
+     *
+     * `resolveTripWeather` never throws — it degrades — so the catch below is
+     * unreachable for a provider that refused, and every empty dataset arrived
+     * here as "we asked and got nothing usable". A rate-limited free tier
+     * therefore reported a successful fetch with nothing in it, on a panel whose
+     * whole job is to tell an operator whether to press the button again.
+     *
+     * The days themselves carry the distinction the schema was given for it, so
+     * this reads it rather than guessing.
+     */
+    return refused ? { ok: false, reason: 'provider_failed' } : { ok: true, reason: 'nothing_available' };
   } catch (error) {
     console.error('Weather fetch failed', error);
     const failedAt = new Date();

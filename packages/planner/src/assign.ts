@@ -123,7 +123,7 @@ function preferByWeather(
  * quarter of the trip's places strands them: they overflow into a second pass and
  * end up wherever there is room rather than where they belong.
  */
-const MIN_PLANNABLE_MINUTES = 90;
+export const MIN_PLANNABLE_MINUTES = 90;
 
 /**
  * Does this traveller want their hard days kept apart?

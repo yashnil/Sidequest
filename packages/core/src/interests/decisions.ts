@@ -192,21 +192,75 @@ export function decisionQuestionsFor(input: DecisionQuestionInput): RegionDecisi
     });
   }
 
-  // --- a long day out ------------------------------------------------------
+  /**
+ * Whether the minutes on a record are a journey this traveller would make.
+ *
+ * The matrix measures one mode. Where that mode is walking and the traveller
+ * has no car, a long figure is a stand-in for a scheduled journey nobody could
+ * price — never their distance, and never something to quote at them. A record
+ * written before the mode was carried says nothing, and an unmeasured leg's
+ * schema-required zero is not a measurement either.
+ */
+function travelMinutesAreThisTravellersJourney(
+  place: Place,
+  carAvailable: boolean | null,
+): boolean {
+  const travel = place.travelFromBase;
+  if (travel.measured !== true) return false;
+  /*
+   * A car figure is this traveller's journey when they have a car. A *foot*
+   * figure at day-trip length never is: at ninety minutes and up it is either a
+   * walk nobody would take or, on a car-free compile, the stand-in the matrix
+   * produced because the scheduled journey could not be timed. Either way it is
+   * not a number to quote at somebody.
+   */
+  return travel.mode === 'car' && carAvailable !== false;
+}
+
+// --- a long day out ------------------------------------------------------
+  /**
+   * A CLOCK IS EVIDENCE ONLY WHERE IT IS THE TRAVELLER'S OWN JOURNEY.
+   *
+   * `travelFromBase.driveMinutes` is not a driving figure: its own schema says
+   * the name predates multi-mode measurement, and on a car-free compile every
+   * record carries a **walking** proxy for a journey nobody could time. This
+   * printed that number bare — "13 of the strongest options sit 275 minutes or
+   * so away, one way", on the first screen of the journey, about places twelve
+   * kilometres from a metropolitan base, to press the traveller into raising a
+   * transport limit.
+   *
+   * `DecisionPrompt` calls this line "the measurement that justified
+   * interrupting somebody with it", which is exactly why it may not be a
+   * measurement of something else. So the *number* is quoted only where the
+   * mode it was measured in is one the traveller will actually travel in; where
+   * it is a stand-in, the question is still worth asking and the evidence says
+   * how far out the places are — which is a distance, and true in every mode.
+   */
   const dayTrips = places.filter(
     (place) =>
       place.relationship === 'satellite' && place.travelFromBase.driveMinutes >= DAY_TRIP_MINUTES,
   );
   if (dayTrips.length > 0) {
-    const furthest = dayTrips.reduce(
+    const quotable = dayTrips.filter((place) =>
+      travelMinutesAreThisTravellersJourney(place, input.carAvailable),
+    );
+    const furthestMinutes = quotable.reduce(
       (worst, place) => Math.max(worst, place.travelFromBase.driveMinutes),
       0,
     );
+    const furthestKm = dayTrips.reduce(
+      (worst, place) => Math.max(worst, place.travelFromBase.distanceKm),
+      0,
+    );
+    const count = dayTrips.length;
     questions.push({
       id: 'long_day_trip',
       prompt: 'Is a whole day out from your base worth it?',
       why: 'It buys the best of what is further out, and costs you a day near where you are staying.',
-      evidence: `${dayTrips.length} of the strongest options ${dayTrips.length === 1 ? 'sits' : 'sit'} ${furthest} minutes or so away, one way.`,
+      evidence:
+        quotable.length === dayTrips.length && furthestMinutes > 0
+          ? `${count} of the strongest options ${count === 1 ? 'sits' : 'sit'} ${furthestMinutes} minutes or so away, one way.`
+          : `${count} of the strongest options ${count === 1 ? 'sits' : 'sit'} up to ${Math.round(furthestKm)} km out, and we could not time the journey.`,
       answerField: 'maxDailyTravelMinutes',
     });
   }

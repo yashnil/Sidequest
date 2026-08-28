@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   FACT_PATH_LABELS,
   FACT_VERIFICATION_LABELS,
@@ -292,6 +293,7 @@ export function DiscoveryBoardView({
    * that changes no pixel is a page that flickers for no reason.
    */
   const imageryAsked = useRef<string | null>(null);
+  const router = useRouter();
   useEffect(() => {
     if (imageryPending <= 0) return;
     if (imageryAsked.current === boardVersion) return;
@@ -299,15 +301,37 @@ export function DiscoveryBoardView({
     let cancelled = false;
     void fillBoardImageryAction(tripId).then((result) => {
       if (cancelled || !result.ok || !result.accepted) return;
-      // A plain reload rather than `router.refresh()`: this component is not a
-      // route boundary and the page it sits in is `force-dynamic`, so the
-      // simplest correct thing is to let the server re-render it.
-      window.location.reload();
+      /**
+       * `router.refresh()`, NEVER `window.location.reload()`.
+       *
+       * This used to be a plain reload, on the reasoning that the page is
+       * `force-dynamic` so letting the server re-render it is the simplest
+       * correct thing. The re-render was correct; the *navigation* was not. A
+       * hard reload tears down every request the page has in flight, and the
+       * one this page exists to start takes several seconds.
+       *
+       * Measured: pressing "Build my trip" inside the imagery window aborts
+       * `buildItineraryAction` mid-flight, so the browser never follows its
+       * redirect to the itinerary. The plan is built and saved — the server
+       * finished — and the traveller is left on a board that has just flashed,
+       * with the button relabelled "Rebuild my trip" and a panel saying their
+       * plan is thin. A success rendered as a refusal, with no way forward
+       * offered.
+       *
+       * The e2e suite hid it because imagery resolution needs a `wikidataId`
+       * and the authored demo region has none, so `imageryPending` is zero
+       * there — while every compiled region carries them. It missed the demo
+       * destination and hit every real one.
+       *
+       * `router.refresh()` re-fetches this route's payload on the server
+       * without unloading the document, so anything in flight survives it.
+       */
+      router.refresh();
     });
     return () => {
       cancelled = true;
     };
-  }, [tripId, boardVersion, imageryPending]);
+  }, [tripId, boardVersion, imageryPending, router]);
 
   /*
    * Counted over the cards on screen, not over the keys of the mark map. The map
@@ -1120,13 +1144,21 @@ function PlaceCard({
           <TravelPhrase candidate={candidate} suppressed={suppressed} />
         </p>
 
-        <div className="mt-3">
-          <FitMeter
-            band={fit.band}
-            label={recommendationLabel(candidate)}
-            meter={FIT_BAND_METER[fit.band]}
-          />
-        </div>
+        {/*
+          The meter answers "how well does this suit you", which is a question
+          the trip has already closed for a place it cannot reach — see
+          `recommendationLabel`. Null there rather than a second verdict beside
+          the heading's.
+        */}
+        {recommendationLabel(candidate) !== null ? (
+          <div className="mt-3">
+            <FitMeter
+              band={fit.band}
+              label={recommendationLabel(candidate)!}
+              meter={FIT_BAND_METER[fit.band]}
+            />
+          </div>
+        ) : null}
 
         {/*
           THE ARGUMENT, OPEN. One sentence, never a panel of them: a card that
@@ -1419,15 +1451,31 @@ function TravelPhrase({
   }
   const { mode, travelMinutes, provenance } = candidate.reach;
   /*
-   * A measured walk whose *verdict* is unknown is the transit-blind case: the
+   * A measured walk that is only *pricing* a journey nobody could time: the
    * traveller's scheduled modes were never measured, the destination's own
    * evidence observes a network, and the walking figure is the fallback
    * network's answer rather than this traveller's journey. The sentence is
    * minted in the reach module beside the rule that produces the state — the
    * walk stays a walk, and no transit time is invented for it.
+   *
+   * Read off `journeyProxy` rather than off `detourClass === 'unknown'`, which
+   * is what it used to test. That was the same fact asked of the wrong witness:
+   * the class is a statement about the traveller's budgets, so a proxy walk
+   * long enough to bust the day's travel allowance is filed `too_far` before
+   * the proxy rule is ever reached — and the card then went back to reading out
+   * a walking clock as this traveller's distance. On a delivered metropolitan
+   * board that produced "2 hr 17 min on foot from base" over the destination's
+   * best-known tower, immediately above the same card's own admission that no
+   * route here could be confirmed.
    */
-  if (candidate.detourClass === 'unknown' && candidate.reach.mode === 'walk') {
-    return <>{describeTransitBlindWalk(travelMinutes, formatMinutes)}</>;
+  if (candidate.journeyProxy) {
+    return (
+      <>
+        {describeTransitBlindWalk(travelMinutes, formatMinutes, {
+          pastDayBudget: candidate.detourClass === 'too_far',
+        })}
+      </>
+    );
   }
   /*
    * A modelled journey says so, in one word.
@@ -1680,7 +1728,9 @@ function SkipRow({
             <PlaceName entity={place} />
           </h3>
           <span className="text-xs text-ink-faint">{place.locality}</span>
-          <Badge tone={blocked ? 'clay' : 'neutral'}>{FIT_BAND_LABELS[fit.band]}</Badge>
+          {recommendationLabel(candidate) !== null ? (
+            <Badge tone={blocked ? 'clay' : 'neutral'}>{FIT_BAND_LABELS[fit.band]}</Badge>
+          ) : null}
         </div>
 
         <p className="mt-1 text-xs leading-relaxed text-ink-muted">

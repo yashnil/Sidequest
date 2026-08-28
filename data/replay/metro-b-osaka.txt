@@ -1,0 +1,379 @@
+Your trip
+ Osaka 
+ 2026-09-14–2026-09-19 · 6 days · based in Osaka 
+ Ready, with cautions The plan works. A few things are worth reading before you commit. 
+ 8 stops across 6 of 6 days, 5 hr 21 min on foot to reach them, 3 hr 38 min held for journeys we could not verify.
+ Calendar file (.ics) Back to the board Share this plan 
+ Getting around
+ On foot for now — public transport is not verified here yet
+ Walk no practical alternative Easy-going days Hands-on logistics 
+ On foot to reach things 5 hr 25 min 
+ Held for unverified journeys 3 hr 40 min 
+ Why this way
+ Public transport is not verified here yet — nothing in this build can measure a scheduled journey — so every leg is priced as the measured walk, and what was scheduled is what fits on foot.
+ Parking Nothing on this plan needs a parking space. 
+ Public transport Public transport is not verified here yet — we cannot check timetables, so the times shown are on foot. 
+ Without a car This plan assumes no car. Anything that needs one has been left out rather than offered and then withdrawn. 
+ Check these before you book
+ These change year to year. We have not checked today’s conditions.
+ We know a routing engine can reach this, not that it is open to the public on your dates. Check before you go.
+ Walking times are measured. Measured against the road network.
+ Weather
+ No weather data 
+ We could not reach a weather source for your dates, so nothing in this plan has been placed against one. Rebuild closer to the time.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available. Conditions change; we have not checked today.
+ Eating
+ Nothing we can verify fitted the routes these days take, so the meals point at an area rather than at a place — 15 of them.
+ Casual most of the time, with the budget saved for the one that is worth it.
+ Meals meant to be an event 0 of 1 
+ Days you pick yourself 1, 2, 3, 4, 5, 6 
+ Read from 10 venues in this region, mostly off their own pages, on the dates recorded against each one. Opening hours here change more than anything else we hold — several of these publish an opening time and nothing else — so treat a closing time as ours unless the venue is named as the source. We have not checked today.
+ Day 1 Mon 14 Sept Lake around Osaka 
+ Day 2 Tue 15 Sept History & culture around Osaka 
+ Day 3 Wed 16 Sept Easy walk around Osaka 
+ Day 4 Thu 17 Sept History & culture around Osaka 
+ Day 5 Fri 18 Sept History & culture around Osaka 
+ Day 6 Sat 19 Sept History & culture around Osaka 
+ Day 1 · Mon 14 Sept 
+ 11:00 – 20:00 
+ Lake around Osaka · based in Osaka 
+ moderate day 1 hr 15 min travelling 1 hr 15 min on foot 
+ 2 hr 30 min at stops · 3 hr 30 min free
+ walk 
+ → visit 
+ → walk back 
+ 1 hr 15 min walking there
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ We found 10 places to eat here against the 12 a 6-day trip like yours would normally draw on. This is what our sources hold, not a claim that there is nothing else — expect to find some meals yourself.
+ Arriving at 10:00, so the day starts after you have landed and settled.
+ 11:00 40 min 
+ Walk to Osaka Fureai no Mizube
+ Walk 
+ 36 min on foot, measured between the two points.
+ Osaka → Osaka Fureai no Mizube · 3 km · measured travel time
+ 11:40 45 min 
+ Lunch near Osaka Fureai no Mizube
+ Lunch · Time held 
+ We hold nothing serving lunch within reach of Osaka Fureai no Mizube, so this is time held near Osaka Fureai no Mizube and the choice of where is yours.
+ 12:25 2 hr 30 min 
+ Osaka Fureai no Mizube
+ easy No weather data 
+ A strong fit for how you said you travel.
+ 14:55 40 min 
+ Walk back to Osaka
+ Walk 
+ 36 min back to Osaka.
+ Osaka Fureai no Mizube → Osaka · 3 km · measured travel time
+ 15:30 2 hr 30 min 
+ Free time
+ Free 
+ Deliberately unbooked. A plan with no slack in it is a plan that breaks.
+ 18:00 1 hr 
+ Dinner around Osaka
+ Dinner · Time held 
+ 1 place we hold within reach of Osaka serves dinner, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 19:00 1 hr 
+ Free time
+ Free 
+ Deliberately unbooked. A plan with no slack in it is a plan that breaks.
+ Day 2 · Tue 15 Sept 
+ 09:00 – 20:00 
+ History & culture around Osaka · based in Osaka 
+ moderate day 2 hr 30 min travelling 1 hr 45 min on foot 
+ 2 hr 45 min at stops · 4 hr free
+ walk 
+ → visit 
+ → walk 
+ → visit 
+ → walk 
+ → visit 
+ → travel back 
+ 1 hr 45 min walking there · 50 min held for journeys we could not verify
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ 09:00 40 min 
+ Walk to 道頓堀
+ Walk 
+ 39 min on foot, measured between the two points.
+ Osaka → 道頓堀 · 3 km · measured travel time
+ 09:40 45 min 
+ 道頓堀
+ easy No weather data 
+ Matches your interest in food & local eating.
+ 10:25 35 min 
+ Walk to Tsūtenkaku
+ Walk 
+ 32 min on foot, measured between the two points.
+ 道頓堀 → Tsūtenkaku · 3 km · measured travel time
+ 11:00 45 min 
+ Tsūtenkaku
+ easy No weather data 
+ A strong fit for how you said you travel.
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 11:45 45 min 
+ Lunch near Tsūtenkaku
+ Lunch · Time held 
+ 2 places we hold within reach of Tsūtenkaku serve lunch, and none of them could be fitted at this hour — so this is time held near Tsūtenkaku rather than somewhere named.
+ 12:30 35 min 
+ Walk to 湊町
+ Walk 
+ 31 min on foot, measured between the two points.
+ Tsūtenkaku → 湊町 · 2 km · measured travel time
+ 13:00 1 hr 15 min 
+ 湊町
+ easy No weather data 
+ Sits right in the middle of famous and quiet, which is the mix you asked for.
+ Matches your interest in history & culture.
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 14:15 50 min 
+ Travel back to Osaka
+ Journey not verified 
+ We could not verify the transit route yet; about 47 min on foot — the longest the way back can take, and what the day holds for it.
+ 湊町 → Osaka · 4 km · route not verified — the walking time shown is the upper bound we hold for it
+ 15:00 3 hr 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Osaka
+ Dinner · Time held 
+ 1 place we hold within reach of Osaka serves dinner, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 19:00 1 hr 
+ Free time
+ Free 
+ Deliberately unbooked. A plan with no slack in it is a plan that breaks.
+ Day 3 · Wed 16 Sept 
+ 09:00 – 20:00 
+ Easy walk around Osaka · based in Osaka 
+ moderate day 2 hr 5 min travelling 
+ 1 hr 15 min at stops · 5 hr 25 min free
+ travel 
+ → visit 
+ → travel back 
+ 2 hr 5 min held for journeys we could not verify
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ We found 10 places to eat here against the 12 a 6-day trip like yours would normally draw on. This is what our sources hold, not a claim that there is nothing else — expect to find some meals yourself.
+ 09:00 30 min 
+ Breakfast around Osaka
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Osaka, so this is time held around Osaka and the choice of where is yours.
+ 09:30 1 hr 5 min 
+ Travel to 真田山公園
+ Journey not verified 
+ We could not verify the transit route yet; about 1 hr 3 min on foot — the longest this journey can take, and what the day holds for it.
+ Osaka → 真田山公園 · 5 km · route not verified — the walking time shown is the upper bound we hold for it
+ 10:35 1 hr 15 min 
+ 真田山公園
+ easy No weather data 
+ A strong fit for how you said you travel.
+ 11:50 45 min 
+ Lunch near 真田山公園
+ Lunch · Time held 
+ We hold nothing serving lunch within reach of 真田山公園, so this is time held near 真田山公園 and the choice of where is yours.
+ 12:35 1 hr 5 min 
+ Travel back to Osaka
+ Journey not verified 
+ We could not verify the transit route yet; about 1 hr 1 min on foot — the longest the way back can take, and what the day holds for it.
+ 真田山公園 → Osaka · 5 km · route not verified — the walking time shown is the upper bound we hold for it
+ 13:35 4 hr 25 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Osaka
+ Dinner · Time held 
+ 1 place we hold within reach of Osaka serves dinner, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 19:00 1 hr 
+ Free time
+ Free 
+ Deliberately unbooked. A plan with no slack in it is a plan that breaks.
+ Day 4 · Thu 17 Sept 
+ 09:00 – 20:00 
+ History & culture around Osaka · based in Osaka 
+ moderate day 1 hr 35 min travelling 45 min on foot 
+ 2 hr at stops · 5 hr 10 min free
+ travel 
+ → visit 
+ → walk back 
+ 45 min walking there · 50 min held for journeys we could not verify
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ We found 10 places to eat here against the 12 a 6-day trip like yours would normally draw on. This is what our sources hold, not a claim that there is nothing else — expect to find some meals yourself.
+ 09:00 30 min 
+ Breakfast around Osaka
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Osaka, so this is time held around Osaka and the choice of where is yours.
+ 09:30 50 min 
+ Travel to Osaka Castle
+ Journey not verified 
+ We could not verify the transit route yet; about 47 min on foot — the longest this journey can take, and what the day holds for it.
+ Osaka → Osaka Castle · 3 km · route not verified — the walking time shown is the upper bound we hold for it
+ 10:20 2 hr 
+ Osaka Castle
+ easy No weather data 
+ One of the established names here — the kind of stop this area is known for.
+ Matches your interest in history & culture.
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 12:20 45 min 
+ Lunch near Osaka Castle
+ Lunch · Time held 
+ We hold nothing serving lunch within reach of Osaka Castle, so this is time held near Osaka Castle and the choice of where is yours.
+ 13:05 45 min 
+ Walk back to Osaka
+ Walk 
+ 45 min back to Osaka.
+ Osaka Castle → Osaka · 3 km · measured travel time
+ 13:50 4 hr 10 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Osaka
+ Dinner · Time held 
+ 1 place we hold within reach of Osaka serves dinner, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 19:00 1 hr 
+ Free time
+ Free 
+ Deliberately unbooked. A plan with no slack in it is a plan that breaks.
+ Day 5 · Fri 18 Sept 
+ 09:00 – 20:00 
+ History & culture around Osaka · based in Osaka 
+ light day 1 hr 15 min travelling 1 hr 15 min on foot 
+ 1 hr 15 min at stops · 6 hr 15 min free
+ walk 
+ → visit 
+ → walk back 
+ 1 hr 15 min walking there
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ We found 10 places to eat here against the 12 a 6-day trip like yours would normally draw on. This is what our sources hold, not a claim that there is nothing else — expect to find some meals yourself.
+ 09:00 30 min 
+ Breakfast around Osaka
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Osaka, so this is time held around Osaka and the choice of where is yours.
+ 09:30 40 min 
+ Walk to Gallery Yamaguchi kunst-bau
+ Walk 
+ 36 min on foot, measured between the two points.
+ Osaka → Gallery Yamaguchi kunst-bau · 3 km · measured travel time
+ 10:10 1 hr 15 min 
+ Gallery Yamaguchi kunst-bau
+ No weather data 
+ Holds up even if the weather turns.
+ Matches your interest in history & culture.
+ holds up in poor weather
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 11:25 40 min 
+ Walk back to Osaka
+ Walk 
+ 37 min back to Osaka.
+ Gallery Yamaguchi kunst-bau → Osaka · 3 km · measured travel time
+ 12:00 45 min 
+ Lunch around Osaka
+ Lunch · Time held 
+ 1 place we hold within reach of Osaka serves lunch, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 12:45 5 hr 15 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ 18:00 1 hr 
+ Dinner around Osaka
+ Dinner · Time held 
+ 1 place we hold within reach of Osaka serves dinner, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 19:00 1 hr 
+ Free time
+ Free 
+ Deliberately unbooked. A plan with no slack in it is a plan that breaks.
+ Day 6 · Sat 19 Sept 
+ 09:00 – 15:30 
+ History & culture around Osaka · based in Osaka 
+ light day 30 min travelling 
+ 1 hr 15 min at stops · 3 hr 15 min free
+ walk 
+ → visit 
+ → walk back 
+ 30 min walking there
+ Check before you go: We know the road or path reaches this, not that it is open to the public on your dates. Check before you go.
+ No weather data 
+ We could not get weather for this date. Daily API request limit exceeded. Please try again tomorrow.
+ Nothing here has been checked against the weather. Rebuild once a forecast is available.
+ Eating
+ We could not verify places to eat near where this day goes — check locally.
+ We found 10 places to eat here against the 12 a 6-day trip like yours would normally draw on. This is what our sources hold, not a claim that there is nothing else — expect to find some meals yourself.
+ Leaving at 17:00, so this day wraps up early.
+ 09:00 30 min 
+ Breakfast around Osaka
+ Breakfast · Time held 
+ We hold nothing serving breakfast within reach of Osaka, so this is time held around Osaka and the choice of where is yours.
+ 09:30 15 min 
+ Walk to neji
+ Walk 
+ 15 min on foot, measured between the two points.
+ Osaka → neji · 1 km · measured travel time
+ 09:45 1 hr 15 min 
+ neji
+ No weather data 
+ 15 min on foot, inside the 30 min you were happy to travel.
+ Matches your interest in history & culture.
+ 15 min on foot from your base · holds up in poor weather
+ Check its hours. Nobody publishes opening hours for this that we could find. Check before you go.
+ 11:00 15 min 
+ Walk back to Osaka
+ Walk 
+ 14 min back to Osaka.
+ neji → Osaka · 1 km · measured travel time
+ 11:30 45 min 
+ Lunch around Osaka
+ Lunch · Time held 
+ 1 place we hold within reach of Osaka serves lunch, and none of them could be fitted at this hour — so this is time held around Osaka rather than somewhere named.
+ 12:15 3 hr 15 min 
+ Free time
+ Free 
+ A long open stretch. Everything else you picked is already placed, out of reach on this day, or would not fit — so the time stays yours rather than being filled for the sake of it.
+ Keep these flexible
+ Each of these carries something the plan cannot promise — weather, unverified details, or a booking still in your hands. Hold them loosely and the trip bends instead of breaking.
+ Tsūtenkaku · day 2 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ 湊町 · day 2 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ Osaka Castle · day 4 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ Gallery Yamaguchi kunst-bau · day 5 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ neji · day 6 — check before travel: Nobody publishes opening hours for this that we could find. Check before you go. 
+ Worth reading
+ ▲ We could not get weather for day 1, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 1's route, so its meals point at Osaka Fureai no Mizube and Osaka rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for Tsūtenkaku. Check them before you rely on day 2. 
+ ▲ Nobody has confirmed opening hours for 湊町. Check them before you rely on day 2. 
+ ▲ We could not get weather for day 2, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 2's route, so its meals point at Tsūtenkaku and Osaka rather than at a place. Which one is yours to pick. 
+ ▲ We could not get weather for day 3, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 3's route, so its meals point at Osaka and 真田山公園 rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for Osaka Castle. Check them before you rely on day 4. 
+ ▲ We could not get weather for day 4, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 4's route, so its meals point at Osaka and Osaka Castle rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for Gallery Yamaguchi kunst-bau. Check them before you rely on day 5. 
+ ▲ We could not get weather for day 5, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 5's route, so its meals point at Osaka rather than at a place. Which one is yours to pick. 
+ ▲ Nobody has confirmed opening hours for neji. Check them before you rely on day 6. 
+ ▲ We could not get weather for day 6, so nothing on it was placed against a forecast. Check conditions yourself before you commit to it. 
+ ▲ Nothing we can vouch for was open and near enough to day 6's route, so its meals point at Osaka rather than at a place. Which one is yours to pick. 
+ ▲ This plan holds 8 stops, on every day it could build one around. At the pace and the free time you asked for, these dates have room for around 18 — so there is more of this trip still to choose. 
+ Adjusted 1 time while planning: Day 2 holds time for its meals rather than naming places: getting to and from them would have taken the day past a limit you set.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDiscoveryBoard } from '../discovery/board';
 import { transitCityBoardInput, transitCityTraveler } from '../testing/transit-city';
-import { BOARD_GROUP_COPY } from './discovery';
+import { BOARD_GROUP_COPY, PROXIMITY_CLAIMS } from './discovery';
 
 /**
  * A GROUP HEADING MAY NOT CLAIM A FACT ITS GROUP DOES NOT HOLD.
@@ -22,18 +22,6 @@ import { BOARD_GROUP_COPY } from './discovery';
  * shows an unmeasured journey genuinely landing in this group, which is the
  * reason the claim cannot be made.
  */
-
-/** The words a proximity claim has to use to be one. */
-const PROXIMITY_CLAIMS = [
-  'short hop',
-  'short trip',
-  'near your base',
-  'from your base',
-  'close to',
-  'nearby',
-  'minutes from',
-  'a stone',
-];
 
 describe('the board group headings', () => {
   it('does not claim nearness for the group that holds unmeasured journeys', () => {
@@ -62,10 +50,19 @@ describe('the board group headings', () => {
       'no unmeasured journey reached the near group, so the heading could honestly claim nearness',
     ).toBeGreaterThan(0);
 
-    const blurb = BOARD_GROUP_COPY.nearby_side_quests.blurb.toLowerCase();
+    /*
+     * This constant is the *compiler's* vocabulary and no surface renders it.
+     * The copy a traveller reads is `BOARD_GROUP_HEADINGS`, which carried
+     * "Within your range · Inside the distance you said you would travel" over
+     * the very population proved above while this test was green — the
+     * invariant guarded on the copy nobody reads and unguarded on the copy
+     * everybody reads. `board-copy.test.ts` holds the rendered half against the
+     * same exported list.
+     */
+    const text = BOARD_GROUP_COPY.nearby_side_quests.blurb.toLowerCase();
     for (const claim of PROXIMITY_CLAIMS) {
       expect(
-        blurb.includes(claim),
+        text.includes(claim),
         `the near group's blurb claims "${claim}" over ${unmeasured.length} stops whose journey nobody could time`,
       ).toBe(false);
     }

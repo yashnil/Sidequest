@@ -135,6 +135,64 @@ describe('the interest a candidate may speak', () => {
     );
     expect(eligible[0]!.primaryInterest).toBe('easy_nature_walks');
   });
+
+  /**
+   * AND THE OTHER HALF OF THE CLAIM: THAT THE TRAVELLER ASKED FOR IT.
+   *
+   * Everything above is about the record. "Matches your interest in X" also
+   * says something about the person, and nothing checked it. `primaryInterest`
+   * falls back to a place's best-graded interest whatever the grade, and `low`
+   * is shown to the traveller as "Only if it is right there" — so a delivered
+   * Osaka plan told a traveller who had graded photography and easy nature
+   * walks at `low` that a viewpoint "matches your interest in sunrise & sunset
+   * photography", and headed a whole day "Easy nature walks around Osaka". The
+   * board's own fit record for both places carried `matchedInterests: []`.
+   */
+  function gradedAt(entry: Place, primaryInterest: Interest, matched: Interest[]) {
+    const candidate = candidateOf(entry, primaryInterest);
+    return {
+      ...candidate,
+      fit: { ...candidate.fit, matchedInterests: matched },
+    } as DiscoveryCandidate;
+  }
+
+  it('withholds an interest the traveller graded "only if it is right there"', () => {
+    const garden = place('fixture-lowgraded', { tags: ['places=garden'], category: 'easy_walk' });
+    const { eligible } = resolveCandidates(
+      [gradedAt(garden, 'easy_nature_walks', [])],
+      included([garden.id]),
+      matrixFor([garden.id]),
+    );
+    expect(eligible).toHaveLength(1);
+    expect(eligible[0]!.primaryInterest).toBeUndefined();
+  });
+
+  it('speaks it as soon as the grading is a real match', () => {
+    /* The control: the kind still evidences it, and now so does the traveller. */
+    const garden = place('fixture-graded', { tags: ['places=garden'], category: 'easy_walk' });
+    const { eligible } = resolveCandidates(
+      [gradedAt(garden, 'easy_nature_walks', ['easy_nature_walks'])],
+      included([garden.id]),
+      matrixFor([garden.id]),
+    );
+    expect(eligible[0]!.primaryInterest).toBe('easy_nature_walks');
+  });
+
+  it('keeps a low-graded stop in the plan — only the sentence about it changes', () => {
+    /*
+     * The thing this fix must not do. A place graded "only if it is right
+     * there" is still a place the traveller chose and the planner may still
+     * schedule it; what it may not do is tell them they asked for it.
+     */
+    const garden = place('fixture-still-eligible', { tags: ['places=garden'], category: 'easy_walk' });
+    const { eligible, rejected } = resolveCandidates(
+      [gradedAt(garden, 'easy_nature_walks', [])],
+      included([garden.id]),
+      matrixFor([garden.id]),
+    );
+    expect(eligible).toHaveLength(1);
+    expect(rejected).toHaveLength(0);
+  });
 });
 
 describe('the theme of a day whose stops carry no speakable interest', () => {

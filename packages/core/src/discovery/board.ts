@@ -88,6 +88,16 @@ export interface DiscoveryCandidate {
   /** The mode that figure is in. `null` alongside an unresolved journey. */
   travelModeFromBase: TransportMode | null;
   /**
+   * Whether `travelMinutesFromBase` is the journey or only stands in for it.
+   *
+   * Carried from the assessment rather than re-derived here, because the two
+   * surfaces that re-derived it read `detourClass` — which is a statement about
+   * the traveller's *budgets* — and so said "2 hr 17 min on foot from base" and
+   * "too far for this trip" about a landmark a quarter of an hour away by
+   * train. See `SatelliteAssessment.journeyProxy`.
+   */
+  journeyProxy: boolean;
+  /**
    * The shared reach relationship, carried whole.
    *
    * The card, the scorer, the auto-selector and the planner all read this one
@@ -225,6 +235,21 @@ export const BOARD_REFUSALS = [
    * is how they arrive. Its inclusion reason says so, and the board honours it.
    */
   'gateway_only',
+  /**
+   * A second record for a subject the board is already showing.
+   *
+   * A live metro board carried four cards for two places — one theme park named
+   * identically twice, described once as an amusement park and once as a water
+   * park, and a second park sitting beside a record of itself whose name
+   * carried both the local and the English reading — over an integrity block
+   * reading `offered: 24, admitted: 24, refused: []`.
+   * A large site is mapped as several features, and the compiler's
+   * `dedupeCandidates` is deliberately conservative about joining them (same
+   * name within 120 m) because *it* merges records, and a wrong merge deletes a
+   * place. Refusing a card does not: both records survive, and the board shows
+   * the subject once.
+   */
+  'duplicate_subject',
 ] as const;
 export type BoardRefusal = (typeof BOARD_REFUSALS)[number];
 
@@ -253,6 +278,26 @@ export function admitToBoard(place: Place): BoardAdmission {
     return { place, admitted: false, role, refusal: 'utility_role' };
   }
   return { place, admitted: true, ...(role ? { role } : {}) };
+}
+
+/**
+ * Every name a record might be recognised by, normalised for comparison.
+ *
+ * Split on the slash because `Local/English` is a common way for a catalogue to
+ * carry both readings in one field, and two Disneyland records differed by
+ * exactly that. Segments under three characters are dropped: they collide
+ * across unrelated places far more often than they identify one.
+ */
+function subjectKeys(name: string): string[] {
+  return name
+    .split(/[/／|｜]/)
+    .map((part) =>
+      part
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[\s\p{P}\p{S}]+/gu, ''),
+    )
+    .filter((part) => part.length >= 3);
 }
 
 /**
@@ -285,7 +330,49 @@ export function partitionBoardPlaces(places: readonly Place[]): {
   admitted: Place[];
   integrity: BoardIntegrity;
 } {
-  const admissions = places.map(admitToBoard);
+  /**
+   * ONE SUBJECT, ONE CARD — DECIDED HERE, BEFORE ANYTHING COUNTS THE REGION.
+   *
+   * In this gate rather than later for the same reason gateways are: everything
+   * downstream — the expansion's satellite counts, the category saturation
+   * tally, the integrity block a traveller reads — is computed over what this
+   * function admits, so a repeat that survives to the cards has already been
+   * counted twice in every number describing "how much is here".
+   *
+   * The survivor is chosen by the records' own standing rather than by fit,
+   * because admission is a statement about the region and takes no traveller:
+   * `partitionBoardPlaces` is not given a profile and must not start needing
+   * one. Popularity first, then the id, so one region always partitions the
+   * same way.
+   *
+   * Names only, and no distance in it. Partly because this file may not compute
+   * one — `routing/semantics.architecture.test` holds the board to rendering
+   * `place.travelFromBase` and never deriving a second answer beside it — but
+   * mostly because distance is not what makes this a defect. A card carries a
+   * name, a description and a journey, and two cards carrying the same name are
+   * indistinguishable to the person reading them however far apart the two
+   * records sit.
+   */
+  const byStanding = [...places].sort(
+    (a, b) => (b.popularityScore ?? 0) - (a.popularityScore ?? 0) || a.id.localeCompare(b.id),
+  );
+  const heldKeys = new Set<string>();
+  const repeats = new Set<string>();
+  for (const place of byStanding) {
+    const keys = subjectKeys(place.name);
+    if (keys.length === 0) continue;
+    if (keys.some((key) => heldKeys.has(key))) {
+      repeats.add(place.id);
+      continue;
+    }
+    for (const key of keys) heldKeys.add(key);
+  }
+
+  const admissions = places.map((place) =>
+    repeats.has(place.id)
+      ? { place, admitted: false as const, refusal: 'duplicate_subject' as const }
+      : admitToBoard(place),
+  );
   const admitted = admissions.filter((entry) => entry.admitted).map((entry) => entry.place);
 
   const refusedCounts = new Map<BoardRefusal, number>();
@@ -1046,6 +1133,7 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
         travelMinutesFromBase: assessment.travelMinutesFromBase,
         travelModeFromBase: assessment.travelModeFromBase,
         reach: assessment.reach,
+        journeyProxy: assessment.journeyProxy,
         distanceKm: assessment.distanceKm,
         season: assessment.season,
         access: assessment.access,
@@ -1057,7 +1145,7 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
           avoidances: profile.avoidances,
           daylightOnly: assessment.operating.daylightOnly,
         }),
-        worthDetour: worthDetourLabel(assessment.detourClass, fit.band),
+        worthDetour: worthDetourLabel(assessment.detourClass, fit.band, assessment.journeyProxy),
         group: groups[0]!,
       };
     })
@@ -1149,8 +1237,45 @@ function groupsFor(
    * excess under a cheerful heading to flatten a distribution would trade a
    * dull board for a dishonest one.
    */
-  if (reasonBasis === 'evidence_gap') return ['needs_verification'];
   if (band === 'not_workable' || band === 'weak') return ['weak_fit'];
+  /**
+   * A CAVEAT ABOUT A CARD IS NOT A SUBSTITUTE FOR WHAT THE CARD IS.
+   *
+   * `evidence_gap` used to be the first thing tested, ahead of every content
+   * heading, and on a dense-metropolis board that meant the heading a traveller
+   * read was almost never about the place. Twenty of twenty-four cards on one
+   * delivered board and nineteen of twenty-four on another sat under
+   * "Promising — check before you go", the destination's principal temple,
+   * shrine and palace among them, and "Classics worth your time" rendered on
+   * neither board — not because no card earned it, but because the cards that
+   * had earned it were routed away before the earning was checked.
+   *
+   * So a record whose standing something *outside it* established keeps its
+   * content heading, and the verification caveat rides on the card, where it
+   * already does: every one of these cards carries its own sentence saying what
+   * could not be confirmed. `standsAsEstablishedName` is the same predicate the
+   * caption uses, so the heading and the sentence cannot come apart.
+   *
+   * Two conditions, and both are about honesty rather than tidiness:
+   *
+   *   - `too_far` stays out. "The well-known ones **that still suit how you
+   *     travel**" is false of a place this trip cannot reach, and putting it
+   *     there would be the board promising what the planner must take back.
+   *   - `needs_verification` is kept as the second true heading, so
+   *     `calibrateBoardGroups` still has somewhere to move a card if the
+   *     classics group over-subscribes.
+   */
+  if (
+    detourClass !== 'too_far' &&
+    outcome !== 'closed_or_unavailable' &&
+    outcome !== 'redundant' &&
+    standsAsEstablishedName(place)
+  ) {
+    return reasonBasis === 'evidence_gap'
+      ? ['must_see_classics', 'needs_verification']
+      : ['must_see_classics'];
+  }
+  if (reasonBasis === 'evidence_gap') return ['needs_verification'];
   if (outcome === 'not_worth_detour') return ['weak_fit'];
 
   /**
@@ -1223,9 +1348,6 @@ function groupsFor(
    * not mandatory, so a board with no classics is a true board, not a broken
    * one.
    */
-  if (standsAsEstablishedName(place)) {
-    return ['must_see_classics'];
-  }
   if (
     place.weather.poorWeatherBackup &&
     (place.physicalIntensity === 'none' || place.physicalIntensity === 'easy')
@@ -1313,6 +1435,7 @@ export const BOARD_INTEGRITY_FACTS = [
   'withheldUnplaceable',
   'removedOutOfScope',
   'removedUtilityRole',
+  'removedDuplicateSubject',
   'gateways',
   'expansionMembers',
   'satellites',
@@ -1328,6 +1451,7 @@ export const BOARD_INTEGRITY_FACT_LABELS: Record<BoardIntegrityFactId, string> =
   withheldUnplaceable: 'Held back until we can place them',
   removedOutOfScope: 'Dropped for being somewhere else',
   removedUtilityRole: 'Dropped as transport or services',
+  removedDuplicateSubject: 'Second records for something already shown',
   gateways: 'Kept as ways in and out',
   expansionMembers: 'Added on purpose from further out',
   satellites: 'Offered as optional side trips',
@@ -1365,6 +1489,8 @@ export const BOARD_INTEGRITY_FACT_BLURBS: Partial<Record<BoardIntegrityFactId, s
     'Nobody publishes enough about where these are for us to be sure they belong to this trip. They are not lost.',
   removedOutOfScope: 'Proven to sit outside the ground this trip covers.',
   removedUtilityRole: 'Transport and services that were offered to the board and refused by it.',
+  removedDuplicateSubject:
+    'A large site is often mapped several times over. These are the extra records; the place itself is on the board once.',
   gateways: 'How you get in and out. Never something you choose between.',
   satellites: 'Outside the destination, and only used once you say so.',
   roleUnclassified:
@@ -1659,6 +1785,7 @@ export function readBoardIntegrity(input: ReadBoardIntegrityInput): BoardIntegri
     withheldUnplaceable: known(recorded?.withheldUnplaceable, external.get('membership_unknown') ?? 0),
     removedOutOfScope: recorded?.removedOutOfScope,
     removedUtilityRole: known(undefined, refused.get('utility_role') ?? 0),
+    removedDuplicateSubject: known(undefined, refused.get('duplicate_subject') ?? 0),
     gateways: known(recorded?.gateways, refused.get('gateway_only') ?? 0),
     expansionMembers: known(
       recorded?.expansionMembers,

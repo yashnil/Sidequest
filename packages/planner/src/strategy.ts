@@ -237,7 +237,21 @@ export function buildTransportStrategy(input: StrategyInput): TransportStrategy 
      * honest sentence names the road and leaves the traveller's own transport to
      * the panel that knows it.
      */
-    dataDisclosure: `${matrixMode === 'foot' ? 'Walking' : 'Road'} times are ${matrixProvenance}. ${matrixNote}${measuredTransitLegs(days) > 0 ? ' Public-transport times were measured against published timetables for a weekday mid-morning departure, so an evening or a Sunday will differ.' : ''} Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.`,
+    /*
+     * THE SERVICE SENTENCE IS A CLAIM ABOUT LEGS THIS PLAN MAY NOT HAVE.
+     *
+     * It was appended unconditionally, and every one of the three delivered
+     * journeys carried `serviceIds: []` and `transitMinutes: 0` on every one of
+     * its twenty-two days. So the transport panel — the surface whose whole job
+     * is to say the product never invents a journey it could not measure —
+     * printed "we cannot check timetables, so the times shown are on foot" and,
+     * three lines lower, "service times come from the operators' published
+     * timetables". One panel, two contradictory statements about the same plan.
+     *
+     * It is a provenance line, so it is stated where there is provenance to
+     * state: a scheduled leg somewhere in the plan.
+     */
+    dataDisclosure: `${matrixMode === 'foot' ? 'Walking' : 'Road'} times are ${matrixProvenance}. ${matrixNote}${measuredTransitLegs(days) > 0 ? ' Public-transport times were measured against published timetables for a weekday mid-morning departure, so an evening or a Sunday will differ.' : ''}${scheduledServiceLegs(days) > 0 ? " Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live." : ''}`,
   };
 }
 
@@ -259,6 +273,18 @@ function measuredTransitLegs(days: readonly ItineraryDay[]): number {
       ).length,
     0,
   );
+}
+
+/**
+ * How many legs on this plan ride a scheduled service the region published.
+ *
+ * `serviceIds` is the access layer's own record of which operators a day
+ * actually used, so this is the plan's answer rather than a second opinion
+ * about it. Zero on a plan with no scheduled leg, which is the case the
+ * provenance sentence above had no business speaking about.
+ */
+function scheduledServiceLegs(days: readonly ItineraryDay[]): number {
+  return days.reduce((count, day) => count + day.transport.serviceIds.length, 0);
 }
 
 /** Modes in the order the trip first uses them, so the summary reads as a route. */
@@ -465,7 +491,29 @@ function noCarConsequence(
       .filter((rule) => rule.approachMode !== 'drive')
       .flatMap((rule) => rule.placeIds),
   );
-  const wouldLose = [...scheduledPlaceIds].filter((id) => !reachableWithoutCar.has(id));
+  /*
+   * THE PLAN'S OWN LEGS ARE EVIDENCE, AND THIS SENTENCE IGNORED THEM.
+   *
+   * The access dataset says which *published services* reach a place; it says
+   * nothing about a stop the planner walked to, because a walk needs no rule.
+   * So a delivered road itinerary announced "9 of the 9 stops on this plan
+   * become unreachable" on a page whose own day cards walked to three of them —
+   * seventeen, seven and thirteen minutes from the base the same sentence then
+   * offered as what survives.
+   *
+   * A stop this plan reached without a vehicle is reachable without a vehicle.
+   * That is not an inference; it is the itinerary.
+   */
+  const reachedWithoutACar = new Set(
+    days.flatMap((day) =>
+      day.items
+        .filter((item) => item.travel !== undefined && item.travel.mode !== 'drive')
+        .map((item) => item.travel!.toId),
+    ),
+  );
+  const wouldLose = [...scheduledPlaceIds].filter(
+    (id) => !reachableWithoutCar.has(id) && !reachedWithoutACar.has(id),
+  );
 
   if (wouldLose.length === 0) {
     return 'Every stop on this plan is also reachable without a car, which is unusual here.';

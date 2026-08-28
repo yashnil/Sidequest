@@ -223,6 +223,34 @@ export const geographicScopeSchema = z.object({
    * default, since the flow ordering made that overwhelmingly the case.
    */
   derivedFromProfile: z.boolean().optional(),
+  /**
+   * "One area, done properly" — with no area resolved.
+   *
+   * The breadth question offers that option over every container-sized
+   * destination and promises, in as many words, "we pick the part that fits you
+   * best and stay there". The part comes from the preflight's base portfolio,
+   * and the portfolio comes from the destination index — so a destination the
+   * index has no parts for produces a narrowing with nothing to centre on, and
+   * `deriveShape` keeps the container's whole published extent.
+   *
+   * That state is not small, and it does not look small. A live Tokyo build
+   * confirmed at `high` confidence with a rationale reading "A single part of
+   * Tokyo, about 12 km out, from one base", a base of Shinjuku, and a shape
+   * spanning the entire metropolis — 20.2°N to 35.9°N, because Tokyo
+   * administers the Izu and Ogasawara islands. All 24 places it then compiled
+   * were on those islands, between 176 and 1,225 km from the base it named.
+   * Nothing routed, and the traveller got no plan at all.
+   *
+   * Recorded here rather than re-derived downstream, because the fact belongs
+   * to the derivation: only `deriveShape` knows which branch it took, and every
+   * later reader would have to guess at it from a shape-versus-reach ratio.
+   * `scopeFitsTrip` refuses it, which is what the derivation's own comment has
+   * claimed all along.
+   *
+   * Optional, so scopes stored before this existed still parse; absent reads as
+   * "not recorded", never as "this happened".
+   */
+  narrowedWithoutPart: z.boolean().optional(),
   confirmedAt: z.string().min(1).optional(),
 });
 export type GeographicScope = z.infer<typeof geographicScopeSchema>;

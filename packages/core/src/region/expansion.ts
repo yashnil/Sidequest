@@ -55,6 +55,33 @@ export interface SatelliteAssessment {
   /** The shared reach relationship this assessment was derived from. */
   reach: ReachFromBase;
   /**
+   * WHETHER THE ONE MEASURED FIGURE IS THE JOURNEY, OR ONLY STANDING IN FOR IT.
+   *
+   * True where the only thing anybody could price is a walk, that walk is
+   * longer than this traveller said they walk, and the compilation signed that
+   * a scheduled network here went unmeasured — `transitBlindWalk`, the same
+   * predicate `classifyDetour` asks, read once and carried so no surface has to
+   * re-derive it.
+   *
+   * It exists because it was being re-derived, badly. `classifyDetour` files
+   * such a walk `unknown` *unless the round trip also busts the day's travel
+   * budget*, in which case rule 2 answers `too_far` first — correctly, because
+   * the scheduler refuses it on the same arithmetic. But the card and
+   * `worthDetourLabel` read only the resulting class, so the instant the budget
+   * rule answered, both went back to speaking as though a real walk had been
+   * measured: a delivered board rendered "2 hr 17 min on foot from base" for a
+   * landmark twenty-five minutes away by train, directly above that same card's
+   * own sentence saying "We could not confirm any route here, so we cannot say
+   * how far away it really is". One card, two answers, and the confident one
+   * was the false one.
+   *
+   * So the *class* stays a statement about budgets, which is what the
+   * scheduler needs, and this stays a statement about evidence, which is what
+   * every traveller-facing sentence needs. `false` on an authored or measured
+   * journey, and on a walk short enough to be the journey.
+   */
+  journeyProxy: boolean;
+  /**
    * Road distance, where the journey is one that puts kilometres on a vehicle.
    * `null` on a ride: a metro journey adds minutes to a day, not kilometres.
    */
@@ -186,6 +213,7 @@ export function expandRegion(input: ExpansionInput): RegionExpansion {
         travelMinutesFromBase: reach.status === 'measured' ? reach.travelMinutes : null,
         travelModeFromBase: reach.status === 'measured' ? reach.mode : null,
         reach,
+        journeyProxy: journeyIsProxyWalk(reach, travel.knowledge),
         distanceKm: reach.status === 'measured' ? reach.distanceKm : null,
         travelBudgetShare: travelBudgetShareOf(reach, travel.knowledge, placeAccess),
         season: assessSeason(place, months),
@@ -383,6 +411,19 @@ function unknownCalendarFor(placeId: string) {
  * Nothing here reads a kilometre. Distance survives as a card fact, not as a
  * verdict: the transport network decides how far away somewhere is.
  */
+/**
+ * Whether the figure this journey was priced at is a stand-in rather than the
+ * journey. One expression, read by the classifier and carried onto the
+ * assessment, so a card and a verdict cannot come to hold different answers.
+ */
+export function journeyIsProxyWalk(reach: ReachFromBase, knowledge: TravelKnowledge): boolean {
+  return (
+    reach.status === 'measured' &&
+    reach.mode === 'walk' &&
+    transitBlindWalk(knowledge, reach.travelMinutes)
+  );
+}
+
 function classifyDetour(
   place: Place,
   reach: ReachFromBase,
@@ -437,7 +478,7 @@ function classifyDetour(
    * verdict about a mode nobody measured, in place of the withheld one, and the
    * card would drop the sentence saying the transit route is unverified.
    */
-  if (reach.mode === 'walk' && transitBlindWalk(knowledge, reach.travelMinutes)) return 'unknown';
+  if (journeyIsProxyWalk(reach, knowledge)) return 'unknown';
 
   /*
    * The same substituted mode the cap used, so one journey is never bounded by
@@ -508,6 +549,7 @@ const FIT_ENTHUSIASM: Record<'top_pick' | 'strong' | 'good' | 'optional', number
 export function worthDetourLabel(
   detourClass: DetourClass,
   fitBand: 'top_pick' | 'strong' | 'good' | 'optional' | 'weak' | 'not_workable',
+  journeyProxy = false,
 ): WorthDetourLabel {
   if (fitBand === 'not_workable' || fitBand === 'weak') return 'skip_for_your_style';
 
@@ -517,7 +559,17 @@ export function worthDetourLabel(
    * and "too far" are both claims about a detour whose length nobody
    * established, and a provider that did not answer must not sound like one
    * that did.
+   *
+   * A *proxy* journey is the same claim wearing a measurement. The walking
+   * figure is real and is not this traveller's distance, so "too far for this
+   * trip" asserts a length nobody established just as confidently as it would
+   * over a blank — which is what a delivered metropolitan board did to its own
+   * principal palace, tower and temple, every one of them a short ride away.
+   * The class stays `too_far` where the budget arithmetic says so, because the
+   * scheduler refuses those on the same figures; the *verdict a traveller
+   * reads* withholds, exactly as it does for a journey nobody priced at all.
    */
+  if (journeyProxy) return 'reach_unverified';
   if (detourClass === 'unknown') return 'reach_unverified';
   if (detourClass === 'too_far') return 'too_far_for_this_trip';
 

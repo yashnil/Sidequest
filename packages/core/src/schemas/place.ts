@@ -21,7 +21,7 @@ import { displayNameSchema } from '../naming/display-name';
  * *type* from this file, which erases — so nothing circular is created at
  * runtime.
  */
-import { PROMINENCE_BASES } from '../quality/significance';
+import { NOTICE_MAGNITUDES, PROMINENCE_BASES } from '../quality/significance';
 
 /**
  * When the place itself is reachable at all — the snow gate, not the shuttle.
@@ -259,6 +259,30 @@ export const placeSchema = z.object({
    * it did. Produced by `standingFields`, never by hand.
    */
   prominenceBasis: z.enum(PROMINENCE_BASES).optional(),
+  /**
+   * WHAT VOUCHED FOR THE SIZE OF THIS RECORD'S NOTICE — SEE `NOTICE_MAGNITUDES`.
+   *
+   * Absent where nothing did, which is the ordinary case and the one that reads
+   * exactly as it always has.
+   *
+   * Carried because "how big is this thing" and "does the world know about it"
+   * are different questions and one of them was answering the other. The notice
+   * channels are all *presence* bits an open catalogue mints for every row of a
+   * class it maps at all, so no record can pass `MAX_UNMAGNIFIED_PROMINENCE` on
+   * them; the magnitude gate is what admits the rest. That put the classics bar
+   * and the magnitude gate at the same place, and the consequence was
+   * mechanical: a designated suburban lake wore "Classics worth your time — the
+   * well-known ones" on a delivered board, alone, while the destination's
+   * famous waterfall sat under "Probably skip" — because a protected boundary
+   * somebody drew is a statement about *size*, and the caption is a claim about
+   * fame.
+   *
+   * `ground_namesake` is the other magnitude and it is not the same claim: the
+   * surrounding ground orienting its own records around a thing is the ground
+   * saying it matters. That one may buy the caption; a designation alone may
+   * not. See `standsAsEstablishedName`.
+   */
+  noticeMagnitude: z.enum(NOTICE_MAGNITUDES).optional(),
   /** 0-1 knowledge-base breadth only. Never an attribute count. */
   globalProminence: z.number().min(0).max(1).optional(),
   /** 0-1 official publication, conferred designation, the region's own naming. */

@@ -26,4 +26,4 @@ export { validateItinerary, validateStrategy, statusFor } from './validate';
  * one venue may be named is a product rule an end-to-end test has to be able to
  * read, and the rest of that module is planner-internal.
  */
-export { MAX_TIMES_ONE_VENUE_IS_NAMED } from './food';
+export { foodAreaAt, MAX_TIMES_ONE_VENUE_IS_NAMED } from './food';

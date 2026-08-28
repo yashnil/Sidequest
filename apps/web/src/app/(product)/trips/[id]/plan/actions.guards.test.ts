@@ -2,6 +2,19 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mintSessionToken } from '@/lib/net/session-signature';
+
+/*
+ * ONE BROWSER, AND A CREDENTIAL THIS SERVER MINTED.
+ *
+ * A value the client picked is not an identity — that is the whole of the
+ * per-caller spend fix — so a test presenting a bare string measures the shared
+ * unattributed pool rather than a browser's own share, which is not what any
+ * assertion below is about. The secret is pinned here so the token is a pure
+ * function and needs no database.
+ */
+process.env.SIDEQUEST_SESSION_SECRET = 'guards-test-secret';
+const BROWSER = mintSessionToken('test-browser');
 
 /**
  * THE GUARDS, ASSERTED AT THE ACTIONS RATHER THAN AT THE MODULES.
@@ -92,7 +105,13 @@ beforeEach(() => {
   // One stable browser identity: the ownership boundary refuses a request
   // presenting no cookie, and every guard below is measured on an owner's
   // ordinary presses. The per-caller ledger test keys on this same value.
-  jar.set('sidequest_session', 'test-browser');
+  /*
+   * A cookie THIS SERVER MINTED, which is the only kind that is an identity.
+   * A value the client chose is not attributable — that is the whole of the
+   * spend-ceiling fix — so a test presenting a bare string would be measuring
+   * the unattributed pool rather than a browser's own share.
+   */
+  jar.set('sidequest_session', BROWSER);
   for (const key of ENV_KEYS) delete process.env[key];
   dir = mkdtempSync(join(tmpdir(), 'sidequest-action-guards-'));
   process.env.SIDEQUEST_DB_PATH = join(dir, 'test.db');
@@ -123,7 +142,7 @@ async function seededTrip(): Promise<string> {
       children: 0,
       travelerNeeds: [],
     },
-    'test-browser',
+    BROWSER,
   );
   repo.saveDestinationQuery(trip.id, 'known_destination', 'Harbour City');
   return trip.id;
@@ -242,7 +261,7 @@ describe('the per-caller daily share, from the action that starts a build', () =
   it('refuses this browser at its share while the deployment has room', async () => {
     // A known cookie, so the ledger can be pre-loaded against the exact key the
     // action will derive.
-    jar.set('sidequest_session', 'test-browser');
+    jar.set('sidequest_session', BROWSER);
 
     const tripId = await seededConfirmedTrip();
     goOpen();
@@ -250,7 +269,7 @@ describe('the per-caller daily share, from the action that starts a build', () =
 
     const { recordDailySpend, dailySpendSoFar } = await import('@/lib/compiler/daily-ceiling');
     for (let index = 0; index < 5; index += 1) {
-      recordDailySpend('live_compilations', 1, new Date(), 'session:test-browser');
+      recordDailySpend('live_compilations', 1, new Date(), `session:${BROWSER}`);
     }
 
     const { startCompilationAction } = await import('./actions');

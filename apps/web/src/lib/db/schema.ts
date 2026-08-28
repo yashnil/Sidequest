@@ -1539,6 +1539,23 @@ export const COLUMN_MIGRATIONS: readonly {
     column: 'transport_strategy_json',
     definition: "TEXT NOT NULL DEFAULT '{}'",
   },
+  /**
+   * Who the day's live-compilation allowance was charged to when this job was
+   * reserved.
+   *
+   * The reservation is taken at the press, which is right — a ceiling
+   * discovered by crossing it is not a ceiling — but nothing could ever give it
+   * back, so a build that failed before it spent anything still cost the
+   * traveller one of the six builds their browser gets in a day. On a
+   * deployment with a rejected research credential *every* build fails that
+   * way, and the traveller is locked out of a product that never did any work
+   * for them. Refunding needs the same key the charge used, and the key is
+   * known at the press and not inside the worker, so the job row carries it.
+   *
+   * Nullable: a job reserved before this column existed, or started by a caller
+   * nobody could attribute, has nothing to give back to.
+   */
+  { table: 'compilation_jobs', column: 'caller_key', definition: 'TEXT' },
   { table: 'itinerary_days', column: 'transport_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   {
     table: 'itinerary_days',

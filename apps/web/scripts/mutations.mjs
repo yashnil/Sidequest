@@ -765,4 +765,563 @@ export const MUTATIONS = [
     ],
     tests: ['packages/core/src/discovery/discovery.test.ts'],
   },
+  {
+    id: 'M33-proxy-walk-priced-as-a-distance',
+    contract:
+      'let a walk that only stands in for an unpriceable scheduled journey be read out as this traveller’s distance (§12, §17 step 6)',
+    detail:
+      'The worth-the-detour verdict goes back to reading `detourClass` alone, so a proxy walk long enough to bust the day budget is filed `too_far` first and the card asserts "too far for this trip" about a journey nobody measured — over a landmark a quarter of an hour away by train.',
+    edits: [
+      {
+        file: 'packages/core/src/region/expansion.ts',
+        find: "  if (journeyProxy) return 'reach_unverified';",
+        replace: "  if (journeyProxy && false) return 'reach_unverified';",
+      },
+    ],
+    tests: ['packages/core/src/region/expansion.test.ts'],
+  },
+  {
+    id: 'M34-card-quotes-a-walking-clock-for-a-train',
+    contract:
+      'let the rendered card re-derive the proxy fact from the budget class again (§9.1, §26)',
+    detail:
+      'The travel phrase reads `detourClass === "unknown"` rather than the carried fact, so the moment the budget rule answers first the card prints "2 hr 17 min on foot from base" directly above its own sentence saying no route could be confirmed.',
+    edits: [
+      {
+        file: 'apps/web/src/components/DiscoveryBoardView.tsx',
+        find: '  if (candidate.journeyProxy) {',
+        replace: "  if (candidate.detourClass === 'unknown' && candidate.reach.mode === 'walk') {",
+      },
+    ],
+    tests: ['apps/web/src/components/DiscoveryBoardView.test.ts'],
+  },
+  {
+    id: 'M35-feasible-reported-as-complete',
+    contract:
+      'report a plan holding a fraction of the traveller’s own paced volume as ready (§17 step 8, §20.1)',
+    detail:
+      'The completeness clause stops governing the verdict, so every feasibility gate passing is enough — which is how three delivered trips holding 42%, 56% and 58% of their paced volume, one with an empty day, all read "Ready".',
+    edits: [
+      {
+        file: 'packages/planner/src/readiness.ts',
+        find: "  if (coverage?.incomplete) return 'partial';",
+        replace: "  if (coverage?.incomplete && false) return 'partial';",
+      },
+    ],
+    tests: [
+      'apps/web/src/lib/iq/closure-invariants.test.ts',
+      'packages/planner/src/readiness.test.ts',
+    ],
+  },
+  {
+    id: 'M36-held-meal-names-somewhere-else',
+    contract:
+      'let a held meal name the base’s municipality on a day that goes elsewhere (§10, §20.11)',
+    detail:
+      'The fallback area is resolved at the base rather than at the anchor the traveller is standing on, so a lunch laid at a reserve sixty kilometres up the coast is titled "around <the base>" — which is what a delivered road journey printed, under a sentence admitting none of our venues worked from where the day actually is.',
+    edits: [
+      {
+        file: 'packages/planner/src/schedule.ts',
+        find: '    const anchorName = input.at?.name ?? atName;',
+        replace: '    const anchorName = baseName;',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M37-yielded-day-loses-the-whole-food-layer',
+    contract:
+      'let a day whose venues would not fit report that the region has no food data (§10)',
+    detail:
+      'The area falls back to the day’s food *plan* rather than the region’s food *dataset*, so a day that lost its named venues renders bare blocks headed "Lunch" and "Dinner" — in a metropolis whose own index holds fourteen venues.',
+    edits: [
+      {
+        file: 'packages/planner/src/schedule.ts',
+        find: '      context.foodDataset !== null',
+        replace: '      context.foodDataset !== null && context.food !== null && foodPlan !== null',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M38-daylight-judged-by-its-first-minute',
+    contract:
+      'judge whether a stop happens in daylight from the minute it starts (§13)',
+    detail:
+      'A visit that begins three minutes before sunset and runs sixty-seven past it says nothing at all — which is what a delivered arrival evening did, using a sunset time held on that same day’s own record.',
+    edits: [
+      {
+        file: 'packages/planner/src/validate-weather.ts',
+        find: '      mostlyAfterDark(item, {\n        sunriseMinute: day.weather.sunriseMinute,\n        sunsetMinute: day.weather.sunsetMinute,\n      })',
+        replace: '      item.startMinute >= day.weather.sunsetMinute',
+      },
+    ],
+    tests: ['packages/planner/src/schedule-quality.test.ts'],
+  },
+  {
+    id: 'M39-verification-caveat-replaces-what-a-place-is',
+    contract:
+      'route every thin-evidence card away from its content heading (§9.1, §20.6)',
+    detail:
+      'The evidence-gap route is tested ahead of the content headings again, so twenty of twenty-four cards on a metropolitan board sit under "Promising — check before you go" — the destination’s principal temple, shrine and palace among them — and the classics group renders on no board at all.',
+    edits: [
+      {
+        file: 'packages/core/src/discovery/board.ts',
+        find: '    standsAsEstablishedName(place)\n  ) {',
+        replace: '    standsAsEstablishedName(place) &&\n    reasonBasis !== \'evidence_gap\'\n  ) {',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M40-a-drawn-boundary-buys-the-classics-caption',
+    contract:
+      'let a conferred designation alone assert that the world knows a place (§8.3, §9.1)',
+    detail:
+      'The classics bar sits one hundredth above the ceiling presence alone reaches, so passing it and passing the magnitude gate become the same event — and a designated suburban lake is the only card under "Classics worth your time" while the destination’s famous waterfall renders under "Probably skip".',
+    edits: [
+      {
+        file: 'packages/core/src/quality/significance.ts',
+        find: "  if (place.noticeMagnitude === 'designation') return false;",
+        replace: "  if (place.noticeMagnitude === 'designation' && false) return false;",
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M41-caller-mints-its-own-spending-allowance',
+    contract:
+      'let a caller mint the identity its own spending allowance is charged against (§34 cost controls)',
+    detail:
+      'The budget identity is minted rather than read, so a caller that simply discards the Set-Cookie is handed a fresh *signed* identity — and therefore a fresh personal allowance — on every request. Measured against a twenty-build ceiling with a per-caller share of two: twenty-one distinct signed identities, twenty builds allowed, the per-caller fence never firing.',
+    edits: [
+      {
+        file: 'apps/web/src/lib/net/caller.ts',
+        find: '  const presented = await presentedSessionToken();\n  if (presented === null) return null;',
+        replace: '  const presented = await sessionToken({ mint: true });\n  if (presented === null) return null;',
+      },
+    ],
+    tests: ['apps/web/src/lib/net/session-identity.test.ts'],
+  },
+  {
+    id: 'M42-an-unspent-build-still-costs-a-build',
+    contract:
+      'keep the reserve of a build that never reached a provider (§34 cost controls)',
+    detail:
+      'A build that fails on a rejected credential still spends one of the six a browser gets in a day — and on a deployment with a dead key every build fails that way, so a traveller is locked out for a day by a product that did no work for them.',
+    edits: [
+      {
+        file: 'apps/web/src/lib/compiler/daily-ceiling.ts',
+        find: '    give.run(day, \'live_compilations\');',
+        replace: "    if (String(caller) === '\\u0000') give.run(day, 'live_compilations');",
+      },
+    ],
+    tests: ['apps/web/src/lib/compiler/unspent-build.test.ts'],
+  },
+  {
+    id: 'M43-the-resolved-clock-never-reaches-the-screen',
+    contract:
+      'leave the stored scope on a longitude guess after the build resolved the zone (§13)',
+    detail:
+      'The plan screen reads the stored intent, so a finished build prints "About UTC−1 — estimated from where this is on the map, because we could not confirm the local time zone" while its own artifact holds the resolved zone.',
+    edits: [
+      {
+        file: 'apps/web/src/lib/db/compiler-repository.ts',
+        find: '  if (artifactRank <= storedRank) return null;',
+        replace: '  if (artifactRank <= storedRank || true) return null;',
+      },
+    ],
+    tests: ['apps/web/src/lib/compiler/scope-timezone.test.ts'],
+  },
+  {
+    id: 'M44-a-square-is-sold-as-somewhere-to-eat',
+    contract:
+      'let an archetype’s convenience become a claim about a day (§8.3, §20.8)',
+    detail:
+      'A public square goes back to offering the food-and-towns interest, so a day made of three adjoining squares five hundred metres apart is headed "Food & local eating".',
+    edits: [
+      {
+        file: 'packages/compiler/src/backbone/taxonomy.ts',
+        find: "  plaza: { ...TOWN, category: 'historic_site', interests: ['history_and_culture', 'scenic_viewpoints'],",
+        replace: '  plaza: { ...TOWN,',
+      },
+    ],
+    tests: ['packages/compiler/src/backbone/taxonomy.test.ts'],
+  },
+  {
+    id: 'M45-a-card-describes-our-record-instead-of-the-place',
+    contract:
+      'print the record’s own metadata in the one line reserved for what a place is (§8.7)',
+    detail:
+      'The local name, the managing body and a sentence naming the map data come back, and together they push a bare stub past the length floor that exists to catch it.',
+    edits: [
+      {
+        file: 'packages/core/src/scoring/fit.ts',
+        find: "  for (const pattern of RECORD_CLAUSES) text = text.replace(pattern, '');",
+        replace: '  for (const pattern of RECORD_CLAUSES) void pattern;',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M46-an-outage-reported-as-an-empty-sky',
+    contract:
+      'report a weather source that refused as a source that answered and had nothing (§13)',
+    detail:
+      'Every empty dataset reads as "we asked and got nothing usable for your dates" again, so a rate-limited free tier reports a successful fetch with nothing in it — on the one panel whose job is to say whether pressing the button again would help. Measured live: three regions built back to back, two of them 429, both trips weather-blind and reported as successful.',
+    edits: [
+      {
+        file: 'apps/web/src/lib/weather/refresh.ts',
+        find: "    const refused = dataset.days.some(\n      (day) => day.kind === 'unavailable' && day.reason === 'provider_error',\n    );",
+        replace: '    const refused = false;',
+      },
+    ],
+    tests: ['apps/web/src/lib/weather/refresh.test.ts'],
+  },
+  {
+    id: 'M47-everything-picked-means-finished',
+    contract:
+      'let "every place they picked landed" waive the completeness bar and the floor (§17 step 8, §20.1)',
+    detail:
+      'Auto-pick scales its target to the region’s supply, so `scheduled === selected` is the ordinary case, and one activity a day satisfies the distribution clause — together they read five stops on a six-day metropolitan trip as `ready`, with the spacious sentence telling the traveller the empty afternoons were the pace they asked for.',
+    edits: [
+      {
+        file: 'packages/planner/src/readiness.ts',
+        find: '    incomplete: scheduled < expected,',
+        replace:
+          '    incomplete:\n      scheduled < expected &&\n      !(everyDayAnchored && input.funnel.selected > 0 && scheduled >= input.funnel.selected),',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M48-a-held-meal-counts-somewhere-it-does-not-name',
+    contract:
+      'let the name and the count on one meal row come from two different anchors (§10, §20.11)',
+    detail:
+      'The layout writes "where the traveller is" into two variables that are not updated together, so a meal laid mid-unit is titled after the gateway and measured at the previous unit’s exit. A delivered day printed "3 places we hold within reach of <the museum> serve lunch" over three counted from a square four kilometres away.',
+    edits: [
+      {
+        file: 'packages/planner/src/schedule.ts',
+        find: '    const anchorId = input.at?.routingId ?? atRoutingId;',
+        replace: '    const anchorId = atRoutingId;',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M49-the-car-follows-a-traveller-who-walked',
+    contract:
+      'move the vehicle on the access rule’s declared mode rather than the mode the leg was laid in (§12)',
+    detail:
+      'A shorter measured walk can win an approach, and the car was then recorded as having driven there. A delivered day walked to two city squares and "drove" from the second, with no leg back to the vehicle anywhere in it — not executable as printed, and short by the walk nobody booked.',
+    edits: [
+      {
+        file: 'packages/planner/src/schedule.ts',
+        find: "    if (!option.service && vehicleAt === option.gatewayRoutingId) vehicleAt = exitedFrom;",
+        replace: "    if (!option.service && option.approachMode === 'drive') vehicleAt = exitedFrom;",
+      },
+    ],
+    tests: ['packages/planner/src/short-leg-mode.test.ts', 'packages/planner/src/planner.test.ts'],
+  },
+  {
+    id: 'M50-a-walking-clock-quoted-as-a-journey-on-the-first-screen',
+    contract:
+      'quote the matrix’s minutes at the traveller whatever mode they were measured in (§12, §26)',
+    detail:
+      '`travelFromBase.driveMinutes` holds a walking proxy on a car-free compile, and the questionnaire printed it bare — "13 of the strongest options sit 275 minutes or so away, one way", about places twelve kilometres from a metropolitan base, to press the traveller into raising a transport limit.',
+    edits: [
+      {
+        file: 'packages/core/src/interests/decisions.ts',
+        find: "  return travel.mode === 'car' && carAvailable !== false;",
+        replace: '  return true;',
+      },
+    ],
+    tests: ['packages/core/src/interests/decisions.test.ts'],
+  },
+  {
+    id: 'M51-a-car-free-verdict-that-ignores-the-plans-own-legs',
+    contract:
+      'compute the without-a-car consequence from access rules alone (§12, §20.5)',
+    detail:
+      'A walk needs no access rule, so a delivered itinerary announced "9 of the 9 stops on this plan become unreachable" on a page whose own day cards walked to three of them from the base the same sentence offered as what survives.',
+    edits: [
+      {
+        file: 'packages/planner/src/strategy.ts',
+        find: '    (id) => !reachableWithoutCar.has(id) && !reachedWithoutACar.has(id),',
+        replace: '    (id) => !reachableWithoutCar.has(id),',
+      },
+    ],
+    tests: ['packages/planner/src/short-leg-mode.test.ts'],
+  },
+  {
+    id: 'M52-a-stop-card-restates-the-figure-the-page-just-qualified',
+    contract:
+      'print an unqualified walking figure for a journey the same page has called unverified (§12, §26)',
+    detail:
+      'The board’s travel phrase was corrected and the itinerary stop card was not, so a delivered plan printed three claims about one journey on one screen: "journey not verified", "the walking time shown is the upper bound we hold for it", and — between them, unqualified — "57 min on foot from your base".',
+    edits: [
+      {
+        file: 'apps/web/src/app/(product)/trips/[id]/itinerary/view-model.ts',
+        find: '    !candidate.journeyProxy\n  ) {',
+        replace: '    true\n  ) {',
+      },
+    ],
+    tests: ['apps/web/src/components/ItineraryView.unverified-journey.test.ts'],
+  },
+  {
+    id: 'M53-open-ground-vouches-for-a-place-somebody-runs',
+    contract:
+      'assert walk-in entry for a commercial venue because its archetype is open ground (§13, §20.8)',
+    detail:
+      'A booking-only, timed-entry thermal spa shares a taxonomy leaf with a hot spring in a river bed, and `plausiblyGated: false` puts both on the open-ground branch — which writes `walkInAllowed: true`, `reservationRequired: false`, no badge and no caution. A delivered plan drove fifty-three kilometres to a door the traveller would be refused at.',
+    edits: [
+      {
+        file: 'packages/compiler/src/backbone/taxonomy.ts',
+        find: '  plausiblyGated: true,\n};\n\nconst SCENIC_ROUTE: Rule = {',
+        replace: '  plausiblyGated: false,\n};\n\nconst SCENIC_ROUTE: Rule = {',
+      },
+    ],
+    tests: ['packages/compiler/src/admission-evidence.test.ts'],
+  },
+  {
+    id: 'M54-a-timetable-claimed-for-a-plan-that-rides-none',
+    contract:
+      'state a timetable provenance for service times the plan has none of (§12, §20.5)',
+    detail:
+      'All three delivered journeys carried `serviceIds: []` on every one of their twenty-two days, and the transport panel printed "we cannot check timetables, so the times shown are on foot" three lines above "Service times come from the operators\' published timetables".',
+    edits: [
+      {
+        file: 'packages/planner/src/strategy.ts',
+        find: "${scheduledServiceLegs(days) > 0 ? \" Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.\" : ''}",
+        replace: "${\" Service times come from the operators' published timetables on the dates recorded against each one, and are not checked live.\"}",
+      },
+    ],
+    tests: ['packages/planner/src/transport.test.ts'],
+  },
+  {
+    id: 'M55-an-empty-day-that-books-a-dinner',
+    contract:
+      'call a day empty from its activity count rather than from its timeline (§20.8)',
+    detail:
+      'Meals and the travel to reach them are laid out after the activities are counted, so a delivered arrival evening printed "Nothing is scheduled on this day … the hours are yours" immediately beneath a booked drive and a ninety-five-minute named dinner.',
+    edits: [
+      {
+        file: 'packages/planner/src/schedule.ts',
+        find: '  } else if (accepted.length === 0 && !layout.items.some(isSomethingOnTheDay)) {',
+        replace: '  } else if (accepted.length === 0) {',
+      },
+    ],
+    tests: ['apps/web/src/lib/iq/closure-invariants.test.ts'],
+  },
+  {
+    id: 'M56-the-rendered-heading-claims-a-distance-nobody-measured',
+    contract:
+      'let the board heading a traveller reads claim nearness for untimed journeys (§9.1)',
+    detail:
+      'The near group is the fallthrough, so a card whose journey nobody could time lands in it. The property was guarded on the compiler vocabulary that no surface renders while the rendered heading carried "Inside the distance you said you would travel" over exactly that population.',
+    edits: [
+      {
+        file: 'apps/web/src/components/BoardCopy.ts',
+        find: "    blurb: 'Not further out than you said you would go — each card says what it costs a day.',",
+        replace: "    blurb: 'Inside the distance you said you would travel — each card says how long it takes.',",
+      },
+    ],
+    tests: ['apps/web/src/components/board-copy.test.ts'],
+  },
+  {
+    id: 'M57-one-area-confirmed-over-the-whole-of-it',
+    contract:
+      'confirm a narrowing that never resolved which part, so the compile searches the container (§11, §24)',
+    detail:
+      'A live Tokyo build answered "One area, done properly" with no destination index behind it, so the preflight portfolio was null and no part reached the derivation. The scope confirmed at high confidence reading "A single part of Tokyo, about 12 km out, from one base" over the whole metropolis extent — 20.2°N to 35.9°N — and all 24 compiled places were on the Izu and Ogasawara islands, 176 to 1,225 km from the base it named. Nothing routed and the traveller got no plan.',
+    edits: [
+      {
+        file: 'packages/compiler/src/scope.ts',
+        find: '  if (scope.narrowedWithoutPart) {',
+        replace: '  if (false && scope.narrowedWithoutPart) {',
+      },
+    ],
+    tests: ['packages/compiler/src/scope-narrowing.test.ts'],
+  },
+  {
+    id: 'M58-a-journey-printed-shorter-than-it-is',
+    contract:
+      'round a travel span down, so the schedule column understates the leg beside it (§20.5)',
+    detail:
+      'Every span on the itinerary floored to five minutes, which is right for free time and time at stops and inverted for travel. A delivered day printed "11:00  10 min  Walk back to Osaka" directly above "14 min back to Osaka" — the same leg, forty per cent apart, with the smaller figure in the column a traveller budgets from.',
+    edits: [
+      {
+        file: 'apps/web/src/components/plan-language.ts',
+        find: 'export function roundedTravel(minutes: number): number {\n  if (minutes < STEP) return minutes;\n  return Math.ceil(minutes / STEP) * STEP;',
+        replace: 'export function roundedTravel(minutes: number): number {\n  if (minutes < STEP) return minutes;\n  return Math.floor(minutes / STEP) * STEP;',
+      },
+    ],
+    tests: ['apps/web/src/components/ItineraryView.travel-span.test.ts'],
+  },
+  {
+    id: 'M59-left-off-for-room-over-a-reason-that-is-not-room',
+    contract:
+      'name one cause in the heading while every card under it names another (§20.8)',
+    detail:
+      'A delivered Tokyo plan headed the section "Left off for room / there were not the hours for them" over two cards both reading "We have no travel time recorded to this place". The day was not full; the way there could not be measured, and the traveller was told the opposite about their own trip.',
+    edits: [
+      {
+        file: 'apps/web/src/components/ItineraryView.tsx',
+        find: "  return allAboutRoom(dropped) ? 'Left off for room' : 'Left off, and why';",
+        replace: "  return 'Left off for room';",
+      },
+    ],
+    tests: ['apps/web/src/components/ItineraryView.dropped-heading.test.ts'],
+  },
+  {
+    id: 'M60-a-day-heading-that-names-nowhere',
+    contract:
+      'print an absent locality into the day heading a traveller reads (§20.8)',
+    detail:
+      'The day area is the farthest stop\'s locality once that stop is over twenty minutes out, and `locality` is optional on a place. A rendered four-day plan carried "History & culture around undefined" as the heading of two of its days.',
+    edits: [
+      {
+        file: 'packages/planner/src/schedule.ts',
+        find: '    farthest && farthest.travelMinutesFromBase > 20 && farAreaName ? farAreaName : baseName;',
+        replace: '    farthest && farthest.travelMinutesFromBase > 20 ? farthest.place.locality! : baseName;',
+      },
+    ],
+    tests: ['packages/planner/src/schedule-quality.test.ts'],
+  },
+  {
+    id: 'M61-pick-more-from-a-board-that-scheduled-nothing',
+    contract:
+      'offer the board as a remedy on a plan where nothing could be laid out (§20.7)',
+    detail:
+      'A live eight-day Iceland build had all thirteen selections refused for `missing_travel_data` — the routing service refuses any pair over 400 km — so nothing was scheduled. The panel still marked picking more from the board as likely to help, with "there is room in these days for more than is in the plan", beside five remedies it had correctly ruled out. The next pick comes off the same board and the same unmeasured matrix.',
+    edits: [
+      {
+        file: 'packages/planner/src/readiness.ts',
+        find: "      (remedy === 'choose_manually' && !nothingFitted && coverageOf(input)?.incomplete === true);",
+        replace: "      (remedy === 'choose_manually' && coverageOf(input)?.incomplete === true);",
+      },
+    ],
+    tests: ['packages/planner/src/readiness.test.ts'],
+  },
+  {
+    id: 'M62-two-day-fractions-that-disagree',
+    contract:
+      'restate the stop count against a second denominator on the same page (§20.8)',
+    detail:
+      'A delivered Osaka plan opened with "8 stops across 6 of 6 days" and closed with "This plan holds 8 stops across 4 of the 4 days it could fill". Both are true — one counts every day of the trip, the other the days a stop can be built around — and printed in the same shape they read as one sentence giving two answers.',
+    edits: [
+      {
+        file: 'packages/planner/src/plan.ts',
+        find: "          ? 'on every day it could build one around'",
+        replace: "          ? `across ${coverage.usableDaysWithActivity} of the ${coverage.anchorableDays} days it could fill`",
+      },
+    ],
+    tests: ['packages/planner/src/readiness.test.ts'],
+  },
+  {
+    id: 'M63-a-finished-plan-with-a-blank-day-in-it',
+    contract:
+      'call a plan ready on volume alone, with a day it could fill holding nothing (§20.7)',
+    detail:
+      'A ten-day plan for a traveller answering slow pace and lots of free time scheduled eight stops over days 1-6 and left days 7, 8, 9 and 10 completely empty — 585, 585, 553 and 435 free minutes with nothing in them — under the summary "All 8 places you picked are in the plan." Eight stops clears both volume gates, and `everyDayAnchored` was read only from inside `spacious` and `short`, neither of which sits on the path to `ready`.',
+    edits: [
+      {
+        file: 'packages/planner/src/readiness.ts',
+        find: "  if (coverage && !coverage.everyDayAnchored) return 'partial';",
+        replace: "  if (false && coverage && !coverage.everyDayAnchored) return 'partial';",
+      },
+    ],
+    tests: ['packages/planner/src/readiness.test.ts'],
+  },
+  {
+    id: 'M64-an-interest-claimed-that-the-traveller-ranked-lowest',
+    contract:
+      'tell a traveller a stop matches an interest they graded "only if it is right there" (§16, §20.8)',
+    detail:
+      'A delivered metro plan told a traveller who had graded photography and easy nature walks at `low` that a viewpoint "matches your interest in sunrise & sunset photography", and headed a whole day "Easy nature walks around Osaka" — while the board\'s own fit record for both places carried `matchedInterests: []`. `primaryInterest` falls back to a place\'s best-graded interest whatever the grade, and nothing checked the grading before speaking it.',
+    edits: [
+      {
+        file: 'packages/planner/src/candidates.ts',
+        find: '  if (!candidate.fit.matchedInterests.includes(primary)) return undefined;',
+        replace: '  if (false && !candidate.fit.matchedInterests.includes(primary)) return undefined;',
+      },
+    ],
+    tests: ['packages/planner/src/spoken-interest.test.ts'],
+  },
+  {
+    id: 'M65-the-same-subject-admitted-twice',
+    contract:
+      'admit a second record for a subject the board already shows (§9, §15)',
+    detail:
+      'A live metro board carried four cards for two places — one theme park named identically twice, and a second beside a record of itself carrying both readings of its name — over an integrity block reading `offered: 24, admitted: 24, refused: []`. The compiler merges only same-named records within 120 m, deliberately, because a merge deletes a place; a large site is mapped as several features much further apart than that.',
+    edits: [
+      {
+        file: 'packages/core/src/discovery/board.ts',
+        find: '    if (keys.some((key) => heldKeys.has(key))) {',
+        replace: '    if (false && keys.some((key) => heldKeys.has(key))) {',
+      },
+    ],
+    tests: ['packages/core/src/discovery/board-duplicates.test.ts'],
+  },
+  {
+    id: 'M66-one-door-named-past-the-variety-cap',
+    contract:
+      'count the variety cap against shortlist heads rather than against what was named (§15)',
+    detail:
+      'The cap was enforced one phase before layout, against a tally of heads of shortlists, while `chooseFoodStop` re-sorts by legality and real detour — so a runner-up won slots without its tally moving. On the primary fixture with no overrides, a seven-day trip named one deli three times including breakfast and lunch on the same day, and a ten-day trip reached five.',
+    edits: [
+      {
+        file: 'packages/planner/src/plan.ts',
+        find: '      if (foodContext) {\n        for (const item of layout.items) {',
+        replace: '      if (false && foodContext) {\n        for (const item of layout.items) {',
+      },
+    ],
+    tests: ['packages/planner/src/food-cap.test.ts'],
+  },
+  {
+    id: 'M67-a-stopped-build-with-no-way-to-start-it-again',
+    contract:
+      'treat a cancellation as a terminal failure and withhold the retry (§20.4)',
+    detail:
+      'Pressing "Stop this build" left the plan screen on its compiling step forever with no retry control, because the screen read `isRetryable` — which answers whether a *failure* was transient, and a cancellation is not a failure. The trip list meanwhile labelled the same trip "You stopped this" and offered "Pick it up again", pointing at the screen that could not do it.',
+    edits: [
+      {
+        file: 'apps/web/src/lib/compiler/verdict.ts',
+        find: "  if (job.errorCode === 'cancelled_by_user') {",
+        replace: "  if (false && job.errorCode === 'cancelled_by_user') {",
+      },
+    ],
+    tests: ['apps/web/src/lib/compiler/verdict.test.ts'],
+  },
+  {
+    id: 'M68-an-edited-trip-linked-to-a-not-found-page',
+    contract:
+      'read "does this trip have a board" from the job row rather than from what the trip adopted (§21)',
+    detail:
+      'Editing the dates of a trip whose region was already built clears `trip_intents.selected_compiled_region_id` and deliberately leaves `compilation_jobs.compiled_region_id`. The trip list read the job, so the row still said "Places found" and linked to `/discover`, which resolves the adopted region, finds none, and renders "We cannot find that trip" over a trip that was neither old nor removed.',
+    edits: [
+      {
+        file: 'apps/web/src/app/(product)/page.tsx',
+        find: '        hasCompiledRegion: adoptedCompiledRegionId(trip.id) !== null,',
+        replace: '        hasCompiledRegion: Boolean(job?.compiledRegionId),',
+      },
+    ],
+    tests: ['apps/web/src/lib/db/adopted-region.test.ts'],
+  },
+  {
+    id: 'M69-two-answers-for-one-travel-total',
+    contract:
+      'compose the trip summary from exact travel minutes while the page rounds the same totals (§20.5)',
+    detail:
+      'The itinerary hero line and the "Getting around" panel print the same quantities, and one rounded travel up to five while the other did not. A delivered plan read "2 hr 51 min on foot to reach them" above "On foot to reach things 2 hr 55 min", and another "3 hr 38 min" against "3 hr 40 min" — one screen giving a reader two numbers for one journey.',
+    edits: [
+      {
+        file: 'packages/planner/src/plan.ts',
+        find: '  const whole = Math.ceil(Math.round(minutes) / TRAVEL_DISPLAY_STEP) * TRAVEL_DISPLAY_STEP;',
+        replace: '  const whole = Math.round(minutes);',
+      },
+    ],
+    tests: ['apps/web/src/components/ItineraryView.travel-span.test.ts'],
+  },
 ];

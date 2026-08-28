@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildDiscoveryBoard,
+  FIT_BAND_LABELS,
   type DestinationImage as ImageRecord,
   type DiscoveryCandidate,
 } from '@sidequest/core';
@@ -29,6 +30,16 @@ import {
  * open a database and are irrelevant to what is under test here, which is the
  * markup: nothing below presses anything.
  */
+/*
+ * The board asks the router to re-fetch this route once background imagery
+ * lands — `router.refresh()`, never a hard reload, because a reload tears down
+ * an in-flight "Build my trip". A static render mounts no router, so the hook
+ * needs one here; nothing below presses anything that would call it.
+ */
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: () => undefined }),
+}));
+
 vi.mock('@/app/(product)/trips/[id]/discover/actions', () => ({
   autoPickAction: async () => ({ ok: true }),
   fillBoardImageryAction: async () => ({ ok: true, accepted: 0 }),
@@ -89,6 +100,88 @@ function render(groups: SerializedGroup[] = GROUPS): string {
  * an earlier version of this helper stopped there and quietly compared the first
  * eight characters of every card.
  */
+/**
+ * ONE CARD, TWO ANSWERS, AND THE CONFIDENT ONE WAS FALSE.
+ *
+ * A car-free metropolitan board rendered "2 hr 17 min on foot from base" over
+ * the destination's best-known tower — twenty-five minutes away by a train
+ * nobody could price — directly above that same card's own sentence saying no
+ * route here could be confirmed. Both came from one measured walk.
+ *
+ * The card read `detourClass`, which is a statement about the traveller's
+ * *budgets*: a stand-in walk long enough to bust the day's travel allowance is
+ * filed `too_far` before the proxy rule is reached, and from there the phrase
+ * went back to quoting a walking clock as this traveller's distance. So the
+ * fact rides on the candidate and the card asks for it by name.
+ *
+ * Rendered rather than asserted on the helper, because the helper was already
+ * right: `describeTransitBlindWalk` has produced the honest sentence since it
+ * was written, and the card simply did not call it on this branch.
+ */
+function proxyCard(overrides: Partial<DiscoveryCandidate> = {}): DiscoveryCandidate {
+  const base = GROUPS.flatMap((group) => group.candidates).find(
+    (candidate) => candidate.reach.status === 'measured',
+  )!;
+  return {
+    ...base,
+    journeyProxy: true,
+    detourClass: 'too_far',
+    worthDetour: 'reach_unverified',
+    reach: { ...base.reach, mode: 'walk', travelMinutes: 137, returnMinutes: 140 },
+    ...overrides,
+  } as DiscoveryCandidate;
+}
+
+describe('a journey priced by a walk nobody would make', () => {
+  it('says the route is unverified instead of quoting a walking clock as the distance', () => {
+    const card = proxyCard();
+    const html = render([{ group: 'nearby_side_quests', candidates: [card] }]);
+    expect(html).toContain('We could not verify the transit route yet');
+    expect(html).not.toMatch(/2 hr 17 min on foot from base/);
+    /* And the refusal is still legible: the day cannot hold that walk. */
+    expect(html).toContain('more than a day here can hold');
+  });
+
+  it('keeps the ordinary walking phrase for a walk that really is the journey', () => {
+    const card = proxyCard({ journeyProxy: false, detourClass: 'in_tolerance' });
+    const html = render([{ group: 'nearby_side_quests', candidates: [card] }]);
+    expect(html).not.toContain('We could not verify the transit route yet');
+    expect(html).toMatch(/on foot from base/);
+  });
+});
+
+describe('a card the trip cannot reach', () => {
+  /**
+   * FIT IS ABOUT TASTE; REACH IS ABOUT THE TRIP — EXCEPT WHERE FIT IS A REFUSAL.
+   *
+   * Nine cards on a delivered board sat under "Probably skip — here for
+   * completeness, with the reason we would leave them out" wearing a "Strong
+   * fit" chip: one card, two verdicts, and the card's own reason line gave the
+   * true one. So a workable band stops answering a question the heading has
+   * already closed.
+   *
+   * The two weak bands are the exception and the browser suite found it: "Not
+   * workable this trip" is a *refusal*, it is what explains a disabled Include
+   * button beside it, and it makes no claim about a journey at all.
+   */
+  it('drops a taste verdict the heading has already closed', () => {
+    const card = proxyCard({ journeyProxy: false, detourClass: 'too_far' });
+    const html = render([{ group: 'weak_fit', candidates: [card] }]);
+    expect(html).not.toContain(FIT_BAND_LABELS[card.fit.band]);
+  });
+
+  it('keeps a refusal, because that is the thing the traveller needs told', () => {
+    const base = GROUPS.flatMap((group) => group.candidates)[0]!;
+    const refused = {
+      ...base,
+      detourClass: 'too_far',
+      fit: { ...base.fit, band: 'not_workable' },
+    } as DiscoveryCandidate;
+    const html = render([{ group: 'weak_fit', candidates: [refused] }]);
+    expect(html).toContain(FIT_BAND_LABELS.not_workable);
+  });
+});
+
 function chunks(html: string, testId: string, closeTag: string): string[] {
   return [...html.matchAll(new RegExp(`data-testid="${testId}"[^>]*>([\\s\\S]*?)</${closeTag}>`, 'g'))].map(
     (match) => match[1] ?? '',

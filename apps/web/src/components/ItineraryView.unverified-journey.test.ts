@@ -5,8 +5,9 @@ import type { Itinerary, ItineraryDay } from '@sidequest/core';
 import { planTrip } from '@sidequest/planner';
 import { transitBlindScenario } from '../../../../packages/planner/src/testing/transit-blind-city';
 import { ItineraryView } from './ItineraryView';
-import { roundedDuration } from './plan-language';
+import { roundedDuration, roundedTravel } from './plan-language';
 import { formatMinutes } from '@/lib/format';
+import { stopRationaleFor } from '@/app/(product)/trips/[id]/itinerary/view-model';
 
 /*
  * The per-stop menu lives beside the server actions it calls, so importing it
@@ -48,6 +49,33 @@ function span(minutes: number): string {
   return formatMinutes(roundedDuration(minutes));
 }
 
+/**
+ * The page's wording for a span of *travel*, which rounds the other way.
+ *
+ * Travel is time the traveller spends rather than has, so the page rounds it up
+ * — see `roundedTravel`. Every figure below that is a journey goes through this
+ * one, for the same reason the rest go through `span`: an expectation that
+ * rounded differently from the page would be measuring the helper.
+ */
+function travelSpan(minutes: number): string {
+  return formatMinutes(roundedTravel(minutes));
+}
+
+/**
+ * THE STOP CARDS' OWN FACTS, WHICH THIS PAGE USED TO RENDER WITHOUT.
+ *
+ * `rationale` is the per-stop block the view model composes from the board —
+ * why the stop fits, and the short facets that tell two stops apart. Rendering
+ * the page without it left the catch-all below blind to a whole surface, and a
+ * delivered itinerary printed "57 min on foot from your base" there, between
+ * the two sentences that had just qualified the same figure as an unverified
+ * journey. Built here through the same function the page uses.
+ */
+const RATIONALE = (() => {
+  const input = transitBlindScenario('observed');
+  return stopRationaleFor(input.candidates);
+})();
+
 const HTML = renderToStaticMarkup(
   createElement(ItineraryView, {
     itinerary: PLAN,
@@ -56,6 +84,7 @@ const HTML = renderToStaticMarkup(
     dateLabel: '12–15 Aug',
     renderedAt: Date.parse('2026-08-10T09:00:00.000Z'),
     coordinates: {},
+    rationale: RATIONALE,
   }),
 );
 
@@ -208,13 +237,13 @@ describe('the finished document, on a trip whose scheduled journeys nobody could
      */
     for (const day of daysWithProxy()) {
       expect(TEXT).toContain(
-        `${span(day.totals.unverifiedMinutes)} held for journeys we could not verify`,
+        `${travelSpan(day.totals.unverifiedMinutes)} held for journeys we could not verify`,
       );
       /* The day still promotes the whole time it spends travelling. */
-      expect(TEXT).toContain(`${span(day.totals.travelMinutes)} travelling`);
+      expect(TEXT).toContain(`${travelSpan(day.totals.travelMinutes)} travelling`);
     }
     expect(TEXT).toContain('Held for unverified journeys');
-    expect(TEXT).toContain(span(PLAN.transportStrategy.totals.unverifiedMinutes));
+    expect(TEXT).toContain(travelSpan(PLAN.transportStrategy.totals.unverifiedMinutes));
   });
 
   it('draws a proxy leg into the day sequence without a mode', () => {
@@ -242,7 +271,7 @@ describe('the finished document, on a trip whose scheduled journeys nobody could
      */
     for (const day of walkingOnlyDays()) {
       const index = PLAN.days.indexOf(day);
-      expect(TEXT).toContain(`${span(day.totals.walkMinutes)} walking there`);
+      expect(TEXT).toContain(`${travelSpan(day.totals.walkMinutes)} walking there`);
       expect(SEQUENCES[index], `day ${day.dayNumber} sequence`).toContain('walk');
       for (const item of day.items) {
         if (item.travel?.mode !== 'walk') continue;

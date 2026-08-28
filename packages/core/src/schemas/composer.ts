@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDateSchema, isoTimeSchema } from './common';
+import { freeTimeAppetiteSchema, isoDateSchema, isoTimeSchema } from './common';
 import { selectedDestinationSchema } from './destination-index';
 import { travelerNeedSchema, tripModeSchema } from './trip';
 import { interpretationSetSchema } from './interpretation';
@@ -268,7 +268,7 @@ export const tripComposerAnswersSchema = z.object({
   crowdTolerance: z.enum(['avoid', 'tolerate', 'unbothered']).optional(),
   foodImportance: z.enum(['fuel', 'matters', 'central']).optional(),
   nightlife: z.enum(['none', 'some', 'important']).optional(),
-  freeTime: z.enum(['packed', 'balanced', 'lots']).optional(),
+  freeTime: freeTimeAppetiteSchema.optional(),
 
   /**
    * Free text, classified into controlled fields only with confirmation.

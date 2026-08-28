@@ -1,5 +1,6 @@
 import {
   ACCESS_BADGE_LABELS,
+  descriptionAboutThePlace,
   FIT_BAND_LABELS,
   OPERATING_BADGE_LABELS,
   PLACE_WEATHER_BADGE_LABELS,
@@ -80,9 +81,34 @@ export const BOARD_GROUP_HEADINGS: Record<BoardGroup, { title: string; blurb: st
    * distance claim, because it also holds the stops whose journey nobody could
    * time, and "short hop" is not something we know about those.
    */
+  /*
+   * A RANGE CLAIM, WHICH IS THE ONLY THING THIS GROUP KNOWS.
+   *
+   * "Easy wins · smaller stops that slot into a day without reshaping it" is a
+   * claim about *size*, and the group is assigned on distance: everything the
+   * classifier files `in_tolerance` lands here. On a delivered road board that
+   * put a fifty-three kilometre thermal spa under it — fifty-nine minutes each
+   * way plus ninety there, which is three and a half hours and reshapes a day
+   * completely. The comment above this table already says these two headings
+   * "may not claim more than their group knows"; this one was still claiming.
+   *
+   * And then it claimed a *range* instead, which is the same mistake one step
+   * along: this group is the fallthrough, so a card whose journey nobody could
+   * time lands here too — "Nearby side quests" held a tower and a cruise
+   * terminal whose own `reach.status` is `unmeasured`, under a heading saying
+   * they are inside the distance the traveller said they would travel. The
+   * group's own comment in `board.ts` says as much: an unmeasured journey "is
+   * not evidence of distance in either direction and stays with the near group,
+   * whose heading no longer claims one".
+   *
+   * So the heading claims the one thing the assignment actually guarantees —
+   * that this is *not* the further-out group — and points at where the cost is:
+   * every card carries its own journey line and time-there, including the ones
+   * that say the journey could not be timed.
+   */
   nearby_side_quests: {
-    title: 'Easy wins',
-    blurb: 'Smaller stops that slot into a day without reshaping it.',
+    title: 'The rest of the shortlist',
+    blurb: 'Not further out than you said you would go — each card says what it costs a day.',
   },
   scenic_detours: {
     title: 'Worth the detour',
@@ -467,8 +493,22 @@ export function cardStats(
  * Null, and the card simply has no description.
  */
 export function descriptionOf(place: DiscoveryCandidate['place']): string | null {
-  const description = place.shortDescription.trim();
-  return substantive(description) ? description : null;
+  /*
+   * ONE IMPLEMENTATION, IN CORE, BECAUSE THERE WAS MORE THAN ONE SURFACE.
+   *
+   * This module stripped the record-provenance clauses and applied the stub
+   * floor to what was left, which was right — and it closed only the *quiet*
+   * line. The card's headline argument is composed in `scoring/fit.ts` from the
+   * same `shortDescription`, and it printed the identical paragraph in full: on
+   * a delivered board, five of twenty-four Tokyo cards and seven of twenty-four
+   * Osaka cards led with "…and that is what this delivers: An easy walk. Known
+   * locally as X. Run by Y. The map data records a charge to enter." while this
+   * function correctly returned null for the very same place.
+   *
+   * So the rule lives beside the scorer that writes the loudest sentence, and
+   * every surface reads it. See `descriptionAboutThePlace`.
+   */
+  return descriptionAboutThePlace(place.shortDescription);
 }
 
 // ---------------------------------------------------------------------------
@@ -583,9 +623,37 @@ export function chipsFor(
  * Straight off `FIT_BAND_LABELS`, which the scorer's own distribution guard
  * calibrates. Nothing is invented here and no second vocabulary is introduced —
  * a board with two label scales is a board that can contradict itself.
+ *
+ * WITH ONE SUPPRESSION, WHICH EXISTS BECAUSE IT WAS CONTRADICTING ITSELF.
+ *
+ * The band is a statement about *taste*: how well this suits the traveller.
+ * Whether the trip can get there is a different question, answered by
+ * `detourClass`. On a delivered board nine cards sat under "Probably skip —
+ * here for completeness, with the reason we would leave them out" wearing a
+ * "Strong fit" chip: one card, two verdicts, and the card's own reason line
+ * said the true one ("further than you said you would travel"). A famous
+ * waterfall a hundred and twenty-eight kilometres out is a strong fit and is
+ * still not on this trip.
+ *
+ * So where the trip cannot reach a place, the chip stops answering a question
+ * the heading has already closed. The fit judgement is not withdrawn — it is
+ * simply not the thing that decided this card, and the reason line beside it
+ * says what did.
  */
-export function recommendationLabel(candidate: DiscoveryCandidate): string {
-  return FIT_BAND_LABELS[candidate.fit.band];
+export function recommendationLabel(candidate: DiscoveryCandidate): string | null {
+  /*
+   * The two weak bands keep their label whatever the distance, and the reason
+   * is the one `worthDetourLabel` already gives for testing them first: they are
+   * the labels that make no claim about a journey. "Not workable this trip" is a
+   * *refusal*, and a card wearing it is the one card on the board a traveller
+   * most needs told — the browser suite asserts it beside a disabled Include
+   * button. Suppressing it because the same place is also far away withheld the
+   * verdict and left the button unexplained.
+   */
+  const band = candidate.fit.band;
+  if (band === 'weak' || band === 'not_workable') return FIT_BAND_LABELS[band];
+  if (candidate.detourClass === 'too_far') return null;
+  return FIT_BAND_LABELS[band];
 }
 
 /**
@@ -633,8 +701,7 @@ export function whyThisFits(
    * "not verified" chip is still a complete card; a card padded with filler is
    * a card that has stopped being trustworthy.
    */
-  const description = candidate.place.shortDescription.trim();
-  return substantive(description) ? description : null;
+  return descriptionAboutThePlace(candidate.place.shortDescription);
 }
 
 /**
@@ -681,17 +748,6 @@ export function whysForBoard(
   return chosen;
 }
 
-/**
- * Whether a description says anything.
- *
- * The bare-stub form — an article, a noun phrase, a full stop — is exactly what
- * §8.7 names, and it is what the classifier emits for a record it knows nothing
- * about. The length floor catches the same shape with a couple of extra words.
- */
-function substantive(description: string): boolean {
-  if (description.length < 45) return false;
-  return !/^an?\s+[a-z\s]+\.\s*$/i.test(description);
-}
 
 /**
  * What the evidence disclosure is called.

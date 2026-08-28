@@ -369,13 +369,23 @@ export function validateTripFood(
   }
   for (const [, entry] of [...uses.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (entry.days.length < 2) continue;
+    const distinctDays = [...new Set(entry.days)].sort((a, b) => a - b);
     issues.push({
       code: 'duplicate_food_venue',
       severity: 'warning',
-      message: `${entry.name} is on this plan ${entry.days.length} times, on ${
-        [...new Set(entry.days)].length === 1
-          ? `day ${entry.days[0]}`
-          : `days ${[...new Set(entry.days)].join(' and ')}`
+      /*
+       * The count and the days have to describe the same set.
+       *
+       * They did not: the count was every meal and the list was the distinct
+       * days, so a venue taking breakfast and lunch on day 4 and breakfast on
+       * day 5 read "is on this plan 3 times, on days 4 and 5" — a sentence that
+       * does not add up, about the traveller's own trip. The count is now the
+       * meals and the days say how they fall across them.
+       */
+      message: `${entry.name} is on this plan ${entry.days.length} times, ${
+        distinctDays.length === 1
+          ? `both on day ${distinctDays[0]}`
+          : `across ${distinctDays.length} days — ${distinctDays.join(' and ')}`
       }. It was the closest thing that worked each time.`,
     });
   }

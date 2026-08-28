@@ -2,6 +2,7 @@ import 'server-only';
 import {
   buildSolarDays,
   isInsideForecastHorizon,
+  unavailableWeatherDataset,
   utcOffsetMinutesOn,
   weatherDatasetSchema,
   type WeatherDataset,
@@ -300,11 +301,35 @@ export async function resolveTripWeather(
     console.error('Weather provider failed', error);
     const stale = readAnyCached(key);
     if (stale) return stale;
-    return weatherProviderFor('off').getWeather({
+    /**
+     * AN OUTAGE IS NOT AN ABSENCE, AND THE LAST STEP USED TO SAY IT WAS.
+     *
+     * This returned the **`off` provider's** dataset — the one written for a
+     * deployment that has deliberately switched weather off — so a provider that
+     * refused the request came back as a provider that answered and had nothing.
+     * The two send a traveller and an operator to opposite actions: "there is
+     * nothing to have, plan around it" against "try again, or the free tier's
+     * quota is spent". `fetchWeatherSnapshot` reads coverage to decide between
+     * `nothing_available` and `provider_failed`, so the substitution reached the
+     * refresh panel as well as the day rows.
+     *
+     * Measured: three regions built back to back exhausted the free archive
+     * tier's rate limit, two of them came back 429, and every day of both trips
+     * read "We have no weather for this day" with the panel reporting the fetch
+     * as having succeeded with nothing in it.
+     *
+     * `provider_error` is the reason the schema already carries for exactly
+     * this, and the sentence names the attempt rather than the sky.
+     */
+    return unavailableWeatherDataset({
       regionId: options.regionId,
-      locations,
-      dates: options.dates,
+      locations: [...locations],
+      dates: [...options.dates],
       now,
+      reason: 'provider_error',
+      message:
+        'We could not reach the weather service for this day, so nothing here has been checked against it. Building again may go differently.',
+      provider: provider.name,
     });
   }
 }

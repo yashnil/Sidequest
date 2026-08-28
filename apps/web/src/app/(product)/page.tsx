@@ -4,7 +4,7 @@ import { countNights, isAbandoned } from '@sidequest/core';
 import { ProductChrome } from '@/components/ProductChrome';
 import { Panel, buttonClass } from '@/components/ui';
 import { providerReadiness } from '@/lib/compiler/readiness';
-import { getLatestJob } from '@/lib/db/compiler-repository';
+import { adoptedCompiledRegionId, getLatestJob } from '@/lib/db/compiler-repository';
 import { hasItinerary, listTrips } from '@/lib/db/repository';
 import { sessionToken } from '@/lib/net/caller';
 import { formatDayRange } from '@/lib/format/dates';
@@ -139,7 +139,12 @@ export default async function HomePage() {
         status: trip.status,
         jobState: job?.state ?? null,
         jobLive: job ? !isAbandoned(job, now) : false,
-        hasCompiledRegion: Boolean(job?.compiledRegionId),
+        /*
+         * The region the *trip* stands on, not the one its last job produced.
+         * See `adoptedCompiledRegionId`: an edit clears the first and leaves
+         * the second, and reading the job sent an edited trip to a 404.
+         */
+        hasCompiledRegion: adoptedCompiledRegionId(trip.id) !== null,
         hasItinerary: hasItinerary(trip.id),
       });
       return {

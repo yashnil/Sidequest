@@ -7,6 +7,16 @@ import {
   classifyPreferences,
   type TripComposerAnswers,
 } from '@sidequest/core';
+import { mintSessionToken } from '@/lib/net/session-signature';
+
+/*
+ * ONE BROWSER, AND A CREDENTIAL THIS SERVER MINTED. A value the client picked
+ * is not an identity — otherwise a caller rotating the cookie opens a fresh
+ * per-caller allowance on every request — so an unsigned string here would
+ * measure the shared unattributed pool rather than this browser's own share.
+ */
+process.env.SIDEQUEST_SESSION_SECRET = 'questionnaire-test-secret';
+const BROWSER = mintSessionToken('test-browser');
 
 /**
  * THE COST CONTROLS IN FRONT OF THE QUESTIONNAIRE'S ONE BILLED CALL.
@@ -84,7 +94,7 @@ function releaseDatabase(): void {
 beforeEach(() => {
   releaseDatabase();
   jar.clear();
-  jar.set('sidequest_session', 'test-browser');
+  jar.set('sidequest_session', BROWSER);
   provider.calls = 0;
   provider.configured = true;
   delete process.env.SIDEQUEST_DAILY_MODEL_CALLS;
@@ -140,7 +150,7 @@ async function tripNeedingAReading(mustDo = UNRESOLVED): Promise<string> {
       children: 0,
       travelerNeeds: [],
   },
-    'test-browser',
+    BROWSER,
   );
   saveComposerAnswers(trip.id, composerFor(mustDo));
   return trip.id;
@@ -203,7 +213,7 @@ describe('the daily model ceiling in front of the questionnaire reading', () => 
     expect(dailySpendSoFar('model_calls', new Date())).toBe(1);
     // Against this browser as well as the deployment, so one visitor cannot
     // spend the whole day's allowance.
-    expect(dailySpendSoFar('model_calls', new Date(), 'session:test-browser')).toBe(1);
+    expect(dailySpendSoFar('model_calls', new Date(), `session:${BROWSER}`)).toBe(1);
   });
 
   it('refuses once the day is spent, without burning the trip’s one reading', async () => {

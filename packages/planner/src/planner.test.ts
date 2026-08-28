@@ -1002,7 +1002,15 @@ describe('planner failure modes', () => {
     if (result.ok || !result.readiness) return;
     const moreDays = result.readiness.remedies.find((entry) => entry.remedy === 'more_days');
     expect(moreDays?.likelyToHelp).toBe(false);
-    expect(moreDays?.detail).toMatch(/would not help/i);
+    expect(moreDays?.detail).toMatch(/would not change/i);
+    /*
+     * And it does not explain itself with a fact about the traveller's own
+     * places that nothing checked. The sentence used to read "not one of these
+     * fits inside a single day as it stands" and was printed over blockers of
+     * every kind — including, on a delivered journey, a stop whose own note
+     * said its open days "were already full", which more days would answer.
+     */
+    expect(moreDays?.detail).not.toMatch(/fits inside a single day/i);
   });
 });
 

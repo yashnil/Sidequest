@@ -16,6 +16,7 @@ import {
   dailyIntensitySchema,
   dayStartSchema,
   discoveryMixSchema,
+  freeTimeAppetiteSchema,
   INTERESTS,
   interestLevelsSchema,
   interestSchema,
@@ -60,6 +61,19 @@ export const questionnaireAnswersSchema = z.object({
   pace: paceSchema,
   dayStart: dayStartSchema,
   dailyIntensity: dailyIntensitySchema,
+  /**
+   * How much unscheduled time the traveller asked for.
+   *
+   * Defaulted, like every other question added after the first questionnaire
+   * shipped: `answers_json` is stored raw and reparsed on every read, so a trip
+   * saved before this existed must stay parseable.
+   *
+   * Asked on the composer's first screen and, until this landed, read by
+   * nothing — the placebo shape this schema already refuses elsewhere. It is
+   * the answer readiness needs: `pace` says how much a day can hold, and only
+   * this says how much of that the traveller wanted filled.
+   */
+  freeTime: freeTimeAppetiteSchema.default('balanced'),
   budgetStyle: budgetStyleSchema,
   discoveryMix: discoveryMixSchema,
   crowdTolerance: crowdToleranceSchema,
@@ -200,6 +214,14 @@ export const travelerProfileSchema = z.object({
   pace: paceSchema,
   dayStart: dayStartSchema,
   dailyIntensity: dailyIntensitySchema,
+  /**
+   * How much unscheduled time this traveller asked for. Carried through from
+   * the answers rather than re-derived: `pace` says how much a day *can* hold,
+   * and only this says how much of that they wanted filled. Defaulted so a
+   * profile stored before the field existed stays parseable and reads as the
+   * middle answer.
+   */
+  freeTime: freeTimeAppetiteSchema.default('balanced'),
   budgetStyle: budgetStyleSchema,
   discoveryMix: discoveryMixSchema,
   crowdTolerance: crowdToleranceSchema,

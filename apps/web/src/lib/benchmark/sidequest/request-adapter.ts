@@ -463,6 +463,8 @@ export function toQuestionnaireAnswers(
     interests,
     preferenceSignals: [],
     pace: PROFILE_PACE[rhythm.pace],
+    /* The request's own free-time answer, carried rather than defaulted. */
+    freeTime: rhythm.freeTime,
     dayStart: DAY_START[rhythm.earlyMornings],
     dailyIntensity: mobilityLimited ? 'light' : rhythm.activityIntensity,
     budgetStyle: PROFILE_BUDGET[request.practicalities.budget],

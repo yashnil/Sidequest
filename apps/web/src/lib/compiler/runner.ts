@@ -48,9 +48,10 @@ import {
   saveWorkPlan,
   startJob,
   type StartJobResult,
+  jobCallerKey,
 } from '../db/compiler-repository';
 import { HEARTBEAT_INTERVAL_MS, isAbandoned, isTerminal } from '@sidequest/core';
-import { dailySpendGate, recordDailySpend } from './daily-ceiling';
+import { dailySpendGate, recordDailySpend, refundLiveCompilation } from './daily-ceiling';
 import {
   compileDeadlineMs,
   maxConcurrentCompilations,
@@ -251,6 +252,9 @@ export function startCompilation(
     scopeFingerprint: fingerprint,
     now,
     ...(waiting ? { waiting: true } : {}),
+    // Carried so the reserve below can be given back if this build delivers
+    // nothing. See `refundLiveCompilation`.
+    ...(readiness.choice === 'open' ? { callerKey: caller } : {}),
   });
   /*
    * THE DEDUP, AND IT COVERS THE QUEUE TOO.
@@ -321,7 +325,15 @@ export async function runCompilation(input: {
   const now = input.now ?? new Date();
   const intent = getIntent(input.trip.id);
   const scope = intent?.scope;
+  /*
+   * Every exit below that happens before a provider is asked anything gives the
+   * reserved build back. See `refundLiveCompilation`: the reservation is right
+   * and un-refundable was not, and on a deployment with a rejected credential
+   * the second branch here is the one every single build takes.
+   */
+  const refundUnspent = () => refundLiveCompilation(now, jobCallerKey(input.jobId));
   if (!scope) {
+    refundUnspent();
     failJob({
       jobId: input.jobId,
       code: 'scope_not_confirmed',
@@ -338,7 +350,12 @@ export async function runCompilation(input: {
    * cheapest possible way to honour that is to never begin. Returning here
    * writes nothing: the row already carries whoever ended it and why.
    */
-  if (!markJobRunning(input.jobId, now)) return null;
+  if (!markJobRunning(input.jobId, now)) {
+    // Ended by somebody else while this process was starting. Nothing was
+    // spent, so the reserve goes back rather than being quietly kept.
+    refundUnspent();
+    return null;
+  }
 
   const dates = tripDates(input.trip.basics.startDate, input.trip.basics.endDate);
   const months = tripMonths(input.trip.basics.startDate, input.trip.basics.endDate);
@@ -357,6 +374,7 @@ export async function runCompilation(input: {
       evidence = resolved.evidence;
     }
   } catch (error) {
+    refundUnspent();
     failJob({
       jobId: input.jobId,
       code: 'provider_credentials_missing',

@@ -48,6 +48,7 @@ export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnsw
      */
     preferenceSignals: [],
     pace: 'balanced',
+    freeTime: 'balanced',
     dayStart: 'normal',
     dailyIntensity: context.travelerNeeds.includes('mobility_limited') ? 'light' : 'moderate',
     budgetStyle: 'midrange',
@@ -418,6 +419,7 @@ export function buildTravelerProfile(
     pace: answers.pace,
     dayStart: answers.dayStart,
     dailyIntensity: answers.dailyIntensity,
+    freeTime: answers.freeTime,
     budgetStyle: answers.budgetStyle,
     discoveryMix: answers.discoveryMix,
     crowdTolerance: answers.crowdTolerance,

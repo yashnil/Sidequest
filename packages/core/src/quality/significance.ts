@@ -194,6 +194,14 @@ export interface PlaceStanding {
    * than infer it from a rounded score.
    */
   noticeMagnitude?: number;
+  /**
+   * Which magnitude channel spoke, where either did.
+   *
+   * The number above says how much; only this says *what kind of statement it
+   * was*, and the classics caption turns on the difference. See
+   * `NOTICE_MAGNITUDES`.
+   */
+  noticeMagnitudeBasis?: NoticeMagnitudeBasis;
   /** 0–1 evidence that it matters where it is. Absent when there is none. */
   localSignificance?: number;
   /** 0–1 how much a source wrote down. Always computable, never ranked on. */
@@ -1079,14 +1087,27 @@ export function assessPlaceStanding(evidence: StandingEvidence): PlaceStanding {
    * absent, because how big a thing is says nothing about whether the wider
    * world took any note of it — and absent is a value.
    */
+  const designationMagnitude =
+    designationChannelFor(evidence) === 'conferred_designation';
+  const namesakeMagnitude =
+    (evidence.groundWitnessCount ?? 0) >= GROUND_PRECINCT_STANDING_WITNESSES;
   const magnitude = union([
-    ...(designationChannelFor(evidence) === 'conferred_designation'
-      ? [MAGNITUDE_WEIGHT.destination_scale_ground]
-      : []),
-    ...((evidence.groundWitnessCount ?? 0) >= GROUND_PRECINCT_STANDING_WITNESSES
-      ? [MAGNITUDE_WEIGHT.ground_namesake_precinct]
-      : []),
+    ...(designationMagnitude ? [MAGNITUDE_WEIGHT.destination_scale_ground] : []),
+    ...(namesakeMagnitude ? [MAGNITUDE_WEIGHT.ground_namesake_precinct] : []),
   ]);
+  /*
+   * Which of the two spoke, carried beside how much they were worth. See
+   * `NOTICE_MAGNITUDES`: the arithmetic cannot distinguish a surveyed boundary
+   * from the ground wearing a name, and one consumer has to.
+   */
+  const magnitudeBasis: NoticeMagnitudeBasis | undefined =
+    designationMagnitude && namesakeMagnitude
+      ? 'both'
+      : designationMagnitude
+        ? 'designation'
+        : namesakeMagnitude
+          ? 'ground_namesake'
+          : undefined;
   const globalProminence = admitNotice(noticed, magnitude);
 
   /**
@@ -1195,6 +1216,7 @@ export function assessPlaceStanding(evidence: StandingEvidence): PlaceStanding {
     channels: fired,
     ...(globalProminence !== undefined ? { globalProminence } : {}),
     ...(magnitude !== undefined ? { noticeMagnitude: magnitude } : {}),
+    ...(magnitudeBasis !== undefined ? { noticeMagnitudeBasis: magnitudeBasis } : {}),
     ...(localSignificance !== undefined ? { localSignificance } : {}),
     ...(hiddenness !== undefined ? { hiddenness } : {}),
     ...(groundWitnesses >= 1 ? { groundWitnesses } : {}),
@@ -1716,6 +1738,25 @@ export function expectCrowd(evidence: CrowdEvidence | undefined): CrowdLevel | u
  * asked "is `globalProminence` present", which is true of a ward park and false
  * of a destination's principal temple, and auto-pick asked nothing at all.
  */
+/**
+ * WHAT VOUCHED FOR THE SIZE OF A RECORD'S NOTICE, WHERE ANYTHING DID.
+ *
+ * The magnitude gate has two channels and until now only their *arithmetic*
+ * survived onto the place. That was enough for ranking and not enough for the
+ * one consumer that has to weigh the **kind** of statement: `WIDELY_NOTED_PROMINENCE`
+ * sits one hundredth above `MAX_UNMAGNIFIED_PROMINENCE`, so passing the bar and
+ * passing the magnitude gate are the same event, and the classics caption was
+ * therefore being sold by whichever channel opened it.
+ *
+ * They are not interchangeable claims. `designation` is a boundary somebody
+ * surveyed — a statement about how much ground, which is real and is not fame,
+ * and which every protected area of any size carries. `ground_namesake` is the
+ * surrounding ground's own records wearing this thing's name, which is the
+ * ground saying the thing matters. `both` is what it says.
+ */
+export const NOTICE_MAGNITUDES = ['designation', 'ground_namesake', 'both'] as const;
+export type NoticeMagnitudeBasis = (typeof NOTICE_MAGNITUDES)[number];
+
 export const PROMINENCE_BASES = ['observed', 'withheld', 'unestablished'] as const;
 export type ProminenceBasis = (typeof PROMINENCE_BASES)[number];
 
@@ -1891,10 +1932,43 @@ export function standsAsEstablishedName(place: {
   evidenceRichness?: number;
   significanceBounded?: boolean;
   prominenceBasis?: ProminenceBasis;
+  noticeMagnitude?: NoticeMagnitudeBasis;
 }): boolean {
   if (place.significanceBounded === true) return false;
   if (place.popularityScore < WIDELY_NOTED_PROMINENCE) return false;
   if (place.evidenceRichness === undefined) return true;
+  /*
+   * A SURVEYED BOUNDARY IS NOT FAME.
+   *
+   * `WIDELY_NOTED_PROMINENCE` sits one hundredth above
+   * `MAX_UNMAGNIFIED_PROMINENCE`, so for an *observed* read, clearing the bar
+   * and passing the magnitude gate are the same event — and one of the two
+   * magnitude channels is a designation, which every protected area of any size
+   * carries. The delivered consequence was mechanical rather than marginal: a
+   * designated suburban lake was the **only** card under "Classics worth your
+   * time — the well-known ones" on a whole board, while that destination's
+   * famous waterfall — a point record with no boundary drawn round it, and so
+   * capped at the unmagnified ceiling — rendered under "Probably skip".
+   *
+   * The other magnitude is not the same claim and keeps its vote: the
+   * surrounding ground naming its own records after a thing is the ground
+   * saying the thing matters, which is precisely what the caption asserts.
+   *
+   * Applied to the magnitude rather than to the basis, and the difference was
+   * measured: a first version tested `prominenceBasis === 'observed'` too, and
+   * the same designation then bought the caption through the withheld door
+   * instead — two coastal nature reserves sat under "Classics worth your time"
+   * on the very next build. What the caption is refusing is a *kind of
+   * statement*, and which question that statement happened to answer is beside
+   * the point.
+   *
+   * A record with **no** magnitude at all is untouched, which is the case this
+   * bar exists to leave open: a destination's principal temple, shrine, palace
+   * or castle reaches 0.74 through `withheldStandingRead` — a union of the
+   * region's own evidence with what notice alone can assert — and never passes
+   * the magnitude gate on the way.
+   */
+  if (place.noticeMagnitude === 'designation') return false;
   if (place.prominenceBasis !== undefined) return place.prominenceBasis !== 'unestablished';
   return place.globalProminence !== undefined;
 }
@@ -1956,6 +2030,13 @@ export function standingFields(
       standing.crowdExpectation ??
       ((standing.globalProminence ?? 0) >= 0.7 ? 'busy' : 'quiet'),
     evidenceRichness: standing.evidenceRichness,
+    /*
+     * Which magnitude vouched for the notice, where either did. The classics
+     * caption reads it; nothing ranks on it.
+     */
+    ...(standing.noticeMagnitudeBasis !== undefined
+      ? { noticeMagnitude: standing.noticeMagnitudeBasis }
+      : {}),
     ...(standing.globalProminence !== undefined
       ? { globalProminence: standing.globalProminence }
       : {}),

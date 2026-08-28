@@ -294,10 +294,56 @@ describe('day themes against the day they describe', () => {
     const theme = themeFor([candidate('photography_golden_hour')], 'Two Rivers', layoutWith(7 * 60, 8 * 60 + 30));
     expect(theme).toContain('Sunrise & sunset');
   });
+
+  /**
+   * A HEADING THAT NAMED NOWHERE.
+   *
+   * From a rendered four-day plan, in the largest type on the day:
+   *
+   *   Day 2  Thu 13 Aug   History & culture around undefined
+   *   Day 3  Fri 14 Aug   History & culture around undefined
+   *
+   * The area is the farthest stop's locality once that stop is more than twenty
+   * minutes out, and `locality` is optional on a place — so a stop nobody
+   * published a locality for put the literal word into the heading. The base is
+   * the honest fallback: it is where the day starts and finishes whatever the
+   * far stop turns out to be called.
+   */
+  const far = (locality: string | undefined): PlanningCandidate =>
+    ({
+      place: { id: 'p-far', name: 'A stop out of town', ...(locality === undefined ? {} : { locality }) },
+      priority: 1,
+      manual: false,
+      selectionStatus: 'included',
+      fitScore: 0.8,
+      matchedInterests: [],
+      durationMinutes: 90,
+      travelMinutesFromBase: 45,
+      travelModeFromBase: 'walk',
+      primaryInterest: 'history_and_culture',
+    }) as unknown as PlanningCandidate;
+
+  it('never prints "undefined" where an area name belongs', () => {
+    const theme = themeFor([far(undefined)], 'Riverport');
+    expect(theme).not.toContain('undefined');
+    expect(theme).toBe('History & culture around Riverport');
+  });
+
+  it('falls back to the base for a locality that is there but empty', () => {
+    expect(themeFor([far('   ')], 'Riverport')).toBe('History & culture around Riverport');
+  });
+
+  it('still names the far area when the far stop has one', () => {
+    /* The control: the fallback must not swallow a locality that exists. */
+    expect(themeFor([far('Hillside')], 'Riverport')).toBe('History & culture around Hillside');
+  });
 });
 
 describe('an outdoor stop after the recorded sunset', () => {
-  function dayWithEveningStop(exposure: 'indoor' | 'exposed'): {
+  function dayWithEveningStop(
+    exposure: 'indoor' | 'exposed',
+    span: { start: number; end: number } = { start: 18 * 60, end: 19 * 60 },
+  ): {
     day: ItineraryDay;
     input: ValidationInput;
   } {
@@ -310,9 +356,9 @@ describe('an outdoor stop after the recorded sunset', () => {
           kind: 'activity',
           title: 'City Pond',
           placeId: 'pond',
-          startMinute: 18 * 60,
-          endMinute: 19 * 60,
-          durationMinutes: 60,
+          startMinute: span.start,
+          endMinute: span.end,
+          durationMinutes: span.end - span.start,
           reason: 'fixture',
           weatherSensitive: false,
         },
@@ -346,7 +392,64 @@ describe('an outdoor stop after the recorded sunset', () => {
     const afterDark = issues.filter((issue) => issue.code === 'scheduled_after_dark');
     expect(afterDark).toHaveLength(1);
     expect(afterDark[0]!.severity).toBe('warning');
-    expect(afterDark[0]!.message).toContain('sunset');
+    expect(afterDark[0]!.message).toContain('sun sets at');
+  });
+
+  /**
+   * THE VISIT AGAINST THE LIGHT, NOT ITS FIRST MINUTE AGAINST SUNSET.
+   *
+   * This test keyed on `startMinute >= sunsetMinute`, and a delivered arrival
+   * evening walked straight through it: a park visit from 17:08 to 18:38
+   * against a sunset of 17:11 held on that same day's own record. Three minutes
+   * of the ninety were lit, and because they were the *first* three the plan
+   * said nothing at all — using a sunset time it was carrying in the very
+   * record it ignored.
+   *
+   * Whether a stop happens in daylight is a question about the overlap between
+   * the visit and the light. The comment the old rule carried — "a dinner-hour
+   * stroll that runs a few minutes past dusk does not nag" — is the property it
+   * was reaching for and could not express; the test below holds that half too.
+   */
+  it('cautions on a visit that only starts in the light and then runs into the dark', () => {
+    /*
+     * Starts *before* sunset and runs long past it — the delivered shape, and
+     * the one the start-minute rule cannot see. Five lit minutes of ninety.
+     */
+    const { day, input } = dayWithEveningStop('exposed', {
+      start: 16 * 60 + 55,
+      end: 18 * 60 + 25,
+    });
+    const afterDark = validateDayWeather(day, input).filter(
+      (issue) => issue.code === 'scheduled_after_dark',
+    );
+    expect(afterDark).toHaveLength(1);
+    expect(afterDark[0]!.message).toContain('most of it in the dark');
+  });
+
+  /**
+   * Which end of the day the dark is on. The sentence said "after that day's
+   * sunset" over a stop laid entirely before sunrise — dark, and not after
+   * anything.
+   */
+  it('names the sunrise when the dark is the morning rather than the evening', () => {
+    const { day, input } = dayWithEveningStop('exposed', { start: 5 * 60, end: 6 * 60 });
+    (day.weather as { sunriseMinute?: number }).sunriseMinute = 7 * 60;
+    const afterDark = validateDayWeather(day, input).filter(
+      (issue) => issue.code === 'scheduled_after_dark',
+    );
+    expect(afterDark).toHaveLength(1);
+    expect(afterDark[0]!.message).toContain('the sun is not up until 07:00');
+    expect(afterDark[0]!.message).not.toContain('sun sets');
+  });
+
+  it('says nothing about a stroll that only runs a few minutes past dusk', () => {
+    const { day, input } = dayWithEveningStop('exposed', {
+      start: 16 * 60,
+      end: 17 * 60 + 10,
+    });
+    expect(
+      validateDayWeather(day, input).filter((issue) => issue.code === 'scheduled_after_dark'),
+    ).toHaveLength(0);
   });
 
   it('says nothing about an indoor place — the dark is not its problem', () => {

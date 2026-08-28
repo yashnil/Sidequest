@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { cookies, headers } from 'next/headers';
+import { isSignedSessionToken, mintSessionToken } from './session-signature';
 import {
   ACTION_RATE_RULES,
   deploymentBusyCopy,
@@ -169,7 +170,7 @@ export async function sessionToken({ mint }: { mint: boolean }): Promise<string 
     if (existing) return existing;
     if (!mint) return null;
 
-    const minted = randomUUID();
+    const minted = mintSessionToken(randomUUID());
     try {
       jar.set(SESSION_COOKIE, minted, sessionCookieOptions({ secure: secureCookiesEnabled() }));
     } catch {
@@ -195,9 +196,94 @@ export async function requestIdentities(): Promise<string[]> {
   const identities: string[] = [];
   const address = await callerAddress();
   if (address) identities.push(`ip:${address}`);
-  const session = await sessionToken({ mint: true });
+  /*
+   * THE RAW COOKIE, DELIBERATELY, AND ONLY HERE.
+   *
+   * A rate bucket is a *restriction*: the worst a forged or rotated value can
+   * do is fall back to the deployment-wide fence, which is exactly where a
+   * caller presenting no cookie at all already is. Refusing to key a bucket on
+   * an unsigned value would throttle nobody it does not already throttle and
+   * would stop throttling the naive case, so this reads whatever the browser
+   * presented.
+   *
+   * `callerKey` is the opposite case and takes the opposite decision: a
+   * per-caller row on the daily ledger is a *grant*, so it must never be opened
+   * by a value the client chose.
+   *
+   * What it does *not* do is mint. A bucket keyed on a token the server just
+   * created is a fresh bucket on every request from a caller who never keeps a
+   * cookie, which is a fence that opens for the one caller it is for. Nothing
+   * is lost by reading only: a request with no cookie has no per-caller bucket
+   * and is bounded by the deployment-wide fence, which is where it already was.
+   */
+  const session = await presentedSessionToken();
   if (session) identities.push(`session:${session}`);
   return identities;
+}
+
+/**
+ * THE SESSION TOKEN, BUT ONLY WHERE THIS DEPLOYMENT ISSUED IT.
+ *
+ * The one seam between "who owns this trip" and "whose allowance is this".
+ * Ownership compares the whole cookie against a stored token and is safe with a
+ * value nobody issued, because such a value matches nothing. A *budget* keyed
+ * on the same unverified value is not safe at all: the cookie is written by the
+ * client, so sending a fresh random string on every request opened a fresh
+ * per-caller bucket on every request and the per-caller ceiling — the control
+ * that stops one visitor draining the deployment's day — cost nothing to
+ * evade.
+ *
+ * A token whose signature does not verify is not treated as a different
+ * identity; it is treated as **no identity**, which puts it in the shared
+ * unattributed pool beside every caller who declines the cookie. So rotating
+ * buys the pool rather than a personal allowance, declining still works, and an
+ * ordinary browser that accepted the cookie we minted keeps its own share.
+ */
+export async function attributableSession(): Promise<string | null> {
+  /*
+   * READ, NEVER MINT. THE MINT IS THE HOLE THIS CLOSES.
+   *
+   * The first version of this asked `sessionToken({ mint: true })`, and a
+   * signature only stops a caller *choosing* a token — it does nothing about a
+   * caller *asking the server for one*. A client that simply discards the
+   * `Set-Cookie` arrives with no cookie on every request, is handed a brand-new
+   * signed token every time, and opens a brand-new per-caller ledger row every
+   * time. Measured against a twenty-build ceiling with a per-caller share of
+   * two: twenty-one distinct signed identities, twenty builds allowed, the
+   * per-caller fence never once firing. That is the very outcome this module's
+   * header says it exists to prevent, reached without forging anything.
+   *
+   * So an identity has to *survive a round trip*: only a token the browser
+   * presented, and that this deployment signed, is one. A request arriving
+   * without a cookie is unattributable — which is exactly what it is — and
+   * joins the shared pool alongside every other caller nobody can tell apart.
+   *
+   * The cookie is still minted, by `sessionToken` wherever ownership needs one.
+   * An ordinary browser is therefore unattributed for its first action and has
+   * its own share from the second onwards; a caller that never keeps a cookie
+   * never leaves the shared pool.
+   */
+  const presented = await presentedSessionToken();
+  if (presented === null) return null;
+  return isSignedSessionToken(presented) ? presented : null;
+}
+
+/**
+ * The cookie value the browser actually sent, with nothing minted.
+ *
+ * Separate from `sessionToken` because the two answer different questions.
+ * `sessionToken` answers "what identity should this browser carry from now on",
+ * and minting is the whole point of it. This answers "what did this request
+ * arrive with", and minting would be the defect.
+ */
+export async function presentedSessionToken(): Promise<string | null> {
+  try {
+    const jar = await cookies();
+    return jar.get(SESSION_COOKIE)?.value?.slice(0, 64) ?? null;
+  } catch {
+    // Outside a request scope: a test, a worker, an internal caller.
+    return null;
+  }
 }
 
 /**
@@ -212,7 +298,7 @@ export async function requestIdentities(): Promise<string[]> {
 export async function callerKey(): Promise<string | null> {
   const address = await callerAddress();
   if (address) return `ip:${address}`;
-  const session = await sessionToken({ mint: true });
+  const session = await attributableSession();
   return session ? `session:${session}` : null;
 }
 

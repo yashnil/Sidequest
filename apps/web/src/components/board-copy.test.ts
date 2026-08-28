@@ -17,6 +17,7 @@ import {
   timeThere,
   whyThisFits,
 } from './BoardCopy';
+import { PROXIMITY_CLAIMS } from '@sidequest/core';
 
 /**
  * THE COPY RULES THE LIVE BOARD BROKE.
@@ -346,5 +347,38 @@ describe('passing on something, with a reason', () => {
         decided: new Set(),
       }),
     ).toEqual([]);
+  });
+});
+
+describe('the heading over the group that holds untimed journeys', () => {
+  /**
+   * THE RENDERED CONSTANT, WHICH IS THE ONE A TRAVELLER READS.
+   *
+   * `board-group-copy.test.ts` in core holds this property against
+   * `BOARD_GROUP_COPY` — the compiler's own vocabulary, which no surface
+   * renders. While that test was green this constant carried "Within your
+   * range · Inside the distance you said you would travel" over cards whose own
+   * `reach.status` is `unmeasured`: a tower and a cruise terminal on one
+   * delivered board, five of five cards on another. The invariant was guarded
+   * on the copy nobody reads.
+   *
+   * `nearby_side_quests` is the fallthrough group — `board.ts` sends `unknown`
+   * here deliberately, because an unmeasured journey is not evidence of
+   * distance in either direction — so its heading may say the group is *not*
+   * the further-out one and may not say how far anything in it is. The word
+   * list is core's, so the two halves cannot come to disagree.
+   */
+  it('claims no distance it does not know', () => {
+    const copy = BOARD_GROUP_HEADINGS.nearby_side_quests;
+    const text = `${copy.title} ${copy.blurb}`.toLowerCase();
+    for (const claim of PROXIMITY_CLAIMS) {
+      expect(text.includes(claim), `the rendered near-group heading claims "${claim}"`).toBe(false);
+    }
+  });
+
+  /** The negative control: the group decided *by* distance may still say so. */
+  it('leaves the further-out heading its earned claim', () => {
+    const detours = BOARD_GROUP_HEADINGS.scenic_detours;
+    expect(`${detours.title} ${detours.blurb}`.toLowerCase()).toContain('further out');
   });
 });

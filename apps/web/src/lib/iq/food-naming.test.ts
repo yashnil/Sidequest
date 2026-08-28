@@ -242,10 +242,29 @@ const namedRows = (rows: readonly MealRow[]) => rows.filter((row) => row.food.st
 const unnamedRows = (rows: readonly MealRow[]) =>
   rows.filter((row) => row.food.stopKind === 'unplanned');
 
-/** Every locality any record in this region publishes. The only legal area names. */
+/**
+ * EVERY NAME A MEAL MAY POINT AT, AND WHY THE SET GREW.
+ *
+ * The rule is unchanged and it is the one that matters: **nothing composed**.
+ * An area name has to be a string some record in this region published, so a
+ * neighbourhood cannot be invented any more than a restaurant can.
+ *
+ * What changed is which published strings are legal, and it is a correction
+ * rather than a loosening. This held localities and base names only, and the
+ * fallback that fed it read a *day-level* modal locality computed over a node
+ * set the base is always in — so on a day that went sixty kilometres up the
+ * coast the meal still said "around <the base's municipality>", naming a place
+ * the traveller was demonstrably not in and doing it with the sentence beneath
+ * admitting that none of our venues "worked from where the day actually is at
+ * this hour". The area is now resolved at the anchor the traveller is standing
+ * on, so a stop's own published name is a legal answer and is the more precise
+ * one. Localities in real packs are frequently the region or the country
+ * ("Tokyo", "Iceland"), which is exactly why the stop wins where there is one.
+ */
 function publishedLocalities(region: CompiledRegion): Set<string> {
   return new Set([
     ...region.places.map((place) => place.locality),
+    ...region.places.map((place) => place.name),
     ...(region.food?.venues ?? []).map((venue) => venue.locality),
     ...region.bases.map((base) => base.name),
   ]);
@@ -504,7 +523,7 @@ describe('a road region with long legs and almost nowhere to eat', () => {
       const claimed = row.item.reason.match(/^(\d+) place/);
       if (!claimed) {
         /* The zero case says nothing is held, and names no number at all. */
-        expect(row.item.reason).toMatch(/nothing we hold near where this day goes/i);
+        expect(row.item.reason).toMatch(/we hold nothing serving/i);
         continue;
       }
       /*
@@ -512,7 +531,7 @@ describe('a road region with long legs and almost nowhere to eat', () => {
        * invented venue, in a unit that looks harder to check.
        */
       expect(Number(claimed[1])).toBeLessThanOrEqual(held);
-      expect(row.item.reason).toMatch(/we hold near this day's cluster/);
+      expect(row.item.reason).toMatch(/we hold within reach of/);
     }
   });
 });

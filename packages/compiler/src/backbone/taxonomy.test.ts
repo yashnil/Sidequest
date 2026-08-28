@@ -516,6 +516,52 @@ describe('the archetypes the live Bali defect turned on', () => {
   });
 });
 
+describe('a leaf that inherits the wrong offer from its archetype', () => {
+  /**
+   * A SQUARE IS SOMETHING YOU STAND IN, NOT SOMEWHERE YOU EAT.
+   *
+   * `plaza` took `TOWN`'s whole rule, `interests: ['food_and_towns']` included —
+   * right for a market street or a neighbourhood, and false of a paved public
+   * space. A delivered plan spent a whole day on three adjoining squares five
+   * hundred metres apart and headed it "Food & local eating", because the only
+   * interest the three of them offered was the one none of them serves. The
+   * theme a traveller reads is composed from what the day's stops offer, so an
+   * archetype's convenience became a claim about the day.
+   */
+  it('offers a public square for its look and its history, not for its food', () => {
+    const plaza = classifySourceCategory({ category: 'plaza' });
+    expect(plaza.interests).not.toContain('food_and_towns');
+    expect(plaza.interests).toContain('scenic_viewpoints');
+    /* The archetype it borrows the rest from is unchanged, and still means food. */
+    expect(classifySourceCategory({ category: 'neighborhood' }).interests).toContain(
+      'food_and_towns',
+    );
+  });
+
+  /**
+   * A cave is geology and it is not a day hike. `HIKE` gave it the hiking
+   * interest and a three-hour default, so a lava tube read as a day's walking
+   * to a traveller who had asked for neither — and the three hours were an
+   * archetype constant rendered as a fact about the visit.
+   */
+  it('offers a cave as geology, at a duration a cave takes — under either spelling', () => {
+    /*
+     * Both leaves, because the first repair changed one of them and the
+     * delivered journey carried the other: `cave_entrance` sat on the line
+     * below `cave` still spreading the day-hike archetype, so a lava tube
+     * shipped as "Hiking around Iceland", three hours, "Matches your interest
+     * in hiking". A test that named one spelling could not have seen it.
+     */
+    for (const key of ['cave', 'cave_entrance']) {
+      const cave = classifySourceCategory({ category: key });
+      expect(cave.interests, key).toContain('geology_and_geothermal');
+      expect(cave.interests, key).not.toContain('hiking');
+      expect(cave.category, key).not.toBe('day_hike');
+      expect(cave.typicalDurationMinutes, key).toBeLessThan(180);
+    }
+  });
+});
+
 describe('nothing in the table names a destination', () => {
   /**
    * The rule that makes this the same table everywhere on earth.

@@ -62,6 +62,34 @@ export const BOARD_GROUPS = [
 export const boardGroupSchema = z.enum(BOARD_GROUPS);
 export type BoardGroup = z.infer<typeof boardGroupSchema>;
 
+/**
+ * THE WORDS A HEADING MAY NOT USE OVER THE GROUP THAT HOLDS UNTIMED JOURNEYS.
+ *
+ * `nearby_side_quests` is the fallthrough: a candidate whose journey nobody
+ * could measure lands there, because an unmeasured journey is not evidence of
+ * distance in either direction. So the heading may say the group is *not* the
+ * further-out one and may not say how far anything in it is.
+ *
+ * Exported because there are two copies of this heading — the compiler's own
+ * vocabulary here and the traveller-facing one the board renders — and the rule
+ * was guarded on the first while the second carried "Inside the distance you
+ * said you would travel" over a tower and a cruise terminal whose own reach
+ * reads `unmeasured`. One list, both surfaces, and neither can drift.
+ */
+export const PROXIMITY_CLAIMS: readonly string[] = [
+  'short hop',
+  'short trip',
+  'near your base',
+  'from your base',
+  'close to',
+  'nearby',
+  'minutes from',
+  'a stone',
+  'inside the distance',
+  'within your range',
+  'within reach',
+];
+
 export const BOARD_GROUP_COPY: Record<BoardGroup, { title: string; blurb: string }> = {
   must_see_classics: {
     title: 'Must-see classics',

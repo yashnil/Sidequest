@@ -314,6 +314,7 @@ function contextFor(
     hours: dayWorld.hours,
     weather: dayWorld.weather,
     food,
+    foodDataset: input.food ?? null,
   };
 }
 

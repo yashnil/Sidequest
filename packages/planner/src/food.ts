@@ -140,6 +140,15 @@ export const PACKED_MEAL_MINUTES = 30;
 export interface FoodArea {
   name: string;
   countBySlot: Readonly<Record<MealSlot, number>>;
+  /**
+   * Whether `name` is where the traveller sleeps or a stop they are standing at.
+   *
+   * The two need different prepositions and make different promises — "around
+   * Shinjuku" is an area you can wander, "near Blautós og Innstavogsnes" is a
+   * nature reserve you are at — and a sentence that gets this wrong is the
+   * whole of the defect this field exists to close.
+   */
+  atBase: boolean;
 }
 
 export interface DaySlotPlan {
@@ -216,6 +225,26 @@ export interface FoodContext {
    */
   reasonForUnused(venueId: string): string;
   specialMealBudget: number;
+  /**
+   * How many meals each venue has been named for on days that are **settled**.
+   *
+   * The cap this enforces was previously a bound on head-of-shortlist
+   * assignments, which is a bound on what the layout is *likeliest* to name
+   * rather than on what it does name: `chooseFoodStop` re-sorts by legality and
+   * real detour, so a runner-up wins slots without its tally moving. Measured on
+   * the primary fixture at an ordinary trip length, the cap of two was breached
+   * on every length from seven days up — a plain seven-day Mammoth trip sent the
+   * traveller to the same deli for breakfast and lunch on day 4 and again on day
+   * 5 morning, and a ten-day one reached 5×.
+   *
+   * Written once per day, by `plan.ts`, from the layout that day actually
+   * settled on — never from an attempt. That is what keeps it compatible with
+   * the rule stated in `resolveFood`: the packer re-lays a day out many times,
+   * so `chooseFoodStop` must have no memory of earlier *attempts*. It has none;
+   * this is memory of earlier *days*, which are finished facts and identical
+   * however many attempts each took.
+   */
+  namedOnSettledDays: Map<string, number>;
 }
 
 export interface ResolveFoodInput {
@@ -303,9 +332,34 @@ export function resolveFood(input: ResolveFoodInput): FoodContext {
       const tookSpecial = isSpecial && shortlist.some((id) => isSpecialGrade(usable, id, hours));
       if (tookSpecial) specialsLeft -= 1;
 
-      // Only the head of the list is treated as spoken for. Reserving the whole
-      // shortlist would leave later days with nothing when the region has three
-      // dinner options and the trip has four nights.
+      /*
+       * TWO TALLIES, BECAUSE THEY BOUND TWO DIFFERENT THINGS.
+       *
+       * `usedVenues` — which becomes the next day's `discouraged` set — is a
+       * *preference*, and only the head is treated as spoken for: reserving a
+       * whole shortlist would leave later days with nothing in a region that
+       * holds three dinner options and a trip that holds four nights.
+       *
+       * `namedCounts` is the *cap*, and it counts head assignments — which is
+       * a bound on what the layout is *likeliest* to name rather than on what
+       * it can name: `chooseFoodStop` re-sorts the shortlist by legality and
+       * real detour, so a runner-up can win a slot without its tally moving.
+       *
+       * Counting every shortlisted venue instead would make the bound exact,
+       * and it was tried and reverted, because the two goals are in real
+       * tension: it empties the shortlist outright in a region holding two
+       * doors and a trip holding twelve meals, and letting the capped venue
+       * back in when the shortlist empties reverses the property this cap was
+       * introduced for — "never names the only door past the cap, however many
+       * slots want it". Measured on the fixtures, the exact version cost meals
+       * on two scenarios and broke that test.
+       *
+       * So the head tally stands, and what is left is a residual rather than a
+       * hole: a venue that is never anybody's head and nonetheless wins slot
+       * after slot on convenience could be named past the cap. It has not been
+       * observed on any delivered journey, and the honest note is here rather
+       * than a claim of exactness that the code does not make.
+       */
       const head = shortlist[0];
       if (head !== undefined) {
         usedVenues.add(head);
@@ -352,6 +406,8 @@ export function resolveFood(input: ResolveFoodInput): FoodContext {
         : 'That venue is no longer in our food data for this region.';
     },
     specialMealBudget: profile.food.specialMealBudget,
+    /* Empty until a day settles. See the field's note. */
+    namedOnSettledDays: new Map<string, number>(),
   };
 }
 
@@ -397,6 +453,33 @@ function slotsForDay(
   }
   if (end >= windows.dinner.earliest + 45) slots.push('dinner');
   return slots;
+}
+
+/**
+ * The same plan with nothing nameable in it.
+ *
+ * Every shortlist emptied, so a day laid out against this keeps its meal slots,
+ * its windows and its area sentence and cannot name a venue. It is what a day
+ * falls back to when routing to a door would cost it a stop — a statement about
+ * *this day's* routing, never the statement "there is no food data here" that
+ * a null context makes about the whole region.
+ *
+ * `userChosen` is emptied with the rest deliberately: a venue the traveller
+ * ticked cannot be honoured on a day that cannot reach it, and leaving it in a
+ * shortlist nothing reads would be a promise with no mechanism behind it.
+ */
+export function foodContextWithoutVenues(context: FoodContext | null): FoodContext | null {
+  if (!context) return null;
+  const byDay = new Map<number, FoodDayPlan>();
+  for (const [dayNumber, plan] of context.byDay) {
+    byDay.set(dayNumber, {
+      ...plan,
+      slots: plan.slots.map((slot) => ({ ...slot, shortlist: [], isSpecial: false })),
+      provisioningShortlist: [],
+      userChosen: new Set<string>(),
+    });
+  }
+  return { ...context, byDay };
 }
 
 /** Every routing node this day is likely to pass, base included. */
@@ -473,7 +556,7 @@ function areaForDay(
   for (const slot of MEAL_SLOTS) {
     countBySlot[slot] = inArea.filter((venue) => venueServes(venue, slot)).length;
   }
-  return { name, countBySlot };
+  return { name, countBySlot, atBase: false };
 }
 
 /**
@@ -485,6 +568,47 @@ function areaForDay(
  * access block and nothing else — a missing locality is a reason to have no area
  * to name, never a reason for the food layer to stop the plan.
  */
+/**
+ * WHERE THE TRAVELLER ACTUALLY IS WHEN A MEAL FALLS, AS SOMEWHERE NAMEABLE.
+ *
+ * `areaForDay` answers a different question and was being spent on this one.
+ * It is a property of the *whole day*, read from the venues within reach of any
+ * of the day's routing nodes — and the base is one of those nodes on every day,
+ * so the base's own municipality won the modal vote on every day of every trip.
+ * A live road journey printed "Lunch around Reykjavík" at half past twelve for a
+ * traveller standing at a coastal reserve sixty kilometres away, with the
+ * sentence beneath it admitting that nothing worked "from where the day actually
+ * is at this hour". The product knew where they were and named somewhere else.
+ *
+ * So the area is resolved *at the anchor the traveller is standing on* when the
+ * slot is laid. The anchor's own name is the strongest true statement available:
+ * localities in these packs are frequently the region or even the country
+ * ("Tokyo", "Iceland"), and "Lunch around Iceland" is a worse answer than the
+ * one it replaces. The counts are of what our index holds within the same
+ * ceiling a meal is actually held to, so "two places serve lunch" is a count of
+ * what could have been offered here rather than of what exists.
+ *
+ * Never composed, never a municipality nobody is in.
+ */
+export function foodAreaAt(input: {
+  routingId: string;
+  name: string;
+  atBase: boolean;
+  venues: readonly FoodVenue[];
+  matrix: TravelTimeMatrix;
+}): FoodArea {
+  const near = input.venues.filter((venue) => {
+    if (venue.routingId === input.routingId) return true;
+    const leg = tryLeg(input.matrix, input.routingId, venue.routingId);
+    return leg !== null && leg.minutes <= MAX_FOOD_DETOUR_MINUTES;
+  });
+  const countBySlot = {} as Record<MealSlot, number>;
+  for (const slot of MEAL_SLOTS) {
+    countBySlot[slot] = near.filter((venue) => venueServes(venue, slot)).length;
+  }
+  return { name: input.name, countBySlot, atBase: input.atBase };
+}
+
 function modalLocality(localities: readonly (string | undefined)[]): string | null {
   const counts = new Map<string, number>();
   for (const locality of localities) {
@@ -851,6 +975,13 @@ export interface FoodChoiceRequest {
   /** Whether a car is available for a detour at all. */
   canDrive: boolean;
   /**
+   * Meals already named at each venue on days that have settled.
+   *
+   * Read-only here and updated once per day by `plan.ts`. See
+   * `FoodContext.namedOnSettledDays`.
+   */
+  namedOnSettledDays?: ReadonlyMap<string, number>;
+  /**
    * True when the traveller comes back to where they set off from rather than
    * carrying on from the venue.
    *
@@ -918,7 +1049,27 @@ export function chooseFoodStop(request: FoodChoiceRequest): FoodChoice | null {
    */
   const legal = slotPlan.shortlist
     .map((venueId, index) => ({ index, choice: evaluate(request, venueId, slotPlan.isSpecial) }))
-    .filter((entry): entry is { index: number; choice: FoodChoice } => entry.choice !== null);
+    .filter((entry): entry is { index: number; choice: FoodChoice } => entry.choice !== null)
+    /**
+     * The cap, applied where the naming actually happens.
+     *
+     * It was applied only to the head of each shortlist, one phase earlier —
+     * which bounds who is *likeliest* to be named and not who is. This sort is
+     * exactly what makes the two different, so the gate belongs on this side of
+     * it. A venue at its cap is simply not a candidate, and the slot falls
+     * through to the area suggestion, which says the true thing: we know the
+     * neighbourhood and not a second door.
+     *
+     * A venue the traveller asked for by name is exempt, the same exemption the
+     * choice below makes: a cap is a variety preference and their own pick is
+     * an instruction.
+     */
+    .filter(
+      (entry) =>
+        entry.choice.food.fromUserChoice ||
+        (request.namedOnSettledDays?.get(entry.choice.venue.id) ?? 0) <
+          MAX_TIMES_ONE_VENUE_IS_NAMED,
+    );
   if (legal.length === 0) return null;
 
   // A venue the traveller asked for is never quietly passed over for a closer

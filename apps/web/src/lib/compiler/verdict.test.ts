@@ -215,3 +215,33 @@ describe('both render paths speak through the verdict, not past it', () => {
     );
   });
 });
+
+describe('a build the traveller stopped themselves', () => {
+  /**
+   * A ONE-WAY DOOR, WITH THE HOMEPAGE POINTING AT IT.
+   *
+   * Pressing "Stop this build" left the plan screen on its `compiling` step
+   * with no retry control at all: `isRetryable('cancelled_by_user')` is false —
+   * correctly, since it answers whether a *failure* was transient, and a
+   * cancellation is not a failure — and the screen was reading that answer to
+   * decide whether to offer the button. Meanwhile the trip list labelled the
+   * same trip "You stopped this" and offered "Pick it up again", linking to the
+   * screen that could not do it. `retryCompilationAction` accepts a cancelled
+   * job already; only the button was missing.
+   */
+  it('is offered again, because stopping is not failing', () => {
+    const verdict = compilationVerdict({ errorCode: 'cancelled_by_user', stages: [] });
+    expect(verdict.cause).toBe('cancelled_by_user');
+    expect(verdict.retryable).toBe(true);
+    expect(verdict.message).toBe(COMPILATION_ERROR_COPY.cancelled_by_user);
+  });
+
+  it('leaves a genuinely terminal verdict alone', () => {
+    /*
+     * The control. Nothing here may turn a real refusal into an invitation to
+     * press the same button and spend again for the same answer.
+     */
+    const verdict = compilationVerdict({ errorCode: 'coverage_insufficient', stages: THIN_GROUND_STAGES });
+    expect(verdict.retryable).toBe(false);
+  });
+});

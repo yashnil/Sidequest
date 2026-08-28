@@ -52,7 +52,10 @@
  *   - an **opening** time rounds later and a **closing** or last-admission time
  *     rounds earlier, so the stated window is never wider than the real one;
  *   - a **duration** rounds down, so the plan never offers more free time than
- *     it has.
+ *     it has;
+ *   - a **travel** duration rounds up, because that is the same rule and not an
+ *     exception to it: travel is time the traveller spends rather than has, so
+ *     down is the direction that understates the journey.
  *
  * In every case the rounding moves the number toward the side where being wrong
  * is harmless. Nothing scheduled changes; this is what the page prints.
@@ -197,4 +200,28 @@ export function roundedMinuteOfDay(minute: number, edge: ClockEdge): number {
 export function roundedDuration(minutes: number): number {
   if (minutes < STEP) return minutes;
   return Math.floor(minutes / STEP) * STEP;
+}
+
+/**
+ * A span of *travel*, rounded up to five.
+ *
+ * Up, always, and that is the same rule as `roundedDuration` rather than an
+ * exception to it: both round in the direction that cannot make a claim false,
+ * and travel time is the one span on this page that the traveller spends rather
+ * than has. Flooring it understates the journey — a rendered day printed
+ *
+ *     11:00  10 min   Walk back to Osaka
+ *                     14 min back to Osaka.
+ *
+ * where the row header and the sentence under it disagreed by forty per cent
+ * about the same walk, and the smaller of the two was the one in the schedule
+ * column. A traveller reading the column budgets ten minutes for a fourteen
+ * minute walk; a traveller reading the sentence wonders which half to believe.
+ *
+ * Under five minutes keeps its exact value, for the same reason it does above:
+ * a two-minute hop printed as five is a different and wrong statement.
+ */
+export function roundedTravel(minutes: number): number {
+  if (minutes < STEP) return minutes;
+  return Math.ceil(minutes / STEP) * STEP;
 }

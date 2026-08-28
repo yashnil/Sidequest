@@ -377,28 +377,60 @@ describe('a plan that is feasible and not yet a trip', () => {
       ),
     };
 
-    expect(buildPlannerReadiness({ ...shape, profile: SPACIOUS }).level).toBe('ready');
+    /*
+     * `partial` rather than `ready` on the spacious side, and the reason is the
+     * unfilled day this shape deliberately holds: a day the trip could have
+     * filled and did not now keeps a plan off `ready` whatever its volume. The
+     * claim under test is untouched — the two verdicts still differ, and they
+     * differ only because the volume bar moved with the profile.
+     */
+    expect(buildPlannerReadiness({ ...shape, profile: SPACIOUS }).level).toBe('partial');
     expect(buildPlannerReadiness({ ...shape, profile: ORDINARY }).level).toBe('insufficient');
     expect(SPACIOUS.derived.activitySlotsPerDay).toBeLessThan(
       ORDINARY.derived.activitySlotsPerDay,
     );
+
+    /*
+     * And the volume bar really is what separated them: fill the third day and
+     * the spacious traveller's plan clears every gate, while the ordinary one's
+     * is still short of what their own answers asked a day to hold.
+     */
+    const anchored = { ...shape, daysWithActivity: 3 };
+    expect(buildPlannerReadiness({ ...anchored, profile: SPACIOUS }).level).toBe('ready');
+    expect(buildPlannerReadiness({ ...anchored, profile: ORDINARY }).level).not.toBe('ready');
   });
 
-  it('leaves a fully scheduled trip exactly as it was', () => {
+  it('leaves a fully scheduled trip usable, and does not call it finished', () => {
     const result = planTrip(buildScenario());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.readiness?.level).toBe('ready');
     /*
-     * And the itinerary's own header agrees. The two verdicts are computed in
-     * different places and a traveller sees both; the point of the invariant is
-     * that they cannot disagree about one plan.
+     * WHAT "FULLY SCHEDULED" IS AND IS NOT.
+     *
+     * This asserted `ready`, on the reasoning that a plan holding every place
+     * the traveller picked is finished. An independent review measured what
+     * that reasoning licences: `everyDayAnchored` needs one activity a day and
+     * auto-pick scales its target to the region's supply, so
+     * `scheduled === selected` is the ordinary case — and the carve-out then
+     * waived the volume test *and* the "is this a trip at all" floor. Five
+     * stops on a six-day metropolitan trip read `ready`, with the spacious
+     * sentence telling a traveller their empty afternoons were the pace they
+     * had asked for. They had answered `balanced`.
+     *
+     * So the two halves are asserted apart, which is what they always were:
+     * **nothing went wrong** — no stop was lost, no cap broken, the plan stands
+     * on its own and the header does not send anybody to a decision — and
+     * **it is not full**, which the shortfall issue says as a warning and the
+     * summary says in the trip's own units.
      */
     expect(result.itinerary.status).not.toBe('needs_decision');
-    expect(
-      result.itinerary.issues.some((issue) => issue.code === 'coverage_below_pace'),
-    ).toBe(false);
+    const shortfall = result.itinerary.issues.filter(
+      (issue) => issue.code === 'coverage_below_pace',
+    );
+    expect(shortfall.every((issue) => issue.severity === 'warning')).toBe(true);
+    expect(result.readiness?.level).not.toBe('insufficient');
+    expect(result.readiness?.summary).toMatch(/All \d+ places you picked are in the plan/);
   });
 
   it('makes the itinerary header agree with the board, end to end', () => {
@@ -433,6 +465,154 @@ describe('a plan that is feasible and not yet a trip', () => {
     );
     expect(coverage?.severity).toBe('error');
     expect(coverage?.message).toContain(`of your ${result.itinerary.days.length} days`);
+  });
+
+  it('does not print a second day fraction beside the summary\u2019s own', () => {
+    /**
+     * TWO TRUE FRACTIONS, ONE CONTRADICTION.
+     *
+     * A rendered six-day Osaka plan opened with
+     *
+     *   "8 stops across 6 of 6 days, 5 hr 21 min on foot to reach them"
+     *
+     * and closed with
+     *
+     *   "This plan holds 8 stops across 4 of the 4 days it could fill."
+     *
+     * Both are true — `summarise` counts every day of the trip, the shortfall
+     * counts the days a stop can be built around, and arrival and departure days
+     * are in one and not the other. A traveller has no way to know that, and
+     * what they read is the same sentence giving two different answers.
+     *
+     * The volume gap is what this warning exists to say, so that is what it says
+     * in figures; the spread is said in words. Asserted through the real planner
+     * rather than on the template, because the collision only exists once both
+     * sentences are on the same plan.
+     */
+    const result = planTrip(buildScenario());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const summary = result.itinerary.summary;
+    expect(summary).toMatch(/across \d+ of \d+ days/);
+
+    /*
+     * The witness. `buildScenario()` with no overrides is the fully-scheduled
+     * shape the test above establishes: nothing went wrong, and it is still not
+     * full — which is exactly when the warning fires and collides.
+     */
+    const warnings = result.itinerary.issues.filter(
+      (issue) => issue.code === 'coverage_below_pace' && issue.severity === 'warning',
+    );
+    expect(warnings.length).toBeGreaterThan(0);
+
+    for (const issue of result.itinerary.issues) {
+      if (issue.code !== 'coverage_below_pace') continue;
+      /*
+       * The shape that collides: "N stops across X of Y days". The error-level
+       * variant says "of your N days" — the same denominator the summary uses,
+       * which is agreement rather than contradiction and is left alone.
+       */
+      if (issue.severity === 'warning') {
+        expect(issue.message).not.toMatch(/stops? across \d+ of (the )?\d+ days?/);
+        expect(issue.message).toContain('it could build one around');
+      }
+    }
+
+    /*
+     * The board's own summary is the other half, and it collided the same way:
+     * "This fills 4 of the 4 days the trip can use" sat one screen before "8
+     * stops across 6 of 6 days" on a plan that used all six.
+     */
+    const readinessSummary = result.readiness?.summary ?? '';
+    expect(readinessSummary).not.toMatch(/\d+ of the \d+ days? the trip can use/);
+    if (readinessSummary.includes('room for around')) {
+      expect(readinessSummary).toContain('it can build one around');
+    }
+  });
+
+  it('never calls a plan finished while a day it could fill holds nothing', () => {
+    /**
+     * FOUR BLANK DAYS UNDER "ALL 8 PLACES YOU PICKED ARE IN THE PLAN".
+     *
+     * A real ten-day Mammoth plan for a traveller answering slow pace, light
+     * days and lots of free time. Eight stops landed on days 1–6; days 7, 8, 9
+     * and 10 came out completely empty — 585, 585, 553 and 435 free minutes
+     * with nothing in them — and the verdict read `ready`.
+     *
+     * Eight stops clears both `expected` and `floor`, so `incomplete` was false,
+     * and `everyDayAnchored` was consulted only from inside `spacious` and
+     * `short`, neither of which sits on the path to `ready`. The volume bar
+     * cannot see distribution, and nothing else was looking: `plan.ts` gates the
+     * completeness warning on the same two booleans, so that surface was silent
+     * too. A tester books ten days and is told the plan is done.
+     *
+     * Driven through the real planner rather than `buildPlannerReadiness`,
+     * because the defect is in what a delivered plan's own shape produces.
+     */
+    const result = planTrip(
+      buildScenario({
+        basics: { startDate: '2026-08-12', endDate: '2026-08-21' },
+        answers: { pace: 'slow', dailyIntensity: 'light', freeTime: 'lots' },
+      }),
+    );
+    expect(result.ok, result.ok ? '' : `refused: ${result.message}`).toBe(true);
+    if (!result.ok) return;
+
+    /* Arrival and departure are lighter by construction; the inner days are the
+     * ones the trip could have filled. */
+    const inner = result.itinerary.days.slice(1, -1);
+    const blank = inner.filter(
+      (day) =>
+        day.window.usableMinutes > 0 && day.items.every((item) => item.kind !== 'activity'),
+    );
+    /*
+     * The witness. If the planner ever fills these days the fixture has moved,
+     * and this test would be asserting about a shape that no longer exists.
+     */
+    expect(blank.length, 'the ten-day slow-pace plan should still leave days empty').toBeGreaterThan(0);
+
+    expect(result.readiness?.level).not.toBe('ready');
+    expect(result.itinerary.status).not.toBe('ready');
+  });
+
+  it('does not send a traveller back to the board when nothing could be laid out', () => {
+    /**
+     * A COUNTRY TRIP WITH NOTHING IN IT, TOLD TO PICK MORE.
+     *
+     * Measured on a live eight-day Iceland build. All thirteen selections came
+     * back `missing_travel_data` — the routing service refuses any pair over
+     * 400 km and the country is wider than that — so the funnel read
+     * `{considered: 59, selected: 13, scheduled: 0}` and the plan was empty.
+     *
+     * The panel then marked `choose_manually` as likely to help, with "Add a
+     * few more from the board — there is room in these days for more than is in
+     * the plan", beside five remedies it had correctly ruled out. That advice
+     * cannot work: the next pick comes off the same board and the same
+     * unmeasured matrix. `retry` is the remedy that applies, and it was already
+     * there.
+     *
+     * The shortfall override exists for a real case — a plan that stands and is
+     * not full — and the guard is only that a plan has to exist.
+     */
+    const nothingScheduled = buildPlannerReadiness({
+      funnel: { considered: 59, selected: 13, eligible: 0, accessFeasible: 0, hoursFeasible: 0, feasible: 0, scheduled: 0 },
+      unscheduled: Array.from({ length: 13 }, (_, index) =>
+        rejection('missing_travel_data', `Place ${index}`),
+      ),
+      dayCount: 8,
+      daysWithActivity: 0,
+      profile: ORDINARY,
+    });
+
+    const manual = nothingScheduled.remedies.find((entry) => entry.remedy === 'choose_manually');
+    expect(manual?.likelyToHelp).toBe(false);
+    expect(manual?.detail).not.toContain('room in these days');
+
+    /* The remedy that does apply is still offered. */
+    expect(
+      nothingScheduled.remedies.find((entry) => entry.remedy === 'retry')?.likelyToHelp,
+    ).toBe(true);
   });
 
   it('says nothing about coverage when there is no traveller to judge against', () => {

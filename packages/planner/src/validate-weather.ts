@@ -115,19 +115,38 @@ export function validateDayWeather(
        * error: viewpoints at night and lit gardens are real plans, and the
        * traveller is the one who knows which this is.
        *
-       * Keyed on the start rather than the end, so a dinner-hour stroll that
-       * runs a few minutes past dusk does not nag — the plan worth flagging is
-       * the one conducted wholly in the dark.
+       * Measured as the share of the visit the light actually covers, not by
+       * which side of sunset the first minute falls on. Keying on the start
+       * was the whole of a defect a reviewer found on a delivered plan: an
+       * arrival evening laid a park visit from 17:08 to 18:38 against a sunset
+       * of 17:11 held on that very day's own record, and because the first
+       * three minutes were lit, nothing said a word about the other
+       * sixty-seven. A dinner-hour stroll that runs past dusk still does not
+       * nag, because most of it happened in the light — which is the property
+       * the original comment was reaching for and the start minute cannot
+       * express.
        */
       day.weather.sunsetMinute !== undefined &&
-      item.startMinute >= day.weather.sunsetMinute &&
       place !== undefined &&
-      place.weather.exposure !== 'indoor'
+      place.weather.exposure !== 'indoor' &&
+      mostlyAfterDark(item, {
+        sunriseMinute: day.weather.sunriseMinute,
+        sunsetMinute: day.weather.sunsetMinute,
+      })
     ) {
       issues.push({
         code: 'scheduled_after_dark',
         severity: 'warning',
-        message: `${name} is outdoors and day ${day.dayNumber} starts it at ${formatMinuteOfDay(item.startMinute)} — after that day's sunset at ${formatMinuteOfDay(day.weather.sunsetMinute)}. Fine if it is lit or the dark is the point; otherwise move it earlier.`,
+        /*
+         * Which end of the day the dark is on, because the visit can be on
+         * either. "after that day's sunset" was printed over a stop laid
+         * entirely *before* sunrise, which is dark and is not after anything.
+         */
+        message: `${name} is outdoors and day ${day.dayNumber} has you there ${formatMinuteOfDay(item.startMinute)}–${formatMinuteOfDay(item.endMinute)}, most of it in the dark — ${
+          day.weather.sunriseMinute !== undefined && item.endMinute <= day.weather.sunriseMinute
+            ? `the sun is not up until ${formatMinuteOfDay(day.weather.sunriseMinute)}`
+            : `that day's sun sets at ${formatMinuteOfDay(day.weather.sunsetMinute)}`
+        }. Fine if it is lit or the dark is the point; otherwise move it.`,
         dayNumber: day.dayNumber,
         placeId: item.placeId,
       });
@@ -293,4 +312,24 @@ function validateBackups(
   }
 
   return issues;
+}
+
+/**
+ * Whether most of a visit happens in the dark.
+ *
+ * The overlap between the block and the lit part of the day, compared with the
+ * block. A zero-length block is never dark — there is nothing to be dark
+ * *for* — and a day with no recorded sunrise is measured against sunset alone,
+ * which is the half the evening case turns on.
+ */
+function mostlyAfterDark(
+  item: { startMinute: number; endMinute: number },
+  solar: { sunriseMinute?: number; sunsetMinute: number },
+): boolean {
+  const length = item.endMinute - item.startMinute;
+  if (length <= 0) return false;
+  const litFrom = Math.max(item.startMinute, solar.sunriseMinute ?? item.startMinute);
+  const litTo = Math.min(item.endMinute, solar.sunsetMinute);
+  const lit = Math.max(0, litTo - litFrom);
+  return lit * 2 < length;
 }

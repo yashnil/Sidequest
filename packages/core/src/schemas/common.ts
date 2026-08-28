@@ -165,6 +165,22 @@ export const INTEREST_LABELS: Record<Interest, string> = {
  * This is the distinction that stops a "likes hiking" signal from producing a
  * trip that is nothing but hikes.
  */
+/**
+ * HOW MUCH UNSCHEDULED TIME THE TRAVELLER ASKED FOR.
+ *
+ * The composer has asked this question since it shipped ("Free time") and
+ * nothing downstream read the answer, which made it a placebo — the failure
+ * mode this codebase names explicitly about `high_altitude_exertion`. It
+ * belongs here rather than only in the composer's own schema because the
+ * consumer is the readiness verdict: how full a plan has to be before it is
+ * *this traveller's* finished trip is a question only they can answer, and a
+ * single constant answering it for everybody is what let a plan holding two
+ * fifths of its own paced volume read "Ready — the plan works".
+ */
+export const FREE_TIME_APPETITES = ['packed', 'balanced', 'lots'] as const;
+export const freeTimeAppetiteSchema = z.enum(FREE_TIME_APPETITES);
+export type FreeTimeAppetite = z.infer<typeof freeTimeAppetiteSchema>;
+
 export const INTEREST_LEVELS = ['avoid', 'low', 'occasional', 'frequent', 'core'] as const;
 export const interestLevelSchema = z.enum(INTEREST_LEVELS);
 export type InterestLevel = z.infer<typeof interestLevelSchema>;

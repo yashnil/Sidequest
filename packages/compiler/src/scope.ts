@@ -200,6 +200,29 @@ function isContainer(candidate: DestinationCandidate, narrowed: boolean): boolea
   return !narrowed && MULTI_PART_BREADTHS.includes(candidate.breadth);
 }
 
+/**
+ * Whether a published extent is larger than a trip could cover at all.
+ *
+ * Half the diagonal against the reach, so the comparison is "could one base sit
+ * inside this and touch its edges" rather than "is the box wide". Degrees to
+ * kilometres is enough for a size question — nothing here is a travel time, and
+ * a boundary this far out of scale is not a borderline call.
+ */
+function exceedsAnyReach(
+  bounds: DestinationCandidate['bounds'],
+  unconstrainedRadiusKm: number,
+): boolean {
+  if (!bounds) return false;
+  const latKm = (bounds.northEast.lat - bounds.southWest.lat) * KM_PER_DEGREE_LAT;
+  const midLat = (bounds.northEast.lat + bounds.southWest.lat) / 2;
+  const lngKm =
+    (bounds.northEast.lng - bounds.southWest.lng) *
+    KM_PER_DEGREE_LAT *
+    Math.max(0.1, Math.cos((midLat * Math.PI) / 180));
+  const halfDiagonalKm = Math.sqrt(latKm * latKm + lngKm * lngKm) / 2;
+  return halfDiagonalKm > unconstrainedRadiusKm;
+}
+
 function deriveShape(
   candidate: DestinationCandidate,
   radiusKm: number,
@@ -673,6 +696,32 @@ export function deriveScope(input: ScopeInput): GeographicScope {
 
   const shape = deriveShape(candidate, radiusKm, unconstrainedRadiusKm, narrowed, part);
   /*
+   * The one branch of `deriveShape` that keeps ground the trip cannot reach:
+   * narrowed, container-sized, nothing resolved which part — **and the ground
+   * it kept is bigger than this trip could cover even unconstrained**.
+   *
+   * That last clause is not a hedge, it is the whole discriminator. Narrowing
+   * with no part is only a *problem* when the container is far larger than the
+   * area it was supposed to be narrowed to: for a metropolis that administers
+   * islands a thousand kilometres out, "one area" is a promise the derivation
+   * could not keep. For an ordinary subregion whose whole extent is already
+   * inside a day's reach, the container *is* the one area and there is nothing
+   * to narrow — refusing there would turn a working trip into a dead end over a
+   * distinction the traveller cannot see. Measured: the first version of this
+   * rule refused a small fixture subregion and disabled "Build the region" on
+   * it, which is precisely the trap it was written to prevent.
+   *
+   * `unconstrainedRadiusKm` is the right ceiling because it is already "the
+   * ground this trip could cover if getting about were not the constraint" —
+   * so this asks whether the shape is beyond *any* reading of this trip's
+   * reach, rather than beyond the mode the traveller happened to choose.
+   */
+  const narrowedWithoutPart =
+    narrowed &&
+    !part &&
+    MULTI_PART_BREADTHS.includes(candidate.breadth) &&
+    exceedsAnyReach(candidate.bounds, unconstrainedRadiusKm);
+  /*
    * A resolver-supplied source promotes the same zones from "published" to
    * "provider_resolved", which is the difference between a value that travelled
    * with a record and one a civil-timezone source answered for this coordinate.
@@ -742,6 +791,7 @@ export function deriveScope(input: ScopeInput): GeographicScope {
      * Reach as its own number, because the shape can no longer be asked for it.
      */
     reachRadiusKm: radiusKm,
+    ...(narrowedWithoutPart ? { narrowedWithoutPart: true } : {}),
     /*
      * What the destination is, administratively — the evidence containment
      * actually uses, since geometry is usually unavailable. It has been on the
@@ -882,6 +932,27 @@ function describeScope(
  * it does not fit.
  */
 export function scopeFitsTrip(scope: GeographicScope): { fits: boolean; reason?: string } {
+  /**
+   * "One area" over a destination whose parts we could not name.
+   *
+   * First, because it is the refusal that stops the widest ground from being
+   * confirmed as the narrowest. The traveller asked for one part; the shape is
+   * the whole container, and the rationale beside it says twelve kilometres.
+   * Confirming that buys a compilation of everything the container administers
+   * — for Tokyo, four Pacific island groups up to 1,225 km from the base the
+   * same screen proposed, none of which routes against anything.
+   *
+   * The sentence names the two ways out, both of which work: naming the part
+   * gives the narrowing something to centre on, and allowing a hotel change
+   * makes the wider ground an honest circuit rather than a mislabelled day trip.
+   */
+  if (scope.narrowedWithoutPart) {
+    return {
+      fits: false,
+      reason:
+        'We could not work out which part of this you meant, so "one area" would end up covering the whole of it. Either name the part you have in mind, or allow a hotel change and we will build a route across it.',
+    };
+  }
   if (breadthRank(scope.breadth) >= breadthRank('country') && scope.maxBaseChanges === 0) {
     return {
       fits: false,

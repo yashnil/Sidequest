@@ -25,7 +25,7 @@ import {
   type AccessOption,
   type AccessUnit,
 } from './access';
-import { assignToDays, wantsStrenuousDaysApart } from './assign';
+import { assignToDays, MIN_PLANNABLE_MINUTES, wantsStrenuousDaysApart } from './assign';
 import {
   bindingInterestOf,
   chargeFrequencyCost,
@@ -44,7 +44,7 @@ import {
   summariseDayWeather,
   type BackupCandidate,
 } from './backups';
-import { resolveFood, type FoodContext } from './food';
+import { foodContextWithoutVenues, resolveFood, type FoodContext } from './food';
 import { buildFoodPlan } from './food-plan';
 import { reviseDayPlans, type DayPlan } from './revise';
 import {
@@ -534,6 +534,11 @@ export function planTrip(input: PlannerInput): PlanResult {
     hours: hoursFor(day.date),
     weather: weatherFor(day.date),
     food: foodContext,
+    /*
+     * On every context, including the two that carry no plan: where somebody is
+     * standing is a fact about the route, not about what the day may eat.
+     */
+    foodDataset: input.food ?? null,
   });
 
   /**
@@ -551,6 +556,33 @@ export function planTrip(input: PlannerInput): PlanResult {
   const packingContextFor = (day: DayPlan['day']): LayoutContext => ({
     ...contextFor(day),
     food: null,
+  });
+
+  /**
+   * THE THIRD LAYOUT: MEALS AS HELD TIME, WHEN NAMED ONES WILL NOT FIT.
+   *
+   * There were two, and the gap between them shipped. `contextFor` names
+   * venues and routes to them; `packingContextFor` says the day has **no food
+   * data at all** — which is a different and false statement about a region
+   * that has plenty. So a day whose restaurants cost it a stop fell all the way
+   * through to the version-5 behaviour: no breakfast slot (`wantsSlot` reads
+   * the plan that is no longer there), and lunch and dinner as bare blocks
+   * headed "Lunch" and "Dinner" with "Back at base, nothing booked" under them,
+   * on a metropolitan trip whose own index held fourteen venues. A reviewer
+   * found exactly that on a delivered board.
+   *
+   * The two things being conflated are *name a door and route to it*, which
+   * genuinely may not fit, and *hold the hour in the right window, in a named
+   * area*, which costs the day only the time it was always going to spend
+   * eating. This context keeps the second and drops the first, by emptying
+   * every shortlist rather than by removing the plan.
+   *
+   * Built lazily and once: the map is per-trip, not per-day.
+   */
+  const heldMealsFood: FoodContext | null = foodContextWithoutVenues(foodContext);
+  const heldMealContextFor = (day: DayPlan['day']): LayoutContext => ({
+    ...contextFor(day),
+    food: heldMealsFood,
   });
 
 
@@ -1006,8 +1038,48 @@ export function planTrip(input: PlannerInput): PlanResult {
           ? layoutBestOrder(contextFor(plan.day), plan.accepted, options)
           : plain;
       const keepFood = withFood !== plain && foodFits(plain.layout, withFood.layout, plan.day);
-      const context = keepFood ? contextFor(plan.day) : packingContextFor(plan.day);
-      const { scheduled, layout } = keepFood ? withFood : plain;
+      /*
+       * Named venues first, held hours second, nothing third — and the second
+       * rung is the one that was missing. Held meals are measured against the
+       * same `foodFits` ceiling as named ones, so this can never buy back the
+       * stop the named layout cost; where even an hour will not fit, the day
+       * still falls through to `plain`, which is the honest end of the ladder.
+       */
+      const withHeld =
+        !keepFood && heldMealsFood
+          ? layoutBestOrder(heldMealContextFor(plan.day), plan.accepted, options)
+          : null;
+      const keepHeld =
+        withHeld !== null &&
+        withHeld !== plain &&
+        foodFits(plain.layout, withHeld.layout, plan.day);
+      const context = keepFood
+        ? contextFor(plan.day)
+        : keepHeld
+          ? heldMealContextFor(plan.day)
+          : packingContextFor(plan.day);
+      const { scheduled, layout } = keepFood ? withFood : keepHeld ? withHeld! : plain;
+      /**
+       * THE DAY IS SETTLED, SO WHAT IT NAMED IS NOW A FACT.
+       *
+       * Recorded here and nowhere earlier. `chooseFoodStop` must stay blind to
+       * what a *packing attempt* chose — the packer re-lays a day out many
+       * times and a plan that remembered attempts would depend on how many it
+       * took — but a finished day is the same finished day however it was
+       * reached, so later days may read it. This is the ledger the variety cap
+       * is enforced against; without it the cap counted heads of shortlists and
+       * a plain seven-day trip named one deli three times.
+       */
+      if (foodContext) {
+        for (const item of layout.items) {
+          const venueId = item.kind === 'meal' ? item.food?.venueId : undefined;
+          if (!venueId) continue;
+          foodContext.namedOnSettledDays.set(
+            venueId,
+            (foodContext.namedOnSettledDays.get(venueId) ?? 0) + 1,
+          );
+        }
+      }
       // A day whose food was suppressed by the validator is already reported,
       // with the right reason. Counting it here as well printed two revision
       // notes for one decision, the second of them naming a limit nothing hit.
@@ -1368,6 +1440,57 @@ export function planTrip(input: PlannerInput): PlanResult {
   const daysWithActivity = built.filter((day) =>
     day.items.some((item) => item.kind === 'activity'),
   ).length;
+  /**
+   * The same count, restricted to the days that could hold anything.
+   *
+   * A departure morning with a nine o'clock flight has zero usable minutes and
+   * an empty day on it is not a gap; an arrival evening has a couple of hours
+   * and one stop on it is not a full day. Readiness was measuring distribution
+   * by comparing a count over *all* days against a day figure the edges had
+   * already been taken out of, so a stop on the arrival evening paid for one of
+   * the inner days — and four inner days holding one activity apiece, each with
+   * five empty daylight hours, cleared the test.
+   *
+   * Both numbers come from the planner's own windows, which are the thing that
+   * decided the shape in the first place.
+   */
+  const fullDayCapacity = Math.max(1, ...days.map((day) => day.capacityMinutes));
+  /*
+   * Usable days in units of *this trip's own full day*, not in whole dates.
+   *
+   * `dayCount - 2` modelled the two edges as costing exactly one full day, which
+   * is a guess about a shape the planner has already measured: an arrival at
+   * four leaves two hours and a departure at nine leaves none. Counting dates
+   * with any usable minutes at all is the opposite error and cost a road trip
+   * its verdict — a two-hour arrival evening counted as a whole day of capacity
+   * and the plan read `insufficient`.
+   *
+   * `capacityMinutes` is the planner's own answer to "how much of this day may
+   * be filled" (`edgeDayCapacityShare` is what shapes an edge day lighter), so
+   * the ratio is a reading of the model rather than a second opinion about it.
+   */
+  const usableDays =
+    days.reduce((sum, day) => sum + day.capacityMinutes, 0) / fullDayCapacity;
+  /*
+   * Distribution is a different question and takes a different denominator: the
+   * days the trip can actually *fill*. Two exclusions, and both are the
+   * planner's own shaping rather than a judgement added here — a departure
+   * morning with nothing on it is not a gap, and neither is an arrival evening.
+   *
+   * The edge exclusion was missing and it cost a plainly good trip its verdict:
+   * an eight-day road journey holding nine stops across six inner days read
+   * "not enough here to plan a trip around", because a two-hour arrival evening
+   * cleared the ninety-minute floor, joined the denominator, and then failed to
+   * be anchored — on a day `edgeDayCapacityShare` exists to keep light.
+   */
+  const anchorableDates = new Set(
+    days
+      .filter((day) => !day.isEdgeDay && day.capacityMinutes >= MIN_PLANNABLE_MINUTES)
+      .map((day) => day.date),
+  );
+  const usableDaysWithActivity = built.filter(
+    (day) => anchorableDates.has(day.date) && day.items.some((item) => item.kind === 'activity'),
+  ).length;
 
   /**
    * A plan with no stops is not a plan, and must never be returned as one.
@@ -1414,6 +1537,9 @@ export function planTrip(input: PlannerInput): PlanResult {
        */
       profile: input.profile,
       daysWithActivity,
+      usableDays,
+      anchorableDays: anchorableDates.size,
+      usableDaysWithActivity,
       daysWithFullMeals: built.filter(
         (day) => day.food.slots.length > 0 && day.food.reservations.length > 0,
       ).length,
@@ -1500,12 +1626,44 @@ export function planTrip(input: PlannerInput): PlanResult {
     dayCount: days.length,
     profile: input.profile,
     daysWithActivity,
+    usableDays,
+    anchorableDays: anchorableDates.size,
+    usableDaysWithActivity,
   });
   if (coverage?.short) {
     issues.push({
       code: 'coverage_below_pace',
       severity: 'error',
       message: `This plan holds ${scheduledCount} ${scheduledCount === 1 ? 'stop' : 'stops'} across ${coverage.daysWithActivity} of your ${days.length} days. At the pace you asked for these dates have room for around ${Math.round(coverage.pacedStops)}, so there is not yet enough here to plan a trip around.`,
+    });
+  } else if (coverage?.incomplete) {
+    /*
+     * Short of what this traveller asked for, and not so short that it stops
+     * being a trip. A warning rather than an error for exactly that reason: the
+     * days that were built are correct and the traveller can use them, and the
+     * thing they must not be told is that the plan is finished.
+     */
+    issues.push({
+      code: 'coverage_below_pace',
+      severity: 'warning',
+      /*
+       * DELIBERATELY NOT "N STOPS ACROSS X OF Y DAYS".
+       *
+       * That is `summarise`'s sentence, and it counts a different set of days:
+       * every day of the trip, against the days a stop can be built around.
+       * Printed in the same shape on the same page the two read as a straight
+       * contradiction — a live Osaka plan opened with "8 stops across 6 of 6
+       * days" and closed with "8 stops across 4 of the 4 days it could fill",
+       * and a traveller has no way to tell that both are true of different
+       * denominators. So the spread is said as spread rather than as a second
+       * fraction, and the number this warning is actually about — the volume
+       * gap — is the one left in figures.
+       */
+      message: `This plan holds ${scheduledCount} ${scheduledCount === 1 ? 'stop' : 'stops'}, ${
+        coverage.usableDaysWithActivity >= coverage.anchorableDays
+          ? 'on every day it could build one around'
+          : `on ${coverage.usableDaysWithActivity} of the ${coverage.anchorableDays} ${coverage.anchorableDays === 1 ? 'day' : 'days'} it could build one around`
+      }. At the pace and the free time you asked for, these dates have room for around ${coverage.expected} — so there is more of this trip still to choose.`,
     });
   }
 
@@ -2002,9 +2160,21 @@ export function summarise(
 /**
  * "3 hr 20 min", never "3.3 hours" — the one place on the plan that spoke in
  * decimal hours while every other surface says hours and minutes.
+ *
+ * Rounded up to five, and to the same five the itinerary prints. Every figure
+ * this composes is travel, and the page renders the same quantities through
+ * `roundedTravel` — so with exact minutes here the two disagreed in the reader's
+ * eye on one screen: "2 hr 51 min on foot to reach them" in the summary, "On
+ * foot to reach things 2 hr 55 min" in the panel five lines below. Neither
+ * understated the journey, which is the property that matters, but a page
+ * giving two answers for one quantity makes a reader wonder which to believe.
+ * The step is stated here rather than imported because `@sidequest/planner` may
+ * not depend on the web app.
  */
+const TRAVEL_DISPLAY_STEP = 5;
+
 function spanOf(minutes: number): string {
-  const whole = Math.round(minutes);
+  const whole = Math.ceil(Math.round(minutes) / TRAVEL_DISPLAY_STEP) * TRAVEL_DISPLAY_STEP;
   if (whole < 60) return `${whole} min`;
   const hrs = Math.floor(whole / 60);
   const rest = whole % 60;

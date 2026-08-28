@@ -384,7 +384,21 @@ describe('a walk pricing a transit traveller, where nothing could see the trains
     const { of } = blindBoard('observed');
     const c = of(TRANSIT_CITY_IDENTITY.candidateC);
     expect(c.detourClass).toBe('too_far');
-    expect(c.worthDetour).toBe('too_far_for_this_trip');
+    /*
+     * THE REFUSAL IS KEPT AND THE *SENTENCE* IS NOT.
+     *
+     * This asserted `too_far_for_this_trip`, and that half was the defect
+     * rather than the invariant. The class is a statement about the traveller's
+     * budgets and the scheduler acts on it — so it stays, and Phase 9 stays
+     * closed. The label is a statement to a person about how far away something
+     * is, and it was being read out of a walking clock for a journey nobody
+     * priced: a delivered metropolitan board printed "2 hr 17 min on foot from
+     * base" and "too far for this trip" over a landmark a quarter of an hour
+     * away by train, beside that same card's own admission that no route could
+     * be confirmed. `journeyProxy` is the fact both surfaces now consult.
+     */
+    expect(c.journeyProxy).toBe(true);
+    expect(c.worthDetour).toBe('reach_unverified');
   });
 
   /**

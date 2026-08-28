@@ -49,6 +49,7 @@ import { ShareControl } from '@/app/(product)/trips/[id]/itinerary/share-control
 import {
   isMachineWeatherLabel,
   roundedDuration,
+  roundedTravel,
   roundedMinuteOfDay,
   travellerVoice,
   type ClockEdge,
@@ -62,9 +63,57 @@ function clock(minute: number, edge: ClockEdge): string {
   return formatMinuteOfDay(roundedMinuteOfDay(minute, edge));
 }
 
+/**
+ * WHY THESE ARE NOT IN THE PLAN, SAID BY WHAT ACTUALLY STOPPED THEM.
+ *
+ * The heading was a constant — "Left off for room", over a blurb reading "there
+ * were not the hours for them" — while the reason on each card comes from the
+ * planner. On a live Tokyo plan the two disagreed outright: both entries read
+ * "We have no travel time recorded to this place, so we cannot fit it into a
+ * day honestly", which is not a statement about hours at all, under a heading
+ * insisting it was. A traveller reading that learns the wrong thing about their
+ * own trip — that the day was too full, when the truth is that we could not
+ * measure the way there.
+ *
+ * So the heading is derived. Room is claimed only when room is what every entry
+ * says; otherwise the section says what it can always say truthfully, and the
+ * cards carry the specifics — which they already did.
+ */
+const ROOM_CODES: ReadonlySet<string> = new Set([
+  'no_time_left',
+  'lower_priority',
+  'frequency_reached',
+  'exceeds_daily_travel',
+  'exceeds_intensity',
+]);
+
+function allAboutRoom(dropped: readonly { reasonCode: string }[]): boolean {
+  return dropped.every((entry) => ROOM_CODES.has(entry.reasonCode));
+}
+
+function droppedHeading(dropped: readonly { reasonCode: string }[]): string {
+  return allAboutRoom(dropped) ? 'Left off for room' : 'Left off, and why';
+}
+
+function droppedBlurb(dropped: readonly { reasonCode: string }[]): string {
+  return allAboutRoom(dropped)
+    ? 'These were on your board but there were not the hours for them. Nothing is hidden.'
+    : 'These were on your board and are not in the plan. Each one says what stopped it — nothing is hidden.';
+}
+
 /** A span as this page prints it: rounded down, so it never overstates. */
 function span(minutes: number): string {
   return formatMinutes(roundedDuration(minutes));
+}
+
+/**
+ * A span of travel: rounded *up*, so it never understates the journey.
+ *
+ * Every figure on this page that is time spent getting somewhere goes through
+ * here rather than through `span`. See `roundedTravel`.
+ */
+function travelSpan(minutes: number): string {
+  return formatMinutes(roundedTravel(minutes));
 }
 
 /**
@@ -485,10 +534,8 @@ export function ItineraryView({
 
       {dropped.length > 0 ? (
         <section className="mt-14 border-t border-rule pt-8">
-          <h2 className="font-display text-xl text-ink">Left off for room</h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            These were on your board but there were not the hours for them. Nothing is hidden.
-          </p>
+          <h2 className="font-display text-xl text-ink">{droppedHeading(dropped)}</h2>
+          <p className="mt-1 text-sm text-ink-muted">{droppedBlurb(dropped)}</p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {dropped.map((entry) => (
               <li key={entry.placeId} className="rounded-lg border border-rule p-3 text-sm">
@@ -816,15 +863,15 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
       */}
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
         {totals.driveMinutes > 0 ? (
-          <Metric label="At the wheel">{span(totals.driveMinutes)}</Metric>
+          <Metric label="At the wheel">{travelSpan(totals.driveMinutes)}</Metric>
         ) : null}
         {totals.transitMinutes + totals.waitMinutes > 0 ? (
           <Metric label="Riding & waiting">
-            {span(totals.transitMinutes + totals.waitMinutes)}
+            {travelSpan(totals.transitMinutes + totals.waitMinutes)}
           </Metric>
         ) : null}
         {totals.walkMinutes > 0 ? (
-          <Metric label="On foot to reach things">{span(totals.walkMinutes)}</Metric>
+          <Metric label="On foot to reach things">{travelSpan(totals.walkMinutes)}</Metric>
         ) : null}
         {/*
           THE MINUTES THAT BELONG TO NO MODE.
@@ -838,7 +885,7 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
           a mode, and this is the row that says so instead of the one above.
         */}
         {totals.unverifiedMinutes > 0 ? (
-          <Metric label="Held for unverified journeys">{span(totals.unverifiedMinutes)}</Metric>
+          <Metric label="Held for unverified journeys">{travelSpan(totals.unverifiedMinutes)}</Metric>
         ) : null}
         {totals.driveKm >= 0.5 ? (
           <Metric label="Road distance">{Math.round(totals.driveKm)} km</Metric>
@@ -982,10 +1029,10 @@ function DayTransport({ day }: { day: ItineraryDay }) {
   const sequence = accessSequence(day);
   const { totals, transport } = day;
   const split = [
-    totals.driveMinutes > 0 ? `${span(totals.driveMinutes)} driving` : null,
-    totals.transitMinutes > 0 ? `${span(totals.transitMinutes)} riding` : null,
-    totals.walkMinutes > 0 ? `${span(totals.walkMinutes)} walking there` : null,
-    totals.waitMinutes > 0 ? `${span(totals.waitMinutes)} waiting` : null,
+    totals.driveMinutes > 0 ? `${travelSpan(totals.driveMinutes)} driving` : null,
+    totals.transitMinutes > 0 ? `${travelSpan(totals.transitMinutes)} riding` : null,
+    totals.walkMinutes > 0 ? `${travelSpan(totals.walkMinutes)} walking there` : null,
+    totals.waitMinutes > 0 ? `${travelSpan(totals.waitMinutes)} waiting` : null,
     /*
      * Its own clause, in the day's own breakdown, because the breakdown is
      * where a reader goes to find out what the travelling figure above is made
@@ -993,7 +1040,7 @@ function DayTransport({ day }: { day: ItineraryDay }) {
      * walking there" here, which is the one thing those minutes are not.
      */
     totals.unverifiedMinutes > 0
-      ? `${span(totals.unverifiedMinutes)} held for journeys we could not verify`
+      ? `${travelSpan(totals.unverifiedMinutes)} held for journeys we could not verify`
       : null,
   ].filter((entry): entry is string => entry !== null);
 
@@ -1457,7 +1504,7 @@ function DayCard({
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity} day</Badge>
           {day.totals.travelMinutes > 0 ? (
-            <Badge tone="blue">{span(day.totals.travelMinutes)} travelling</Badge>
+            <Badge tone="blue">{travelSpan(day.totals.travelMinutes)} travelling</Badge>
           ) : null}
           {/*
             The one chip that differs between two days of the same shape: how
@@ -1467,7 +1514,7 @@ function DayCard({
             flight behind them is actually scanning for.
           */}
           {day.totals.walkMinutes >= WALKING_DAY_MINUTES ? (
-            <Badge tone="neutral">{span(day.totals.walkMinutes)} on foot</Badge>
+            <Badge tone="neutral">{travelSpan(day.totals.walkMinutes)} on foot</Badge>
           ) : null}
         </div>
 
@@ -1983,7 +2030,7 @@ function TimelineRow({
           {clock(item.startMinute, 'later')}
         </time>
         <span className="mt-0.5 block text-[11px] tabular-nums text-ink-faint">
-          {span(item.durationMinutes)}
+          {item.kind === 'travel' ? travelSpan(item.durationMinutes) : span(item.durationMinutes)}
         </span>
       </div>
 

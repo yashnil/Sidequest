@@ -294,6 +294,48 @@ function rowToJob(row: JobRow): CompilationJob | null {
   return job;
 }
 
+/**
+ * The caller the day's allowance was charged to when this job was reserved.
+ *
+ * Read rather than threaded through the worker, because the press and the run
+ * are different processes: the browser that pressed the button is long gone by
+ * the time the build finishes or fails.
+ */
+export function jobCallerKey(jobId: string): string | null {
+  const db = getDb();
+  const row = db.prepare('SELECT caller_key FROM compilation_jobs WHERE id = ?').get(jobId) as
+    | { caller_key: string | null }
+    | undefined;
+  return row?.caller_key ?? null;
+}
+
+/**
+ * THE REGION THIS TRIP HAS ADOPTED — WHICH IS NOT THE ONE ITS LAST BUILD MADE.
+ *
+ * Two rows can answer "does this trip have a board": `compilation_jobs`
+ * remembers what a build produced, and `trip_intents` remembers what the trip
+ * currently stands on. `invalidateDependentStages` clears the second when an
+ * edit moves the ground under it and deliberately leaves the first alone — a
+ * job is a record of work done and editing a trip does not un-do it.
+ *
+ * The trip list was reading the job. So after an ordinary edit — change the
+ * dates on a trip whose region was already built — the row still said "Places
+ * found" and linked to `/discover`, which resolves the *adopted* region, finds
+ * none, and renders "We cannot find that trip. The link may be old, or the trip
+ * may have been removed." over a trip that was neither. The not-found page
+ * links only to the home page and a new trip, so the row looped.
+ *
+ * One column, by design: a trip list renders many rows and must not parse a
+ * region payload to find out whether one exists.
+ */
+export function adoptedCompiledRegionId(tripId: string): string | null {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT selected_compiled_region_id FROM trip_intents WHERE trip_id = ?')
+    .get(tripId) as { selected_compiled_region_id: string | null } | undefined;
+  return row?.selected_compiled_region_id ?? null;
+}
+
 export function getJob(jobId: string): CompilationJob | null {
   const row = getDb().prepare('SELECT * FROM compilation_jobs WHERE id = ?').get(jobId) as
     | JobRow
@@ -485,6 +527,12 @@ export function startJob(input: {
    * that nothing is coming for it yet, which is what `waiting_since` records.
    */
   waiting?: boolean;
+  /**
+   * The key the day's live-compilation allowance was charged to, so the reserve
+   * can be given back if this build ends up delivering nothing. Absent for a
+   * fixture run and for a caller nobody could attribute.
+   */
+  callerKey?: string | null;
 }): StartJobResult {
   const db = getDb();
   const existing = getActiveJob(input.tripId);
@@ -532,8 +580,9 @@ export function startJob(input: {
     db.prepare(
       `INSERT INTO compilation_jobs
          (id, trip_id, scope_fingerprint, state, stage, stages_json,
-          started_at, updated_at, heartbeat_at, waiting_since, cancel_requested, correlation_id)
-       VALUES (?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, 0, ?)`,
+          started_at, updated_at, heartbeat_at, waiting_since, cancel_requested, correlation_id,
+          caller_key)
+       VALUES (?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, 0, ?, ?)`,
     ).run(
       job.id,
       job.tripId,
@@ -545,6 +594,7 @@ export function startJob(input: {
       job.heartbeatAt,
       job.waitingSince ?? null,
       job.correlationId,
+      input.callerKey ?? null,
     );
   } catch {
     // Lost a race against another request. Whoever won is the live job.
@@ -697,6 +747,39 @@ export function isCancelRequested(jobId: string): boolean {
  * reclaimed job's original process comes back from a long stall and tries to
  * complete a row another request has already ended.
  */
+/**
+ * The stored scope with the artifact's resolved zone on it, or null when the
+ * artifact knows no better.
+ *
+ * The ordering is the whole rule: a resolver's answer beats a published one
+ * beats a longitude guess beats nothing recorded. Anything else — equal basis,
+ * or an artifact that guessed where the stored scope was told — leaves the
+ * stored answer exactly as it is.
+ */
+const TIME_ZONE_BASIS_RANK: Record<string, number> = {
+  provider_resolved: 3,
+  published: 2,
+  derived_from_longitude: 1,
+  unknown: 0,
+};
+
+function betterKnownTimeZone(tripId: string, region: CompiledRegion): GeographicScope | null {
+  const stored = getIntent(tripId)?.scope;
+  if (!stored) return null;
+  const from = region.scope;
+  const storedRank = TIME_ZONE_BASIS_RANK[stored.timeZoneBasis ?? 'unknown'] ?? 0;
+  const artifactRank = TIME_ZONE_BASIS_RANK[from.timeZoneBasis ?? 'unknown'] ?? 0;
+  if (artifactRank <= storedRank) return null;
+  const next = geographicScopeSchema.safeParse({
+    ...stored,
+    timeZones: from.timeZones,
+    ...(from.timeZoneBasis ? { timeZoneBasis: from.timeZoneBasis } : {}),
+    ...(from.timeZoneSource ? { timeZoneSource: from.timeZoneSource } : {}),
+    ...(from.timeZoneResolvedAt ? { timeZoneResolvedAt: from.timeZoneResolvedAt } : {}),
+  });
+  return next.success ? next.data : null;
+}
+
 export function completeJob(input: {
   jobId: string;
   tripId: string;
@@ -734,6 +817,36 @@ export function completeJob(input: {
     db.prepare(
       `UPDATE trip_intents SET selected_compiled_region_id = ?, updated_at = ? WHERE trip_id = ?`,
     ).run(region.id, stamp, input.tripId);
+
+    /**
+     * THE STORED SCOPE ADOPTS WHAT THE COMPILATION RESOLVED.
+     *
+     * The scope is written before the build and carries a *guess* at the civil
+     * time zone, derived from the destination's longitude. The compilation then
+     * asks a resolver and gets a real answer, which travels on the artifact's
+     * own scope and reaches weather, daylight and every opening time. The
+     * stored intent never heard about it — and the plan screen reads the stored
+     * intent. So a finished Reykjavík build printed "About UTC−1 — estimated
+     * from where this is on the map, because we could not confirm the local
+     * time zone" while its own artifact held `Atlantic/Reykjavik`, resolved, on
+     * a clock that is UTC+0: a wrong number *and* a confession of ignorance
+     * about a fact the product had already established.
+     *
+     * Only the zone fields move, and the revision deliberately does not: this
+     * is the same scope, better known, and bumping the revision would change
+     * the fingerprint and orphan the artifact this transaction is committing.
+     * Written only where the artifact's basis is genuinely better than the
+     * stored one, so a build that could not resolve the zone either never
+     * overwrites a published answer with a guess.
+     */
+    const upgraded = betterKnownTimeZone(input.tripId, region);
+    if (upgraded) {
+      db.prepare(`UPDATE trip_intents SET scope_json = ?, updated_at = ? WHERE trip_id = ?`).run(
+        JSON.stringify(upgraded),
+        stamp,
+        input.tripId,
+      );
+    }
 
     /**
      * The pages behind the artifact, as an audit row each.
