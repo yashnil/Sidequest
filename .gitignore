@@ -35,3 +35,6 @@ playwright-report/
 .playwright/
 
 .DS_Store
+
+# Local Sidequest compilation logs
+apps/web/data/compile-logs/*.log
