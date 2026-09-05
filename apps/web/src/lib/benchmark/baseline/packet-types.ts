@@ -121,6 +121,19 @@ export interface PacketPlace {
   /** Categories from the shared taxonomy, for avoidance matching. */
   tags: readonly string[];
   sourceIndex: number | null;
+  /**
+   * 0-1 real-world prominence, where the source could establish one. `null`
+   * means nobody scored it, never "obscure" — the same absent-is-not-zero
+   * contract every other optional signal in this packet holds.
+   *
+   * Not a ranking and not a filter: whichever candidates the acquisition
+   * layer already returned still all reach the packet. What this buys is
+   * *visibility* — the composer can now tell a place its own sources judge
+   * genuinely well known from one nobody has written much about, which
+   * "closest to a category tag" cannot express. A model still decides what
+   * belongs in the trip; this is evidence to decide with, not for it.
+   */
+  significance?: number | null;
 }
 
 /* ------------------------------------------------------------------ *

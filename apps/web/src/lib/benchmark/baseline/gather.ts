@@ -350,6 +350,9 @@ function toRawPlace(
       url: place.url,
       retrievedAt: place.sourceTimestamp ?? null,
     },
+    // OSM carries no prominence score this arm can read. `null` here means
+    // "not scored", not "obscure" — see `PacketPlace.significance`.
+    significance: null,
   };
 }
 
@@ -916,7 +919,17 @@ async function gatherWeather(input: {
           coordinates: { lat: input.destination.latitude, lng: input.destination.longitude },
           elevationMetres: 0,
           timeZone: input.timeZone ?? 'UTC',
-          placeIds: [],
+          /*
+           * A placeholder, not a real place id. `getWeather`'s schema requires
+           * at least one entry (see `packages/core/src/schemas/weather.ts`),
+           * and this arm has no compiled `Place` rows to associate with a
+           * weather location — `translateWeatherDay` below reads the dataset
+           * by date only, never by `placeIds`, so the id is never looked back
+           * up. An empty array satisfied nothing: every call reached the
+           * provider and failed the request's own schema before a socket
+           * opened, so this arm has never once returned a real forecast.
+           */
+          placeIds: ['destination'],
           limitation: 'One point speaks for the whole region in this arm.',
         },
       ],

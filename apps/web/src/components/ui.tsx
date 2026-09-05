@@ -23,7 +23,7 @@ export function cx(...values: (string | false | null | undefined)[]): string {
  * button's own edge, which on a filled primary button is invisible.
  */
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
+  'inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm font-medium transition-[background-color,border-color,color,transform] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
 
 const BUTTON_VARIANTS = {
   primary: 'bg-ink text-paper hover:bg-ink-muted',
@@ -56,6 +56,7 @@ const BUTTON_VARIANTS = {
 const BUTTON_SIZES = {
   sm: 'min-h-11 px-3 py-1.5 text-xs',
   md: 'min-h-11 px-4 py-2.5',
+  lg: 'min-h-12 px-6 py-3 text-base',
 } as const;
 
 export function buttonClass(
@@ -538,7 +539,7 @@ export function Choice({
   return (
     <label
       className={cx(
-        'relative flex min-w-0 flex-col rounded-lg border px-3.5 py-2.5 text-left transition-colors',
+        'relative flex min-w-0 flex-col rounded-[var(--radius-card)] border px-3.5 py-3 text-left transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)]',
         FOCUS_RING,
         disabled
           ? 'cursor-not-allowed border-dashed border-rule opacity-60'
@@ -546,21 +547,15 @@ export function Choice({
             ? /*
                * A CHOSEN OPTION HAS TO LOOK CHOSEN.
                *
-               * `border-pine bg-pine-soft` was a 4% mint wash behind a 1px
-               * border — at arm's length, on a warm paper ground, next to five
-               * unchosen siblings, it is very close to nothing. The
-               * questionnaire is nine screens of these, and a traveller who
-               * cannot see which option they just picked cannot check their own
-               * answers, which is the whole promise of the review step.
-               *
                * Three redundant signals rather than a darker tint alone: the
-               * ground, a doubled border in the strong pine, and a check glyph.
-               * The glyph is `aria-hidden` — the input's own checked state is
-               * what assistive technology reads, and a tick inside the label
-               * would be spoken as part of the option's name and would land in
-               * every `getByRole(..., { name })` in the suite.
+               * ochre ground that the whole product reserves for the
+               * traveller's own choices, a doubled border in the same ochre,
+               * and a check badge. The badge is `aria-hidden` — the input's
+               * own checked state is what assistive technology reads, and a
+               * tick inside the label would be spoken as part of the option's
+               * name and would land in every `getByRole(..., { name })`.
                */
-              'cursor-pointer border-2 border-pine-strong bg-pine-soft px-[13px] py-[9px]'
+              'cursor-pointer border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent)]'
             : 'cursor-pointer border-rule bg-paper-raised hover:border-ink-faint',
       )}
     >
@@ -575,18 +570,25 @@ export function Choice({
       />
       <span
         className={cx(
-          'flex items-start gap-1.5 text-sm',
-          checked ? 'font-semibold text-pine-strong' : 'text-ink',
+          'flex items-start gap-2 pr-6 text-sm',
+          checked ? 'font-medium text-accent-strong' : 'text-ink',
         )}
       >
-        {checked ? (
-          <span aria-hidden="true" className="leading-tight">
-            ✓
-          </span>
-        ) : null}
         <span className="min-w-0">{label}</span>
       </span>
-      {detail ? <span className="mt-0.5 text-xs leading-relaxed text-ink-muted">{detail}</span> : null}
+      {detail ? (
+        <span className={cx('mt-0.5 pr-6 text-xs leading-relaxed', checked ? 'text-accent-strong/80' : 'text-ink-muted')}>
+          {detail}
+        </span>
+      ) : null}
+      {checked ? (
+        <span
+          aria-hidden="true"
+          className="absolute top-2.5 right-2.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[9px] text-paper"
+        >
+          ✓
+        </span>
+      ) : null}
     </label>
   );
 }

@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } from './support/trip';
 
 /** Same directory the rest of the suite writes to, created before use. */
 const SHOT_DIR = 'test-results/screens';
@@ -19,38 +20,18 @@ const SHOT_DIR = 'test-results/screens';
 
 const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
+/** A Mammoth trip walked to the interview's review screen. */
 async function startQuestionnaire(page: Page) {
   await page.goto('/trips/new');
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
-
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-  await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
-  await page.getByRole('radio', { name: 'Viewpoints: A few times' }).check();
-
-  for (const heading of ['How should the days feel?', 'What is the spending style?']) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
+  await completeQuestionnaire(page, { priorities: ['Hiking', 'Lakes & rivers', 'Scenic viewpoints'] });
 }
 
 async function finishQuestionnaire(page: Page) {
-  for (const heading of [
-    'Famous or off the track?',
-    'How are you getting around?',
-    'How far from Mammoth Lakes?',
-    'Anything to steer around?',
-    'Your trip personality',
-  ]) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
-  await expect(page).toHaveURL(/\/discover$/);
+  await buildBoardFromReview(page);
 }
 
 async function buildTrip(page: Page) {
@@ -59,13 +40,20 @@ async function buildTrip(page: Page) {
   await expect(page.getByRole('heading', { name: 'Eating' }).first()).toBeVisible();
 }
 
-test('the food step asks about eating and nothing about restaurants', async ({ page }) => {
+test('the food questions ask about eating and nothing about restaurants', async ({ page }) => {
   await startQuestionnaire(page);
 
-  await expect(page.getByRole('radio', { name: /I skip it/ })).toBeVisible();
-  await expect(page.getByRole('radio', { name: /Keep it cheap/ })).toBeVisible();
-  await expect(page.getByText('Anything you do not eat?')).toBeVisible();
+  await page.getByTestId('review-change-food_tradeoff').click();
+  const food = page.getByTestId('interview-question-food_tradeoff');
+  await expect(food).toBeVisible();
+  await expect(food.getByText(/near the day's route/)).toBeVisible();
+  await expect(food.getByText(/Mostly fuel/)).toBeVisible();
+  await expect(page.locator('body')).not.toContainText(/restaurant/i);
+  await page.getByRole('button', { name: 'Back' }).click();
+  await completeQuestionnaire(page);
 
+  await page.getByTestId('review-change-dietary').click();
+  await expect(page.getByText('Anything you do not eat?')).toBeVisible();
   // The strictness question is about a list, so it only exists once there is one.
   await expect(page.getByText('These are requirements, not preferences')).toHaveCount(0);
   await page.getByRole('checkbox', { name: 'Vegetarian' }).check();
@@ -107,8 +95,11 @@ test('a meal never claims a booking exists', async ({ page }) => {
 
 test('a strict dietary need is answered with honesty rather than reassurance', async ({ page }) => {
   await startQuestionnaire(page);
+  await page.getByTestId('review-change-dietary').click();
   await page.getByRole('checkbox', { name: 'Nut allergy' }).check();
   await page.getByRole('checkbox', { name: 'These are requirements, not preferences' }).check();
+  await page.getByTestId('interview-continue').click();
+  await completeQuestionnaire(page);
   await finishQuestionnaire(page);
   await buildTrip(page);
 
@@ -168,11 +159,7 @@ test('the plan survives a refresh unchanged, then changes when the preference do
    * label — which made the constraints row announce itself as "Change Steering
    * around". Every row now carries a hand-written phrase instead.
    */
-  const jump = page.getByRole('button', { name: 'Change how you eat' });
-  await expect(jump).toBeVisible();
-  await jump.click();
-  await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
-  await page.getByRole('radio', { name: /Keep it cheap/ }).check();
+  await changeInterviewAnswer(page, 'food_tradeoff', 'fuel');
   await finishQuestionnaire(page);
   await buildTrip(page);
 
@@ -217,7 +204,10 @@ test('the itinerary is readable with no console errors and no sideways scroll', 
   page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
 
   await startQuestionnaire(page);
+  await page.getByTestId('review-change-dietary').click();
   await page.getByRole('checkbox', { name: 'Vegetarian' }).check();
+  await page.getByTestId('interview-continue').click();
+  await completeQuestionnaire(page);
   await finishQuestionnaire(page);
   await buildTrip(page);
 

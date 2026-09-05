@@ -7,6 +7,7 @@ import {
 } from '@sidequest/bench';
 import {
   countTripDays,
+  interviewDefaults,
   isQuestionVisible,
   normalizeAnswers,
   type Avoidance,
@@ -460,6 +461,7 @@ export function toQuestionnaireAnswers(
    * halves of this function would disagree.
    */
   const draft: QuestionnaireAnswers = {
+    ...interviewDefaults(),
     interests,
     preferenceSignals: [],
     pace: PROFILE_PACE[rhythm.pace],

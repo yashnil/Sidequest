@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { waitUntilInteractive } from './support/trip';
+import { waitUntilInteractive, completeQuestionnaire } from './support/trip';
 
 /**
  * THE SHARE LINK, END TO END: MINTED BY THE OWNER, READ BY A STRANGER.
@@ -25,24 +25,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
   await page.getByLabel('Leave').fill(dates.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
 
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-  await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' }).check();
-
-  for (const heading of [
-    'How should the days feel?',
-    'What is the spending style?',
-    'How do you want to eat?',
-    'Famous or off the track?',
-    'How are you getting around?',
-    'How far from Mammoth Lakes?',
-    'Anything to steer around?',
-    'Your trip personality',
-  ]) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
+  await completeQuestionnaire(page);
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
@@ -105,9 +88,11 @@ test('a share link opens the plan, read-only, for a browser that never saw the t
       reader.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) }),
     ).toBeVisible();
   }
-  await expect(reader.getByText(/\d+ min on the road/).first()).toBeVisible();
-  await expect(reader.getByRole('heading', { name: 'Lunch' }).first()).toBeVisible();
-  await expect(reader.getByText(/modelled travel time/).first()).toBeVisible();
+  await expect(reader.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
+  await expect(reader.getByText(/measured|not measured/).first()).toBeVisible();
+  // The shared copy carries the whole package, not only the days.
+  await expect(reader.getByTestId('route-overview')).toBeVisible();
+  await expect(reader.getByTestId('packing-list')).toBeVisible();
   // The licence notice survives into the shared copy; the data obligation
   // follows the plan wherever it is read.
   await expect(reader.getByTestId('itinerary-attribution')).toBeVisible();

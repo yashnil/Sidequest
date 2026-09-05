@@ -8,6 +8,7 @@ import {
   autoSelect,
   buildDiscoveryBoard,
   buildTravelerProfile,
+  interviewDefaults,
   countTripDays,
   itineraryStructureFingerprint,
   tripDates,
@@ -61,6 +62,7 @@ function realItinerary(): Itinerary {
   const context = { travelerNeeds: [], tripDays };
   const profile = buildTravelerProfile(
     {
+      ...interviewDefaults(),
       interests: {
         hiking: 'frequent',
         lakes_and_rivers: 'frequent',

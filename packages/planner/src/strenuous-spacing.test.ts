@@ -61,7 +61,7 @@ function daysHoldingHardStops(separate: boolean): number[] {
     tripDays: 4,
   });
   const days = buildDailyWindows(AUGUST_BASICS, profile, resolveConfig());
-  const assignments = assignToDays(
+  const { assignments } = assignToDays(
     POOL,
     days,
     matrix(),

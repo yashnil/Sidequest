@@ -310,3 +310,164 @@ export function baselineFixtureInputs(
 
   return { ...base, days };
 }
+
+/* ------------------------------------------------------------------ *
+ * A second, distant region — for anything that needs more than one to
+ * mean something: skeleton evidence regional coverage, and hydration
+ * of a genuine moving-route trip.
+ * ------------------------------------------------------------------ */
+
+function movingRoutePlace(overrides: Partial<RawPlace> & Pick<RawPlace, 'entityId' | 'name'>): RawPlace {
+  return {
+    latitude: 45,
+    longitude: 9,
+    kind: 'tourism=attraction',
+    tags: ['tourism', 'attraction'],
+    typicalDurationMinutes: 90,
+    daylightOnly: null,
+    hours: { state: 'unknown' },
+    seasonal: { state: 'unknown' },
+    access: {
+      requiresCar: null,
+      unpavedApproach: null,
+      remoteNoServices: null,
+      strenuous: null,
+      wheelchair: 'unknown',
+      feeStated: null,
+    },
+    food: null,
+    source: {
+      host: 'openstreetmap.org',
+      title: overrides.name,
+      url: `https://www.openstreetmap.org/${overrides.entityId}`,
+      retrievedAt: '2026-08-01T00:00:00.000Z',
+    },
+    significance: null,
+    ...overrides,
+  };
+}
+
+/**
+ * Two fictional, widely-separated towns — about 240km apart, so
+ * `buildResearchPacket`'s grid clustering (see `packet.ts`'s own header)
+ * puts them in different cells regardless of how the bounding box happens
+ * to divide. Northgate is deliberately the denser region — more places,
+ * higher significance — because the regression this fixture exists for is
+ * a moving-route trip collapsing into whichever region has more evidence.
+ */
+export const MOVING_ROUTE_DESTINATION: PacketDestination = {
+  entityId: 'relation/900002',
+  displayName: 'The Ardenholt Corridor',
+  countryCode: 'ZZ',
+  latitude: 45.8,
+  longitude: 10.1,
+  radiusKm: 150,
+  scale: 'region',
+};
+
+export const MOVING_ROUTE_PLACES: RawPlace[] = [
+  // Northgate — dense, high-significance region.
+  movingRoutePlace({
+    entityId: 'node/3001',
+    name: 'Northgate Overlook',
+    latitude: 45.02,
+    longitude: 9.03,
+    kind: 'tourism=viewpoint',
+    tags: ['tourism', 'viewpoint'],
+    significance: 0.9,
+  }),
+  movingRoutePlace({
+    entityId: 'node/3002',
+    name: 'Northgate Trail Head',
+    latitude: 45.05,
+    longitude: 9.08,
+    kind: 'highway=trailhead',
+    tags: ['highway', 'trailhead', 'hiking'],
+    significance: 0.6,
+  }),
+  movingRoutePlace({
+    entityId: 'node/3003',
+    name: 'Northgate Old Quarter',
+    latitude: 44.99,
+    longitude: 9.0,
+    kind: 'tourism=museum',
+    tags: ['tourism', 'museum', 'historic'],
+    significance: 0.75,
+  }),
+  movingRoutePlace({
+    entityId: 'node/3004',
+    name: 'Northgate Table',
+    latitude: 45.0,
+    longitude: 9.01,
+    kind: 'amenity=restaurant',
+    tags: ['amenity', 'restaurant'],
+    food: { servesSlots: ['lunch', 'dinner'], dietaryTags: [], cuisine: 'regional', cannotAccommodate: [] },
+    significance: 0.3,
+  }),
+  movingRoutePlace({
+    entityId: 'node/3005',
+    name: 'Northgate Shut Overlook',
+    latitude: 45.03,
+    longitude: 9.05,
+    kind: 'tourism=viewpoint',
+    tags: ['tourism', 'viewpoint'],
+    significance: 0.5,
+    seasonal: { state: 'closed_in_season', note: 'The access road is closed for the trip’s dates.' },
+  }),
+  // Vale Hollow — the quieter region a moving-route trip must still reach.
+  movingRoutePlace({
+    entityId: 'node/4001',
+    name: 'Vale Hollow Lakeshore',
+    latitude: 46.61,
+    longitude: 11.22,
+    kind: 'natural=water',
+    tags: ['natural', 'water', 'lake'],
+    significance: 0.55,
+  }),
+  movingRoutePlace({
+    entityId: 'node/4002',
+    name: 'Vale Hollow Summit',
+    latitude: 46.65,
+    longitude: 11.18,
+    kind: 'natural=peak',
+    tags: ['natural', 'peak', 'hiking'],
+    significance: 0.4,
+  }),
+  movingRoutePlace({
+    entityId: 'node/4003',
+    name: 'Vale Hollow Kitchen',
+    latitude: 46.6,
+    longitude: 11.2,
+    kind: 'amenity=restaurant',
+    tags: ['amenity', 'restaurant'],
+    food: { servesSlots: ['breakfast', 'lunch', 'dinner'], dietaryTags: [], cuisine: 'local', cannotAccommodate: [] },
+    significance: 0.2,
+  }),
+];
+
+export function fixtureMovingRoutePacketInputs(overrides: Partial<PacketInputs> = {}): PacketInputs {
+  return {
+    destination: MOVING_ROUTE_DESTINATION,
+    days: FIXTURE_DAYS,
+    places: MOVING_ROUTE_PLACES,
+    baseCandidates: [
+      { entityId: null, name: 'Northgate', latitude: 45.0, longitude: 9.0, basis: 'A settlement the geocoder resolved.' },
+      { entityId: null, name: 'Vale Hollow', latitude: 46.6, longitude: 11.2, basis: 'A settlement the geocoder resolved.' },
+    ],
+    routeLegs: [
+      { fromEntityId: 'node/3001', toEntityId: 'node/3002', minutes: 12, km: 6, mode: 'drive' },
+      { fromEntityId: 'node/3002', toEntityId: 'node/3001', minutes: 12, km: 6, mode: 'drive' },
+      { fromEntityId: 'node/3001', toEntityId: 'node/3003', minutes: 8, km: 3, mode: 'drive' },
+      { fromEntityId: 'node/3003', toEntityId: 'node/3001', minutes: 8, km: 3, mode: 'drive' },
+      { fromEntityId: 'node/4001', toEntityId: 'node/4002', minutes: 20, km: 12, mode: 'drive' },
+      { fromEntityId: 'node/4002', toEntityId: 'node/4001', minutes: 20, km: 12, mode: 'drive' },
+      // The inter-region relocation leg — real, measured, and the one this
+      // fixture's departure-closure tests key off.
+      { fromEntityId: 'node/3001', toEntityId: 'node/4001', minutes: 195, km: 230, mode: 'drive' },
+      { fromEntityId: 'node/4001', toEntityId: 'node/3001', minutes: 195, km: 230, mode: 'drive' },
+    ],
+    gaps: [],
+    unknowns: [],
+    ...overrides,
+  };
+}

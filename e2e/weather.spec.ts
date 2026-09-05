@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { completeQuestionnaire } from './support/trip';
 import { openBoardBackstage } from './support/trip';
 
 /**
@@ -105,22 +106,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
   await page.getByLabel('Leave').fill(dates.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
 
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-
-  for (const heading of [
-    'How should the days feel?',
-    'What is the spending style?',
-    'How do you want to eat?',
-    'Famous or off the track?',
-    'How are you getting around?',
-    'How far from Mammoth Lakes?',
-    'Anything to steer around?',
-    'Your trip personality',
-  ]) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
+  await completeQuestionnaire(page, { priorities: ['Scenic viewpoints', 'Hiking'] });
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);

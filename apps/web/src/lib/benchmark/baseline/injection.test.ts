@@ -315,7 +315,16 @@ describe('a hostile free-text request', () => {
 
     // Theirs, labelled, verbatim — and nowhere else.
     expect(untrusted.travellerOwnWords.freeText).toBe(payload);
-    expect(untrusted.retrievedContent.packet).toBe(packet);
+    // Not the same object any more — `retrievedContent.packet` is
+    // `compactPacketForModel(packet)`'s projection (see `packet-compact.ts`),
+    // not the full `ResearchPacket` itself. What still has to hold is that it
+    // is a *strict* projection: the same places, in the same index order, so
+    // a `placeIndex` the model returns still resolves correctly at
+    // conversion time against the full packet this test built.
+    const sentPacket = untrusted.retrievedContent.packet as { places: readonly { index: number; name: string }[] };
+    expect(sentPacket).not.toBe(packet);
+    expect(sentPacket.places.map((place) => place.index)).toEqual(packet.places.map((place) => place.index));
+    expect(sentPacket.places.map((place) => place.name)).toEqual(packet.places.map((place) => place.name));
     expect(JSON.stringify(untrusted.retrievedContent)).not.toContain('IGNORE PREVIOUS');
     expect(captured.task).not.toContain(payload);
     expect(captured.instruction).not.toContain(payload);

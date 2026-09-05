@@ -146,6 +146,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     input.profile,
     input.transit,
     input.scheduledNetwork,
+    input.travelLegs,
   );
 
   const resolved = resolveCandidates(
@@ -656,7 +657,7 @@ export function planTrip(input: PlannerInput): PlanResult {
   const EMPTY_SPEND: ReadonlyMap<string, number> = new Map();
 
   // --- First pass: geographic and access groups onto days -----------------
-  const assignments = assignToDays(
+  const { assignments, funnel: assignmentFunnel } = assignToDays(
     plannable,
     days,
     input.matrix,
@@ -666,21 +667,40 @@ export function planTrip(input: PlannerInput): PlanResult {
     openDates,
     (placeIds, date) => weatherPreference(placeIds, date, weatherByPlaceDate),
     wantsStrenuousDaysApart(input.profile),
+    input.travelLegs,
+    lockedDayByPlace,
   );
 
   /**
-   * Locks bind *after* geography, by moving rather than by weighting.
+   * LOCKS: PLACED FIRST INSIDE `assignToDays` ITSELF (STAGE B), THIS IS NOW A
+   * SAFETY NET, NOT THE PRIMARY MECHANISM.
    *
-   * Clustering is free to disagree with a lock — it has no way to know one
-   * exists — so the locked stop is simply moved onto its day here. Moving
-   * after assignment rather than biasing the clusterer keeps the guarantee
-   * absolute: whatever geography preferred, the traveller's pin wins, and if
-   * the day then cannot hold it the packer reports it by name rather than
-   * relocating it.
+   * `assignToDays` already puts a valid lock (real identity, a usable day,
+   * real routing evidence to that day's base) directly onto its pinned day
+   * before clustering runs at all — the guarantee a locked anchor used to
+   * depend on *surviving* geographic clustering, which is exactly what let a
+   * real, resolved, routable anchor vanish with no record at all (a live
+   * Iceland run's own "Brúarfoss": never reported infeasible, never
+   * scheduled, simply absent). This move loop still runs, for one legitimate
+   * remaining reason: an unlocked candidate happened to already occupy the
+   * pinned day's slot in a way clustering alone would not undo. It is a
+   * no-op whenever Stage B already placed things correctly, which is the
+   * normal case now.
+   *
+   * `unroutableLocks` — locks Stage B itself determined cannot legally reach
+   * their pinned day's base — are excluded from this move on purpose: moving
+   * one here regardless would silently reintroduce the exact "relocate
+   * without checking" behaviour Stage B exists to prevent.
    */
+  const unroutableLocks = new Set(
+    assignmentFunnel.lockedRejections
+      .filter((entry) => entry.reason === 'not_routable_to_target_base')
+      .map((entry) => entry.placeId),
+  );
   if (lockedDayByPlace.size > 0) {
     const byDayNumber = new Map(assignments.map((entry) => [entry.day.dayNumber, entry]));
     for (const [placeId, dayNumber] of lockedDayByPlace) {
+      if (unroutableLocks.has(placeId)) continue;
       const target = byDayNumber.get(dayNumber);
       if (!target) continue;
       for (const assignment of assignments) {
@@ -691,6 +711,23 @@ export function planTrip(input: PlannerInput): PlanResult {
       target.candidates.sort(
         (a, b) => b.priority - a.priority || a.place.id.localeCompare(b.place.id),
       );
+    }
+
+    /**
+     * NO SILENT FOURTH STATE.
+     *
+     * Every lock now ends in exactly one observable state: scheduled on its
+     * pinned day (Stage B, or the move above), or reported right here.
+     * Nothing between "on the day" and "in `unscheduled` with a reason" is
+     * left for a lock this pass was actually asked to honour.
+     */
+    for (const [placeId, dayNumber] of lockedDayByPlace) {
+      const target = byDayNumber.get(dayNumber);
+      const landedOnPinnedDay = target?.candidates.some((entry) => entry.place.id === placeId) ?? false;
+      if (landedOnPinnedDay) continue;
+      const candidate = eligible.find((entry) => entry.place.id === placeId);
+      if (!candidate) continue; // never resolved to a real, eligible candidate at all — already reported upstream (rejected/access/hours/weather), not this function's story to tell twice
+      unscheduled.push(lockConflict(candidate, unroutableLocks.has(placeId)));
     }
   }
 
@@ -709,7 +746,10 @@ export function planTrip(input: PlannerInput): PlanResult {
     unitByPlaceId,
     feasibleDates,
     openDates,
-  )) {
+    undefined,
+    undefined,
+    input.travelLegs,
+  ).assignments) {
     for (const candidate of assignment.candidates) {
       geographicOnly.set(candidate.place.id, assignment.day.dayNumber);
     }
@@ -1300,6 +1340,7 @@ export function planTrip(input: PlannerInput): PlanResult {
     profile: input.profile,
     config,
     matrix: input.matrix,
+    ...(input.travelLegs ? { travelLegs: input.travelLegs } : {}),
     placesById,
     baseId: input.baseId,
     access: input.access,
@@ -1883,6 +1924,31 @@ function hoursBlocked(
     reason: `${displayNameOf(candidate.place)} is open on your dates, but never for long enough after you could get there — a ${candidate.durationMinutes} min visit does not fit inside its hours on any day of this trip.`,
     suggestedRemedy:
       'Start the day earlier, or free up a day by dropping something else from the board.',
+  };
+}
+
+/**
+ * A stop the traveller pinned to a specific day that did not end up there.
+ *
+ * Every lock now resolves to exactly one observable state: scheduled on its
+ * pinned day (directly, by `assignToDays`'s own Stage B, or via the
+ * post-assignment move that follows it), or reported here — never silently
+ * absent. That third, previously-real possibility is exactly what let a
+ * real, resolved, routable locked anchor disappear from a live Iceland run
+ * with no record anywhere of what happened to it.
+ */
+function lockConflict(candidate: PlanningCandidate, notRoutableToTargetBase: boolean): UnscheduledPlace {
+  return {
+    placeId: candidate.place.id,
+    name: displayNameOf(candidate.place),
+    wasManual: candidate.manual,
+    reasonCode: notRoutableToTargetBase ? 'missing_travel_data' : 'not_feasible',
+    reason: notRoutableToTargetBase
+      ? `${displayNameOf(candidate.place)} was pinned to a specific day, but no measured route exists from that day's own base to it, so it could not be scheduled there.`
+      : `${displayNameOf(candidate.place)} was pinned to a specific day, but could not be placed on it.`,
+    suggestedRemedy: notRoutableToTargetBase
+      ? 'Move the pin to a day based somewhere closer, or unpin it and let the plan place it where it can be reached.'
+      : 'Unpin it and let the plan choose a day for it, or check that the day it was pinned to is part of this trip.',
   };
 }
 

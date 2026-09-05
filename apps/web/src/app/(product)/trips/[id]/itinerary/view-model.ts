@@ -1,4 +1,10 @@
 import 'server-only';
+import { loadTripIntelligence } from '@/lib/intelligence/load';
+import { renderInstant } from '@/lib/clock';
+import { providerRegistry } from '@/lib/providers/registry';
+import { buildRecheckManifest, buildTodayView, type RecheckManifest, type TodayView } from '@sidequest/core';
+import type { CheckList } from '@/lib/db/intelligence-repository';
+import type { BookedPlanItem, TravelIntelligence, TravelReadinessProfile } from '@sidequest/core';
 import type { StopRationale } from '@/components/ItineraryView';
 import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { formatMinutes } from '@/lib/format';
@@ -10,6 +16,7 @@ import {
   findOperatingCalendar,
   buildPreparation,
   licence,
+  tripPersonality,
   type DestinationImage as DestinationImageRecord,
   type DiscoveryCandidate,
   type DisplayName,
@@ -36,6 +43,18 @@ import {
  * itinerary.
  */
 export interface ItineraryViewModel {
+  /** The canonical itinerary with the traveller's booked facts applied. Render this one. */
+  appliedItinerary: Itinerary;
+  intelligence: TravelIntelligence;
+  /** LIVE WORLD V1 — the trip as it stands at the render instant; inactive outside the trip's dates. */
+  today: TodayView;
+  /** LIVE WORLD V1 — what to re-check, and when, before departure. */
+  recheck: RecheckManifest;
+  booked: BookedPlanItem[];
+  bookedHonored: string[];
+  bookedConflicts: string[];
+  checks: Record<CheckList, string[]>;
+  readinessProfile: TravelReadinessProfile | null;
   preparation: PreparationItem[];
   baseNames?: DisplayName;
   timeZone?: string;
@@ -45,6 +64,8 @@ export interface ItineraryViewModel {
   lodgingAreas: { name: string; rationale: string; tradeoffs: readonly string[] }[];
   images: Record<string, DestinationImageRecord>;
   rationale: Record<string, StopRationale>;
+  /** The trip in one sentence, from the traveller's profile; null without one. */
+  personality: string | null;
 }
 
 export async function itineraryViewModel(
@@ -87,6 +108,7 @@ export async function itineraryViewModel(
    * says UTC rather than inventing a plausible-looking local hour.
    */
   let timeZone: string | undefined;
+  let countryCode: string | undefined;
   /**
    * ODbL attribution for the place data this plan is made of.
    *
@@ -149,6 +171,13 @@ export async function itineraryViewModel(
    * per stop, per day, per refresh, for every visitor.
    */
   let images: Record<string, DestinationImageRecord> = {};
+  let personality: string | null = null;
+  try {
+    const profile = getProfile(trip.id);
+    if (profile) personality = tripPersonality(profile, itinerary.days.length).headline;
+  } catch {
+    personality = null;
+  }
   try {
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
@@ -214,6 +243,7 @@ export async function itineraryViewModel(
       const base = resolved.context.compiled.bases.find((entry) => entry.id === itinerary.baseId);
       baseNames = base?.names;
       timeZone = base?.timeZone;
+      countryCode = resolved.context.compiled.scope.countryCode;
       attributions = resolved.context.compiled.sourceManifest.attributions ?? [];
       for (const place of resolved.context.compiled.places) {
         coordinates.set(place.id, {
@@ -295,7 +325,38 @@ export async function itineraryViewModel(
     attributions = [licence('ODbL-1.0').attribution];
   }
 
+  const now = new Date(renderInstant());
+  const loaded = loadTripIntelligence({ trip, itinerary, ...(timeZone ? { timeZone } : {}), ...(countryCode ? { countryCode } : {}), sourcedAreas: lodgingAreas, worthSkipping, now });
+  /*
+   * LIVE WORLD V1 — Today mode and the recheck manifest are derived here, on
+   * the server, from the same instant every day on the page judges itself
+   * against. Pure functions of persisted state: no provider is asked.
+   */
+  const intel = loaded.intelligence;
+  const today = buildTodayView({ itinerary: loaded.itinerary, booked: loaded.booked, backups: intel.backups, now, ...(timeZone ? { timeZone } : {}), warnings: intel.unresolvedCriticals });
+  const registry = providerRegistry();
+  // Days until departure at this render, not at the cached snapshot's build time.
+  const daysUntilTrip = Math.round((Date.parse(`${trip.basics.startDate}T00:00:00Z`) - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86_400_000);
+  const recheck = buildRecheckManifest({
+    claims: intel.sourceRegistry,
+    daysUntilTrip,
+    tripDays: intel.destinationContext.tripDays,
+    drives: intel.destinationContext.drives,
+    hasFlights: intel.transport.legs.some((l) => l.mode === 'flight') || loaded.booked.some((b) => b.type === 'flight'),
+    hasFerries: intel.transport.legs.some((l) => l.mode === 'ferry') || loaded.booked.some((b) => b.type === 'ferry'),
+    capabilities: { forecast: registry.byId['weather.forecast']?.available ?? false, traffic: registry.byId['routing.traffic']?.available ?? false, hours: registry.byId['places.hours']?.available ?? false, transit: registry.byId['routing.transit']?.available ?? false },
+  });
+
   return {
+    appliedItinerary: loaded.itinerary,
+    intelligence: loaded.intelligence,
+    today,
+    recheck,
+    booked: loaded.booked,
+    bookedHonored: loaded.honored,
+    bookedConflicts: loaded.conflicts,
+    checks: loaded.checks,
+    readinessProfile: loaded.readinessProfile,
     preparation,
     baseNames,
     timeZone,
@@ -305,6 +366,7 @@ export async function itineraryViewModel(
     lodgingAreas,
     images,
     rationale,
+    personality,
   };
 }
 

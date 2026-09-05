@@ -592,6 +592,7 @@ interface ItineraryRow {
   issues_json: string;
   unscheduled_json: string;
   diagnostics_json: string;
+  package_json: string | null;
 }
 
 interface ItineraryDayRow {
@@ -653,10 +654,10 @@ export function saveItinerary(itinerary: Itinerary): void {
     db.prepare(
       `INSERT INTO itineraries (trip_id, version, region_id, base_id, base_name, start_date, end_date,
          status, summary, transport_strategy_json, food_plan_json, issues_json, unscheduled_json,
-         diagnostics_json, created_at, updated_at)
+         diagnostics_json, package_json, created_at, updated_at)
        VALUES (@trip_id, @version, @region_id, @base_id, @base_name, @start_date, @end_date,
          @status, @summary, @transport_strategy_json, @food_plan_json, @issues_json,
-         @unscheduled_json, @diagnostics_json, @created_at, @updated_at)`,
+         @unscheduled_json, @diagnostics_json, @package_json, @created_at, @updated_at)`,
     ).run({
       trip_id: value.tripId,
       version: value.version,
@@ -672,6 +673,7 @@ export function saveItinerary(itinerary: Itinerary): void {
       issues_json: JSON.stringify(value.issues),
       unscheduled_json: JSON.stringify(value.unscheduled),
       diagnostics_json: JSON.stringify(value.diagnostics),
+      package_json: value.package ? JSON.stringify(value.package) : null,
       created_at: now,
       updated_at: now,
     });
@@ -771,6 +773,7 @@ export function getItinerary(tripId: string): Itinerary | null {
     issues: JSON.parse(head.issues_json),
     unscheduled: JSON.parse(head.unscheduled_json),
     diagnostics: JSON.parse(head.diagnostics_json),
+    ...(head.package_json ? { package: JSON.parse(head.package_json) } : {}),
     days: dayRows.map((row) => ({
       dayNumber: row.day_number,
       date: row.date,

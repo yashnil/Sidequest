@@ -2,6 +2,25 @@ import { z } from 'zod';
 import { transportPrioritySchema } from './access';
 import { preferenceSignalSchema } from './interpretation';
 import {
+  altitudeComfortSchema,
+  baseMoveToleranceSchema,
+  budgetEnvelopeSchema,
+  convenienceSpendSchema,
+  dayTripAppetiteSchema,
+  guideWillingnessSchema,
+  hardConstraintSchema,
+  hikeAppetiteSchema,
+  iconicCrowdStrategySchema,
+  interviewLogSchema,
+  lateNightAppetiteSchema,
+  lodgingStyleSchema,
+  preferenceProvenanceSchema,
+  coverageStrategySchema,
+  toleranceSchema,
+  transferWillingnessSchema,
+  walkingToleranceSchema,
+} from './interview';
+import {
   breakfastStyleSchema,
   dietaryNeedSchema,
   foodPreferencesSchema,
@@ -154,8 +173,62 @@ export const questionnaireAnswersSchema = z.object({
    * same claim as an empty list.
    */
   decideForMe: z.array(questionnaireStepIdSchema).optional(),
+  /**
+   * THE ADAPTIVE INTERVIEW'S OWN DIMENSIONS (questionnaire v2).
+   *
+   * Every one of these is defaulted so a trip saved before the interview
+   * existed still parses. The defaults are the *silent* values — what a
+   * traveller who was never asked looks like — and `provenance` is what
+   * separates silence from a choice: a value with no provenance entry was
+   * never put to anybody.
+   */
+  ...interviewAnswerFields(),
 });
 export type QuestionnaireAnswers = z.infer<typeof questionnaireAnswersSchema>;
+
+/**
+ * The v2 answer fields, as a function so the shape is stated once and read by
+ * both the answers schema and the profile's `interview` block.
+ */
+export function interviewAnswerFields() {
+  return {
+    /** Trade-offs. */
+    baseMoveTolerance: baseMoveToleranceSchema.default('move_if_it_saves_time'),
+    iconicCrowdStrategy: iconicCrowdStrategySchema.default('go_at_odd_hours'),
+    convenienceSpend: convenienceSpendSchema.default('balance'),
+    /** Lodging and spend. */
+    lodgingStyle: lodgingStyleSchema.default('no_preference'),
+    rusticLodgingOk: z.boolean().default(true),
+    budgetEnvelope: budgetEnvelopeSchema.optional(),
+    /** Remote, water, air, altitude. */
+    guideWillingness: guideWillingnessSchema.default('sometimes'),
+    privateTransfers: transferWillingnessSchema.default('if_needed'),
+    boatsAndFerries: toleranceSchema.default('fine'),
+    internalFlights: toleranceSchema.default('fine'),
+    remoteComfort: toleranceSchema.default('fine'),
+    altitudeComfort: altitudeComfortSchema.default('fine'),
+    hikeAppetite: hikeAppetiteSchema.default('half_day'),
+    /** Cities. */
+    walkingTolerance: walkingToleranceSchema.default('moderate'),
+    stairsAndHills: toleranceSchema.default('fine'),
+    lateNights: lateNightAppetiteSchema.default('sometimes'),
+    dayTripAppetite: dayTripAppetiteSchema.default('one_day_trip'),
+    /** Broad destinations. */
+    scopeStrategy: coverageStrategySchema.default('best_subset'),
+    /** Groups. */
+    everyoneEveryDay: z.boolean().default(true),
+    groupNotes: z.string().max(500).optional(),
+    /** Hard constraints and explicit names. Never inferred from prose. */
+    hardConstraints: z.array(hardConstraintSchema).max(24).default([]),
+    hardNotes: z.string().max(500).optional(),
+    mustInclude: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+    mustAvoid: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+    /** Where each answer came from, keyed by interview question id. */
+    provenance: z.record(z.string(), preferenceProvenanceSchema).default({}),
+    /** What was asked, decided and skipped, and the screening that shaped it. */
+    interview: interviewLogSchema.optional(),
+  };
+}
 
 /** A profile with every interest set to "only if it is right there" cannot personalise anything. */
 export const validatedQuestionnaireAnswersSchema = questionnaireAnswersSchema.refine(
@@ -206,7 +279,12 @@ export type DerivedProfile = z.infer<typeof derivedProfileSchema>;
  * `migrateTravelerProfile` rebuilds any older row from the answers that produced
  * it, so a bump here costs a stored profile nothing.
  */
-export const TRAVELER_PROFILE_VERSION = 3 as const;
+/**
+ * 4 — the adaptive interview: trade-off answers, comfort dimensions, lodging,
+ * hard constraints and per-answer provenance ride on the profile so every
+ * consumer can tell an explicit "cannot" from an assumed "would rather not".
+ */
+export const TRAVELER_PROFILE_VERSION = 4 as const;
 
 export const travelerProfileSchema = z.object({
   version: z.literal(TRAVELER_PROFILE_VERSION),
@@ -262,6 +340,43 @@ export const travelerProfileSchema = z.object({
     mobilityLimited: z.boolean(),
     notes: z.string().max(500).optional(),
   }),
+  /**
+   * The interview's own dimensions, copied from the answers after
+   * normalisation. Read by the composition summary, the review screen and the
+   * reconciler; never re-derived downstream.
+   */
+  interview: z.object({
+    baseMoveTolerance: baseMoveToleranceSchema,
+    iconicCrowdStrategy: iconicCrowdStrategySchema,
+    convenienceSpend: convenienceSpendSchema,
+    lodgingStyle: lodgingStyleSchema,
+    rusticLodgingOk: z.boolean(),
+    budgetEnvelope: budgetEnvelopeSchema.optional(),
+    guideWillingness: guideWillingnessSchema,
+    privateTransfers: transferWillingnessSchema,
+    boatsAndFerries: toleranceSchema,
+    internalFlights: toleranceSchema,
+    remoteComfort: toleranceSchema,
+    altitudeComfort: altitudeComfortSchema,
+    hikeAppetite: hikeAppetiteSchema,
+    walkingTolerance: walkingToleranceSchema,
+    stairsAndHills: toleranceSchema,
+    lateNights: lateNightAppetiteSchema,
+    dayTripAppetite: dayTripAppetiteSchema,
+    scopeStrategy: coverageStrategySchema,
+    everyoneEveryDay: z.boolean(),
+    groupNotes: z.string().max(500).optional(),
+    mustInclude: z.array(z.string()).default([]),
+    mustAvoid: z.array(z.string()).default([]),
+    /** Minutes at base every day must end by, when the traveller made that hard. */
+    mustBeBackByMinute: z.number().int().min(0).max(1440).optional(),
+    /** Minutes on foot a day may hold, when a hard ceiling was stated. */
+    maxWalkingMinutesPerDay: z.number().int().min(0).max(1440).optional(),
+  }),
+  /** Typed hard constraints, verbatim from the answers. Filters, never nudges. */
+  hard: z.array(hardConstraintSchema).default([]),
+  /** Provenance by interview question id — explicit vs assumed, and why. */
+  provenance: z.record(z.string(), preferenceProvenanceSchema).default({}),
   derived: derivedProfileSchema,
 });
 export type TravelerProfile = z.infer<typeof travelerProfileSchema>;

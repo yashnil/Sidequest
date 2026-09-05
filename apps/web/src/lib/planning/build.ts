@@ -1,4 +1,10 @@
 import 'server-only';
+/*
+ * NOT CANONICAL FOR GENERATION. `buildItinerary()` here is the pure
+ * deterministic `planTrip()` path, kept for rollback, regression comparison
+ * and the planner-input assembly the legacy edit verbs still use. Every
+ * user-facing generation CTA reaches `production-plan.ts` instead.
+ */
 import { planTrip, type PlannerInput } from '@sidequest/planner';
 import {
   getFoodSelections,

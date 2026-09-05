@@ -398,6 +398,34 @@ export const SYNTHETIC_WORLDS: Record<string, SyntheticWorldSpec> = {
    * before the planner ever saw it, which is a different world's job
    * (`recovery_adversary` owns the thin-supply shape).
    */
+  /**
+   * A protected river basin: a wilderness shape. Nobody drives to most of it,
+   * the lodges are reached by boat, hours are barely published and the
+   * router models rather than measures. It exists so the interview's
+   * remote/wilderness module and the itinerary's honest unmeasured legs can be
+   * exercised from a name a browser test can type.
+   */
+  river_basin: {
+    id: 'river-basin',
+    name: 'River Basin Reserve',
+    qualifiedName: 'River Basin Reserve, Testland',
+    countryCode: 'TL',
+    timeZone: 'America/Manaus',
+    center: { lat: -3.4, lng: -62.0 },
+    entityType: 'protected_area',
+    breadth: 'region',
+    placeCount: 10,
+    baseCount: 1,
+    subregionCount: 1,
+    primaryMode: 'drive',
+    hoursCoverage: 0.3,
+    accessCoverage: 0.8,
+    foodVenues: 2,
+    weatherPoints: 2,
+    routingKind: 'modelled',
+    failedLegs: 1,
+    hasFerry: true,
+  },
   unplannable_region: {
     id: 'unplannable-region',
     name: 'Longday Basin',

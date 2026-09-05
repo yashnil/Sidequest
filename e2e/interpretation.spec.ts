@@ -75,8 +75,10 @@ test('confirming it changes the questionnaire underneath', async ({ page }) => {
    * through the rendered control rather than through the database, because the
    * whole claim of the phase is that this reaches the traveller.
    */
-  const hiking = page.getByRole('group', { name: /Hiking/i }).first();
-  await expect(hiking.getByRole('radio', { checked: true })).toHaveCount(1);
+  const start = page.getByTestId('interview-start');
+  await expect(start).toBeVisible();
+  await start.click();
+  await expect(page.getByRole('checkbox', { name: 'Hiking', exact: true })).toBeChecked();
   await expect(page.locator('body')).toContainText(/Hiking/i);
 });
 

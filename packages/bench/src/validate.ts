@@ -83,6 +83,7 @@ export const CHECK_COVERAGE: Record<BenchCheckCode, CheckModule> = {
   route_time_unavailable: 'routing',
   impossible_jump: 'routing',
   base_inconsistent: 'routing',
+  trip_not_closed_to_departure: 'routing',
   transfer_day_without_transfer: 'routing',
   transfer_understated: 'routing',
   daily_travel_exceeded: 'routing',

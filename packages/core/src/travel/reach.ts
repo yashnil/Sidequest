@@ -177,6 +177,19 @@ export type ScheduledNetworkPresence = 'observed' | 'not_observed';
  */
 export interface TravelKnowledge {
   matrix: TravelTimeMatrix;
+  /**
+   * A second, small road matrix — legs measured on demand for identities the
+   * primary matrix does not carry, never merged into it.
+   *
+   * Exists for exactly one shape of gap: a base or a stop whose identity was
+   * decided after the primary matrix was built (a locality resolved from a
+   * traveller-supplied trip structure, for instance) and therefore has no row
+   * in it. Consulted only as a fallback, after `matrix` itself — a pair either
+   * matrix actually measures always wins over one neither did. Absent means
+   * there is nothing beside the matrix, which is every trip's ordinary case
+   * and changes nothing about how `matrix` alone is read.
+   */
+  travelLegs?: TravelTimeMatrix | null;
   transit: TransitEvidence | null;
   /** The modes this traveller may actually use. Walking is always in it. */
   permitted: ReadonlySet<TransportMode>;
@@ -361,6 +374,8 @@ export function travelKnowledgeFor(
    * behaviour: an absent argument stores `null`, and `null` opens no gate.
    */
   scheduledNetwork?: ScheduledNetworkPresence | null,
+  /** See `TravelKnowledge.travelLegs`. Optional for the same reason every caller above is. */
+  travelLegs?: TravelTimeMatrix | null,
 ): TravelKnowledge {
   const journeys = new Map<string, TransitJourneyRecord>();
   for (const journey of transit?.journeys ?? []) {
@@ -368,6 +383,7 @@ export function travelKnowledgeFor(
   }
   return {
     matrix,
+    travelLegs: travelLegs ?? null,
     transit: transit ?? null,
     permitted: permittedModesFor(profile),
     /*
@@ -1061,13 +1077,29 @@ function matrixOption(knowledge: TravelKnowledge, fromId: string, toId: string):
    * option here".
    */
   const measured = tryLeg(knowledge.matrix, fromId, toId);
-  if (!measured) return null;
+  if (measured) {
+    return {
+      mode,
+      minutes: measured.minutes,
+      km: measured.km,
+      provenance: knowledge.matrix.provenance.kind,
+      ...(knowledge.matrix.provenance.source ? { source: knowledge.matrix.provenance.source } : {}),
+    };
+  }
+  /*
+   * `knowledge.travelLegs` — see its own note on `TravelKnowledge`. Consulted
+   * only once the primary matrix has said it does not have this pair; a leg
+   * either matrix actually measures always wins over one neither did.
+   */
+  if (!knowledge.travelLegs) return null;
+  const onDemand = tryLeg(knowledge.travelLegs, fromId, toId);
+  if (!onDemand) return null;
   return {
     mode,
-    minutes: measured.minutes,
-    km: measured.km,
-    provenance: knowledge.matrix.provenance.kind,
-    ...(knowledge.matrix.provenance.source ? { source: knowledge.matrix.provenance.source } : {}),
+    minutes: onDemand.minutes,
+    km: onDemand.km,
+    provenance: knowledge.travelLegs.provenance.kind,
+    ...(knowledge.travelLegs.provenance.source ? { source: knowledge.travelLegs.provenance.source } : {}),
   };
 }
 

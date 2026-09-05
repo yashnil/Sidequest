@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ItineraryView } from '@/components/ItineraryView';
+import { EnvironmentPill } from '@/components/EnvironmentPill';
+import { OfflineSnapshot } from '@/components/OfflineSnapshot';
+import { resolveMapTileSource } from '@/components/map-adapter';
 import { renderInstant } from '@/lib/clock';
+import { isFixtureComposer } from '@/lib/providers/switches';
 import { Panel, buttonClass } from '@/components/ui';
 import { formatDateRange } from '@/lib/format';
 import {
@@ -125,12 +129,28 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * too. One derivation, two pages, no drift.
    */
   const model = await itineraryViewModel(trip, itinerary);
+  /*
+   * DEV ONLY: when the composer is the offline fixture, say so on the page a
+   * founder evaluates, so fixture output is never mistaken for the live model.
+   * Never rendered in a production build.
+   */
+  const fixtureMode = process.env.NODE_ENV !== 'production' && isFixtureComposer();
 
   return (
+    <>
+      <EnvironmentPill />
+      {fixtureMode ? (
+        <p className="mx-auto max-w-4xl px-5 pt-4 sm:px-8">
+          <span className="inline-flex items-center gap-2 rounded-md border border-dashed border-amber bg-amber-soft px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
+            Fixture planning data — this plan was composed from a saved fixture, not the live model.
+          </span>
+        </p>
+      ) : null}
     <ItineraryView
-      itinerary={itinerary}
+      tiles={resolveMapTileSource(process.env)}
       tripId={id}
       {...model}
+      itinerary={model.appliedItinerary}
       lockedPlaceIds={getItineraryLocks(id).map((lock) => lock.placeId)}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
@@ -138,6 +158,10 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       // function rather than an inline clock read.
       renderedAt={renderInstant()}
     />
+    <p className="mx-auto max-w-4xl px-5 pb-8 sm:px-8">
+      <OfflineSnapshot path={`/trips/${id}/itinerary`} />
+    </p>
+    </>
   );
 }
 

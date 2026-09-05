@@ -678,6 +678,49 @@ export interface RoutingMatrixResult {
   failedPairs: { from: string; to: string; reason: ProviderGapReason }[];
   calls: number;
   elements: number;
+  /**
+   * Whether this provider's own outage breaker tripped during this call —
+   * optional because it is specific to providers that have one (Valhalla
+   * does; a fake/test provider need not). A coarse "the provider stopped
+   * answering" signal, not per-pair.
+   */
+  circuitOpened?: boolean;
+  /** `failedPairs` tallied by reason, when the provider can produce one — spares a caller re-deriving it from the array every time it wants to observe one. */
+  reasonCounts?: Partial<Record<ProviderGapReason, number>>;
+}
+
+/**
+ * ONE PAIR, DIRECTLY — THE BOUNDED FALLBACK FOR A LEG A HARD FEASIBILITY
+ * DECISION DEPENDS ON, NEVER THE PRIMARY ACQUISITION STRATEGY.
+ *
+ * `matrix()`'s own algorithm can answer `not_found` — or nothing at all —
+ * for a pair a single point-to-point route genuinely connects; a live
+ * Iceland validation proved exactly this against Valhalla's `costmatrix`
+ * engine. `found: true` means a real, positive measurement, the same
+ * standard a `RoutingMatrixResult`'s finite cells already mean; `found:
+ * false` carries `reason` from the same `ProviderGapReason` vocabulary —
+ * `'not_found'` is the provider's own positive "no route exists" answer,
+ * everything else means no trustworthy measurement was obtained.
+ */
+export interface RouteConfirmationResult {
+  found: boolean;
+  minutes: number | null;
+  km: number | null;
+  reason?: ProviderGapReason;
+  /** Real latency of this one request, ms — diagnostic only. */
+  latencyMs?: number;
+  /**
+   * The route's own real shape, ordered origin to destination — present
+   * exactly when a real, positive measurement (`found: true`) came back and
+   * the provider's response happened to carry geometry, which a point-to-
+   * point `/route`-style request typically does in the same response as the
+   * duration (no extra request). Optional and provider-generic on purpose:
+   * a provider with no geometry in its response, or no `route()` at all,
+   * simply omits it — a caller that needs a route's real shape (rather than
+   * a straight line between its two endpoints) must treat an absent value
+   * as "not available", never fabricate one.
+   */
+  geometry?: readonly { lat: number; lng: number }[];
 }
 
 export interface RoutingProvider {
@@ -690,6 +733,16 @@ export interface RoutingProvider {
     /** Hard ceiling. A provider that would exceed it must truncate and say so. */
     maxElements: number;
   }): Promise<RoutingMatrixResult>;
+  /**
+   * Optional: a single point-to-point route confirmation. A provider with
+   * no such capability simply omits it — callers must treat that exactly
+   * like "attempted, no evidence", never as a reason to fabricate a value.
+   */
+  route?(input: {
+    from: { lat: number; lng: number };
+    to: { lat: number; lng: number };
+    mode: TravelMode;
+  }): Promise<RouteConfirmationResult>;
 }
 
 /**

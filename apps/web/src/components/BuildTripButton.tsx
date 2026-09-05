@@ -64,7 +64,7 @@ export function BuildTripButton({
       <button
         type="button"
         onClick={build}
-        disabled={pending || includedCount === 0}
+        disabled={pending}
         className={buttonClass('primary')}
         aria-describedby={includedCount === 0 ? 'build-hint' : undefined}
       >
@@ -82,11 +82,12 @@ export function BuildTripButton({
         does, and empty when idle so it says nothing on arrival.
       */}
       <p role="status" aria-live="polite" className="sr-only">
-        {pending ? 'Building your trip. This takes a few seconds.' : ''}
+        {pending ? 'Building your trip. This can take a minute or two.' : ''}
       </p>
       {includedCount === 0 ? (
         <p id="build-hint" className="mt-2 text-sm text-ink-muted">
-          Include at least one place first, or use auto-pick.
+          Nothing picked yet is fine: the trip is composed from what you told us, and anything you
+          include or exclude here is a signal it honours.
         </p>
       ) : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}
@@ -315,4 +316,6 @@ const BLOCKER_LABELS: Record<string, string> = {
   closed_on_trip_dates: 'shut on every day of your trip',
   hours_do_not_fit: 'never open long enough for a visit',
   weather_incompatible: 'ruled out by the weather on every possible day',
+  route_contradicted: 'the router answered that no route reaches them',
+  model_proposal_unintegrated: 'proposed by your plan but not confirmed by our evidence',
 };

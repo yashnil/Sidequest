@@ -18,7 +18,7 @@ import {
   overpassCacheKey,
   type OverpassElement,
 } from './overpass';
-import { computeMatrix, costingFor, densify, isPlausibleLeg, matrixPairCacheKey } from './valhalla';
+import { computeMatrix, computeRoute, costingFor, decodePolyline6, densify, isPlausibleLeg, matrixPairCacheKey } from './valhalla';
 
 /**
  * Contract tests for the open-licensed provider stack.
@@ -249,7 +249,7 @@ describe('valhalla', () => {
           { from_index: 1, to_index: 1, time: 0, distance: 0 },
         ]),
     });
-    expect(outcome.failedPairs).toContainEqual({ from: 'a', to: 'b' });
+    expect(outcome.failedPairs).toContainEqual({ from: 'a', to: 'b', reason: 'not_found' });
     expect(Number.isNaN(outcome.minutes[0]![1]!)).toBe(true);
   });
 
@@ -454,6 +454,108 @@ describe('valhalla', () => {
     expect(measured.length).toBeGreaterThan(0);
   }, 120_000);
 
+  it('bounds retries at MAX_ATTEMPTS (2) per rectangle for a request that never answers — never a third attempt at the same rectangle', async () => {
+    // A 2-point matrix is a single 2x2 rectangle, so a total failure here
+    // subdivides once (into two 1x1 children) before the lowered
+    // `CIRCUIT_THRESHOLD` (3) trips and skips the rest — the top-level
+    // attempt (2 calls, MAX_ATTEMPTS) plus at most two 1-attempt children
+    // before the breaker opens, never a third attempt at any one rectangle.
+    let calls = 0;
+    const pair = [
+      { id: 'x0', lat: 40.7, lng: -74.0 },
+      { id: 'x1', lat: 40.702, lng: -74.0 },
+    ];
+    const fetchImpl = async (): Promise<Response> => {
+      calls += 1;
+      throw new Error('network unreachable');
+    };
+    const outcome = await computeMatrix(pair, 'pedestrian', { maxPairs: 400, fetchImpl });
+    expect(calls).toBeLessThanOrEqual(4);
+    expect(outcome.circuitOpened).toBe(true);
+  }, 15_000);
+
+  it('classifies a rate limit (429) as rate_limited, never mistaken for a positive answer, and never a retry storm', async () => {
+    let calls = 0;
+    const pair = [
+      { id: 'r0', lat: 40.7, lng: -74.0 },
+      { id: 'r1', lat: 40.702, lng: -74.0 },
+    ];
+    const fetchImpl = async (): Promise<Response> => {
+      calls += 1;
+      return jsonResponse({ error: 'slow down' }, 429);
+    };
+    const outcome = await computeMatrix(pair, 'pedestrian', { maxPairs: 400, fetchImpl });
+    expect(calls).toBeLessThanOrEqual(4);
+    expect(outcome.failedPairs).toContainEqual({ from: 'r0', to: 'r1', reason: 'rate_limited' });
+  }, 15_000);
+
+  it('classifies a 5xx as provider_error and, unlike a deterministic 4xx, still counts toward the circuit', async () => {
+    let calls = 0;
+    const trio = Array.from({ length: 3 }, (_, index) => ({
+      id: `s${index}`,
+      lat: 40.7 + index * 0.002,
+      lng: -74.0,
+    }));
+    const fetchImpl = async (): Promise<Response> => {
+      calls += 1;
+      return jsonResponse({ error: 'service unavailable' }, 503);
+    };
+    const outcome = await computeMatrix(trio, 'pedestrian', { maxPairs: 400, fetchImpl });
+    expect(outcome.circuitOpened).toBe(true);
+    expect(outcome.failedPairs.every((pair) => pair.reason === 'provider_error')).toBe(true);
+    /* The breaker stopped it well short of retrying every one of the 6 ordered pairs individually. */
+    expect(calls).toBeLessThan(12);
+  }, 30_000);
+
+  it('a malformed response (unparseable body) classifies as provider_error rather than crashing the whole matrix', async () => {
+    const pair = [
+      { id: 'm0', lat: 40.7, lng: -74.0 },
+      { id: 'm1', lat: 40.702, lng: -74.0 },
+    ];
+    const fetchImpl = async (): Promise<Response> => new Response('not json at all', { status: 200 });
+    const outcome = await computeMatrix(pair, 'pedestrian', { maxPairs: 400, fetchImpl });
+    expect(outcome.failedPairs).toContainEqual({ from: 'm0', to: 'm1', reason: 'provider_error' });
+  }, 15_000);
+
+  it('opens the circuit after CIRCUIT_THRESHOLD (3) consecutive non-deterministic failures, exposed on the outcome', async () => {
+    const many = Array.from({ length: 6 }, (_, index) => ({
+      id: `c${index}`,
+      lat: 40.7 + index * 0.01,
+      lng: -74.0,
+    }));
+    const fetchImpl = async (): Promise<Response> => jsonResponse({ error: 'service unavailable' }, 503);
+    const outcome = await computeMatrix(many, 'pedestrian', { maxPairs: 400, fetchImpl });
+    expect(outcome.circuitOpened).toBe(true);
+  }, 30_000);
+
+  it(
+    'bounds total wall-clock at MAX_TOTAL_MATRIX_MS even when every request is deterministically rejected (so the circuit never opens)',
+    async () => {
+      // Deterministic 4xx rejections never trip the breaker (see "never lets
+      // deterministic rejections open the outage breaker" above) — this is
+      // exactly the scenario where only the wall-clock ceiling, not the
+      // circuit breaker, can bound the run. Enough points that full pairwise
+      // isolation would need dozens of paced single-pair requests if nothing
+      // stopped it early.
+      const many = Array.from({ length: 8 }, (_, index) => ({
+        id: `d${index}`,
+        lat: 40.7 + index * 0.002,
+        lng: -74.0,
+      }));
+      const fetchImpl = async (): Promise<Response> => jsonResponse({ error: 'bad request' }, 400);
+      const start = Date.now();
+      const outcome = await computeMatrix(many, 'pedestrian', { maxPairs: 400, fetchImpl });
+      const elapsedMs = Date.now() - start;
+      // A generous margin over MAX_TOTAL_MATRIX_MS (60s) — this proves the
+      // ceiling actually bounded the run, not that it hit the exact number.
+      expect(elapsedMs).toBeLessThan(75_000);
+      expect(outcome.circuitOpened).toBe(false);
+      // Every pair still ends up honestly unmeasured, never fabricated.
+      for (const row of outcome.minutes) for (const value of row) if (value !== 0) expect(Number.isFinite(value)).toBe(false);
+    },
+    90_000,
+  );
+
   it('keeps the largest routable core instead of dropping everything', () => {
     /**
      * A live Denali build came back with a matrix of zero points out of
@@ -474,7 +576,7 @@ describe('valhalla', () => {
     );
     const km = minutes.map((row) => row.map((value) => (Number.isFinite(value) ? 9 : Number.NaN)));
 
-    const dense = densify({ ids, minutes, km, failedPairs: [], calls: 1, pairs: 16, cacheHits: 0 });
+    const dense = densify({ ids, minutes, km, failedPairs: [], reasonCounts: { not_found: 0, provider_error: 0, rate_limited: 0, budget_exhausted: 0, insufficient_evidence: 0 }, circuitOpened: false, calls: 1, pairs: 16, cacheHits: 0 });
     expect(dense.ids).toEqual(['a', 'b', 'c']);
     expect(dense.dropped).toEqual(['unreachable']);
     // And the surviving submatrix is complete, which is what the planner needs.
@@ -485,7 +587,7 @@ describe('valhalla', () => {
     const ids = ['a', 'b', 'c'];
     const minutes = ids.map((_, from) => ids.map((__, to) => (from === to ? 0 : Number.NaN)));
     const km = minutes.map((row) => row.map(() => Number.NaN));
-    const dense = densify({ ids, minutes, km, failedPairs: [], calls: 1, pairs: 9, cacheHits: 0 });
+    const dense = densify({ ids, minutes, km, failedPairs: [], reasonCounts: { not_found: 0, provider_error: 0, rate_limited: 0, budget_exhausted: 0, insufficient_evidence: 0 }, circuitOpened: false, calls: 1, pairs: 9, cacheHits: 0 });
     expect(dense.ids).toEqual([]);
     expect(dense.dropped.sort()).toEqual(['a', 'b', 'c']);
   });
@@ -497,5 +599,176 @@ describe('valhalla', () => {
     expect(matrixPairCacheKey(points[0]!, points[1]!, 'pedestrian')).not.toBe(key);
     // Direction is part of the identity: a one-way street is not symmetric.
     expect(matrixPairCacheKey(points[1]!, points[0]!, 'auto')).not.toBe(key);
+  });
+
+  describe('computeRoute — the bounded, single-pair fallback', () => {
+    it('measures a real found route', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () =>
+          jsonResponse({ trip: { status: 0, status_message: 'Found route between points', summary: { time: 181, length: 1.544 } } }),
+      });
+      expect(result).toEqual({ found: true, minutes: 3, km: 1.544 });
+    });
+
+    it('classifies Valhalla’s own documented "no path could be found" response as an authoritative not_found, not a generic error', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () => jsonResponse({ error_code: 442, error: 'No path could be found for input', status_code: 400 }, 400),
+      });
+      expect(result).toEqual({ found: false, minutes: null, km: null, reason: 'not_found' });
+    });
+
+    it('does not treat every 4xx as authoritative — only Valhalla’s documented no-path code', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () => jsonResponse({ error_code: 154, error: 'Path distance exceeds the max distance limit', status_code: 400 }, 400),
+      });
+      expect(result).toEqual({ found: false, minutes: null, km: null, reason: 'provider_error' });
+    });
+
+    it('reports a rate limit as its own reason, distinct from a generic provider error', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () => new Response('', { status: 429 }),
+      });
+      expect(result).toEqual({ found: false, minutes: null, km: null, reason: 'rate_limited' });
+    });
+
+    it('degrades a network failure to provider_error, never a thrown exception', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () => {
+          throw new Error('network down');
+        },
+      });
+      expect(result).toEqual({ found: false, minutes: null, km: null, reason: 'provider_error' });
+    });
+
+    it('refuses a response it cannot parse rather than half-reading it', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () => jsonResponse({ nonsense: true }),
+      });
+      expect(result).toEqual({ found: false, minutes: null, km: null, reason: 'provider_error' });
+    });
+
+    it('never retries — one request, one answer, even on a transient-looking failure', async () => {
+      let calls = 0;
+      await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () => {
+          calls += 1;
+          throw new Error('transient');
+        },
+      });
+      expect(calls).toBe(1);
+    });
+  });
+
+  describe('decodePolyline6 / computeRoute geometry — real route shape, decoded once, never a second request', () => {
+    /**
+     * A minimal, standard polyline encoder (delta + zigzag + base64-ish
+     * chunking) used only to build a real, self-consistent input for the
+     * decoder under test — round-tripping through it is what proves the
+     * decoder reads Valhalla's own precision (`1e6`) correctly, rather than
+     * trusting a memorised encoded string.
+     */
+    function encodeNumber(num: number): string {
+      let output = '';
+      let n = num;
+      while (n >= 0x20) {
+        output += String.fromCharCode((0x20 | (n & 0x1f)) + 63);
+        n >>= 5;
+      }
+      output += String.fromCharCode(n + 63);
+      return output;
+    }
+    function encodeSigned(num: number): string {
+      const sgn = num < 0 ? ~(num << 1) : num << 1;
+      return encodeNumber(sgn);
+    }
+    function encodePolyline6(pts: { lat: number; lng: number }[]): string {
+      let output = '';
+      let prevLat = 0;
+      let prevLng = 0;
+      for (const point of pts) {
+        const lat = Math.round(point.lat * 1e6);
+        const lng = Math.round(point.lng * 1e6);
+        output += encodeSigned(lat - prevLat);
+        output += encodeSigned(lng - prevLng);
+        prevLat = lat;
+        prevLng = lng;
+      }
+      return output;
+    }
+
+    it('decodes a real polyline6 string back to the original coordinates, at Valhalla’s own 1e6 precision', () => {
+      const original = [
+        { lat: 64.253265, lng: -15.208044 },
+        { lat: 64.9, lng: -16.5 },
+        { lat: 65.683904, lng: -18.112176 },
+      ];
+      const encoded = encodePolyline6(original);
+      const decoded = decodePolyline6(encoded);
+      expect(decoded).toHaveLength(original.length);
+      for (let i = 0; i < original.length; i += 1) {
+        expect(decoded[i]!.lat).toBeCloseTo(original[i]!.lat, 5);
+        expect(decoded[i]!.lng).toBeCloseTo(original[i]!.lng, 5);
+      }
+    });
+
+    it('an empty string decodes to no points, not a crash', () => {
+      expect(decodePolyline6('')).toEqual([]);
+    });
+
+    it('computeRoute threads the trip’s real shape through as geometry — no extra request, the same response Valhalla already sent', async () => {
+      const shape = encodePolyline6([
+        { lat: 40.7128, lng: -74.006 },
+        { lat: 40.71, lng: -73.99 },
+        { lat: 40.7061, lng: -73.9969 },
+      ]);
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () =>
+          jsonResponse({
+            trip: {
+              status: 0,
+              status_message: 'Found route between points',
+              summary: { time: 181, length: 1.544 },
+              legs: [{ shape }],
+            },
+          }),
+      });
+      expect(result.found).toBe(true);
+      expect(result.geometry).toBeDefined();
+      expect(result.geometry).toHaveLength(3);
+      expect(result.geometry![0]!.lat).toBeCloseTo(40.7128, 4);
+      expect(result.geometry![2]!.lng).toBeCloseTo(-73.9969, 4);
+    });
+
+    it('omits geometry entirely when the response has no legs/shape — never a fabricated empty route', async () => {
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () =>
+          jsonResponse({ trip: { status: 0, status_message: 'Found route between points', summary: { time: 181, length: 1.544 } } }),
+      });
+      expect(result.geometry).toBeUndefined();
+    });
+
+    it('concatenates geometry across multiple legs, in order, when a route genuinely has more than one', async () => {
+      const legOneShape = encodePolyline6([
+        { lat: 40.0, lng: -100.0 },
+        { lat: 40.1, lng: -99.9 },
+      ]);
+      const legTwoShape = encodePolyline6([
+        { lat: 40.1, lng: -99.9 },
+        { lat: 40.2, lng: -99.8 },
+      ]);
+      const result = await computeRoute(points[0]!, points[1]!, 'auto', {
+        fetchImpl: async () =>
+          jsonResponse({
+            trip: {
+              status: 0,
+              status_message: 'Found route between points',
+              summary: { time: 181, length: 1.544 },
+              legs: [{ shape: legOneShape }, { shape: legTwoShape }],
+            },
+          }),
+      });
+      expect(result.geometry).toHaveLength(4);
+      expect(result.geometry![3]!.lat).toBeCloseTo(40.2, 4);
+    });
   });
 });

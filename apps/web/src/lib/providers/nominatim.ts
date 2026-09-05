@@ -183,6 +183,106 @@ export async function geocode(query: string, options: GeocodeOptions = {}): Prom
   return { places: places.data, calls: 1, cacheHit: false };
 }
 
+export interface ReverseGeocodeOptions {
+  /** Nominatim's own address-detail granularity: 10 ≈ city/town, the level a settlement worth sleeping in resolves at. */
+  zoom?: number;
+  fetchImpl?: typeof fetch;
+  cache?: {
+    read: (key: string) => NominatimPlace | null | undefined;
+    write: (key: string, value: NominatimPlace | null) => void;
+  };
+}
+
+export interface ReverseGeocodeResult {
+  /** `null` when Nominatim has nothing at this point (open ocean, an unmapped area) — not an error. */
+  place: NominatimPlace | null;
+  calls: number;
+  cacheHit: boolean;
+}
+
+export function reverseGeocodeCacheKey(lat: number, lng: number, zoom: number): string {
+  return ['nominatim', 'reverse', 'v1', geocoderEndpoint(), String(zoom), lat.toFixed(4), lng.toFixed(4)].join('|');
+}
+
+/**
+ * THE OTHER DIRECTION — A COORDINATE IN, THE NEAREST REAL SETTLEMENT OUT.
+ *
+ * `geocode()` answers "where is this name"; this answers "what is here" —
+ * the question a route-corridor search needs, since a plausible overnight
+ * locality is not named in advance. Same instance, same rate gate, same
+ * usage-policy discipline (`geocoderEndpoint()`, `nextSlot()`, caching,
+ * `USER_AGENT`) as `geocode()` — a sibling capability, not a new client.
+ *
+ * `zoom=10` asks Nominatim to resolve at city/town granularity rather than a
+ * street address or a country — the same level `classifyNominatim()`'s
+ * `'city'`/`'neighbourhood'` distinction already reads off `/search` results
+ * elsewhere in this file.
+ */
+export async function reverseGeocode(lat: number, lng: number, options: ReverseGeocodeOptions = {}): Promise<ReverseGeocodeResult> {
+  const zoom = options.zoom ?? 10;
+  const key = reverseGeocodeCacheKey(lat, lng, zoom);
+
+  const cached = options.cache?.read(key);
+  if (cached !== undefined && cached !== null) return { place: cached, calls: 0, cacheHit: true };
+  if (cached === null) return { place: null, calls: 0, cacheHit: true };
+
+  const url = new URL('/reverse', geocoderEndpoint());
+  url.searchParams.set('lat', String(lat));
+  url.searchParams.set('lon', String(lng));
+  url.searchParams.set('format', 'jsonv2');
+  url.searchParams.set('zoom', String(zoom));
+  url.searchParams.set('addressdetails', '1');
+  url.searchParams.set('namedetails', '1');
+
+  await nextSlot();
+
+  const doFetch = options.fetchImpl ?? fetch;
+  let response: Response;
+  try {
+    response = await doFetch(url, {
+      headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new GeocoderError('request_failed', 'The geocoder did not answer.');
+  }
+
+  if (response.status === 429) {
+    throw new GeocoderError('rate_limited', 'The geocoder asked us to slow down.');
+  }
+  if (!response.ok) {
+    throw new GeocoderError('request_failed', 'The geocoder did not answer.');
+  }
+
+  const text = await response.text();
+  if (text.length > MAX_RESPONSE_BYTES) {
+    throw new GeocoderError('malformed_response', 'The geocoder returned more than we will read.');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new GeocoderError('malformed_response', 'The geocoder returned something unreadable.');
+  }
+
+  // Nominatim's honest answer for a point with nothing mapped nearby
+  // (open ocean, an unmapped area) is `{"error": "Unable to geocode"}`, not
+  // a failed request — a real, cacheable "nothing here", not an outage.
+  if (parsed !== null && typeof parsed === 'object' && 'error' in parsed) {
+    options.cache?.write(key, null);
+    return { place: null, calls: 1, cacheHit: false };
+  }
+
+  const result = nominatimPlaceSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new GeocoderError('malformed_response', 'The geocoder returned a shape we cannot read.');
+  }
+
+  options.cache?.write(key, result.data);
+  return { place: result.data, calls: 1, cacheHit: false };
+}
+
 /** `way/27784372`, the form OSM itself uses. */
 export function osmElementId(place: NominatimPlace): string | null {
   if (!place.osm_type || place.osm_id === undefined) return null;

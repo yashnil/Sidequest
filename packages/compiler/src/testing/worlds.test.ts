@@ -29,6 +29,7 @@ export const BROWSER_REACHABLE_WORLDS = [
   'transit_mixed',
   'recovery_adversary',
   'unclocked_valley',
+  'river_basin',
 ] as const;
 
 describe('synthetic worlds', () => {
@@ -63,6 +64,7 @@ describe('synthetic worlds', () => {
       'a day that needs more than one mode': 'transit_mixed',
       'a packet that is not good enough': 'recovery_adversary',
       'a destination nobody published a clock for': 'unclocked_valley',
+      'a wilderness reached by boat and guide': 'river_basin',
     };
     for (const [label, world] of Object.entries(classes)) {
       expect(SYNTHETIC_WORLDS[world], `${label} has no world`).toBeDefined();

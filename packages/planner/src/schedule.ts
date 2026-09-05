@@ -21,7 +21,7 @@ import {
   type TransportMode,
   type TravelerProfile,
 } from '@sidequest/core';
-import { leg, orderStops, type TravelTimeMatrix } from '@sidequest/geo';
+import { leg, orderStops, resolveSubMatrix, type TravelTimeMatrix } from '@sidequest/geo';
 import { matrixCoversMode, type AccessLegPlan, type AccessOption, type AccessUnit } from './access';
 import {
   latestStartOn,
@@ -3011,8 +3011,36 @@ export function scheduleUnits(
   });
   if (pending.length === 0) return [];
 
-  const anchors = pending.map((entry) => entry.option.gatewayRoutingId);
-  const route = orderStops(context.matrix, {
+  /*
+   * `orderStops` assumes every id it is given has a row in the matrix it is
+   * handed, and throws if one does not — correct for the matrix alone, wrong
+   * for a base or a stop resolved on demand (`PlannerInput.travelLegs`; see
+   * `TravelKnowledge.travelLegs`'s own note). `resolveSubMatrix` builds a
+   * small, complete matrix over exactly this day's own points first, backed
+   * by the primary matrix and that supplementary one, so `orderStops` is
+   * never hand ed a gap to throw on.
+   *
+   * A unit `resolveSubMatrix` genuinely cannot place — neither matrix
+   * measures it — is dropped from *this day's* ordering rather than failing
+   * the whole day; upstream eligibility (`resolveCandidates`, `assignToDays`)
+   * is what is supposed to keep this from happening for anything actually
+   * locked, so reaching this branch is the defensive case, not the normal
+   * one, and is worth being conservative about rather than throwing anyway.
+   */
+  let orderable = pending;
+  let anchors = orderable.map((entry) => entry.option.gatewayRoutingId);
+  let resolved = resolveSubMatrix(context.matrix, [context.baseId, ...anchors], context.travel.travelLegs);
+  if (!resolved.ok) {
+    const unresolved = new Set(resolved.unresolved);
+    orderable = orderable.filter((entry) => !unresolved.has(entry.option.gatewayRoutingId));
+    if (orderable.length === 0) return [];
+    anchors = orderable.map((entry) => entry.option.gatewayRoutingId);
+    resolved = resolveSubMatrix(context.matrix, [context.baseId, ...anchors], context.travel.travelLegs);
+    if (!resolved.ok) return [];
+  }
+  const pendingResolved = orderable;
+
+  const route = orderStops(resolved.matrix, {
     startId: context.baseId,
     endId: context.baseId,
     stopIds: [...new Set(anchors)],
@@ -3023,7 +3051,7 @@ export function scheduleUnits(
     if (!position.has(id)) position.set(id, index);
   });
 
-  return pending
+  return pendingResolved
     .map((entry) => ({
       ...entry,
       /**

@@ -181,6 +181,21 @@ export interface PlannerInput {
   selections: readonly DiscoverySelection[];
   matrix: TravelTimeMatrix;
   /**
+   * A second, small road matrix for identities `matrix` does not carry —
+   * never merged into it, and never densified against the whole board.
+   *
+   * Exists for one caller: a trip built from a traveller-supplied structure
+   * (a base or a stop resolved *after* `matrix` was compiled) whose identity
+   * genuinely has no row in the original evidence. Every consumer that reads
+   * `matrix` through `TravelKnowledge` (`resolveLeg`, `reachFromBase`,
+   * candidate/access eligibility, stop ordering) falls back to this,
+   * automatically, only once `matrix` itself has said it does not have the
+   * pair — a pair either one actually measures always wins. Absent on every
+   * ordinary trip, and changes nothing about how `matrix` alone behaves when
+   * it is.
+   */
+  travelLegs?: TravelTimeMatrix;
+  /**
    * Measured public-transport journeys, beside the matrix and never inside it.
    *
    * The separation is the safeguard, and it is the compiled artifact's own: a

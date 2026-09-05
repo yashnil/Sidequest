@@ -1,0 +1,187 @@
+import {
+  countTripDays,
+  interestOffer,
+  screenDestination,
+  tripMonths,
+  type CompiledRegion,
+  type DestinationClassSignal,
+  type DestinationQuestionContext,
+  type Interest,
+  type InterviewContext,
+  type QuestionnaireAnswers,
+  type Region,
+  type ScreeningSignals,
+  type Trip,
+  type TripComposerAnswers,
+} from '@sidequest/core';
+import type { TripIntentRecord } from '@/lib/db/compiler-repository';
+import type { RegionContext } from '@/lib/region';
+
+/**
+ * DESTINATION SCREENING FOR ONE TRIP — FROM WHAT IS ALREADY ON DISK.
+ *
+ * The questionnaire renders before any research runs for most trips, so the
+ * screening has to work from what the intake already stored: the destination
+ * the traveller pointed at (or the resolver's leading candidate), the
+ * geographic scope when one was confirmed, the preflight's climate normals,
+ * the compiled region when a build has finished, and the seeded region for an
+ * authored destination. Every one of those is a synchronous read of stored
+ * state; nothing here reaches a provider, and the whole function is bounded
+ * by how fast `screenDestination` runs (microseconds).
+ *
+ * Unavailable evidence lowers `evidence` on the result and hides traits; it
+ * never blocks the questionnaire.
+ */
+
+export interface ScreeningInputs {
+  trip: Trip;
+  intent: TripIntentRecord | null;
+  region: RegionContext | null;
+  /** The authored region when the trip is against one (the seeded Eastern Sierra today). */
+  seeded?: Region | null;
+}
+
+export function screeningSignalsFor(input: ScreeningInputs): ScreeningSignals {
+  const { trip, intent, region } = input;
+  const tripDays = countTripDays(trip.basics.startDate, trip.basics.endDate);
+  const composer = intent?.composer ?? null;
+  const selected = intent?.selectedDestination ?? null;
+  const candidate = intent?.resolution
+    ? (intent.resolution.candidates.find((c) => c.id === (intent.selectedCandidateId ?? intent.resolution?.unambiguousCandidateId)) ?? intent.resolution.candidates[0] ?? null)
+    : null;
+  const scope = intent?.scope ?? null;
+  const compiled = region?.compiled ?? null;
+
+  const signals: ScreeningSignals = {
+    name: selected?.displayName ?? candidate?.displayName ?? region?.region.baseName ?? trip.basics.destinationInput,
+    tripDays,
+    startDate: trip.basics.startDate,
+    months: tripMonths(trip.basics.startDate, trip.basics.endDate),
+    travelerNeeds: trip.basics.travelerNeeds,
+    adults: trip.basics.adults,
+    children: trip.basics.children,
+  };
+  const seededCopy = input.seeded?.questionnaireCopy ?? region?.region.questionnaireCopy;
+  if (seededCopy?.proseName) signals.proseName = seededCopy.proseName;
+
+  // --- identity -----------------------------------------------------------------
+  const entityType = scope?.destinationEntityType ?? candidate?.entityType;
+  if (entityType) signals.entityType = entityType;
+  const breadth = scope?.breadth ?? candidate?.breadth;
+  if (breadth) signals.breadth = breadth;
+  if (selected?.featureType) signals.featureType = selected.featureType;
+  const countryCode = scope?.countryCode ?? candidate?.countryCode ?? selected?.countryCode;
+  if (countryCode) signals.countryCode = countryCode;
+  const center = scope?.center ?? candidate?.center ?? selected?.center ?? region?.region.baseCoordinates;
+  if (center) signals.center = center;
+  const bounds = scope?.administrativeBoundary ?? scope?.bounds ?? candidate?.bounds ?? selected?.bounds;
+  if (bounds) signals.bounds = bounds;
+
+  // --- the scope's own transport reading ----------------------------------------------
+  if (scope) {
+    signals.scopeTransport = {
+      primaryMode: scope.transport.primaryMode,
+      allowedModes: scope.transport.allowedModes,
+      carAvailable: scope.transport.carAvailable,
+      acceptsWaterOrAirTransfers: scope.transport.acceptsWaterOrAirTransfers,
+      basis: scope.transport.basis,
+    };
+    signals.gatewayKinds = scope.gateways.map((gateway) => gateway.kind);
+    signals.maxBaseChanges = scope.maxBaseChanges;
+  }
+  if (composer?.shape) signals.composerShape = composer.shape;
+  if (composer?.transport) signals.composerTransport = composer.transport;
+
+  // --- climate for the dates, from the preflight when it looked ------------------------
+  const climate = climateFor(intent?.preflight?.dates ?? null, trip.basics.startDate);
+  if (climate) signals.climate = climate;
+
+  // --- what a compiled region measured ---------------------------------------------------
+  if (compiled && region) {
+    signals.compiled = compiledSignals(compiled, region);
+  } else if (input.seeded) {
+    signals.seededClass = seededClassOf(input.seeded, region);
+  }
+  if (region && !signals.compiled) {
+    const offer = region.region.interestOffer ?? interestOffer({ places: region.places });
+    if (offer.classes.length > 0) signals.offerClasses = offer.classes as DestinationClassSignal[];
+  }
+  return signals;
+}
+
+function climateFor(dates: NonNullable<TripIntentRecord['preflight']>['dates'] | null, startDate: string): { high?: number; low?: number } | undefined {
+  if (!dates || dates.kind !== 'recommended') return undefined;
+  const month = Number(startDate.slice(5, 7));
+  const window = dates.windows.find((w) => w.month === month) ?? dates.windows[0];
+  if (!window) return undefined;
+  return { high: window.climate.temperature.high, low: window.climate.temperature.low };
+}
+
+const NON_DRIVE = new Set(['walk', 'public_bus', 'rail', 'shuttle', 'ferry', 'bicycle']);
+
+function compiledSignals(compiled: CompiledRegion, region: RegionContext): NonNullable<ScreeningSignals['compiled']> {
+  const places = region.places;
+  let carOnly = 0;
+  const ferryPlaces = new Set<string>();
+  for (const place of places) {
+    const modes = region.access.rules.filter((rule) => rule.placeIds.includes(place.id)).map((rule) => rule.approachMode);
+    if (modes.length > 0 && modes.every((mode) => !NON_DRIVE.has(mode))) carOnly += 1;
+    if (modes.includes('ferry')) ferryPlaces.add(place.id);
+  }
+  const offer = region.region.interestOffer ?? interestOffer({ places, foodVenueCount: region.food?.venues.length ?? 0 });
+  const maxElevation = Math.max(0, ...region.weather.locations.map((location) => location.elevationMetres));
+  const furthest = Math.max(0, ...places.map((place) => (place.travelFromBase.measured ? place.travelFromBase.driveMinutes : 0)));
+  return {
+    placeCount: places.length,
+    ...(places.length > 0 ? { carOnlyShare: Math.round((carOnly / places.length) * 100) / 100 } : {}),
+    ferryPlaces: ferryPlaces.size,
+    transitMeasured: compiled.transitEvidence?.measured ?? 0,
+    hasScheduledNetwork: region.scheduledNetwork !== null,
+    matrixMode: compiled.travelTimes.mode,
+    classes: offer.classes as DestinationClassSignal[],
+    subregionCount: compiled.subregions.length,
+    baseCount: compiled.bases.length,
+    foodVenueCount: region.food?.venues.length ?? 0,
+    ...(maxElevation > 0 ? { maxElevationMetres: maxElevation } : {}),
+    ...(furthest > 0 ? { furthestSatelliteMinutes: furthest } : {}),
+  };
+}
+
+function seededClassOf(seeded: Region, region: RegionContext | null): DestinationClassSignal {
+  const offer = seeded.interestOffer ?? (region ? interestOffer({ places: region.places }) : null);
+  const classes = (offer?.classes ?? []) as DestinationClassSignal[];
+  if (classes.includes('mountain')) return 'mountain';
+  if (classes.includes('urban')) return 'urban';
+  if (classes.includes('coastal')) return 'coastal';
+  return 'countryside';
+}
+
+export function destinationContextFor(input: ScreeningInputs): DestinationQuestionContext {
+  return screenDestination(screeningSignalsFor(input));
+}
+
+/** The composer fields the interview treats as already answered, by question field name. */
+export function carriedFieldsFor(composer: TripComposerAnswers | null, carried: readonly string[]): string[] {
+  const fields = new Set<string>(carried);
+  if (composer?.shape && composer.shape !== 'undecided') fields.add('shape');
+  if (composer?.foodImportance) fields.add('foodImportance');
+  if (composer?.freeTime) fields.add('freeTime');
+  return [...fields];
+}
+
+export function interviewContextFor(input: ScreeningInputs & { offeredInterests: readonly Interest[]; carried: readonly string[]; answers?: QuestionnaireAnswers }): InterviewContext {
+  const composer = input.intent?.composer ?? null;
+  return {
+    destination: destinationContextFor(input),
+    traveller: {
+      travelerNeeds: input.trip.basics.travelerNeeds,
+      tripDays: countTripDays(input.trip.basics.startDate, input.trip.basics.endDate),
+      adults: input.trip.basics.adults,
+      children: input.trip.basics.children,
+      offeredInterests: input.offeredInterests,
+      ...(composer?.themes && composer.themes.length > 0 ? { composerThemes: composer.themes } : {}),
+      carried: carriedFieldsFor(composer, input.carried),
+      composerNamedPlaces: Boolean(composer?.mustDo || composer?.avoid),
+    },
+  };
+}

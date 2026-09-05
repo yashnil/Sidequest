@@ -70,8 +70,8 @@ for (const viewport of VIEWPORTS) {
      * room shows first, and it is one navigation away, so all three sizes can have
      * it for the price of one page load.
      */
-    await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
-    await expectNoHorizontalOverflow(page, `interests at ${viewport.name}`);
+    await expect(page.getByTestId('interview-understanding')).toBeVisible();
+    await expectNoHorizontalOverflow(page, `understanding at ${viewport.name}`);
 
     /*
      * And the far end of the questionnaire, which is a different layout problem:

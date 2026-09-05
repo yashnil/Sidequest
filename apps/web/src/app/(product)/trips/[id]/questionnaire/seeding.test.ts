@@ -97,10 +97,11 @@ async function renderedWizardProps(tripId: string): Promise<{
   })) as unknown as {
     props: {
       initialAnswers: { willDrive: boolean; willUseShuttles: boolean };
-      prefilled: readonly string[];
+      context: { traveller: { carried: readonly string[] } };
     };
   };
-  return element.props;
+  /* The interview names carried fields on its context; `prefilled` is the old name for the same list. */
+  return { initialAnswers: element.props.initialAnswers, prefilled: element.props.context.traveller.carried };
 }
 
 describe('seeding the questionnaire from the clarification transport answer', () => {

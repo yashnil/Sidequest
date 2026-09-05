@@ -4,6 +4,7 @@ import {
   createTrip,
   reachScope,
   REGION_READY_HEADING,
+  CULTURAL_INTERVIEW,
 } from './support/trip';
 
 /**
@@ -29,7 +30,7 @@ async function reachAuthoredBoard(page: Page): Promise<void> {
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
-  await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
+  await expect(page.getByTestId('interview')).toBeVisible();
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
@@ -144,20 +145,8 @@ test('an empty board names the binding constraint rather than three plausible on
 
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
-  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
-  for (let step = 0; step < 14; step += 1) {
-    const build = page.getByRole('button', { name: 'Build my discovery board' });
-    if (await build.isVisible().catch(() => false)) {
-      await build.click();
-      break;
-    }
-    const next = page.getByRole('button', { name: 'Continue' });
-    if (!(await next.isVisible().catch(() => false))) break;
-    await next.click();
-    await page.waitForTimeout(150);
-  }
+  await completeQuestionnaire(page, CULTURAL_INTERVIEW);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
   const panel = page.getByTestId('board-integrity');

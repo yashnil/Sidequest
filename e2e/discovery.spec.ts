@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire, openBoardBackstage } from './support/trip';
+import { completeQuestionnaire, openBoardBackstage, waitUntilInteractive } from './support/trip';
 
 /**
  * The journey this slice promises: a traveller enters a Mammoth Lakes trip,
@@ -16,7 +16,7 @@ async function createTrip(page: Page, dates: { start: string; end: string }) {
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
-  await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
+  await expect(page.getByTestId('interview')).toBeVisible();
 }
 
 test('a traveller goes from a blank trip to a personalised Eastern Sierra board', async ({
@@ -25,9 +25,10 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
 
-  // The profile is reflected back before anything is generated.
-  await expect(page.getByText(/pace over 4 days/)).toBeVisible();
-  await expect(page.getByText('Detour limit')).toBeVisible();
+  // The profile is reflected back before anything is generated: the review
+  // opens with the trip in one sentence and the sketch's shape / range facts.
+  await expect(page.getByTestId('interview-sentence')).toContainText(/over \d+ days/);
+  await expect(page.getByText('Range', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
 
@@ -334,86 +335,70 @@ test('things to skip are one line each, and can still be put back', async ({ pag
 
 test('the questionnaire adapts and refuses to continue on an empty profile', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
+  const start = page.getByTestId('interview-start');
+  await waitUntilInteractive(start);
+  await start.click();
 
-  // Nothing chosen yet — every interest is still "if nearby".
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Pick at least one thing' })).toBeVisible();
+  // Nothing chosen yet — the priorities screen will not advance on an empty profile.
+  await expect(page.getByTestId('interview-question-priorities')).toBeVisible();
+  await expect(page.getByTestId('interview-continue')).toBeDisabled();
 
-  await page.getByRole('radio', { name: 'Hiking: Core' }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
+  await page.getByTestId('interview-continue').click();
+  // Choosing hiking unlocks the question about how big a role it plays.
+  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
 
-  // Walk forward to the transport step, checking each heading on the way so a
-  // change in step order fails loudly instead of silently skipping a step.
-  for (const heading of [
-    'What is the spending style?',
-    'How do you want to eat?',
-    'Famous or off the track?',
-    'How are you getting around?',
-  ]) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
-  await expect(page.getByText('Steep mountain roads are fine')).toBeVisible();
-
-  await page.getByLabel('You will have a car').uncheck();
-  await expect(page.getByText('Steep mountain roads are fine')).toBeHidden();
   /*
-   * The note that appears when the car is unchecked. Its wording moved when the
-   * questionnaire stopped naming one valley's trolley and bus route — the
-   * assertion is on the *behaviour*, which is that a no-car answer says plainly
-   * what it costs.
+   * The car answer reshapes the rest of the interview: without a car the
+   * driving questions never appear, and the reach question offers only the
+   * rings a day of scheduled transport can cover.
    */
-  await expect(page.getByText(/Without a car we will keep to what walks/)).toBeVisible();
-
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('radio', { name: /Up to ~2 hours/ })).toHaveCount(0);
-  await expect(page.getByText(/Wider radii are hidden because you are not driving/)).toBeVisible();
+  const seen = await completeQuestionnaire(page, { answers: { transport_mode: 'no_car' } });
+  expect(seen).toContain('transport_mode');
+  expect(seen).not.toContain('daily_driving');
+  expect(seen).not.toContain('road_comfort');
+  await expect(page.getByTestId('review-change-daily_driving')).toHaveCount(0);
+  await expect(page.getByTestId('review-told')).toContainText(/No car|public transport|Without a car/);
 });
 
 test('questionnaire progress survives a refresh mid-flow', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
-  await page.getByRole('radio', { name: 'Stargazing: Core' }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
+  const start = page.getByTestId('interview-start');
+  await waitUntilInteractive(start);
+  await start.click();
+  await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
+  await page.getByTestId('interview-continue').click();
+  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
 
   await page.reload();
 
   /*
-   * BOTH HALVES OF "PROGRESS", NOW THAT BOTH ARE KEPT.
-   *
-   * This used to assert only that the answer survived — and it could only do
-   * that because a refresh dumped the traveller back on step one, where the
-   * radio happened to be on screen. The position was React state while the
-   * answers were saved, so a refresh on step seven of nine restarted at step
-   * one with everything intact and nothing to say which answers had been
-   * reached deliberately, under a header reading "Saved as you go".
-   *
-   * Progress is the step *and* the answers. So: they come back where they were,
-   * and the answer is still there when they step back to it.
+   * BOTH HALVES OF "PROGRESS": the position and the answer. The position is a
+   * question id rather than an index, so a plan that grew (choosing hiking added
+   * a role question) still resumes on the same screen.
    */
-  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
+  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
-  await expect(page.getByRole('radio', { name: 'Stargazing: Core' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Hiking', exact: true })).toBeChecked();
 });
 
 test('the whole journey is reachable by keyboard', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile', 'Keyboard traversal is a desktop concern');
 
   await createTrip(page, AUGUST_TRIP);
-
-  // Focus lands somewhere in the document and the first interest control is
-  // reachable by tabbing, with a visible focus ring.
-  const firstRadio = page.getByRole('radio', { name: 'Hiking: Skip' });
-  await firstRadio.focus();
-  await expect(firstRadio).toBeFocused();
-
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: 'Hiking: A few times' })).toBeChecked();
-
-  await page.getByRole('button', { name: 'Continue' }).focus();
+  const start = page.getByTestId('interview-start');
+  await waitUntilInteractive(start);
+  await start.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
+
+  // The first priority chip is reachable and toggles from the keyboard, with a visible ring.
+  const hiking = page.getByRole('checkbox', { name: 'Hiking', exact: true });
+  await hiking.focus();
+  await expect(hiking).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(hiking).toBeChecked();
+
+  await page.getByTestId('interview-continue').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
 });

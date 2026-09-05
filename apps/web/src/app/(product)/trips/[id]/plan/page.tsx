@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
   candidateById,
@@ -255,6 +256,19 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                 : 'Planning',
         }}
       />
+      {/*
+        PHASE 17 — THE MINIMAL-FIRST PATH, OFFERED RATHER THAN FORCED.
+        Everything below this still works exactly as it did; this is a second
+        door next to it, not a replacement for it. See
+        `.claude-private/phase-17-baseline-first-hybrid-planner.md` §7-8.
+      */}
+      <p className="mx-auto max-w-3xl px-4 pt-4 text-sm text-ink-muted sm:px-6">
+        Or skip ahead —{' '}
+        <Link href={`/trips/${id}/quickplan`} className="underline underline-offset-4">
+          let Sidequest plan the whole trip now
+        </Link>
+        .
+      </p>
     <PlanFlow
       tripId={id}
       step={step}

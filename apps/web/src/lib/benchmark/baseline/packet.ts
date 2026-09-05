@@ -70,6 +70,8 @@ export interface RawPlace {
   access: PacketAccess;
   food: PacketFood | null;
   source: RawSource | null;
+  /** See `PacketPlace.significance`. Absent or `null` where the provider layer has no read on it. */
+  significance?: number | null;
 }
 
 export interface RawDay {
@@ -275,6 +277,7 @@ export function buildResearchPacket(inputs: PacketInputs): ResearchPacket {
       food: place.food,
       tags: [...place.tags].sort(),
       sourceIndex: sourceIndexFor(place.source),
+      significance: place.significance,
     };
   });
 
@@ -427,6 +430,27 @@ function takeSpread(
     const bucket = byCell.get(key);
     if (bucket) bucket.push(place);
     else byCell.set(key, [place]);
+  }
+
+  /*
+   * MOST SIGNIFICANT FIRST, WITHIN EACH CELL.
+   *
+   * Every bucket held whatever order its providers happened to enumerate —
+   * effectively entity-id order, which encodes no opinion about which of a
+   * cell's places actually matter. A round robin that reads round 0 from
+   * each bucket already spreads the packet across geography; it does nothing
+   * to protect the most prominent place *within* a crowded cell from an
+   * arbitrary draw. A live Iceland run's most significant single feature in
+   * its region — the kind of thing this field exists to surface — was absent
+   * from the composed trip after a cap this same mechanism applied, and nothing
+   * in the pipeline up to this point had told the model it existed. Sorting
+   * each bucket by `significance` (nulls last, so an unscored place is never
+   * preferred over a scored one purely for lacking a score) means round 0 of
+   * every cell is its most prominent member, not its earliest-sorted one.
+   */
+
+  for (const bucket of byCell.values()) {
+    bucket.sort((a, b) => (b.significance ?? -1) - (a.significance ?? -1));
   }
 
   const cellKeys = [...byCell.keys()].sort();

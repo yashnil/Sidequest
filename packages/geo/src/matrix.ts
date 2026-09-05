@@ -127,6 +127,78 @@ export function subMatrix(matrix: TravelTimeMatrix, ids: readonly string[]): Tra
   };
 }
 
+export type ResolvedSubMatrix =
+  | { ok: true; matrix: TravelTimeMatrix }
+  | { ok: false; unresolved: readonly string[] };
+
+/**
+ * A small, complete matrix over exactly `ids` — never the whole board — built
+ * from `primary` and, for any pair `primary` cannot answer, `fallback`.
+ *
+ * The point of this over `subMatrix`: `subMatrix` requires every id already
+ * be in the source matrix (it throws via `matrixIndex` otherwise), which is
+ * exactly wrong for an id introduced after that matrix was built — a base or
+ * a stop resolved from a traveller-supplied trip structure, for instance.
+ * Here, a missing pair is a fact to report, not a throw: if `primary` and
+ * `fallback` together cannot measure every pair among `ids`, this returns
+ * exactly which ids could not be resolved instead of a matrix, so a caller
+ * can surface a typed failure rather than handing an incomplete matrix to
+ * something (`orderStops`, `routeSummary`) that assumes a complete one and
+ * throws partway through.
+ *
+ * Never fabricates: every returned cell is either `0` (a point to itself) or
+ * a value `tryLeg` actually returned from one of the two sources.
+ */
+export function resolveSubMatrix(
+  primary: TravelTimeMatrix,
+  ids: readonly string[],
+  fallback?: TravelTimeMatrix | null,
+): ResolvedSubMatrix {
+  const uniqueIds = [...new Set(ids)];
+  const minutes: number[][] = [];
+  const km: number[][] = [];
+  const unresolved = new Set<string>();
+
+  for (const fromId of uniqueIds) {
+    const minuteRow: number[] = [];
+    const kmRow: number[] = [];
+    for (const toId of uniqueIds) {
+      if (fromId === toId) {
+        minuteRow.push(0);
+        kmRow.push(0);
+        continue;
+      }
+      const resolved = tryLeg(primary, fromId, toId) ?? (fallback ? tryLeg(fallback, fromId, toId) : null);
+      if (!resolved) {
+        unresolved.add(fromId);
+        unresolved.add(toId);
+        minuteRow.push(Number.NaN);
+        kmRow.push(Number.NaN);
+        continue;
+      }
+      minuteRow.push(resolved.minutes);
+      kmRow.push(resolved.km);
+    }
+    minutes.push(minuteRow);
+    km.push(kmRow);
+  }
+
+  if (unresolved.size > 0) return { ok: false, unresolved: [...unresolved] };
+  return {
+    ok: true,
+    matrix: {
+      mode: primary.mode,
+      ids: uniqueIds,
+      minutes,
+      km,
+      provenance: {
+        kind: 'measured',
+        note: 'Resolved on demand from the primary matrix and a supplementary matrix, for exactly these points.',
+      },
+    },
+  };
+}
+
 export interface RouteSummary {
   totalMinutes: number;
   totalKm: number;

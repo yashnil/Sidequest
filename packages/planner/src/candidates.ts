@@ -237,7 +237,10 @@ export function resolveCandidates(
       continue;
     }
 
-    if (!hasPoint(matrix, candidate.place.id)) {
+    const routableOnDemand = Boolean(
+      reach?.knowledge.travelLegs && hasPoint(reach.knowledge.travelLegs, candidate.place.id),
+    );
+    if (!hasPoint(matrix, candidate.place.id) && !routableOnDemand) {
       rejected.push({
         placeId: candidate.place.id,
         name: displayNameOf(candidate.place),

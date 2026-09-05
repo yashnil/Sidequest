@@ -53,7 +53,130 @@ export function checkRouting(
     findings.push(...checkDailyBudgets(day, previous, truth, ctx));
   });
 
+  findings.push(...checkTripClosure(plan, ctx));
+
   return findings;
+}
+
+/**
+ * DOES THE TRIP END SOMEWHERE THE TRAVELLER COULD ACTUALLY DEPART FROM?
+ *
+ * The request schema (see `schemas/request.ts`) states one destination and one
+ * pair of arrival/departure timings — it has no field for a separate departure
+ * point, so a plan that ends far from where it began has stranded the
+ * traveller by construction, not by a debatable reading of an unstated
+ * preference. A founder benchmark run of this exact class produced a plan that
+ * ended its final day in a base four hundred kilometres from where the trip
+ * started, with no leg anywhere in the plan making up the difference.
+ *
+ * Deliberately whole-plan rather than per-day: `checkBase` above already
+ * catches a day that does not begin and end at its own stated base, and that
+ * check is blind to this failure precisely because every individual day in
+ * the founder run *was* internally consistent — day 13 correctly started and
+ * ended in Akureyri. The defect only exists at the scale of the whole trip.
+ *
+ * A move on the final day redeems the plan: if any block that day travels to
+ * within proximity of the first base, the traveller has been brought home
+ * even if `baseId` — which names where a day *sleeps*, not a same-day
+ * departure — still names the last base. Checked by endpoint coordinates
+ * rather than by entity id, because a departure point is frequently an
+ * airport with its own identity distinct from the town base.
+ */
+const DEPARTURE_PROXIMITY_KM = 75;
+
+function checkTripClosure(plan: BenchmarkPlan, ctx: CheckContext): BenchFinding[] {
+  const days = safeArray(plan.days);
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last || days.length < 2) return [];
+
+  const subject = subjectOf(last);
+
+  if (typeof first.baseId !== 'string' || typeof last.baseId !== 'string') {
+    ctx.undecided();
+    return [
+      unresolved(
+        'trip_not_closed_to_departure',
+        subject,
+        'The first or last day does not say where the traveller sleeps, so closure against departure cannot be checked.',
+        'plan.days[].baseId',
+        'plan_omits_field',
+      ),
+    ];
+  }
+
+  if (first.baseId === last.baseId) return [];
+
+  const firstBase = plan.bases.find((base) => base.id === first.baseId);
+  const lastBase = plan.bases.find((base) => base.id === last.baseId);
+  const firstPoint = firstBase?.place;
+  const lastPoint = lastBase?.place;
+  if (
+    !firstPoint ||
+    !lastPoint ||
+    firstPoint.latitude === null ||
+    firstPoint.longitude === null ||
+    lastPoint.latitude === null ||
+    lastPoint.longitude === null
+  ) {
+    ctx.undecided();
+    return [
+      unresolved(
+        'trip_not_closed_to_departure',
+        subject,
+        'The first or last base has no located coordinates, so closure against departure cannot be checked.',
+        'plan.bases[].place',
+        'subject_not_in_inventory',
+      ),
+    ];
+  }
+
+  const distanceKm = haversineKm(
+    { latitude: firstPoint.latitude, longitude: firstPoint.longitude },
+    { latitude: lastPoint.latitude, longitude: lastPoint.longitude },
+  );
+  if (distanceKm <= DEPARTURE_PROXIMITY_KM) return [];
+
+  /*
+   * A redeeming move on the final day: the day's OWN LAST leg — where it
+   * actually ends up, not merely passes through — arrives back within
+   * proximity of the first base, even though the day's `baseId` — where it
+   * sleeps, not a same-day departure — still names somewhere else.
+   *
+   * Deliberately the day's final leg only. An early check considered any
+   * travel block that day, which credited a midday stop that merely happened
+   * to sit near the first base's coordinates as though the day had ended
+   * there — exactly the false "redeemed" reading a coincidental waypoint
+   * produces, and not evidence the traveller was actually brought home.
+   */
+  const legs = travelBlocks(last);
+  const finalLeg = legs[legs.length - 1];
+  const finalArrival = finalLeg?.travel?.to;
+  const returned =
+    finalArrival !== undefined &&
+    finalArrival !== null &&
+    finalArrival.latitude !== null &&
+    finalArrival.longitude !== null &&
+    haversineKm(
+      { latitude: finalArrival.latitude, longitude: finalArrival.longitude },
+      { latitude: firstPoint.latitude, longitude: firstPoint.longitude },
+    ) <= DEPARTURE_PROXIMITY_KM;
+  if (returned) return [];
+
+  ctx.decided();
+  return [
+    report(
+      'trip_not_closed_to_departure',
+      'critical',
+      subject,
+      `The trip starts in ${firstPoint.name} and ends ${Math.round(distanceKm)} km away in ${lastPoint.name}, with no leg anywhere in the plan that returns the traveller to within departure range.`,
+      'plan.bases[] vs plan.days[].baseId',
+      {
+        observed: { firstBaseId: first.baseId, lastBaseId: last.baseId, distanceKm: Math.round(distanceKm) },
+        expected: { maxDistanceKm: DEPARTURE_PROXIMITY_KM },
+      },
+    ),
+  ];
 }
 
 /* ------------------------------------------------------------------ *

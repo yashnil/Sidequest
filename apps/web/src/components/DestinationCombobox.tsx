@@ -67,6 +67,7 @@ export function DestinationCombobox({
   autoFocus,
   label = 'Where are you going?',
   hint,
+  size = 'default',
 }: {
   name: string;
   defaultValue?: string;
@@ -77,6 +78,8 @@ export function DestinationCombobox({
   autoFocus?: boolean;
   label?: string;
   hint?: string;
+  /** `hero` is the new-trip page's one big question: display type on a rule, not a boxed field. */
+  size?: 'default' | 'hero';
 }) {
   const [text, setText] = useState(defaultValue ?? '');
   const [state, setState] = useState<State>({ kind: 'idle' });
@@ -245,12 +248,12 @@ export function DestinationCombobox({
 
   return (
     <div ref={wrapper} className="relative">
-      <label htmlFor={inputId} className="block text-sm font-medium text-ink">
+      <label htmlFor={inputId} className={size === 'hero' ? 'label block text-ink-faint' : 'block text-sm font-medium text-ink'}>
         {label}
       </label>
-      {hint ? <p className="mt-1 text-sm text-ink-muted">{hint}</p> : null}
+      {hint && size !== 'hero' ? <p className="mt-1 text-sm text-ink-muted">{hint}</p> : null}
 
-      <div className="relative mt-2">
+      <div className={cx('relative', size === 'hero' ? 'mt-1' : 'mt-2')}>
         <input
           ref={input}
           id={inputId}
@@ -263,7 +266,7 @@ export function DestinationCombobox({
           autoFocus={autoFocus}
           spellCheck={false}
           value={text}
-          placeholder="A city, region, park or country"
+          placeholder={size === 'hero' ? 'A city, park or country' : 'A city, region, park or country'}
           onChange={(event) => {
             const next = event.target.value;
             setText(next);
@@ -287,7 +290,11 @@ export function DestinationCombobox({
           onFocus={() => {
             if (suggestions.length > 0) setOpen(true);
           }}
-          className="w-full rounded-lg border border-rule bg-paper-raised px-3.5 py-3 text-base text-ink placeholder:text-ink-faint focus-visible:border-pine"
+          className={
+            size === 'hero'
+              ? 'w-full rounded-none border-0 border-b-2 border-ink bg-transparent px-0 py-3 font-display text-2xl leading-tight text-ink outline-none placeholder:text-ink-faint/70 focus-visible:border-accent sm:text-5xl'
+              : 'w-full rounded-lg border border-rule bg-paper-raised px-3.5 py-3 text-base text-ink placeholder:text-ink-faint focus-visible:border-pine'
+          }
         />
         {state.kind === 'loading' ? (
           <span

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { createTrip, reachScope, waitUntilInteractive, DEFAULT_DATES } from './support/trip';
+import { completeQuestionnaire, createTrip, reachScope, waitUntilInteractive, DEFAULT_DATES } from './support/trip';
 
 /**
  * THE FOUNDER-TEST REGRESSIONS, DRIVEN THROUGH THE ORDINARY PRODUCT.
@@ -122,123 +122,75 @@ test.describe('traveller counts behave like numbers', () => {
 });
 
 test.describe('the questionnaire remembers where you were', () => {
-  /*
-   * The step titles are level-two headings now: the page grew a stable h1
-   * above the interpretation panel so the heading order stops reading inside
-   * out, and the step's own heading — the one that changes per step — was
-   * demoted with it. These selectors follow the step heading, not the page's.
-   */
   test('a refresh returns to the step the traveller had reached', async ({ page }) => {
     await createTrip(page, 'Mammoth Lakes');
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
+    const start = page.getByTestId('interview-start');
+    await waitUntilInteractive(start);
+    await start.click();
 
-    const first = page.getByRole('heading', { level: 2 });
-    await expect(first).toBeVisible();
-    const firstTitle = (await first.textContent())?.trim();
-
-    /*
-     * Answer enough to move. The first step refuses to advance while every
-     * interest is left at its default, which is deliberate — "if nearby" on
-     * everything gives the planner nothing — so this picks a real level rather
-     * than the first radio on the page.
-     */
-    const core = page.locator('input[type=radio][value="core"]');
-    await waitUntilInteractive(core.first());
-    await core.first().check();
-    await page.getByRole('button', { name: 'Continue' }).click();
-
-    const second = page.getByRole('heading', { level: 2 });
-    await expect(second).not.toHaveText(firstTitle ?? '');
-    const secondTitle = (await second.textContent())?.trim();
+    await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
+    await page.getByTestId('interview-continue').click();
+    const second = page.locator('[data-testid^="interview-question-"]');
+    await expect(second).toBeVisible();
+    const id = await second.getAttribute('data-testid');
+    expect(id).not.toBe('interview-question-priorities');
 
     await page.reload();
     /*
-     * The defect: the position was React state while the answers were saved, so
-     * a refresh came back at step one with everything intact and nothing to say
-     * which answers had been reached deliberately — under a header reading
-     * "Saved as you go".
+     * The defect this guards: the position was React state while the answers
+     * were saved, so a refresh came back at step one with everything intact.
      */
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(secondTitle ?? '');
+    await expect(page.getByTestId(id!)).toBeVisible();
   });
 
   test('going back and forward keeps an edit made on the way', async ({ page }) => {
     await createTrip(page, 'Mammoth Lakes');
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
+    const start = page.getByTestId('interview-start');
+    await waitUntilInteractive(start);
+    await start.click();
 
-    const core = page.locator('input[type=radio][value="core"]');
-    await waitUntilInteractive(core.first());
-    await core.first().check();
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
+    await page.getByTestId('interview-continue').click();
+    await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
 
-    /* Change something on the second step, then step back and forward again. */
-    const onSecond = page.locator('input[type=radio]');
-    await waitUntilInteractive(onSecond.first());
-    const chosen = onSecond.nth(1);
+    /* Answer the second screen, step back, and come forward again. */
+    const chosen = page.locator('input[type=radio][value="couple"]');
     await chosen.check();
-    await expect(chosen).toBeChecked();
-
+    await page.getByTestId('interview-continue').click();
+    await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeHidden();
     await page.getByRole('button', { name: 'Back' }).click();
-    await expect(page.getByRole('button', { name: 'Back' })).toBeDisabled();
-    await page.getByRole('button', { name: 'Continue' }).click();
-
-    /*
-     * `goBack` used to change the index and save nothing, so an edit made on a
-     * step and stepped away from was lost until the traveller happened to walk
-     * forward through it again.
-     */
-    await expect(page.locator('input[type=radio]').nth(1)).toBeChecked();
+    await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+    await expect(page.locator('input[type=radio][value="couple"]')).toBeChecked();
   });
 
   test('the review step lists the answers, not only a summary of them', async ({ page }) => {
     await createTrip(page, 'Mammoth Lakes');
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
-
-    const core = page.locator('input[type=radio][value="core"]');
-    await waitUntilInteractive(core.first());
-    await core.first().check();
-
-    /*
-     * Walk to the end.
-     *
-     * The step count is derived from the region, so this polls for "am I still
-     * on a step with a Continue on it" rather than counting to a number. Each
-     * click waits for the *heading* to change, which is the readiness condition
-     * for a step transition — `networkidle` is not, because the move is a
-     * client transition and the heading is the only thing that proves it landed.
-     */
-    for (let step = 0; step < 15; step += 1) {
-      const next = page.getByRole('button', { name: 'Continue' });
-      if (!(await next.isVisible().catch(() => false))) break;
-      const before = (await page.getByRole('heading', { level: 2 }).textContent())?.trim() ?? '';
-      await next.click();
-      await expect(page.getByRole('heading', { level: 2 })).not.toHaveText(before);
-    }
-    /* The last step is the review, and its button says so. */
+    await completeQuestionnaire(page);
+    /* The last screen is the review, and its button says so. */
     await expect(page.getByRole('button', { name: /Build my discovery board/i })).toBeVisible();
 
-    const answers = page.getByTestId('review-answers');
-    await expect(answers).toBeVisible();
     /*
-     * The review screen used to render a personality card and no answer at all —
-     * nothing on it to check, immediately before the expensive research.
+     * The review separates what the traveller said from what Sidequest
+     * assumed, and every row has a control that jumps back to its question.
      */
-    await expect(answers.getByText('Pace', { exact: false }).first()).toBeVisible();
-    await expect(answers.getByRole('button', { name: /^Change/ }).first()).toBeVisible();
+    const told = page.getByTestId('review-told');
+    await expect(told).toBeVisible();
+    await expect(told.getByText('Two or three meaningful stops', { exact: false }).first()).toBeVisible();
+    await expect(told.getByRole('button', { name: /^Change/ }).first()).toBeVisible();
+    await expect(page.getByTestId('review-assumed')).toBeVisible();
+    await expect(page.getByTestId('review-hard')).toBeVisible();
   });
 });
 
 test.describe('the questionnaire is shorter, not just apologetic', () => {
-  test('a step whose only question the composer answered is not shown at all', async ({ page }) => {
+  test('a question the composer answered is not asked again, and is shown as an assumption', async ({ page }) => {
     /*
-     * Carrying the composer's answers across stopped the questionnaire
-     * *contradicting* the traveller, which was the worst of it. It did not make
-     * the questionnaire any shorter: every question was still asked, in the
-     * same words, with a badge over it.
-     *
-     * The spending-style step's only control is one the composer asks. So a
-     * traveller who answered it up front should never see that screen — and the
-     * answer must still be on the review screen, marked as an assumption, with
-     * a way to change it.
+     * The spending style is asked on the composer. A traveller who answered it
+     * up front never sees that screen in the interview — and the answer is on
+     * the review, marked as carried from the trip setup, with a way to change it.
      */
     await page.goto('/trips/new');
     const destination = page.getByLabel('Destination');
@@ -247,7 +199,6 @@ test.describe('the questionnaire is shorter, not just apologetic', () => {
     await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
     await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
 
-    /* Answer the budget question on the composer. */
     await page.getByRole('button', { name: /A few more that change the plan/i }).click();
     const budget = page.getByRole('radio', { name: /Mid-range|Keep it cheap/i }).first();
     await waitUntilInteractive(budget);
@@ -256,28 +207,12 @@ test.describe('the questionnaire is shorter, not just apologetic', () => {
     await page.getByRole('button', { name: /See what we make of it/i }).click();
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
 
-    const core = page.locator('input[type=radio][value="core"]');
-    await waitUntilInteractive(core.first());
-    await core.first().check();
-
-    const headings: string[] = [];
-    for (let step = 0; step < 15; step += 1) {
-      const heading = page.getByRole('heading', { level: 2 });
-      headings.push(((await heading.textContent()) ?? '').trim());
-      const next = page.getByRole('button', { name: 'Continue' });
-      if (!(await next.isVisible().catch(() => false))) break;
-      const before = headings[headings.length - 1]!;
-      await next.click();
-      await expect(heading).not.toHaveText(before);
-    }
-
-    /* The step that asks it is gone. */
-    expect(headings.some((title) => /spending style/i.test(title))).toBe(false);
-    /* And the answer is on the review screen, marked as carried over. */
-    const answers = page.getByTestId('review-answers');
-    await expect(answers).toBeVisible();
-    await expect(answers.getByText('Spending style').first()).toBeVisible();
-    await expect(answers.getByText('assumed').first()).toBeVisible();
+    const seen = await completeQuestionnaire(page);
+    expect(seen).not.toContain('budget');
+    const assumed = page.getByTestId('review-assumed');
+    await expect(assumed).toBeVisible();
+    await expect(assumed.getByText('from your trip setup').first()).toBeVisible();
+    await expect(page.getByTestId('review-change-budget')).toBeVisible();
   });
 });
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   easeDayAction,
+  regenerateItineraryAction,
   removeStopAction,
   swapAlternativesAction,
   swapStopAction,
@@ -250,4 +251,49 @@ export function PrintExpand() {
     };
   }, []);
   return null;
+}
+
+/**
+ * REGENERATE — THE SAME CANONICAL GENERATION AS "BUILD MY TRIP", FROM THE PLAN.
+ *
+ * One model call, a fresh draft, verified and reconciled the same way, and
+ * the page refreshes onto the replacement. Disabled while pending so a second
+ * press cannot overlap a write.
+ */
+export function RegenerateButton({ tripId }: { tripId: string }) {
+  const router = useRouter();
+  const [status, setStatus] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={pending}
+        data-testid="regenerate-trip"
+        onClick={() => {
+          setStatus(null);
+          startTransition(async () => {
+            const result = await regenerateItineraryAction(tripId);
+            if (!result.ok) {
+              setStatus(result.error ?? 'We could not regenerate your trip just now.');
+              return;
+            }
+            router.refresh();
+          });
+        }}
+        className="rounded-md border border-rule bg-paper px-3 py-1.5 text-sm text-ink transition-colors hover:border-ink disabled:opacity-50"
+      >
+        {pending ? 'Regenerating…' : 'Regenerate'}
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {pending ? 'Regenerating your trip. This can take a minute or two.' : ''}
+      </span>
+      {status ? (
+        <span role="alert" className="text-xs text-clay">
+          {status}
+        </span>
+      ) : null}
+    </span>
+  );
 }

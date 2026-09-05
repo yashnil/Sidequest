@@ -50,7 +50,8 @@ import {
   proposeInterpretations,
   type StructuredModel,
 } from '@/lib/providers/interpretation-model';
-import { boardFor, resolveTripRegion } from '@/lib/region';
+import { boardFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
+import { generateSidequestPlanForTrip } from '@/lib/planning/production-plan';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { callerKey, chargeAction, checkAction } from '@/lib/net/caller';
 import { dailySpendGate, recordDailySpend } from '@/lib/compiler/daily-ceiling';
@@ -109,14 +110,29 @@ export async function saveDraftAction(
   }
 }
 
+/**
+ * Where a finished interview goes.
+ *
+ * - `board`: the Discovery Board (a region resolves; the board is ranked
+ *   around these answers). The historical default.
+ * - `research`: the plan flow, for a dynamic destination whose region has
+ *   not been researched yet — the profile is saved first so the research and
+ *   the board are built around it.
+ * - `build`: straight to the canonical generation, no board needed; see
+ *   `completeAndBuildAction`.
+ */
+export type CompletionDestination = 'board' | 'research' | 'build';
+
 export async function completeQuestionnaireAction(
   tripId: string,
   answers: QuestionnaireAnswers,
+  destination: CompletionDestination = 'board',
 ): Promise<SaveResult> {
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
+  if (destination === 'build') return completeAndBuildAction(tripId, answers);
 
   const parsed = validatedQuestionnaireAnswersSchema.safeParse(answers);
   if (!parsed.success) {
@@ -208,7 +224,54 @@ export async function completeQuestionnaireAction(
     );
   }
 
+  /*
+   * A dynamic destination nobody has researched yet has no board to land on;
+   * the research flow is the honest next screen, and it now runs with the
+   * profile already saved. Explicit `research` goes there too.
+   */
+  if (destination === 'research' || (!boardIsUsable && trip.basics.regionId === DYNAMIC_REGION_ID)) {
+    redirect(`/trips/${tripId}/plan`);
+  }
   redirect(`/trips/${tripId}/discover`);
+}
+
+/**
+ * FINISH THE INTERVIEW AND COMPOSE THE TRIP, WITH NO BOARD IN BETWEEN.
+ *
+ * The fast path ("Plan with smart defaults") and the review's "Build my trip"
+ * both land here: the profile is saved exactly as `completeQuestionnaireAction`
+ * saves it, then the one canonical generation runs and the traveller lands
+ * on the itinerary. Never a second model call, never a repair — the same
+ * `generateSidequestPlanForTrip` every other CTA reaches.
+ */
+export async function completeAndBuildAction(tripId: string, answers: QuestionnaireAnswers): Promise<SaveResult> {
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = validatedQuestionnaireAnswersSchema.safeParse(answers);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Something in the questionnaire is incomplete.' };
+  }
+  try {
+    const tripDays = countTripDays(trip.basics.startDate, trip.basics.endDate);
+    const profile = buildTravelerProfile(parsed.data, { travelerNeeds: trip.basics.travelerNeeds, tripDays });
+    saveProfile(tripId, parsed.data, profile);
+    clearItinerary(tripId);
+    const resolved = await resolveTripRegion(trip);
+    if (resolved.ok) {
+      const board = boardFor(trip, profile, resolved.context);
+      const selection = autoSelect({ candidates: board.candidates, profile, tripDays, transitUnmeasured: board.transitUnmeasured });
+      replaceAutoSelections(tripId, selection.selectedIds);
+    }
+  } catch (error) {
+    console.error('Failed to save traveler profile before building', error);
+    return { ok: false, error: 'We could not save your profile. Nothing was lost — try again.' };
+  }
+  const generated = await generateSidequestPlanForTrip(tripId, { caller: 'interview_build_action', mode: 'full' });
+  if (!generated.ok) return { ok: false, error: generated.error ?? 'We could not compose your trip just now.' };
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  redirect(`/trips/${tripId}/itinerary`);
 }
 
 /**

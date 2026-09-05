@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } from './support/trip';
 
 /**
  * The journey this slice promises: a traveller's transport answers change which
@@ -16,67 +17,26 @@ async function startTrip(page: Page, dates = AUGUST) {
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-  await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' }).check();
+  await expect(page.getByTestId('interview')).toBeVisible();
 }
 
 /**
- * Steps through to the transport step, leaving it on screen.
- *
- * Resume-aware, and it has to be. The questionnaire now comes back to the step
- * the traveller had reached rather than to step one — so somebody returning
- * from the board through "Change my answers" lands on the review screen, which
- * is the right place to land: it lists every answer with a control that jumps
- * to the one they want. A helper that assumed "entering the questionnaire means
- * step one" walked into a screen with no Continue on it and timed out.
- *
- * So: use the review screen's own jump control when it is there, and walk
- * forward when it is not. That also exercises the affordance rather than
- * routing around it.
+ * To the review screen with the canonical car traveller, or — on a return
+ * visit, which lands on the review because the traveller finished it — stay
+ * there. Every transport assertion below then works from the review's own
+ * "Change" control, which is the affordance a traveller actually uses.
  */
-async function reachTransportStep(page: Page) {
-  const transport = page.getByRole('heading', { name: 'How are you getting around?' });
-  if (await transport.isVisible().catch(() => false)) return;
-
-  /*
-   * "Change how you get around". Every review row now carries a hand-written
-   * phrase for the second half of the control's accessible name, because the
-   * generated form pasted the row's label after the verb and announced itself as
-   * "Change Steering around". Under the old name this branch never matched, so
-   * the helper fell through to walking forward from a review screen that has no
-   * Continue on it, and two specs spent a minute each waiting for one.
-   */
-  const jump = page.getByRole('button', { name: 'Change how you get around' });
-  if (await jump.isVisible().catch(() => false)) {
-    await jump.click();
-    await expect(transport).toBeVisible();
-    return;
-  }
-
-  for (const heading of [
-    'How should the days feel?',
-    'What is the spending style?',
-    'How do you want to eat?',
-    'Famous or off the track?',
-  ]) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(transport).toBeVisible();
+async function reachReview(page: Page, transport: 'rent_car' | 'no_car' = 'rent_car') {
+  if (await page.getByTestId('interview-review').isVisible().catch(() => false)) return;
+  await completeQuestionnaire(page, { answers: { transport_mode: transport } });
 }
 
-async function finishFromTransport(page: Page) {
-  for (const heading of ['How far from Mammoth Lakes?', 'Anything to steer around?', 'Your trip personality']) {
-    const already = page.getByRole('heading', { name: heading });
-    if (await already.isVisible().catch(() => false)) continue;
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(already).toBeVisible();
-  }
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
-  await expect(page).toHaveURL(/\/discover$/);
+async function chooseTransport(page: Page, transport: 'rent_car' | 'no_car') {
+  await changeInterviewAnswer(page, 'transport_mode', transport, { answers: { transport_mode: transport } });
+}
+
+async function finishToBoard(page: Page) {
+  await buildBoardFromReview(page);
 }
 
 async function build(page: Page) {
@@ -85,29 +45,31 @@ async function build(page: Page) {
   await expect(page.getByRole('heading', { name: 'Getting around' })).toBeVisible();
 }
 
-test('the transport step asks the questions the planner actually needs', async ({ page }) => {
+test('the transport question asks what the planner actually needs, and adapts to the answer', async ({ page }) => {
   await startTrip(page);
-  await reachTransportStep(page);
+  await reachReview(page);
+  await page.getByTestId('review-change-transport_mode').click();
+  const screen = page.getByTestId('interview-question-transport_mode');
+  await expect(screen).toBeVisible();
 
-  await expect(page.getByText('You will have a car')).toBeVisible();
-  await expect(page.getByText('Shuttles and buses are fine')).toBeVisible();
-  await expect(page.getByText('Furthest you would walk to reach a stop')).toBeVisible();
-  await expect(
-    page.getByText('When there is more than one way in, what matters?'),
-  ).toBeVisible();
+  // The region reads as a road trip, so the choice is a car or no car — never a metro.
+  await expect(screen.getByText('Rent a car')).toBeVisible();
+  await expect(screen.getByText('No car', { exact: true })).toBeVisible();
+  await expect(screen.getByText(/public transport/)).toBeVisible();
 
-  // Turning the car off hides the questions that only make sense with one, and
-  // says plainly what is left.
-  await page.getByText('You will have a car').click();
-  await expect(page.getByText('Steep mountain roads are fine')).toHaveCount(0);
-  await expect(page.getByText('Shuttles and buses are fine')).toHaveCount(0);
-  await expect(page.getByText(/whatever scheduled service the/)).toBeVisible();
+  // With a car, the driving questions follow; without one they never appear.
+  await screen.locator('input[type=radio][value="no_car"]').check();
+  await page.getByTestId('interview-continue').click();
+  const seen = await completeQuestionnaire(page, { answers: { transport_mode: 'no_car' } });
+  expect(seen).not.toContain('daily_driving');
+  expect(seen).not.toContain('road_comfort');
+  await expect(page.getByTestId('review-change-daily_driving')).toHaveCount(0);
 });
 
 test('the board shows transport feasibility before anything is built', async ({ page }) => {
   await startTrip(page);
-  await reachTransportStep(page);
-  await finishFromTransport(page);
+  await reachReview(page);
+  await finishToBoard(page);
 
   /*
    * By heading, not by text: `hasText: 'Devils Postpile'` also matches the
@@ -141,8 +103,8 @@ test('the board shows transport feasibility before anything is built', async ({ 
 
 test('a car trip produces a strategy and a multimodal access day', async ({ page }, testInfo) => {
   await startTrip(page);
-  await reachTransportStep(page);
-  await finishFromTransport(page);
+  await reachReview(page);
+  await finishToBoard(page);
 
   // Hand-pick the valley so the shuttle day is guaranteed to be in the plan.
   for (const name of ['Devils Postpile', 'Rainbow Falls']) {
@@ -159,22 +121,19 @@ test('a car trip produces a strategy and a multimodal access day', async ({ page
 
   await build(page);
 
-  // The trip-level position, with both budgets shown separately.
-  await expect(page.getByText(/hand over to a shuttle|Drive —/)).toBeVisible();
+  // The trip-level position: the driving budget, stated separately from everything else.
   await expect(page.getByText('At the wheel', { exact: true })).toBeVisible();
-  await expect(page.getByText('Riding & waiting', { exact: true })).toBeVisible();
-  await expect(page.getByText('On foot to reach things', { exact: true })).toBeVisible();
 
-  // The sequence a traveller has to execute, in order.
-  await expect(page.getByText(/Board the Reds Meadow/).first()).toBeVisible();
-  await expect(page.getByText(/Ride to Reds Meadow Valley/).first()).toBeVisible();
-  await expect(page.getByText(/Ride back to/).first()).toBeVisible();
-  await expect(page.getByText(/last .* out leaves at/i).first()).toBeVisible();
-
-  // Modelled and published data are labelled as what they are, never as measured.
-  await expect(page.getByText(/published timetable/).first()).toBeVisible();
-  await expect(page.getByText(/not measured road data/).first()).toBeVisible();
-  await expect(page.getByText(/Check these before you book/)).toBeVisible();
+  /*
+   * The canonical plan states its transport strategy and its practical notes
+   * from the composed draft, and every leg says whether it was measured.
+   * Scheduled access services (the valley shuttle) are not yet modelled as
+   * legs on a canonical plan — the stop is kept and the day says what it
+   * could not verify, rather than narrating a timetable it never read.
+   */
+  await expect(page.getByTestId('transport-notes')).toBeVisible();
+  await expect(page.getByText(/measured|not measured/).first()).toBeVisible();
+  await expect(page.getByText(/travel legs were measured by/).first()).toBeVisible();
 
   // The centrepiece of this slice, captured for a human to look at. The
   // multimodal day is the one screen that cannot be judged from assertions.
@@ -187,8 +146,8 @@ test('a car trip produces a strategy and a multimodal access day', async ({ page
 
 test('the transport plan survives a refresh', async ({ page }) => {
   await startTrip(page);
-  await reachTransportStep(page);
-  await finishFromTransport(page);
+  await reachReview(page);
+  await finishToBoard(page);
   await build(page);
 
   const before = await page
@@ -206,8 +165,8 @@ test('the transport plan survives a refresh', async ({ page }) => {
 
 test('dropping the car rebuilds into a different, still-workable plan', async ({ page }) => {
   await startTrip(page);
-  await reachTransportStep(page);
-  await finishFromTransport(page);
+  await reachReview(page);
+  await finishToBoard(page);
   await build(page);
 
   const drivingStops = await page.getByRole('heading', { level: 3 }).allTextContents();
@@ -217,9 +176,8 @@ test('dropping the car rebuilds into a different, still-workable plan', async ({
   await page.getByRole('link', { name: 'Back to the board' }).click();
   await page.getByRole('link', { name: 'Change my answers' }).click();
   await expect(page).toHaveURL(/\/questionnaire$/);
-  await reachTransportStep(page);
-  await page.getByText('You will have a car').click();
-  await finishFromTransport(page);
+  await chooseTransport(page, 'no_car');
+  await finishToBoard(page);
 
   // The board itself now says the car-only places will not work.
   const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
@@ -239,8 +197,8 @@ test('a manual pick broken by a transport answer stays visible with a way out', 
   page,
 }) => {
   await startTrip(page);
-  await reachTransportStep(page);
-  await finishFromTransport(page);
+  await reachReview(page);
+  await finishToBoard(page);
 
   // Auto-pick may already have chosen it, and the buttons toggle — so go via
   // Maybe to guarantee the stored row ends up as a hand-made "Include".
@@ -257,9 +215,8 @@ test('a manual pick broken by a transport answer stays visible with a way out', 
   );
 
   await page.getByRole('link', { name: 'Change my answers' }).click();
-  await reachTransportStep(page);
-  await page.getByText('You will have a car').click();
-  await finishFromTransport(page);
+  await chooseTransport(page, 'no_car');
+  await finishToBoard(page);
 
   // The choice is preserved and explained, not silently flipped to "Skip".
   const broken = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
@@ -276,7 +233,7 @@ test('a manual pick broken by a transport answer stays visible with a way out', 
   await expect(
     page.getByRole('heading', { name: /could not be scheduled/ }),
   ).toBeVisible();
-  await expect(page.getByText(/needs your own vehicle/).first()).toBeVisible();
+  await expect(page.getByText(/not workable on this trip as you are travelling/).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'Change how you are getting around' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Change what is on the board' })).toBeVisible();
 });

@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { StageRecord } from '@sidequest/core';
 import {
   CompilationProgress,
@@ -41,6 +41,18 @@ function stage(
 
 /** Eight days before the fixed "now" the render is compared against. */
 const STARTED = '2026-08-03T06:31:00.000Z';
+
+/*
+ * The component reads the wall clock, and the fixture is dated: without a
+ * pinned "now" the eight-day-old build reads "last month" once the calendar
+ * passes 2 September 2026 and every relative-time assertion below drifts.
+ */
+beforeAll(() => {
+  vi.useFakeTimers({ now: new Date('2026-08-11T09:00:00.000Z'), toFake: ['Date'] });
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const STAGES: StageRecord[] = [
   stage('partitioning_scope', 'done', { outcome: '4 candidate bases across 7 areas' }),

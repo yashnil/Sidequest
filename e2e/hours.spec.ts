@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { completeQuestionnaire } from './support/trip';
 
 /**
  * The slice this proves: a traveller sees, before building anything, when each
@@ -22,7 +23,7 @@ const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 /** Tuesday to Thursday — Manzanar's visitor centre is shut on every one. */
 const MIDWEEK = { start: '2026-08-11', end: '2026-08-13' };
 /** The widest radius, which is the only one that reaches the Owens Valley. */
-const REGION_WIDE = 'Best of the Eastern Sierra Go wherever it is worth it';
+const REGION_WIDE = 'best_regional';
 
 async function reachBoard(page: Page, dates = AUGUST) {
   await page.goto('/trips/new');
@@ -31,40 +32,13 @@ async function reachBoard(page: Page, dates = AUGUST) {
   await page.getByLabel('Leave').fill(dates.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
 
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
-
-  for (const heading of [
-    'How should the days feel?',
-    'What is the spending style?',
-    'How do you want to eat?',
-    'Famous or off the track?',
-    'How are you getting around?',
-  ]) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
-
-  // Manzanar is ninety minutes each way. The default driving budget rules it out
-  // on distance before hours ever get a say, and the point of these tests is the
-  // hours — so this raises the limit rather than picking a nearer fixture that
-  // does not have a closed weekday.
-  await page
-    .getByLabel('Most you want to spend at the wheel in a day')
-    .fill('300');
-
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'How far from Mammoth Lakes?' })).toBeVisible();
-
-  // Manzanar is ninety-five minutes down the 395, which the default radius keeps
-  // off the board entirely. These tests are about its hours, so open the radius.
-  await page.getByRole('radio', { name: REGION_WIDE }).check();
-  await page.getByLabel('Furthest you would drive for one stop').fill('180');
-
-  for (const heading of ['Anything to steer around?', 'Your trip personality']) {
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByRole('heading', { name: heading })).toBeVisible();
-  }
+  // Manzanar is ninety-five minutes down the 395: the default driving budget and
+  // radius keep it off the board before hours ever get a say, and the point of
+  // these tests is the hours — so the walker opens both.
+  await completeQuestionnaire(page, {
+    priorities: ['Scenic viewpoints', 'History & culture'],
+    answers: { 'priority_role:scenic_viewpoints': 'most_days', 'priority_role:history_and_culture': 'couple', daily_driving: '360', scenic_reach: REGION_WIDE },
+  });
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
@@ -183,8 +157,9 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
 
   // The window is stated on the stop, in the traveller's terms.
   await expect(page.getByText('Open 09:00–16:30 · arrive before 16:00').first()).toBeVisible();
-  // The day says which stop fixed its shape.
-  await expect(page.getByText(/Panorama Gondola sets the shape of this day/)).toBeVisible();
+  // The day says which stop fixed its shape — whichever stop with published
+  // hours the composed day leads with; the gondola's own window is asserted above.
+  await expect(page.getByText(/sets the shape of this day/).first()).toBeVisible();
   // And where the hours came from, with no claim to have checked today.
   await expect(page.getByText(/Hours from/).first()).toBeVisible();
   await expect(page.getByText(/We have not checked today/).first()).toBeVisible();
@@ -199,7 +174,7 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
   // It survives a refresh, hours evidence and all.
   await page.reload();
   await expect(page.getByText('Open 09:00–16:30 · arrive before 16:00').first()).toBeVisible();
-  await expect(page.getByText(/Panorama Gondola sets the shape of this day/)).toBeVisible();
+  await expect(page.getByText(/sets the shape of this day/).first()).toBeVisible();
 });
 
 test('a place shut on every trip date cannot be included, and says why', async ({ page }) => {

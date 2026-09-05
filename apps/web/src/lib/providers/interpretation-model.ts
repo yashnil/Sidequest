@@ -117,6 +117,24 @@ export interface StructuredModel {
      * different function. See `ResearchModel.structured`.
      */
     schemaEnforcement?: 'grammar' | 'prompt';
+    /**
+     * `'generation' | 'structural_reask' | 'repair'` for the Phase 17
+     * composer's `callLog` diagnostics. Optional and unused by this caller —
+     * one call, one label nobody needs — but declared here so the fakes this
+     * interface exists to admit stay structurally identical to `ResearchModel`.
+     * See `ResearchModel.structured`.
+     */
+    callLabel?: string;
+    /** See `ResearchModel.structured`. Unused by this caller — one call, ever. */
+    attempt?: number;
+    /**
+     * Deterministic cosmetic-field rewriting, applied before schema
+     * validation. On the interface for the same reason `schemaEnforcement`
+     * is: the composer's generation and repair calls genuinely use it, and
+     * a fake that silently ignored the field would be a fake of a
+     * different function. See `ResearchModel.structured`.
+     */
+    normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] };
   }): Promise<T>;
 }
 

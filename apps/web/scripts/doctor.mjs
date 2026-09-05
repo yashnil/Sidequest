@@ -118,6 +118,25 @@ const geocoder = equals('SIDEQUEST_GEOCODER_PROVIDER', 'nominatim');
 const backbone = equals('SIDEQUEST_PLACE_BACKBONE', 'overture');
 const poi = equals('SIDEQUEST_POI_PROVIDER', 'overpass');
 const routes = equals('SIDEQUEST_ROUTES_PROVIDER', 'valhalla');
+/**
+ * WHICH OF FOUR ROUTING STATES THIS BUILD IS ACTUALLY IN.
+ *
+ * `routes` alone only ever answered "is the switch on" — it could not tell a
+ * deployment pointed at the shared public demo instance (rate-limited,
+ * unversioned, offered as a courtesy — see `valhalla.ts`'s own header) apart
+ * from one pointed at an operator-controlled endpoint, and a live Iceland
+ * validation measured what that gap costs in practice: individual matrix
+ * requests against the public demo running 140s and 198s. Mirrors
+ * `valhalla.ts`'s own `DEFAULT_ENDPOINT` by value rather than by import, for
+ * the same zero-import reason every other predicate here is duplicated.
+ */
+const ROUTES_DEMO_ENDPOINT = 'https://valhalla1.openstreetmap.de';
+const routesUrl = env('SIDEQUEST_ROUTES_URL');
+const routesState = !routes
+  ? 'off'
+  : routesUrl === '' || routesUrl.replace(/\/+$/, '') === ROUTES_DEMO_ENDPOINT
+    ? 'demo'
+    : 'production';
 const researchModel = isSet('ANTHROPIC_API_KEY');
 const researchProvider = equals('SIDEQUEST_RESEARCH_PROVIDER', 'anthropic');
 const climate = !equals('SIDEQUEST_CLIMATE_PROVIDER', 'off');
@@ -189,7 +208,15 @@ say('Adapters');
 mark(geocoder, 'Destination geocoder', geocoder ? 'nominatim' : 'SIDEQUEST_GEOCODER_PROVIDER not set');
 mark(backbone, 'Place backbone', backbone ? 'overture' : 'SIDEQUEST_PLACE_BACKBONE not set');
 mark(poi, 'Place fallback', poi ? 'overpass' : 'SIDEQUEST_POI_PROVIDER not set (optional)');
-mark(routes, 'Travel-time routing', routes ? 'valhalla' : 'SIDEQUEST_ROUTES_PROVIDER not set');
+mark(
+  routes,
+  'Travel-time routing',
+  routesState === 'off'
+    ? 'SIDEQUEST_ROUTES_PROVIDER not set'
+    : routesState === 'demo'
+      ? 'valhalla, DEVELOPMENT/DEMO endpoint — the shared public instance is rate-limited and unversioned; not suitable for production traffic (see SIDEQUEST_ROUTES_URL below)'
+      : 'valhalla, production endpoint configured (SIDEQUEST_ROUTES_URL set to something other than the public demo host)',
+);
 mark(
   researchProvider && researchModel,
   'Research model',
@@ -302,12 +329,27 @@ say('Endpoints');
  */
 for (const [label, name] of [
   ['Geocoder', 'SIDEQUEST_GEOCODER_URL'],
-  ['Routing', 'SIDEQUEST_ROUTES_URL'],
   ['Place fallback', 'SIDEQUEST_POI_URL'],
   ['Place catalogue', 'SIDEQUEST_PLACE_CATALOG_URL'],
 ]) {
   say(`  · ${label} — ${isSet(name) ? `${name} set` : `${name} not set, using the public default`}`);
 }
+/*
+ * Routing gets its own line rather than the generic loop above: unlike the
+ * others, this deployment's own live Iceland validation measured exactly
+ * what "using the public default" costs for this one endpoint — individual
+ * matrix requests running 140s and 198s — so an operator reading this line
+ * needs to know demo-vs-production, not just set-vs-unset.
+ */
+say(
+  `  · Routing — ${
+    routesState === 'off'
+      ? 'SIDEQUEST_ROUTES_URL not applicable (SIDEQUEST_ROUTES_PROVIDER not set)'
+      : routesState === 'demo'
+        ? `SIDEQUEST_ROUTES_URL not set — using the public demo default (${ROUTES_DEMO_ENDPOINT}), suitable for development only`
+        : `SIDEQUEST_ROUTES_URL set to a production endpoint`
+  }`,
+);
 say('  · Not contacted. This is a configuration report, not a reachability check.');
 say('');
 
@@ -452,6 +494,40 @@ if (blocked) {
   say('');
   say('  A traveller reaching the plan screen on this build is told so up front,');
   say('  and offered a destination this deployment can plan instead.');
+  say('');
+}
+
+/*
+ * LIVE WORLD V1 — the capability registry, read from the same module the
+ * app reads (`src/lib/providers/capabilities.mjs`). The zero-import rule
+ * above still holds in spirit: that module imports nothing from the app
+ * either — it is plain `process.env` reading, shared so this script and the
+ * running product can never disagree about what is real and what is fixture.
+ */
+try {
+  const { capabilityRegistry, modeLabel, modeExplanation } = await import('../src/lib/providers/capabilities.mjs');
+  const registry = capabilityRegistry(process.env);
+  say(`Capabilities — ${modeLabel(registry.mode)}: ${modeExplanation(registry)}`);
+  const groups = [...new Set(registry.capabilities.map((c) => c.group))];
+  for (const group of groups) {
+    say(`  ${group}`);
+    for (const c of registry.capabilities.filter((x) => x.group === group)) {
+      /*
+       * Three words, kept apart: "usable" means the canonical trip path reaches this capability now;
+       * "adapter only" means code exists but nothing on the product path consumes it; "off" means not configured.
+       */
+      const state = c.adapterOnly || (c.configured && !c.consumer) ? 'ADAPTER ONLY — not usable by the canonical trip' : !c.configured ? 'off' : c.fixture ? 'usable (FIXTURE)' : 'usable';
+      const cost = c.configured && !c.fixture ? ` · ${c.costClass}` : '';
+      const mark = c.adapterOnly || (c.configured && !c.consumer) ? '!' : c.configured ? (c.fixture ? '~' : '✓') : '·';
+      say(`    ${mark} ${c.id} — ${state}${c.provider ? ` (${c.provider})` : ''}${cost}${c.consumer ? ` → ${c.consumer}` : ''}${c.limitations?.length ? ` — ${c.limitations[0]}` : ''}`);
+    }
+  }
+  const lodgingDiscovery = registry.byId['lodging.discovery'];
+  if (lodgingDiscovery?.configured) say('  ! Hotel discovery configured; live room price/availability is NOT configured — nothing will show a rate or a room.');
+  if (registry.byId['routing.drive']?.provider === 'google-routes') say('  ! Google Routes is the driving provider: see .claude-private/BLOCKER-google-terms.md on persisting durations and polylines before shipping.');
+  say('');
+} catch (error) {
+  say(`Capabilities — could not read the registry: ${error instanceof Error ? error.message : String(error)}`);
   say('');
 }
 

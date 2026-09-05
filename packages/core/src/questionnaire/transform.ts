@@ -8,6 +8,7 @@ import {
 } from '../schemas/common';
 import type { FoodPreferences, FoodStyle, PriceBand } from '../schemas/food';
 import {
+  interviewAnswerFields,
   questionnaireAnswersSchema,
   TRAVELER_PROFILE_VERSION,
   travelerProfileSchema,
@@ -15,6 +16,8 @@ import {
   type QuestionnaireAnswers,
   type TravelerProfile,
 } from '../schemas/profile';
+import type { HardConstraint } from '../schemas/interview';
+import { z } from 'zod';
 import {
   availableRegionalExpansions,
   carFreeReachMinutes,
@@ -33,6 +36,19 @@ import {
  * and re-exporting them here as well would make the two star exports ambiguous,
  * which ESM resolves by silently dropping the symbol from the barrel.
  */
+
+/**
+ * The v2 interview fields at their silent values — what a traveller who was
+ * never asked looks like. Spread into every hand-built answer set so the
+ * literal keeps compiling as the interview grows, and so "silence" is defined
+ * in exactly one place (the schema's own defaults).
+ */
+export function interviewDefaults(): Pick<
+  QuestionnaireAnswers,
+  keyof ReturnType<typeof interviewAnswerFields>
+> {
+  return z.object(interviewAnswerFields()).parse({});
+}
 
 export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnswers {
   const interests = Object.fromEntries(
@@ -78,7 +94,121 @@ export function defaultAnswers(context: QuestionnaireContext): QuestionnaireAnsw
      * decide" looks like, and downstream may treat only the second as licence.
      */
     decideForMe: [],
+    ...interviewDefaults(),
   };
+}
+
+/**
+ * HARD CONSTRAINTS LAND ON THE FIELDS EVERY CONSUMER ALREADY READS.
+ *
+ * A typed hard constraint is the traveller's strongest statement, and the
+ * planner, the scorer and the composition prompt read the legacy fields —
+ * `willDrive`, `maxDailyTravelMinutes`, `avoidances`, `dayStart` — so the
+ * constraint is written onto those here, once, rather than every consumer
+ * learning a second vocabulary. The typed list survives on the profile
+ * (`profile.hard`) so a consumer that *can* tell hard from soft still can.
+ */
+export function applyHardConstraints(answers: QuestionnaireAnswers): QuestionnaireAnswers {
+  const next: QuestionnaireAnswers = {
+    ...answers,
+    avoidances: [...answers.avoidances],
+    mustInclude: [...answers.mustInclude],
+    mustAvoid: [...answers.mustAvoid],
+  };
+  const avoid = (value: QuestionnaireAnswers['avoidances'][number]) => {
+    if (!next.avoidances.includes(value)) next.avoidances.push(value);
+  };
+  for (const constraint of answers.hardConstraints) {
+    switch (constraint.code) {
+      case 'cannot_drive':
+        next.willDrive = false;
+        break;
+      case 'max_daily_drive_minutes':
+        if (constraint.value !== undefined) {
+          next.maxDailyTravelMinutes = Math.max(30, Math.min(480, constraint.value));
+          if (constraint.value <= 120) avoid('long_drives');
+        }
+        break;
+      case 'max_walking_minutes':
+        if (constraint.value !== undefined) {
+          next.walkingTolerance = constraint.value <= 90 ? 'little' : constraint.value <= 200 ? 'moderate' : 'lots';
+          next.maxAccessWalkMinutes = Math.min(next.maxAccessWalkMinutes, Math.max(0, Math.floor(constraint.value / 3)));
+        }
+        break;
+      case 'no_boats':
+        next.boatsAndFerries = 'cannot';
+        break;
+      case 'no_small_aircraft':
+        next.internalFlights = 'cannot';
+        break;
+      case 'no_strenuous_hiking':
+        avoid('strenuous_activity');
+        avoid('long_hikes');
+        if (next.hikeAppetite === 'half_day' || next.hikeAppetite === 'full_day') next.hikeAppetite = 'short';
+        break;
+      case 'wheelchair_accessible':
+        next.mobilityLimited = true;
+        next.stairsAndHills = 'cannot';
+        break;
+      case 'no_stairs':
+        next.stairsAndHills = 'cannot';
+        break;
+      case 'dietary_absolute':
+        if (next.dietaryNeeds.length > 0) next.dietaryStrict = true;
+        break;
+      case 'no_early_starts':
+        next.dayStart = 'relaxed';
+        avoid('early_mornings');
+        break;
+      case 'no_late_nights':
+        next.lateNights = 'no';
+        break;
+      case 'no_remote_areas':
+        next.remoteComfort = 'cannot';
+        avoid('remote_areas_without_services');
+        break;
+      case 'no_high_altitude':
+        next.altitudeComfort = 'avoid_high';
+        avoid('high_altitude_exertion');
+        break;
+      case 'no_hotel_changes':
+        next.baseMoveTolerance = 'stay_put';
+        break;
+      case 'must_include':
+        if (constraint.text && !next.mustInclude.includes(constraint.text)) next.mustInclude.push(constraint.text);
+        break;
+      case 'must_avoid':
+        if (constraint.text && !next.mustAvoid.includes(constraint.text)) next.mustAvoid.push(constraint.text);
+        break;
+      case 'must_be_back_by':
+        // Read straight from the typed list by the profile builder; nothing legacy carries an hour.
+        break;
+    }
+  }
+  /*
+   * A "cannot" tolerance is a hard constraint by definition, whichever screen
+   * it was said on; the typed list is completed so `profile.hard` is the one
+   * place that lists everything hard.
+   */
+  const implied: HardConstraint[] = [];
+  if (next.boatsAndFerries === 'cannot') implied.push({ code: 'no_boats' });
+  if (next.internalFlights === 'cannot') implied.push({ code: 'no_small_aircraft' });
+  if (next.remoteComfort === 'cannot') implied.push({ code: 'no_remote_areas' });
+  if (next.stairsAndHills === 'cannot') implied.push({ code: 'no_stairs' });
+  if (next.altitudeComfort === 'avoid_high') implied.push({ code: 'no_high_altitude' });
+  const seen = new Set(next.hardConstraints.map((c) => `${c.code}:${c.value ?? ''}:${c.text ?? ''}`));
+  next.hardConstraints = [
+    ...next.hardConstraints,
+    ...implied.filter((c) => !seen.has(`${c.code}::`)),
+  ];
+  if (next.hikeAppetite === 'none') {
+    next.interests = { ...next.interests, hiking: 'avoid' };
+  } else if (next.hikeAppetite === 'short') {
+    avoid('long_hikes');
+  }
+  next.mustInclude = [...new Set(next.mustInclude.map((s) => s.trim()).filter(Boolean))].slice(0, 10);
+  next.mustAvoid = [...new Set(next.mustAvoid.map((s) => s.trim()).filter(Boolean))].slice(0, 10);
+  return next;
 }
 
 /**
@@ -90,7 +220,9 @@ export function normalizeAnswers(
   answers: QuestionnaireAnswers,
   context: QuestionnaireContext,
 ): QuestionnaireAnswers {
-  const next: QuestionnaireAnswers = { ...answers, avoidances: [...answers.avoidances] };
+  const next: QuestionnaireAnswers = applyHardConstraints(
+    questionnaireAnswersSchema.parse({ ...answers, avoidances: [...answers.avoidances] }),
+  );
   const input = { answers: next, context };
 
   if (!isQuestionVisible('dailyIntensity', input)) {
@@ -440,10 +572,51 @@ export function buildTravelerProfile(
       mobilityLimited: answers.mobilityLimited,
       ...(answers.accessibilityNotes ? { notes: answers.accessibilityNotes } : {}),
     },
+    interview: interviewBlockFrom(answers),
+    hard: [...answers.hardConstraints],
+    provenance: { ...answers.provenance },
     derived: deriveProfileValues(answers, context),
   };
 
   return travelerProfileSchema.parse(profile);
+}
+
+/**
+ * The interview dimensions, copied onto the profile after normalisation.
+ *
+ * `mustBeBackByMinute` and `maxWalkingMinutesPerDay` are the two hard values
+ * nothing legacy can carry, so they are read off the typed list here and
+ * nowhere else.
+ */
+export function interviewBlockFrom(answers: QuestionnaireAnswers): TravelerProfile['interview'] {
+  const backBy = answers.hardConstraints.find((c) => c.code === 'must_be_back_by' && c.value !== undefined);
+  const walking = answers.hardConstraints.find((c) => c.code === 'max_walking_minutes' && c.value !== undefined);
+  return {
+    baseMoveTolerance: answers.baseMoveTolerance,
+    iconicCrowdStrategy: answers.iconicCrowdStrategy,
+    convenienceSpend: answers.convenienceSpend,
+    lodgingStyle: answers.lodgingStyle,
+    rusticLodgingOk: answers.rusticLodgingOk,
+    ...(answers.budgetEnvelope ? { budgetEnvelope: answers.budgetEnvelope } : {}),
+    guideWillingness: answers.guideWillingness,
+    privateTransfers: answers.privateTransfers,
+    boatsAndFerries: answers.boatsAndFerries,
+    internalFlights: answers.internalFlights,
+    remoteComfort: answers.remoteComfort,
+    altitudeComfort: answers.altitudeComfort,
+    hikeAppetite: answers.hikeAppetite,
+    walkingTolerance: answers.walkingTolerance,
+    stairsAndHills: answers.stairsAndHills,
+    lateNights: answers.lateNights,
+    dayTripAppetite: answers.dayTripAppetite,
+    scopeStrategy: answers.scopeStrategy,
+    everyoneEveryDay: answers.everyoneEveryDay,
+    ...(answers.groupNotes ? { groupNotes: answers.groupNotes } : {}),
+    mustInclude: [...answers.mustInclude],
+    mustAvoid: [...answers.mustAvoid],
+    ...(backBy?.value !== undefined ? { mustBeBackByMinute: backBy.value } : {}),
+    ...(walking?.value !== undefined ? { maxWalkingMinutesPerDay: walking.value } : {}),
+  };
 }
 
 /**

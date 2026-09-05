@@ -24,7 +24,62 @@ import { USER_AGENT } from './nominatim';
  */
 
 const DEFAULT_ENDPOINT = 'https://valhalla1.openstreetmap.de';
-const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * THE INTERACTIVE ROUTING SLO.
+ *
+ * A traveller waiting on an itinerary is not a batch job. The live Iceland
+ * validation this bounds against measured *individual* matrix requests
+ * running 140s and 198s — not because any one HTTP call hung that long
+ * (`REQUEST_TIMEOUT_MS` alone bounds that), but because a degraded top-level
+ * block subdivides into quadrants, then rows or columns, then single pairs
+ * (`resolveRectangle`'s own ladder, `MAX_SUBDIVISION_DEPTH` deep), and every
+ * one of those *sequential*, awaited children paid its own timeout with no
+ * ceiling on the sum. Isolating which specific pairs a degraded provider can
+ * and cannot answer — the actual reason subdivision exists — is worth
+ * keeping; letting the isolation itself run unbounded is not, and the two
+ * are separable: `MAX_TOTAL_MATRIX_MS` bounds the sum without changing what
+ * subdivision does.
+ *
+ * Every number below is a *reduction* from what shipped through the live
+ * validation, chosen from the shape of the actual failure, not invented:
+ *
+ * - `REQUEST_TIMEOUT_MS` 30s → 8s. A real, healthy routing service answers a
+ *   ≤400-pair block in well under a second; 8s is generous headroom for one
+ *   attempt, not a promise about how long a traveller should wait.
+ * - `MAX_ATTEMPTS` 3 → 2, `BACKOFF_MS` `[0,1500,4000]` → `[0,1000]`. A second
+ *   attempt catches a genuine transient blip; a third spends a traveller's
+ *   patience relearning what the second attempt already established.
+ * - `CIRCUIT_THRESHOLD` 4 → 3. An outage should stop costing new requests
+ *   sooner, and every consecutive failure through this ladder is now cheaper
+ *   to accumulate than it was.
+ * - `MAX_TOTAL_MATRIX_MS` (new) — a hard wall-clock ceiling on one
+ *   `computeMatrix()` call, covering every block and every subdivided child
+ *   together. **60s, not the tighter number the timeout/attempt/circuit
+ *   arithmetic alone would suggest** — genuinely isolating one poisoned
+ *   point among several others can legitimately need a couple of dozen
+ *   *sequential* single-pair requests (`resolveRectangle`'s per-point
+ *   probing ladder), each still paced by `MIN_INTERVAL_MS` even when every
+ *   attempt succeeds instantly — see this file's own
+ *   `isolates a poisoned point down to its own pairs, past the quadrant
+ *   depth` test, which needs the greater part of a minute under perfectly
+ *   healthy conditions. 60s is chosen as the smallest ceiling that still
+ *   comfortably fits that legitimate case, not the smallest one arithmetic
+ *   alone would justify — and it is still a real, more-than-3× reduction
+ *   from the worst wall-clock (198s) this round's live Iceland run actually
+ *   measured, for the realistic production shape (Phase A ≤5 points, Phase
+ *   B ≤4 points per skeleton hydration round) this ceiling exists to
+ *   protect, which needs nowhere near this many sequential probes. Once
+ *   passed, every cell `computeMatrix` has not yet resolved is reported
+ *   `'provider_error'` — the same honest "no trustworthy measurement",
+ *   never a fabricated value — and no further requests are attempted.
+ *
+ * None of this widens what a caller must know: `computeMatrix`'s signature
+ * is unchanged, and every existing caller (the compiler's own matrix
+ * building included) gets the same, safer defaults for free.
+ */
+const REQUEST_TIMEOUT_MS = 8_000;
+const MAX_TOTAL_MATRIX_MS = 60_000;
 const MIN_INTERVAL_MS = 1_100;
 const MAX_RESPONSE_BYTES = 4_000_000;
 
@@ -54,6 +109,33 @@ export class RoutingError extends Error {
     this.code = code;
     this.deterministic = options.deterministic ?? false;
   }
+}
+
+/**
+ * WHY A PAIR HAS NO MEASURED VALUE — A FACT ABOUT THE ROAD NETWORK, OR ABOUT
+ * WHETHER THE PROVIDER COULD ANSWER RIGHT NOW.
+ *
+ * String-literal-compatible with `@sidequest/compiler`'s `ProviderGapReason`
+ * (a superset) without importing it here — this module stays a plain HTTP
+ * client with no dependency on the compiler package; `live.ts`, which already
+ * imports that type, is where the two meet.
+ *
+ * `'not_found'` is the only value that means the router *answered*: Valhalla
+ * returned a real response with a null time for this pair, which is positive
+ * evidence the pair has no route, not an absence of an answer. Every other
+ * value means the opposite — no trustworthy measurement was obtained, for a
+ * reason about the provider or the request, never about the ground.
+ */
+export type ValhallaFailureReason =
+  | 'not_found'
+  | 'provider_error'
+  | 'rate_limited'
+  | 'budget_exhausted'
+  | 'insufficient_evidence';
+
+function classifyRoutingFailure(error: unknown): ValhallaFailureReason {
+  if (error instanceof RoutingError && error.code === 'rate_limited') return 'rate_limited';
+  return 'provider_error';
 }
 
 export function routingEndpoint(): string {
@@ -113,7 +195,11 @@ export interface MatrixOutcome {
   /** minutes[from][to]; NaN where no route was found. Never silently zero. */
   minutes: number[][];
   km: number[][];
-  failedPairs: { from: string; to: string }[];
+  failedPairs: { from: string; to: string; reason: ValhallaFailureReason }[];
+  /** `failedPairs` tallied by reason — the same breakdown a caller would otherwise recompute from the array every time it wants to observe one. */
+  reasonCounts: Record<ValhallaFailureReason, number>;
+  /** Whether the shared circuit breaker tripped during this run — a coarse "the provider stopped answering" signal, not per-pair. */
+  circuitOpened: boolean;
   calls: number;
   /** Ordered pairs this run needed. Counted whether bought or read back. */
   pairs: number;
@@ -174,23 +260,29 @@ export function matrixPairCacheKey(
  * A public demo endpoint is not a production service, and the honest posture is
  * that it will sometimes stop answering. Without a breaker, a country-scale plan
  * with forty blocks meets forty timeouts one after another and spends twenty
- * minutes discovering what the third one already knew.
+ * minutes discovering what the third one already knew. Lowered from 4 to 3 as
+ * part of the interactive SLO (see `MAX_TOTAL_MATRIX_MS`'s own comment) — an
+ * outage should stop costing new requests sooner for a traveller waiting live.
  *
  * Reset by any success, so a single blip does not disable routing for the rest
  * of a build.
  */
-const CIRCUIT_THRESHOLD = 4;
+const CIRCUIT_THRESHOLD = 3;
 
 /**
- * Retries per block, and the backoff between them.
+ * Attempts per block, and the backoff between them.
  *
- * Two, because the failures worth retrying are transient — a rate limit or a
- * dropped connection — and a third attempt against a service that has said no
- * twice is spending somebody's quota to learn nothing. Capped, so a retry storm
- * cannot multiply spend without a ceiling.
+ * Two total — one retry — because the failures worth retrying are transient —
+ * a rate limit or a dropped connection — and a second attempt against a
+ * service that has already failed once is spending a traveller's patience
+ * relearning what the first attempt established. Lowered from 3 (see
+ * `MAX_TOTAL_MATRIX_MS`'s own comment); capped, so a retry storm cannot
+ * multiply spend without a ceiling, and 429 never gets the *full* ladder
+ * either — the circuit breaker, not repeated retrying, is what stops a
+ * sustained rate limit.
  */
-const MAX_ATTEMPTS = 3;
-const BACKOFF_MS = [0, 1_500, 4_000];
+const MAX_ATTEMPTS = 2;
+const BACKOFF_MS = [0, 1_000];
 
 /** Reset per matrix run rather than per process: a build should start hopeful. */
 export interface CircuitState {
@@ -215,7 +307,7 @@ async function fetchBlock(
    * ladder per child would multiply wall-clock for nothing.
    */
   maxAttempts: number = MAX_ATTEMPTS,
-): Promise<{ minutes: number[][]; km: number[][] }> {
+): Promise<{ minutes: number[][]; km: number[][]; noRoute: boolean[][] }> {
   if (circuit?.open) {
     throw new RoutingError('request_failed', 'The routing service stopped answering.');
   }
@@ -307,6 +399,7 @@ async function fetchBlock(
 
   const minutes = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
   const km = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
+  const noRoute = sources.map(() => new Array<boolean>(targets.length).fill(false));
 
   // Valhalla returns either a matrix of rows or one flat list, depending on
   // version. Both are keyed by from_index/to_index, so both are read the same way.
@@ -319,13 +412,192 @@ async function fetchBlock(
     const to = cell.to_index;
     if (minutes[from] === undefined || km[from] === undefined) continue;
     // A null time is Valhalla saying "no route", which is a real answer and a
-    // different one from zero.
-    if (cell.time === null || cell.time === undefined) continue;
+    // different one from zero — and, unlike every other gap this function can
+    // produce, positive evidence rather than an absence of one. Recorded so
+    // the caller can tell "the router said no" from "the router never said".
+    if (cell.time === null || cell.time === undefined) {
+      noRoute[from]![to] = true;
+      continue;
+    }
     minutes[from]![to] = Math.round(cell.time / 60);
     km[from]![to] = cell.distance ?? Number.NaN;
   }
 
-  return { minutes, km };
+  return { minutes, km, noRoute };
+}
+
+const routeTripSchema = z.object({
+  status: z.number(),
+  status_message: z.string().optional(),
+  summary: z.object({ time: z.number(), length: z.number() }).optional(),
+  /**
+   * `shape` is Valhalla's own polyline6-encoded geometry for one leg of the
+   * trip — already present in every `/route` response by default (no extra
+   * request parameter needed), previously parsed and discarded entirely.
+   * `legs` rather than a single top-level shape because Valhalla's response
+   * is per-leg even for the simple two-point, no-via-points request this
+   * file ever makes (exactly one leg in that case).
+   */
+  legs: z.array(z.object({ shape: z.string().optional() })).optional(),
+});
+
+/**
+ * DECODES VALHALLA'S POLYLINE6 SHAPE STRING INTO REAL COORDINATES.
+ *
+ * The standard polyline algorithm (delta-encoded, zigzag, base64-ish
+ * character stream), at Valhalla's own precision: six decimal places
+ * (`1e6`), not the five-decimal-place (`1e5`) precision the more common
+ * Google polyline variant uses — using the wrong factor silently produces
+ * coordinates off by roughly 10x, which is why this is its own function
+ * rather than a borrowed one.
+ */
+export function decodePolyline6(encoded: string): { lat: number; lng: number }[] {
+  const points: { lat: number; lng: number }[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const factor = 1e6;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+    do {
+      byte = encoded.charCodeAt(index) - 63;
+      index += 1;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lat += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+    do {
+      byte = encoded.charCodeAt(index) - 63;
+      index += 1;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lng += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+
+    points.push({ lat: lat / factor, lng: lng / factor });
+  }
+  return points;
+}
+
+/** Every leg's shape, decoded and concatenated in order — real geometry for the whole trip, not just its first leg. `undefined` when nothing usable was present, never an empty-but-claimed array. */
+function decodeTripGeometry(trip: z.infer<typeof routeTripSchema>): readonly { lat: number; lng: number }[] | undefined {
+  const legs = trip.legs;
+  if (!legs || legs.length === 0) return undefined;
+  const points: { lat: number; lng: number }[] = [];
+  for (const leg of legs) {
+    if (!leg.shape) continue;
+    points.push(...decodePolyline6(leg.shape));
+  }
+  return points.length > 0 ? points : undefined;
+}
+
+const routeResponseSchema = z.object({
+  trip: routeTripSchema.optional(),
+  error_code: z.number().optional(),
+  error: z.string().optional(),
+});
+
+/** Valhalla's own documented error code for "no path could be found for input" — the one 4xx shape that is positive evidence, not merely a rejection. */
+const NO_PATH_ERROR_CODE = 442;
+
+export interface RouteResult {
+  found: boolean;
+  minutes: number | null;
+  km: number | null;
+  reason?: ValhallaFailureReason;
+  /** The route's own real shape, decoded from Valhalla's polyline6 response — see `RouteConfirmationResult.geometry`'s own header (`packages/compiler/src/providers.ts`) for what this is for and why it costs no extra request. */
+  geometry?: readonly { lat: number; lng: number }[];
+}
+
+/**
+ * ONE POINT-TO-POINT ROUTE, DIRECTLY — THE BOUNDED FALLBACK A MATRIX RESULT
+ * CANNOT BE TRUSTED ALONE FOR, ON A LEG A HARD FEASIBILITY DECISION DEPENDS ON.
+ *
+ * A live Iceland validation proved this is necessary: `/sources_to_targets`'s
+ * `costmatrix` algorithm (what `computeMatrix` above uses) returned `null`
+ * for two legs this exact `/route` endpoint measured successfully seconds
+ * later, against the same healthy instance — a known characteristic of
+ * matrix-style search on a small regional (non-planet) tile build, not a
+ * flaw in the road data or evidence the leg is impossible.
+ *
+ * One request, one attempt, no retry ladder — this is a bounded fallback for
+ * the rare leg that matters enough to ask again a different way, not a
+ * second acquisition strategy, so it does not carry `fetchBlock`'s own
+ * multi-attempt backoff. Still paced by the same shared `nextSlot()` gate,
+ * so it never competes with a concurrent matrix build for the host's own
+ * rate limit.
+ */
+export async function computeRoute(
+  from: RoutePoint,
+  to: RoutePoint,
+  costing: ValhallaCosting,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<RouteResult> {
+  await nextSlot();
+  const doFetch = options.fetchImpl ?? fetch;
+
+  let response: Response;
+  try {
+    response = await doFetch(`${routingEndpoint()}/route`, {
+      method: 'POST',
+      headers: {
+        'user-agent': USER_AGENT,
+        'x-client-id': 'sidequest-dev',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        locations: [
+          { lat: from.lat, lon: from.lng },
+          { lat: to.lat, lon: to.lng },
+        ],
+        costing,
+        units: 'kilometers',
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    return { found: false, minutes: null, km: null, reason: 'provider_error' };
+  }
+
+  if (response.status === 429) return { found: false, minutes: null, km: null, reason: 'rate_limited' };
+
+  const text = await response.text();
+  if (text.length > MAX_RESPONSE_BYTES) return { found: false, minutes: null, km: null, reason: 'provider_error' };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { found: false, minutes: null, km: null, reason: 'provider_error' };
+  }
+
+  const result = routeResponseSchema.safeParse(parsed);
+  if (!result.success) return { found: false, minutes: null, km: null, reason: 'provider_error' };
+
+  if (!response.ok) {
+    if (response.status === 400 && result.data.error_code === NO_PATH_ERROR_CODE) {
+      return { found: false, minutes: null, km: null, reason: 'not_found' };
+    }
+    return { found: false, minutes: null, km: null, reason: 'provider_error' };
+  }
+
+  const trip = result.data.trip;
+  if (!trip || trip.status !== 0 || !trip.summary) {
+    return { found: false, minutes: null, km: null, reason: 'provider_error' };
+  }
+  const geometry = decodeTripGeometry(trip);
+  return {
+    found: true,
+    minutes: Math.round(trip.summary.time / 60),
+    km: trip.summary.length,
+    ...(geometry ? { geometry } : {}),
+  };
 }
 
 /**
@@ -347,10 +619,14 @@ async function resolveBlock(
   costing: ValhallaCosting,
   options: MatrixOptions,
   budgetRemaining: number,
-  circuit?: CircuitState,
+  circuit: CircuitState | undefined,
+  /** Epoch ms — see `MAX_TOTAL_MATRIX_MS`'s own comment. Checked, never extended, by every recursive step. */
+  deadlineAt: number,
 ): Promise<{
   minutes: number[][];
   km: number[][];
+  /** Per cell, why it has no measured value — `null` where it does, or where nothing has tried yet. */
+  reason: (ValhallaFailureReason | null)[][];
   served: number;
   bought: number;
   calls: number;
@@ -359,6 +635,7 @@ async function resolveBlock(
 }> {
   const minutes = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
   const km = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
+  const reason: (ValhallaFailureReason | null)[][] = sources.map(() => new Array(targets.length).fill(null));
 
   /** Which columns each row still needs, so a request covers only those. */
   const missingByRow = new Map<number, number[]>();
@@ -382,7 +659,7 @@ async function resolveBlock(
   }
 
   if (missingByRow.size === 0) {
-    return { minutes, km, served, bought: 0, calls: 0, overBudget: false };
+    return { minutes, km, reason, served, bought: 0, calls: 0, overBudget: false };
   }
 
   /**
@@ -433,7 +710,7 @@ async function resolveBlock(
    * nothing, and the blocks beyond it were reported as unroutable.
    */
   if (bought > budgetRemaining) {
-    return { minutes, km, served, bought: 0, calls: 0, overBudget: true };
+    return { minutes, km, reason, served, bought: 0, calls: 0, overBudget: true };
   }
 
   /**
@@ -486,6 +763,11 @@ async function resolveBlock(
     const cells = rowIndexes.length * colIndexes.length;
     if (cells === 0) return;
     if (circuit?.open) return; // an outage is not a shape subdivision can fix
+    // The interactive SLO: once the whole matrix call's wall-clock budget is
+    // spent, no further request is attempted, however few cells remain. This
+    // is what actually bounds a degraded run — the pair budget alone did
+    // not, since a request that keeps failing spends no pairs at all.
+    if (Date.now() >= deadlineAt) return;
     if (spent + cells > budgetRemaining) return; // stays unmeasured, never overspends
     calls += 1;
     try {
@@ -507,11 +789,12 @@ async function resolveBlock(
       spent += cells;
       for (let r = 0; r < rowIndexes.length; r += 1) {
         for (let c = 0; c < colIndexes.length; c += 1) {
+          const row = rowIndexes[r]!;
+          const col = colIndexes[c]!;
+          if (fetched.noRoute[r]?.[c]) reason[row]![col] = 'not_found';
           const value = fetched.minutes[r]?.[c];
           const distance = fetched.km[r]?.[c];
           if (value === undefined || !Number.isFinite(value)) continue;
-          const row = rowIndexes[r]!;
-          const col = colIndexes[c]!;
           minutes[row]![col] = value;
           km[row]![col] = distance ?? Number.NaN;
           options.cache?.write(matrixPairCacheKey(sources[row]!, targets[col]!, costing), {
@@ -520,11 +803,22 @@ async function resolveBlock(
           });
         }
       }
-    } catch {
+    } catch (error) {
       failedRequests += 1;
+      /*
+       * A leaf's own reason is recorded before anything checks whether the
+       * circuit is now open — including a circuit this very failure just
+       * tripped. The classification is a fact about the attempt that was
+       * just spent and already known; discarding it in favour of the
+       * now-open circuit was reclassifying a real, specific `rate_limited`
+       * (or any other) reason as the generic `'provider_error'` fallback
+       * for no reason but ordering.
+       */
+      if (rowIndexes.length <= 1 && colIndexes.length <= 1) {
+        reason[rowIndexes[0]!]![colIndexes[0]!] = classifyRoutingFailure(error);
+        return;
+      }
       if (circuit?.open) return;
-      /* A pair that failed alone is the answer: it stays unmeasured. */
-      if (rowIndexes.length <= 1 && colIndexes.length <= 1) return;
       if (failedRequests > MAX_FAILED_REQUESTS_PER_BLOCK) return;
       /**
        * SUBDIVISION ISOLATES POINTS, NOT RECTANGLES.
@@ -574,7 +868,7 @@ async function resolveBlock(
     await resolveRectangle(group.rows, group.cols, 0);
   }
 
-  return { minutes, km, served, bought: spent, calls, overBudget: false };
+  return { minutes, km, reason, served, bought: spent, calls, overBudget: false };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -598,7 +892,7 @@ export async function computeMatrix(
   const size = points.length;
   const minutes = ids.map(() => new Array<number>(size).fill(Number.NaN));
   const km = ids.map(() => new Array<number>(size).fill(Number.NaN));
-  const failedPairs: { from: string; to: string }[] = [];
+  const failedPairs: { from: string; to: string; reason: ValhallaFailureReason }[] = [];
 
   const blockSize = Math.max(1, Math.floor(Math.sqrt(MAX_MATRIX_PAIRS_PER_REQUEST)));
   const circuit = newCircuit();
@@ -607,6 +901,8 @@ export async function computeMatrix(
   let cacheHits = 0;
   /** Pairs actually charged to the router, which is what the budget bounds. */
   let bought = 0;
+  /** The interactive SLO — see `MAX_TOTAL_MATRIX_MS`'s own comment. Fixed once, never extended by a slow block. */
+  const deadlineAt = Date.now() + MAX_TOTAL_MATRIX_MS;
 
   for (let rowStart = 0; rowStart < size; rowStart += blockSize) {
     for (let colStart = 0; colStart < size; colStart += blockSize) {
@@ -614,13 +910,20 @@ export async function computeMatrix(
       const targets = points.slice(colStart, colStart + blockSize);
       const cells = sources.length * targets.length;
 
-      const markFailed = (): void => {
+      const markFailed = (reason: ValhallaFailureReason): void => {
         for (const source of sources) {
           for (const target of targets) {
-            if (source.id !== target.id) failedPairs.push({ from: source.id, to: target.id });
+            if (source.id !== target.id) failedPairs.push({ from: source.id, to: target.id, reason });
           }
         }
       };
+
+      if (Date.now() >= deadlineAt) {
+        // The whole matrix call's wall-clock budget is spent — every
+        // remaining block stays honestly unmeasured, never attempted.
+        markFailed('provider_error');
+        continue;
+      }
 
       try {
         const block = await resolveBlock(
@@ -630,9 +933,13 @@ export async function computeMatrix(
           options,
           options.maxPairs - bought,
           circuit,
+          deadlineAt,
         );
         if (block.overBudget) {
-          markFailed();
+          // Never attempted — the budget ran out before this block was asked
+          // for, not evidence the provider said no. `'budget_exhausted'`, not
+          // `'not_found'`.
+          markFailed('budget_exhausted');
           continue;
         }
         calls += block.calls;
@@ -650,8 +957,13 @@ export async function computeMatrix(
             const toId = ids[to];
             const fromPoint = points[from];
             const toPoint = points[to];
+            // Plausibility is only a question for a *real* number — running
+            // it over `NaN` (no answer at all) used to always fail it, which
+            // is how a plain "no answer" nearly got mislabelled below as a
+            // value we distrusted rather than one we never received.
             const implausible =
               value !== undefined &&
+              Number.isFinite(value) &&
               fromPoint !== undefined &&
               toPoint !== undefined &&
               !isPlausibleLeg({
@@ -663,7 +975,27 @@ export async function computeMatrix(
               });
 
             if (value === undefined || Number.isNaN(value) || implausible) {
-              if (fromId && toId && fromId !== toId) failedPairs.push({ from: fromId, to: toId });
+              if (fromId && toId && fromId !== toId) {
+                // `block.reason` is the per-cell classification threaded up
+                // from `resolveBlock`/`resolveRectangle`: `'not_found'` only
+                // where Valhalla itself answered with a null time — checked
+                // first, since it is positive evidence and must win even
+                // though a `NaN` value also fails the finiteness check above.
+                // A real value that failed the plausibility check is
+                // evidence we chose not to trust, not an authoritative
+                // no-route, hence `'insufficient_evidence'`. Anything left
+                // unclassified (a rectangle abandoned after
+                // `MAX_FAILED_REQUESTS_PER_BLOCK`) defaults to the generic,
+                // conservative `'provider_error'` — a fact about this
+                // attempt, never dressed up as a fact about the road network.
+                const classified =
+                  block.reason[row]?.[col] === 'not_found'
+                    ? 'not_found'
+                    : implausible
+                      ? 'insufficient_evidence'
+                      : (block.reason[row]?.[col] ?? 'provider_error');
+                failedPairs.push({ from: fromId, to: toId, reason: classified });
+              }
               continue;
             }
             minutes[from]![to] = value;
@@ -671,7 +1003,7 @@ export async function computeMatrix(
           }
         }
       } catch {
-        markFailed();
+        markFailed('provider_error');
       }
     }
   }
@@ -681,7 +1013,16 @@ export async function computeMatrix(
     km[index]![index] = 0;
   }
 
-  return { ids, minutes, km, failedPairs, calls, pairs, cacheHits };
+  const reasonCounts: Record<ValhallaFailureReason, number> = {
+    not_found: 0,
+    provider_error: 0,
+    rate_limited: 0,
+    budget_exhausted: 0,
+    insufficient_evidence: 0,
+  };
+  for (const pair of failedPairs) reasonCounts[pair.reason] += 1;
+
+  return { ids, minutes, km, failedPairs, reasonCounts, circuitOpened: circuit.open, calls, pairs, cacheHits };
 }
 
 /**

@@ -131,6 +131,23 @@ export const FOOD_SELECTORS: readonly { key: string; values: string[]; intent: s
   { key: 'amenity', values: ['marketplace'], intent: 'market' },
 ];
 
+/**
+ * The settlement classes worth naming as somewhere real to sleep.
+ *
+ * The exact tag set `apps/web/src/lib/benchmark/baseline/gather.ts` already
+ * uses for the same underlying question ("what real settlement is here") —
+ * promoted to the shared provider rather than forked, so a base-candidate
+ * sweep and a corridor-remediation search read the same real-world evidence.
+ * A hamlet is the smallest thing worth naming as a base; `isolated_dwelling`
+ * and `farm` are left out, and so are `suburb`/`neighbourhood`, which would
+ * fill the result with other names for a city already found separately.
+ */
+export const SETTLEMENT_SELECTOR: { key: string; values: string[]; intent: string } = {
+  key: 'place',
+  values: ['city', 'town', 'village', 'hamlet'],
+  intent: 'settlement',
+};
+
 /** A bbox big enough to matter is refused rather than silently truncated. */
 export const MAX_BBOX_DEGREES = 3;
 
@@ -357,6 +374,21 @@ export async function fetchFoodPois(
   options: OverpassOptions = {},
 ): Promise<OverpassResult> {
   return fetchTagged(box, FOOD_SELECTORS, 'food', options);
+}
+
+/**
+ * Real, named settlements inside a bounded box — the same query shape as
+ * `fetchPois`/`fetchFoodPois`, pointed at `place=city/town/village/hamlet`
+ * instead. Used where a search needs "what is a real place to sleep near
+ * here", not "what is there to do here" — e.g. a route-corridor remediation
+ * search (`relocation-corridor.ts`) that cannot name the settlement it is
+ * looking for in advance, unlike `geocode()`'s by-name lookup.
+ */
+export async function fetchSettlements(
+  box: BoundingBox,
+  options: OverpassOptions = {},
+): Promise<OverpassResult> {
+  return fetchTagged(box, [SETTLEMENT_SELECTOR], 'settlement', options);
 }
 
 async function fetchTagged(
@@ -695,4 +727,23 @@ export function normalizeElement(element: OverpassElement): NormalizedOsmPlace |
     sourceTimestamp: element.timestamp,
     url: elementUrl(element),
   };
+}
+
+/** A real settlement, normalized — `normalizeElement` only recognises `POI_SELECTORS`/`FOOD_SELECTORS`, so a `place=town` element reads as `null` from it. */
+export interface NormalizedSettlement {
+  elementId: string;
+  name: string;
+  coordinates: { lat: number; lng: number };
+  /** The raw `place` tag value: `city` | `town` | `village` | `hamlet`. */
+  placeType: string;
+}
+
+export function normalizeSettlement(element: OverpassElement): NormalizedSettlement | null {
+  const coordinates = elementCoordinates(element);
+  const tags = element.tags ?? {};
+  const name = tags.name;
+  const placeType = tags.place;
+  if (!coordinates || !name || !placeType) return null;
+  if (!SETTLEMENT_SELECTOR.values.includes(placeType)) return null;
+  return { elementId: elementId(element), name, coordinates, placeType };
 }

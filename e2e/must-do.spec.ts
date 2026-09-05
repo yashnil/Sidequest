@@ -164,9 +164,7 @@ test('the status follows the traveller onto the Discovery Board', async ({ page 
    * because React does not re-read a pre-existing checked state when it hydrates.
    * It cost one flaked run of this specification before it was added.
    */
-  const firstAnswer = page.getByRole('radio', { name: 'Hiking: A few times' });
-  await expect(firstAnswer).toBeVisible({ timeout: 20_000 });
-  await waitUntilInteractive(firstAnswer);
+  await expect(page.getByTestId('interview')).toBeVisible({ timeout: 20_000 });
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);

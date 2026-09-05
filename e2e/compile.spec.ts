@@ -6,6 +6,8 @@ import {
   REGION_READY_HEADING,
   waitForLookup,
   waitUntilInteractive,
+  CULTURAL_INTERVIEW,
+  completeQuestionnaire,
 } from './support/trip';
 
 /**
@@ -343,21 +345,8 @@ test('the board and a deterministic itinerary come out of the compiled region', 
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
 
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
-  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
-
-  for (let step = 0; step < 12; step += 1) {
-    const build = page.getByRole('button', { name: 'Build my discovery board' });
-    if (await build.isVisible().catch(() => false)) {
-      await build.click();
-      break;
-    }
-    const next = page.getByRole('button', { name: 'Continue' });
-    if (!(await next.isVisible().catch(() => false))) break;
-    await next.click();
-    await page.waitForTimeout(150);
-  }
+  await completeQuestionnaire(page, CULTURAL_INTERVIEW);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
 
   await page.waitForURL(/discover/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -401,7 +390,7 @@ test('the journey stays free of console errors and horizontal overflow', async (
   expect(problems, `Runtime problems:\n${problems.join('\n')}`).toEqual([]);
 });
 
-test('a plan with nothing in it is refused, with the funnel that explains why', async ({
+test('a plan whose every stop outruns a day is still delivered, and says its days run long', async ({
   page,
 }) => {
   /**
@@ -423,51 +412,28 @@ test('a plan with nothing in it is refused, with the funnel that explains why', 
 
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
-  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
-
-  for (let step = 0; step < 14; step += 1) {
-    const build = page.getByRole('button', { name: 'Build my discovery board' });
-    if (await build.isVisible().catch(() => false)) {
-      await build.click();
-      break;
-    }
-    const next = page.getByRole('button', { name: 'Continue' });
-    if (!(await next.isVisible().catch(() => false))) break;
-    await next.click();
-    await page.waitForTimeout(150);
-  }
+  await completeQuestionnaire(page, CULTURAL_INTERVIEW);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
   const build = page.getByRole('button', { name: /Build my trip|Rebuild my trip/ });
   await expect(build).toBeEnabled({ timeout: 15_000 });
   await build.click();
 
-  // It must not become an itinerary.
-  const panel = page.getByTestId('planner-readiness');
-  await expect(panel).toBeVisible({ timeout: 60_000 });
-  expect(page.url()).not.toMatch(/itinerary/);
+  /*
+   * Under the canonical path the trip is never withheld: the composed draft
+   * is laid out, the ten-hour stops are kept because every one was marked
+   * essential, and the plan says plainly that its days run long — a trip the
+   * traveller can read and decide on, never a refusal with a funnel instead.
+   */
+  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+  await expect(page.getByTestId('route-overview')).toBeVisible();
+  await expect(page.getByText(/runs about \d+ minutes past your usual end|exceeds your \d+-minute limit/).first()).toBeVisible();
+  await expect(page.getByText(/^(Ready, with cautions|Needs a decision)$/)).toBeVisible();
 
-  // The funnel, gate by gate, as numbers rather than as an apology.
-  await expect(panel.getByText('On the board')).toBeVisible();
-  await expect(panel.getByText('Measurable')).toBeVisible();
-  await expect(panel.getByText('Way in')).toBeVisible();
-  await expect(panel.getByText('Open', { exact: true })).toBeVisible();
-  await expect(panel.getByText('Scheduled')).toBeVisible();
-  await expect(panel.getByText('What blocked them')).toBeVisible();
-  // The level, as a rule rather than a score.
-  await expect(page.getByTestId('readiness-level')).toHaveText('Not enough to plan on');
-
-  // And what to do about it, including what not to bother with.
-  const ruledOut = panel.getByText('What would not help');
-  await expect(ruledOut).toBeVisible();
-  await ruledOut.click();
-  await expect(panel.getByText(/would not help|not what stopped these/i).first()).toBeVisible();
-
-  // Nothing was persisted: the itinerary page still says there is no plan.
+  // Persisted: the itinerary page shows it again on a fresh load.
   await page.goto(`/trips/${id}/itinerary`);
-  await expect(page.getByText(/No trip built yet/i).first()).toBeVisible();
+  await expect(page.getByTestId('route-overview')).toBeVisible();
 
   /**
    * And the explanation survives the reload that loses the action's answer.
@@ -501,20 +467,8 @@ test('a region nothing can be planned from says so on the board, before the buil
 
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
-  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
-  for (let step = 0; step < 14; step += 1) {
-    const build = page.getByRole('button', { name: 'Build my discovery board' });
-    if (await build.isVisible().catch(() => false)) {
-      await build.click();
-      break;
-    }
-    const next = page.getByRole('button', { name: 'Continue' });
-    if (!(await next.isVisible().catch(() => false))) break;
-    await next.click();
-    await page.waitForTimeout(150);
-  }
+  await completeQuestionnaire(page, CULTURAL_INTERVIEW);
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
   /*

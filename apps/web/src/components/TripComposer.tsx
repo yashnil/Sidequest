@@ -26,11 +26,11 @@ import {
   ErrorNote,
   FieldLabel,
   FOCUS_RING,
-  Panel,
   buttonClass,
   cx,
 } from './ui';
 import { formatDayRange } from '@/lib/format/dates';
+import { Glyph, type GlyphId } from './interview/glyphs';
 import {
   createTripFromComposer,
   updateTripFromComposer,
@@ -213,14 +213,45 @@ export function TripComposer({
     });
   }
 
+  const nightsSoFar =
+    nights !== ''
+      ? `${nights} nights`
+      : startDate && endDate && (dateMode === 'exact' || dateMode === 'flexible')
+        ? `${nightsBetween(startDate, endDate)} nights`
+        : wantsLengthHelp
+          ? 'We will suggest a length'
+          : null;
+  const datesSoFar =
+    dateMode === 'undecided'
+      ? 'Dates not decided'
+      : dateMode === 'month'
+        ? (MONTHS[month - 1] ?? '—')
+        : dateMode === 'season'
+          ? season[0]!.toUpperCase() + season.slice(1)
+          : startDate && endDate
+            ? /*
+               * `2026-10-12 → 2026-10-18` was the database's format on the panel
+               * a traveller checks their own answers against. One formatter,
+               * shared with the homepage and the context bar.
+               */
+              `${formatDayRange(startDate, endDate)}${dateMode === 'flexible' ? ` (± ${flexDays} days)` : ''}`
+            : '—';
+  const travellersSoFar = `${draft.adults ?? 2} adult${(draft.adults ?? 2) === 1 ? '' : 's'}${(draft.children ?? 0) > 0 ? `, ${draft.children} child${draft.children === 1 ? '' : 'ren'}` : ''}`;
+  const canSubmit = !pending && hasDestination && datesSettled;
+
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-14">
-      <div className="space-y-10">
-        {/* ---- 1. Where ------------------------------------------------- */}
-        <Section step={1} title="Where are you going?">
+    <div className="pb-24 lg:pb-0">
+      {/* ---- 1. Where: the one big question ------------------------------ */}
+      <section className="enter" aria-labelledby="composer-where">
+        <p className="label text-accent">{intent === 'has_plan' ? 'A plan you already have' : 'New trip'}</p>
+        <h1 id="composer-where" className="display-hero mt-3 text-ink">
+          {intent === 'has_plan' ? 'Where is the plan taking you?' : 'Where do you want to go?'}
+        </h1>
+        <div className="mt-8 max-w-3xl">
           <DestinationCombobox
             name="destination"
             label="Destination"
+            size="hero"
             hint="A city, a region, a national park or a whole country — we will work out how much of it a trip can hold."
             autoFocus
             /*
@@ -238,531 +269,356 @@ export function TripComposer({
             onTextChange={(text) => patch({ destinationText: text })}
           />
           {fieldErrors.destination ? <ErrorNote>{fieldErrors.destination}</ErrorNote> : null}
+        </div>
 
-          {/*
-            THE PLACES A PLAN ALREADY HAS, ASKED FOR WHERE THEY MATTER.
+        {/*
+          THE PLACES A PLAN ALREADY HAS, ASKED FOR WHERE THEY MATTER.
 
-            Same field, same pipeline, promoted. For somebody arriving from "I
-            already have a plan" this is the whole reason they came, and leaving
-            it at the bottom of an optional disclosure two sections down would
-            make the intent a label on a link rather than a difference in the
-            product.
-          */}
-          {intent === 'has_plan' && hasDestination ? (
-            <div className="mt-6">
-              <FieldLabel htmlFor="mustDo">Which places does your plan already have?</FieldLabel>
-              <textarea
-                id="mustDo"
-                rows={4}
-                maxLength={600}
-                value={draft.mustDo ?? ''}
-                onChange={(event) => patch({ mustDo: event.target.value })}
-                className={cx(inputClass, 'resize-y')}
-                placeholder="One per line, or however you have them written down."
-              />
-              <p className="mt-2 text-xs leading-relaxed text-ink-muted">
-                We look each one up on the map and show you what we made of it before it changes
-                anything. Anything we cannot find, cannot reach, or cannot fit into your dates is
-                named with the reason rather than dropped quietly.
-              </p>
-            </div>
-          ) : null}
-        </Section>
+          Same field, same pipeline, promoted. For somebody arriving from "I
+          already have a plan" this is the whole reason they came.
+        */}
+        {intent === 'has_plan' && hasDestination ? (
+          <div className="enter mt-8 max-w-3xl">
+            <FieldLabel htmlFor="mustDo">Which places does your plan already have?</FieldLabel>
+            <textarea
+              id="mustDo"
+              rows={4}
+              maxLength={600}
+              value={draft.mustDo ?? ''}
+              onChange={(event) => patch({ mustDo: event.target.value })}
+              className={cx(inputClass, 'resize-y')}
+              placeholder="One per line, or however you have them written down."
+            />
+            <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+              We look each one up on the map and show you what we made of it before it changes
+              anything. Anything we cannot find, cannot reach, or cannot fit into your dates is
+              named with the reason rather than dropped quietly.
+            </p>
+          </div>
+        ) : null}
+        {!hasDestination ? (
+          <p className="mt-6 max-w-xl text-sm leading-relaxed text-ink-muted">
+            Start typing. The rest of the questions open as you go, and each one changes what we
+            go and look for.
+          </p>
+        ) : null}
+      </section>
 
-        {/* ---- 2. When -------------------------------------------------- */}
-        {hasDestination ? (
-          <Section step={2} title="When?">
-            <ChoiceGroup legend="How settled are your dates?" columns={2}>
-              {DATE_MODES.map((mode) => (
-                <Choice
-                  key={mode}
-                  name="dateMode"
-                  value={mode}
-                  checked={dateMode === mode}
-                  onChange={() => setDateMode(mode)}
-                  label={DATE_MODE_LABELS[mode]}
-                />
-              ))}
-            </ChoiceGroup>
-
-            {dateMode === 'exact' || dateMode === 'flexible' ? (
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <FieldLabel htmlFor="startDate">Arrive</FieldLabel>
-                  <input
-                    id="startDate"
-                    type="date"
-                    value={startDate}
-                    onChange={(event) => setStartDate(event.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <FieldLabel htmlFor="endDate">Leave</FieldLabel>
-                  <input
-                    id="endDate"
-                    type="date"
-                    value={endDate}
-                    onChange={(event) => setEndDate(event.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                {dateMode === 'flexible' ? (
-                  <div className="sm:col-span-2">
-                    <ChoiceGroup legend="How far can they move?" columns={3}>
-                      {[1, 3, 7].map((days) => (
-                        <Choice
-                          key={days}
-                          name="flex"
-                          value={String(days)}
-                          checked={flexDays === days}
-                          onChange={() => setFlexDays(days)}
-                          label={`± ${days} day${days === 1 ? '' : 's'}`}
-                        />
-                      ))}
-                    </ChoiceGroup>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {dateMode === 'month' ? (
-              <div className="mt-5">
-                <FieldLabel htmlFor="month">Which month?</FieldLabel>
-                <select
-                  id="month"
-                  value={month}
-                  onChange={(event) => setMonth(Number(event.target.value))}
-                  className={inputClass}
-                >
-                  {MONTHS.map((name, index) => (
-                    <option key={name} value={index + 1}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-
-            {dateMode === 'season' ? (
-              <ChoiceGroup legend="Which season?" columns={4} className="mt-5">
-                {(['spring', 'summer', 'autumn', 'winter'] as const).map((value) => (
+      <div className={cx('grid gap-10 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-14', hasDestination ? 'mt-12' : 'mt-8')}>
+        <div className="space-y-12">
+          {/* ---- 2. When ------------------------------------------------ */}
+          {hasDestination ? (
+            <Section step={2} title="When?">
+              <ChoiceGroup legend="How settled are your dates?" columns={2}>
+                {DATE_MODES.map((mode) => (
                   <Choice
-                    key={value}
-                    name="season"
-                    value={value}
-                    checked={season === value}
-                    onChange={() => setSeason(value)}
-                    label={value[0]!.toUpperCase() + value.slice(1)}
+                    key={mode}
+                    name="dateMode"
+                    value={mode}
+                    checked={dateMode === mode}
+                    onChange={() => setDateMode(mode)}
+                    label={DATE_MODE_LABELS[mode]}
                   />
                 ))}
               </ChoiceGroup>
-            ) : null}
 
-            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-dashed border-rule p-3.5">
-              <input
-                type="checkbox"
-                checked={wantsDateHelp}
-                onChange={(event) => setWantsDateHelp(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-pine"
-              />
-              <span>
-                <span className="block text-sm font-medium text-ink">
-                  Tell me when this place is at its best
-                </span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">
-                  We will compare the months on climate records and daylight, and say what each one
-                  costs you. Not a forecast — records from past years.
-                </span>
-              </span>
-            </label>
-
-            <ChoiceGroup legend="How long?" columns={2} className="mt-6">
-              <label className="sm:col-span-1">
-                <span className="sr-only">Nights</span>
-                <input
-                  type="number"
-                  // `type="number"` alone still opens the text keypad on
-                  // several Android browsers; `inputMode` is what decides it.
-                  inputMode="numeric"
-                  min={1}
-                  max={30}
-                  value={nights}
-                  placeholder="Nights"
-                  onChange={(event) =>
-                    setNights(event.target.value === '' ? '' : Number(event.target.value))
-                  }
-                  className={inputClass}
-                  disabled={dateMode === 'exact' || dateMode === 'flexible'}
-                />
-              </label>
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-rule px-3.5">
-                <input
-                  type="checkbox"
-                  checked={wantsLengthHelp}
-                  onChange={(event) => setWantsLengthHelp(event.target.checked)}
-                  className="h-4 w-4 accent-pine"
-                />
-                <span className="text-sm text-ink">Recommend a trip length</span>
-              </label>
-            </ChoiceGroup>
-            {dateMode === 'exact' || dateMode === 'flexible' ? (
-              <p className="mt-2 text-xs text-ink-faint">
-                Taken from your dates. Switch to a month or a season to set it directly.
-              </p>
-            ) : null}
-          </Section>
-        ) : null}
-
-        {/* ---- 3. Shape ------------------------------------------------- */}
-        {hasDestination && datesSettled ? (
-          <Section step={3} title="What kind of trip?">
-            <ChoiceGroup legend="How much do you want to move?" columns={2}>
-              {TRIP_SHAPES.map((shape) => (
-                <Choice
-                  key={shape}
-                  name="shape"
-                  value={shape}
-                  checked={draft.shape === shape}
-                  onChange={() => patch({ shape })}
-                  label={TRIP_SHAPE_LABELS[shape]}
-                />
-              ))}
-            </ChoiceGroup>
-
-            <ChoiceGroup legend="How are you getting around?" columns={2} className="mt-6">
-              {TRANSPORT_INTENTS.map((transport) => (
-                <Choice
-                  key={transport}
-                  name="transport"
-                  value={transport}
-                  checked={draft.transport === transport}
-                  onChange={() => patch({ transport })}
-                  label={TRANSPORT_INTENT_LABELS[transport]}
-                />
-              ))}
-            </ChoiceGroup>
-
-            <ChoiceGroup
-              legend="What are you actually here for?"
-              hint="Pick as many as apply. This decides what counts as worth researching, so it changes the whole board."
-              columns={2}
-              className="mt-6"
-            >
-              {TRIP_THEMES.map((theme) => (
-                <Choice
-                  key={theme}
-                  name={`theme-${theme}`}
-                  type="checkbox"
-                  value={theme}
-                  checked={(draft.themes ?? []).includes(theme)}
-                  onChange={() =>
-                    patch({
-                      themes: (draft.themes ?? []).includes(theme)
-                        ? (draft.themes ?? []).filter((entry) => entry !== theme)
-                        : [...(draft.themes ?? []), theme],
-                    })
-                  }
-                  label={TRIP_THEME_LABELS[theme]}
-                />
-              ))}
-            </ChoiceGroup>
-            {fieldErrors.themes ? <ErrorNote>{fieldErrors.themes}</ErrorNote> : null}
-
-            <ChoiceGroup legend="Pace" columns={3} className="mt-6">
-              {(
-                [
-                  ['slow', 'Slow — room to sit still'],
-                  ['balanced', 'Balanced'],
-                  ['packed', 'Packed — fit it all in'],
-                ] as const
-              ).map(([value, label]) => (
-                <Choice
-                  key={value}
-                  name="pace"
-                  value={value}
-                  checked={draft.pace === value}
-                  onChange={() => patch({ pace: value })}
-                  label={label}
-                />
-              ))}
-            </ChoiceGroup>
-          </Section>
-        ) : null}
-
-        {/* ---- 4. Who and the rest -------------------------------------- */}
-        {hasDestination && datesSettled ? (
-          <Section step={4} title="Who is going?">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <CountField
-                id="adults"
-                label="Adults"
-                singular="adult"
-                min={1}
-                max={12}
-                value={draft.adults ?? 2}
-                onChange={(adults) => patch({ adults })}
-              />
-              <CountField
-                id="children"
-                label="Children"
-                singular="child"
-                min={0}
-                max={12}
-                value={draft.children ?? 0}
-                onChange={(children) => patch({ children })}
-              />
-            </div>
-
-            <ChoiceGroup
-              legend="Anything in the group that changes the plan?"
-              hint="These do real work: a mobility need caps how hard a stop can be, and children thin out the day."
-              columns={2}
-              className="mt-6"
-            >
-              {TRAVELER_NEEDS.map((need) => (
-                <Choice
-                  key={need}
-                  name={`need-${need}`}
-                  type="checkbox"
-                  value={need}
-                  checked={(draft.travelerNeeds ?? []).includes(need)}
-                  onChange={() =>
-                    patch({
-                      travelerNeeds: (draft.travelerNeeds ?? []).includes(need)
-                        ? (draft.travelerNeeds ?? []).filter((entry) => entry !== need)
-                        : [...(draft.travelerNeeds ?? []), need],
-                    })
-                  }
-                  label={TRAVELER_NEED_LABELS[need]}
-                />
-              ))}
-            </ChoiceGroup>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div>
-                <FieldLabel htmlFor="arrival">When do you get in?</FieldLabel>
-                <select
-                  id="arrival"
-                  value={arrival}
-                  onChange={(event) =>
-                    setArrival(event.target.value as (typeof ARRIVAL_PRECISIONS)[number])
-                  }
-                  className={inputClass}
-                >
-                  {ARRIVAL_PRECISIONS.map((precision) => (
-                    <option key={precision} value={precision}>
-                      {ARRIVAL_PRECISION_LABELS[precision]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <FieldLabel htmlFor="departure">And when do you head out?</FieldLabel>
-                <select
-                  id="departure"
-                  value={departure}
-                  onChange={(event) =>
-                    setDeparture(event.target.value as (typeof ARRIVAL_PRECISIONS)[number])
-                  }
-                  className={inputClass}
-                >
-                  {ARRIVAL_PRECISIONS.map((precision) => (
-                    <option key={precision} value={precision}>
-                      {ARRIVAL_PRECISION_LABELS[precision]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-              A band is enough. We plan a late arrival as a quiet first evening rather than
-              inventing a flight time and then building a day around it.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setShowMore((current) => !current)}
-              className="mt-6 text-sm text-ink-muted underline underline-offset-4 hover:text-pine"
-              aria-expanded={showMore}
-            >
-              {showMore ? 'Fewer questions' : 'A few more that change the plan'}
-            </button>
-
-            {showMore ? (
-              <div className="mt-6 space-y-6 border-t border-rule pt-6">
-                <ChoiceGroup legend="Budget" columns={3}>
-                  {BUDGET_BANDS.map((band) => (
-                    <Choice
-                      key={band}
-                      name="budget"
-                      value={band}
-                      checked={draft.budget === band}
-                      onChange={() => patch({ budget: band })}
-                      label={BUDGET_BAND_LABELS[band]}
-                    />
-                  ))}
-                </ChoiceGroup>
-
-                <ChoiceGroup legend="Crowds" columns={3}>
-                  {(
-                    [
-                      ['avoid', 'Ruin a place for me'],
-                      ['tolerate', 'Worth it sometimes'],
-                      ['unbothered', 'Do not mind them'],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <Choice
-                      key={value}
-                      name="crowd"
-                      value={value}
-                      checked={draft.crowdTolerance === value}
-                      onChange={() => patch({ crowdTolerance: value })}
-                      label={label}
-                    />
-                  ))}
-                </ChoiceGroup>
-
-                <ChoiceGroup legend="How hard should the outdoor days be?" columns={3}>
-                  {(
-                    [
-                      ['gentle', 'Gentle'],
-                      ['moderate', 'Moderate'],
-                      ['strenuous', 'Strenuous'],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <Choice
-                      key={value}
-                      name="intensity"
-                      value={value}
-                      checked={draft.outdoorIntensity === value}
-                      onChange={() => patch({ outdoorIntensity: value })}
-                      label={label}
-                    />
-                  ))}
-                </ChoiceGroup>
-
-                {/*
-                  Asked once. Somebody who came through "I already have a plan"
-                  answered this in the first section, and two boxes with the same
-                  `id` writing to the same field is an invalid document that
-                  silently loses whichever one they typed into second.
-                */}
-                {intent === 'has_plan' ? null : (
+              {dateMode === 'exact' || dateMode === 'flexible' ? (
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   <div>
-                    <FieldLabel htmlFor="mustDo">Anything you would regret missing?</FieldLabel>
-                    <textarea
-                      id="mustDo"
-                      rows={2}
-                      maxLength={600}
-                      value={draft.mustDo ?? ''}
-                      onChange={(event) => patch({ mustDo: event.target.value })}
-                      className={cx(inputClass, 'resize-y')}
-                      placeholder="Free text. We will show you what we made of it before it changes anything."
-                    />
+                    <FieldLabel htmlFor="startDate">Arrive</FieldLabel>
+                    <input id="startDate" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className={inputClass} />
                   </div>
-                )}
-                <div>
-                  <FieldLabel htmlFor="avoid">Anything you would rather not do?</FieldLabel>
-                  <textarea
-                    id="avoid"
-                    rows={2}
-                    maxLength={600}
-                    value={draft.avoid ?? ''}
-                    onChange={(event) => patch({ avoid: event.target.value })}
-                    className={cx(inputClass, 'resize-y')}
+                  <div>
+                    <FieldLabel htmlFor="endDate">Leave</FieldLabel>
+                    <input id="endDate" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className={inputClass} />
+                  </div>
+                  {dateMode === 'flexible' ? (
+                    <div className="sm:col-span-2">
+                      <ChoiceGroup legend="How far can they move?" columns={3}>
+                        {[1, 3, 7].map((days) => (
+                          <Choice key={days} name="flex" value={String(days)} checked={flexDays === days} onChange={() => setFlexDays(days)} label={`± ${days} day${days === 1 ? '' : 's'}`} />
+                        ))}
+                      </ChoiceGroup>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {dateMode === 'month' ? (
+                <div className="mt-5">
+                  <FieldLabel htmlFor="month">Which month?</FieldLabel>
+                  <select id="month" value={month} onChange={(event) => setMonth(Number(event.target.value))} className={inputClass}>
+                    {MONTHS.map((name, index) => (
+                      <option key={name} value={index + 1}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              {dateMode === 'season' ? (
+                <ChoiceGroup legend="Which season?" columns={4} className="mt-5">
+                  {(['spring', 'summer', 'autumn', 'winter'] as const).map((value) => (
+                    <Choice key={value} name="season" value={value} checked={season === value} onChange={() => setSeason(value)} label={value[0]!.toUpperCase() + value.slice(1)} />
+                  ))}
+                </ChoiceGroup>
+              ) : null}
+
+              <label className={cx('mt-5 flex cursor-pointer items-start gap-3 rounded-[var(--radius-card)] border border-dashed border-rule p-3.5', FOCUS_RING)}>
+                <input type="checkbox" checked={wantsDateHelp} onChange={(event) => setWantsDateHelp(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]" />
+                <span>
+                  <span className="block text-sm font-medium text-ink">Tell me when this place is at its best</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">
+                    We will compare the months on climate records and daylight, and say what each one costs you. Not a forecast — records from past years.
+                  </span>
+                </span>
+              </label>
+
+              <ChoiceGroup legend="How long?" columns={2} className="mt-6">
+                <label className="sm:col-span-1">
+                  <span className="sr-only">Nights</span>
+                  <input
+                    type="number"
+                    // `type="number"` alone still opens the text keypad on
+                    // several Android browsers; `inputMode` is what decides it.
+                    inputMode="numeric"
+                    min={1}
+                    max={30}
+                    value={nights}
+                    placeholder="Nights"
+                    onChange={(event) => setNights(event.target.value === '' ? '' : Number(event.target.value))}
+                    className={cx(inputClass, 'mt-0')}
+                    disabled={dateMode === 'exact' || dateMode === 'flexible'}
                   />
+                </label>
+                <label className={cx('flex cursor-pointer items-center gap-3 rounded-[var(--radius-card)] border border-dashed border-rule px-3.5 py-2.5', FOCUS_RING)}>
+                  <input type="checkbox" checked={wantsLengthHelp} onChange={(event) => setWantsLengthHelp(event.target.checked)} className="h-4 w-4 accent-[var(--color-accent)]" />
+                  <span className="text-sm text-ink">Recommend a trip length</span>
+                </label>
+              </ChoiceGroup>
+              {dateMode === 'exact' || dateMode === 'flexible' ? (
+                <p className="mt-2 text-xs text-ink-faint">Taken from your dates. Switch to a month or a season to set it directly.</p>
+              ) : null}
+            </Section>
+          ) : null}
+
+          {/* ---- 3. Shape ----------------------------------------------- */}
+          {hasDestination && datesSettled ? (
+            <Section step={3} title="What kind of trip?">
+              <ChoiceGroup legend="How much do you want to move?" columns={2}>
+                {TRIP_SHAPES.map((shape) => (
+                  <Choice key={shape} name="shape" value={shape} checked={draft.shape === shape} onChange={() => patch({ shape })} label={TRIP_SHAPE_LABELS[shape]} />
+                ))}
+              </ChoiceGroup>
+
+              <ChoiceGroup legend="How are you getting around?" columns={2} className="mt-6">
+                {TRANSPORT_INTENTS.map((transport) => (
+                  <Choice key={transport} name="transport" value={transport} checked={draft.transport === transport} onChange={() => patch({ transport })} label={TRANSPORT_INTENT_LABELS[transport]} />
+                ))}
+              </ChoiceGroup>
+
+              <ChoiceGroup
+                legend="What are you actually here for?"
+                hint="Pick as many as apply. This decides what counts as worth researching, so it changes the whole board."
+                columns={2}
+                className="mt-6"
+              >
+                {TRIP_THEMES.map((theme) => (
+                  <Choice
+                    key={theme}
+                    name={`theme-${theme}`}
+                    type="checkbox"
+                    value={theme}
+                    checked={(draft.themes ?? []).includes(theme)}
+                    onChange={() =>
+                      patch({
+                        themes: (draft.themes ?? []).includes(theme) ? (draft.themes ?? []).filter((entry) => entry !== theme) : [...(draft.themes ?? []), theme],
+                      })
+                    }
+                    label={TRIP_THEME_LABELS[theme]}
+                  />
+                ))}
+              </ChoiceGroup>
+              {fieldErrors.themes ? <ErrorNote>{fieldErrors.themes}</ErrorNote> : null}
+
+              <ChoiceGroup legend="Pace" columns={3} className="mt-6">
+                {(
+                  [
+                    ['slow', 'Slow — room to sit still'],
+                    ['balanced', 'Balanced'],
+                    ['packed', 'Packed — fit it all in'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Choice key={value} name="pace" value={value} checked={draft.pace === value} onChange={() => patch({ pace: value })} label={label} />
+                ))}
+              </ChoiceGroup>
+            </Section>
+          ) : null}
+
+          {/* ---- 4. Who and the rest ------------------------------------ */}
+          {hasDestination && datesSettled ? (
+            <Section step={4} title="Who is going?">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <CountField id="adults" label="Adults" singular="adult" min={1} max={12} value={draft.adults ?? 2} onChange={(adults) => patch({ adults })} />
+                <CountField id="children" label="Children" singular="child" min={0} max={12} value={draft.children ?? 0} onChange={(children) => patch({ children })} />
+              </div>
+
+              <ChoiceGroup
+                legend="Anything in the group that changes the plan?"
+                hint="These do real work: a mobility need caps how hard a stop can be, and children thin out the day."
+                columns={2}
+                className="mt-6"
+              >
+                {TRAVELER_NEEDS.map((need) => (
+                  <Choice
+                    key={need}
+                    name={`need-${need}`}
+                    type="checkbox"
+                    value={need}
+                    checked={(draft.travelerNeeds ?? []).includes(need)}
+                    onChange={() =>
+                      patch({
+                        travelerNeeds: (draft.travelerNeeds ?? []).includes(need) ? (draft.travelerNeeds ?? []).filter((entry) => entry !== need) : [...(draft.travelerNeeds ?? []), need],
+                      })
+                    }
+                    label={TRAVELER_NEED_LABELS[need]}
+                  />
+                ))}
+              </ChoiceGroup>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <FieldLabel htmlFor="arrival">When do you get in?</FieldLabel>
+                  <select id="arrival" value={arrival} onChange={(event) => setArrival(event.target.value as (typeof ARRIVAL_PRECISIONS)[number])} className={inputClass}>
+                    {ARRIVAL_PRECISIONS.map((precision) => (
+                      <option key={precision} value={precision}>
+                        {ARRIVAL_PRECISION_LABELS[precision]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <FieldLabel htmlFor="departure">And when do you head out?</FieldLabel>
+                  <select id="departure" value={departure} onChange={(event) => setDeparture(event.target.value as (typeof ARRIVAL_PRECISIONS)[number])} className={inputClass}>
+                    {ARRIVAL_PRECISIONS.map((precision) => (
+                      <option key={precision} value={precision}>
+                        {ARRIVAL_PRECISION_LABELS[precision]}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            ) : null}
-          </Section>
-        ) : null}
+              <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+                A band is enough. We plan a late arrival as a quiet first evening rather than inventing a flight time and then building a day around it.
+              </p>
 
-        {error ? <ErrorNote>{error}</ErrorNote> : null}
+              <button
+                type="button"
+                onClick={() => setShowMore((current) => !current)}
+                className={cx('mt-6 min-h-11 text-sm text-accent underline underline-offset-4 hover:text-accent-strong', FOCUS_RING)}
+                aria-expanded={showMore}
+              >
+                {showMore ? 'Fewer questions' : 'A few more that change the plan'}
+              </button>
 
-        <div className="flex flex-wrap items-center gap-4 border-t border-rule pt-7">
-          <button
-            type="button"
-            className={buttonClass('primary')}
-            disabled={pending || !hasDestination || !datesSettled}
-            onClick={submit}
-          >
-            {pending ? 'Reading the region…' : 'See what we make of it'}
-          </button>
-          <span className="text-sm text-ink-faint">
-            Nothing is bought yet. The next screen is free and takes a few seconds.
-          </span>
+              {showMore ? (
+                <div className="slide-down mt-6 space-y-6 border-t border-rule pt-6">
+                  <ChoiceGroup legend="Budget" columns={3}>
+                    {BUDGET_BANDS.map((band) => (
+                      <Choice key={band} name="budget" value={band} checked={draft.budget === band} onChange={() => patch({ budget: band })} label={BUDGET_BAND_LABELS[band]} />
+                    ))}
+                  </ChoiceGroup>
+
+                  <ChoiceGroup legend="Crowds" columns={3}>
+                    {(
+                      [
+                        ['avoid', 'Ruin a place for me'],
+                        ['tolerate', 'Worth it sometimes'],
+                        ['unbothered', 'Do not mind them'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <Choice key={value} name="crowd" value={value} checked={draft.crowdTolerance === value} onChange={() => patch({ crowdTolerance: value })} label={label} />
+                    ))}
+                  </ChoiceGroup>
+
+                  <ChoiceGroup legend="How hard should the outdoor days be?" columns={3}>
+                    {(
+                      [
+                        ['gentle', 'Gentle'],
+                        ['moderate', 'Moderate'],
+                        ['strenuous', 'Strenuous'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <Choice key={value} name="intensity" value={value} checked={draft.outdoorIntensity === value} onChange={() => patch({ outdoorIntensity: value })} label={label} />
+                    ))}
+                  </ChoiceGroup>
+
+                  {/*
+                    Asked once. Somebody who came through "I already have a plan"
+                    answered this in the first section, and two boxes with the same
+                    `id` writing to the same field is an invalid document.
+                  */}
+                  {intent === 'has_plan' ? null : (
+                    <div>
+                      <FieldLabel htmlFor="mustDo">Anything you would regret missing?</FieldLabel>
+                      <textarea id="mustDo" rows={2} maxLength={600} value={draft.mustDo ?? ''} onChange={(event) => patch({ mustDo: event.target.value })} className={cx(inputClass, 'resize-y')} placeholder="Free text. We will show you what we made of it before it changes anything." />
+                    </div>
+                  )}
+                  <div>
+                    <FieldLabel htmlFor="avoid">Anything you would rather not do?</FieldLabel>
+                    <textarea id="avoid" rows={2} maxLength={600} value={draft.avoid ?? ''} onChange={(event) => patch({ avoid: event.target.value })} className={cx(inputClass, 'resize-y')} />
+                  </div>
+                </div>
+              ) : null}
+            </Section>
+          ) : null}
+
+          {error ? <ErrorNote>{error}</ErrorNote> : null}
+
+          {hasDestination ? (
+            <div className="hidden flex-wrap items-center gap-4 border-t border-rule pt-7 lg:flex">
+              <button type="button" className={buttonClass('primary', 'lg')} disabled={!canSubmit} onClick={submit}>
+                {pending ? 'Reading the region…' : 'See what we make of it'}
+              </button>
+              <span className="text-sm text-ink-faint">Nothing is bought yet. The next screen is free and takes a few seconds.</span>
+            </div>
+          ) : null}
         </div>
+
+        {/* ---- The trip stub ------------------------------------------- */}
+        <aside className="min-w-0 lg:sticky lg:top-[calc(var(--chrome-height)+1.5rem)] lg:self-start" aria-label="What we have so far">
+          <TripStub
+            destination={draft.destinationText?.trim() || null}
+            dates={datesSoFar}
+            nights={nightsSoFar}
+            shape={draft.shape ? TRIP_SHAPE_LABELS[draft.shape] : null}
+            shapeCode={draft.shape ?? null}
+            transport={draft.transport ? TRANSPORT_INTENT_LABELS[draft.transport] : null}
+            transportCode={draft.transport ?? null}
+            themes={(draft.themes ?? []).map((theme) => TRIP_THEME_LABELS[theme])}
+            travellers={travellersSoFar}
+          />
+        </aside>
       </div>
 
-      {/* ---- The live intent rail -------------------------------------- */}
-      <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="What we have so far">
-        <Panel className="p-5">
-          <p className="eyebrow">So far</p>
-          <dl className="mt-4 space-y-3.5 text-sm">
-            <Fact label="Destination" value={draft.destinationText || '—'} />
-            <Fact
-              label="Dates"
-              value={
-                dateMode === 'undecided'
-                  ? 'Not decided'
-                  : dateMode === 'month'
-                    ? MONTHS[month - 1] ?? '—'
-                    : dateMode === 'season'
-                      ? season[0]!.toUpperCase() + season.slice(1)
-                      : startDate && endDate
-                        ? /*
-                           * `2026-10-12 → 2026-10-18` was the database's format
-                           * on the panel a traveller checks their own answers
-                           * against. One formatter, shared with the homepage and
-                           * the context bar — see `lib/format/dates`.
-                           */
-                          `${formatDayRange(startDate, endDate)}${dateMode === 'flexible' ? ` (± ${flexDays} days)` : ''}`
-                        : '—'
-              }
-            />
-            <Fact
-              label="Length"
-              value={
-                nights !== ''
-                  ? `${nights} nights`
-                  : startDate && endDate
-                    ? `${nightsBetween(startDate, endDate)} nights`
-                    : wantsLengthHelp
-                      ? 'We will suggest one'
-                      : '—'
-              }
-            />
-            <Fact label="Shape" value={draft.shape ? TRIP_SHAPE_LABELS[draft.shape] : '—'} />
-            <Fact
-              label="Getting around"
-              value={draft.transport ? TRANSPORT_INTENT_LABELS[draft.transport] : '—'}
-            />
-            <Fact
-              label="Here for"
-              value={
-                (draft.themes ?? []).length > 0
-                  ? (draft.themes ?? []).map((theme) => TRIP_THEME_LABELS[theme]).join(', ')
-                  : '—'
-              }
-            />
-            <Fact
-              label="Travellers"
-              value={`${draft.adults ?? 2} adult${(draft.adults ?? 2) === 1 ? '' : 's'}${(draft.children ?? 0) > 0 ? `, ${draft.children} child${draft.children === 1 ? '' : 'ren'}` : ''}`}
-            />
-          </dl>
-          <p className="mt-5 border-t border-rule pt-4 text-xs leading-relaxed text-ink-faint">
-            Every answer changes what we look for. None of them is stored anywhere until you press
-            the button.
-          </p>
-        </Panel>
-      </aside>
+      {/* ---- Mobile: the one action, always reachable ------------------- */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-rule bg-paper/95 px-5 py-3 backdrop-blur-sm lg:hidden">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <span className="min-w-0 truncate text-sm text-ink-muted">
+            {hasDestination ? `${draft.destinationText?.trim()} · ${nightsSoFar ?? datesSoFar}` : 'Start with a destination'}
+          </span>
+          <button type="button" className={cx(buttonClass('primary'), 'shrink-0')} disabled={!canSubmit} onClick={submit}>
+            {pending ? 'Reading…' : 'See what we make of it'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 const inputClass =
-  'mt-2 w-full rounded-lg border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint';
+  'mt-2 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint';
 
 const MONTHS = [
   'January',
@@ -786,38 +642,106 @@ function nightsBetween(start: string, end: string): number {
   return Math.max(0, Math.round((to - from) / 86_400_000));
 }
 
-function Section({
-  step,
-  title,
-  children,
-}: {
-  step: number;
-  title: string;
-  children: React.ReactNode;
-}) {
+/**
+ * A section of the composer: a numeral in the margin, a display heading, and
+ * the controls. Sections enter as the ones above them are answered.
+ */
+function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
   return (
-    <section aria-labelledby={`composer-step-${step}`}>
-      <div className="flex items-baseline gap-3">
-        <span
-          aria-hidden="true"
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-medium text-paper"
-        >
-          {step}
+    <section aria-labelledby={`composer-step-${step}`} className="enter">
+      <div className="flex items-baseline gap-4">
+        <span aria-hidden="true" className="numeral text-sm text-accent">
+          {String(step).padStart(2, '0')}
         </span>
-        <h2 id={`composer-step-${step}`} className="font-display text-2xl text-ink">
+        <h2 id={`composer-step-${step}`} className="display-md text-ink">
           {title}
         </h2>
       </div>
-      <div className="mt-5 pl-0 sm:pl-9">{children}</div>
+      <div className="mt-5 sm:pl-10">{children}</div>
     </section>
+  );
+}
+
+const STUB_TRANSPORT: Record<string, GlyphId> = {
+  drive: 'car',
+  public_transport: 'transit',
+  mixed: 'compass',
+  undecided: 'compass',
+};
+
+/**
+ * THE TRIP STUB.
+ *
+ * What the composer knows so far, drawn as a ticket rather than listed as a
+ * table: the destination lettered on a plate, the length as a numeral, and the
+ * few facts that decide what we research. It fills in as the traveller answers,
+ * which is the first time the product visibly learns something from them.
+ */
+function TripStub({
+  destination,
+  dates,
+  nights,
+  shape,
+  shapeCode,
+  transport,
+  transportCode,
+  themes,
+  travellers,
+}: {
+  destination: string | null;
+  dates: string;
+  nights: string | null;
+  shape: string | null;
+  shapeCode: string | null;
+  transport: string | null;
+  transportCode: string | null;
+  themes: string[];
+  travellers: string;
+}) {
+  const bases = shapeCode === 'two_bases' ? 2 : shapeCode === 'circuit' ? 3 : 1;
+  return (
+    <div className="overflow-hidden rounded-[var(--radius-plate)] border border-rule bg-paper-raised">
+      <div className="plate relative h-40 px-5 pt-4" style={{ '--plate-hue': 38 } as React.CSSProperties}>
+        <p className="label text-ink-faint">So far</p>
+        <svg viewBox="0 0 320 120" className="absolute inset-x-0 bottom-0 h-24 w-full" aria-hidden="true">
+          <circle cx="160" cy="80" r="46" fill="none" stroke="var(--color-ink)" strokeOpacity="0.25" strokeDasharray="3 4" />
+          <rect x="155" y="75" width="10" height="10" fill="var(--color-ink)" />
+          {bases >= 2 ? <rect x="228" y="52" width="8" height="8" fill="var(--color-accent)" /> : null}
+          {bases >= 2 ? <path d="M165 80 L 232 56" stroke="var(--color-accent)" strokeDasharray="3 3" fill="none" /> : null}
+          {bases >= 3 ? <rect x="84" y="44" width="8" height="8" fill="var(--color-accent)" /> : null}
+          {bases >= 3 ? <path d="M155 80 L 88 48" stroke="var(--color-accent)" strokeDasharray="3 3" fill="none" /> : null}
+        </svg>
+        {transportCode ? (
+          <span className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-paper-raised text-ink shadow-sm">
+            <Glyph id={STUB_TRANSPORT[transportCode] ?? 'compass'} className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
+      <div className="px-5 py-4">
+        <p className={cx('font-display text-2xl leading-tight', destination ? 'text-ink' : 'text-ink-faint')}>{destination ?? 'Somewhere'}</p>
+        <p className="mt-1 text-sm text-ink-muted">{dates}</p>
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <Fact label="Length" value={nights ?? '—'} />
+          <Fact label="Travellers" value={travellers} />
+          <Fact label="Shape" value={shape ?? '—'} />
+          <Fact label="Getting around" value={transport ?? '—'} />
+          <div className="col-span-2">
+            <Fact label="Here for" value={themes.length > 0 ? themes.join(', ') : '—'} />
+          </div>
+        </dl>
+        <p className="mt-4 border-t border-rule pt-3 text-xs leading-relaxed text-ink-faint">
+          Every answer changes what we look for. None of them is stored anywhere until you press the button.
+        </p>
+      </div>
+    </div>
   );
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">{label}</dt>
-      <dd className="mt-0.5 text-ink">{value}</dd>
+    <div className="min-w-0">
+      <dt className="label text-ink-faint">{label}</dt>
+      <dd className="mt-0.5 truncate text-ink">{value}</dd>
     </div>
   );
 }

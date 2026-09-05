@@ -120,6 +120,50 @@ describe('the research packet', () => {
       expect(longitudes.size).toBeGreaterThan(4);
       expect(packet.clusters.length).toBeGreaterThan(1);
     });
+
+    /**
+     * PHASE 17 — A CROWDED CELL DOES NOT COST IT ITS MOST SIGNIFICANT PLACE.
+     *
+     * Destination-agnostic regression: nothing here names a real place. What
+     * it reproduces is the *shape* of a real production defect — a live
+     * Iceland run's most prominent single feature was absent from the
+     * composed trip after this exact cap trimmed the packet, because the cap
+     * read a crowded cell in entity-id order and entity ids encode no
+     * opinion about what matters.
+     *
+     * One place carries the highest significance and an entity id sorted to
+     * come *last* alphabetically, so the pre-fix behavior — keep whichever
+     * entries sort earliest — would have been the one case guaranteed to
+     * drop it. Proving the old order fails this and the new one does not.
+     */
+    it('keeps the most significant place in a crowded cell even when its id sorts last', () => {
+      const crowd: RawPlace[] = Array.from({ length: PACKET_CAPS.places }, (_, index) => ({
+        ...placeAt(index, 45, 9),
+        entityId: `node/${String(index).padStart(4, '0')}`,
+        significance: 0.1,
+      }));
+      const highlight: RawPlace = {
+        ...placeAt(PACKET_CAPS.places, 45, 9),
+        entityId: 'node/zzz-most-significant',
+        significance: 1,
+      };
+      const crowdedPacket = buildResearchPacket(
+        fixturePacketInputs({ places: [...crowd, highlight] }),
+      );
+      expect(crowdedPacket.places.some((place) => place.entityId === highlight.entityId)).toBe(
+        true,
+      );
+
+      // The old, order-preserving behavior this replaces: sorted by entity id
+      // alone, the highlight — sorting last — is exactly the one entry a cap
+      // of `crowd.length` would cut. Demonstrated directly against the same
+      // input, independent of the fix, so this is a fact about the fixture's
+      // shape rather than an assumption about the implementation.
+      const byEntityIdOrder = [...crowd, highlight].sort((a, b) =>
+        a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0,
+      );
+      expect(byEntityIdOrder[byEntityIdOrder.length - 1]!.entityId).toBe(highlight.entityId);
+    });
   });
 
   it('holds the same place once, however many providers described it', () => {

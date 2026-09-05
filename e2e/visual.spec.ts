@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { completeQuestionnaire } from './support/trip';
 import { mkdirSync } from 'node:fs';
 import {
   expectNoHorizontalOverflow,
@@ -46,26 +47,10 @@ test('captures the journey and stays free of console errors and overflow', async
   await shot('02-composer');
 
   await page.getByRole('button', { name: /See what we make of it/i }).click();
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-  await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' }).check();
-  await shot('03-interests');
-
-  await advance(page, 'How should the days feel?');
-  await shot('04-rhythm');
-  await advance(page, 'What is the spending style?');
-  await advance(page, 'How do you want to eat?');
-  await advance(page, 'Famous or off the track?');
-  await page.getByRole('radio', { name: /Crowds ruin it/ }).check();
-  await shot('05-discovery');
-  await advance(page, 'How are you getting around?');
-  await shot('06-transport');
-  await advance(page, 'How far from Mammoth Lakes?');
-  await advance(page, 'Anything to steer around?');
-  await shot('07-constraints');
-  await advance(page, 'Your trip personality');
-  await shot('08-personality');
+  await expect(page.getByTestId('interview-understanding')).toBeVisible();
+  await shot('03-understanding');
+  await completeQuestionnaire(page, { answers: { iconic_crowds: 'quieter_alternative' } });
+  await shot('08-review');
 
   await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
@@ -83,8 +68,3 @@ test('captures the journey and stays free of console errors and overflow', async
 
   expectNoRuntimeProblems(problems);
 });
-
-async function advance(page: Page, nextHeading: string) {
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: nextHeading })).toBeVisible();
-}

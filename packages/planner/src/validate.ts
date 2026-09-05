@@ -30,6 +30,8 @@ export interface ValidationInput {
   profile: TravelerProfile;
   config: PlannerConfig;
   matrix: TravelTimeMatrix;
+  /** See `PlannerInput.travelLegs`. A place measured here, not `matrix`, is still measured. */
+  travelLegs?: TravelTimeMatrix;
   placesById: ReadonlyMap<string, Place>;
   baseId: string;
   access: AccessDataset;
@@ -54,7 +56,7 @@ export interface ValidationInput {
  */
 export function validateItinerary(input: ValidationInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const { days, profile, config, matrix, placesById, baseId } = input;
+  const { days, profile, config, matrix, travelLegs, placesById, baseId } = input;
 
   const seenPlaces = new Map<string, number>();
   const foodInput = {
@@ -166,7 +168,7 @@ export function validateItinerary(input: ValidationInput): ValidationIssue[] {
           placeId: place.id,
         });
       }
-      if (place && !hasPoint(matrix, place.id)) {
+      if (place && !hasPoint(matrix, place.id) && !(travelLegs && hasPoint(travelLegs, place.id))) {
         issues.push({
           code: 'matrix_entry_missing',
           severity: 'error',

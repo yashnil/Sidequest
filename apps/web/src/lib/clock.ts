@@ -20,5 +20,15 @@ import 'server-only';
  * reasoning has somewhere to live, and so any second caller has to read it.
  */
 export function renderInstant(): number {
+  /*
+   * LIVE WORLD V1 — Today mode is tested against a fixed instant. The
+   * fixture clock is honoured only when the composer is the offline fixture,
+   * which no real deployment runs; a live build always reads the real clock.
+   */
+  const fixture = process.env.SIDEQUEST_FIXTURE_NOW;
+  if (fixture && process.env.SIDEQUEST_COMPOSER_PROVIDER === 'fixture') {
+    const parsed = Date.parse(fixture);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   return Date.now();
 }

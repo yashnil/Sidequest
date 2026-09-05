@@ -573,6 +573,28 @@ const mutations: Mutation[] = [
     },
   },
   {
+    code: 'trip_not_closed_to_departure',
+    severity: 'critical',
+    label: 'the trip ends far from where it started, with no leg back',
+    apply: (plan) => {
+      // ~155 km from base1 (37.6, -119) — a Phase 17 production-path
+      // regression: the founder's Iceland run ended its last day about 400 km
+      // from where the trip started, with every individual day internally
+      // consistent (so `base_inconsistent`, which is per-day, never fired)
+      // and nothing anywhere in the plan making up the distance.
+      plan.bases.push({
+        id: 'b2',
+        place: ref('base2', 'Far North Lodge', 39.0),
+        nights: 1,
+        fromDate: '2026-08-11',
+        toDate: '2026-08-11',
+        why: 'The last stop on the loop.',
+      });
+      plan.days[1]!.baseId = 'b2';
+      blockAt(plan, 1, 5).travel!.to = ref('base2', 'Far North Lodge', 39.0);
+    },
+  },
+  {
     code: 'daily_travel_exceeded',
     severity: 'major',
     label: 'more time in transit than the traveller allowed',
@@ -1292,6 +1314,87 @@ describe('subjects are reconstructed from the timeline, not read off optional fi
     });
 
     expect(severityOf(report, 'stated_totals_contradict_timeline')).toContain('critical');
+  });
+});
+
+/**
+ * A DAY-TRIP DRIVING CEILING IS NOT A CEILING ON RELOCATING TO A NEW BASE.
+ *
+ * A live Iceland run scoped the whole country down to its western/northern
+ * quarter and named the traveller's daily driving limit as the reason — the
+ * *generation* prompt was telling the model every day had to fit inside that
+ * cap, relocation included. This validator was never the bug: `checkDailyBudgets`
+ * already gives a day that changes base its own transfer allowance, on top of
+ * the cap, sized to the measured distance between the two bases. These three
+ * tests are the regression the correction promised — proof the exemption
+ * exists, is bounded, and is generic to any destination and any shape rather
+ * than special-cased for a moving trip:
+ *
+ * 1. an ordinary day at one base is still held to the cap exactly as before;
+ * 2. a day that relocates to a new base may spend what the move measures,
+ *    even past the cap, and earns no finding for it;
+ * 3. a relocation that spends *more* than the cap plus the measured move is
+ *    still a real defect — the exemption is not a blank cheque.
+ */
+describe('a day-trip driving ceiling versus a day that relocates', () => {
+  it('still holds an ordinary, single-base day to the cap', () => {
+    const report = run((_plan, options) => {
+      options.request = (request) => {
+        request.movement.maxDailyDriveMinutes = 30;
+      };
+    });
+    expect(severityOf(report, 'daily_drive_exceeded')).toContain('major');
+  });
+
+  it('lets a relocation day spend the measured move without a finding', () => {
+    const report = run((plan, options) => {
+      plan.bases.push({
+        id: 'b2',
+        place: ref('base2', 'Lake Lodge'),
+        nights: 1,
+        fromDate: '2026-08-11',
+        toDate: '2026-08-11',
+        why: 'The next stop on the route.',
+      });
+      plan.days[1]!.baseId = 'b2';
+      // Day 2 already drives 140 minutes on its own sightseeing (see `day()`).
+      // A 300-minute transfer on top of that is 440 minutes at the wheel —
+      // past the 240-minute cap alone, and exactly what a moving-route
+      // traveller signed up for when they allowed more than one base.
+      plan.days[1]!.blocks.unshift(
+        drive(ref('base1', 'Valley Inn'), ref('base2', 'Lake Lodge'), 300, 600, 300),
+      );
+      clearTotals(plan.days[1]!);
+      options.routes = { 'base1->base2': 300 };
+    });
+    expect(codes(report)).not.toContain('daily_drive_exceeded');
+    expect(codes(report)).not.toContain('daily_travel_exceeded');
+  });
+
+  it('still flags a relocation day that overspends even its transfer allowance', () => {
+    const report = run((plan, options) => {
+      plan.bases.push({
+        id: 'b2',
+        place: ref('base2', 'Lake Lodge'),
+        nights: 1,
+        fromDate: '2026-08-11',
+        toDate: '2026-08-11',
+        why: 'The next stop on the route.',
+      });
+      plan.days[1]!.baseId = 'b2';
+      // The measured move is 60 minutes; the plan drives 300 anyway. The
+      // allowance covers the move it actually needed, not whatever a day
+      // chooses to spend.
+      plan.days[1]!.blocks.unshift(
+        drive(ref('base1', 'Valley Inn'), ref('base2', 'Lake Lodge'), 300, 600, 300),
+      );
+      clearTotals(plan.days[1]!);
+      options.routes = { 'base1->base2': 60 };
+      options.request = (request) => {
+        request.movement.maxDailyDriveMinutes = 100;
+      };
+    });
+    expect(severityOf(report, 'daily_drive_exceeded')).toContain('major');
   });
 });
 

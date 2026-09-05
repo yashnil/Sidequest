@@ -252,6 +252,14 @@ export default defineConfig({
     // loop they exist to refuse. Left up, they refuse a different dozen tests
     // each run; sized to fit, they would refuse nobody real. The fences keep
     // their named unit tests, where the rules are exercised explicitly.
+    // Every live-provider switch pinned off and the map key blanked, for the
+    // ninth time and the plainest reason: a developer's `.env.local` may carry
+    // the open stack (geocoder, place backbone, routes, research) and a real
+    // credential, and `next start` loads `.env.local`. The canonical
+    // generation's verification step reaches the geocoder and router whenever
+    // their switches are on — so without these pins a browser run would call
+    // volunteer-run services on every "Build my trip". Set explicitly rather
+    // than trusted absent.
     // And the `Secure` attribute off the ownership cookie, which is the one pin
     // here that is not about money. `npm run start` is `next start`, which is
     // NODE_ENV=production, and this suite drives it over `http://127.0.0.1` —
@@ -262,7 +270,7 @@ export default defineConfig({
     // ownership *is* that cookie, so a policy change in Chromium would take the
     // whole suite red for a reason no failure message would name. Pinned rather
     // than left to luck; see `secureCookiesEnabled` in lib/net/caller.ts.
-    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
+    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= GOOGLE_MAPS_API_KEY= SIDEQUEST_GEOCODER_PROVIDER=off SIDEQUEST_PLACE_BACKBONE=off SIDEQUEST_POI_PROVIDER=off SIDEQUEST_ROUTES_PROVIDER=off SIDEQUEST_RESEARCH_PROVIDER=off SIDEQUEST_IMAGERY_PROVIDER=fixture SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_COMPOSER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

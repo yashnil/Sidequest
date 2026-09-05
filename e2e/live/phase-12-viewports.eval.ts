@@ -1,3 +1,4 @@
+import { completeQuestionnaire } from '../support/trip';
 import { chromium } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
@@ -84,25 +85,8 @@ async function main(): Promise<void> {
     await page.goto(`${BASE}/trips/${tripId}/questionnaire`);
     await check('01-free-text-reading');
 
-    await page
-      .getByRole('radio', { name: 'Scenic viewpoints: Core' })
-      .check()
-      .catch(() => undefined);
-    await page
-      .getByRole('radio', { name: 'Hiking: A few times' })
-      .check()
-      .catch(() => undefined);
-
-    for (let step = 0; step < 14; step += 1) {
-      const build = page.getByRole('button', { name: 'Build my discovery board' });
-      if (await build.isVisible().catch(() => false)) {
-        await build.click();
-        break;
-      }
-      const next = page.getByRole('button', { name: /^Continue$/ });
-      if (await next.isVisible().catch(() => false)) await next.click();
-      else await page.waitForTimeout(300);
-    }
+    await completeQuestionnaire(page, { priorities: ['Scenic viewpoints', 'Hiking'] }).catch(() => undefined);
+    await page.getByRole('button', { name: 'Build my discovery board' }).click().catch(() => undefined);
     await page.waitForURL(/\/discover$/, { timeout: 30_000 }).catch(() => undefined);
     await check('02-board-weather-not-fetched');
 

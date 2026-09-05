@@ -324,8 +324,13 @@ function buildOption(args: {
   const memberName = firstMember ? nameOf(firstMember.place) : unit.gatewayName;
 
   // Refusing to plan on a point the matrix does not know is the same rule the
-  // rest of the planner follows: a missing travel time is a failure, not a zero.
-  if (!hasPoint(matrix, gatewayRoutingId)) {
+  // rest of the planner follows: a missing travel time is a failure, not a
+  // zero — but a point resolved on demand (see `PlannerInput.travelLegs`) is
+  // not missing, it is measured somewhere beside this matrix.
+  const routableOnDemand = Boolean(
+    travel?.knowledge.travelLegs && hasPoint(travel.knowledge.travelLegs, gatewayRoutingId),
+  );
+  if (!hasPoint(matrix, gatewayRoutingId) && !routableOnDemand) {
     return {
       blocked: {
         code: 'no_access_data',

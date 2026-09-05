@@ -237,6 +237,33 @@ describe('converting a generation into a neutral plan', () => {
     );
   });
 
+  /**
+   * A live run kept a "Placeholder not used" base in the final structured
+   * plan — the model proposed it while composing, no day ended up staying
+   * there, and nothing stripped it back out. `baseId` on the converted days
+   * is the ground truth for which bases the trip actually uses.
+   */
+  it('drops a base no day in the trip actually stayed at', () => {
+    const base = fixtureGeneration();
+    const { plan } = convert(
+      fixtureGeneration({
+        bases: [
+          ...base.bases,
+          {
+            id: 'unused-placeholder',
+            placeIndex: null,
+            name: 'Somewhere Considered And Dropped',
+            nights: 0,
+            why: 'Placeholder not used.',
+          },
+        ],
+      }),
+    );
+    expect(plan.bases.map((planBase) => planBase.id)).toEqual(['ardenholt']);
+    expect(plan.bases.some((planBase) => planBase.id === 'unused-placeholder')).toBe(false);
+    expect(plan.warnings.join(' ')).toContain('no day in the trip actually stayed at');
+  });
+
   it('records a day the plan invented outside the trip rather than accepting it', () => {
     const base = fixtureGeneration();
     const { plan } = convert(

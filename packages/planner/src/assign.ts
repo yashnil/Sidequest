@@ -1,5 +1,5 @@
 import { isMeaningfullyBetter, type TravelerProfile } from '@sidequest/core';
-import { clusterByTravelTime, type TravelTimeMatrix, tryLeg } from '@sidequest/geo';
+import { clusterByTravelTime, hasPoint, resolveSubMatrix, type TravelTimeMatrix, tryLeg } from '@sidequest/geo';
 import type { AccessUnit } from './access';
 import type { PlannedDay } from './windows';
 import type { PlanningCandidate } from './types';
@@ -7,6 +7,49 @@ import type { PlanningCandidate } from './types';
 export interface DayAssignment {
   day: PlannedDay;
   candidates: PlanningCandidate[];
+}
+
+/**
+ * OBSERVABILITY FOR THE ASSIGNMENT FUNNEL — NEVER A QUALITY GATE.
+ *
+ * A trip that goes from many feasible candidates to almost none scheduled
+ * must never do so silently. This is not a minimum-stop requirement (no
+ * threshold here ever blocks or rewrites an itinerary) — it is a record of
+ * where every candidate went, so "why is this day empty" has a real answer:
+ * genuinely not enough evidence/eligible places, or a planner defect. The
+ * live Iceland run that exposed the original defect (15 feasible -> 1
+ * scheduled) had no diagnostic that could tell the two apart; this exists so
+ * that never happens invisibly again.
+ */
+export interface AssignmentFunnel {
+  /** Individual candidates handed to `assignToDays`, before unitisation. */
+  candidatesEntering: number;
+  /** How many of those candidates ended up in some base window's cluster pool (locked or unlocked). */
+  candidatesAssignedToWindow: number;
+  /** How many candidates actually landed on a day in the returned assignment. */
+  candidatesScheduled: number;
+  /** Distinct locked place ids this call was asked to honour. */
+  lockedRequested: number;
+  /** Locked candidates that landed on their own pinned day. */
+  lockedScheduled: number;
+  /** Locked candidates that did not — see `lockedRejections` for why, one entry each. */
+  lockedRejected: number;
+  lockedRejections: readonly { placeId: string; reason: 'day_not_usable' | 'not_routable_to_target_base' }[];
+  /** Every reason a unit (locked or not) never made it onto a day, tallied. */
+  droppedByReason: Readonly<Record<string, number>>;
+}
+
+function emptyFunnel(candidatesEntering: number): AssignmentFunnel {
+  return {
+    candidatesEntering,
+    candidatesAssignedToWindow: 0,
+    candidatesScheduled: 0,
+    lockedRequested: 0,
+    lockedScheduled: 0,
+    lockedRejected: 0,
+    lockedRejections: [],
+    droppedByReason: {},
+  };
 }
 
 /**
@@ -143,18 +186,179 @@ export function wantsStrenuousDaysApart(profile: TravelerProfile): boolean {
 }
 
 /**
+ * ONE BASE'S OWN SLICE OF THE TRIP — LOCAL CLUSTERING, LOCAL DAY MATCHING.
+ *
+ * Exactly the algorithm `assignToDays` used to run once, globally, over every
+ * eligible unit in the trip — unchanged in its own logic (k-medoids seeded on
+ * the base, weight-to-day matching, hard-day spacing, weather preference) —
+ * now run once per base window instead of once for the whole trip. Every unit
+ * passed in has already been confirmed (by the caller, Stage C) to have real
+ * routing evidence to *this* base specifically, so `resolveSubMatrix` here
+ * only ever needs to resolve pairs among places that could plausibly share a
+ * day, never a pair spanning two different bases the traveller is never at
+ * the same time.
+ *
+ * The peeling fallback from the prior round is kept, deliberately, at this
+ * scale: within one base's own small set of units, one genuinely-unroutable
+ * pair is still a real, if rare, possibility (two satellites of the same base
+ * that happen to have no measured leg between them), and dropping just that
+ * one unit — never the whole window — is still the correct, non-fabricating
+ * degradation `scheduleUnits` already established one stage later. What it
+ * must never again do is run over units from *other* bases, which is what
+ * turned one unroutable pair into "drop nearly everything".
+ */
+function assignWithinWindow(
+  units: readonly PlanningUnit[],
+  windowDays: readonly PlannedDay[],
+  baseId: string,
+  matrix: TravelTimeMatrix,
+  travelLegs: TravelTimeMatrix | undefined,
+  feasibleDates: ReadonlyMap<string, ReadonlySet<string>>,
+  openDates: ReadonlyMap<string, ReadonlySet<string>>,
+  weatherPreferenceFor: (placeIds: readonly string[], date: string) => number | null,
+  separateStrenuousDays: boolean,
+  assignmentByDay: Map<number, PlanningCandidate[]>,
+  droppedByReason: Record<string, number>,
+): void {
+  if (units.length === 0 || windowDays.length === 0) return;
+
+  const drop = (reason: string, count = 1) => {
+    droppedByReason[reason] = (droppedByReason[reason] ?? 0) + count;
+  };
+
+  let clusterUnits = [...units];
+  let resolvedForClustering = resolveSubMatrix(
+    matrix,
+    [baseId, ...clusterUnits.map((unit) => unit.representativeId)],
+    travelLegs,
+  );
+  while (!resolvedForClustering.ok) {
+    const unresolvedIds = new Set(resolvedForClustering.unresolved);
+    const implicated = clusterUnits.filter((unit) => unresolvedIds.has(unit.representativeId));
+    if (implicated.length === 0) {
+      drop('local_cluster_unresolvable', clusterUnits.length);
+      return;
+    }
+    const offPrimary = implicated.filter((unit) => !hasPoint(matrix, unit.representativeId));
+    const pool = offPrimary.length > 0 ? offPrimary : implicated;
+    const peeled = [...pool].sort((a, b) => a.representativeId.localeCompare(b.representativeId))[0]!;
+    clusterUnits = clusterUnits.filter((unit) => unit !== peeled);
+    drop('peeled_within_local_cluster');
+    if (clusterUnits.length === 0) return;
+    resolvedForClustering = resolveSubMatrix(
+      matrix,
+      [baseId, ...clusterUnits.map((unit) => unit.representativeId)],
+      travelLegs,
+    );
+  }
+
+  const clusters = clusterByTravelTime(
+    resolvedForClustering.matrix,
+    clusterUnits.map((unit) => unit.representativeId),
+    { k: windowDays.length, baseId },
+  );
+
+  const unitByRepresentative = new Map(clusterUnits.map((unit) => [unit.representativeId, unit]));
+
+  const clusterLoads = clusters.map((cluster) => {
+    const members = cluster.memberIds
+      .map((id) => unitByRepresentative.get(id))
+      .filter((unit): unit is PlanningUnit => unit !== undefined);
+    return {
+      candidates: members.flatMap((unit) => unit.members),
+      unitKeys: [...new Set(members.map((unit) => unit.key))],
+      placeIds: members.flatMap((unit) => unit.members.map((member) => member.place.id)),
+      weight: members.length > 0 ? Math.max(...members.map((unit) => unit.maxDriveMinutes)) : 0,
+      topPriority: members.length > 0 ? Math.max(...members.map((unit) => unit.topPriority)) : 0,
+      strenuous: members.some((unit) =>
+        unit.members.some((member) => member.place.physicalIntensity === 'strenuous'),
+      ),
+    };
+  });
+
+  // Heaviest cluster to the roomiest day, both scoped to this window only.
+  const orderedClusters = [...clusterLoads].sort(
+    (a, b) => b.weight - a.weight || b.topPriority - a.topPriority,
+  );
+  const orderedDays = [...windowDays].sort(
+    (a, b) => b.capacityMinutes - a.capacityMinutes || a.dayNumber - b.dayNumber,
+  );
+
+  const workableParts = (cluster: (typeof clusterLoads)[number], date: string) => {
+    const reachableUnits = cluster.unitKeys.filter(
+      (key) => feasibleDates.get(key)?.has(date) ?? true,
+    ).length;
+    const openPlaces = cluster.placeIds.filter(
+      (placeId) => openDates.get(placeId)?.has(date) ?? true,
+    ).length;
+    return reachableUnits + openPlaces;
+  };
+
+  const clustersPerDay = new Map<number, number>();
+  const strenuousDays = new Set<number>();
+
+  for (const cluster of orderedClusters) {
+    const best = Math.max(...orderedDays.map((day) => workableParts(cluster, day.date)));
+    const workable = orderedDays.filter((day) => workableParts(cluster, day.date) === best);
+
+    const spaced =
+      separateStrenuousDays && cluster.strenuous
+        ? workable.filter(
+            (day) =>
+              !strenuousDays.has(day.dayNumber) &&
+              !strenuousDays.has(day.dayNumber - 1) &&
+              !strenuousDays.has(day.dayNumber + 1),
+          )
+        : workable;
+    const pool = spaced.length > 0 ? spaced : workable;
+
+    const balanced = [...pool].sort(
+      (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
+    )[0];
+    const day = preferByWeather(cluster, pool, balanced, weatherPreferenceFor);
+    if (!day) {
+      drop('no_workable_day_in_window', cluster.candidates.length);
+      continue;
+    }
+    clustersPerDay.set(day.dayNumber, (clustersPerDay.get(day.dayNumber) ?? 0) + 1);
+    if (cluster.strenuous) strenuousDays.add(day.dayNumber);
+    assignmentByDay.get(day.dayNumber)?.push(...cluster.candidates);
+  }
+}
+
+/**
  * Groups places geographically and hands each group to a day.
  *
- * Three decisions carry the quality here:
+ * Restructured around one invariant the original single global clustering
+ * pass violated: **a candidate at one base is never compared, for any
+ * purpose, against a candidate at a different base.** A multi-base trip's
+ * real routing evidence is inherently local — the primary matrix and
+ * `travelLegs` both describe "this base and its own neighbourhood", never
+ * "every base in the trip against every other" — and asking `clusterByTravelTime`
+ * to resolve pairwise distances across the whole trip at once meant one
+ * genuinely sparse pairing between two *unrelated* bases could peel away
+ * units that had perfectly good local evidence, all the way down to almost
+ * nothing (a real live Iceland run: 15 feasible candidates, 1 scheduled).
  *
- * 1. Clustering runs on travel time, not straight-line distance, and on *units*
- *    rather than places — so anything behind a shared gate is guaranteed to land
- *    in the same group and therefore on the same day.
- * 2. Only days that can genuinely hold a stop take part, so a cluster is never
- *    handed to a departure morning that has half an hour in it.
- * 3. Groups are matched to days by weight: the cluster that reaches furthest from
- *    base is paired with the day that has the most hours in it. That is what stops
- *    a two-hour round trip being handed to the arrival afternoon.
+ * Five stages, in order:
+ *
+ * 1. **Locked anchors placed first, directly onto their pinned day** — never
+ *    subject to clustering surviving at all. A lock only fails to land here
+ *    when its own pinned day is not usable or the day's own base genuinely
+ *    cannot reach it; both are recorded in the returned `funnel`, never
+ *    silent.
+ * 2. **Base windows** — the trip's own usable days, partitioned by which
+ *    base each one starts from. A loop that returns to an earlier base
+ *    shares one window with its first stay there; a genuinely different
+ *    stay is a different window.
+ * 3. **Each remaining (unlocked, or lock-not-honoured) unit joins the one
+ *    base window it has real evidence of reaching** — the nearest one when
+ *    more than one qualifies, none when nowhere does.
+ * 4. **Clustering runs once per window**, over only that window's own units
+ *    and days — see `assignWithinWindow`.
+ * 5. Untouched: within a window, weight-to-day matching, hard-day spacing
+ *    and weather preference are the exact same logic this function always
+ *    used, merely scoped smaller.
  */
 export function assignToDays(
   eligible: readonly PlanningCandidate[],
@@ -187,167 +391,135 @@ export function assignToDays(
    * pace says otherwise".
    */
   separateStrenuousDays = false,
-): DayAssignment[] {
+  /** See `PlannerInput.travelLegs`. Consulted only once `matrix` itself cannot answer for a pair. */
+  travelLegs?: TravelTimeMatrix,
+  /**
+   * Place id → the day number the traveller pinned it to. Optional and
+   * additive: every caller before this field existed passes nothing, and
+   * gets exactly the pre-lock-awareness behaviour (locks still work, via
+   * `plan.ts`'s own post-assignment move — see that file's own header on
+   * why leaving it in place is a harmless no-op once this stage already
+   * placed things correctly).
+   */
+  locks?: ReadonlyMap<string, number>,
+): { assignments: DayAssignment[]; funnel: AssignmentFunnel } {
+  const funnel = emptyFunnel(eligible.length);
   const usableDays = days.filter((day) => day.capacityMinutes >= MIN_PLANNABLE_MINUTES);
   if (usableDays.length === 0 || eligible.length === 0) {
-    return days.map((day) => ({ day, candidates: [] }));
+    return { assignments: days.map((day) => ({ day, candidates: [] })), funnel };
   }
-
-  const units = buildUnits(eligible, unitByPlaceId);
-  /*
-   * Seeded on the first day's base. On a single-base trip that is the base; on
-   * a multi-base one it is where the traveller starts, which is the right end
-   * of the route to grow clusters outward from. Which day a cluster then lands
-   * on is decided below, and *that* is where the base actually binds.
-   */
-  const clusters = clusterByTravelTime(
-    matrix,
-    units.map((unit) => unit.representativeId),
-    { k: usableDays.length, baseId: baseIdFor(usableDays[0]!.date) },
-  );
-
-  const unitByRepresentative = new Map(units.map((unit) => [unit.representativeId, unit]));
-
-  const clusterLoads = clusters.map((cluster) => {
-    const members = cluster.memberIds
-      .map((id) => unitByRepresentative.get(id))
-      .filter((unit): unit is PlanningUnit => unit !== undefined);
-    return {
-      candidates: members.flatMap((unit) => unit.members),
-      // The access units inside this geographic cluster, so day assignment can
-      // ask "can this actually be reached on that date?".
-      unitKeys: [
-        ...new Set(
-          members.flatMap((unit) =>
-            unit.members.map((member) => unitByPlaceId.get(member.place.id)?.key ?? unit.key),
-          ),
-        ),
-      ],
-      placeIds: members.flatMap((unit) => unit.members.map((member) => member.place.id)),
-      weight: members.length > 0 ? Math.max(...members.map((unit) => unit.maxDriveMinutes)) : 0,
-      topPriority: members.length > 0 ? Math.max(...members.map((unit) => unit.topPriority)) : 0,
-      /* One hard stop is enough to make the day a hard day. */
-      strenuous: members.some((unit) =>
-        unit.members.some((member) => member.place.physicalIntensity === 'strenuous'),
-      ),
-    };
-  });
-
-  // Heaviest cluster to the roomiest day.
-  const orderedClusters = [...clusterLoads].sort(
-    (a, b) => b.weight - a.weight || b.topPriority - a.topPriority,
-  );
-  const orderedDays = [...usableDays].sort(
-    (a, b) => b.capacityMinutes - a.capacityMinutes || a.dayNumber - b.dayNumber,
-  );
 
   const assignmentByDay = new Map<number, PlanningCandidate[]>();
   for (const day of days) assignmentByDay.set(day.dayNumber, []);
+  const droppedByReason: Record<string, number> = {};
 
-  /**
-   * How much of a cluster genuinely works on a given date — counting both
-   * halves of the question, because they fail independently.
-   *
-   * Without the access half, geography alone decides the day and a
-   * shuttle-served valley lands on a Tuesday the shuttle does not run. Without
-   * the hours half, a state park that shuts on Wednesdays lands on Wednesday.
-   * Either way the packer then rejects it and it spills into an overflow pass,
-   * by which time every other day is full of auto-picks — and a traveller's
-   * hand-picked stop loses to a weekday.
-   */
-  const workableParts = (cluster: (typeof clusterLoads)[number], date: string) => {
-    const reachableUnits = cluster.unitKeys.filter(
-      (key) => feasibleDates.get(key)?.has(date) ?? true,
-    ).length;
-    const openPlaces = cluster.placeIds.filter(
-      (placeId) => openDates.get(placeId)?.has(date) ?? true,
-    ).length;
-    return reachableUnits + openPlaces;
-  };
+  const allUnits = buildUnits(eligible, unitByPlaceId);
 
-  /**
-   * Whether this day's base can actually reach this cluster.
-   *
-   * The gate that makes multi-base real. Without it the assigner is free to put
-   * a stop beside the second base on a day the traveller is still at the first,
-   * and every individual number stays consistent — the day just contains a
-   * six-hour round trip nobody would make.
-   *
-   * Measured, never assumed: a pair the matrix cannot answer for is *not*
-   * reachable. On a single-base trip every day has the same base and this is
-   * always true, so nothing changes for the regions that already worked.
-   */
-  const reachableFromDayBase = (cluster: (typeof clusterLoads)[number], date: string): boolean => {
-    const base = baseIdFor(date);
-    if (cluster.placeIds.length === 0) return true;
-    return cluster.placeIds.some((placeId) => tryLeg(matrix, base, placeId) !== null);
-  };
+  // --- Stage B: locked units, placed before any clustering can decide whether ---
+  // --- they survive it. ------------------------------------------------------
+  const dayByNumber = new Map(usableDays.map((day) => [day.dayNumber, day]));
+  const placedUnitKeys = new Set<string>();
+  const lockedRejections: { placeId: string; reason: 'day_not_usable' | 'not_routable_to_target_base' }[] = [];
+  let lockedRequested = 0;
+  let lockedScheduled = 0;
+  if (locks && locks.size > 0) {
+    lockedRequested = new Set(locks.keys()).size;
+    for (const unit of allUnits) {
+      const lockedDayNumber = unit.members
+        .map((member) => locks.get(member.place.id))
+        .find((day): day is number => day !== undefined);
+      if (lockedDayNumber === undefined) continue;
 
-  // Fewest clusters so far wins, and `sort` is stable, so the capacity order
-  // already baked into `orderedDays` breaks every tie. Fully deterministic.
-  const clustersPerDay = new Map<number, number>();
-  /** Days already carrying a hard stop, so the next one can be kept off them. */
-  const strenuousDays = new Set<number>();
+      const lockedPlaceId = unit.members.find((member) => locks.has(member.place.id))!.place.id;
+      const targetDay = dayByNumber.get(lockedDayNumber);
+      if (!targetDay) {
+        lockedRejections.push({ placeId: lockedPlaceId, reason: 'day_not_usable' });
+        continue;
+      }
+      const targetBaseId = baseIdFor(targetDay.date);
+      const routable =
+        tryLeg(matrix, targetBaseId, unit.representativeId) !== null ||
+        (travelLegs !== undefined && tryLeg(travelLegs, targetBaseId, unit.representativeId) !== null);
+      if (!routable) {
+        lockedRejections.push({ placeId: lockedPlaceId, reason: 'not_routable_to_target_base' });
+        continue;
+      }
 
-  for (const cluster of orderedClusters) {
-    /*
-     * Days whose base cannot reach this cluster are removed *before* the
-     * best-fit comparison, not penalised inside it — a cluster the base cannot
-     * reach is not a worse choice, it is not a choice.
-     */
-    const candidateDays = orderedDays.filter((day) => reachableFromDayBase(cluster, day.date));
-    if (candidateDays.length === 0) continue;
-    const best = Math.max(...candidateDays.map((day) => workableParts(cluster, day.date)));
-    const workable = candidateDays.filter((day) => workableParts(cluster, day.date) === best);
-
-    /**
-     * SPACING HARD DAYS OUT — §9.3, "long hikes on consecutive days when pace
-     * says otherwise".
-     *
-     * `maxStrenuous` bounds effort *within* a day and nothing bounded it
-     * *between* days, so a balanced-pace traveller who likes hiking was
-     * perfectly likely to be handed three long climbs in a row: each day passed
-     * every check it was given, and the week was punishing. Composition is a
-     * property of the sequence, and nothing was looking at the sequence.
-     *
-     * A narrowing, not a score: days adjacent to one already carrying a hard
-     * stop drop out of contention, and everything downstream — load balancing,
-     * then weather — chooses among what is left, unchanged. It gives way the
-     * moment it would cost the traveller a stop: if nothing non-adjacent is
-     * workable, the original pool stands, because a spread-out trip that leaves
-     * a lake unvisited is not the trade anybody asked for.
-     */
-    const spaced =
-      separateStrenuousDays && cluster.strenuous
-        ? workable.filter(
-            (day) =>
-              /*
-               * The day itself as well as its neighbours: a traveller who wants
-               * hard days apart has `maxStrenuous` of one, so stacking two on
-               * one day is not spacing, it is one of them being dropped by the
-               * packer a few steps later.
-               */
-              !strenuousDays.has(day.dayNumber) &&
-              !strenuousDays.has(day.dayNumber - 1) &&
-              !strenuousDays.has(day.dayNumber + 1),
-          )
-        : workable;
-    const pool = spaced.length > 0 ? spaced : workable;
-
-    const balanced = [...pool].sort(
-      (a, b) => (clustersPerDay.get(a.dayNumber) ?? 0) - (clustersPerDay.get(b.dayNumber) ?? 0),
-    )[0];
-    const day = preferByWeather(cluster, pool, balanced, weatherPreferenceFor);
-    if (!day) continue;
-    clustersPerDay.set(day.dayNumber, (clustersPerDay.get(day.dayNumber) ?? 0) + 1);
-    if (cluster.strenuous) strenuousDays.add(day.dayNumber);
-    assignmentByDay.get(day.dayNumber)?.push(...cluster.candidates);
+      assignmentByDay.get(targetDay.dayNumber)!.push(...unit.members);
+      placedUnitKeys.add(unit.key);
+      lockedScheduled += 1;
+    }
   }
 
-  return days.map((day) => ({
+  const remainingUnits = allUnits.filter((unit) => !placedUnitKeys.has(unit.key));
+
+  // --- Stage A: base windows — the trip's own days, partitioned by which ---
+  // --- base each one starts from. --------------------------------------------
+  const windowsByBase = new Map<string, PlannedDay[]>();
+  for (const day of usableDays) {
+    const baseId = baseIdFor(day.date);
+    const bucket = windowsByBase.get(baseId);
+    if (bucket) bucket.push(day);
+    else windowsByBase.set(baseId, [day]);
+  }
+
+  // --- Stage C: each remaining unit joins the one base window it has real ---
+  // --- evidence of reaching — the nearest one, never all of them at once. ---
+  const windowUnits = new Map<string, PlanningUnit[]>();
+  for (const baseId of windowsByBase.keys()) windowUnits.set(baseId, []);
+  let candidatesAssignedToWindow = 0;
+  for (const unit of remainingUnits) {
+    let bestBaseId: string | null = null;
+    let bestMinutes = Number.POSITIVE_INFINITY;
+    for (const baseId of windowsByBase.keys()) {
+      const leg = tryLeg(matrix, baseId, unit.representativeId) ?? (travelLegs ? tryLeg(travelLegs, baseId, unit.representativeId) : null);
+      if (!leg) continue;
+      if (leg.minutes < bestMinutes || (leg.minutes === bestMinutes && (bestBaseId === null || baseId.localeCompare(bestBaseId) < 0))) {
+        bestBaseId = baseId;
+        bestMinutes = leg.minutes;
+      }
+    }
+    if (bestBaseId === null) {
+      droppedByReason.no_base_window_reachable = (droppedByReason.no_base_window_reachable ?? 0) + unit.members.length;
+      continue;
+    }
+    windowUnits.get(bestBaseId)!.push(unit);
+    candidatesAssignedToWindow += unit.members.length;
+  }
+
+  // --- Stage D + E: cluster and match to a day, independently per window. ---
+  for (const [baseId, windowDays] of windowsByBase) {
+    const units = windowUnits.get(baseId) ?? [];
+    assignWithinWindow(
+      units,
+      windowDays,
+      baseId,
+      matrix,
+      travelLegs,
+      feasibleDates,
+      openDates,
+      weatherPreferenceFor,
+      separateStrenuousDays,
+      assignmentByDay,
+      droppedByReason,
+    );
+  }
+
+  const assignments = days.map((day) => ({
     day,
     candidates: (assignmentByDay.get(day.dayNumber) ?? []).sort(
       (a, b) => b.priority - a.priority || a.place.id.localeCompare(b.place.id),
     ),
   }));
+
+  const candidatesScheduled = assignments.reduce((sum, entry) => sum + entry.candidates.length, 0);
+  funnel.candidatesAssignedToWindow = candidatesAssignedToWindow + lockedScheduled;
+  funnel.candidatesScheduled = candidatesScheduled;
+  funnel.lockedRequested = lockedRequested;
+  funnel.lockedScheduled = lockedScheduled;
+  funnel.lockedRejected = lockedRejections.length;
+  funnel.lockedRejections = lockedRejections;
+  funnel.droppedByReason = droppedByReason;
+
+  return { assignments, funnel };
 }

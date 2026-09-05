@@ -821,6 +821,9 @@ const REASON_PHRASES: Record<UnscheduledReasonCode, string> = {
   weather_incompatible: 'the weather rules them out on every day they could have gone on',
   selection_not_on_board:
     'they were on an earlier version of your board and are not on this one',
+  route_contradicted: 'the routing provider answered that no route reaches them',
+  model_proposal_unintegrated:
+    'your plan proposed them and we have not yet matched them to a fully verified board listing',
 };
 
 /**

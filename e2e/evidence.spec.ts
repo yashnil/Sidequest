@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { compileRegion } from './support/trip';
+import { compileRegion, CULTURAL_INTERVIEW, completeQuestionnaire } from './support/trip';
 
 /**
  * WHAT A TRAVELLER SEES OF THE EVIDENCE.
@@ -40,21 +40,9 @@ async function reachBoard(page: Page): Promise<void> {
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
 
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  await page.getByRole('radio', { name: 'History & culture: A few times' }).check();
-  await page.getByRole('radio', { name: 'Easy nature walks: A few times' }).check();
+  await completeQuestionnaire(page, CULTURAL_INTERVIEW);
 
-  for (let step = 0; step < 12; step += 1) {
-    const build = page.getByRole('button', { name: 'Build my discovery board' });
-    if (await build.isVisible().catch(() => false)) {
-      await build.click();
-      break;
-    }
-    const next = page.getByRole('button', { name: 'Continue' });
-    if (!(await next.isVisible().catch(() => false))) break;
-    await next.click();
-    await page.waitForTimeout(150);
-  }
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 }
 

@@ -31,7 +31,7 @@ async function startTrip(page: Page): Promise<string> {
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
   await page.getByRole('button', { name: /See what we make of it/i }).click();
-  await expect(page.getByRole('heading', { name: 'What are you actually here for?' })).toBeVisible();
+  await expect(page.getByTestId('interview')).toBeVisible();
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();
   return id!;

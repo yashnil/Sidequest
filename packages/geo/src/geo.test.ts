@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clusterByTravelTime } from './cluster';
 import { haversineKm } from './distance';
-import { leg, routeSummary, subMatrix, tryLeg, validateMatrix } from './matrix';
+import { leg, resolveSubMatrix, routeSummary, subMatrix, tryLeg, validateMatrix } from './matrix';
 import { orderStops } from './order';
 import { MatrixError, type TravelTimeMatrix } from './types';
 
@@ -89,6 +89,76 @@ describe('matrix validation', () => {
     const sub = subMatrix(LINE, ['c', 'base']);
     expect(sub.ids).toEqual(['c', 'base']);
     expect(sub.minutes[0]?.[1]).toBe(30);
+  });
+});
+
+describe('resolveSubMatrix — primary ∪ fallback, never fabricated', () => {
+  it('prefers the primary edge when both sources have it', () => {
+    const primary = matrixOf(['base', 'a'], [[0, 10], [10, 0]]);
+    // A deliberately different value, so a test failure here would mean the
+    // fallback silently won rather than the primary being preferred.
+    const fallback = matrixOf(['base', 'a', 'c'], [[0, 99, 20], [99, 0, 15], [20, 15, 0]]);
+    const resolved = resolveSubMatrix(primary, ['base', 'a', 'c'], fallback);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(leg(resolved.matrix, 'base', 'a').minutes).toBe(10); // primary's value, not fallback's 99
+  });
+
+  it('uses the fallback edge when the primary has no answer for it', () => {
+    const primary = matrixOf(['base', 'a'], [[0, 10], [10, 0]]); // 'c' is absent entirely
+    const fallback = matrixOf(['base', 'a', 'c'], [[0, 99, 20], [99, 0, 15], [20, 15, 0]]);
+    const resolved = resolveSubMatrix(primary, ['base', 'a', 'c'], fallback);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(leg(resolved.matrix, 'base', 'c').minutes).toBe(20);
+    expect(leg(resolved.matrix, 'a', 'c').minutes).toBe(15);
+  });
+
+  it('resolves multiple fallback-only stops at once, mixed with primary evidence', () => {
+    const primary = matrixOf(['base'], [[0]]);
+    const fallback = matrixOf(
+      ['base', 'x', 'y'],
+      [
+        [0, 12, 18],
+        [12, 0, 9],
+        [18, 9, 0],
+      ],
+    );
+    const resolved = resolveSubMatrix(primary, ['base', 'x', 'y'], fallback);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(leg(resolved.matrix, 'x', 'y').minutes).toBe(9);
+    expect(leg(resolved.matrix, 'base', 'x').minutes).toBe(12);
+  });
+
+  it('never fabricates an edge neither source has — reports exactly which ids could not be resolved', () => {
+    const primary = matrixOf(['base', 'a'], [[0, 10], [10, 0]]);
+    const fallback = matrixOf(['base', 'a'], [[0, 10], [10, 0]]); // no knowledge of 'missing' at all
+    const resolved = resolveSubMatrix(primary, ['base', 'a', 'missing'], fallback);
+    expect(resolved.ok).toBe(false);
+    if (resolved.ok) return;
+    expect(resolved.unresolved).toContain('missing');
+  });
+
+  it('degrades the same way with no fallback supplied at all — absent is absent, never a thrown default', () => {
+    const primary = matrixOf(['base', 'a'], [[0, 10], [10, 0]]);
+    const resolved = resolveSubMatrix(primary, ['base', 'a', 'c']); // no third argument
+    expect(resolved.ok).toBe(false);
+  });
+
+  it('is directional — a fallback edge known in only one direction is not silently mirrored into a symmetric one', () => {
+    const primary = matrixOf(['base'], [[0]]); // 'c' is entirely absent from primary
+    // base -> c is known (25); c -> base is explicitly unmeasured (NaN), not merely omitted.
+    const fallback = matrixOf(['base', 'c'], [[0, 25], [Number.NaN, 0]]);
+    expect(tryLeg(fallback, 'base', 'c')).toEqual({ minutes: 25, km: 20 });
+    expect(tryLeg(fallback, 'c', 'base')).toBeNull();
+
+    const resolved = resolveSubMatrix(primary, ['base', 'c'], fallback);
+    // The reverse direction has no evidence anywhere, so the whole sub-matrix
+    // is honestly unresolved — never inferred from the forward direction.
+    expect(resolved.ok).toBe(false);
+    if (resolved.ok) return;
+    expect(resolved.unresolved).toContain('c');
   });
 });
 

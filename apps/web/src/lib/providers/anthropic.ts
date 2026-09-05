@@ -2,6 +2,14 @@ import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
+import {
+  createTransportLivenessMiddleware,
+  newIdleTracker,
+  snapshotTransportLiveness,
+  tickIdleTracker,
+  transportIdleTimeoutMs,
+  type TransportLivenessSnapshot,
+} from './anthropic-liveness';
 
 /**
  * THE RESEARCH MODEL, AND THE FENCE AROUND IT.
@@ -143,33 +151,242 @@ export function emptyUsage(): ModelUsage {
 /** Opus 5, in dollars per token. Used for a diagnostic figure, never a bill. */
 const RATE = { input: 5 / 1e6, output: 25 / 1e6 };
 
+
 /**
- * ABOVE THIS MANY OUTPUT TOKENS, THE REQUEST IS STREAMED.
+ * What actually happened to one attempted call, not just what it returned.
  *
- * Not a preference. A non-streaming request is rejected outright — HTTP 400,
- * `invalid_request_error`, nothing generated and nothing billed — once its
- * `max_tokens` is large enough that generation could outrun the non-streaming
- * response limit. The rejection arrives in a few hundred milliseconds and reads
- * in a log exactly like an outage, which is how it survived: every offline test
- * passes, and the only symptom is that the one call which asks for real room
- * fails the moment it is pointed at the live provider.
- *
- * Sixteen thousand is comfortably under the limit rather than derived from it.
- * Guessing the exact boundary would buy nothing — a streamed request is correct
- * at every size, so the threshold only has to be low enough to be safe and high
- * enough that the small calls keep the simpler path and its client-side parse.
- *
- * It is applied here, once, so both arms of the benchmark cross it on the same
- * terms. Fixing this for the arm that happened to trip it would have made the
- * comparison a measurement of which planner asked for more room.
+ * A run that spent 17.7 minutes inside a call configured with a four-minute
+ * timeout logged nothing at all — `logCall` only ran after a successful
+ * `record()`, so a call that never got that far left no trace, and "the model
+ * did not answer" was the entire post-mortem. `completed` is one outcome among
+ * several now, not the only one a call can reach `callLog` through.
  */
-const STREAMING_REQUIRED_ABOVE_MAX_TOKENS = 16_000;
+export type ModelCallOutcome =
+  | 'completed'
+  | /** Sidequest's own application-owned deadline fired; see `structured()`. */ 'aborted_deadline'
+  | /**
+     * No raw SSE event of any kind — content or ping — arrived for longer
+     * than `transportIdleTimeoutMs()`. Distinct from `aborted_deadline`:
+     * this fires because the *connection* looked dead, not because the call
+     * merely ran long while healthy. See `anthropic-liveness.ts`.
+     */
+    'transport_idle_timeout'
+  | /** The SDK's narrower connect/headers-phase timeout fired first. */ 'sdk_timeout'
+  | 'network_error'
+  | /** The provider answered; the answer was not usable. */ 'malformed_response'
+  | 'other';
+
+/** See `ResearchModel.callLog`. */
+export interface ModelCallDiagnostic {
+  /**
+   * `'generation' | 'structural_reask' | 'repair'` for the Phase 17 composer;
+   * every other call site has no such vocabulary and this defaults to its own
+   * `promptVersion`, which already names it uniquely.
+   */
+  callLabel: string;
+  model: string;
+  promptVersion: string;
+  startedAt: string;
+  finishedAt: string;
+  elapsedMs: number;
+  maxTokensRequested: number;
+  /** `null` means unknown — the call ended before usage metadata arrived. */
+  inputTokens: number | null;
+  outputTokens: number | null;
+  /** `JSON.stringify` length of the outbound request body, in UTF-16 code units. */
+  requestBytes: number;
+  /**
+   * Length of the generated text, complete or partial. `null` when nothing
+   * was observable at all (e.g. aborted before the stream connected).
+   */
+  responseBytes: number | null;
+  requestId: string | null;
+  /** The provider's own reason the response ended. `null` unless it completed. */
+  stopReason: string | null;
+  outcome: ModelCallOutcome;
+  /** 1 for a first attempt; 2+ only for an application-initiated re-ask — never advanced by the SDK, which makes none. */
+  attempt: number;
+  /**
+   * Whether this call's `grammar`-enforced request was refused outright — a
+   * pre-generation `BadRequestError`, nothing generated, nothing billed —
+   * *and* that refusal was classified by `isStructuredOutputSchemaRefusal`
+   * as the schema/grammar-compilation kind, which is the only kind this
+   * method retries on. `true` here means a second HTTP request genuinely
+   * went out, in `prompt` mode, within this same logical attempt — it is
+   * excluded from `hybrid.ts`'s own call-budget accounting (one generation
+   * either way, by design: see the fallback's own comment in `structured()`),
+   * but that exclusion is a budgeting choice, not a claim that the second
+   * request didn't happen. `enforcementAttempted`/`schemaRefusal`/
+   * `enforcementFallbackReason` below carry the rest of what actually
+   * occurred, including for the case this field is `false` but a grammar
+   * attempt was still refused for an unrelated reason.
+   */
+  enforcementFallback: boolean;
+  /**
+   * Every enforcement mode actually sent to the provider for this call, in
+   * order. `['grammar']` for the overwhelmingly common case; `['grammar',
+   * 'prompt']` only when `enforcementFallback` is `true`. Length 2 here is
+   * the ground truth for "did a second transport request occur" —
+   * `enforcementFallback` says the same thing but is kept as its own field
+   * since it is what the fallback's own logic branches on.
+   */
+  enforcementAttempted: readonly ('grammar' | 'prompt')[];
+  /**
+   * Set whenever a `grammar`-mode attempt received a `BadRequestError` at
+   * all — whether or not `isStructuredOutputSchemaRefusal` classified it as
+   * the kind this method retries on. `status`/`type` are the two fields the
+   * provider actually gives (see `isStructuredOutputSchemaRefusal`'s own
+   * comment on why `type` alone is never enough to classify by); `null`
+   * when no `BadRequestError` occurred on a grammar attempt this call.
+   */
+  schemaRefusal: { status: number | null; type: string | null } | null;
+  /**
+   * Why the fallback did, or deliberately did not, fire — present whenever
+   * `schemaRefusal` is non-`null`, `null` otherwise. Read for a post-mortem;
+   * not parsed by anything.
+   */
+  enforcementFallbackReason: string | null;
+  /**
+   * Output-token accounting, split where the provider exposes the split.
+   * `thinkingTokens` is `null` when the provider did not report
+   * `output_tokens_details` (older responses, or a call that never reached
+   * usage metadata at all) — never `0` standing in for "none reported".
+   * `nonThinkingOutputTokens` is derived (`outputTokens - thinkingTokens`)
+   * only when both are known; otherwise `null`. Neither field is, or ever
+   * will be, the reasoning text itself — counts only, matching every other
+   * field in this interface.
+   */
+  thinkingTokens: number | null;
+  nonThinkingOutputTokens: number | null;
+  /**
+   * Field paths a caller-supplied `normalize` step deterministically
+   * rewrote before this schema validated the answer — e.g.
+   * `'days[2].blocks[1].note'` for a cosmetic length clip. `[]` when no
+   * `normalize` was supplied, or when one was and found nothing to touch;
+   * never the field's *value*, before or after — only where it happened.
+   * See `normalizeBaselineGeneration` in `benchmark/baseline/generate.ts`
+   * for the one caller that populates this.
+   */
+  normalizedFields: readonly string[];
+  /**
+   * Diagnostic timing/counts observed as SSE events arrived — every call
+   * streams now, so this is always present, never `null` for having taken
+   * some other path. A hung call's post-mortem can say how far it actually
+   * got. Never the event content — only *when* and *how many*, which is why
+   * this is safe to keep even though it is built from the same events
+   * "thinking" deltas arrive on; only `'text'` delta *lengths* are summed,
+   * never stored.
+   *
+   * Two independent layers, on purpose — see `anthropic-liveness.ts`'s own
+   * header for why they can disagree: `firstEventAtMs`/`lastEventAtMs`/
+   * `eventCount`/`longestModelIdleMs` are *model* activity (content/thinking/
+   * message deltas — what `MessageStream`'s public event surface exposes,
+   * which is blind to pings by construction); `firstTransportEventAtMs`/
+   * `lastTransportEventAtMs`/`transportEventCount`/`lastPingAtMs`/`pingCount`/
+   * `longestTransportIdleMs` are *transport* activity — every raw SSE event
+   * including pings, observed through a narrow middleware reading an
+   * independent clone of the response body. A stream can be transport-alive
+   * (pings arriving) with the model layer showing a long gap — that is
+   * "still thinking," not "connection dead" — and this is what lets a
+   * post-mortem, or a future watchdog, tell the two apart.
+   */
+  stream: {
+    connectedAtMs: number | null;
+    firstEventAtMs: number | null;
+    lastEventAtMs: number | null;
+    eventCount: number;
+    longestModelIdleMs: number;
+  } & TransportLivenessSnapshot;
+  /**
+   * Present only for a hard failure at this method's own strict-validation
+   * step (`parseStreamedOutput`'s `schema.safeParse`) — the *exact* issues
+   * Zod raised, path/code/message only, never the offending value. Private
+   * operational diagnostics: read from `callLog`, never sent to console and
+   * never included in the message a traveller-facing error carries. `null`
+   * for every other outcome, including a truncated answer that never
+   * reached validation at all (a JSON-parse failure has no Zod issues to
+   * report) and a call that completed cleanly.
+   */
+  schemaValidationIssues: readonly { path: string; code: string; message: string }[] | null;
+}
 
 /**
  * The SDK exports its error classes as values on the default export; in type
  * position they have to be named through `InstanceType`.
  */
 type ProviderApiError = InstanceType<typeof Anthropic.APIError>;
+
+/**
+ * THE NARROW REFUSAL A SCHEMA-COMPILATION FALLBACK MAY ACT ON.
+ *
+ * Every 400 the provider returns carries the same generic `error.type`:
+ * `'invalid_request_error'`, for every status-400 response without
+ * exception — confirmed from the SDK's own error-generation code
+ * (`core/error.mjs`'s `APIError.generate`, which reads `error.type` off
+ * `errorResponse.error.type` but the provider's own `ErrorType` union
+ * — `resources/shared.d.ts` — has exactly one 400-shaped member,
+ * `invalid_request_error`, covering every reason a request can be
+ * malformed). That field cannot tell a refused compiled grammar apart
+ * from an invalid parameter, an unsupported combination, or a malformed
+ * message — so it cannot be the signal a fallback decides on. The only
+ * thing the provider gives that is specific to *this request having been
+ * the problem* is the prose in `error.message`.
+ *
+ * `'the compiled grammar is too large'` is the one phrase this codebase has
+ * actually observed live, against this exact schema — see
+ * `.claude-private/benchmark/review-findings.md` for the record of that
+ * call and `schema-size.test.ts` for the byte-size calibration built from
+ * it. The remaining phrases below are not yet confirmed against a live
+ * response. Anthropic's own structured-outputs documentation
+ * (https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+ * states only "If you use an unsupported feature, you'll receive a 400
+ * error with details" — no exact wording — for a named list of unsupported
+ * schema features: recursive schemas, complex types within enums, external
+ * `$ref`, numeric/string/array constraints beyond `minItems` of 0 or 1, and
+ * `additionalProperties` other than `false`. Each phrase below names one of
+ * those concepts rather than guessing a full sentence, so a genuinely
+ * different wording of the same underlying refusal is still likely to
+ * match, while an unrelated 400 that merely happens to mention "schema" is
+ * not.
+ *
+ * Deliberately NOT matched on: the bare word "schema" alone, the bare word
+ * "invalid" alone, or anything about the request's *messages* or *content*
+ * shape. Those would catch exactly the class this predicate must let
+ * propagate untouched — a malformed message, an unsupported parameter, a
+ * bad combination of fields — each of which is a real defect in the request
+ * that a retry in a different enforcement mode would not fix, and each of
+ * which must reach the caller as the ordinary `request_failed` it already
+ * is rather than spend a second, potentially billed, round trip on a retry
+ * that cannot succeed.
+ */
+const STRUCTURED_OUTPUT_SCHEMA_REFUSAL_PHRASES = [
+  'compiled grammar',
+  'grammar is too large',
+  'grammar too large',
+  'schema is too large',
+  'schema is too complex',
+  'schema could not be compiled',
+  'failed to compile',
+  'unsupported json schema',
+  'unsupported schema feature',
+  'recursive schema',
+  'output_config.format',
+] as const;
+
+/**
+ * True only for a `BadRequestError` whose own message names the
+ * schema/grammar-compilation request itself as the problem — see the
+ * constant above for exactly which phrases and why. Every other
+ * `BadRequestError` — and every non-`BadRequestError` — returns `false`,
+ * on purpose: this is the one predicate the grammar→prompt fallback in
+ * `structured()` is allowed to retry on, and nothing here narrows what
+ * kind of error can reach it, only what this function reports about one.
+ */
+export function isStructuredOutputSchemaRefusal(error: unknown): boolean {
+  if (!(error instanceof Anthropic.BadRequestError)) return false;
+  const message = String(error.message ?? '').toLowerCase();
+  return STRUCTURED_OUTPUT_SCHEMA_REFUSAL_PHRASES.some((phrase) => message.includes(phrase));
+}
 
 export class ResearchModelError extends Error {
   readonly code:
@@ -183,14 +400,39 @@ export class ResearchModelError extends Error {
      * own code rather than `request_failed`: the stages may still degrade past
      * it, but the runner must be able to tell a dead key from a bad minute.
      */
-    | 'auth_rejected';
+    | 'auth_rejected'
+    /**
+     * No answer arrived before a deadline — Sidequest's own application-owned
+     * one (`ModelCallOutcome: 'aborted_deadline'`), or the SDK's narrower
+     * connect/headers-phase one (`'sdk_timeout'`). Its own code rather than
+     * `request_failed` because the two are actionable in different ways: a
+     * generic `request_failed` reads as "something is wrong with the
+     * provider", where a timeout is a fact about how long this specific
+     * answer was taking, and the one caller that retries (`classifyModelFailure`
+     * in `benchmark/baseline/generate.ts`) needs to tell them apart from a
+     * malformed answer without sniffing `error.name`.
+     */
+    | 'timeout';
   readonly requestId: string | undefined;
+  /**
+   * Set only by `parseStreamedOutput`'s own hard-validation-failure throw —
+   * see `ModelCallDiagnostic.schemaValidationIssues` for what this is and
+   * is not for. `undefined` everywhere else, including a truncated or
+   * unparseable answer, which never reached `schema.safeParse` at all.
+   */
+  readonly schemaValidationIssues?: readonly { path: string; code: string; message: string }[];
 
-  constructor(code: ResearchModelError['code'], message: string, requestId?: string) {
+  constructor(
+    code: ResearchModelError['code'],
+    message: string,
+    requestId?: string,
+    schemaValidationIssues?: readonly { path: string; code: string; message: string }[],
+  ) {
     super(message);
     this.name = 'ResearchModelError';
     this.code = code;
     this.requestId = requestId;
+    this.schemaValidationIssues = schemaValidationIssues;
   }
 }
 
@@ -230,6 +472,20 @@ export class ResearchModel {
    */
   private credentialRejected = false;
   readonly usage: ModelUsage = emptyUsage();
+  /**
+   * One entry per `structured()` call that was *attempted* — every call that
+   * passed the guards at the top of that method and reached the provider,
+   * whether it completed, was aborted, timed out, or came back unusable. A
+   * retry and the call it retried are two entries, not one overwritten by the
+   * other, and a call that never finished still gets one: an 18-minute
+   * attempt that this ledger recorded nothing about, because the entry used
+   * to be written only after a successful response, is the exact failure this
+   * exists to make legible. Written exactly once per call, in a `finally`
+   * block, so every exit path — return, throw, abort — logs something. Never
+   * carries prose or reasoning content — those fields are exactly the ones a
+   * hidden-chain-of-thought capture would need and this does not have.
+   */
+  readonly callLog: ModelCallDiagnostic[] = [];
 
   constructor(options: ResearchModelOptions) {
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
@@ -293,8 +549,28 @@ export class ResearchModel {
     schema: z.ZodType<T>;
     maxTokens?: number;
     effort?: 'low' | 'medium' | 'high';
-    /** Per-request, because a big structured answer legitimately takes longer. */
+    /**
+     * Per-request, because a big structured answer legitimately takes longer —
+     * and, since this is what actually bounds it now, per-request is also how
+     * long Sidequest will wait for this call in total. See the comment beside
+     * `deadlineController` below for what this used to mean and did not.
+     */
     timeoutMs?: number;
+    /**
+     * `'generation' | 'structural_reask' | 'repair'` for the Phase 17
+     * composer, which is the one caller that needs to tell those apart in
+     * `callLog`. Every other call site has no such vocabulary; leave it unset
+     * and the log falls back to `promptVersion`, which already names the call
+     * uniquely.
+     */
+    callLabel?: string;
+    /**
+     * 1 for a first attempt. Set to 2+ only when this call is Sidequest's own
+     * explicit, deliberate re-ask of a prior attempt — never incremented by
+     * this method itself and never by the SDK, which makes none (see
+     * `maxRetries` on the constructor).
+     */
+    attempt?: number;
     /**
      * WHO HOLDS THE SHAPE TO ACCOUNT — AND WHY THERE IS A CHOICE AT ALL.
      *
@@ -324,98 +600,420 @@ export class ResearchModel {
      * cost in safety.
      */
     schemaEnforcement?: 'grammar' | 'prompt';
+    /**
+     * A DETERMINISTIC PASS BETWEEN "VALID JSON" AND "VALID *THIS* SCHEMA" —
+     * OPT-IN, AND OPT-IN FOR A REASON.
+     *
+     * Runs once, on the parsed-but-not-yet-validated JSON, before `schema`
+     * gets it. It exists because native structured output does not
+     * guarantee first-pass conformance on every constraint this schema
+     * carries — `zodOutputFormat`'s own converter folds `maxLength`/
+     * `pattern`/`minItems` into descriptive text rather than compiling them
+     * into the grammar (see `schema-size.test.ts`'s header comment) — so a
+     * response can be well-formed, on-shape, and *semantically* exactly
+     * right, and still fail this schema on a field that is a few
+     * characters over a cosmetic cap. Rejecting the whole answer over that,
+     * after a generation that can run minutes, is not proportionate to
+     * what actually went wrong.
+     *
+     * There is no default and no generic version: only a caller that has
+     * done the classification work — named which of its own fields are
+     * cosmetic prose and which carry planning meaning — may supply one.
+     * See `normalizeBaselineGeneration` for the one schema in this codebase
+     * that has. Every other call site leaves this unset and validates the
+     * parsed JSON exactly as it arrived, unchanged from before this existed.
+     */
+    normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] };
   }): Promise<T> {
     if (this.credentialRejected) throw ResearchModel.deadCredentialError();
     if (this.callsRemaining <= 0) {
       throw new ResearchModelError('request_failed', 'This trip has no model calls left.');
     }
 
-    const content: Anthropic.MessageParam[] = [];
-    if (input.untrusted !== undefined) {
-      /**
-       * JSON-encoded rather than concatenated, because JSON escaping is an
-       * unambiguous delimiter: an attacker cannot close a quote and break out
-       * into instruction context the way they can close a tag.
-       */
+    const outputFormat = zodOutputFormat(input.schema as z.ZodType);
+    const maxTokens = input.maxTokens ?? 8192;
+
+    /**
+     * Built fresh per enforcement mode, so a grammar rejection can retry in
+     * prompt mode without re-deriving anything by hand — see
+     * `enforcementFallback` below for why a second mode is ever attempted at
+     * all.
+     */
+    const buildParams = (enforcement: 'grammar' | 'prompt') => {
+      const content: Anthropic.MessageParam[] = [];
+      if (input.untrusted !== undefined) {
+        /**
+         * JSON-encoded rather than concatenated, because JSON escaping is an
+         * unambiguous delimiter: an attacker cannot close a quote and break
+         * out into instruction context the way they can close a tag.
+         */
+        content.push({
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ trust: 'untrusted', source: 'retrieved', payload: input.untrusted }),
+            },
+          ],
+        });
+      }
+      // Our instruction comes after the untrusted block, never inside it.
       content.push({
         role: 'user',
-        content: [
+        content:
+          enforcement === 'grammar'
+            ? input.task
+            : `${input.task}\n\nAnswer with a single JSON object and nothing else — no prose ` +
+              `before or after it, no code fence. It must validate against this JSON Schema:\n` +
+              `${JSON.stringify(outputFormat.schema)}`,
+      });
+      return {
+        model: this.model,
+        max_tokens: maxTokens,
+        output_config: {
+          /*
+           * SCHEMA AND TYPE ONLY — NEVER THE SDK'S OWN `.parse`.
+           *
+           * `zodOutputFormat(input.schema)` returns `{type, schema, parse}`,
+           * and `parse` is a client-side convenience the SDK calls on our
+           * behalf wherever it can — inside `MessageStream`'s own
+           * `message_stop`/end-of-stream handling (`lib/MessageStream.mjs`),
+           * not only inside `client.messages.parse()`. Sending it is what
+           * let the SDK's own `zodObject.safeParse` run *before* this
+           * method's own `parseStreamedOutput` ever saw the response, and
+           * throw a bare `AnthropicError` — not `APIError`, matching none
+           * of this method's classification — discarding its own
+           * (otherwise informative) validation-issue message into this
+           * method's generic "did not answer" fallback. Traced from a live
+           * call: a `maxTokens: 9,000` skeleton request took the SDK's own
+           * internal parse path specifically because it was small, finished
+           * in 100.7s, and still surfaced only "The research model did not
+           * answer" — see `.claude-private/PROGRESS.md`'s own entry for
+           * that replay.
+           *
+           * `parse` is never sent to the provider either way — it is a
+           * function, and the request body is JSON — so dropping it changes
+           * nothing about what Anthropic receives or how the grammar is
+           * compiled; it only stops the *client* from racing this method's
+           * own validation. `schema.safeParse` in `parseStreamedOutput`
+           * remains the one place a structured answer is actually checked,
+           * on every call, regardless of size — see that method's own
+           * comment for why that was already true for every size that used
+           * to take this branch.
+           */
+          ...(enforcement === 'grammar' ? { format: { type: outputFormat.type, schema: outputFormat.schema } } : {}),
+          ...(input.effort ? { effort: input.effort } : {}),
+        },
+        system: [
           {
-            type: 'text',
-            text: JSON.stringify({ trust: 'untrusted', source: 'retrieved', payload: input.untrusted }),
+            type: 'text' as const,
+            text: `${input.instruction}\n\n${UNTRUSTED_POLICY}`,
+            cache_control: { type: 'ephemeral' as const },
           },
         ],
-      });
-    }
-    const enforcement = input.schemaEnforcement ?? 'grammar';
-    const outputFormat = zodOutputFormat(input.schema as z.ZodType);
+        messages: content,
+      };
+    };
 
-    // Our instruction comes after the untrusted block, never inside it.
-    content.push({
-      role: 'user',
-      content:
-        enforcement === 'grammar'
-          ? input.task
-          : `${input.task}\n\nAnswer with a single JSON object and nothing else — no prose ` +
-            `before or after it, no code fence. It must validate against this JSON Schema:\n` +
-            `${JSON.stringify(outputFormat.schema)}`,
+    let enforcement = input.schemaEnforcement ?? 'grammar';
+    let params = buildParams(enforcement);
+    /**
+     * Set once, if the fallback below actually fires. Read only by `logCall`
+     * — it changes nothing about retry/repair accounting, which still sees
+     * exactly one attempt, because it is one: the same generation, told the
+     * shape a different way after the provider refused the first attempt at
+     * the shape itself rather than at anything it was asked to say.
+     */
+    let enforcementFallback = false;
+    /** Every mode actually sent, in order — see `ModelCallDiagnostic.enforcementAttempted`. */
+    const enforcementAttempted: ('grammar' | 'prompt')[] = [enforcement];
+    /** See `ModelCallDiagnostic.schemaRefusal`. */
+    let schemaRefusal: { status: number | null; type: string | null } | null = null;
+    /** See `ModelCallDiagnostic.enforcementFallbackReason`. */
+    let enforcementFallbackReason: string | null = null;
+    /** See `ModelCallDiagnostic.normalizedFields`. */
+    let normalizedFields: readonly string[] = [];
+    const requestBytes = JSON.stringify(params).length;
+    const startedAt = new Date();
+    const calledAt = performance.now();
+
+    /**
+     * THE APPLICATION-OWNED DEADLINE — WHAT `timeout` USED TO PROMISE AND DID
+     * NOT KEEP.
+     *
+     * Proven from the installed SDK (`@anthropic-ai/sdk@0.115.0`), not
+     * inferred from elapsed time: `Client.fetchWithTimeout` arms its timer
+     * with `setTimeout(abort, ms)` around the call to `fetch()` alone —
+     * `client.mjs`'s own comment says so ("Arm the timeout around the
+     * underlying fetch only, not the middleware chain") — and clears it the
+     * moment `fetch()` resolves, in a `finally` block, before a single byte of
+     * a streamed body has been read. `fetch()` resolves once HTTP headers
+     * arrive, which for a streamed response is seconds in. Everything after
+     * that — every SSE chunk `MessageStream`/`.finalMessage()` goes on
+     * consuming — had no timer watching it at all. That is the entire
+     * mechanism behind a call configured with a 240,000ms timeout running for
+     * 1,060,592ms: the timeout was disarmed within the first few seconds and
+     * never covered the other seventeen and a half minutes. `logCall` used to
+     * run only after a successful `record()`, so that call also left nothing
+     * in `callLog` — the two defects compounded into a live run that produced
+     * no plan, no error worth reading, and no trace of what had actually
+     * happened.
+     *
+     * The fix is not a bigger number in the same broken place. `requestOptions`
+     * still carries `timeout`, which still bounds the connect/headers phase —
+     * a real, if narrower, guard worth keeping — but the deadline that
+     * actually matters is this `AbortController`, on a `setTimeout` armed for
+     * the call's *entire* duration and passed as `signal`. Traced through the
+     * SDK's own source (`lib/MessageStream.mjs`'s `static createMessage`):
+     * a caller-supplied `signal` is wired into `MessageStream`'s own internal
+     * controller, which is threaded into the underlying `messages.create`
+     * call and from there into the same `controller.signal` `fetchWithTimeout`
+     * hands to `fetch()` — so firing it at any point, including deep into an
+     * open SSE stream, aborts the in-flight read and rejects `finalMessage()`
+     * with `Anthropic.APIUserAbortError`, a type this method can catch
+     * specifically. `clearTimeout` in the `finally` block below releases the
+     * timer on every exit path — completed, thrown, or aborted — so a call
+     * that finishes early never leaves one running.
+     *
+     * Deliberately *not a content-idle watchdog*: nothing here aborts a call
+     * merely because no content/thinking delta has arrived in a while — a
+     * model legitimately reasoning must never be mistaken for a hung
+     * connection just because it has been quiet. This deadline stays a flat
+     * ceiling on the whole call's wall time, unconditionally, exactly as it
+     * always has.
+     *
+     * A second, independent protection exists below and is a genuinely
+     * different check: a *transport*-idle watchdog, which resets on any raw
+     * SSE event at all — including a `ping`, which carries no content and
+     * which `MessageStream`'s own public event surface cannot see (proven
+     * from the installed SDK's source; see `anthropic-liveness.ts`'s own
+     * header). It fires only when the *connection itself* has gone silent
+     * for longer than a real one plausibly would, not when the model has.
+     * The two together are what let a run tell "still thinking, connection
+     * fine" apart from "connection is dead" — which a single flat deadline
+     * cannot, and which a naive content-idle timeout would get backwards on
+     * the first case.
+     */
+    const deadlineMs = input.timeoutMs ?? 60_000;
+    const deadlineController = new AbortController();
+    // Which of the two independent watchdogs actually fired, read in the
+    // catch block below to classify the resulting `APIUserAbortError`
+    // correctly — both abort the same controller, because only one thing
+    // can meaningfully cancel the one in-flight request, but they are
+    // different facts about *why*.
+    let abortReason: 'deadline' | 'transport_idle' | null = null;
+    const deadlineTimer = setTimeout(() => {
+      abortReason = 'deadline';
+      deadlineController.abort();
+    }, deadlineMs);
+
+    /*
+     * THE TRANSPORT-IDLE WATCHDOG.
+     *
+     * Armed before the call starts and re-armed on every raw SSE event the
+     * liveness middleware observes — ping or content alike. If it is ever
+     * allowed to run to completion, no raw event of any kind crossed the
+     * wire for `transportIdleTimeoutMs()`, which is a fact about the
+     * connection, not about the model's pace. Cleared in `finally` below
+     * alongside the deadline timer, on every exit path.
+     */
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    const armIdleTimer = (): void => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        abortReason = 'transport_idle';
+        deadlineController.abort();
+      }, transportIdleTimeoutMs());
+    };
+    armIdleTimer();
+
+    /*
+     * The narrow SDK-documented seam that makes the watchdog above possible
+     * at all — see `anthropic-liveness.ts`'s own header for the full
+     * argument.
+     */
+    const liveness = createTransportLivenessMiddleware({
+      calledAtMs: calledAt,
+      onEvent: () => armIdleTimer(),
     });
 
-    const maxTokens = input.maxTokens ?? 8192;
-    const params = {
-      model: this.model,
-      max_tokens: maxTokens,
-      output_config: {
-        ...(enforcement === 'grammar' ? { format: outputFormat } : {}),
-        ...(input.effort ? { effort: input.effort } : {}),
-      },
-      system: [
-        {
-          type: 'text' as const,
-          text: `${input.instruction}\n\n${UNTRUSTED_POLICY}`,
-          cache_control: { type: 'ephemeral' as const },
-        },
-      ],
-      messages: content,
+    const requestOptions = {
+      timeout: deadlineMs,
+      signal: deadlineController.signal,
+      middleware: [liveness.middleware],
     };
-    /**
-     * The client's own 60-second default is a floor, not a ceiling.
+
+    let outcome: ModelCallOutcome = 'other';
+    // `parsed_output` comes from the SDK's own internal parse attempt,
+    // which this method deliberately no longer asks for (see the note
+    // above `buildParams`'s `output_config.format`) — always `undefined`
+    // in practice now, kept optional on the type only because
+    // `Anthropic.Message` itself carries no such field and this is the one
+    // place both this method's own reads and `logCall`'s share a type for
+    // the message.
+    let message:
+      | (Anthropic.Message & { _request_id?: string | null; parsed_output?: unknown })
+      | undefined;
+    // A call that failed before `message` was assigned may still have a
+    // request id — the provider's own errors carry one whenever a request
+    // reached it at all. Captured once, generically, rather than repeated in
+    // every branch below.
+    let requestIdFromError: string | null = null;
+    const modelEvents = newIdleTracker();
+    let partialResponseBytes = 0;
+    /** See `ModelCallDiagnostic.schemaValidationIssues`. */
+    let schemaValidationIssues: readonly { path: string; code: string; message: string }[] | null = null;
+
+    /*
+     * ONE PIPELINE, EVERY SIZE.
      *
-     * A live New York compile asked for ninety-six classifications in one call
-     * and the request was cut off client-side with no status and no request id —
-     * which surfaces as "the research model did not answer" and looks exactly
-     * like an outage. Batching is the real fix (see `classifyPlaces`); a longer
-     * per-request budget is what stops the remaining large calls failing the
-     * same way.
+     * This method used to branch on `maxTokens`: above 16,000, Anthropic
+     * rejects a non-streamed request outright (HTTP 400, nothing generated,
+     * nothing billed — a real API constraint, not a preference), so calls
+     * above that line streamed and calls below it went through
+     * `client.messages.parse()`'s single-response convenience method
+     * instead. That second path never went through this file's own
+     * `parseStreamedOutput` — no `normalize`, no uniform classification —
+     * and, worse, could fail in a way this method could not see at all: a
+     * response that failed the SDK's own client-side `zodObject.safeParse`
+     * threw a bare `AnthropicError` before `message` was ever assigned here,
+     * which the classification below could not distinguish from a genuine
+     * network failure. A live `maxTokens: 9,000` skeleton call hit exactly
+     * this — completed in 100.7s, well inside every deadline, and still
+     * surfaced only "The research model did not answer," with the token
+     * usage, stop reason and the SDK's own validation-issue detail all lost
+     * with it.
+     *
+     * Streaming was already correct at every size — nothing about
+     * `client.messages.stream()` requires a token minimum — so the
+     * non-streamed branch existed only to keep small calls on the SDK's own
+     * convenience path. It bought nothing this file needed and cost the one
+     * property that matters most for a bounded diagnostic: knowing, for
+     * certain, whether a failure happened before or after the provider
+     * actually answered. Every call now takes the same route.
      */
-    const requestOptions = { timeout: input.timeoutMs ?? 60_000 };
-
     try {
-      // Prompt-enforced answers have no `format` for the parse helper to
-      // validate against, so they always come back through the hand-rolled path.
-      if (enforcement === 'prompt' || maxTokens > STREAMING_REQUIRED_ABOVE_MAX_TOKENS) {
-        const message = await this.client.messages
-          .stream(params, requestOptions)
-          .finalMessage();
+    for (let attempted = 1; attempted <= 2; attempted += 1) {
+      try {
+        const stream = this.client.messages.stream(params, requestOptions);
+        /*
+         * Diagnostic-only, and never the event content. `'text'` delta
+         * *lengths* are summed for `partialResponseBytes`; the deltas
+         * themselves are never stored. `'thinking'` is not listened to at
+         * all — tracking even its size would be tracking something about
+         * hidden reasoning, which this file does not do anywhere else.
+         * `'connect'` is not listened to here — the liveness middleware's
+         * own `connectedAtMs` (below) is the authoritative one, since it is
+         * what the idle watchdog is armed against.
+         */
+        stream.on('streamEvent', () => {
+          tickIdleTracker(modelEvents, Math.round(performance.now() - calledAt));
+        });
+        stream.on('text', (delta) => {
+          partialResponseBytes += delta.length;
+        });
+        message = await stream.finalMessage();
         this.record(message);
-        return this.parseStreamedOutput(message, input.schema);
-      }
-
-      const message = await this.client.messages.parse(params, requestOptions);
-
-      this.record(message);
-
-      if (!message.parsed_output) {
+        const parsed = this.parseStreamedOutput(message, input.schema, input.normalize);
+        normalizedFields = parsed.normalizedFields;
+        outcome = 'completed';
+        return parsed.data;
+      } catch (error) {
+        if (error && typeof error === 'object' && 'requestID' in error) {
+          requestIdFromError = (error as { requestID?: string | null }).requestID ?? null;
+        }
+        /*
+         * THE ONE-TIME, NARROWLY-CLASSIFIED, PRE-GENERATION FALLBACK.
+         *
+         * A `BadRequestError` on a `grammar`-enforced attempt is *some*
+         * refusal of the request before a single token was generated —
+         * nothing billed either way — but not every 400 here is the
+         * provider refusing to compile the schema. `isStructuredOutputSchemaRefusal`
+         * is the narrow classifier that tells the two apart: only when it
+         * returns `true` is this the "known-working `prompt` mode is worth
+         * retrying" case. An unrelated 400 — a malformed message, an
+         * unsupported parameter, anything not about the schema itself —
+         * would not be fixed by asking the same broken request a different
+         * way, so it falls straight through to the ordinary classification
+         * below instead of spending a second request on a retry that cannot
+         * succeed.
+         *
+         * `schemaRefusal`/`enforcementFallbackReason` are recorded here
+         * whenever a grammar-mode `BadRequestError` occurs at all —
+         * classified or not — so an unmatched refusal is still visible in
+         * `callLog`, not merely a `request_failed` with no further trace of
+         * what the provider actually said was wrong.
+         *
+         * Bounded by `attempted`, not by a loop that could spin: a second
+         * `BadRequestError` — from `prompt` mode, or from a second
+         * `grammar` attempt this can no longer reach — always falls through
+         * to the classification below instead of retrying again, whether or
+         * not it would itself have classified as a schema refusal.
+         */
+        if (attempted === 1 && enforcement === 'grammar' && error instanceof Anthropic.BadRequestError) {
+          schemaRefusal = { status: error.status ?? null, type: error.type ?? null };
+          if (isStructuredOutputSchemaRefusal(error)) {
+            enforcementFallbackReason =
+              'grammar-mode request was refused as a structured-output schema/grammar-compilation ' +
+              'problem; retrying once in prompt mode';
+            enforcement = 'prompt';
+            params = buildParams('prompt');
+            enforcementAttempted.push('prompt');
+            enforcementFallback = true;
+            continue;
+          }
+          enforcementFallbackReason =
+            'grammar-mode request received a 400 not classified as a structured-output schema ' +
+            'refusal; propagating without a fallback retry';
+        }
+        if (error instanceof ResearchModelError) {
+          // Thrown by this method itself, above — the schema/parse failure
+          // rather than a transport one. `record()` already ran, so real usage
+          // is in `message` and this is a call that completed and answered
+          // unusably, not one that failed to reach the provider at all.
+          outcome = 'malformed_response';
+          schemaValidationIssues = error.schemaValidationIssues ?? null;
+          throw error;
+        }
+      /*
+       * Our own abort — `deadlineController` is aborted from exactly two
+       * places, both above (the absolute deadline and the transport-idle
+       * watchdog), so any `APIUserAbortError` reaching this catch can only
+       * have come from one of them. `abortReason` says which, set
+       * immediately before the `.abort()` call that caused it.
+       */
+      if (error instanceof Anthropic.APIUserAbortError) {
+        if (abortReason === 'transport_idle') {
+          outcome = 'transport_idle_timeout';
+          throw new ResearchModelError(
+            'timeout',
+            `No SSE event of any kind — content or ping — arrived for ${transportIdleTimeoutMs()}ms; the connection looked dead rather than merely slow.`,
+            (error as ProviderApiError).requestID ?? undefined,
+          );
+        }
+        outcome = 'aborted_deadline';
         throw new ResearchModelError(
-          'malformed_output',
-          `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}).`,
-          message._request_id ?? undefined,
+          'timeout',
+          `Sidequest’s own ${deadlineMs}ms deadline was reached before the model finished answering.`,
+          (error as ProviderApiError).requestID ?? undefined,
         );
       }
-      return message.parsed_output as T;
-    } catch (error) {
-      if (error instanceof ResearchModelError) throw error;
+      /*
+       * The SDK's own narrower guard, still armed as a connect/headers-phase
+       * backstop (see the comment above `deadlineController`). Reaching this
+       * means the request never got as far as a response at all — a
+       * different, earlier failure than our deadline firing mid-stream.
+       */
+      if (error instanceof Anthropic.APIConnectionTimeoutError) {
+        outcome = 'sdk_timeout';
+        throw new ResearchModelError(
+          'timeout',
+          'The connection to the research model timed out before it answered.',
+          (error as ProviderApiError).requestID ?? undefined,
+        );
+      }
       if (error instanceof Anthropic.RateLimitError) {
+        outcome = 'other';
         throw new ResearchModelError(
           'rate_limited',
           'The research model asked us to slow down.',
@@ -430,9 +1028,11 @@ export class ResearchModel {
        * refusal again.
        */
       if (ResearchModel.isCredentialRejection(error)) {
+        outcome = 'other';
         this.rejectCredential(error, input.promptVersion);
       }
       if (error instanceof Anthropic.APIError) {
+        outcome = 'network_error';
         // The provider's own message is kept out of the sentence a traveller
         // sees; only the code and the request id travel, which is what an
         // outage can actually be diagnosed from.
@@ -459,7 +1059,83 @@ export class ResearchModel {
           error.requestID ?? undefined,
         );
       }
+      /*
+       * A BARE `AnthropicError` — THE SDK'S OWN BASE CLASS, NOT AN `APIError`
+       * — DEFENSE IN DEPTH, NOT THE PRIMARY FIX.
+       *
+       * `buildParams` already stops the one confirmed source of this
+       * (the SDK's own structured-output parse-and-throw) from ever firing —
+       * see its own comment. What can still reach here is the SDK's other
+       * internal invariant checks (`lib/MessageStream.mjs` throws bare
+       * `AnthropicError`s of its own for things like "Unexpected event
+       * order" or "stream has ended, this shouldn't happen"): genuine SDK-
+       * or protocol-level irregularities, never model content, so the
+       * message is safe to keep rather than discard. `instanceof
+       * Anthropic.APIError` above already claimed every *provider* error;
+       * reaching this branch means the SDK itself raised the exception, not
+       * Anthropic's API — a fact worth keeping distinct from "the network
+       * failed," which is what the final generic branch below would other-
+       * wise report it as.
+       */
+      if (error instanceof Anthropic.AnthropicError) {
+        outcome = 'network_error';
+        const sdkMessage = String(error.message).slice(0, 300);
+        console.error('Research model call failed (SDK-internal exception)', {
+          name: error.name,
+          promptVersion: input.promptVersion,
+          sdkMessage,
+        });
+        throw new ResearchModelError(
+          'request_failed',
+          `The research model’s connection reported an internal error: ${sdkMessage}`,
+        );
+      }
+      outcome = 'network_error';
       throw new ResearchModelError('request_failed', 'The research model did not answer.');
+      }
+    }
+    // Unreachable: every iteration above either returns or throws, and the
+    // fallback `continue` only fires once (`attempted === 1`), so the loop
+    // can never fall off its own end. Here only so the function's own
+    // return type stays exact rather than `T | undefined`.
+    throw new ResearchModelError('request_failed', 'The research model did not answer.');
+    } finally {
+      // Released on every exit path — return, throw, or abort — so a call
+      // that finishes (by any route) never leaves either timer running
+      // behind it: the absolute deadline, and the transport-idle watchdog.
+      clearTimeout(deadlineTimer);
+      clearTimeout(idleTimer);
+      // Every call streams now — see the note above the retry loop — so
+      // transport liveness is always observable, never `null` for having
+      // taken some other path.
+      const transportSnapshot = snapshotTransportLiveness(liveness.tracker, liveness.pings, liveness.connectedAtMs.value);
+      this.logCall({
+        input,
+        maxTokens,
+        requestBytes,
+        startedAt,
+        calledAt,
+        message,
+        outcome,
+        partialResponseBytes,
+        requestIdFromError,
+        enforcementFallback,
+        enforcementAttempted,
+        schemaRefusal,
+        enforcementFallbackReason,
+        normalizedFields,
+        schemaValidationIssues,
+        stream: {
+          // `connectedAtMs` comes from the transport snapshot below — the
+          // liveness middleware's own observation, which is what the idle
+          // watchdog is armed against.
+          firstEventAtMs: modelEvents.firstAtMs,
+          lastEventAtMs: modelEvents.lastAtMs,
+          eventCount: modelEvents.count,
+          longestModelIdleMs: modelEvents.longestIdleMs,
+          ...transportSnapshot,
+        },
+      });
     }
   }
 
@@ -539,11 +1215,15 @@ export class ResearchModel {
   }
 
   /**
-   * WHAT `messages.parse` DOES FOR US, DONE BY HAND FOR THE STREAMED PATH.
+   * THE ONE PLACE A STRUCTURED ANSWER IS ACTUALLY VALIDATED — DONE BY HAND,
+   * DELIBERATELY, RATHER THAN LEFT TO THE SDK'S OWN HELPER.
    *
-   * The helper that validates a non-streamed answer has no streaming twin, so
-   * the streamed path has to reproduce it — and the half of it that matters is
-   * not the JSON parse.
+   * `buildParams` strips `.parse` from `output_config.format` before it ever
+   * reaches the provider precisely so the SDK's own `zodObject.safeParse`
+   * (`helpers/zod.mjs`) never runs, on any call — see that method's own
+   * comment for the live failure that made this the answer rather than a
+   * per-call choice. This method is what replaces it, once, for every call,
+   * and the half of it that matters is not the JSON parse.
    *
    * `zodOutputFormat` does not send the whole schema. The provider's structured
    * output supports types and enums, and the SDK silently drops what it cannot
@@ -564,7 +1244,8 @@ export class ResearchModel {
   private parseStreamedOutput<T>(
     message: Anthropic.Message & { _request_id?: string | null },
     schema: z.ZodType<T>,
-  ): T {
+    normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] },
+  ): { data: T; normalizedFields: readonly string[] } {
     const requestId = message._request_id ?? undefined;
     const text = message.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
@@ -596,17 +1277,54 @@ export class ResearchModel {
       );
     }
 
-    const validated = schema.safeParse(json);
+    /*
+     * Cosmetic normalization, if this caller supplied one — deterministic,
+     * applied once, before the strict validation below, which still runs
+     * against `schema` exactly as `schema` is. This step cannot make a
+     * malformed answer pass: it can only rewrite fields its own caller has
+     * named as cosmetic (see `ResearchModel.structured`'s `normalize`
+     * parameter, and `normalizeBaselineGeneration` for the one schema that
+     * uses it), and `safeParse` below still enforces everything else —
+     * required fields, shape, enums, references, numeric bounds, the
+     * safe-prose pattern — completely unweakened.
+     */
+    const normalizedFields: readonly string[] = [];
+    let candidate = json;
+    let fieldsTouched = normalizedFields;
+    if (normalize) {
+      const result = normalize(json);
+      candidate = result.value;
+      fieldsTouched = result.normalizedFields;
+    }
+
+    const validated = schema.safeParse(candidate);
     if (!validated.success) {
-      // The failure detail is deliberately not included: it quotes the offending
-      // value, and the offending value is the thing we just refused to trust.
+      /*
+       * The user-facing message is deliberately generic: it quotes no
+       * value, because the offending value is the untrusted thing this
+       * validation just refused. The *paths* and *codes* Zod raised are a
+       * different kind of fact — where the shape broke, not what the model
+       * said — and are attached to the error for `logCall` alone. Each
+       * issue's own `.message` can, in principle, echo a fragment of the
+       * offending value (a literal/enum mismatch names what it received),
+       * so this travels only as far as `ModelCallDiagnostic` — private
+       * operational diagnostics, per that field's own comment — and never
+       * into this thrown message, console output, or anything a traveller
+       * could see.
+       */
+      const schemaValidationIssues = validated.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        code: issue.code,
+        message: issue.message,
+      }));
       throw new ResearchModelError(
         'malformed_output',
         `The model answered in a shape the schema refused (${message.stop_reason ?? 'no stop reason'}).`,
         requestId,
+        schemaValidationIssues,
       );
     }
-    return validated.data;
+    return { data: validated.data, normalizedFields: fieldsTouched };
   }
 
   private record(message: { usage: Anthropic.Usage; _request_id?: string | null }): void {
@@ -628,6 +1346,82 @@ export class ResearchModel {
       usage.output_tokens * RATE.output +
       searches * 0.01;
     if (message._request_id) this.usage.requestIds.push(message._request_id);
+  }
+
+  /**
+   * The per-call record `callLog` exists for — called exactly once per
+   * attempt, from `structured()`'s `finally` block, on every exit path.
+   *
+   * Response size is measured from the generated text, not
+   * `JSON.stringify(message)` — the latter would count the SDK's own
+   * envelope (usage block, ids, content-array wrapper) as though it were
+   * part of what the model produced, which is not the question "is the
+   * output itself too large" is asking. When there is no completed
+   * `message` at all — an aborted or failed call — the only size available
+   * is what the streamed-path listeners in `structured()` counted as `text`
+   * deltas arrived, which is honestly `null` rather than 0 when nothing was
+   * observed (e.g. the call never even connected).
+   */
+  private logCall(input: {
+    input: { promptVersion: string; callLabel?: string; attempt?: number };
+    maxTokens: number;
+    requestBytes: number;
+    startedAt: Date;
+    calledAt: number;
+    message: (Anthropic.Message & { _request_id?: string | null }) | undefined;
+    outcome: ModelCallOutcome;
+    partialResponseBytes: number;
+    requestIdFromError: string | null;
+    enforcementFallback: boolean;
+    enforcementAttempted: readonly ('grammar' | 'prompt')[];
+    schemaRefusal: { status: number | null; type: string | null } | null;
+    enforcementFallbackReason: string | null;
+    normalizedFields: readonly string[];
+    schemaValidationIssues: ModelCallDiagnostic['schemaValidationIssues'];
+    stream: ModelCallDiagnostic['stream'];
+  }): void {
+    const text = input.message
+      ? input.message.content
+          .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+          .map((block) => block.text)
+          .join('').length
+      : input.partialResponseBytes > 0
+        ? input.partialResponseBytes
+        : null;
+    // `output_tokens_details` is itself `null` on some responses (see the
+    // SDK's own type) — `null` propagates rather than becoming `0`, which
+    // would misreport "reported zero thinking tokens" as indistinguishable
+    // from "the provider did not report this at all".
+    const outputTokens = input.message?.usage.output_tokens ?? null;
+    const thinkingTokens = input.message?.usage.output_tokens_details?.thinking_tokens ?? null;
+    const nonThinkingOutputTokens =
+      outputTokens !== null && thinkingTokens !== null ? outputTokens - thinkingTokens : null;
+    this.callLog.push({
+      callLabel: input.input.callLabel ?? input.input.promptVersion,
+      model: this.model,
+      promptVersion: input.input.promptVersion,
+      startedAt: input.startedAt.toISOString(),
+      finishedAt: new Date().toISOString(),
+      elapsedMs: Math.round(performance.now() - input.calledAt),
+      maxTokensRequested: input.maxTokens,
+      inputTokens: input.message?.usage.input_tokens ?? null,
+      outputTokens,
+      thinkingTokens,
+      nonThinkingOutputTokens,
+      requestBytes: input.requestBytes,
+      responseBytes: text,
+      requestId: input.message?._request_id ?? input.requestIdFromError,
+      stopReason: input.message?.stop_reason ?? null,
+      outcome: input.outcome,
+      attempt: input.input.attempt ?? 1,
+      enforcementFallback: input.enforcementFallback,
+      enforcementAttempted: input.enforcementAttempted,
+      schemaRefusal: input.schemaRefusal,
+      enforcementFallbackReason: input.enforcementFallbackReason,
+      normalizedFields: input.normalizedFields,
+      schemaValidationIssues: input.schemaValidationIssues,
+      stream: input.stream,
+    });
   }
 }
 

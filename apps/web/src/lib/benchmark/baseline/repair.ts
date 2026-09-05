@@ -5,6 +5,8 @@ import {
   GENERATION_TIMEOUT_MS,
   baselineGenerationSchema,
   classifyModelFailure,
+  composerEffort,
+  normalizeBaselineGeneration,
   type BaselineGeneration,
   type GenerationOutcome,
 } from './generate';
@@ -115,17 +117,24 @@ export async function repairBaselinePlan(input: RepairInput): Promise<Generation
         'Place and source indices still address the original research packet; the slice above is only the part these findings touch.',
       ].join('\n'),
       schema: baselineGenerationSchema,
-      effort: 'high',
+      effort: composerEffort(),
       // A repair returns the *whole* plan, so it needs the same room the
       // generation had. A ceiling that fitted the findings and not the answer
       // would turn every correction of a long trip into a truncation.
       maxTokens: GENERATION_MAX_TOKENS,
       timeoutMs: GENERATION_TIMEOUT_MS,
-      // A repair answers in the same shape the generation did, so it inherits
-      // the same problem: that shape is too large for the provider to compile a
-      // decoding grammar for. Stated in the prompt and validated on return, on
-      // exactly the terms `generateBaselinePlan` uses.
-      schemaEnforcement: 'prompt',
+      // A repair answers in the same shape the generation did, so it now
+      // attempts the same thing that call does: native structured output
+      // first, `structured()`'s own bounded grammar→prompt fallback if the
+      // provider refuses to compile it. See `generateBaselinePlan`'s own
+      // note on this — same schema, same reasoning, unset here for the
+      // same reason.
+      callLabel: 'repair',
+      attempt: 1,
+      // Same cosmetic-normalization pass as the generation, for the same
+      // reason: a repair returns the whole plan in this same schema, so it
+      // can fail the same way on the same class of field.
+      normalize: normalizeBaselineGeneration,
     });
     return { ok: true, output };
   } catch (error) {

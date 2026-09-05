@@ -15,20 +15,52 @@
  */
 
 /**
- * Version bumped on 2026-08-07 for all three.
+ * Version bumped on 2026-08-07 for all three, `generatePlan` bumped again on
+ * 2026-08-28, and both `generatePlan` and `repairPlan` bumped again on
+ * 2026-08-29.
  *
- * The traveller's follow-up answers, and the prior plan a repair is given, moved
- * out of the instruction turn and into the untrusted payload. That is a change to
- * what the model is told and where, so it is a new prompt version — the rule the
- * contract states, applied to a security fix rather than to a wording tweak.
+ * The 2026-08-07 bump: the traveller's follow-up answers, and the prior plan a
+ * repair is given, moved out of the instruction turn and into the untrusted
+ * payload. That is a change to what the model is told and where, so it is a new
+ * prompt version — the rule the contract states, applied to a security fix
+ * rather than to a wording tweak.
+ *
+ * The 2026-08-28 bump, `generatePlan` only: `buildGenerationTask` gained a
+ * paragraph stating that the daily driving/travel ceiling bounds an ordinary
+ * day's local movement, not a relocation to a new overnight base — see the
+ * comment beside it. A live Iceland run had scoped the whole country down to
+ * its western/northern quarter and named the driving limit as the reason,
+ * because nothing told the model the validator already exempts a measured
+ * inter-base transfer from that same cap. Composer output shrank in the same
+ * change (`BASELINE_OUTPUT_SCHEMA_VERSION` 2 → 3), but a schema version and a
+ * prompt version are different facts — the schema controls what shape comes
+ * back, this controls what the model is told — so only the field that changed
+ * moved.
+ *
+ * The 2026-08-29 bump, both `generatePlan` and `repairPlan`: a composer-
+ * efficiency pass after a live call was still actively streaming when
+ * Sidequest's own 240-second deadline aborted it. Both instructions gained
+ * one sentence telling the model to return only the structured decisions the
+ * schema asks for, not restate evidence, and think in proportion to the
+ * difficulty rather than by default at full depth — see
+ * `BASELINE_GENERATE_INSTRUCTION`/`BASELINE_REPAIR_INSTRUCTION`'s own text.
+ * `followUpQuestions` is untouched and keeps its 2026-08-07 version.
  */
 export const BASELINE_PROMPT_VERSIONS = {
   /** The optional synthesis call, used only when the packet cannot ask enough. */
   followUpQuestions: 'baseline-follow-up-questions/2026-08-07.1',
   /** The one generation call. */
-  generatePlan: 'baseline-generate-plan/2026-08-07.1',
+  generatePlan: 'baseline-generate-plan/2026-08-29.1',
   /** The single bounded repair. */
-  repairPlan: 'baseline-repair-plan/2026-08-07.1',
+  repairPlan: 'baseline-repair-plan/2026-08-29.1',
+  /**
+   * The skeleton call — new in the skeleton-composer/deterministic-hydration
+   * split. See `skeleton.ts`'s own header for why a second, much smaller
+   * generation replaces the full-plan composer's one big one.
+   */
+  generateSkeleton: 'baseline-generate-skeleton/2026-08-29.1',
+  /** The skeleton-level bounded repair — corrects trip-shape decisions, not itinerary prose. */
+  repairSkeleton: 'baseline-repair-skeleton/2026-08-29.1',
 } as const;
 
 export type BaselinePromptVersion =
@@ -100,15 +132,19 @@ export const BASELINE_GENERATE_INSTRUCTION = [
   '',
   'Plan the trip. That means choosing which places are worth this particular traveller’s time, grouping them so a day does not zig-zag, deciding where they sleep and for how long, ordering the stops, putting meals where somebody would really eat them, leaving room to breathe, and saying in a sentence why each choice suits the person who asked.',
   '',
+  'Return only the structured travel decisions needed by the schema. Do not restate evidence or explain your reasoning beyond the short rationale fields. Thinking should be proportional to the planning difficulty; prioritise completing the structured plan within the latency budget.',
+  '',
   'Judgement worth applying:',
   '- Respect what they stated. A hard avoidance is a filter, not a preference. A stated daily travel limit is a limit. An interest marked "avoid" does not appear, and one marked "core" shapes the trip.',
   '- Pace is a real constraint. A slow traveller with four things a day has a better trip than one with eight.',
   '- Arrival and departure days are shorter than the days between them.',
+  '- The trip has to end somewhere the traveller can actually leave from. Unless they said otherwise, assume departure is from the same point as arrival, and make sure the final base — or a journey on the last day — actually gets them back there with enough time before departure. A route that ends a full day\'s drive from where it started is not a finished plan.',
   '- Group by geography before you order by time. A day that crosses the region twice is a day nobody enjoys.',
   '- Prefer a shorter day with something left over to a full one with no slack.',
   '- Put a meal where the traveller will already be, not where the best restaurant is.',
   '- Offer an alternative for anything that depends on the weather or on something being open.',
   '- Say what you decided against and why. A traveller who can see the discarded option trusts the kept one.',
+  '- Some places in the packet carry a significance figure from 0 to 1 — how well-established the place is by its own sources, not a ranking and not an instruction to include it. A place nobody scored is not thereby a hidden gem, and a well-known place is not thereby right for this traveller. But a high figure is worth weighing: before you leave out the packet\'s most prominent places, especially the one or two most significant in each area it covers, have an actual reason — distance, season, a mismatch with what they asked for — and say what it was, the same way you already explain any other exclusion.',
   '',
   BASELINE_HONESTY_RULES,
 ].join('\n');
@@ -132,7 +168,7 @@ export const BASELINE_REPAIR_INSTRUCTION = [
   '',
   'If a finding cannot be fixed without inventing a fact you do not have, remove the offending item and say in the plan’s unknowns why it was removed. Removing something honestly is a correct repair; keeping it with a made-up justification is not.',
   '',
-  'Return the whole plan in the same shape, corrected.',
+  'Return the whole plan in the same shape, corrected. Do not restate evidence or narrate what you changed beyond the plan’s own rationale fields; think in proportion to how hard the fix actually is, and prioritise returning the corrected structure within the latency budget.',
   '',
   BASELINE_HONESTY_RULES,
 ].join('\n');

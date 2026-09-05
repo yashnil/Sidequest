@@ -31,6 +31,7 @@ const NAME_FOR_WORLD: Record<keyof typeof SYNTHETIC_WORLDS, string> = {
   transit_mixed: 'Two Rivers',
   recovery_adversary: 'Thin Harbour',
   unclocked_valley: 'Unclocked Valley',
+  river_basin: 'River Basin Reserve',
 };
 
 describe('the fixture destination table', () => {

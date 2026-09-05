@@ -117,6 +117,8 @@ export const UNMEASURED_TRAVEL_REASONS = [
   'no_route_found',
   /** A scheduled operator's own ride time, which nobody publishes as a duration. */
   'operator_unpublished',
+  /** LIVE WORLD V1 — the traveller moved, reordered or added a stop; the leg beside it was measured for a different pair and is not re-measured on render. */
+  'not_remeasured_after_edit',
 ] as const;
 export const unmeasuredTravelReasonSchema = z.enum(UNMEASURED_TRAVEL_REASONS);
 export type UnmeasuredTravelReason = z.infer<typeof unmeasuredTravelReasonSchema>;
@@ -172,6 +174,26 @@ export const travelSegmentSchema = z
      * otherwise have to carry a `false` that says nothing.
      */
     unverifiedScheduled: z.literal(true).optional(),
+    /**
+     * LIVE WORLD V1 — what a measured figure actually is.
+     *
+     * `static` is a road network without traffic (Valhalla, or Google
+     * TRAFFIC_UNAWARE); `traffic_aware` is a provider's figure for a specific
+     * departure inside its horizon; `scheduled` is a published timetable;
+     * `estimated` is Sidequest's own figure. A traffic-aware figure never
+     * overwrites the static one: both are kept.
+     */
+    basis: z.enum(['static', 'traffic_aware', 'scheduled', 'estimated']).optional(),
+    provider: z.string().min(1).optional(),
+    measuredAt: z.string().datetime().optional(),
+    effectiveDepartAt: z.string().datetime().optional(),
+    staticMinutes: z.number().int().min(0).optional(),
+    /** Encoded polyline (precision 5) of the route as the provider returned it. Only on measured legs. */
+    geometry: z.string().min(1).optional(),
+    /** The figure is the measured base-to-base leg; the day's stops sit en route and add time. */
+    viaBases: z.literal(true).optional(),
+    /** A traveller-readable transit shape, e.g. "24 min by metro + walk". */
+    transitSummary: z.string().min(1).optional(),
   })
   .refine((leg) => (leg.provenance === 'unmeasured') === (leg.minutes === null), {
     message: 'A leg has a duration when and only when somebody measured or published one',
@@ -326,6 +348,23 @@ export const itineraryItemSchema = z
      * and is still the honest output when nothing verified fitted.
      */
     food: scheduledFoodSchema.optional(),
+    /**
+     * LIVE WORLD V1 closure — the Sidequest-owned result of an operational
+     * check (business status, regular hours) made during reconciliation.
+     * Provider hours and names are never stored; this is disposition and
+     * provenance only, with an honest recheck flag.
+     */
+    operational: z
+      .object({
+        provider: z.string().min(1),
+        checkedAt: z.string().min(1),
+        outcome: z.enum(['open_at_time', 'opens_later', 'closes_earlier', 'closed_on_date', 'closed_permanently', 'closed_temporarily_now', 'hours_unknown', 'not_applicable', 'unavailable']),
+        basis: z.enum(['regular', 'current', 'status_only', 'none']),
+        recheck: z.boolean(),
+        attribution: z.string().min(1),
+        note: z.string().min(1),
+      })
+      .optional(),
     /**
      * Officially signed for daylight use only.
      *
@@ -691,6 +730,23 @@ export const UNSCHEDULED_REASON_CODES = [
    * what actually happened was that we rebuilt the board underneath them.
    */
   'selection_not_on_board',
+  /**
+   * The model's own trip draft named this place; Sidequest either could not
+   * independently confirm it exists as described, or confirmed a real
+   * identity for it but has not yet matched it to a board listing with fit,
+   * hours and access evidence. Not a rejection: it survives here, by name,
+   * with the model's own reason, rather than silently vanishing because
+   * Sidequest's structured evidence for it was thin — see the Phase 17
+   * baseline-first doctrine (`unknown != false`).
+   */
+  'model_proposal_unintegrated',
+  /**
+   * The routing provider affirmatively answered "no route" for this stop
+   * while its base was routable — a real contradiction of the draft's own
+   * day, not a gap in evidence. Only affirmative evidence ever produces
+   * this; an unmeasured leg stays scheduled as unmeasured.
+   */
+  'route_contradicted',
 ] as const;
 export const unscheduledReasonCodeSchema = z.enum(UNSCHEDULED_REASON_CODES);
 export type UnscheduledReasonCode = z.infer<typeof unscheduledReasonCodeSchema>;
@@ -947,6 +1003,11 @@ export const REVISION_ACTION_CODES = [
   'attached_backup',
   /** Swapped a meal for one that fits the route, the clock or the budget. */
   'changed_meal',
+  /** Booked reality, applied after reconciliation. See `applyBookedFacts`. */
+  'base_locked_to_booking',
+  'booked_stop_inserted',
+  'departure_window_tightened',
+  'arrival_window_tightened',
   /**
    * The traveller changed the plan themselves — removed a stop, swapped one,
    * asked for an easier day. Its own code because it is the one revision the
@@ -1033,6 +1094,116 @@ export const ITINERARY_STATUS_COPY: Record<ItineraryStatus, { label: string; blu
   },
 };
 
+
+/**
+ * THE TRIP PACKAGE — THE MODEL-AUTHORED, SIDEQUEST-VERIFIED CONTENT THAT IS
+ * NOT A TIMELINE ROW.
+ *
+ * The canonical generation path (`apps/web/src/lib/planning/reconcile.ts`)
+ * composes a complete trip: bases with lodging guidance, a food strategy, a
+ * transport strategy, preparation, packing, backups, deliberate omissions,
+ * and the explicit disposition of every experience the draft proposed. None
+ * of that is a day item, so it lives here, beside the days, persisted with
+ * the plan and rendered by the same view. Optional on the schema so every
+ * plan built by the deterministic planner before this existed still parses.
+ */
+export const ANCHOR_DISPOSITIONS = [
+  'preserved',
+  'preserved_with_verified_facts',
+  'retained_unverified',
+  'moved_same_day',
+  'moved_other_day',
+  'substituted',
+  'rejected_contradiction',
+  'rejected_hard_constraint',
+  'unscheduled_capacity',
+] as const;
+export const anchorDispositionSchema = z.enum(ANCHOR_DISPOSITIONS);
+export type AnchorDispositionCode = z.infer<typeof anchorDispositionSchema>;
+
+export const VERIFICATION_STATES = ['verified', 'partially_verified', 'unverified'] as const;
+export const verificationStateSchema = z.enum(VERIFICATION_STATES);
+export type VerificationState = z.infer<typeof verificationStateSchema>;
+
+export const packageBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  nights: z.number().int().min(0),
+  why: z.string().min(1),
+  area: z.string().min(1).optional(),
+  style: z.string().min(1).optional(),
+  verification: verificationStateSchema,
+  placeId: z.string().min(1).optional(),
+  /** Set when Sidequest inserted this base itself (a corridor waypoint), never by the draft. */
+  insertedBySidequest: z.boolean().optional(),
+});
+
+export const packageAnchorSchema = z.object({
+  id: z.string().min(1),
+  dayNumber: z.number().int().min(1),
+  /** The day it ended up on, when it moved. */
+  scheduledDayNumber: z.number().int().min(1).optional(),
+  name: z.string().min(1),
+  role: z.enum(['core', 'secondary', 'optional', 'flex']),
+  category: z.string().min(1),
+  disposition: anchorDispositionSchema,
+  verification: verificationStateSchema,
+  placeId: z.string().min(1).optional(),
+  note: z.string().min(1).optional(),
+  /**
+   * LIVE WORLD V1 — how the name became a place, persisted so a rebuild reuses
+   * the resolution instead of paying for it again. `providerRef` is the
+   * provider's own id (a Google place id, an OSM `node/…`); `coordinates` let
+   * the persisted identity stand on its own when the provider is off.
+   */
+  identity: z
+    .object({
+      method: z.enum(['persisted', 'board', 'compiled_place', 'places', 'backbone', 'osm', 'geocoder']),
+      provider: z.string().min(1),
+      providerRef: z.string().min(1).optional(),
+      coordinates: z.object({ lat: z.number(), lng: z.number() }),
+      placeClass: z.enum(['business_venue', 'controlled_site', 'open_ground', 'area', 'transport_terminal', 'unknown']).optional(),
+      confidence: z.enum(['exact', 'probable', 'weak']).optional(),
+      attribution: z.string().min(1).optional(),
+      resolvedAt: z.string().optional(),
+    })
+    .optional(),
+});
+export type PackageAnchor = z.infer<typeof packageAnchorSchema>;
+
+export const tripPackageSchema = z.object({
+  source: z.literal('model_draft'),
+  draftVersion: z.number().int().min(1),
+  archetype: z.enum(['single_base', 'moving_route', 'loop']),
+  purpose: z.string().min(1),
+  routeRationale: z.string().min(1),
+  assumptions: z.array(z.string().min(1)).default([]),
+  tradeoffs: z.array(z.string().min(1)).default([]),
+  bases: z.array(packageBaseSchema),
+  foodStrategy: z.array(z.string().min(1)).default([]),
+  transport: z.object({ summary: z.string().min(1), notes: z.array(z.string().min(1)).default([]) }),
+  beforeYouGo: z.array(z.string().min(1)).default([]),
+  packing: z.array(z.string().min(1)).default([]),
+  backups: z.array(z.object({ trigger: z.string().min(1), alternative: z.string().min(1) })).default([]),
+  omissions: z.array(z.object({ name: z.string().min(1), reason: z.string().min(1) })).default([]),
+  unresolved: z.array(z.string().min(1)).default([]),
+  anchors: z.array(packageAnchorSchema),
+  verification: z.object({
+    anchors: z.number().int().min(0),
+    verified: z.number().int().min(0),
+    partiallyVerified: z.number().int().min(0),
+    unverified: z.number().int().min(0),
+    scheduled: z.number().int().min(0),
+    rejected: z.number().int().min(0),
+    legsMeasured: z.number().int().min(0),
+    legsUnmeasured: z.number().int().min(0),
+    /** True when the bounded verification deadline fired and later lookups were skipped. */
+    deadlineReached: z.boolean(),
+    providerNotes: z.array(z.string().min(1)).default([]),
+  }),
+});
+export type TripPackage = z.infer<typeof tripPackageSchema>;
+
 export const itinerarySchema = z.object({
   version: z.literal(ITINERARY_VERSION),
   tripId: z.string().min(1),
@@ -1049,6 +1220,8 @@ export const itinerarySchema = z.object({
   unscheduled: z.array(unscheduledPlaceSchema),
   issues: z.array(validationIssueSchema),
   diagnostics: planDiagnosticsSchema,
+  /** Present on every plan the canonical model-draft path produced. See `tripPackageSchema`. */
+  package: tripPackageSchema.optional(),
 });
 export type Itinerary = z.infer<typeof itinerarySchema>;
 

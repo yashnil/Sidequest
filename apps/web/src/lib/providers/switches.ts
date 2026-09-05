@@ -152,3 +152,17 @@ export function missingProviderSwitches(): string[] {
   if (!isResearchModelConfigured()) missing.push('ANTHROPIC_API_KEY');
   return missing;
 }
+
+/**
+ * WHICH COMPOSER WRITES THE TRIP DRAFT.
+ *
+ * `fixture` swaps the frontier model for a deterministic, offline draft
+ * composer (`lib/planning/fixture-composer.ts`) so the whole canonical
+ * generation path — composition, verification, reconciliation,
+ * persistence, rendering — runs in a browser test or an integration test
+ * with zero model calls. Anything else means the real model. Like every
+ * other switch here, this is read from the environment and imports nothing.
+ */
+export function isFixtureComposer(): boolean {
+  return process.env.SIDEQUEST_COMPOSER_PROVIDER?.trim().toLowerCase() === 'fixture';
+}

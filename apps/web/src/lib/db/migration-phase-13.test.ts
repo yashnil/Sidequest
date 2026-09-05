@@ -200,9 +200,18 @@ describe('a Phase 12 database upgraded to Phase 13', () => {
     migrate(path);
 
     const after = new Database(path);
-    expect(after.prepare('SELECT * FROM itineraries WHERE trip_id = ?').get('trip-1')).toEqual(
-      itineraryBefore,
-    );
+    /*
+     * `itineraries` has since gained `package_json` (the canonical model-draft
+     * path's trip package), so it is asserted the way `trips` is below: every
+     * column that existed is byte-identical, and the new one arrived at its
+     * declared default — null, because a plan written by the deterministic
+     * planner genuinely has no package.
+     */
+    const itineraryAfter = after.prepare('SELECT * FROM itineraries WHERE trip_id = ?').get('trip-1') as Record<string, unknown>;
+    for (const [column, value] of Object.entries(itineraryBefore as Record<string, unknown>)) {
+      expect(itineraryAfter[column], `itineraries.${column} moved`).toEqual(value);
+    }
+    expect(itineraryAfter.package_json).toBeNull();
 
     /*
      * `trips` gained `owner_token`, so it is asserted the same precise way

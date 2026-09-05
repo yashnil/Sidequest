@@ -111,6 +111,34 @@ CREATE TABLE IF NOT EXISTS itinerary_items (
   PRIMARY KEY (trip_id, day_number, position)
 );
 
+-- Phase 17 — the baseline-first hybrid planner's own itinerary.
+--
+-- One row per trip, exactly like itineraries above, and deliberately not
+-- merged into it: this is a converted BenchmarkPlan (see @sidequest/bench),
+-- not a deterministic Itinerary, and forcing the two into one schema would
+-- either weaken the deterministic plan's guarantees or invent structure the
+-- model never stated. A rebuild replaces the row wholesale.
+-- The raw model draft behind the canonical itinerary, persisted the moment
+-- the composition call returns and before any verification runs — so a
+-- downstream failure never costs a second model call to find out what the
+-- model actually said. One row per trip; a regeneration replaces it.
+CREATE TABLE IF NOT EXISTS trip_drafts (
+  trip_id       TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  draft_version INTEGER NOT NULL,
+  draft_json    TEXT NOT NULL,
+  model_json    TEXT,
+  created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hybrid_plans (
+  trip_id     TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  plan_json   TEXT NOT NULL,
+  metrics_json TEXT NOT NULL,
+  report_json TEXT,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
 -- What the traveller said about where they would like to eat.
 --
 -- Its own table rather than a status on discovery_selections: a food venue is
@@ -1564,6 +1592,11 @@ export const COLUMN_MIGRATIONS: readonly {
   },
   { table: 'itinerary_days', column: 'weather_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: 'itineraries', column: 'food_plan_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  /**
+   * The trip package the canonical model-draft path writes beside the days.
+   * Nullable: a plan built by the deterministic planner genuinely has none.
+   */
+  { table: 'itineraries', column: 'package_json', definition: 'TEXT' },
   { table: 'itinerary_days', column: 'food_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   /**
    * Added when claims gained supersession.

@@ -47,6 +47,7 @@ export * from './schemas/place';
 export * from './schemas/food';
 export * from './schemas/region';
 export * from './schemas/trip';
+export * from './schemas/interview';
 export * from './schemas/profile';
 export * from './schemas/discovery';
 export * from './schemas/provisional';
@@ -66,6 +67,16 @@ export * from './imagery/gate';
 
 export * from './questionnaire/definition';
 export * from './questionnaire/transform';
+
+export * from './interview/impact';
+export * from './interview/traits';
+export * from './interview/catalog';
+export * from './interview/selector';
+export * from './interview/state';
+export * from './interview/review';
+export * from './interview/analytics';
+export * from './interview/summary';
+export * from './intelligence';
 
 export * from './time/interval';
 export * from './time/zone';

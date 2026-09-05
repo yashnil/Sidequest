@@ -8,16 +8,16 @@ import {
   mayShowDiscoveryBoard,
   readBoardIntegrity,
   settleMustDoCoverage,
-  tripPersonality,
   type SelectionStatus,
 } from '@sidequest/core';
 import { DiscoveryBoardView } from '@/components/DiscoveryBoardView';
+import { resolveMapTileSource } from '@/components/map-adapter';
 import { BoardIntegrityPanel } from '@/components/BoardIntegrityPanel';
 import { BoardBackstage } from '@/components/BoardBackstage';
 import { acceptedImagesFor, unresolvedImagerySubjects } from '@/lib/db/imagery-repository';
 
 import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
-import { TripPersonalityCard } from '@/components/QuestionnaireWizard';
+import { TripPersonalityCard } from '@/components/TripPersonalityCard';
 import { Panel, buttonClass } from '@/components/ui';
 import { MustDoPanel } from '@/components/MustDoPanel';
 import { ResearchReadinessPanel, coverageStoppedEarly } from '@/components/ResearchReadinessPanel';
@@ -103,7 +103,6 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
     tripDays: days,
     transitUnmeasured: board.transitUnmeasured,
   });
-  const personality = tripPersonality(profile, days);
 
   const planned = hasItinerary(id);
 
@@ -281,9 +280,9 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
         the foot of the page.
       */}
       <header className="border-b border-rule pb-6">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Discovery board</p>
+        <p className="label text-accent">Discovery board</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <h1 className="font-display text-3xl leading-tight text-ink sm:text-4xl">{region.name}</h1>
+          <h1 className="display-xl text-ink">{region.name}</h1>
           <div className="flex flex-wrap gap-2 print:hidden">
             <Link href={`/trips/${id}/questionnaire`} className={buttonClass('secondary', 'sm')}>
               Change my answers
@@ -295,7 +294,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
             ) : null}
           </div>
         </div>
-        <p className="mt-2 text-sm text-ink-muted" data-testid="trip-line">
+        <p className="mt-3 text-sm text-ink-muted" data-testid="trip-line">
           {formatDateRange(trip.basics.startDate, trip.basics.endDate)} · {days} days ·{' '}
           {trip.basics.adults} adult{trip.basics.adults === 1 ? '' : 's'}
           {trip.basics.children > 0 ? `, ${trip.basics.children} children` : ''} · staying in{' '}
@@ -367,6 +366,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : (
             <DiscoveryBoardView
               tripId={id}
+              tiles={resolveMapTileSource(process.env)}
               /*
                * The artifact these counts are counts *of*.
                *
@@ -511,7 +511,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
                 Everything on the board is ranked against this.
               </p>
               <div className="mt-3">
-                <TripPersonalityCard personality={personality} />
+                <TripPersonalityCard profile={profile} tripDays={days} />
               </div>
             </div>
 

@@ -224,7 +224,24 @@ export function toBenchmarkPlan(input: ConvertInput): ConversionResult {
     };
   });
 
-  const bases = output.bases.map((base) => {
+  /*
+   * A BASE NOBODY SLEPT AT IS NOT PART OF THE TRIP.
+   *
+   * A live run kept a "Placeholder not used" Snæfellsnes base in the final
+   * plan alongside a summary that never mentioned it — the model proposed a
+   * base while composing, changed its mind about the route, and the schema
+   * had no rule forcing the abandoned entry back out of `bases[]`. Nothing
+   * downstream should have to notice that on its own: a base only belongs in
+   * the trip's typed representation if some day actually stayed there, and
+   * that is a fact the converted `days[]` above already states through
+   * `baseId` — checked here rather than trusted from the model's own list.
+   */
+  const usedBaseIds = new Set(
+    days.map((day) => day.baseId).filter((id): id is string => id !== null),
+  );
+  const unusedBaseCount = output.bases.filter((base) => !usedBaseIds.has(base.id)).length;
+
+  const bases = output.bases.filter((base) => usedBaseIds.has(base.id)).map((base) => {
     const resolved = resolve(base.placeIndex);
     return {
       id: base.id,
@@ -255,6 +272,9 @@ export function toBenchmarkPlan(input: ConvertInput): ConversionResult {
     ...(input.extraWarnings ?? []),
     ...(strayDays.length > 0
       ? [`The plan described ${strayDays.length} day(s) that are not part of this trip; they were left out.`]
+      : []),
+    ...(unusedBaseCount > 0
+      ? [`The plan listed ${unusedBaseCount} base(s) that no day in the trip actually stayed at; they were left out.`]
       : []),
   ];
 

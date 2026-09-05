@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ItineraryView } from '@/components/ItineraryView';
+import { resolveMapTileSource } from '@/components/map-adapter';
 import { Panel } from '@/components/ui';
 import { renderInstant } from '@/lib/clock';
 import { formatDateRange } from '@/lib/format';
@@ -88,8 +89,9 @@ export default async function SharedTripPage({
 
   return (
     <ItineraryView
-      itinerary={itinerary}
+      tiles={resolveMapTileSource(process.env)}
       {...model}
+      itinerary={model.appliedItinerary}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock`.

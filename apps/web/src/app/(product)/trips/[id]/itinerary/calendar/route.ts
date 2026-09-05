@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { formatMinuteOfDay, licence } from '@sidequest/core';
+import { loadTripIntelligence } from '@/lib/intelligence/load';
 import type { Itinerary, ItineraryItem } from '@sidequest/core';
 import { getItinerary, getTrip } from '@/lib/db/repository';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
@@ -80,7 +81,31 @@ export async function GET(
     ...(timeZone ? [fold(`X-WR-TIMEZONE:${escapeText(timeZone)}`)] : []),
   ];
 
+  /*
+   * Booked facts first, and the itinerary with those facts applied. A
+   * calendar that carried the model's hotel while the traveller has booked a
+   * different one would be the wrong calendar.
+   */
+  const loaded = loadTripIntelligence({ trip, itinerary, ...(timeZone ? { timeZone } : {}), persist: false });
+  itinerary = loaded.itinerary;
   const stamp = toIcsInstant(new Date());
+  for (const booking of loaded.booked) {
+    if (booking.status !== 'booked' || !booking.date) continue;
+    const start = booking.startTime ?? (booking.type === 'lodging' ? '15:00' : '09:00');
+    const end = booking.endTime ?? (booking.type === 'lodging' ? '11:00' : addMinutes(start, 120));
+    const endDate = booking.type === 'lodging' ? (booking.endDate ?? booking.date) : booking.date;
+    lines.push(
+      'BEGIN:VEVENT',
+      fold(`UID:${escapeText(`${itinerary.tripId}-booked-${booking.id}@sidequest`)}`),
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${booking.date.replace(/-/g, '')}T${start.replace(':', '')}00`,
+      `DTEND:${endDate.replace(/-/g, '')}T${end.replace(':', '')}00`,
+      fold(`SUMMARY:${escapeText(`Booked: ${booking.title}`)}`),
+      fold(`DESCRIPTION:${escapeText([booking.location, booking.notes, booking.url].filter((p): p is string => Boolean(p)).join(' '))}`),
+      'PRIORITY:1',
+      'END:VEVENT',
+    );
+  }
   for (const day of itinerary.days) {
     for (const item of day.items) {
       if (!isExportable(item)) continue;
@@ -123,7 +148,14 @@ export async function GET(
 }
 
 /** Activities and meals are appointments; short travel legs are noise. */
+function addMinutes(time: string, minutes: number): string {
+  const [h, m] = time.split(':').map(Number);
+  const total = Math.min(23 * 60 + 59, (h ?? 0) * 60 + (m ?? 0) + minutes);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 function isExportable(item: ItineraryItem): boolean {
+  if (item.id.startsWith('booked:')) return false;
   if (item.kind === 'activity') return true;
   if (item.kind === 'meal') return true;
   if (item.kind === 'travel') return item.durationMinutes >= 45;

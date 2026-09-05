@@ -64,6 +64,7 @@ import {
   type SharedFactKind,
 } from './BoardCopy';
 import { BoardMap } from './BoardMap';
+import type { MapTileSource } from './map-adapter';
 import { DestinationImage, ImageCredit } from './DestinationImage';
 import { BuildTripButton, PlannerReadinessPanel } from './BuildTripButton';
 import { formatMinutes } from '@/lib/format';
@@ -160,6 +161,7 @@ export function DiscoveryBoardView({
   images = {},
   base = null,
   imageryPending = 0,
+  tiles = null,
 }: {
   tripId: string;
   /** How old the weather behind this board is, when the page knows. */
@@ -173,6 +175,8 @@ export function DiscoveryBoardView({
   initialSelections: SelectionMap;
   autoPickNotes: string[];
   hasItinerary: boolean;
+  /** A basemap tile source, resolved on the server from `SIDEQUEST_MAP_TILES`; null draws positions only. */
+  tiles?: MapTileSource | null;
   /** Licensed photographs by place id, read from a table by the page. */
   images?: Record<string, ImageRecord>;
   /** Where they are sleeping, so the map can draw the thing everything is measured from. */
@@ -497,6 +501,7 @@ export function DiscoveryBoardView({
        */
       name: displayNameOf(candidate.place),
       coordinates: candidate.place.coordinates,
+      category: candidate.place.category,
       chosen: optimistic[candidate.place.id] === 'included',
       travelMinutes: candidate.travelMinutesFromBase,
     }));
@@ -552,8 +557,48 @@ export function DiscoveryBoardView({
           asked for anyway. What auto-pick did is now said in words, once, where
           it was pressed.
         */}
+        {/*
+          THE FOLLOW-UP A REJECTION REASON EARNED.
+
+          On a phone it is the first row *of this bar* rather than a second
+          fixed panel stacked above it: the bar's height depends on how its
+          rows wrap, and a panel pinned at a guessed offset landed on top of
+          "Choose for me". On a wider screen it floats at the corner as before,
+          because by the time somebody has chosen a reason the card they
+          pressed may well have scrolled away — and an offer nobody sees is a
+          reason nobody used.
+        */}
+        {followUp ? (
+          <div
+            className="max-sm:order-first max-sm:basis-full max-sm:border-b max-sm:border-rule max-sm:pb-3 sm:fixed sm:right-6 sm:bottom-6 sm:z-50 sm:max-w-sm sm:rounded-[var(--radius-card)] sm:border sm:border-rule sm:bg-paper-raised sm:p-4 sm:shadow-panel print:hidden"
+            role="status"
+            data-testid="board-pass-followup"
+          >
+            <p className="text-sm leading-relaxed text-ink">
+              {alsoLikeThisPrompt(followUp.reason, followUp.ids.length)}
+            </p>
+            <p className="mt-1 text-xs text-ink-faint">Because you passed on {followUp.from}.</p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={applyFollowUp}
+                className={cx(buttonClass('primary', 'sm'), MIN_TARGET)}
+                data-testid="board-pass-followup-apply"
+              >
+                Skip {followUp.ids.length === 1 ? 'it' : 'them'} too
+              </button>
+              <button
+                type="button"
+                onClick={() => setFollowUp(null)}
+                className={cx(buttonClass('ghost', 'sm'), MIN_TARGET)}
+              >
+                Leave them
+              </button>
+            </div>
+          </div>
+        ) : null}
         <p className="text-sm text-ink" data-testid="board-summary" data-board-version={summary.boardVersion}>
-          <strong className="font-display text-lg">{includedCount}</strong> chosen
+          <strong className="numeral font-display text-2xl text-accent-strong">{includedCount}</strong> chosen
           {maybeCount > 0 ? <span className="text-ink-muted"> · {maybeCount} maybe</span> : null}
           {/*
             The denominator is dropped on a phone. Three facts and two buttons do
@@ -610,8 +655,7 @@ export function DiscoveryBoardView({
       {autoPicked && notes.length > 0 ? (
         <div
           className={cx(
-            'mb-6 rounded-[var(--radius-card)] border-l-2 border-pine bg-pine-soft/40 px-4 py-3',
-            autoPicked && 'ring-1 ring-pine/30',
+            'mb-6 rounded-[var(--radius-card)] border-l-4 border-accent bg-accent-soft px-4 py-3',
           )}
           data-testid="board-auto-pick-notes"
           data-board-version={summary.boardVersion}
@@ -735,11 +779,13 @@ export function DiscoveryBoardView({
           </div>
 
           <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[calc(var(--chrome-height)+5.5rem)] print:hidden">
+            <p className="label mb-2 text-ink-faint">The board, on the map</p>
             <BoardMap
               base={base}
               places={mapPlaces}
               focusedId={focusedId}
               onFocus={focusFromMap}
+              tiles={tiles}
             />
 
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -753,7 +799,7 @@ export function DiscoveryBoardView({
                   type="checkbox"
                   checked={onlyIncluded}
                   onChange={(event) => setOnlyIncluded(event.target.checked)}
-                  className="h-5 w-5 accent-[var(--color-pine)]"
+                  className="h-5 w-5 accent-[var(--color-accent)]"
                 />
                 Only what I chose
               </label>
@@ -796,42 +842,6 @@ export function DiscoveryBoardView({
         </div>
       )}
 
-      {/*
-        THE FOLLOW-UP A REJECTION REASON EARNED.
-
-        Pinned above the action bar rather than inline, because by the time
-        somebody has chosen a reason the card they pressed may well have scrolled
-        away — and an offer nobody sees is a reason nobody used.
-      */}
-      {followUp ? (
-        <div
-          className="fixed inset-x-0 bottom-0 z-50 border-t border-rule bg-paper-raised p-4 shadow-panel max-sm:bottom-[4.5rem] sm:inset-x-auto sm:right-6 sm:bottom-6 sm:max-w-sm sm:rounded-[var(--radius-card)] sm:border print:hidden"
-          role="status"
-          data-testid="board-pass-followup"
-        >
-          <p className="text-sm leading-relaxed text-ink">
-            {alsoLikeThisPrompt(followUp.reason, followUp.ids.length)}
-          </p>
-          <p className="mt-1 text-xs text-ink-faint">Because you passed on {followUp.from}.</p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={applyFollowUp}
-              className={cx(buttonClass('primary', 'sm'), MIN_TARGET)}
-              data-testid="board-pass-followup-apply"
-            >
-              Skip {followUp.ids.length === 1 ? 'it' : 'them'} too
-            </button>
-            <button
-              type="button"
-              onClick={() => setFollowUp(null)}
-              className={cx(buttonClass('ghost', 'sm'), MIN_TARGET)}
-            >
-              Leave them
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -889,13 +899,13 @@ function BoardSections({
         >
           {entry.continued ? null : (
             <>
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h2 id={`group-${entry.group}`} className="font-display text-2xl text-ink">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t-2 border-ink pt-4">
+                <h2 id={`group-${entry.group}`} className="display-md text-ink">
                   {BOARD_GROUP_HEADINGS[entry.group].title}
                 </h2>
-                <span className="text-sm text-ink-faint">{entry.candidates.length}</span>
+                <span className="numeral text-sm text-accent">{entry.candidates.length}</span>
               </div>
-              <p className="mt-1 max-w-2xl text-sm text-ink-muted">
+              <p className="mt-1.5 max-w-2xl text-sm text-ink-muted">
                 {BOARD_GROUP_HEADINGS[entry.group].blurb}
               </p>
             </>
@@ -1066,9 +1076,9 @@ function PlaceCard({
         // The lead card takes the row. Not a decoration: it is the only thing
         // giving a wall of equal cells somewhere for the eye to start.
         featured && 'sm:col-span-2',
-        status === 'included' && 'border-pine',
+        status === 'included' && 'border-accent shadow-[inset_0_0_0_1px_var(--color-accent)]',
         status === 'excluded' && 'opacity-60',
-        focused && 'ring-2 ring-pine ring-offset-2 ring-offset-[var(--color-paper)]',
+        focused && 'ring-2 ring-ink/40 ring-offset-2 ring-offset-[var(--color-paper)]',
       )}
       onMouseEnter={() => onFocus(place.id)}
       onFocusCapture={() => onFocus(place.id)}
@@ -1102,7 +1112,7 @@ function PlaceCard({
         ) : (
           <PlacePlate
             category={place.category}
-            className={featured ? 'h-44' : 'h-28'}
+            className={featured ? 'h-56' : 'h-32'}
             /*
               The three facts that make one plate differ from the next. Without
               them eleven easy walks in one city are eleven identical rectangles
@@ -1121,7 +1131,7 @@ function PlaceCard({
         <h3
           className={cx(
             'font-display leading-snug text-ink',
-            featured ? 'text-xl sm:text-2xl' : 'text-lg',
+            featured ? 'text-2xl sm:text-3xl' : 'text-xl',
           )}
         >
           {/*
@@ -1395,7 +1405,7 @@ function PlaceCard({
                     // fit" tells nobody which of their answers to change.
                     title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
                     className={cx(
-                      'flex flex-1 items-center justify-center rounded-md border px-2 text-xs font-medium whitespace-nowrap transition-colors',
+                      'flex flex-1 items-center justify-center rounded-[var(--radius-control)] border px-2 text-xs font-medium whitespace-nowrap transition-colors duration-[var(--motion-fast)]',
                       MIN_TARGET,
                       unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
                       !unavailable && status === option
@@ -1659,7 +1669,7 @@ function WeatherCredit({
 }
 
 const STATUS_STYLE: Record<SelectionStatus, string> = {
-  included: 'border-pine bg-pine-soft text-pine',
+  included: 'border-accent bg-accent-soft text-accent-strong',
   maybe: 'border-slate-blue bg-slate-blue-soft text-slate-blue',
   excluded: 'border-clay bg-clay-soft text-clay',
 };

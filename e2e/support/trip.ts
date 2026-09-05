@@ -226,73 +226,154 @@ export async function openBoardBackstage(page: Page): Promise<void> {
 }
 
 /**
- * THE WHOLE QUESTIONNAIRE, ONCE, IN ONE PLACE.
+ * THE WHOLE INTERVIEW, ONCE, IN ONE PLACE.
  *
- * Lifted out of `discovery.spec.ts` because a second copy had already appeared —
- * a hand-rolled loop that pressed "Continue" a fixed number of times and gave up
- * silently at step 3 of 9, then spent thirty seconds waiting for a URL nothing
- * was going to navigate to. The stall was reported as a routing failure, which
- * is exactly the class of misleading timeout this suite has just finished
- * removing.
+ * The questionnaire is adaptive now: which screens appear, and in what order,
+ * depends on the destination's screening and on earlier answers. So this is a
+ * walker rather than a script — it reads the id of the question on screen and
+ * answers it from `choices`, picking the priorities it was given, choosing a
+ * named option where one is given, and handing everything else to Sidequest
+ * with "Decide this for me". It stops at the review screen; callers press the
+ * CTA they are testing.
  *
- * Step by step rather than a loop, and deliberately: the questionnaire refuses
- * to continue from an empty profile, so "answer every unanswered group with its
- * first option" walks straight into a screen that will not advance. The steps
- * are asserted by heading, so a reordering fails on the name of the screen that
- * moved rather than on a count.
+ * The defaults reproduce the canonical hiking/lakes/viewpoints traveller the
+ * suite has always driven, on a car, within about an hour of base.
  */
-export async function completeQuestionnaire(page: Page): Promise<void> {
-  /*
-   * Interests: the canonical hiking/lakes/viewpoints traveller, graded against
-   * the offer the destination actually produced.
-   *
-   * The offer is destination-shaped now — a synthetic harbour city is not asked
-   * about geothermal ground and a mountain town is — so grading a fixed four
-   * meant `check()` waiting the full sixty seconds for a control the screen was
-   * right not to render. Two specs reported that as a routing failure.
-   *
-   * The three below are offered everywhere this suite goes, so they are checked
-   * unconditionally: an offer that stopped carrying them is a change worth
-   * failing on, and failing here names the interest rather than timing out three
-   * screens later. Only the fourth is conditional, because only the fourth is
-   * genuinely destination-specific.
-   */
-  await page.getByRole('radio', { name: 'Hiking: A few times' }).check();
-  await page.getByRole('radio', { name: 'Lakes & rivers: A few times' }).check();
-  await page.getByRole('radio', { name: 'Scenic viewpoints: Core' }).check();
-  const geothermal = page.getByRole('radio', { name: 'Geology & geothermal: Once or twice' });
-  if ((await geothermal.count()) > 0) await geothermal.check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+export interface InterviewChoices {
+  /** Interest labels to tick on the priorities screen. */
+  priorities?: readonly string[];
+  /** Option values by question id (`transport_mode: 'rent_car'`), applied when that question appears. */
+  answers?: Readonly<Record<string, string>>;
+  /** Question ids to answer with "No preference" rather than "Decide this for me". */
+  noPreference?: readonly string[];
+}
 
-  // Rhythm
-  await expect(page.getByRole('heading', { name: 'How should the days feel?' })).toBeVisible();
-  await page.getByRole('radio', { name: /^Balanced/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+export const DEFAULT_INTERVIEW: Required<InterviewChoices> = {
+  priorities: ['Hiking', 'Lakes & rivers', 'Scenic viewpoints'],
+  answers: {
+    'priority_role:hiking': 'couple',
+    'priority_role:lakes_and_rivers': 'couple',
+    'priority_role:scenic_viewpoints': 'most_days',
+    transport_mode: 'rent_car',
+    day_shape: 'two_three',
+    effort: 'moderate',
+    budget: 'midrange',
+    iconic_crowds: 'go_at_odd_hours',
+    food_tradeoff: 'convenient',
+    famous_vs_hidden: 'balanced',
+    day_start: 'normal',
+    scenic_reach: 'nearby_60',
+    daily_driving: '150',
+    road_comfort: 'mountain',
+    base_moves: 'move_if_it_saves_time',
+    hike_appetite: 'half_day',
+    altitude_comfort: 'fine',
+    walking_tolerance: 'moderate',
+    transit_comfort: 'best_value',
+    day_trips: 'one_day_trip',
+  },
+  noPreference: [],
+};
 
-  // Budget
-  await page.getByRole('radio', { name: /^Mid-range/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+/** The question on screen, by id, or null on the understanding or review screens. */
+export async function currentInterviewQuestion(page: Page): Promise<string | null> {
+  const question = page.locator('[data-testid^="interview-question-"]');
+  if ((await question.count()) === 0) return null;
+  const id = await question.first().getAttribute('data-testid');
+  return id ? id.replace('interview-question-', '') : null;
+}
 
-  // Food
-  await expect(page.getByRole('heading', { name: 'How do you want to eat?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
+export async function completeQuestionnaire(page: Page, choices: InterviewChoices = {}): Promise<string[]> {
+  const seen: string[] = [];
+  const priorities = choices.priorities ?? DEFAULT_INTERVIEW.priorities;
+  const answers = { ...DEFAULT_INTERVIEW.answers, ...(choices.answers ?? {}) };
+  const noPreference = new Set(choices.noPreference ?? []);
 
-  // Discovery
-  await page.getByRole('radio', { name: /^A real mix/ }).check();
-  await page.getByRole('radio', { name: /Crowds ruin it/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  const interview = page.getByTestId('interview');
+  await expect(interview).toBeVisible({ timeout: 20_000 });
+  const start = page.getByTestId('interview-start');
+  if (await start.isVisible().catch(() => false)) {
+    await waitUntilInteractive(start);
+    await start.click();
+  }
 
-  // Transport
-  await expect(page.getByRole('heading', { name: 'How are you getting around?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  for (let step = 0; step < 40; step += 1) {
+    if (await page.getByTestId('interview-review').isVisible().catch(() => false)) return seen;
+    const id = await currentInterviewQuestion(page);
+    if (!id) {
+      await page.waitForTimeout(200);
+      continue;
+    }
+    seen.push(id);
+    const screen = page.getByTestId(`interview-question-${id}`);
+    await waitUntilInteractive(page.getByTestId('interview-decide'));
+    if (id === 'priorities') {
+      for (const label of priorities) {
+        let chip = screen.getByRole('checkbox', { name: label, exact: true });
+        if ((await chip.count()) === 0) {
+          const more = page.getByTestId('interview-more-interests');
+          if (await more.isVisible().catch(() => false)) await more.click();
+          chip = screen.getByRole('checkbox', { name: label, exact: true });
+        }
+        if ((await chip.count()) > 0 && !(await chip.first().isChecked())) await chip.first().check();
+      }
+      await advanceInterview(page, id);
+      continue;
+    }
+    const wanted = answers[id];
+    if (wanted !== undefined) {
+      const radio = screen.locator(`input[type=radio][value="${wanted}"]`);
+      if ((await radio.count()) > 0) {
+        await radio.first().check();
+        await advanceInterview(page, id);
+        continue;
+      }
+    }
+    if (noPreference.has(id)) {
+      await page.getByTestId('interview-no-preference').click();
+    } else {
+      await page.getByTestId('interview-decide').click();
+    }
+    await expect(screen).toBeHidden({ timeout: 15_000 });
+  }
+  await expect(page.getByTestId('interview-review')).toBeVisible({ timeout: 20_000 });
+  return seen;
+}
 
-  // Region
-  await page.getByRole('radio', { name: /Within ~1 hour/ }).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+/** From the review, press the board CTA and land on the Discovery Board. */
+export async function buildBoardFromReview(page: Page): Promise<void> {
+  await expect(page.getByTestId('interview-review')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
+}
 
-  // Constraints
-  await page.getByRole('button', { name: 'Continue' }).click();
+/** The canonical cultural walker: viewpoints, history, easy walks. */
+export const CULTURAL_INTERVIEW: InterviewChoices = {
+  priorities: ['Scenic viewpoints', 'History & culture', 'Easy nature walks'],
+  answers: { 'priority_role:scenic_viewpoints': 'most_days', 'priority_role:history_and_culture': 'couple', 'priority_role:easy_nature_walks': 'couple' },
+};
 
-  // Review
-  await expect(page.getByRole('heading', { name: 'Your trip personality' })).toBeVisible();
+/** Press Continue and wait for the question to leave the screen. */
+async function advanceInterview(page: Page, id: string): Promise<void> {
+  const screen = page.getByTestId(`interview-question-${id}`);
+  await page.getByTestId('interview-continue').click();
+  await expect(screen).toBeHidden({ timeout: 15_000 });
+}
+
+/**
+ * From the review screen, jump to one question and answer it.
+ *
+ * The review lists every question with a Change control; this presses the one
+ * for `questionId`, picks `value`, and walks the rest of the way back to the
+ * review through whatever follows.
+ */
+export async function changeInterviewAnswer(page: Page, questionId: string, value: string, choices: InterviewChoices = {}): Promise<void> {
+  await expect(page.getByTestId('interview-review')).toBeVisible({ timeout: 20_000 });
+  const change = page.getByTestId(`review-change-${questionId}`);
+  await expect(change).toBeVisible();
+  await change.click();
+  await expect(page.getByTestId(`interview-question-${questionId}`)).toBeVisible({ timeout: 15_000 });
+  await page.locator(`input[type=radio][value="${value}"]`).first().check();
+  await advanceInterview(page, questionId);
+  await completeQuestionnaire(page, choices);
 }

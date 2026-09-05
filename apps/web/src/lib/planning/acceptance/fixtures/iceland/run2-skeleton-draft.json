@@ -1,0 +1,363 @@
+{
+ "archetype": "loop",
+ "purpose": "A clockwise ring around Iceland built for geothermal, geological and scenic-drive interests, hitting every must-do while keeping to six manageable bases and moderate daily driving.",
+ "bases": [
+  {
+   "id": "reykjavik-1",
+   "placeIndex": null,
+   "name": "Reykjavik",
+   "nights": 2,
+   "why": "Widest lodging and a natural gateway for Reykjanes geothermal sites and the capital's own historic core."
+  },
+  {
+   "id": "vik",
+   "placeIndex": null,
+   "name": "Vik",
+   "nights": 2,
+   "why": "Central to the south coast waterfalls and the gateway to the glacier park."
+  },
+  {
+   "id": "hofn",
+   "placeIndex": null,
+   "name": "Höfn",
+   "nights": 2,
+   "why": "Closest practical base for the Lónsöræfi hike and the eastern glacier fringe."
+  },
+  {
+   "id": "egilsstadir",
+   "placeIndex": null,
+   "name": "Egilsstaðir",
+   "nights": 2,
+   "why": "Eastern hub for Seyðisfjörður, Lagarfljót and the road north to Dettifoss."
+  },
+  {
+   "id": "akureyri",
+   "placeIndex": null,
+   "name": "Akureyri",
+   "nights": 2,
+   "why": "Northern capital within reach of Mývatn's volcanic landscapes and northern waterfalls."
+  },
+  {
+   "id": "reykjavik-2",
+   "placeIndex": null,
+   "name": "Reykjavik",
+   "nights": 2,
+   "why": "Returns to the widest departure options after a West Iceland waterfall transfer."
+  }
+ ],
+ "days": [
+  {
+   "dayNumber": 1,
+   "baseId": "reykjavik-1",
+   "theme": "Capital orientation and coastal green space",
+   "intensity": "light",
+   "anchors": [
+    {
+     "placeIndex": 117,
+     "name": "Lækjartorg",
+     "locality": "Reykjavik",
+     "estimatedDurationMinutes": 45,
+     "role": "primary",
+     "why": "Central historic square requested by traveller, easy first-day orientation."
+    },
+    {
+     "placeIndex": 65,
+     "name": "Ylströndin í Nauthólsvík",
+     "role": "secondary",
+     "why": "Relaxed coastal spot to ease into the trip."
+    },
+    {
+     "placeIndex": 69,
+     "name": "Vífilsstaðavatn",
+     "role": "secondary",
+     "why": "Nearby wildlife area, low-effort add-on."
+    }
+   ]
+  },
+  {
+   "dayNumber": 2,
+   "baseId": "reykjavik-1",
+   "theme": "Reykjanes geothermal loop",
+   "intensity": "moderate",
+   "anchors": [
+    {
+     "placeIndex": 57,
+     "name": "Gunnuhver",
+     "role": "primary",
+     "why": "Requested hot spring and a strong fit for geothermal interest."
+    },
+    {
+     "placeIndex": 48,
+     "name": "Raufarhólshellir",
+     "role": "primary",
+     "why": "Requested lava cave, geology-focused anchor."
+    },
+    {
+     "placeIndex": 106,
+     "name": "Kaldárhraun og Gjárnar",
+     "role": "secondary",
+     "why": "Lava field viewpoint that rounds out the geological theme."
+    }
+   ]
+  },
+  {
+   "dayNumber": 3,
+   "baseId": "vik",
+   "theme": "South coast waterfalls drive",
+   "intensity": "moderate",
+   "anchors": [
+    {
+     "placeIndex": 93,
+     "name": "Seljalandsfoss",
+     "role": "primary",
+     "why": "Explicitly requested waterfall on the classic south coast route."
+    },
+    {
+     "placeIndex": 0,
+     "name": "Skógafoss",
+     "role": "primary",
+     "why": "Major south coast waterfall en route to Vik."
+    },
+    {
+     "placeIndex": 133,
+     "name": "Urriðafoss",
+     "role": "secondary",
+     "why": "Convenient scenic stop along the same drive."
+    }
+   ]
+  },
+  {
+   "dayNumber": 4,
+   "baseId": "vik",
+   "theme": "Glacier park hike and bird island",
+   "intensity": "intense",
+   "anchors": [
+    {
+     "placeIndex": 102,
+     "name": "Vatnajökulsþjóðgarður",
+     "role": "primary",
+     "why": "Major day-hike experience in Iceland's largest national park."
+    },
+    {
+     "placeIndex": 92,
+     "name": "Ingólfshöfði",
+     "role": "secondary",
+     "why": "Distinctive wildlife promontory nearby, worth the detour."
+    }
+   ]
+  },
+  {
+   "dayNumber": 5,
+   "baseId": "hofn",
+   "theme": "Transfer along the glacier fringe",
+   "intensity": "light",
+   "anchors": [
+    {
+     "placeIndex": 64,
+     "name": "Phare de Landahóll",
+     "role": "secondary",
+     "why": "Modest waypoint monument on the drive east toward Höfn."
+    },
+    {
+     "placeIndex": 46,
+     "name": "Hjallanes",
+     "role": "secondary",
+     "why": "Easy hike near Höfn to stretch legs after driving."
+    }
+   ]
+  },
+  {
+   "dayNumber": 6,
+   "baseId": "hofn",
+   "theme": "Lónsöræfi wilderness hike",
+   "intensity": "intense",
+   "anchors": [
+    {
+     "placeIndex": 11,
+     "name": "Lónsöræfi",
+     "role": "primary",
+     "why": "Explicitly requested and the trip's most demanding wilderness day hike."
+    },
+    {
+     "placeIndex": 46,
+     "name": "Hjallanes",
+     "role": "secondary",
+     "why": "Complementary shorter walk in the same area if energy allows."
+    }
+   ]
+  },
+  {
+   "dayNumber": 7,
+   "baseId": "egilsstadir",
+   "theme": "East fjords scenic drive",
+   "intensity": "moderate",
+   "anchors": [
+    {
+     "placeIndex": 107,
+     "name": "Seyðisfjörður",
+     "role": "primary",
+     "why": "Iconic fjord town and scenic mountain-pass drive."
+    },
+    {
+     "placeIndex": 87,
+     "name": "Litlanesfoss",
+     "role": "primary",
+     "why": "Distinctive basalt-column waterfall walk fitting the geology interest."
+    },
+    {
+     "placeIndex": 91,
+     "name": "Hallormsstaður",
+     "role": "secondary",
+     "why": "Easy forest walk to balance the day's driving."
+    }
+   ]
+  },
+  {
+   "dayNumber": 8,
+   "baseId": "egilsstadir",
+   "theme": "North toward Dettifoss",
+   "intensity": "moderate",
+   "anchors": [
+    {
+     "placeIndex": 110,
+     "name": "Dettifoss",
+     "role": "primary",
+     "why": "Major waterfall on the route north, strong scenic-viewpoint fit."
+    },
+    {
+     "placeIndex": 99,
+     "name": "Selfoss",
+     "role": "secondary",
+     "why": "Nearby waterfall easily paired with Dettifoss."
+    },
+    {
+     "placeIndex": 8,
+     "name": "Norðfjarðarkirkja",
+     "role": "secondary",
+     "why": "Small historic stop if time allows on the way out of the fjords."
+    }
+   ]
+  },
+  {
+   "dayNumber": 9,
+   "baseId": "akureyri",
+   "theme": "Mývatn volcanic landscapes",
+   "intensity": "moderate",
+   "anchors": [
+    {
+     "placeIndex": 85,
+     "name": "Dimmuborgir",
+     "role": "primary",
+     "why": "Explicitly requested lava-formation viewpoint, core geology anchor."
+    },
+    {
+     "placeIndex": 96,
+     "name": "Hverfjall",
+     "role": "primary",
+     "why": "Adjacent volcanic crater, natural pairing with Dimmuborgir."
+    }
+   ]
+  },
+  {
+   "dayNumber": 10,
+   "baseId": "akureyri",
+   "theme": "Reykjafoss and northern lakes",
+   "intensity": "light",
+   "anchors": [
+    {
+     "placeIndex": 59,
+     "name": "Reykjafoss",
+     "role": "primary",
+     "why": "Explicitly requested easy waterfall walk."
+    },
+    {
+     "placeIndex": 74,
+     "name": "Blönduvatn",
+     "role": "secondary",
+     "why": "Nearby lake worth a look on the return leg."
+    },
+    {
+     "placeIndex": 125,
+     "name": "Herring Era Museum",
+     "role": "secondary",
+     "why": "A change of pace with a distinct cultural stop."
+    }
+   ]
+  },
+  {
+   "dayNumber": 11,
+   "baseId": "reykjavik-2",
+   "theme": "West Iceland waterfalls transfer",
+   "intensity": "moderate",
+   "anchors": [
+    {
+     "placeIndex": 114,
+     "name": "Hraunfossar",
+     "role": "primary",
+     "why": "Explicitly requested and one of the highest-significance viewpoints in the packet."
+    },
+    {
+     "placeIndex": 66,
+     "name": "Geitland",
+     "role": "primary",
+     "why": "Explicitly requested viewpoint along the same Borgarfjörður route."
+    },
+    {
+     "placeIndex": 94,
+     "name": "Stóri Geysir",
+     "role": "secondary",
+     "why": "Requested geothermal stop, reachable on the way back toward Reykjavik."
+    }
+   ]
+  },
+  {
+   "dayNumber": 12,
+   "baseId": "reykjavik-2",
+   "theme": "Golden Circle finishing touches",
+   "intensity": "light",
+   "anchors": [
+    {
+     "placeIndex": 25,
+     "name": "Gálgahraun",
+     "role": "primary",
+     "why": "Lava-field viewpoint close to Reykjavik for an easy closing day."
+    },
+    {
+     "placeIndex": 29,
+     "name": "Fossvogsbakkar",
+     "role": "secondary",
+     "why": "Convenient coastal viewpoint near the capital."
+    }
+   ]
+  },
+  {
+   "dayNumber": 13,
+   "baseId": "reykjavik-2",
+   "theme": "Departure day",
+   "intensity": "light",
+   "anchors": [
+    {
+     "placeIndex": 117,
+     "name": "Lækjartorg",
+     "role": "secondary",
+     "why": "Central, easy final stop before heading to departure."
+    }
+   ]
+  }
+ ],
+ "majorOmissions": [
+  {
+   "placeIndex": 94,
+   "reason": "Gullfoss, the classic Golden Circle waterfall, is not in the packet and was left as a possible traveller addition rather"
+  },
+  {
+   "placeIndex": 92,
+   "reason": "Jökulsárlón glacier lagoon, a destination-defining sight near the south coast route, is absent from the packet and was n"
+  }
+ ],
+ "unresolved": [
+  "Lónsöræfi is a remote, demanding hike; actual access road conditions and whether a full day suffices for both approach and hike should be verified by hydration.",
+  "The drive distances between Höfn, Egilsstaðir and Akureyri are long; whether they fit within the traveller's 240-minute daily driving cap needs routing verifica",
+  "Whether Akureyri or Egilsstaðir have suitable midrange lodging matching the traveller's budget is not confirmed by the packet."
+ ]
+}

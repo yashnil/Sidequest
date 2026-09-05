@@ -84,7 +84,7 @@ describe('the finished plan is a document about places, not a bare schedule', ()
     expect(daysWithStops).toBeGreaterThan(0);
     expect(maps, 'a day with stops was rendered with no map at all').toBe(daysWithStops);
     // Drawn, not linked: the numbers on the drawing are in the document.
-    expect(html).toContain('Numbered in the order above');
+    expect(html).toContain('Numbered in the order of the day');
   });
 
   it('numbers the rows over the stops it could draw, not over every stop', () => {
@@ -114,7 +114,7 @@ describe('the finished plan is a document about places, not a bare schedule', ()
     const next = html.indexOf(`id="day-${withStops!.dayNumber + 1}"`);
     const day = html.slice(from, next < 0 ? undefined : next);
     const marks = [
-      ...day.matchAll(/rounded-full bg-pine text-\[11px\] font-semibold text-paper">(\d+)</g),
+      ...day.matchAll(/rounded-full bg-ink text-\[11px\] font-semibold text-paper">(\d+)</g),
     ].map((match) => Number(match[1]));
 
     expect(marks.length, 'the day rendered no numbered rows at all').toBeGreaterThan(0);
@@ -228,7 +228,10 @@ describe('the finished plan is a document about places, not a bare schedule', ()
      * its own piece further down, and must — the defect is that one day's
      * sentence was promoted to speak for the whole trip.
      */
-    const panel = html.slice(html.indexOf('>Weather<'), html.indexOf('id="day-1"'));
+    // The trip-level weather panel lives in the hub's Backups section now, after the days.
+    const start = html.indexOf('>Weather</h2>');
+    const stop = html.indexOf('data-testid="backups"', start);
+    const panel = html.slice(start, stop < 0 ? undefined : stop);
     expect(panel.length).toBeGreaterThan(100);
     expect(panel).toContain('Open-Meteo.com');
     expect(panel, 'the arrival day\'s "nothing was checked" spoke for the whole trip').not.toContain(
@@ -249,6 +252,6 @@ describe('the finished plan is a document about places, not a bare schedule', ()
       ),
     });
     expect(html).toContain('based in');
-    expect(html, 'no day carries a colour of its own').toMatch(/linear-gradient\(90deg, ?hsl\(/);
+    expect(html, 'no day carries a colour of its own').toMatch(/--plate-hue:\s*\d+/);
   });
 });

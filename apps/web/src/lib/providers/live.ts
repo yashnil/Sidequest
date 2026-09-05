@@ -112,6 +112,7 @@ import {
 } from './overpass';
 import {
   computeMatrix as valhallaMatrix,
+  computeRoute as valhallaRoute,
   costingFor,
   densify,
 } from './valhalla';
@@ -1745,10 +1746,35 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
           note: `Measured ${mode === 'car' ? 'driving' : 'walking'} times from a Valhalla routing engine over OpenStreetMap data.`,
           source: 'Valhalla / OpenStreetMap',
         },
-        failedPairs: outcome.failedPairs.map((pair) => ({ ...pair, reason: 'not_found' as const })),
+        // Forwarded as classified, not re-stamped: `outcome.failedPairs` now
+        // carries the real distinction the skeleton-hydration boundary
+        // needs — `'not_found'` only where Valhalla itself answered with a
+        // null time, everything else naming the actual provider-side reason
+        // no trustworthy measurement exists (see `valhalla.ts`'s
+        // `ValhallaFailureReason`). Collapsing every gap to `'not_found'`
+        // here used to make a rate limit or a timeout indistinguishable from
+        // positive evidence that no route exists.
+        failedPairs: outcome.failedPairs,
         calls: outcome.calls,
         elements: outcome.pairs,
+        circuitOpened: outcome.circuitOpened,
+        reasonCounts: outcome.reasonCounts,
       };
+    },
+    /**
+     * The bounded fallback `matrix()` cannot be trusted alone for — see
+     * `RoutingProvider.route`'s own header. Reuses the same `/route`
+     * endpoint independently proven, live, to measure two legs Valhalla's
+     * matrix algorithm returned `null` for on the same healthy instance.
+     */
+    async route({ from, to, mode }) {
+      if (mode === 'transit') {
+        return { found: false, minutes: null, km: null, reason: 'provider_error' };
+      }
+      const startedAt = performance.now();
+      const result = await valhallaRoute({ id: 'from', ...from }, { id: 'to', ...to }, costingFor(mode));
+      diagnostics.routeCalls += 1;
+      return { ...result, latencyMs: Math.round(performance.now() - startedAt) };
     },
   };
 

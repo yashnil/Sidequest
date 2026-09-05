@@ -277,6 +277,17 @@ describe('the planner is unchanged by the existence of a benchmark', () => {
      * *read*, not what one arm is given.
      */
     'transit',
+    /**
+     * A second, small on-demand matrix for bases/stops the compiled matrix
+     * does not carry, added deliberately for the skeleton-hydration path.
+     *
+     * The list is meant to cost an edit, and this is that edit. Neither
+     * benchmark arm ever sets it: `build.ts`'s `plannerInputForTrip` (the
+     * Sidequest arm's own path) never populates it, so it is `undefined` for
+     * both arms exactly as before this field existed — this widens what the
+     * planner may *read*, not what either arm is given.
+     */
+    'travelLegs',
     'tripId',
     'weather',
   ];

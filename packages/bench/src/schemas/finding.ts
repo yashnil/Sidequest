@@ -84,6 +84,16 @@ export const BENCH_CHECK_CODES = [
   'transfer_understated',
   'daily_travel_exceeded',
   'daily_drive_exceeded',
+  /**
+   * The trip ends somewhere the traveller could not plausibly depart from.
+   *
+   * A whole-plan check rather than a per-day one: geography does not care which
+   * day the mistake was made on, only that the last night is nowhere near
+   * where the first one was — and the request schema states no separate
+   * departure point, so arrival and departure are the same place by
+   * construction. See `checkTripClosure` in `validate/routing.ts`.
+   */
+  'trip_not_closed_to_departure',
   // Traveller constraints
   'mobility_conflict',
   'hard_avoidance_violated',

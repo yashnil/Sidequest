@@ -44,25 +44,11 @@ export default async function NewTripPage({
   const improving = params.have === 'plan';
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-      <p className="eyebrow">{improving ? 'A plan you already have' : 'New trip'}</p>
-      <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl">
-        {improving
-          ? 'Tell us what you have, and we will build around it'
-          : 'Let us work out what your trip should be'}
-      </h1>
-      <p className="measure mt-3 leading-relaxed text-ink-muted">
-        {improving
-          ? 'List the places your plan already has. We will find them on the map, work out how far apart they really are, lay the days out around them — and tell you plainly which of them do not fit the time you have.'
-          : 'A few questions, each of which changes what we go and look for. Nothing is researched until you have seen what we made of it.'}
-      </p>
-
-      <div className="mt-10">
-        <TripComposer
-          defaults={{ startDate: isoDate(30), endDate: isoDate(36) }}
-          intent={improving ? 'has_plan' : 'new'}
-        />
-      </div>
+    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
+      <TripComposer
+        defaults={{ startDate: isoDate(30), endDate: isoDate(36) }}
+        intent={improving ? 'has_plan' : 'new'}
+      />
     </div>
   );
 }

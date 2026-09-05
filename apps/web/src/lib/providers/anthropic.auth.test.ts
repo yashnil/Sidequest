@@ -64,7 +64,10 @@ function modelThatThrows(error: unknown): { model: ResearchModel; wire: { calls:
   (model as unknown as { client: { messages: unknown } }).client.messages = {
     parse: thrower,
     create: thrower,
-    stream: () => ({ finalMessage: thrower }),
+    // `structured()` streams every call now — see `anthropic.ts`'s own note
+    // on why — and registers listeners on the returned stream before ever
+    // awaiting `finalMessage()`, so the stub needs a real (no-op) `.on()`.
+    stream: () => ({ on: () => {}, finalMessage: thrower }),
   };
   return { model, wire };
 }

@@ -132,6 +132,7 @@ const FIXTURE_DESTINATIONS: readonly {
   { match: 'two rivers', worlds: ['transit_mixed'], isPlace: true },
   { match: 'thin harbour', worlds: ['recovery_adversary'], isPlace: true },
   { match: 'unclocked valley', worlds: ['unclocked_valley'], isPlace: true },
+  { match: 'river basin', worlds: ['river_basin'], isPlace: true },
 ];
 
 /**

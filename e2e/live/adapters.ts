@@ -488,32 +488,34 @@ export class PlaywrightJourneyDriver implements JourneyDriver {
    * traveller does not exist on a city board.
    */
   async completeProfile(): Promise<Measured<boolean>> {
-    const review = this.page.getByRole('heading', { name: 'Your trip personality' });
+    const review = this.page.getByTestId('interview-review');
     const build = this.page.getByRole('button', { name: 'Build my discovery board' });
 
-    for (let step = 0; step < 16; step += 1) {
+    /*
+     * The adaptive interview: start it, tick the first three priorities the
+     * destination offers, and hand every other question to Sidequest. Which
+     * questions appear depends on the destination's screening, so nothing here
+     * names one.
+     */
+    const start = this.page.getByTestId('interview-start');
+    if (await start.isVisible().catch(() => false)) await start.click();
+    for (let step = 0; step < 40; step += 1) {
       if (await review.isVisible().catch(() => false)) break;
       if (await build.isVisible().catch(() => false)) break;
-
-      /*
-       * Positive answers first. "Answer every group with its first option" walks
-       * into a screen that will not advance, because the first option of an
-       * interest row is "Skip" and the questionnaire refuses to continue from an
-       * empty profile.
-       */
-      const positive = this.page.getByRole('radio', { name: /: (A few times|Core)$/ });
-      const positiveCount = await positive.count().catch(() => 0);
-      for (let index = 0; index < Math.min(positiveCount, 4); index += 1) {
-        await positive
-          .nth(index)
-          .check()
-          .catch(() => undefined);
+      const priorities = this.page.getByTestId('interview-question-priorities');
+      if (await priorities.isVisible().catch(() => false)) {
+        const chips = priorities.getByRole('checkbox');
+        const count = await chips.count().catch(() => 0);
+        for (let index = 0; index < Math.min(count, 3); index += 1) {
+          await chips.nth(index).check().catch(() => undefined);
+        }
+        await this.page.getByTestId('interview-continue').click().catch(() => undefined);
+        await this.page.waitForTimeout(300);
+        continue;
       }
-      if (positiveCount === 0) await this.answerEveryGroup();
-
-      const next = this.page.getByRole('button', { name: /^Continue$/ });
-      if (await next.isVisible().catch(() => false)) {
-        await next.click();
+      const decide = this.page.getByTestId('interview-decide');
+      if (await decide.isVisible().catch(() => false)) {
+        await decide.click();
         await this.page.waitForTimeout(300);
         continue;
       }
