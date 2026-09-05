@@ -239,7 +239,7 @@ export interface ModelCallDiagnostic {
    * comment on why `type` alone is never enough to classify by); `null`
    * when no `BadRequestError` occurred on a grammar attempt this call.
    */
-  schemaRefusal: { status: number | null; type: string | null } | null;
+  schemaRefusal: { status: number | null; type: string | null; message?: string } | null;
   /**
    * Why the fallback did, or deliberately did not, fire — present whenever
    * `schemaRefusal` is non-`null`, `null` otherwise. Read for a post-mortem;
@@ -728,7 +728,7 @@ export class ResearchModel {
     /** Every mode actually sent, in order — see `ModelCallDiagnostic.enforcementAttempted`. */
     const enforcementAttempted: ('grammar' | 'prompt')[] = [enforcement];
     /** See `ModelCallDiagnostic.schemaRefusal`. */
-    let schemaRefusal: { status: number | null; type: string | null } | null = null;
+    let schemaRefusal: { status: number | null; type: string | null; message?: string } | null = null;
     /** See `ModelCallDiagnostic.enforcementFallbackReason`. */
     let enforcementFallbackReason: string | null = null;
     /** See `ModelCallDiagnostic.normalizedFields`. */
@@ -951,7 +951,8 @@ export class ResearchModel {
          * not it would itself have classified as a schema refusal.
          */
         if (attempted === 1 && enforcement === 'grammar' && error instanceof Anthropic.BadRequestError) {
-          schemaRefusal = { status: error.status ?? null, type: error.type ?? null };
+          // The provider's own sentence about the schema, bounded: it names the offending keyword, never anything from the request body.
+          schemaRefusal = { status: error.status ?? null, type: error.type ?? null, message: String(error.message ?? '').slice(0, 300) };
           if (isStructuredOutputSchemaRefusal(error)) {
             enforcementFallbackReason =
               'grammar-mode request was refused as a structured-output schema/grammar-compilation ' +
@@ -1374,7 +1375,7 @@ export class ResearchModel {
     requestIdFromError: string | null;
     enforcementFallback: boolean;
     enforcementAttempted: readonly ('grammar' | 'prompt')[];
-    schemaRefusal: { status: number | null; type: string | null } | null;
+    schemaRefusal: { status: number | null; type: string | null; message?: string } | null;
     enforcementFallbackReason: string | null;
     normalizedFields: readonly string[];
     schemaValidationIssues: ModelCallDiagnostic['schemaValidationIssues'];

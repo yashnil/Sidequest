@@ -31,9 +31,17 @@ export function securityHeaders(options: { dev: boolean }): { key: string; value
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${scriptExtras}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://upload.wikimedia.org https://commons.wikimedia.org",
+    /*
+     * QUALITY V1 — the optional OpenFreeMap basemap (`SIDEQUEST_MAP_PROVIDER=openfreemap`).
+     * Vector tiles, glyphs and sprites come from tiles.openfreemap.org; MapLibre
+     * renders them in a worker from a blob URL. Listed unconditionally: a host
+     * in a CSP is not a request, and the map only reaches it when configured.
+     */
+    "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://tiles.openfreemap.org",
     "font-src 'self' data:",
-    `connect-src 'self'${connectExtras}`,
+    `connect-src 'self' https://tiles.openfreemap.org${connectExtras}`,
+    "worker-src 'self' blob:",
+    "child-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

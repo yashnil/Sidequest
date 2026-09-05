@@ -75,10 +75,10 @@ async function main(): Promise<void> {
     const more = page.getByRole('button', { name: /A few more that change the plan/i });
     if (await more.isVisible().catch(() => false)) await more.click();
     await page
-      .getByLabel('Anything you would regret missing?')
+      .getByLabel(/Anything booked, fixed, or that you would regret missing/)
       .fill('Hot springs. Somewhere we can potter about with no fixed plan.')
       .catch(() => undefined);
-    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).click();
     await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 30_000 });
     const tripId = /\/trips\/([^/]+)\//.exec(page.url())?.[1] ?? '';
 

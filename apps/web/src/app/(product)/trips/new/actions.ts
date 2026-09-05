@@ -78,18 +78,23 @@ const inputSchema = z.object({
   adults: z.number().int().min(1).max(12),
   children: z.number().int().min(0).max(12),
   travelerNeeds: z.array(z.enum(TRAVELER_NEEDS)),
-  shape: z.enum(TRIP_SHAPES).nullable(),
-  pace: z.enum(['slow', 'balanced', 'packed']).nullable(),
-  transport: z.enum(TRANSPORT_INTENTS).nullable(),
-  budget: z.enum(BUDGET_BANDS).nullable(),
-  themes: z.array(z.enum(TRIP_THEMES)),
-  crowdTolerance: z.enum(['avoid', 'tolerate', 'unbothered']).nullable(),
-  outdoorIntensity: z.enum(['gentle', 'moderate', 'strenuous']).nullable(),
-  foodImportance: z.enum(['fuel', 'matters', 'central']).nullable(),
-  freeTime: z.enum(['packed', 'balanced', 'lots']).nullable(),
   mustDo: z.string().max(600),
   avoid: z.string().max(600),
   origin: z.string().max(120),
+  /*
+   * QUALITY V1 — the composer form no longer asks these; the interview does.
+   * Accepted when a caller still sends them (the labs benchmark adapter and
+   * older clients) so a stored answer keeps its meaning, never required.
+   */
+  shape: z.enum(TRIP_SHAPES).nullable().optional(),
+  pace: z.enum(['slow', 'balanced', 'packed']).nullable().optional(),
+  transport: z.enum(TRANSPORT_INTENTS).nullable().optional(),
+  budget: z.enum(BUDGET_BANDS).nullable().optional(),
+  themes: z.array(z.enum(TRIP_THEMES)).optional(),
+  crowdTolerance: z.enum(['avoid', 'tolerate', 'unbothered']).nullable().optional(),
+  outdoorIntensity: z.enum(['gentle', 'moderate', 'strenuous']).nullable().optional(),
+  foodImportance: z.enum(['fuel', 'matters', 'central']).nullable().optional(),
+  freeTime: z.enum(['packed', 'balanced', 'lots']).nullable().optional(),
 });
 
 export type ComposerInput = z.input<typeof inputSchema>;
@@ -209,7 +214,7 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
     ...(input.pace ? { pace: input.pace } : {}),
     ...(input.transport ? { transport: input.transport } : {}),
     ...(input.budget ? { budget: input.budget } : {}),
-    themes: input.themes,
+    themes: input.themes ?? [],
     ...(input.outdoorIntensity ? { outdoorIntensity: input.outdoorIntensity } : {}),
     ...(input.crowdTolerance ? { crowdTolerance: input.crowdTolerance } : {}),
     ...(input.foodImportance ? { foodImportance: input.foodImportance } : {}),

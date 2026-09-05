@@ -82,7 +82,8 @@ export function capabilityRegistry(env = process.env) {
   const fx = fxRaw === 'frankfurter' || fxRaw === 'fixture' ? fxRaw : 'off';
   const imageryRaw = read(env, 'SIDEQUEST_IMAGERY_PROVIDER').toLowerCase();
   const imagery = imageryRaw === '' ? 'wikimedia' : imageryRaw;
-  const tiles = set(env, 'SIDEQUEST_MAP_TILES');
+  const openFreeMap = eq(env, 'SIDEQUEST_MAP_PROVIDER', 'openfreemap');
+  const tiles = set(env, 'SIDEQUEST_MAP_TILES') || openFreeMap;
   const placesLive = !fixtureCompiler && (nominatim || overture || overpass || google);
 
   /** @type {Capability[]} */
@@ -130,7 +131,7 @@ export function capabilityRegistry(env = process.env) {
   add('readiness.advisory', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'Traveller-country advisories for US, GB, CA, AU, NZ, IE, DE, FR.', limitations: ['Other passport countries get the generic official entry points and are told so.'] });
   add('readiness.health', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'CDC, NHS Fit for Travel, WHO links.', limitations: [] });
 
-  add('maps.tiles', 'maps', { configured: tiles, provider: tiles ? 'tiles' : null, costClass: tiles ? 'metered' : 'none', coverage: tiles ? 'Basemap tiles.' : 'Positions and geometry only, no basemap.', limitations: tiles ? [] : ['Maps draw positions and routes without a basemap.'] });
+  add('maps.tiles', 'maps', { configured: tiles, provider: openFreeMap ? 'openfreemap' : tiles ? 'tiles' : null, costClass: openFreeMap ? 'free' : tiles ? 'metered' : 'none', coverage: openFreeMap ? 'OpenFreeMap vector basemap (OpenMapTiles / OpenStreetMap), rendered in the browser.' : tiles ? 'Basemap tiles.' : 'Positions and geometry only, no basemap.', limitations: openFreeMap ? ['Public instance, no SLA; attribution rendered under every map.'] : tiles ? [] : ['Maps draw positions and routes without a basemap.'] });
 
   const byId = Object.fromEntries(capabilities.map((c) => [c.id, c]));
   const realProviders = capabilities.some((c) => c.group !== 'composition' && c.configured && !c.fixture && c.provider && c.provider !== 'sidequest' && c.provider !== 'official-source-registry' && c.costClass !== 'none');

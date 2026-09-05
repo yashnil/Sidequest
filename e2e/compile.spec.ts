@@ -36,7 +36,7 @@ async function createTrip(page: Page, destination: string): Promise<string> {
   await field.fill(destination);
   await page.getByLabel('Arrive').fill(DATES.start);
   await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/);
   const id = /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();
@@ -55,7 +55,7 @@ async function createTrip(page: Page, destination: string): Promise<string> {
 async function reachClarification(page: Page): Promise<void> {
   await waitForLookup(page);
 
-  for (let step = 0; step < 12; step += 1) {
+  for (let step = 0; step < 16; step += 1) {
     const heading = await page
       .getByRole('heading', { level: 1 })
       .innerText()
@@ -63,6 +63,14 @@ async function reachClarification(page: Page): Promise<void> {
     if (/thing first/i.test(heading)) return;
     if (/what we are about to do/i.test(heading)) {
       throw new Error('the flow skipped the clarification step; this test needs it');
+    }
+
+    const explore = page.getByTestId('interview-explore');
+    if (await explore.isVisible().catch(() => false)) {
+      await waitUntilInteractive(explore);
+      await explore.click();
+      await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 20_000 });
+      continue;
     }
 
     const research = page.getByRole('button', { name: /Go and research this/i });
@@ -88,7 +96,7 @@ async function answerClarifications(page: Page): Promise<void> {
 /** Push through resolution, clarification and scope to a compiled region. */
 async function compile(page: Page): Promise<void> {
   await answerClarifications(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
   await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 60_000,
   });
@@ -100,15 +108,14 @@ test('an unambiguous destination skips the interpretation screen', async ({ page
 
   /*
    * One credible reading is not a choice, so it is adopted without a screen and
-   * the traveller lands on the preflight — which is free, takes seconds, and is
-   * the first thing that tells them whether we understood them.
+   * the traveller lands on the interview — the research (preflight, scope,
+   * build) is an optional detour from there, never a gate in front of it.
    *
    * The two negative assertions are the point of the phase: there is no
    * "which one?" for a single reading, and no confirmation button under it.
    */
-  await expect(page.getByRole('heading', { name: /as we read it/i })).toBeVisible({
-    timeout: 20_000,
-  });
+  await page.waitForURL(/\/questionnaire$/, { timeout: 20_000 });
+  await expect(page.getByTestId('interview-understanding')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('heading', { name: /More than one place is called/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'That is the one' })).toHaveCount(0);
 });
@@ -183,7 +190,7 @@ test('a refresh during compilation resumes the same job rather than starting ano
 }) => {
   const id = await createTrip(page, 'Harbour City');
   await answerClarifications(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
 
   // Wait for the job to exist before reloading. Navigating away *during* the
   // start request is a different case, covered by the test below.
@@ -210,7 +217,7 @@ test('navigating away before a compilation starts leaves an honest restartable s
   await answerClarifications(page);
 
   // Click and immediately navigate, abandoning the in-flight start request.
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
   await page.goto(`/trips/${id}/plan`);
 
   // The scope is confirmed, so it must not offer to confirm again — and if no
@@ -226,7 +233,7 @@ test('navigating away before a compilation starts leaves an honest restartable s
    * full minute waiting for a finished build nothing had restarted — a failure
    * that read as "compilation hangs after a navigation away".
    */
-  const start = page.getByRole('button', { name: 'Start researching' });
+  const start = page.getByRole('button', { name: 'Start exploring' });
   if (await start.isVisible().catch(() => false)) {
     await start.click();
   }
@@ -346,7 +353,7 @@ test('the board and a deterministic itinerary come out of the compiled region', 
   await page.waitForURL(/questionnaire/);
 
   await completeQuestionnaire(page, CULTURAL_INTERVIEW);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 
   await page.waitForURL(/discover/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -413,7 +420,7 @@ test('a plan whose every stop outruns a day is still delivered, and says its day
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
   await completeQuestionnaire(page, CULTURAL_INTERVIEW);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
   const build = page.getByRole('button', { name: /Build my trip|Rebuild my trip/ });
@@ -468,7 +475,7 @@ test('a region nothing can be planned from says so on the board, before the buil
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
   await completeQuestionnaire(page, CULTURAL_INTERVIEW);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
   /*

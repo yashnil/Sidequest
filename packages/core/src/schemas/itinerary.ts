@@ -1174,7 +1174,8 @@ export type PackageAnchor = z.infer<typeof packageAnchorSchema>;
 export const tripPackageSchema = z.object({
   source: z.literal('model_draft'),
   draftVersion: z.number().int().min(1),
-  archetype: z.enum(['single_base', 'moving_route', 'loop']),
+  /** The trip shape the model chose. Legacy values (`single_base`, `moving_route`, `loop`) still parse for stored plans. */
+  archetype: z.enum(['single_base_urban', 'hub_and_spoke', 'road_trip', 'rail_route', 'island_hopping', 'fly_drive', 'multi_region', 'wilderness_gateway', 'guided_remote', 'lodge_circuit', 'mixed', 'single_base', 'moving_route', 'loop']),
   purpose: z.string().min(1),
   routeRationale: z.string().min(1),
   assumptions: z.array(z.string().min(1)).default([]),
@@ -1201,6 +1202,40 @@ export const tripPackageSchema = z.object({
     deadlineReached: z.boolean(),
     providerNotes: z.array(z.string().min(1)).default([]),
   }),
+  /** What to book first, in the model's judgement — lodges, internal flights, timed tickets. */
+  bookingPriorities: z.array(z.string().min(1)).default([]),
+  /**
+   * QUALITY V1 — the draft preservation report: every proposed experience's
+   * fate in numbers, silent loss (must be zero), and the draft-vs-final
+   * substantive-day comparison. Persisted so the Verify section and the
+   * acceptance tests read the same record.
+   */
+  preservation: z
+    .object({
+      version: z.literal(1),
+      draftAnchors: z.number().int().min(0),
+      kept: z.number().int().min(0),
+      removed: z.number().int().min(0),
+      silentLoss: z.number().int().min(0),
+      counts: z.record(z.string(), z.number().int().min(0)),
+      draftSubstantiveDays: z.number().int().min(0),
+      finalSubstantiveDays: z.number().int().min(0),
+      collapsedDays: z.array(z.object({ dayNumber: z.number().int().min(1), reasons: z.array(z.string()) })).default([]),
+      summary: z.string().min(1),
+    })
+    .optional(),
+  /** QUALITY V1 — the deterministic structural audit. Never a taste oracle; never deletes content. */
+  quality: z
+    .object({
+      version: z.literal(1),
+      passed: z.boolean(),
+      errors: z.number().int().min(0),
+      warnings: z.number().int().min(0),
+      checks: z.array(z.object({ id: z.string().min(1), ok: z.boolean(), severity: z.enum(['error', 'warning']), detail: z.string().min(1) })),
+    })
+    .optional(),
+  /** QUALITY V1 — stage timings of the build that produced this plan, milliseconds. */
+  timings: z.record(z.string(), z.number()).optional(),
 });
 export type TripPackage = z.infer<typeof tripPackageSchema>;
 

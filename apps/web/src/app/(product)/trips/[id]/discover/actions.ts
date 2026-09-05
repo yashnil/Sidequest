@@ -24,7 +24,7 @@ import {
   acknowledgeReconciliationEntry,
   getReconciliation,
 } from '@/lib/db/provisional-repository';
-import { fetchWeatherSnapshot } from '@/lib/weather/refresh';
+import { fetchWeatherSnapshot, weatherTargetFor } from '@/lib/weather/refresh';
 import { imageryCache, unresolvedImagerySubjects } from '@/lib/db/imagery-repository';
 import { resolveImageryForSubjects } from '@/lib/providers/wikimedia';
 
@@ -297,12 +297,7 @@ export async function refreshWeatherAction(tripId: string): Promise<ActionResult
   if (!resolved.ok) return { ok: false, error: resolved.error };
 
   const { compiled, dates } = resolved.context;
-  const outcome = await fetchWeatherSnapshot({
-    tripId,
-    compiled,
-    dates,
-    scopeKey: resolved.context.weatherScopeKey,
-  });
+  const outcome = await fetchWeatherSnapshot(weatherTargetFor(tripId, compiled, dates, resolved.context.weatherScopeKey));
 
   revalidatePath(`/trips/${tripId}/discover`);
   revalidatePath(`/trips/${tripId}/itinerary`);

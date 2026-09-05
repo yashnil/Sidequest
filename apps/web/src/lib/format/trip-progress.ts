@@ -182,7 +182,7 @@ export function tripProgress(facts: TripProgressFacts): TripProgress {
 
   return {
     state: 'not_started',
-    label: 'Not researched yet',
+    label: 'Not planned yet',
     action: 'Carry on',
     path: (id) => `/trips/${id}/plan`,
     tone: 'neutral',

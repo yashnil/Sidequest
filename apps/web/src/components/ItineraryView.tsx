@@ -41,7 +41,7 @@ import { TripOverviewMap } from './TripOverviewMap';
 import { PackingChecklist } from './PackingChecklist';
 import type { MapConnector, MapMarker } from './InteractiveMap';
 import { dayMapModel } from './day-map-legs';
-import type { MapTileSource } from './map-adapter';
+import type { MapBasemap } from './map-adapter';
 import { formatMinutes } from '@/lib/format';
 import { dayRouteLinks, mapModeFor } from '@/lib/maps';
 import { PrintButton } from './PrintButton';
@@ -268,6 +268,8 @@ export function ItineraryView({
   dateLabel,
   renderedAt,
   baseNames,
+  destinationName,
+  boardAvailable = true,
   timeZone,
   attributions = [],
   coordinates = {},
@@ -302,7 +304,7 @@ export function ItineraryView({
   /** Present when the caller spreads the view model; the applied itinerary is passed as `itinerary`. */
   appliedItinerary?: Itinerary;
   /** A basemap tile source resolved on the server; null draws positions only. */
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   /** The trip in one sentence, from the traveller's profile. Null on a shared copy or when no profile exists. */
   personality?: string | null;
   /**
@@ -349,6 +351,10 @@ export function ItineraryView({
    * plain `baseName` exactly as before.
    */
   baseNames?: DisplayName;
+  /** QUALITY V1 — the trip as the traveller named it; the hero uses it when the plan moves between bases. */
+  destinationName?: string;
+  /** Whether a Discovery Board exists for this trip; without one the secondary link returns to the interview. */
+  boardAvailable?: boolean;
   /**
    * When the server rendered this page, as epoch milliseconds.
    *
@@ -409,6 +415,7 @@ export function ItineraryView({
     name: itinerary.baseName,
     ...(baseNames ? { names: baseNames } : {}),
   };
+  const multiBase = (itinerary.package?.bases.length ?? 0) > 1;
   const status = ITINERARY_STATUS_COPY[itinerary.status];
   const conflicts = itinerary.unscheduled.filter((entry) => entry.wasManual);
   const dropped = itinerary.unscheduled.filter((entry) => !entry.wasManual);
@@ -449,11 +456,17 @@ export function ItineraryView({
           {tripId ? 'Your trip' : 'Shared with you'}
         </p>
         <h1 className="display-hero mt-3 text-ink">
-          <PlaceName entity={baseEntity} />
+          {multiBase && destinationName ? destinationName : <PlaceName entity={baseEntity} />}
         </h1>
         <p className="mt-3 text-ink-muted">
-          {dateLabel} · {itinerary.days.length} days · based in{' '}
-          <PlaceName entity={baseEntity} showLocal={false} />
+          {dateLabel} · {itinerary.days.length} days ·{' '}
+          {multiBase ? (
+            <>{itinerary.package!.bases.length} bases, {itinerary.package!.bases.map((base) => base.name).join(' → ')}</>
+          ) : (
+            <>
+              based in <PlaceName entity={baseEntity} showLocal={false} />
+            </>
+          )}
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -479,9 +492,15 @@ export function ItineraryView({
             >
               Calendar file (.ics)
             </a>
-            <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
-              Back to the board
-            </Link>
+            {boardAvailable ? (
+              <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
+                Back to the board
+              </Link>
+            ) : (
+              <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('secondary', 'sm')}>
+                Change my answers
+              </Link>
+            )}
             <ShareControl tripId={tripId} />
             {itinerary.package ? <RegenerateButton tripId={tripId} /> : null}
           </>
@@ -1450,7 +1469,7 @@ function DayCard({
   day: ItineraryDay;
   renderedAt: number;
   coordinates: Record<string, { lat: number; lng: number }>;
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   /** LIVE WORLD V1 — how many days the plan has, for "move to day". */
   dayCount?: number;
   /** LIVE WORLD V1 — package roles by item/place id, for must-keep/optional. */
@@ -2697,12 +2716,37 @@ function ConsideredPanel({ pkg }: { pkg: TripPackage }) {
   const moved = pkg.anchors.filter((anchor) => anchor.disposition === 'moved_other_day');
   return (
     <>
-      {pkg.omissions.length > 0 || leftOut.length > 0 || moved.length > 0 || pkg.tradeoffs.length > 0 || pkg.unresolved.length > 0 ? (
+      {pkg.omissions.length > 0 || leftOut.length > 0 || moved.length > 0 || pkg.tradeoffs.length > 0 || pkg.unresolved.length > 0 || pkg.preservation ? (
         <section className="mt-14 border-t border-rule pt-8" data-testid="considered-and-left-out">
           <h2 className="display-md text-ink">Considered, and decided</h2>
           <p className="mt-1 text-sm text-ink-muted">
             What was weighed and left out on purpose, what Sidequest changed on evidence, and what is still open.
           </p>
+          {pkg.preservation ? (
+            <p className="mt-3 text-sm text-ink" data-testid="preservation-summary" data-silent-loss={pkg.preservation.silentLoss}>
+              {pkg.preservation.summary}
+              {pkg.preservation.silentLoss > 0 ? ' Some proposals reached no decision; treat this plan with care.' : ''}
+            </p>
+          ) : null}
+          {pkg.quality && !pkg.quality.passed ? (
+            <ul className="mt-3 space-y-1 text-sm text-clay" data-testid="quality-notes">
+              {pkg.quality.checks
+                .filter((check) => !check.ok && check.severity === 'error')
+                .map((check) => (
+                  <li key={check.id}>{check.detail.charAt(0).toUpperCase() + check.detail.slice(1)}.</li>
+                ))}
+            </ul>
+          ) : null}
+          {pkg.bookingPriorities && pkg.bookingPriorities.length > 0 ? (
+            <div className="mt-4" data-testid="booking-priorities">
+              <h3 className="font-display text-lg text-ink">Book first, in the planner's judgement</h3>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-ink">
+                {pkg.bookingPriorities.map((entry) => (
+                  <li key={entry}>{entry}</li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
           {pkg.omissions.length > 0 ? (
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {pkg.omissions.map((omission) => (
@@ -2793,7 +2837,7 @@ function TripSnapshot({
   coordinates: Record<string, { lat: number; lng: number }>;
   images: Record<string, ImageRecord>;
   rationale: Record<string, StopRationale>;
-  tiles: MapTileSource | null;
+  tiles: MapBasemap | null;
   personality: string | null;
   dateLabel: string;
 }) {

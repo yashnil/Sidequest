@@ -6,6 +6,7 @@ import {
   INTERVIEW_MODULE_LABELS,
   answerQuestion,
   applySmartDefaults,
+  assessSufficiency,
   buildTravelerProfile,
   decideQuestion,
   describeAnswer,
@@ -58,6 +59,7 @@ import { StagePath, stageOf } from './interview/StagePath';
 import {
   completeAndBuildAction,
   completeQuestionnaireAction,
+  exploreExperiencesAction,
   saveDraftAction,
   type CompletionDestination,
 } from '@/app/(product)/trips/[id]/questionnaire/actions';
@@ -212,8 +214,19 @@ export function InterviewWizard({
       const result =
         destination === 'build'
           ? await completeAndBuildAction(tripId, withPosition(answers, REVIEW_POSITION))
-          : await completeQuestionnaireAction(tripId, withPosition(answers, REVIEW_POSITION), destination);
+          : destination === 'research'
+            ? await exploreExperiencesAction(tripId, withPosition(answers, REVIEW_POSITION))
+            : await completeQuestionnaireAction(tripId, withPosition(answers, REVIEW_POSITION), destination);
       if (!result.ok) setError(result.error ?? 'We could not save your profile.');
+    });
+  }
+
+  /** "Explore experiences first" from the understanding screen: research runs while the traveller answers. */
+  function exploreFirst() {
+    setError(null);
+    startTransition(async () => {
+      const result = await exploreExperiencesAction(tripId, withPosition(answers, position));
+      if (!result.ok) setError(result.error ?? 'We could not start exploring just now.');
     });
   }
 
@@ -249,7 +262,7 @@ export function InterviewWizard({
       ) : null}
 
       {position === UNDERSTANDING_POSITION ? (
-        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} />
+        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} {...(researchAvailable && !boardAvailable ? { onExplore: exploreFirst } : {})} />
       ) : null}
 
       {inInterview || position === REVIEW_POSITION ? (
@@ -327,6 +340,7 @@ function UnderstandingScreen({
   pending,
   onStart,
   onDefaults,
+  onExplore,
 }: {
   context: InterviewContext;
   answers: QuestionnaireAnswers;
@@ -335,6 +349,7 @@ function UnderstandingScreen({
   pending: boolean;
   onStart: () => void;
   onDefaults: () => void;
+  onExplore?: () => void;
 }) {
   const d = context.destination;
   const sketch = sketchFor(context, answers);
@@ -382,6 +397,15 @@ function UnderstandingScreen({
             Plan with smart defaults
           </button>
         </div>
+        {onExplore ? (
+          <p className="mt-4 text-sm text-ink-muted">
+            Prefer to see what is there first?{' '}
+            <button type="button" onClick={onExplore} disabled={pending} className={cx('text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-explore">
+              Explore experiences first
+            </button>
+            {' '}— Sidequest researches the area while you answer, and you choose from a board before building.
+          </p>
+        ) : null}
       </div>
       <div className="enter-slow min-w-0">
         <SketchFigure sketch={sketch} />
@@ -660,8 +684,10 @@ function ReviewScreen({
       return null;
     }
   }, [answers, qContext]);
-  const reconcile = mobilityReconciliation(answers);
+  // Only when the traveller actually said one of the two things: two of Sidequest's own defaults disagreeing is Sidequest's problem to settle quietly, not a question for them.
+  const reconcile = answers.provenance.daily_driving?.source === 'explicit' || answers.provenance.scenic_reach?.source === 'explicit' ? mobilityReconciliation(answers) : null;
   const remainingFineTune = plan.questions.filter((q) => q.tier === 'fine_tune' && !q.hidden && q.status === 'open').length;
+  const sufficiency = useMemo(() => assessSufficiency(plan), [plan]);
   const synthesis = synthesisLines(answers, sketch);
 
   return (
@@ -709,6 +735,21 @@ function ReviewScreen({
       </div>
 
       {durationAdvice ? <p className="mt-6 rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk p-4 text-sm leading-relaxed text-ink-muted">You asked for a steer on trip length: {durationAdvice}</p> : null}
+
+      {sufficiency.kind === 'one_question' ? (
+        <div className="mt-6 rounded-[var(--radius-card)] border-l-4 border-accent bg-accent-soft p-5" data-testid="critical-unknown">
+          <h3 className="font-display text-lg text-ink">One answer would change this trip</h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+            {sufficiency.unknown.question.definition.prompt(context, answers).replace(/[:?]$/, '')} — Sidequest can decide it, but it shapes {sufficiency.unknown.question.definition.impacts.slice(0, 2).map((impact) => impact.replace(/_/g, ' ')).join(' and ')}.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" className={buttonClass('secondary')} onClick={() => onJump(sufficiency.unknown.id)} data-testid="critical-unknown-answer">
+              Answer it
+            </button>
+            <span className="text-sm text-ink-faint">Or build now and Sidequest decides.</span>
+          </div>
+        </div>
+      ) : null}
 
       {reconcile && !rangeKept ? (
         <div className="mt-6 rounded-[var(--radius-card)] border-l-4 border-amber bg-amber-soft p-5" data-testid="mobility-reconciliation">
@@ -779,27 +820,19 @@ function ReviewScreen({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
+            {/* ONE PRIMARY ACTION. Building the trip is what the interview is for; the board is an optional detour. */}
             {boardAvailable ? (
-              <>
-                <button type="button" onClick={() => onFinish('build')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-build-now">
-                  Plan now with these answers
-                </button>
-                <button type="button" onClick={() => onFinish('board')} disabled={pending} className={cx(buttonClass('primary', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-build-board">
-                  {pending ? 'Building your board…' : 'Build my discovery board →'}
-                </button>
-              </>
-            ) : (
-              <>
-                {researchAvailable ? (
-                  <button type="button" onClick={() => onFinish('research')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-research-first">
-                    Research the region first
-                  </button>
-                ) : null}
-                <button type="button" onClick={() => onFinish('build')} disabled={pending} className={cx(buttonClass('primary', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-build-trip">
-                  {pending ? 'Composing your trip…' : 'Build my trip →'}
-                </button>
-              </>
-            )}
+              <button type="button" onClick={() => onFinish('board')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-build-board">
+                {pending ? 'Opening your board…' : 'Open the Discovery Board'}
+              </button>
+            ) : researchAvailable ? (
+              <button type="button" onClick={() => onFinish('research')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-research-first">
+                Explore experiences first
+              </button>
+            ) : null}
+            <button type="button" onClick={() => onFinish('build')} disabled={pending} className={cx(buttonClass('primary', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-build-trip">
+              {pending ? 'Composing your trip…' : 'Build my trip →'}
+            </button>
           </div>
         </div>
       </div>

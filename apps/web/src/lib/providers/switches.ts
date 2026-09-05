@@ -56,6 +56,19 @@ export function isResearchModelConfigured(): boolean {
 }
 
 /**
+ * Whether the ONE composition call can be made.
+ *
+ * The same credential as the research model today, named separately because
+ * the two are different capabilities: composition is the canonical product
+ * path and needs nothing else; research (`SIDEQUEST_RESEARCH_PROVIDER`) is an
+ * optional stage behind "Explore experiences first". Nothing on the normal
+ * path may consult the research switch.
+ */
+export function isCompositionModelConfigured(): boolean {
+  return (process.env.ANTHROPIC_API_KEY?.trim().length ?? 0) > 0;
+}
+
+/**
  * The climate archive.
  *
  * Defaults to **on**, unlike every other switch here, because Open-Meteo is free

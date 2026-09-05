@@ -30,8 +30,44 @@ export function prose(max: number): z.ZodString {
 }
 const slug = () => z.string().max(40).regex(SAFE_SLUG_PATTERN);
 
-export const TRIP_ARCHETYPES = ['single_base', 'moving_route', 'loop'] as const;
+/**
+ * The trip shapes the model may choose. Named after how a trip actually
+ * moves — never after a destination — so the same vocabulary covers a city
+ * break, a safari circuit and an archipelago. The three legacy values are
+ * still accepted so a stored draft from an earlier prompt keeps parsing.
+ */
+export const TRIP_ARCHETYPES = [
+  'single_base_urban',
+  'hub_and_spoke',
+  'road_trip',
+  'rail_route',
+  'island_hopping',
+  'fly_drive',
+  'multi_region',
+  'wilderness_gateway',
+  'guided_remote',
+  'lodge_circuit',
+  'mixed',
+  'single_base',
+  'moving_route',
+  'loop',
+] as const;
 export type TripArchetype = (typeof TRIP_ARCHETYPES)[number];
+
+/** How the trip moves, in the three-way vocabulary the relocation machinery reasons in. */
+export function movementShapeOf(archetype: TripArchetype): 'single_base' | 'moving_route' | 'loop' {
+  switch (archetype) {
+    case 'single_base':
+    case 'single_base_urban':
+    case 'hub_and_spoke':
+    case 'wilderness_gateway':
+      return 'single_base';
+    case 'loop':
+      return 'loop';
+    default:
+      return 'moving_route';
+  }
+}
 
 /** A small closed vocabulary so the reconciler can pick sensible default durations and the UI a plate colour. */
 export const ANCHOR_CATEGORIES = [
@@ -99,6 +135,7 @@ export const DRAFT_SOFT_PROSE_CAPS = {
   anchorWhy: 140,
   omissionReason: 140,
   unresolvedItem: 160,
+  bookingPriority: 120,
   foodStrategy: 140,
   transportSummary: 200,
   transportNote: 140,
@@ -181,11 +218,19 @@ export const tripDraftSchema = z.object({
   routeRationale: prose(DRAFT_SOFT_PROSE_CAPS.routeRationale),
   assumptions: z.array(prose(DRAFT_SOFT_PROSE_CAPS.assumption)).max(5),
   tradeoffs: z.array(prose(DRAFT_SOFT_PROSE_CAPS.tradeoff)).max(5),
-  bases: z.array(draftBaseSchema).min(1).max(8),
-  days: z.array(draftDaySchema).min(1).max(40),
+  /*
+   * No `min(1)` here: structured outputs accept no array constraints, and a
+   * `minItems` on the wire made the provider refuse grammar mode (400) and
+   * the transport fall back to prompt-enforced JSON. "At least one base and
+   * one day" is checked by `draftStructureIssues` instead.
+   */
+  bases: z.array(draftBaseSchema).max(8),
+  days: z.array(draftDaySchema).max(40),
   /** Destination-defining experiences weighed and left out, by name — never silently. */
   omissions: z.array(z.object({ name: prose(60), reason: prose(DRAFT_SOFT_PROSE_CAPS.omissionReason) })).max(8),
   unresolved: z.array(prose(DRAFT_SOFT_PROSE_CAPS.unresolvedItem)).max(8),
+  /** What to book first and why, in the order it matters — lodges, internal flights, timed tickets. Optional for older drafts. */
+  bookingPriorities: z.array(prose(DRAFT_SOFT_PROSE_CAPS.bookingPriority)).max(8).optional(),
   package: draftPackageSchema,
 });
 export type TripDraft = z.infer<typeof tripDraftSchema>;
@@ -234,6 +279,7 @@ export function normalizeTripDraft(raw: unknown): { value: unknown; normalizedFi
   root.assumptions = clipArray('assumptions', root.assumptions, DRAFT_SOFT_PROSE_CAPS.assumption);
   root.tradeoffs = clipArray('tradeoffs', root.tradeoffs, DRAFT_SOFT_PROSE_CAPS.tradeoff);
   root.unresolved = clipArray('unresolved', root.unresolved, DRAFT_SOFT_PROSE_CAPS.unresolvedItem);
+  root.bookingPriorities = clipArray('bookingPriorities', root.bookingPriorities, DRAFT_SOFT_PROSE_CAPS.bookingPriority);
 
   if (Array.isArray(root.bases)) {
     root.bases = root.bases.map((entry, i) => {
@@ -321,6 +367,8 @@ export function normalizeTripDraft(raw: unknown): { value: unknown; normalizedFi
 /** Sanity checks the schema cannot express: every day names a base that exists, day numbers are 1..N in order, nights sum sanity is left to the reconciler. */
 export function draftStructureIssues(draft: TripDraft): string[] {
   const issues: string[] = [];
+  if (draft.bases.length === 0) issues.push('the draft names no base');
+  if (draft.days.length === 0) issues.push('the draft has no days');
   const baseIds = new Set(draft.bases.map((b) => b.id));
   draft.days.forEach((day, i) => {
     if (day.dayNumber !== i + 1) issues.push(`days[${i}] is numbered ${day.dayNumber}, expected ${i + 1}`);

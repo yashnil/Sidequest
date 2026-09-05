@@ -30,7 +30,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
 
   // Manzanar is ninety-five minutes down the 395: the default driving budget and
   // radius keep it off the board before hours ever get a say, and the point of
@@ -40,7 +40,7 @@ async function reachBoard(page: Page, dates = AUGUST) {
     answers: { 'priority_role:scenic_viewpoints': 'most_days', 'priority_role:history_and_culture': 'couple', daily_driving: '360', scenic_reach: REGION_WIDE },
   });
 
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
   await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
 }

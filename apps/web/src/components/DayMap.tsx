@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { InteractiveMap, type MapConnector, type MapMarker } from './InteractiveMap';
-import type { MapTileSource } from './map-adapter';
+import type { MapBasemap } from './map-adapter';
 
 /**
  * ONE DAY, ON THE GROUND.
@@ -27,7 +27,7 @@ export function DayMap({
   connectors: readonly MapConnector[];
   omitted: number;
   dayNumber: number;
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   className?: string;
 }) {
   const [focusedId, setFocusedId] = useState<string | null>(null);

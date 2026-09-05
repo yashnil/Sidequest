@@ -15,7 +15,7 @@ async function createTrip(page: Page, dates: { start: string; end: string }) {
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await expect(page.getByTestId('interview')).toBeVisible();
 }
 
@@ -30,7 +30,7 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
   await expect(page.getByTestId('interview-sentence')).toContainText(/over \d+ days/);
   await expect(page.getByText('Range', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 
   await expect(page).toHaveURL(/\/discover$/);
   await expect(page.getByRole('heading', { name: /Eastern Sierra/ })).toBeVisible();
@@ -73,7 +73,7 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
 test('the board arrives pre-selected rather than empty', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
   // A balanced starting set is already applied — the traveller confirms a plan
@@ -94,7 +94,7 @@ test('the board arrives pre-selected rather than empty', async ({ page }) => {
 test('a hand-made choice overrides the auto-pick and survives a refresh', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
   /*
@@ -133,7 +133,7 @@ test('a hand-made choice overrides the auto-pick and survives a refresh', async 
 test('the counts from "choose for me" persist across a reload', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 
   await page.getByTestId('board-auto-pick').click();
   const counter = page.getByTestId('board-summary');
@@ -155,7 +155,7 @@ test('a winter trip is told plainly what is shut rather than shown a broken plan
 }) => {
   await createTrip(page, JANUARY_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 
   /*
    * The count of shut places is backstage now, with the readiness reading, the
@@ -206,7 +206,7 @@ test('a card opens for the detail and closes again, keeping the decision made on
    */
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
   const convict = page.getByRole('article').filter({ hasText: 'Convict Lake' }).first();
@@ -250,7 +250,7 @@ test('a card opens for the detail and closes again, keeping the decision made on
 test('filters narrow the board and give every card back', async ({ page }) => {
   await createTrip(page, AUGUST_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
   const board = page.getByTestId('discovery-board');
@@ -305,7 +305,7 @@ test('things to skip are one line each, and can still be put back', async ({ pag
    */
   await createTrip(page, JANUARY_TRIP);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 
   const list = page.getByTestId('skip-list');
   await expect(list).toBeVisible();

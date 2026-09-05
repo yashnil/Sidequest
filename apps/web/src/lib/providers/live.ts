@@ -1,10 +1,8 @@
 import 'server-only';
-import { candidatesFromNominatim, resolveEntityName } from './names';
+import { resolveEntityName } from './names';
 import {
-  assessConfidence,
   assessPlaceStanding,
   standingFields,
-  DESTINATION_RESOLUTION_VERSION,
   assertFoodRoutingWithinDoorWalk,
   foodDistinctiveness,
   foodNameCounts,
@@ -12,21 +10,16 @@ import {
   snapFoodRouting,
   licence,
   matchesAcquisitionIntent,
-  normalizeDestinationQuery,
   operatingCalendarSchema,
   parseOsmOpeningHours,
   type AdmissionRequirement,
-  type ConfidenceSignal,
   type DataLicence,
-  type DestinationCandidate,
-  type DestinationResolution,
   type FoodVenue,
   type GeographicScope,
   type OperatingCalendar,
   type Place,
   type WeatherLocation,
   type FactPath,
-  resolveDisplayName,
 } from '@sidequest/core';
 import {
   admitLateCandidate,
@@ -91,11 +84,8 @@ import { fetchWikidataFacts } from './wikidata';
 import { isPlaceBackboneEnabled } from './overture/catalog';
 import { createCachedPackProvider } from './overture/cached';
 import {
-  boundsOf,
-  classifyNominatim,
   geocode,
   osmElementId,
-  osmElementUrl,
   type NominatimPlace,
 } from './nominatim';
 import {
@@ -110,12 +100,6 @@ import {
   type NormalizedOsmPlace,
   type OverpassResult,
 } from './overpass';
-import {
-  computeMatrix as valhallaMatrix,
-  computeRoute as valhallaRoute,
-  costingFor,
-  densify,
-} from './valhalla';
 import {
   classifyPlaces,
   DEFAULT_MODEL,
@@ -133,8 +117,9 @@ import {
   TIME_ZONE_TTL_MS,
 } from './timezone';
 import { isTransitProviderEnabled } from './switches';
+import { cacheFor, createOpenResolver, createOpenRouting, OSM_LICENCE_ROUTING, TTL } from './open-verification';
 import { measureTransitJourneys, transitTilesAvailable } from './transit';
-import { readProviderCache, writeProviderCache } from '../db/compiler-repository';
+import { readProviderCache } from '../db/compiler-repository';
 
 /**
  * THE OPEN-LICENSED PROVIDER SET.
@@ -155,7 +140,6 @@ import { readProviderCache, writeProviderCache } from '../db/compiler-repository
  */
 
 const OSM_LICENCE_PLACES: DataLicence = licence('ODbL-1.0', ['places', 'geography']);
-const OSM_LICENCE_ROUTING: DataLicence = licence('ODbL-1.0', ['routing']);
 const AUTHORED_LICENCE: DataLicence = licence('sidequest-authored', [
   'descriptions',
   'classification',
@@ -210,13 +194,6 @@ export interface LiveDiagnostics {
  * long the service should take.
  */
 const POI_STAGE_BUDGET_MS = 150_000;
-
-/** Cache TTLs, matched to how fast the thing behind them actually changes. */
-const TTL = {
-  geocode: 30 * 24 * 60 * 60 * 1000,
-  poi: 7 * 24 * 60 * 60 * 1000,
-  matrix: 14 * 24 * 60 * 60 * 1000,
-} as const;
 
 /**
  * The portfolio, as the set-level arithmetic readiness needs.
@@ -318,14 +295,6 @@ function portfolioFactsFrom(
   };
 }
 
-function cacheFor<T>(provider: string, ttlMs: number) {
-  return {
-    read: (key: string): T | null => readProviderCache<T>(key, new Date()),
-    write: (key: string, value: T): void =>
-      writeProviderCache(key, provider, value, ttlMs, new Date()),
-  };
-}
-
 /**
  * Last week's answer, read only when this week's cannot be had.
  *
@@ -337,121 +306,6 @@ function staleCacheFor<T>() {
   return {
     read: (key: string): T | null =>
       readProviderCache<T>(key, new Date(), { allowExpired: true }),
-  };
-}
-
-/**
- * A zone, from a source that publishes zones. Never derived from an offset.
- *
- * This used to be an inline `fetch` with no cache, no budget and no record of
- * where the answer came from — so a resolution that succeeded and one that
- * quietly fell back to a solar approximation were indistinguishable one line
- * later. It now goes through the adapter, which is cached for a month, refuses a
- * fixed offset, and is registered against `civil_time_zone` so the doctor and
- * the product path agree about whether it can be asked at all.
- */
-async function resolveTimeZone(lat: number, lng: number): Promise<string | null> {
-  if (!isTimeZoneResolverEnabled()) return null;
-  const outcome = await resolveCivilTimeZones([{ id: 'destination', lat, lng }], {
-    maxCalls: 1,
-    cache: cacheFor<{ timeZone: string }>('open-meteo-timezone', TIME_ZONE_TTL_MS),
-  });
-  return outcome.answers[0]?.timeZone ?? null;
-}
-
-/**
- * Whether the geocoder actually returned what was asked for.
- *
- * Asserted unconditionally at first, which is how "inland Alaska" came back as
- * "Inland Lake" carrying an `exact_name_match` signal — three positives, no
- * negatives, high confidence, silently adopted. The name is evidence only when
- * it is actually the name.
- */
-function isExactNameMatch(query: string, place: NominatimPlace): boolean {
-  const wanted = normalizeDestinationQuery(query);
-  const got = normalizeDestinationQuery(place.name ?? place.display_name.split(',')[0] ?? '');
-  return wanted === got;
-}
-
-function toCandidate(
-  place: NominatimPlace,
-  query: string,
-  onlyResult: boolean,
-): DestinationCandidate | null {
-  const lat = Number(place.lat);
-  const lng = Number(place.lon);
-  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-
-  const { breadth, entityType } = classifyNominatim(place);
-  const bounds = boundsOf(place);
-  const country = place.address?.country;
-  const countryCode = place.address?.country_code?.toUpperCase();
-
-  const signals: ConfidenceSignal[] = [];
-  if (isExactNameMatch(query, place)) signals.push('exact_name_match');
-  else signals.push('name_match_partial');
-  if (country) signals.push('administrative_hierarchy_match');
-  if (bounds) signals.push('boundary_available');
-  else signals.push('no_boundary_available');
-  /**
-   * One geocoder is one geocoder.
-   *
-   * A model agreeing that a string looks place-like is not a second source
-   * finding the same place, and recording it as `multiple_providers_agree` was
-   * an overstatement that pushed single-source results to high confidence and
-   * skipped the screen where a traveller would have caught them.
-   */
-  signals.push('single_provider_only');
-  void onlyResult;
-
-  const elementId = osmElementId(place);
-
-  return {
-    id: elementId ?? `nominatim-${place.place_id ?? `${lat},${lng}`}`,
-    /*
-     * English-first, from names the record itself publishes.
-     *
-     * `place.name` is the *local* name by design, and taking it directly is why
-     * an interpretation card could be headed in a script the traveller had not
-     * typed in. `namedetails` gives `name:en` where OSM has one; where it does
-     * not, this resolves to exactly what it always did.
-     */
-    displayName: resolveDisplayName({
-      candidates: candidatesFromNominatim(place),
-      fallback: place.display_name.split(',')[0]?.trim() ?? place.display_name,
-    }).display,
-    qualifiedName: place.display_name,
-    entityType,
-    breadth,
-    center: { lat, lng },
-    ...(bounds ? { bounds } : {}),
-    ...(countryCode && countryCode.length === 2 ? { countryCode } : {}),
-    ...(country ? { countryName: country } : {}),
-    /*
-     * The ISO 3166-2 code, kept rather than filtered out.
-     *
-     * This line used to drop `ISO3166-2-lvl4` on the floor while keeping the
-     * printed subdivision *name* — so the geocoder path published a name, the
-     * catalogue path published a code, and comparing one against the other read
-     * as a border. The code is the one value that compares reliably across
-     * scripts and translations, and it was already here.
-     */
-    ...(place.address?.['ISO3166-2-lvl4']
-      ? { regionCode: place.address['ISO3166-2-lvl4']! }
-      : {}),
-    aliases: candidatesFromNominatim(place).map((entry) => entry.value),
-    administrativeAreas: Object.entries(place.address ?? {})
-      .filter(([key]) => ['country', 'state', 'region', 'county', 'city', 'town'].includes(key))
-      .map(([, value]) => value),
-    timeZones: [],
-    providerRefs: [
-      {
-        provider: 'openstreetmap',
-        externalId: elementId ?? String(place.place_id ?? ''),
-        ...(osmElementUrl(place) ? { url: osmElementUrl(place)! } : {}),
-      },
-    ],
-    confidence: assessConfidence(signals),
   };
 }
 
@@ -612,86 +466,15 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     diagnostics.timeZone ??
     'UTC';
 
-  const resolver: DestinationResolver = {
-    name: 'nominatim',
-    async resolve({ query }) {
-      const result = await geocode(query, {
-        limit: 5,
-        cache: cacheFor<NominatimPlace[]>('nominatim', TTL.geocode),
-      });
-      diagnostics.geocoderCalls += result.calls;
-      if (result.cacheHit) diagnostics.geocoderCacheHits += 1;
-
-      // The model corroborates; it does not resolve. Losing it costs an
-      // ambiguity signal, not the answer.
-      let interpretation: Awaited<ReturnType<typeof interpretDestination>> | null;
-      try {
-        interpretation = await interpretDestination(model, query);
-      } catch {
-        interpretation = null;
-      }
-
-      const candidates = result.places
-        .map((place) => toCandidate(place, query, result.places.length === 1))
-        .filter((candidate): candidate is DestinationCandidate => candidate !== null);
-
-      const ambiguityReasons: DestinationResolution['ambiguityReasons'] = [];
-      if (candidates.length === 0) ambiguityReasons.push('no_match');
-      if (candidates.length > 1) ambiguityReasons.push('multiple_matching_places');
-      if (interpretation && !interpretation.looksLikeAPlace) {
-        ambiguityReasons.push('query_is_not_a_place');
-      }
-      const leading = candidates[0];
-      if (leading?.breadth === 'country' || leading?.breadth === 'multi_country') {
-        ambiguityReasons.push('administrative_area_needs_subset');
-      }
-      if (leading && !leading.bounds) ambiguityReasons.push('no_boundary_available');
-
-      if (leading) {
-        const zone = await resolveTimeZone(leading.center.lat, leading.center.lng);
-        diagnostics.timeZone = zone;
-        if (zone) {
-          /**
-           * THE LEADING CANDIDATE ONLY, AND THIS IS NOT A DETAIL.
-           *
-           * One coordinate is looked up — the leading reading's — and the answer
-           * used to be written onto *every* candidate. That was survivable while
-           * it was a bare value; stamping it `provider_resolved` turns it into a
-           * claim that a source confirmed this zone for this place, which is
-           * false for every candidate but one.
-           *
-           * The failure is concrete and common. "San Jose" resolves to San José,
-           * Costa Rica first; the traveller picks San Jose, California from the
-           * ambiguity screen; and the scope carries `America/Costa_Rica` marked
-           * authoritative. Every opening hour, sunrise and departure is two hours
-           * out, and nothing on the artifact can be used to notice.
-           *
-           * The other readings keep no zone at all, which is honest: nobody
-           * asked about them. If one is chosen, the solar fallback applies and
-           * says so — a visibly degraded answer rather than an invisibly wrong
-           * one.
-           */
-          leading.timeZones = [zone];
-          leading.timeZoneSource = 'open-meteo';
-          leading.timeZoneResolvedAt = new Date().toISOString();
-        }
-      }
-
-      const unambiguous =
-        candidates.length === 1 && ambiguityReasons.length === 0 ? candidates[0]?.id : undefined;
-
-      return {
-        schemaVersion: DESTINATION_RESOLUTION_VERSION,
-        query,
-        normalizedQuery: normalizeDestinationQuery(query),
-        candidates,
-        ambiguityReasons,
-        ...(unambiguous ? { unambiguousCandidateId: unambiguous } : {}),
-        providersConsulted: ['nominatim', 'anthropic'],
-        resolvedAt: new Date().toISOString(),
-      };
-    },
-  };
+  /*
+   * The geocoder-backed resolver from `open-verification.ts`, with the model
+   * corroborating whether the string looks like a place at all. The model
+   * corroborates; it does not resolve. Losing it costs an ambiguity signal.
+   */
+  const resolver: DestinationResolver = createOpenResolver({
+    diagnostics,
+    corroborate: (query) => interpretDestination(model, query),
+  });
 
   const expansion: RegionExpansionProvider = {
     name: 'anthropic-expansion',
@@ -1689,94 +1472,7 @@ export function createOpenProviders(limits: { maxModelCalls: number }): {
     },
   };
 
-  const routing: RoutingProvider = {
-    name: 'valhalla',
-    supportedModes() {
-      return ['car', 'foot'];
-    },
-    async matrix({ points, mode, maxElements }) {
-      /**
-       * A ROAD MATRIX IS NEVER ASKED FOR A TRANSIT ANSWER.
-       *
-       * `costingFor` used to map `transit` onto Valhalla's `bus` costing — a
-       * road-network vehicle with no timetable — and the mapping was unreachable
-       * only because nothing happened to pass `transit`. "Nothing calls it
-       * today" is a property of the current control flow rather than of the
-       * build, and it is one refactor away from being false. Transit is measured
-       * by the transit seam or not at all.
-       */
-      if (mode === 'transit') {
-        throw new Error(
-          'The road router was asked for a public-transport journey. Transit is measured by the transit provider or reported as unavailable.',
-        );
-      }
-      /*
-       * One stored answer per ordered coordinate pair, not per request block.
-       *
-       * `cacheFor` is generic over the stored value, so the change is entirely
-       * in what the router asks it for — see `matrixPairCacheKey`. The block key
-       * it replaced named forty points in two fixed orders and therefore matched
-       * nothing a second build ever assembled, which is why two Tokyo
-       * compilations three days apart both reported `routeCacheHits=0`.
-       */
-      const outcome = await valhallaMatrix([...points], costingFor(mode), {
-        maxPairs: maxElements,
-        cache: cacheFor<{ minutes: number; km: number }>('valhalla', TTL.matrix),
-      });
-      diagnostics.routeCalls += outcome.calls;
-      diagnostics.routePairs += outcome.pairs;
-      diagnostics.routeCacheHits += outcome.cacheHits;
-
-      const dense = densify(outcome);
-      return {
-        licences: [OSM_LICENCE_ROUTING],
-        ids: dense.ids,
-        minutes: dense.minutes,
-        km: dense.km,
-        provenance: {
-          kind: 'measured' as const,
-          /*
-           * Named from the mode, with no `else`.
-           *
-           * This was a binary — anything that was not `car` was labelled
-           * *walking* — which was harmless while only two modes could reach it
-           * and becomes a fabricated claim the moment a third can. A mode this
-           * router cannot measure is refused above rather than described here.
-           */
-          note: `Measured ${mode === 'car' ? 'driving' : 'walking'} times from a Valhalla routing engine over OpenStreetMap data.`,
-          source: 'Valhalla / OpenStreetMap',
-        },
-        // Forwarded as classified, not re-stamped: `outcome.failedPairs` now
-        // carries the real distinction the skeleton-hydration boundary
-        // needs — `'not_found'` only where Valhalla itself answered with a
-        // null time, everything else naming the actual provider-side reason
-        // no trustworthy measurement exists (see `valhalla.ts`'s
-        // `ValhallaFailureReason`). Collapsing every gap to `'not_found'`
-        // here used to make a rate limit or a timeout indistinguishable from
-        // positive evidence that no route exists.
-        failedPairs: outcome.failedPairs,
-        calls: outcome.calls,
-        elements: outcome.pairs,
-        circuitOpened: outcome.circuitOpened,
-        reasonCounts: outcome.reasonCounts,
-      };
-    },
-    /**
-     * The bounded fallback `matrix()` cannot be trusted alone for — see
-     * `RoutingProvider.route`'s own header. Reuses the same `/route`
-     * endpoint independently proven, live, to measure two legs Valhalla's
-     * matrix algorithm returned `null` for on the same healthy instance.
-     */
-    async route({ from, to, mode }) {
-      if (mode === 'transit') {
-        return { found: false, minutes: null, km: null, reason: 'provider_error' };
-      }
-      const startedAt = performance.now();
-      const result = await valhallaRoute({ id: 'from', ...from }, { id: 'to', ...to }, costingFor(mode));
-      diagnostics.routeCalls += 1;
-      return { ...result, latencyMs: Math.round(performance.now() - startedAt) };
-    },
-  };
+  const routing: RoutingProvider = createOpenRouting(diagnostics);
 
   /**
    * Public transport, when this build was told it has a router that can answer.

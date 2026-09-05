@@ -29,9 +29,15 @@ describe('the security header policy', () => {
     const csp = headerMap({ dev: false }).get('Content-Security-Policy')!;
     // Wikimedia imagery is a deliberate decision (see wikimedia.ts); the
     // fallback graphics are data URIs. Nothing else loads into an <img>.
+    // QUALITY V1 — plus the optional OpenFreeMap basemap host (tiles, sprites) and
+    // the blob: URLs MapLibre draws from; only reached when the provider is configured.
     expect(csp).toContain(
-      "img-src 'self' data: https://upload.wikimedia.org https://commons.wikimedia.org",
+      "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://tiles.openfreemap.org",
     );
+    expect(csp).toContain("connect-src 'self' https://tiles.openfreemap.org");
+    expect(csp).toContain("worker-src 'self' blob:");
+    // Still no third-party *script* origin.
+    expect(csp).toMatch(/script-src 'self' 'unsafe-inline'(;|$)/);
     // No third-party script origin, ever. Open-Meteo is server-side and must
     // not appear anywhere in a browser policy.
     expect(csp).not.toContain('open-meteo');

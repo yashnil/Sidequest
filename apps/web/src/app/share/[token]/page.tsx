@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { ItineraryView } from '@/components/ItineraryView';
-import { resolveMapTileSource } from '@/components/map-adapter';
+import { resolveMapBasemap } from '@/components/map-adapter';
 import { Panel } from '@/components/ui';
 import { renderInstant } from '@/lib/clock';
 import { formatDateRange } from '@/lib/format';
@@ -89,7 +89,7 @@ export default async function SharedTripPage({
 
   return (
     <ItineraryView
-      tiles={resolveMapTileSource(process.env)}
+      tiles={resolveMapBasemap(process.env)}
       {...model}
       itinerary={model.appliedItinerary}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}

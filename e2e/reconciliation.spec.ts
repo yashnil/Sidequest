@@ -68,7 +68,7 @@ async function markMustDos(page: Page, tripId: string, count: number): Promise<s
 async function reachDiscoveryBoard(page: Page, tripId: string): Promise<void> {
   await page.goto(`/trips/${tripId}/questionnaire`);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 }
 

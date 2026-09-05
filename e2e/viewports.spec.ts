@@ -61,7 +61,7 @@ for (const viewport of VIEWPORTS) {
     await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
     await expectNoHorizontalOverflow(page, `composer at ${viewport.name}`);
 
-    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).click();
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
 
     /*
@@ -126,11 +126,11 @@ for (const phone of PHONES) {
     await destination.fill('Mammoth Lakes');
     await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
     await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).click();
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
     await completeQuestionnaire(page);
 
-    await page.getByRole('button', { name: 'Build my discovery board' }).click();
+    await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
     await expect(page).toHaveURL(/\/discover$/);
     await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
     await expectNoHorizontalOverflow(page, `discovery board at ${where}`);
@@ -221,7 +221,7 @@ test.describe('every normal route', () => {
 
     planned = await createTrip(shared, 'Mammoth Lakes');
     await completeQuestionnaire(shared);
-    await shared.getByRole('button', { name: 'Build my discovery board' }).click();
+    await shared.getByRole('button', { name: 'Open the Discovery Board' }).click();
     await expect(shared).toHaveURL(/\/discover$/);
     await shared.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
     await expect(shared).toHaveURL(/\/itinerary$/, { timeout: 60_000 });

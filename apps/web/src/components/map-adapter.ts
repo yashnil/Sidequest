@@ -81,6 +81,44 @@ export interface TileEnvironment {
 }
 
 /**
+ * QUALITY V1 — a vector basemap, rendered by MapLibre GL from a style URL.
+ *
+ * `SIDEQUEST_MAP_PROVIDER=openfreemap` selects OpenFreeMap's public instance:
+ * OpenMapTiles-schema vector tiles from OpenStreetMap data, served without a
+ * key, commercial use permitted, attribution required ("OpenFreeMap",
+ * "OpenMapTiles", "OpenStreetMap contributors"). The style is loaded at
+ * runtime by the browser; nothing about it is persisted. Where the provider
+ * is not configured the honest data-driven figure renders exactly as before.
+ */
+export interface VectorBasemap {
+  kind: 'vector';
+  provider: 'openfreemap';
+  styleUrl: string;
+  attribution: string;
+  maxZoom: number;
+}
+
+export type MapBasemap = (MapTileSource & { kind?: 'raster' }) | VectorBasemap;
+
+export const MAP_PROVIDER_ENV = 'SIDEQUEST_MAP_PROVIDER';
+export const OPENFREEMAP_STYLE_ENV = 'SIDEQUEST_MAP_STYLE';
+/** OpenFreeMap's light style — a quiet ground under ink marks. */
+export const OPENFREEMAP_DEFAULT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+export const OPENFREEMAP_ATTRIBUTION = '© OpenFreeMap · © OpenMapTiles · Data © OpenStreetMap contributors';
+
+export function resolveVectorBasemap(env: TileEnvironment): VectorBasemap | null {
+  if (env[MAP_PROVIDER_ENV]?.trim().toLowerCase() !== 'openfreemap') return null;
+  const style = env[OPENFREEMAP_STYLE_ENV]?.trim() || OPENFREEMAP_DEFAULT_STYLE;
+  if (!/^https:\/\/tiles\.openfreemap\.org\//.test(style)) return null;
+  return { kind: 'vector', provider: 'openfreemap', styleUrl: style, attribution: OPENFREEMAP_ATTRIBUTION, maxZoom: 18 };
+}
+
+/** The basemap this build renders under every map: a vector style when the provider is chosen, raster tiles when a template is configured, else none. */
+export function resolveMapBasemap(env: TileEnvironment): MapBasemap | null {
+  return resolveVectorBasemap(env) ?? resolveMapTileSource(env);
+}
+
+/**
  * The configured basemap, or `null` — which is every build today.
  *
  * Deliberately strict. A template that is missing a placeholder, is not HTTPS,

@@ -1,5 +1,5 @@
 import 'server-only';
-import { weatherCoverageOf, type CompiledRegion } from '@sidequest/core';
+import { weatherCoverageOf, type CompiledRegion, type WeatherLocation } from '@sidequest/core';
 import { resolveTripWeather } from './index';
 import {
   buildWeatherSnapshot,
@@ -26,9 +26,17 @@ import {
 
 export interface WeatherFetchTarget {
   tripId: string;
-  compiled: CompiledRegion;
+  /** The region the snapshot belongs to — a compiled region's id, or the draft-region id of a trip planned without one. */
+  regionId: string;
+  /** Where the forecast is read: a compiled region's weather locations, or the destination centre for a trip without one. */
+  locations: readonly WeatherLocation[];
   dates: readonly string[];
   scopeKey: string;
+}
+
+/** The target for a compiled region — the shape every existing caller had. */
+export function weatherTargetFor(tripId: string, compiled: CompiledRegion, dates: readonly string[], scopeKey: string): WeatherFetchTarget {
+  return { tripId, regionId: compiled.region.id, locations: compiled.weatherLocations, dates, scopeKey };
 }
 
 export type WeatherFetchOutcome =
@@ -74,9 +82,9 @@ export async function fetchWeatherSnapshot(
     target.scopeKey,
     { status: 'in_progress', requestedAt: requestedAt.toISOString() },
     {
-      regionId: target.compiled.region.id,
+      regionId: target.regionId,
       dates: target.dates,
-      locations: target.compiled.weatherLocations,
+      locations: target.locations,
       now: requestedAt,
       reason: 'provider_error',
       message: 'We are asking now. Nothing here is a claim about the weather yet.',
@@ -85,9 +93,9 @@ export async function fetchWeatherSnapshot(
 
   try {
     const dataset = await resolveTripWeather({
-      regionId: target.compiled.region.id,
+      regionId: target.regionId,
       dates: [...target.dates],
-      locations: target.compiled.weatherLocations,
+      locations: target.locations,
       now: requestedAt,
     });
 
@@ -114,10 +122,10 @@ export async function fetchWeatherSnapshot(
     saveWeatherSnapshot(
       buildWeatherSnapshot({
         tripId: target.tripId,
-        regionId: target.compiled.region.id,
+        regionId: target.regionId,
         scopeKey: target.scopeKey,
         dates: [...target.dates],
-        locations: target.compiled.weatherLocations,
+        locations: target.locations,
         dataset,
         fetchedAt: new Date(),
         /*
@@ -178,9 +186,9 @@ export async function fetchWeatherSnapshot(
         message,
       },
       {
-        regionId: target.compiled.region.id,
+        regionId: target.regionId,
         dates: target.dates,
-        locations: target.compiled.weatherLocations,
+        locations: target.locations,
         now: failedAt,
         reason: 'provider_error',
         message,

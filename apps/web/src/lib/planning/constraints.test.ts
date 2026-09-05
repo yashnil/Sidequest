@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   answerQuestion,
   buildTravelerProfile,
-  compositionPreferenceSummary,
   defaultAnswers,
   interestOfferFromEntityType,
   parseMinuteOfDay,
@@ -15,6 +14,7 @@ import {
 } from '@sidequest/core';
 import { buildCompositionTask, type CompositionContext } from './composition';
 import { buildHybridTripRequest } from './hybrid-request';
+import { travelerBriefFor } from './production-plan';
 import { reconcileTripDraft } from './reconcile';
 import { draftOf, fictionalWorld } from './acceptance/harness';
 
@@ -53,7 +53,13 @@ describe('edge days are hard', () => {
     const result = await reconcileTripDraft({ draft, context: world.context });
     const last = result.itinerary.days[2]!;
     expect(last.items.filter((i) => i.kind === 'activity')).toHaveLength(0);
+    // QUALITY V1 — no meal either: a window that closed at 09:00 has no room for one.
+    expect(last.items.filter((i) => i.kind === 'meal')).toHaveLength(0);
     expect(endOfLastDay(last.items)).toBeLessThanOrEqual(parseMinuteOfDay('09:00'));
+    // And a meal the draft calls "none, in transit" is not content on any day.
+    const transit = draftOf({ bases: [{ id: 'b', name: 'Base Town', nights: 2 }], days: draft.days.map((d, i) => ({ base: 'b', anchors: [{ name: i === 0 ? 'Morning Ridge' : 'Evening Falls', role: 'core' as const }], meals: { breakfast: 'none, in transit', lunch: 'packed lunch' } })) });
+    const transitResult = await reconcileTripDraft({ draft: transit, context: world.context });
+    expect(transitResult.itinerary.days[0]!.items.some((i) => i.kind === 'meal' && /Breakfast/.test(i.title))).toBe(false);
     const dropped = result.itinerary.unscheduled.find((u) => u.name === 'Morning Ridge');
     expect(dropped?.reason).toMatch(/departure at 09:00/);
     // Silent loss: none — the anchor has a disposition and an explanation.
@@ -143,7 +149,7 @@ function contextFor(): InterviewContext {
 function taskFor(answers: QuestionnaireAnswers): string {
   const profile = buildTravelerProfile(answers, { travelerNeeds: [], tripDays: 8 });
   const request = buildHybridTripRequest({ trip: TRIP, composer: null, profile, now: NOW });
-  const context: CompositionContext = { request, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } }, preferenceSummary: compositionPreferenceSummary(profile), mode: 'full' };
+  const context: CompositionContext = { request, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } }, brief: travelerBriefFor({ profile, trip: TRIP, request, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } } }), mode: 'full' };
   return buildCompositionTask(context);
 }
 
@@ -171,13 +177,13 @@ describe('every answer reaches the composition input', () => {
     { label: 'day start', id: 'day_start', value: 'early', expect: /Starts early|Early mornings: happily/ },
     { label: 'hotel switching', id: 'base_moves', value: 'stay_put', expect: /One base for the whole trip|moving at most 0 time/ },
     { label: 'effort', id: 'effort', value: 'intense', expect: /Effort: intense|Daily intensity: intense/ },
-    { label: 'hiking frequency', id: 'priorities', value: ['hiking'], expect: /hiking \(a few times\)|Frequent: hiking/ },
+    { label: 'hiking frequency', id: 'priorities', value: ['hiking'], expect: /hiking: a few times|hiking \(a few times\)/ },
     { label: 'crowd preference', id: 'iconic_crowds', value: 'quieter_alternative', expect: /quieter alternative/ },
     { label: 'budget and convenience', id: 'convenience_spend', value: 'pay_to_reduce_hassle', expect: /Pays to reduce hassle|Reservations: happy_to_book_ahead/ },
     { label: 'regional expansion', id: 'scenic_reach', value: 'nearby_30', expect: /nearby 30/ },
     { label: 'explicit must include', id: 'names', value: { include: ['Cliffs of the Ninth'], avoid: [] }, expect: /Must include: Cliffs of the Ninth/ },
     { label: 'explicit reject', id: 'names', value: { include: [], avoid: ['Tourist Trap Tower'] }, expect: /Must avoid: Tourist Trap Tower/ },
-    { label: 'a typed hard constraint', id: 'hard_constraints', value: { constraints: [{ code: 'cannot_drive' }], notes: '', notesAreHard: false }, expect: /Hard constraints:\n- Nobody will be driving/ },
+    { label: 'a typed hard constraint', id: 'hard_constraints', value: { constraints: [{ code: 'cannot_drive' }], notes: '', notesAreHard: false }, expect: /<hard_constraints>\n- Nobody will be driving/ },
     { label: 'a hard back-by hour', id: 'hard_constraints', value: { constraints: [{ code: 'must_be_back_by', value: 20 * 60 }], notes: '', notesAreHard: false }, expect: /Back at base by 20:00/ },
     { label: 'guided travel', id: 'transport_mode', value: 'guided', expect: /Guided tours: prefer|guided, with arranged transfers/ },
   ];
@@ -194,6 +200,7 @@ describe('every answer reaches the composition input', () => {
   it('assumptions are tagged and explicit answers are not', () => {
     const task = taskFor(answered(ctx, base, 'day_shape', 'cover'));
     expect(task).toMatch(/Days: cover a lot, happy to be on the move\n/);
-    expect(task).toMatch(/\(assumed/);
+    expect(task).toMatch(/\[assumed\]/);
+    expect(task).toMatch(/<assumptions>/);
   });
 });

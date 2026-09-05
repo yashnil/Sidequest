@@ -31,7 +31,7 @@ test('the progress screen shows elapsed time immediately and no fabricated estim
 }) => {
   await createTrip(page, 'Harbour City');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
 
   const finished = page.getByRole('heading', { name: REGION_READY_HEADING });
 
@@ -84,7 +84,7 @@ test('nothing on the progress screen is a percentage, a zero range or a negative
 }) => {
   await createTrip(page, 'Harbour City');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
 
   const heading = page.getByRole('heading', { name: REGION_READY_HEADING });
 
@@ -111,7 +111,7 @@ test('no raw stage identifier reaches the screen, in the phases or in the disclo
 }) => {
   await createTrip(page, 'Harbour City');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
 
   /*
    * `reusing_shared_claims` reached a traveller as "reusing shared claims" —
@@ -215,7 +215,7 @@ test('no raw stage identifier reaches the screen, in the phases or in the disclo
 test('a finished phase never goes back to working while somebody watches', async ({ page }) => {
   await createTrip(page, 'Harbour City');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
 
   /*
    * The ordering defect as it was seen rather than as it was reasoned about.

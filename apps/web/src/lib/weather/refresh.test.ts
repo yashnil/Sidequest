@@ -177,10 +177,8 @@ const WEATHER_TARGET = {
   tripId: 'trip-1',
   scopeKey: 'scope-1',
   dates: DATES,
-  compiled: {
-    region: { id: 'region-1' },
-    weatherLocations: LOCATIONS,
-  },
+  regionId: 'region-1',
+  locations: LOCATIONS,
 } as unknown as WeatherFetchTarget;
 
 describe('an empty dataset, and which of the two kinds it is', () => {

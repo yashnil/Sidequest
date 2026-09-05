@@ -11,7 +11,7 @@ import {
   type SelectionStatus,
 } from '@sidequest/core';
 import { DiscoveryBoardView } from '@/components/DiscoveryBoardView';
-import { resolveMapTileSource } from '@/components/map-adapter';
+import { resolveMapBasemap } from '@/components/map-adapter';
 import { BoardIntegrityPanel } from '@/components/BoardIntegrityPanel';
 import { BoardBackstage } from '@/components/BoardBackstage';
 import { acceptedImagesFor, unresolvedImagerySubjects } from '@/lib/db/imagery-repository';
@@ -366,7 +366,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : (
             <DiscoveryBoardView
               tripId={id}
-              tiles={resolveMapTileSource(process.env)}
+              tiles={resolveMapBasemap(process.env)}
               /*
                * The artifact these counts are counts *of*.
                *

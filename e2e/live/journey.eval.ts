@@ -114,7 +114,7 @@ async function runJourney(
     await shot(page, `${slug}-02-composer-filled`);
 
     const started = Date.now();
-    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).click();
     clicks += 1;
     await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
 

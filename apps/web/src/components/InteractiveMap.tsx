@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { tilesForViewport, type MapTileSource } from './map-adapter';
+import { tilesForViewport, type MapBasemap } from './map-adapter';
+import { VectorBasemapLayer } from './VectorBasemap';
 import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoint, type MapViewport } from './map-projection';
 import { cx } from './ui';
 
@@ -53,7 +54,7 @@ export interface InteractiveMapProps {
   base?: { name: string; coordinates: GeoPoint } | null;
   focusedId: string | null;
   onFocus: (id: string) => void;
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   width?: number;
   height?: number;
   /** One sentence for assistive technology: what this drawing shows. */
@@ -229,7 +230,9 @@ export function InteractiveMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base, view.cx, view.cy, view.scale, width, height]);
 
-  const placedTiles = tiles ? tilesForViewport({ viewport, source: tiles, maxTiles: 48 }) : [];
+  const vector = tiles && tiles.kind === 'vector' ? tiles : null;
+  const placedTiles = tiles && tiles.kind !== 'vector' ? tilesForViewport({ viewport, source: tiles, maxTiles: 48 }) : [];
+  const centreGeo = viewport.unproject({ x: width / 2, y: height / 2 });
   const hasMeasured = connectors.some((c) => c.style.startsWith('measured'));
   const hasRouteShape = connectors.some((c) => c.path && c.path.length > 1);
   const hasStraightMeasured = connectors.some((c) => c.style.startsWith('measured') && !(c.path && c.path.length > 1));
@@ -257,10 +260,11 @@ export function InteractiveMap({
     <div className={cx('min-w-0', className)}>
       <figure className="m-0" data-testid={testId}>
         <div className="relative overflow-hidden rounded-[var(--radius-card)] border border-rule bg-paper-sunk">
+          {vector ? <VectorBasemapLayer source={vector} centre={centreGeo} scale={view.scale} width={width} height={height} /> : null}
           <svg
             ref={svgRef}
             viewBox={`0 0 ${width} ${height}`}
-            className={cx('h-auto w-full touch-none select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
+            className={cx('relative h-auto w-full touch-none select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
             role="img"
             aria-label={summary}
             tabIndex={0}

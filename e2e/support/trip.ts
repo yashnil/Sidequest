@@ -75,7 +75,7 @@ export async function createTrip(
   await field.fill(destination);
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();
@@ -130,9 +130,21 @@ export async function reachScope(page: Page): Promise<void> {
    * the preflight has ever needed, and running out is a real failure rather
    * than a timing one.
    */
-  for (let step = 0; step < 12; step += 1) {
+  for (let step = 0; step < 16; step += 1) {
     const scope = page.getByRole('heading', { name: 'Here is what we are about to do' });
     if (await scope.isVisible().catch(() => false)) return;
+
+    /*
+     * A known destination lands on the interview; the research steps are an
+     * explicit request from there. See `requestExploration`.
+     */
+    const explore = page.getByTestId('interview-explore');
+    if (await explore.isVisible().catch(() => false)) {
+      await waitUntilInteractive(explore);
+      await explore.click();
+      await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 20_000 });
+      continue;
+    }
 
     const research = page.getByRole('button', { name: /Go and research this/i });
     if (await research.isVisible().catch(() => false)) {
@@ -173,10 +185,28 @@ export async function reachScope(page: Page): Promise<void> {
  */
 export const REGION_READY_HEADING = /^We have been through /;
 
+/**
+ * Ask for the optional research from the interview's understanding screen.
+ *
+ * The plan page hands a known destination straight to the interview, so the
+ * research steps (preflight, clarification, scope, build) are reached only by
+ * pressing "Explore experiences first". That press saves nothing about the
+ * traveller's preferences; the interview can still be answered afterwards.
+ */
+export async function requestExploration(page: Page): Promise<void> {
+  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 20_000 });
+  const explore = page.getByTestId('interview-explore');
+  await expect(explore).toBeVisible({ timeout: 20_000 });
+  await waitUntilInteractive(explore);
+  await explore.click();
+  await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 20_000 });
+}
+
 /** Push all the way through to a compiled region. */
 export async function compileRegion(page: Page): Promise<void> {
+  // `reachScope` presses "Explore experiences first" itself when the interview is on screen.
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
   await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 90_000,
   });
@@ -343,7 +373,7 @@ export async function completeQuestionnaire(page: Page, choices: InterviewChoice
 /** From the review, press the board CTA and land on the Discovery Board. */
 export async function buildBoardFromReview(page: Page): Promise<void> {
   await expect(page.getByTestId('interview-review')).toBeVisible({ timeout: 20_000 });
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
 }
 

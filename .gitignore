@@ -38,3 +38,6 @@ playwright-report/
 
 # Local Sidequest compilation logs
 apps/web/data/compile-logs/*.log
+
+# Compilation logs are runtime artifacts, wherever a workspace writes them (the doctor reads the newest one; nothing is committed).
+**/data/compile-logs/

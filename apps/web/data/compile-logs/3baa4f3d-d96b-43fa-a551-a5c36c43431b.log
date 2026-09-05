@@ -1,7 +1,0 @@
-Research model call failed {
-  status: undefined,
-  type: null,
-  requestId: undefined,
-  promptVersion: 'expand-region/2026-07-31.1',
-  providerMessage: 'Connection error.'
-}

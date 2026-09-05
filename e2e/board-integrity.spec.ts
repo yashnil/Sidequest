@@ -29,10 +29,10 @@ async function reachAuthoredBoard(page: Page): Promise<void> {
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await expect(page.getByTestId('interview')).toBeVisible();
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 }
 
@@ -138,7 +138,7 @@ test('an empty board names the binding constraint rather than three plausible on
 }) => {
   const id = await createTrip(page, 'Faraway Reaches');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
   await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toBeVisible({
     timeout: 90_000,
   });
@@ -146,7 +146,7 @@ test('an empty board names the binding constraint rather than three plausible on
   await page.getByRole('link', { name: 'Tell us how you travel' }).click();
   await page.waitForURL(/questionnaire/);
   await completeQuestionnaire(page, CULTURAL_INTERVIEW);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 
   const panel = page.getByTestId('board-integrity');
@@ -187,7 +187,7 @@ test('an empty board names the binding constraint rather than three plausible on
 async function reachProvisionalBoard(page: Page): Promise<string> {
   const tripId = await createTrip(page, 'Faraway Reaches');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
   await page.waitForTimeout(2_000);
   await page.goto(`/trips/${tripId}/provisional`);
   await expect(page.getByTestId('provisional-card').first()).toBeVisible();

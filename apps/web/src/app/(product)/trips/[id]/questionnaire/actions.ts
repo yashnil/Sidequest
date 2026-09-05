@@ -52,6 +52,8 @@ import {
 } from '@/lib/providers/interpretation-model';
 import { boardFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
 import { generateSidequestPlanForTrip } from '@/lib/planning/production-plan';
+import { ensurePreflightAction, proposeScopeAction } from '@/app/(product)/trips/[id]/plan/actions';
+import { unansweredRequired } from '@sidequest/core';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { callerKey, chargeAction, checkAction } from '@/lib/net/caller';
 import { dailySpendGate, recordDailySpend } from '@/lib/compiler/daily-ceiling';
@@ -272,6 +274,48 @@ export async function completeAndBuildAction(tripId: string, answers: Questionna
   if (!generated.ok) return { ok: false, error: generated.error ?? 'We could not compose your trip just now.' };
   revalidatePath(`/trips/${tripId}/itinerary`);
   redirect(`/trips/${tripId}/itinerary`);
+}
+
+/**
+ * EXPLORE EXPERIENCES FIRST — THE OPTIONAL RESEARCH PATH.
+ *
+ * Saves whatever the interview holds so far, records that this traveller
+ * asked for research, runs the free preflight, adopts the only strategy when
+ * there is nothing to choose, proposes a scope when nothing is left to ask,
+ * and lands on the plan page — which shows only the decisions that remain
+ * (a region shape for a broad destination, a clarification, the scope) and
+ * then the build. Never a prerequisite for "Build my trip".
+ */
+export async function exploreExperiencesAction(tripId: string, answers: QuestionnaireAnswers): Promise<SaveResult> {
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = questionnaireAnswersSchema.safeParse(answers);
+  if (parsed.success) saveAnswers(tripId, parsed.data);
+
+  const intent = getIntent(tripId);
+  if (intent?.composer && !intent.composer.researchRequestedAt) {
+    saveComposerAnswers(tripId, { ...intent.composer, researchRequestedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  }
+
+  /*
+   * The free preflight runs now so the plan page opens on its reading of the
+   * region (what it holds, which part of a broad destination to take). That
+   * screen stays: it is where the honest "we have no local index for this"
+   * note and the region-shape choice live, and it costs seconds. Where the
+   * preflight was already accepted and nothing is left to ask, the scope is
+   * proposed so the next screen is the one confirmation before the build.
+   */
+  const preflight = await ensurePreflightAction(tripId);
+  if (preflight.ok) {
+    const after = getIntent(tripId);
+    if (after && after.composer?.scopeStrategy !== undefined && unansweredRequired(after.clarifications).length === 0 && !after.scope) {
+      await proposeScopeAction(tripId);
+    }
+  }
+  revalidatePath(`/trips/${tripId}/plan`);
+  redirect(`/trips/${tripId}/plan`);
 }
 
 /**

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { ItineraryView } from '@/components/ItineraryView';
 import { EnvironmentPill } from '@/components/EnvironmentPill';
 import { OfflineSnapshot } from '@/components/OfflineSnapshot';
-import { resolveMapTileSource } from '@/components/map-adapter';
+import { resolveMapBasemap } from '@/components/map-adapter';
 import { renderInstant } from '@/lib/clock';
 import { isFixtureComposer } from '@/lib/providers/switches';
 import { Panel, buttonClass } from '@/components/ui';
@@ -17,6 +17,7 @@ import {
   StaleItineraryError,
 } from '@/lib/db/repository';
 import { ownedTrip } from '@/lib/net/trip-access';
+import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
 import { StaleItineraryView } from './StaleItineraryView';
 import { itineraryViewModel } from './view-model';
 
@@ -147,10 +148,12 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
         </p>
       ) : null}
     <ItineraryView
-      tiles={resolveMapTileSource(process.env)}
+      tiles={resolveMapBasemap(process.env)}
       tripId={id}
       {...model}
       itinerary={model.appliedItinerary}
+      destinationName={trip.basics.destinationInput}
+      boardAvailable={trip.basics.regionId !== DYNAMIC_REGION_ID || compiledRegionFor(id) !== null}
       lockedPlaceIds={getItineraryLocks(id).map((lock) => lock.placeId)}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { InteractiveMap, type MapConnector, type MapMarker } from './InteractiveMap';
-import type { MapTileSource } from './map-adapter';
+import type { MapBasemap } from './map-adapter';
 
 /**
  * THE WHOLE TRIP ON ONE MAP — every placed stop, every base, the moves
@@ -19,7 +19,7 @@ export function TripOverviewMap({
   markers: readonly (MapMarker & { dayNumber: number })[];
   connectors: readonly MapConnector[];
   base: { name: string; coordinates: { lat: number; lng: number } } | null;
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   summary: string;
 }) {
   const [focusedId, setFocusedId] = useState<string | null>(null);

@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   await page.screenshot({ path: `${OUT}/${slug}-composer.png`, fullPage: true });
 
   const t0 = Date.now();
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
   const tripId = /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1];
   record.tripId = tripId;

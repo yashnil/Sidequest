@@ -17,6 +17,7 @@
     "@sidequest/planner": "*",
     "better-sqlite3": "^13.0.2",
     "hyparquet": "^1.27.1",
+    "maplibre-gl": "^6.7.0",
     "next": "^16.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

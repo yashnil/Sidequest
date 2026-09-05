@@ -567,6 +567,8 @@ export type SkeletonDeviationKind =
   | 'base_unresolved'
   | 'base_resolved_via_geocoder'
   | 'duplicate_location_identity'
+  /** QUALITY V1 — the draft's day sequence disagreed with its declared base nights (a loop's return, a miscount); the stays were rebuilt from the days. */
+  | 'base_stays_corrected_from_days'
   | 'relocation_resolved_with_intermediate_base'
   /**
    * The same remedy as `relocation_resolved_with_intermediate_base`, but the

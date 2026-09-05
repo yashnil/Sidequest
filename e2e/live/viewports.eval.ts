@@ -51,7 +51,7 @@ for (const size of SIZES) {
   await page.getByLabel('Leave').fill('2027-07-16');
   await check('04-composer-filled');
 
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/plan/, { timeout: 30_000 });
   await page.getByRole('radio', { name: 'Two bases' }).waitFor({ timeout: 60_000 });
   await check('05-preflight');

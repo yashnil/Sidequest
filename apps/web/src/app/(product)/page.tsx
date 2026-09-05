@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { countNights, isAbandoned } from '@sidequest/core';
 import { ProductChrome } from '@/components/ProductChrome';
 import { Panel, buttonClass } from '@/components/ui';
-import { providerReadiness } from '@/lib/compiler/readiness';
+import { isCompositionModelConfigured, isFixtureComposer } from '@/lib/providers/switches';
 import { adoptedCompiledRegionId, getLatestJob } from '@/lib/db/compiler-repository';
 import { hasItinerary, listTrips } from '@/lib/db/repository';
 import { sessionToken } from '@/lib/net/caller';
@@ -111,7 +111,8 @@ export default async function HomePage() {
    * minutes of questionnaire before the flow admitted it could not build.
    * `readiness.ts` imports nothing, which is what makes asking this free.
    */
-  const compileReady = providerReadiness().ready;
+  /* Planning needs a composer, never the research stack: that is optional, behind "Explore experiences first". */
+  const compileReady = isFixtureComposer() || isCompositionModelConfigured();
 
   /**
    * WHAT EACH TRIP ACTUALLY IS, FROM FACTS THAT ARE CHEAP TO READ.
@@ -227,11 +228,10 @@ export default async function HomePage() {
               <Panel className="mt-5 border-amber bg-amber-soft p-4">
                 <p className="text-sm leading-relaxed text-ink">
                   <strong className="font-medium">
-                    This deployment cannot research a new destination right now.
+                    This deployment cannot compose a new trip right now.
                   </strong>{' '}
-                  Somewhere already researched still plans normally, and everything below still
-                  works — but a name typed in fresh will not build until whoever set this up
-                  finishes it.
+                  Trips you have already built still open normally. A new one needs whoever set
+                  this up to finish the setup.
                 </p>
               </Panel>
             ) : null}

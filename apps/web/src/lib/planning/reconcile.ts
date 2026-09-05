@@ -70,7 +70,7 @@ import {
   type UnresolvedRelocation,
 } from './skeleton-adapter';
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
-import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAnchor, type DraftTransport, type TripDraft } from './trip-draft';
+import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAnchor, type DraftTransport, type TripDraft, movementShapeOf } from './trip-draft';
 
 /**
  * THE RECONCILER — MODEL DRAFT + VERIFICATION OVERLAY + MINIMAL DETERMINISTIC
@@ -102,6 +102,23 @@ import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAn
  */
 
 /** A place identity a dedicated places provider (Google Places identity level, Overture, OSM) resolved — never a geocoder guess. */
+/** How many identity lookups run at once. Small: providers rate-limit, and the budget counts every call. */
+const ANCHOR_RESOLUTION_CONCURRENCY = 4;
+
+async function mapConcurrent<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await fn(items[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export interface ProviderPlaceIdentity {
   providerRef: string;
   provider: string;
@@ -570,7 +587,46 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     merged.push({ ...base });
   }
   bases = merged;
-  const draftNights = draft.bases.reduce((sum, b) => sum + b.nights, 0);
+
+  /*
+   * QUALITY V1 — THE DAY SEQUENCE IS THE TRUTH ABOUT WHERE THE TRAVELLER SLEEPS.
+   *
+   * The draft states nights per base *and* a base per day, and the two can
+   * disagree: the live Tasmania loop declared Hobart once with two nights and
+   * then slept there on night seven as well, so the cumulative-nights
+   * assignment put the traveller in Cradle Mountain while the day was in
+   * Hobart. Every day names its bed; a run of days at one base is one stay,
+   * and a base revisited later is a second stay of the same place (a loop's
+   * return, never a duplicate). Only when every day names a base the draft
+   * declared — otherwise the declared list stands and the scaling below
+   * keeps the arithmetic honest.
+   */
+  {
+    const nightDays = draft.days.slice(0, Math.max(0, dates.length - 1));
+    const byRoot = new Map(bases.map((b) => [b.skeletonBaseId, b] as const));
+    const runs: { id: string; nights: number }[] = [];
+    for (const day of nightDays) {
+      const last = runs[runs.length - 1];
+      if (last && last.id === day.baseId) last.nights += 1;
+      else runs.push({ id: day.baseId, nights: 1 });
+    }
+    const knownRuns = runs.length > 0 && runs.every((run) => byRoot.has(run.id));
+    const declared = bases.map((b) => `${b.skeletonBaseId}:${b.nights}`).join(',');
+    const sequenced = runs.map((run) => `${run.id}:${run.nights}`).join(',');
+    if (knownRuns && declared !== sequenced) {
+      const seen = new Map<string, number>();
+      const stays: ResolvedBase[] = runs.map((run) => {
+        const root = byRoot.get(run.id)!;
+        const visit = (seen.get(run.id) ?? 0) + 1;
+        seen.set(run.id, visit);
+        return { ...root, skeletonBaseId: visit === 1 ? root.skeletonBaseId : `${root.skeletonBaseId}#${visit}`, nights: run.nights };
+      });
+      deviations.push({ kind: 'base_stays_corrected_from_days', detail: `The draft's bases (${declared.replace(/,/g, ', ')}) did not match the beds its days name (${sequenced.replace(/,/g, ', ')}); the stays follow the days.` });
+      bases = stays;
+    }
+  }
+
+  const draftNights = bases.reduce((sum, b) => sum + b.nights, 0);
   const tripNights = Math.max(0, dates.length - 1);
   if (draftNights !== tripNights) {
     // The trip's own length is a hard fact; the draft's nights are scaled to it, last base absorbing the difference.
@@ -597,7 +653,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     matrix: context.matrix,
     profile: context.profile,
     candidates: context.candidates,
-    archetype: draft.archetype,
+    archetype: movementShapeOf(draft.archetype),
     extraMatrix,
     routeAttempted,
     ledger,
@@ -651,10 +707,20 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   }
 
   // --- Anchors: identity, then day-local routing ------------------------------
+  /*
+   * QUALITY V1 — identity lookups are independent of each other, so they run
+   * a few at a time instead of one after another: a 30-anchor draft against a
+   * places provider used to spend most of the verification budget waiting in
+   * sequence. Order is preserved by index; the deadline is still consulted
+   * inside each lookup; provider notes are appended in completion order.
+   */
+  const anchorJobs = draft.days.flatMap((day) => day.anchors.map((anchor, index) => ({ day, anchor, index })));
+  const resolvedAnchors = await mapConcurrent(anchorJobs, ANCHOR_RESOLUTION_CONCURRENCY, (job) => resolveDraftAnchor(job.anchor, context, providerNotes));
   const anchors: ReconciledAnchor[] = [];
-  for (const day of draft.days) {
-    for (const [index, anchor] of day.anchors.entries()) {
-      const resolved = await resolveDraftAnchor(anchor, context, providerNotes);
+  for (const [jobIndex, job] of anchorJobs.entries()) {
+    const { day, anchor, index } = job;
+    {
+      const resolved = resolvedAnchors[jobIndex]!;
       // A verified place's own typical visit length is evidence and wins over
       // the model's estimate; the estimate wins over a category default.
       const placeMinutes = resolved.verification === 'verified' ? resolved.place?.typicalDurationMinutes : undefined;
@@ -953,7 +1019,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     assumptions: [...draft.assumptions],
     tradeoffs: [...draft.tradeoffs],
     bases: bases.map((base) => {
-      const draftBase = draft.bases.find((b) => b.id === base.skeletonBaseId);
+      // A revisited base carries a `#n` suffix on its stay id; the draft's own record is the root.
+      const draftBase = draft.bases.find((b) => b.id === base.skeletonBaseId.split('#')[0]);
       return {
         id: base.skeletonBaseId,
         name: base.identity?.name ?? base.name,
@@ -973,6 +1040,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     backups: draft.package.backups.map((b) => ({ ...b })),
     omissions: draft.omissions.map((o) => ({ ...o })),
     unresolved: [...draft.unresolved],
+    bookingPriorities: [...(draft.bookingPriorities ?? [])],
     anchors: packageAnchors,
     verification: {
       anchors: anchors.length,
@@ -1231,6 +1299,16 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
 
   const pushMeal = (slot: 'breakfast' | 'lunch' | 'dinner', intent: string | undefined) => {
     const minutes = MEAL_MINUTES[slot];
+    /*
+     * QUALITY V1 — a meal is content only when the draft means one. "none, in
+     * transit" is the model saying there is no meal; a day whose window has
+     * already closed (a 09:00 departure) has no room for one; breakfast after
+     * midday is not breakfast. The live East Africa build placed "Breakfast —
+     * none, arriving midday" at 17:00 and a breakfast after a 09:00 departure.
+     */
+    if (intent && /^\s*(none|no |nothing|skip|not needed|in transit|n\/a)/i.test(intent)) return;
+    if (clock + minutes > window.window.endMinute) return;
+    if (slot === 'breakfast' && clock > 11 * 60) return;
     const title = intent ? `${slot[0]!.toUpperCase()}${slot.slice(1)} — ${intent}` : `${slot[0]!.toUpperCase()}${slot.slice(1)}`;
     items.push({
       id: `d${input.dayNumber}-${slot}`,

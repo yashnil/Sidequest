@@ -135,6 +135,8 @@ export type PlanStep =
 export interface PlanFlowProps {
   tripId: string;
   step: PlanStep;
+  /** Whether the interview has been answered — decides whether the finished research opens the board or the interview. */
+  profileExists?: boolean;
   /**
    * The research reading, when this trip has been compiled.
    *
@@ -389,8 +391,8 @@ function DestinationStep({
           </div>
         ) : null}
 
-        {providerMissing.length > 0 ? (
-          <details className="mt-6 text-sm text-ink-muted">
+        {providerMissing.length > 0 && process.env.NODE_ENV !== 'production' ? (
+          <details className="mt-6 text-sm text-ink-muted" data-testid="setup-disclosure">
             <summary className={cx(SUMMARY_TARGET, FOCUS_RING)}>
               Setting this up (for whoever deployed Sidequest)
             </summary>
@@ -1161,7 +1163,7 @@ function ScopeStep({ tripId, scope, scopeFits, pending, onRun }: StepProps) {
             }, 'We could not start that just then.')
           }
         >
-          {pending ? 'Starting…' : 'Build the region'}
+          {pending ? 'Starting…' : 'Start exploring'}
         </button>
       </div>
     </>
@@ -1480,7 +1482,7 @@ function CompilingStep({ tripId, snapshot, pending, onRun }: StepProps) {
               disabled={pending}
               onClick={() => onRun(() => startCompilationAction(tripId), 'That did not start.')}
             >
-              {pending ? 'Starting…' : 'Start researching'}
+              {pending ? 'Starting…' : 'Start exploring'}
             </button>
             {/*
               What the button costs, next to the button.
@@ -1783,6 +1785,7 @@ function decisionLabel(decision: string): string | null {
  */
 function ReadyStep({
   tripId,
+  profileExists,
   researchReadiness,
   mustDoCoverage,
   coverage,
@@ -1876,13 +1879,26 @@ function ReadyStep({
 
       {/* ---- The one control, where somebody will find it ---------------- */}
       <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-rule pt-6">
-        <a className={buttonClass('primary')} href={`/trips/${tripId}/questionnaire`}>
-          Tell us how you travel
-        </a>
-        <p className="text-sm text-ink-muted">
-          A few questions about pace, budget and what you like. The board is ranked against your
-          answers, so this is the step that makes it yours.
-        </p>
+        {profileExists ? (
+          <>
+            <a className={buttonClass('primary')} href={`/trips/${tripId}/discover`}>
+              Open your Discovery Board
+            </a>
+            <p className="text-sm text-ink-muted">
+              Ranked around your answers. Mark what sounds good, then build the trip from there.
+            </p>
+          </>
+        ) : (
+          <>
+            <a className={buttonClass('primary')} href={`/trips/${tripId}/questionnaire`}>
+              Tell us how you travel
+            </a>
+            <p className="text-sm text-ink-muted">
+              A few questions about pace, budget and what you like. The board is ranked against your
+              answers, so this is the step that makes it yours.
+            </p>
+          </>
+        )}
       </div>
 
       {/* ---- Everything else, once, behind one door ---------------------- */}

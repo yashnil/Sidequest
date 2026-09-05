@@ -154,7 +154,7 @@ test('Plan with smart defaults composes a trip straight from the understanding s
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await expect(page.getByTestId('trip-snapshot')).toBeVisible();
   await expect(page.getByTestId('prepare')).toBeVisible();
-  await expect(page.getByText(/^Nothing scheduled/)).toHaveCount(0);
+  await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   // The DEV-only fixture badge is deliberately absent here: this suite drives a production build.
   await expect(page.getByTestId('fixture-planning-badge')).toHaveCount(0);
   await shot(page, 'smart-defaults-itinerary', testInfo.project.name);
@@ -163,7 +163,7 @@ test('Plan with smart defaults composes a trip straight from the understanding s
 test('the itinerary carries the overview map, day maps with honest legs, compact warnings and the preparation hub', async ({ page }, testInfo) => {
   await reachInterview(page, 'Mammoth Lakes');
   await completeQuestionnaire(page);
-  await page.getByTestId('interview-build-now').click();
+  await page.getByTestId('interview-build-trip').click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 90_000 });
   await expect(page.getByTestId('trip-overview-map')).toBeVisible();
   const dayMaps = page.getByTestId('day-map');

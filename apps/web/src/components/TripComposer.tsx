@@ -5,18 +5,10 @@ import { useRouter } from 'next/navigation';
 import {
   ARRIVAL_PRECISIONS,
   ARRIVAL_PRECISION_LABELS,
-  BUDGET_BANDS,
-  BUDGET_BAND_LABELS,
   DATE_MODES,
   DATE_MODE_LABELS,
-  TRANSPORT_INTENTS,
-  TRANSPORT_INTENT_LABELS,
   TRAVELER_NEEDS,
   TRAVELER_NEED_LABELS,
-  TRIP_SHAPES,
-  TRIP_SHAPE_LABELS,
-  TRIP_THEMES,
-  TRIP_THEME_LABELS,
   type TripComposerAnswers,
 } from '@sidequest/core';
 import { DestinationCombobox, type DestinationSuggestionView } from './DestinationCombobox';
@@ -30,7 +22,6 @@ import {
   cx,
 } from './ui';
 import { formatDayRange } from '@/lib/format/dates';
-import { Glyph, type GlyphId } from './interview/glyphs';
 import {
   createTripFromComposer,
   updateTripFromComposer,
@@ -107,13 +98,6 @@ export function TripComposer({
     adults: prior?.adults ?? 2,
     children: prior?.children ?? 0,
     travelerNeeds: prior ? [...prior.travelerNeeds] : [],
-    themes: prior ? [...prior.themes] : [],
-    ...(prior?.shape ? { shape: prior.shape } : {}),
-    ...(prior?.pace ? { pace: prior.pace } : {}),
-    ...(prior?.transport ? { transport: prior.transport } : {}),
-    ...(prior?.budget ? { budget: prior.budget } : {}),
-    ...(prior?.crowdTolerance ? { crowdTolerance: prior.crowdTolerance } : {}),
-    ...(prior?.outdoorIntensity ? { outdoorIntensity: prior.outdoorIntensity } : {}),
     ...(prior?.mustDo ? { mustDo: prior.mustDo } : {}),
     ...(prior?.avoid ? { avoid: prior.avoid } : {}),
     ...(prior?.origin ? { origin: prior.origin } : {}),
@@ -148,7 +132,6 @@ export function TripComposer({
   const [departure, setDeparture] = useState<(typeof ARRIVAL_PRECISIONS)[number]>(
     prior?.departure?.precision ?? 'morning',
   );
-  const [showMore, setShowMore] = useState(Boolean(prior));
 
   function patch(next: Partial<Draft>) {
     setDraft((current) => ({ ...current, ...next }));
@@ -182,15 +165,6 @@ export function TripComposer({
         adults: draft.adults ?? 2,
         children: draft.children ?? 0,
         travelerNeeds: draft.travelerNeeds ?? [],
-        shape: draft.shape ?? null,
-        pace: draft.pace ?? null,
-        transport: draft.transport ?? null,
-        budget: draft.budget ?? null,
-        themes: draft.themes ?? [],
-        crowdTolerance: draft.crowdTolerance ?? null,
-        outdoorIntensity: draft.outdoorIntensity ?? null,
-        foodImportance: draft.foodImportance ?? null,
-        freeTime: draft.freeTime ?? null,
         mustDo: draft.mustDo ?? '',
         avoid: draft.avoid ?? '',
         origin: draft.origin ?? '',
@@ -298,8 +272,8 @@ export function TripComposer({
         ) : null}
         {!hasDestination ? (
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-ink-muted">
-            Start typing. The rest of the questions open as you go, and each one changes what we
-            go and look for.
+            Start typing. Dates and travellers open as you go; how you like to travel is the next
+            screen.
           </p>
         ) : null}
       </section>
@@ -403,62 +377,9 @@ export function TripComposer({
             </Section>
           ) : null}
 
-          {/* ---- 3. Shape ----------------------------------------------- */}
+          {/* ---- 3. Who ------------------------------------------------- */}
           {hasDestination && datesSettled ? (
-            <Section step={3} title="What kind of trip?">
-              <ChoiceGroup legend="How much do you want to move?" columns={2}>
-                {TRIP_SHAPES.map((shape) => (
-                  <Choice key={shape} name="shape" value={shape} checked={draft.shape === shape} onChange={() => patch({ shape })} label={TRIP_SHAPE_LABELS[shape]} />
-                ))}
-              </ChoiceGroup>
-
-              <ChoiceGroup legend="How are you getting around?" columns={2} className="mt-6">
-                {TRANSPORT_INTENTS.map((transport) => (
-                  <Choice key={transport} name="transport" value={transport} checked={draft.transport === transport} onChange={() => patch({ transport })} label={TRANSPORT_INTENT_LABELS[transport]} />
-                ))}
-              </ChoiceGroup>
-
-              <ChoiceGroup
-                legend="What are you actually here for?"
-                hint="Pick as many as apply. This decides what counts as worth researching, so it changes the whole board."
-                columns={2}
-                className="mt-6"
-              >
-                {TRIP_THEMES.map((theme) => (
-                  <Choice
-                    key={theme}
-                    name={`theme-${theme}`}
-                    type="checkbox"
-                    value={theme}
-                    checked={(draft.themes ?? []).includes(theme)}
-                    onChange={() =>
-                      patch({
-                        themes: (draft.themes ?? []).includes(theme) ? (draft.themes ?? []).filter((entry) => entry !== theme) : [...(draft.themes ?? []), theme],
-                      })
-                    }
-                    label={TRIP_THEME_LABELS[theme]}
-                  />
-                ))}
-              </ChoiceGroup>
-              {fieldErrors.themes ? <ErrorNote>{fieldErrors.themes}</ErrorNote> : null}
-
-              <ChoiceGroup legend="Pace" columns={3} className="mt-6">
-                {(
-                  [
-                    ['slow', 'Slow — room to sit still'],
-                    ['balanced', 'Balanced'],
-                    ['packed', 'Packed — fit it all in'],
-                  ] as const
-                ).map(([value, label]) => (
-                  <Choice key={value} name="pace" value={value} checked={draft.pace === value} onChange={() => patch({ pace: value })} label={label} />
-                ))}
-              </ChoiceGroup>
-            </Section>
-          ) : null}
-
-          {/* ---- 4. Who and the rest ------------------------------------ */}
-          {hasDestination && datesSettled ? (
-            <Section step={4} title="Who is going?">
+            <Section step={3} title="Who is going?">
               <div className="grid gap-4 sm:grid-cols-2">
                 <CountField id="adults" label="Adults" singular="adult" min={1} max={12} value={draft.adults ?? 2} onChange={(adults) => patch({ adults })} />
                 <CountField id="children" label="Children" singular="child" min={0} max={12} value={draft.children ?? 0} onChange={(children) => patch({ children })} />
@@ -513,64 +434,28 @@ export function TripComposer({
                 A band is enough. We plan a late arrival as a quiet first evening rather than inventing a flight time and then building a day around it.
               </p>
 
-              <button
-                type="button"
-                onClick={() => setShowMore((current) => !current)}
-                className={cx('mt-6 min-h-11 text-sm text-accent underline underline-offset-4 hover:text-accent-strong', FOCUS_RING)}
-                aria-expanded={showMore}
-              >
-                {showMore ? 'Fewer questions' : 'A few more that change the plan'}
-              </button>
+            </Section>
+          ) : null}
 
-              {showMore ? (
-                <div className="slide-down mt-6 space-y-6 border-t border-rule pt-6">
-                  <ChoiceGroup legend="Budget" columns={3}>
-                    {BUDGET_BANDS.map((band) => (
-                      <Choice key={band} name="budget" value={band} checked={draft.budget === band} onChange={() => patch({ budget: band })} label={BUDGET_BAND_LABELS[band]} />
-                    ))}
-                  </ChoiceGroup>
-
-                  <ChoiceGroup legend="Crowds" columns={3}>
-                    {(
-                      [
-                        ['avoid', 'Ruin a place for me'],
-                        ['tolerate', 'Worth it sometimes'],
-                        ['unbothered', 'Do not mind them'],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <Choice key={value} name="crowd" value={value} checked={draft.crowdTolerance === value} onChange={() => patch({ crowdTolerance: value })} label={label} />
-                    ))}
-                  </ChoiceGroup>
-
-                  <ChoiceGroup legend="How hard should the outdoor days be?" columns={3}>
-                    {(
-                      [
-                        ['gentle', 'Gentle'],
-                        ['moderate', 'Moderate'],
-                        ['strenuous', 'Strenuous'],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <Choice key={value} name="intensity" value={value} checked={draft.outdoorIntensity === value} onChange={() => patch({ outdoorIntensity: value })} label={label} />
-                    ))}
-                  </ChoiceGroup>
-
-                  {/*
-                    Asked once. Somebody who came through "I already have a plan"
-                    answered this in the first section, and two boxes with the same
-                    `id` writing to the same field is an invalid document.
-                  */}
-                  {intent === 'has_plan' ? null : (
-                    <div>
-                      <FieldLabel htmlFor="mustDo">Anything you would regret missing?</FieldLabel>
-                      <textarea id="mustDo" rows={2} maxLength={600} value={draft.mustDo ?? ''} onChange={(event) => patch({ mustDo: event.target.value })} className={cx(inputClass, 'resize-y')} placeholder="Free text. We will show you what we made of it before it changes anything." />
-                    </div>
-                  )}
+          {/* ---- 4. Anything already fixed ------------------------------ */}
+          {hasDestination && datesSettled ? (
+            <Section step={4} title="Anything already fixed?">
+              <p className="text-sm leading-relaxed text-ink-muted">
+                Optional. Everything about how you like to travel is asked on the next screen, one
+                question at a time — this is only for things the plan has to work around.
+              </p>
+              <div className="mt-5 space-y-5">
+                {intent === 'has_plan' ? null : (
                   <div>
-                    <FieldLabel htmlFor="avoid">Anything you would rather not do?</FieldLabel>
-                    <textarea id="avoid" rows={2} maxLength={600} value={draft.avoid ?? ''} onChange={(event) => patch({ avoid: event.target.value })} className={cx(inputClass, 'resize-y')} />
+                    <FieldLabel htmlFor="mustDo">Anything booked, fixed, or that you would regret missing?</FieldLabel>
+                    <textarea id="mustDo" rows={2} maxLength={600} value={draft.mustDo ?? ''} onChange={(event) => patch({ mustDo: event.target.value })} className={cx(inputClass, 'resize-y')} placeholder="A hotel you have booked, a tour on a set day, one place you must see. Free text — we show you what we made of it before it changes anything." />
                   </div>
+                )}
+                <div>
+                  <FieldLabel htmlFor="avoid">Anything you would rather not do?</FieldLabel>
+                  <textarea id="avoid" rows={2} maxLength={600} value={draft.avoid ?? ''} onChange={(event) => patch({ avoid: event.target.value })} className={cx(inputClass, 'resize-y')} />
                 </div>
-              ) : null}
+              </div>
             </Section>
           ) : null}
 
@@ -579,9 +464,9 @@ export function TripComposer({
           {hasDestination ? (
             <div className="hidden flex-wrap items-center gap-4 border-t border-rule pt-7 lg:flex">
               <button type="button" className={buttonClass('primary', 'lg')} disabled={!canSubmit} onClick={submit}>
-                {pending ? 'Reading the region…' : 'See what we make of it'}
+                {pending ? 'Saving…' : 'Continue'}
               </button>
-              <span className="text-sm text-ink-faint">Nothing is bought yet. The next screen is free and takes a few seconds.</span>
+              <span className="text-sm text-ink-faint">Next: a short interview about how you travel. Nothing is researched or bought yet.</span>
             </div>
           ) : null}
         </div>
@@ -592,11 +477,7 @@ export function TripComposer({
             destination={draft.destinationText?.trim() || null}
             dates={datesSoFar}
             nights={nightsSoFar}
-            shape={draft.shape ? TRIP_SHAPE_LABELS[draft.shape] : null}
-            shapeCode={draft.shape ?? null}
-            transport={draft.transport ? TRANSPORT_INTENT_LABELS[draft.transport] : null}
-            transportCode={draft.transport ?? null}
-            themes={(draft.themes ?? []).map((theme) => TRIP_THEME_LABELS[theme])}
+            arrival={ARRIVAL_PRECISION_LABELS[arrival]}
             travellers={travellersSoFar}
           />
         </aside>
@@ -609,7 +490,7 @@ export function TripComposer({
             {hasDestination ? `${draft.destinationText?.trim()} · ${nightsSoFar ?? datesSoFar}` : 'Start with a destination'}
           </span>
           <button type="button" className={cx(buttonClass('primary'), 'shrink-0')} disabled={!canSubmit} onClick={submit}>
-            {pending ? 'Reading…' : 'See what we make of it'}
+            {pending ? 'Saving…' : 'Continue'}
           </button>
         </div>
       </div>
@@ -662,13 +543,6 @@ function Section({ step, title, children }: { step: number; title: string; child
   );
 }
 
-const STUB_TRANSPORT: Record<string, GlyphId> = {
-  drive: 'car',
-  public_transport: 'transit',
-  mixed: 'compass',
-  undecided: 'compass',
-};
-
 /**
  * THE TRIP STUB.
  *
@@ -681,24 +555,15 @@ function TripStub({
   destination,
   dates,
   nights,
-  shape,
-  shapeCode,
-  transport,
-  transportCode,
-  themes,
+  arrival,
   travellers,
 }: {
   destination: string | null;
   dates: string;
   nights: string | null;
-  shape: string | null;
-  shapeCode: string | null;
-  transport: string | null;
-  transportCode: string | null;
-  themes: string[];
+  arrival: string;
   travellers: string;
 }) {
-  const bases = shapeCode === 'two_bases' ? 2 : shapeCode === 'circuit' ? 3 : 1;
   return (
     <div className="overflow-hidden rounded-[var(--radius-plate)] border border-rule bg-paper-raised">
       <div className="plate relative h-40 px-5 pt-4" style={{ '--plate-hue': 38 } as React.CSSProperties}>
@@ -706,16 +571,7 @@ function TripStub({
         <svg viewBox="0 0 320 120" className="absolute inset-x-0 bottom-0 h-24 w-full" aria-hidden="true">
           <circle cx="160" cy="80" r="46" fill="none" stroke="var(--color-ink)" strokeOpacity="0.25" strokeDasharray="3 4" />
           <rect x="155" y="75" width="10" height="10" fill="var(--color-ink)" />
-          {bases >= 2 ? <rect x="228" y="52" width="8" height="8" fill="var(--color-accent)" /> : null}
-          {bases >= 2 ? <path d="M165 80 L 232 56" stroke="var(--color-accent)" strokeDasharray="3 3" fill="none" /> : null}
-          {bases >= 3 ? <rect x="84" y="44" width="8" height="8" fill="var(--color-accent)" /> : null}
-          {bases >= 3 ? <path d="M155 80 L 88 48" stroke="var(--color-accent)" strokeDasharray="3 3" fill="none" /> : null}
         </svg>
-        {transportCode ? (
-          <span className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-paper-raised text-ink shadow-sm">
-            <Glyph id={STUB_TRANSPORT[transportCode] ?? 'compass'} className="h-4 w-4" />
-          </span>
-        ) : null}
       </div>
       <div className="px-5 py-4">
         <p className={cx('font-display text-2xl leading-tight', destination ? 'text-ink' : 'text-ink-faint')}>{destination ?? 'Somewhere'}</p>
@@ -723,14 +579,12 @@ function TripStub({
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           <Fact label="Length" value={nights ?? '—'} />
           <Fact label="Travellers" value={travellers} />
-          <Fact label="Shape" value={shape ?? '—'} />
-          <Fact label="Getting around" value={transport ?? '—'} />
           <div className="col-span-2">
-            <Fact label="Here for" value={themes.length > 0 ? themes.join(', ') : '—'} />
+            <Fact label="Arriving" value={arrival} />
           </div>
         </dl>
         <p className="mt-4 border-t border-rule pt-3 text-xs leading-relaxed text-ink-faint">
-          Every answer changes what we look for. None of them is stored anywhere until you press the button.
+          How you like to travel — pace, transport, food, what you are here for — is the next screen, one question at a time. Nothing is stored until you press the button.
         </p>
       </div>
     </div>

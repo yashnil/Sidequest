@@ -37,7 +37,8 @@ import {
   withAdaptiveQuestions,
 } from '@sidequest/compiler';
 import { capabilityRegistry } from '@/lib/capabilities';
-import { compilerProviderChoice, compilerProviders, providerReadiness } from '@/lib/compiler/providers';
+
+import { verificationProviders } from '@/lib/planning/verification-providers';
 import { activeJobFor, startCompilation } from '@/lib/compiler/runner';
 import { dispatchCompilation, pumpCompilationQueue } from '@/lib/compiler/queue';
 import {
@@ -57,7 +58,7 @@ import {
 import { compilationVerdict } from '@/lib/compiler/verdict';
 import { callerKey, guardAction } from '@/lib/net/caller';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
-import { reserveModelCalls } from '@/lib/compiler/daily-ceiling';
+
 import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
 import { destinationDivisionIds } from '@/lib/destinations/identity';
 import { runPreflight } from '@/lib/destinations/preflight';
@@ -144,36 +145,22 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
   const query = intent?.destinationQuery?.trim();
   if (!query) return { ok: false, error: 'Tell us where you are going first.' };
 
-  const readiness = providerReadiness();
-  if (!readiness.ready) return { ok: false, error: readiness.message };
+  /*
+   * Resolution needs a geocoder, never the research model. The research
+   * provider is an optional stage behind "Explore experiences first"; a
+   * build with it switched off still puts a typed destination on the map
+   * and hands it to the interview.
+   */
+  const { resolver } = verificationProviders();
+  if (!resolver) return { ok: false, error: 'This build has no way to look a destination up, so the interview starts from your own words.' };
 
   // After the free checks, before the geocoder round-trip: a refused request
   // must not have cost the provider anything to refuse.
   const limited = await rateGuard('destination_resolve');
   if (limited) return { ok: false, error: limited };
 
-  /**
-   * THE MODEL CALL HIDING INSIDE "LOOK UP A DESTINATION".
-   *
-   * `resolver.resolve` does not only geocode: on the open stack it also asks
-   * the billed model whether the typed string is a place at all, once per
-   * invocation and uncached. That spend was invisible to the daily ceiling,
-   * which only ever counted what a *compilation* reported — so the one control
-   * that bounds the aggregate bill was blind to an action any visitor can fire
-   * on any trip. Booked here, before the call, because a reservation taken
-   * afterwards is a ceiling discovered by crossing it.
-   *
-   * Only on the open stack: the fixture resolver reaches no model, and a gate
-   * that refused a free lookup would be a cost control with no cost behind it.
-   */
-  if (compilerProviderChoice() === 'open') {
-    const spend = reserveModelCalls(1, { caller: await callerKey() });
-    if (!spend.allowed) return { ok: false, error: spend.message };
-  }
-
   try {
-    const { providers } = compilerProviders();
-    const resolution = await providers.resolver.resolve({ query, now: new Date() });
+    const resolution = await resolver.resolve({ query, now: new Date() });
     saveResolution(tripId, resolution);
 
     /**

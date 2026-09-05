@@ -30,7 +30,7 @@ async function startTrip(page: Page): Promise<string> {
   await page.getByLabel('Destination').fill(DESTINATION);
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await expect(page.getByTestId('interview')).toBeVisible();
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();
@@ -42,7 +42,7 @@ test('no two routes a traveller can be on share a title', async ({ page }, testI
 
   const id = await startTrip(page);
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
@@ -147,7 +147,7 @@ test('the trip list says where each trip actually is, and can remove one', async
    * defect: a label that is wrong is worse than no label, because it sends the
    * traveller to a page that redirects them away.
    */
-  await expect(row).toContainText('Not researched yet');
+  await expect(row).toContainText('Not planned yet');
   await expect(row.getByRole('link', { name: 'Carry on' })).toHaveAttribute(
     'href',
     `/trips/${id}/plan`,

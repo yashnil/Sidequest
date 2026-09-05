@@ -23,6 +23,7 @@ import { getIntent } from '@/lib/db/compiler-repository';
 import { interviewContextFor } from '@/lib/interview/screening';
 import { compiledRegionFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
 import { isFixtureComposer } from '@/lib/providers/switches';
+import { providerReadiness } from '@/lib/compiler/readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,7 +135,7 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       initialAnswers={initialAnswers}
       durationAdvice={durationAdvice}
       boardAvailable={resolved.ok}
-      researchAvailable={trip.basics.regionId === DYNAMIC_REGION_ID}
+      researchAvailable={trip.basics.regionId === DYNAMIC_REGION_ID && intent?.selectedDestination !== null && providerReadiness().ready}
       fixtureMode={process.env.NODE_ENV !== 'production' && isFixtureComposer()}
       {...(interpretation
         ? { interpretation: { set: interpretation, mustDo: intent?.composer?.mustDo ?? '', avoid: intent?.composer?.avoid ?? '' } }

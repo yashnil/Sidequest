@@ -91,7 +91,7 @@ describe('the configuration doctor', () => {
   it('refuses, and exits non-zero, when nothing is configured', () => {
     const { code, out } = runDoctor({});
     expect(code).toBe(1);
-    expect(out).toContain('cannot research a new destination');
+    expect(out).toContain('cannot compose a trip');
     expect(out).toContain('Compilation mode: off');
   });
 

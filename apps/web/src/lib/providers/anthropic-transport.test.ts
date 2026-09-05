@@ -479,7 +479,7 @@ describe('a bare AnthropicError — not an APIError — is classified, not swall
       .catch((error: unknown) => error);
 
     expect(thrown).toMatchObject({ code: 'request_failed' });
-    expect(model.callLog[0]?.schemaRefusal).toEqual({ status: 400, type: 'invalid_request_error' });
+    expect(model.callLog[0]?.schemaRefusal).toMatchObject({ status: 400, type: 'invalid_request_error' });
   });
 });
 
@@ -1025,7 +1025,7 @@ describe('the grammar→prompt fallback', () => {
     // ...and the second request genuinely happened, in the diagnostics, not
     // just in `stream`'s own call count.
     expect(model.callLog[0]?.enforcementAttempted).toEqual(['grammar', 'prompt']);
-    expect(model.callLog[0]?.schemaRefusal).toEqual({ status: 400, type: 'invalid_request_error' });
+    expect(model.callLog[0]?.schemaRefusal).toMatchObject({ status: 400, type: 'invalid_request_error' });
     expect(model.callLog[0]?.enforcementFallbackReason).toMatch(/retrying once in prompt mode/);
   });
 
@@ -1064,7 +1064,7 @@ describe('the grammar→prompt fallback', () => {
     expect(model.callLog).toHaveLength(1);
     expect(model.callLog[0]?.enforcementFallback).toBe(false);
     expect(model.callLog[0]?.enforcementAttempted).toEqual(['grammar']);
-    expect(model.callLog[0]?.schemaRefusal).toEqual({ status: 400, type: 'invalid_request_error' });
+    expect(model.callLog[0]?.schemaRefusal).toMatchObject({ status: 400, type: 'invalid_request_error' });
     expect(model.callLog[0]?.enforcementFallbackReason).toMatch(/not classified as a structured-output schema/);
     expect(model.callLog[0]?.outcome).toBe('network_error');
   });

@@ -16,7 +16,7 @@ async function startTrip(page: Page, dates = AUGUST) {
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(dates.start);
   await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await expect(page.getByTestId('interview')).toBeVisible();
 }
 

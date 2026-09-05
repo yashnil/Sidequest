@@ -24,9 +24,9 @@ async function buildPlan(page: Page): Promise<string> {
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
   const id = /\/trips\/([^/]+)\/discover/.exec(page.url())?.[1];
@@ -221,7 +221,7 @@ test('a trip with no plan is refused a calendar rather than given an empty one',
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await expect(page.getByTestId('interview')).toBeVisible();
 
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];

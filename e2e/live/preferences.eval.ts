@@ -44,9 +44,9 @@ async function main(): Promise<void> {
 
   const more = page.getByRole('button', { name: /A few more that change the plan/i });
   if (await more.isVisible().catch(() => false)) await more.click();
-  await page.getByLabel('Anything you would regret missing?').fill(TEXT);
+  await page.getByLabel(/Anything booked, fixed, or that you would regret missing/).fill(TEXT);
 
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 60_000 });
   const tripId = /\/trips\/([^/]+)\//.exec(page.url())?.[1] ?? '';
   record.tripId = tripId;

@@ -203,8 +203,16 @@ describe('the rate limit in front of the actions that spend', () => {
   });
 });
 
-describe('the daily model ceiling in front of destination resolution', () => {
-  it('refuses before the resolver is built once the day is spent', async () => {
+describe('destination resolution spends no model call', () => {
+  /*
+   * QUALITY V1 — resolution is a geocoder lookup and nothing else. The
+   * research model used to corroborate "does this look like a place" on the
+   * open stack, which made the daily model ceiling a gate in front of a
+   * lookup any visitor could fire, and made the whole interview unreachable
+   * whenever the research provider was switched off. The canonical path
+   * never reaches a model before the one composition call.
+   */
+  it('on the open stack, with the day spent, still resolves (or fails on the network) without touching the ledger', async () => {
     const tripId = await seededTrip();
     goOpen();
     process.env.SIDEQUEST_DAILY_MODEL_CALLS = '0';
@@ -212,30 +220,9 @@ describe('the daily model ceiling in front of destination resolution', () => {
     const { resolveDestinationAction } = await import('./actions');
     const { dailySpendSoFar } = await import('@/lib/compiler/daily-ceiling');
 
-    const result = await resolveDestinationAction(tripId);
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('live research');
-    // Nothing was booked for a call that was never made, and — the point of
-    // the ordering — no provider was constructed to make it.
+    const result = await resolveDestinationAction(tripId).catch(() => ({ ok: false, error: 'network' }));
+    expect(result.error ?? '').not.toContain('live research');
     expect(dailySpendSoFar('model_calls', new Date())).toBe(0);
-  });
-
-  it('books the model call the resolver is about to make', async () => {
-    const tripId = await seededTrip();
-    goOpen();
-    /*
-     * One call in the day's allowance. The reservation is taken, the resolver
-     * then fails on this machine because no provider is reachable from a test —
-     * and the booking stands, which is the property: a spend recorded from the
-     * *result* would miss every call that timed out, which is the shape a
-     * runaway produces.
-     */
-    process.env.SIDEQUEST_DAILY_MODEL_CALLS = '4';
-    const { resolveDestinationAction } = await import('./actions');
-    const { dailySpendSoFar } = await import('@/lib/compiler/daily-ceiling');
-
-    await resolveDestinationAction(tripId).catch(() => undefined);
-    expect(dailySpendSoFar('model_calls', new Date())).toBe(1);
   });
 
   it('charges the fixture stack nothing, because it reaches no model', async () => {

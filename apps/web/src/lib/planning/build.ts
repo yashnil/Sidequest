@@ -21,7 +21,7 @@ import {
   journeySpanOf,
   recordJourneySpan,
 } from '@/lib/db/journey-repository';
-import { ensureWeatherForPlanning } from '@/lib/weather/refresh';
+import { ensureWeatherForPlanning, weatherTargetFor } from '@/lib/weather/refresh';
 
 import type { MustDoConflict } from '@sidequest/planner';
 import type { PlannerReadiness } from '@sidequest/core';
@@ -158,12 +158,7 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
   if (!resolved.ok) return { ok: false, error: resolved.error };
 
   await ensureWeatherForPlanning(
-    {
-      tripId,
-      compiled: resolved.context.compiled,
-      dates: resolved.context.dates,
-      scopeKey: resolved.context.weatherScopeKey,
-    },
+    weatherTargetFor(tripId, resolved.context.compiled, resolved.context.dates, resolved.context.weatherScopeKey),
     new Date(),
   );
 

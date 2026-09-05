@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createTrip, reachScope, REGION_READY_HEADING, waitForLookup } from './support/trip';
+import { createTrip, reachScope, REGION_READY_HEADING, requestExploration, waitForLookup } from './support/trip';
 
 /**
  * THE COMPOSER, THE SHELL AND THE PROGRESS SCREEN.
@@ -46,12 +46,15 @@ test('the composer discloses progressively rather than showing thirty fields', a
   // Before a destination there is one question, not a form.
   await expect(page.getByLabel('Destination')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'When?' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'What kind of trip?' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Who is going?' })).toHaveCount(0);
 
   await page.getByLabel('Destination').fill('Harbour City');
   await expect(page.getByRole('heading', { name: 'When?' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'What kind of trip?' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Who is going?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Anything already fixed?' })).toBeVisible();
+  /* QUALITY V1 — preferences are the interview's questions, never a second form here. */
+  await expect(page.getByRole('heading', { name: 'What kind of trip?' })).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: 'Drive' })).toHaveCount(0);
 });
 
 test('no disabled mode card dominates the first screen', async ({ page }) => {
@@ -90,8 +93,8 @@ test('the live intent rail reflects what has been answered so far', async ({ pag
   await page.getByLabel('Destination').fill('Harbour City');
   await expect(rail).toContainText('Harbour City');
 
-  await page.getByRole('radio', { name: 'Drive' }).check();
-  await expect(rail).toContainText('Drive');
+  await page.getByRole('button', { name: 'One more adult' }).click();
+  await expect(rail).toContainText('3 adults');
 });
 
 test('the composer survives a refresh by starting clean rather than half-filled', async ({
@@ -118,20 +121,21 @@ test('trip context is shown by the page, not claimed by the shell', async ({ pag
   await expect(page.locator('header')).not.toContainText('Harbour City');
 });
 
-test('a typed destination is looked up without a screen asking permission', async ({ page }) => {
+test('a typed destination is looked up without a screen asking permission, and lands on the interview', async ({ page }) => {
   await createTrip(page, 'Harbour City');
 
   // The screen that used to sit here said "Reading Harbour City" and had one
-  // button on it, whose only possible answer was yes.
+  // button on it, whose only possible answer was yes. And the screen after it
+  // used to be a research gate; it is the interview now.
   await expect(page.getByRole('button', { name: 'Read this' })).toHaveCount(0);
-  await waitForLookup(page);
-  await expect(page.getByRole('heading', { name: /as we read it/i })).toBeVisible({
-    timeout: 20_000,
-  });
+  await page.waitForURL(/\/questionnaire$/, { timeout: 20_000 });
+  await expect(page.getByTestId('interview-understanding')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/This build is missing/)).toHaveCount(0);
 });
 
 test('the preflight is honest about having no index coverage', async ({ page }) => {
   await createTrip(page, 'Harbour City');
+  await requestExploration(page);
   await waitForLookup(page);
 
   // The preflight is computed on arrival, so the panel appears a beat later.
@@ -145,7 +149,7 @@ test('the preflight is honest about having no index coverage', async ({ page }) 
 test('the compilation progress groups stages and hides the technical list', async ({ page }) => {
   await createTrip(page, 'Harbour City');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
 
   /*
    * The five phases are what a traveller reads. The twenty-six stages are still

@@ -217,14 +217,32 @@ mark(
       ? 'valhalla, DEVELOPMENT/DEMO endpoint — the shared public instance is rate-limited and unversioned; not suitable for production traffic (see SIDEQUEST_ROUTES_URL below)'
       : 'valhalla, production endpoint configured (SIDEQUEST_ROUTES_URL set to something other than the public demo host)',
 );
+/*
+ * QUALITY V1 — two different things share one credential. Composition (the
+ * one model call that writes the trip) needs only ANTHROPIC_API_KEY, or the
+ * fixture composer. Research (compiling a destination for the optional
+ * Discovery Board) additionally needs SIDEQUEST_RESEARCH_PROVIDER=anthropic
+ * and the open map stack. The normal "Build my trip" never consults the
+ * research switch.
+ */
+const fixtureComposer = equals('SIDEQUEST_COMPOSER_PROVIDER', 'fixture');
+mark(
+  fixtureComposer || researchModel,
+  'Trip composition (the one model call)',
+  fixtureComposer
+    ? 'fixture composer — saved drafts, no model call'
+    : researchModel
+      ? 'anthropic, credential present — presence only; whether the provider accepts it is learned from the first live generation'
+      : 'ANTHROPIC_API_KEY not set — nothing can compose a trip',
+);
 mark(
   researchProvider && researchModel,
-  'Research model',
+  'Research model (optional, "Explore experiences first")',
   researchProvider
     ? researchModel
-      ? 'anthropic, credential present — presence only; whether the provider accepts it is learned from live calls, and the "Last live build" section below reads the newest compile log for a recorded rejection'
+      ? 'anthropic, credential present — presence only; the "Last live build" section below reads the newest compile log for a recorded rejection'
       : 'anthropic selected, ANTHROPIC_API_KEY not set'
-    : 'SIDEQUEST_RESEARCH_PROVIDER not set',
+    : 'SIDEQUEST_RESEARCH_PROVIDER not set — the interview and Build my trip still work; only the Discovery Board research is off',
 );
 mark(climate, 'Climate archive', climate ? 'on (keyless)' : 'off');
 mark(
@@ -264,15 +282,24 @@ say('');
 
 say('Capabilities');
 mark(
+  fixtureComposer || researchModel,
+  'Plan an arbitrary destination (Build my trip)',
+  fixtureComposer
+    ? 'yes — fixture composer; verification through fixture worlds or whichever open adapters are switched on'
+    : researchModel
+      ? `yes — one composition call, verified through ${[geocoder && 'the geocoder', routes && 'the router'].filter(Boolean).join(' and ') || 'no provider (every place stays unverified)'}`
+      : 'no — no composer credential',
+);
+mark(
   choice === 'open' ? openReady : choice === 'fixture',
-  'Plan an arbitrary destination',
+  'Explore experiences first (optional Discovery Board research)',
   choice === 'fixture'
     ? 'fixture worlds only — a typed name resolves to synthetic data'
     : choice === 'off'
-      ? 'no — only regions already held can be planned'
+      ? 'off — the interview offers no research step; regions already held still open a board'
       : openReady
         ? 'yes, through the open map stack'
-        : 'no — configuration missing (see below)',
+        : 'off — configuration missing (see below)',
 );
 mark(
   transit,
@@ -483,17 +510,19 @@ if (logsArg !== 'none') {
 
 const blocked = choice === 'off' || (choice === 'open' && !openReady);
 if (blocked) {
-  say('This build cannot research a new destination.');
+  say('Optional research ("Explore experiences first") is off on this build.');
+  say('  Build my trip does not need it: a typed destination goes to the interview and composes normally.');
   if (choice === 'off') {
-    say('  Set SIDEQUEST_COMPILER_PROVIDER=open (or =fixture for synthetic worlds).');
+    say('  To enable the Discovery Board research, set SIDEQUEST_COMPILER_PROVIDER=open (or =fixture for synthetic worlds).');
   }
   if (missing.length > 0) {
-    say('  Still needed, by name:');
+    say('  Still needed for research, by name:');
     for (const name of missing) say(`    ${name}`);
   }
   say('');
-  say('  A traveller reaching the plan screen on this build is told so up front,');
-  say('  and offered a destination this deployment can plan instead.');
+}
+if (!fixtureComposer && !researchModel) {
+  say('This build cannot compose a trip: set ANTHROPIC_API_KEY (or SIDEQUEST_COMPOSER_PROVIDER=fixture for saved drafts).');
   say('');
 }
 

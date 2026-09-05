@@ -57,7 +57,7 @@ async function reachBoard(page: Page): Promise<string> {
    */
   await completeQuestionnaire(page, { priorities: ['Scenic viewpoints', 'Hiking'] });
 
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
   return id;
 }

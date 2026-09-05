@@ -258,6 +258,15 @@ export const tripComposerAnswersSchema = z.object({
    * moved on", which is a decision, not an absence.
    */
   scopeStrategy: z.string().max(40).optional(),
+  /**
+   * When the traveller pressed "Explore experiences first".
+   *
+   * Research (compilation) is optional and secondary: the plan page runs its
+   * research steps only for a trip that asked for them, and otherwise hands
+   * a resolved destination straight to the interview. Stored on the composer
+   * record because it is a thing a person decided, and it survives refreshes.
+   */
+  researchRequestedAt: z.string().optional(),
   pace: z.enum(['slow', 'balanced', 'packed']).optional(),
   transport: transportIntentSchema.optional(),
   /** Minutes at the wheel a single day may hold. Absent means nobody has said. */

@@ -46,13 +46,13 @@ test('captures the journey and stays free of console errors and overflow', async
   await page.getByLabel('Leave').fill('2026-08-15');
   await shot('02-composer');
 
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await expect(page.getByTestId('interview-understanding')).toBeVisible();
   await shot('03-understanding');
   await completeQuestionnaire(page, { answers: { iconic_crowds: 'quieter_alternative' } });
   await shot('08-review');
 
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
   await expect(page.getByRole('heading', { name: 'Classics worth your time' })).toBeVisible();
   await shot('09-board');

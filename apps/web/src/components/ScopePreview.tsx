@@ -2,7 +2,7 @@ import { useId } from 'react';
 import type { PreflightPortfolio } from '@sidequest/core';
 import { formatMinutes } from '@/lib/format';
 import { buildRegionFigure, type FigureLabel } from './region-figure';
-import { tilesForViewport, type MapTileSource } from './map-adapter';
+import { tilesForViewport, type MapBasemap } from './map-adapter';
 
 /**
  * WHAT THE TRIP LOOKS LIKE ON THE GROUND.
@@ -87,13 +87,13 @@ export function ScopePreview({
   /**
    * A basemap, when one has been configured and its terms accepted.
    *
-   * Resolved by a caller from `resolveMapTileSource(process.env)` rather than
+   * Resolved by a caller from `resolveMapBasemap(process.env)` rather than
    * read here: this component is part of a client tree, and — more to the point
    * — `lib/render-purity.architecture.test.ts` exists to keep environment and
    * provider work out of the render path. A prop is the seam; `null` is the
    * shipped state.
    */
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
 }) {
   const captionId = useId();
   /*
@@ -110,7 +110,7 @@ export function ScopePreview({
   const satellites = marks.filter((mark) => mark.role === 'satellite');
   const excluded = marks.filter((mark) => mark.role === 'excluded');
   const baseNameById = new Map(bases.map((base) => [base.id, base.name]));
-  const placedTiles = tiles ? tilesForViewport({ viewport: figure.viewport, source: tiles }) : [];
+  const placedTiles = tiles && tiles.kind !== 'vector' ? tilesForViewport({ viewport: figure.viewport, source: tiles }) : [];
 
   return (
     <figure className="m-0" data-testid="scope-preview">

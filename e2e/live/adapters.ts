@@ -377,7 +377,7 @@ export class PlaywrightJourneyDriver implements JourneyDriver {
       .check()
       .catch(() => undefined);
 
-    await this.page.getByRole('button', { name: /See what we make of it/i }).click();
+    await this.page.getByRole('button', { name: /^Continue$/ }).click();
     const arrived = await this.page
       .waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 60_000 })
       .then(() => true)

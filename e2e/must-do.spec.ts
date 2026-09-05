@@ -34,9 +34,8 @@ async function createTripNaming(page: Page, destination: string, mustDo: string)
   await field.fill(destination);
   await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
   await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByRole('button', { name: /A few more that change the plan/i }).click();
-  await page.getByLabel('Anything you would regret missing?').fill(mustDo);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByLabel(/Anything booked, fixed, or that you would regret missing/).fill(mustDo);
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
 }
 
@@ -136,7 +135,7 @@ test('a trip that names nothing shows no panel at all', async ({ page }) => {
   await field.fill('Harbour City');
   await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
   await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
   await compileRegion(page);
 
@@ -166,7 +165,7 @@ test('the status follows the traveller onto the Discovery Board', async ({ page 
    */
   await expect(page.getByTestId('interview')).toBeVisible({ timeout: 20_000 });
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 
   const panel = page.getByTestId('must-do-panel');

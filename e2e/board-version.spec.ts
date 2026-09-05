@@ -38,7 +38,7 @@ const MIN_TARGET_PX = 44;
 async function reachProvisionalBoard(page: Page): Promise<string> {
   const tripId = await createTrip(page, 'Outer Isles');
   await reachScope(page);
-  await page.getByRole('button', { name: 'Build the region' }).click();
+  await page.getByRole('button', { name: 'Start exploring' }).click();
   await page.waitForTimeout(2_000);
   await page.goto(`/trips/${tripId}/provisional`);
   await expect(page.getByTestId('provisional-card').first()).toBeVisible({ timeout: 30_000 });

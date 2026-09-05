@@ -40,7 +40,7 @@ test.describe('correcting an answer without starting again', () => {
     const field = page.getByLabel('Destination');
     await waitUntilInteractive(field);
     await page.getByLabel('Leave').fill('2026-08-18');
-    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).click();
 
     await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
     /* The same trip. A new id here would mean the original was orphaned. */
@@ -170,7 +170,7 @@ test.describe('the questionnaire remembers where you were', () => {
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
     await completeQuestionnaire(page);
     /* The last screen is the review, and its button says so. */
-    await expect(page.getByRole('button', { name: /Build my discovery board/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open the Discovery Board/i })).toBeVisible();
 
     /*
      * The review separates what the traveller said from what Sidequest
@@ -185,12 +185,13 @@ test.describe('the questionnaire remembers where you were', () => {
   });
 });
 
-test.describe('the questionnaire is shorter, not just apologetic', () => {
-  test('a question the composer answered is not asked again, and is shown as an assumption', async ({ page }) => {
+test.describe('one intake, not two', () => {
+  test('the composer asks nothing about how you travel, and the interview asks it once', async ({ page }) => {
     /*
-     * The spending style is asked on the composer. A traveller who answered it
-     * up front never sees that screen in the interview — and the answer is on
-     * the review, marked as carried from the trip setup, with a way to change it.
+     * QUALITY V1 — the composer used to ask budget, pace, transport, themes
+     * and crowds, and the interview asked them again with better questions.
+     * The composer now holds only what every itinerary needs; every
+     * preference is the interview's, asked once.
      */
     await page.goto('/trips/new');
     const destination = page.getByLabel('Destination');
@@ -198,20 +199,16 @@ test.describe('the questionnaire is shorter, not just apologetic', () => {
     await destination.fill('Mammoth Lakes');
     await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
     await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
+    await expect(page.getByRole('button', { name: /A few more that change the plan/i })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: /Mid-range|Keep it cheap/i })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Anything already fixed?' })).toBeVisible();
 
-    await page.getByRole('button', { name: /A few more that change the plan/i }).click();
-    const budget = page.getByRole('radio', { name: /Mid-range|Keep it cheap/i }).first();
-    await waitUntilInteractive(budget);
-    await budget.check();
-
-    await page.getByRole('button', { name: /See what we make of it/i }).click();
+    await page.getByRole('button', { name: /^Continue$/ }).click();
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
 
     const seen = await completeQuestionnaire(page);
-    expect(seen).not.toContain('budget');
-    const assumed = page.getByTestId('review-assumed');
-    await expect(assumed).toBeVisible();
-    await expect(assumed.getByText('from your trip setup').first()).toBeVisible();
+    expect(seen).toContain('budget');
+    await expect(page.getByTestId('review-told')).toBeVisible();
     await expect(page.getByTestId('review-change-budget')).toBeVisible();
   });
 });

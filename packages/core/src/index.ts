@@ -76,6 +76,8 @@ export * from './interview/state';
 export * from './interview/review';
 export * from './interview/analytics';
 export * from './interview/summary';
+export * from './interview/brief';
+export * from './interview/sufficiency';
 export * from './intelligence';
 
 export * from './time/interval';

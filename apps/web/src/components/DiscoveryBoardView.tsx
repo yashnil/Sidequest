@@ -64,7 +64,7 @@ import {
   type SharedFactKind,
 } from './BoardCopy';
 import { BoardMap } from './BoardMap';
-import type { MapTileSource } from './map-adapter';
+import type { MapBasemap } from './map-adapter';
 import { DestinationImage, ImageCredit } from './DestinationImage';
 import { BuildTripButton, PlannerReadinessPanel } from './BuildTripButton';
 import { formatMinutes } from '@/lib/format';
@@ -176,7 +176,7 @@ export function DiscoveryBoardView({
   autoPickNotes: string[];
   hasItinerary: boolean;
   /** A basemap tile source, resolved on the server from `SIDEQUEST_MAP_TILES`; null draws positions only. */
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   /** Licensed photographs by place id, read from a table by the page. */
   images?: Record<string, ImageRecord>;
   /** Where they are sleeping, so the map can draw the thing everything is measured from. */

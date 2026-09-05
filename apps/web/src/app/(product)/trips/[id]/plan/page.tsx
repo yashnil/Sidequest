@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
   candidateById,
@@ -17,7 +16,8 @@ import { formatDayRange } from '@/lib/format/dates';
 import { scopeFitsTrip } from '@sidequest/compiler';
 import { PlanFlow, type PlanStep } from '@/components/PlanFlow';
 import { TripContextBar } from '@/components/TripContextBar';
-import { providerReadiness } from '@/lib/compiler/readiness';
+import { providerReadiness, compilerProviderChoice } from '@/lib/compiler/readiness';
+import { isGeocoderEnabled } from '@/lib/providers/switches';
 import {
   getIntent,
   getLatestJob,
@@ -25,6 +25,7 @@ import {
   queuePositionFor,
 } from '@/lib/db/compiler-repository';
 import { ownedTrip } from '@/lib/net/trip-access';
+import { getProfile } from '@/lib/db/repository';
 import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
 import type { CompilationSnapshot } from './actions';
 import { compilationVerdict } from '@/lib/compiler/verdict';
@@ -192,6 +193,25 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
   const questions: ClarificationQuestion[] = visibleQuestions(intent.clarifications);
   const outstanding = unansweredRequired(intent.clarifications);
 
+  /*
+   * THE INTERVIEW IS THE NEXT SCREEN, NOT THE RESEARCH.
+   *
+   * Once the destination is known this page hands over to the adaptive
+   * interview. The research steps below (preflight, clarification, scope,
+   * build) run only for a trip whose traveller pressed "Explore experiences
+   * first" — recorded on the composer — or that already has a build.
+   */
+  const researchRequested = intent.composer?.researchRequestedAt !== undefined || compiled !== null || job !== null || (intent.scope?.confirmedByUser ?? false);
+  const identityKnown = intent.selectedDestination !== null || selectedCandidate !== undefined;
+  if (identityKnown && !researchRequested) {
+    redirect(`/trips/${id}/questionnaire`);
+  }
+  /* A lookup needs a resolver — the fixture worlds or the geocoder — and never the research model. */
+  const resolverAvailable = compilerProviderChoice() === 'fixture' || isGeocoderEnabled();
+  if (!identityKnown && !resolverAvailable && intent.resolution === null) {
+    redirect(`/trips/${id}/questionnaire`);
+  }
+
   const step = decideStep({
     hasIdentity: intent.selectedDestination !== null,
     hasResolution: intent.resolution !== null,
@@ -256,22 +276,10 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
                 : 'Planning',
         }}
       />
-      {/*
-        PHASE 17 — THE MINIMAL-FIRST PATH, OFFERED RATHER THAN FORCED.
-        Everything below this still works exactly as it did; this is a second
-        door next to it, not a replacement for it. See
-        `.claude-private/phase-17-baseline-first-hybrid-planner.md` §7-8.
-      */}
-      <p className="mx-auto max-w-3xl px-4 pt-4 text-sm text-ink-muted sm:px-6">
-        Or skip ahead —{' '}
-        <Link href={`/trips/${id}/quickplan`} className="underline underline-offset-4">
-          let Sidequest plan the whole trip now
-        </Link>
-        .
-      </p>
     <PlanFlow
       tripId={id}
       step={step}
+      profileExists={getProfile(id) !== null}
       destinationQuery={intent.destinationQuery}
       destinationName={
         intent.selectedDestination?.displayName ??
@@ -391,8 +399,8 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
       }
       routingDiagnostics={compiled?.routingDiagnostics ?? null}
       workPlan={workPlan ? workPlan.entries.map((entry) => ({ ...entry })) : null}
-      providerMessage={readiness.message}
-      providerReady={readiness.ready}
+      providerMessage={process.env.NODE_ENV === 'production' ? 'Sidequest cannot look this place up on this deployment yet, so the interview starts from your own words.' : readiness.message}
+      providerReady={step === 'destination' ? resolverAvailable : readiness.ready}
       providerNextActions={readiness.nextActions}
       providerMissing={readiness.missing}
     />

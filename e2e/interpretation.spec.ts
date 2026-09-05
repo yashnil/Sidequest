@@ -29,10 +29,9 @@ async function composeWith(page: Page, mustDo: string, avoid: string): Promise<v
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
   await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByRole('button', { name: /A few more that change the plan/i }).click();
-  await page.getByLabel('Anything you would regret missing?').fill(mustDo);
+  await page.getByLabel(/Anything booked, fixed, or that you would regret missing/).fill(mustDo);
   await page.getByLabel('Anything you would rather not do?').fill(avoid);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
 }
 

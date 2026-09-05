@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { PLACE_CATEGORY_LABELS, type PlaceCategory } from '@sidequest/core';
 import { InteractiveMap, type MapMarker } from './InteractiveMap';
-import type { MapTileSource } from './map-adapter';
+import type { MapBasemap } from './map-adapter';
 import { cx, FOCUS_RING, OVERLAY_INPUT } from './ui';
 
 /**
@@ -40,7 +40,7 @@ export function BoardMap({
   places: readonly BoardMapPlace[];
   focusedId: string | null;
   onFocus: (placeId: string) => void;
-  tiles?: MapTileSource | null;
+  tiles?: MapBasemap | null;
   className?: string;
 }) {
   const [chosenOnly, setChosenOnly] = useState(false);

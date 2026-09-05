@@ -4,7 +4,7 @@ import {
   expectNoRuntimeProblems,
   watchForRuntimeProblems,
 } from './support/viewports';
-import { answerEveryQuestion, waitUntilInteractive } from './support/trip';
+import { answerEveryQuestion, requestExploration, waitUntilInteractive } from './support/trip';
 
 /**
  * THE REGION FIGURE, IN A REAL BROWSER, AGAINST REAL PORTFOLIO DATA.
@@ -48,8 +48,10 @@ async function reachRegionFigure(page: Page): Promise<void> {
 
   await page.getByLabel('Arrive').fill(DATES.start);
   await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
+  // The research steps are an explicit request from the interview now.
+  await requestExploration(page);
 
   /*
    * A loop rather than a fixed sequence, for the same reason `reachScope` in the

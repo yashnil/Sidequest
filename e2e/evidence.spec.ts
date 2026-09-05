@@ -20,7 +20,7 @@ async function createTrip(page: Page, destination: string): Promise<string> {
   await page.getByLabel('Destination').fill(destination);
   await page.getByLabel('Arrive').fill(DATES.start);
   await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/);
   return /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1] ?? '';
 }
@@ -42,7 +42,7 @@ async function reachBoard(page: Page): Promise<void> {
 
   await completeQuestionnaire(page, CULTURAL_INTERVIEW);
 
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await page.waitForURL(/discover/, { timeout: 30_000 });
 }
 

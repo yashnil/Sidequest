@@ -138,7 +138,7 @@ test('optimise my existing plan: the traveller’s places are checked and the pl
   await page.getByLabel('Which places does your plan already have?').fill('Convict Lake\nMinaret Vista\nNowhere Special');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
   const id = /\/trips\/([^/]+)\//.exec(page.url())![1]!;
   if (/\/plan/.test(page.url())) await waitForLookup(page);

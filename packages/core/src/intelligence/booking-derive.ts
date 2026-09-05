@@ -88,7 +88,16 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
   });
 
   // The car the route needs -----------------------------------------------------------
-  if (itinerary.transportStrategy.primaryMode === 'drive' && profile.transport.willDrive) {
+  /*
+   * QUALITY V1 — only when the plan is actually self-driven. A safari circuit
+   * moved by private transfers and 4x4 game drives still carries `drive` as
+   * the profile's primary mode, and the live East Africa build recommended
+   * "Rental car for the whole trip — 0 km of the plan is driven". The model's
+   * own transport summary says how the route moves; when it moves by
+   * transfers, drivers or guides, the transfer legs below are the bookings.
+   */
+  const movesByTransfers = /\b(transfer|driver|guide|guided|4x4 (game|safari)|game drive)/i.test(itinerary.package?.transport.summary ?? '');
+  if (itinerary.transportStrategy.primaryMode === 'drive' && profile.transport.willDrive && !movesByTransfers) {
     const booked = matchBooked(input.booked, 'rental_vehicle', { date: itinerary.startDate, title: 'car' });
     items.push(
       bookingItemSchema.parse({
@@ -97,7 +106,7 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
         kind: 'rental_vehicle',
         necessity: 'required',
         priority: bookingPriorityFor({ necessity: 'required', hardDependency: true, fixedDateTime: true, limitedCapacity: false, fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
-        reason: `${Math.round(itinerary.transportStrategy.totals.driveKm)} km of the plan is driven; nothing else reaches the far stops.`,
+        reason: itinerary.transportStrategy.totals.driveKm > 0 ? `${Math.round(itinerary.transportStrategy.totals.driveKm)} km of the plan is driven; nothing else reaches the far stops.` : 'The ordinary days rely on a car; nothing else reaches the far stops.',
         date: itinerary.startDate,
         status: booked ? 'booked' : 'open',
         ...(booked ? { bookedItemId: booked.id } : {}),

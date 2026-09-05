@@ -4,9 +4,10 @@ import { completeQuestionnaire, createTrip, compileRegion } from './support/trip
 /**
  * THE CANONICAL GENERATION PATH, PRESSED FROM THE REAL BUTTONS.
  *
- * Four CTAs, one architecture: "Build my trip" on the Discovery Board,
- * "Regenerate" on the itinerary page, "Plan the whole trip for me" (Quick
- * Plan) before any questionnaire, and Auto Pick followed by Build. The server
+ * One architecture, every door: "Build my trip" from the interview review,
+ * "Plan with smart defaults" before any question, "Build my trip" on the
+ * Discovery Board after an optional exploration, "Regenerate" on the
+ * itinerary page, and Auto Pick followed by Build. The server
  * runs with `SIDEQUEST_COMPOSER_PROVIDER=fixture`, so the model is a
  * deterministic offline composer and nothing here spends anything — what is
  * under test is that the product reaches the canonical orchestrator, persists
@@ -20,9 +21,9 @@ async function reachMammothBoard(page: Page) {
   await page.getByLabel('Destination').fill('Mammoth Lakes');
   await page.getByLabel('Arrive').fill(AUGUST.start);
   await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /See what we make of it/i }).click();
+  await page.getByRole('button', { name: /^Continue$/ }).click();
   await completeQuestionnaire(page);
-  await page.getByRole('button', { name: 'Build my discovery board' }).click();
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
 }
 
@@ -34,7 +35,7 @@ async function expectCanonicalItinerary(page: Page) {
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
   // Real content on every day: activities and meals, never the stale "Nothing scheduled" copy beside content.
-  await expect(page.getByText(/^Nothing scheduled/)).toHaveCount(0);
+  await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
   await expect(page.getByTestId('where-to-stay')).toBeVisible();
   await expect(page.getByTestId('packing-list')).toBeVisible();
@@ -107,25 +108,41 @@ test('Auto pick, then Build, honours the picks as signals', async ({ page }) => 
   await expect(page.getByRole('heading', { name: 'Convict Lake', exact: true })).toHaveCount(0);
 });
 
-test('Quick Plan composes a complete trip before any questionnaire and lands on the same itinerary page', async ({ page }) => {
-  const id = await createTrip(page, 'Harbour City', AUGUST);
-  await page.goto(`/trips/${id}/quickplan`);
-  await page.getByRole('button', { name: 'Plan the whole trip for me' }).click();
+test('Plan with smart defaults composes a complete trip before any question is answered and lands on the itinerary', async ({ page }) => {
+  await createTrip(page, 'Harbour City', AUGUST);
+  await page.waitForURL(/\/questionnaire$/, { timeout: 20_000 });
+  const defaults = page.getByTestId('interview-smart-defaults');
+  await expect(defaults).toBeVisible({ timeout: 20_000 });
+  await defaults.click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   for (const dayNumber of [1, 2, 3, 4]) {
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
-  await expect(page.getByText(/^Nothing scheduled/)).toHaveCount(0);
+  await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   await expect(page.getByTestId('packing-list')).toBeVisible();
   await expect(page.getByText('Not yet verified').first()).toBeVisible();
 });
 
-test('Quick Plan after a compiled region verifies against it', async ({ page }) => {
-  const id = await createTrip(page, 'Harbour City', AUGUST);
+test('Build my trip from the interview review, with no research and no board, verifies through the geocoder alone', async ({ page }) => {
+  await createTrip(page, 'Harbour City', AUGUST);
+  await page.waitForURL(/\/questionnaire$/, { timeout: 20_000 });
+  await completeQuestionnaire(page);
+  await expect(page.getByTestId('interview-build-board')).toHaveCount(0);
+  await page.getByTestId('interview-build-trip').click();
+  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+  await expect(page.getByTestId('route-overview')).toBeVisible();
+  await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
+});
+
+test('Explore experiences first, then the board, verifies against the compiled region', async ({ page }) => {
+  await createTrip(page, 'Harbour City', AUGUST);
   await compileRegion(page);
-  await page.goto(`/trips/${id}/quickplan`);
-  await page.getByRole('button', { name: 'Plan the whole trip for me' }).click();
+  await page.getByRole('link', { name: 'Tell us how you travel' }).click();
+  await completeQuestionnaire(page);
+  await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
+  await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
+  await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await expect(page.getByText('Verified').first()).toBeVisible();
