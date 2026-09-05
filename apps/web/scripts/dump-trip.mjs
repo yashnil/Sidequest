@@ -25,8 +25,11 @@ const days = db.prepare('SELECT * FROM itinerary_days WHERE trip_id = ? ORDER BY
   items: db.prepare('SELECT * FROM itinerary_items WHERE trip_id = ? AND day_number = ? ORDER BY start_minute').all(tripId, day.day_number).map((item) => Object.fromEntries(Object.entries(item).map(([k, v]) => [k, k.endsWith('_json') ? parse(v) : v]))),
 }));
 writeFileSync(resolve(outDir, 'days.json'), JSON.stringify(days, null, 2));
+// COMPOSITION RELIABILITY — every attempt's raw visible answer and the parser's verdict, for replay without a model call.
+const attempts = db.prepare('SELECT * FROM composition_attempts WHERE trip_id = ? ORDER BY created_at').all(tripId).map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, k.endsWith('_json') ? parse(v) : v])));
+writeFileSync(resolve(outDir, 'composition-attempts.json'), JSON.stringify(attempts, null, 2));
 const pkg = plan?.package_json ?? plan?.package ?? null;
 if (pkg) {
   writeFileSync(resolve(outDir, 'preservation.json'), JSON.stringify({ preservation: pkg.preservation ?? null, quality: pkg.quality ?? null, timings: pkg.timings ?? null, verification: pkg.verification ?? null }, null, 2));
 }
-console.log(`dumped ${tripId}: draft ${draft ? 'yes' : 'no'}, itinerary ${itinerary ? 'yes' : 'no'} → ${outDir}`);
+console.log(`dumped ${tripId}: draft ${draft ? 'yes' : 'no'}, itinerary ${itinerary ? 'yes' : 'no'}, attempts ${attempts.length} → ${outDir}`);

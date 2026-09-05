@@ -1,6 +1,7 @@
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { extractJsonObject } from './json-extract';
 import { z } from 'zod';
 import {
   createTransportLivenessMiddleware,
@@ -601,6 +602,35 @@ export class ResearchModel {
      */
     schemaEnforcement?: 'grammar' | 'prompt';
     /**
+     * COMPOSITION RELIABILITY — the mode is chosen before the request.
+     *
+     * When false, a grammar-mode refusal is propagated as the failure it is
+     * instead of buying a second, prompt-mode request. Callers that measured
+     * their schema locally (`wireSchemaProfile`) set this; the legacy
+     * default keeps the one-time fallback for callers that did not.
+     */
+    allowEnforcementFallback?: boolean;
+    /**
+     * The schema the *answer* is validated against, when it should be looser
+     * than the schema that shapes the request. The composition path sends its
+     * wire schema as the output format and validates with `z.unknown()`
+     * here, then normalizes deterministically before its canonical schema —
+     * so a paid answer is never refused inside the transport over a shape
+     * difference the normalizer would have repaired.
+     */
+    validationSchema?: z.ZodType<T>;
+    /**
+     * In prompt mode, ask for the one JSON object inside this XML tag and
+     * extract it with the balanced-object extractor (`json-extract.ts`).
+     */
+    jsonWrapperTag?: string;
+    /**
+     * Called with the visible response text BEFORE any parsing or validation,
+     * so a completed, paid answer is on record even when the shape is refused.
+     * Never receives thinking content.
+     */
+    onResponse?: (info: { text: string; stopReason: string | null; requestId: string | null; inputTokens: number; outputTokens: number; elapsedMs: number; enforcement: 'grammar' | 'prompt' }) => void;
+    /**
      * A DETERMINISTIC PASS BETWEEN "VALID JSON" AND "VALID *THIS* SCHEMA" —
      * OPT-IN, AND OPT-IN FOR A REASON.
      *
@@ -663,9 +693,13 @@ export class ResearchModel {
         content:
           enforcement === 'grammar'
             ? input.task
-            : `${input.task}\n\nAnswer with a single JSON object and nothing else — no prose ` +
-              `before or after it, no code fence. It must validate against this JSON Schema:\n` +
-              `${JSON.stringify(outputFormat.schema)}`,
+            : input.jsonWrapperTag
+              ? `${input.task}\n\nReturn exactly one JSON object, inside <${input.jsonWrapperTag}> and </${input.jsonWrapperTag}> tags, ` +
+                `with nothing else before, inside or after the tags — no Markdown, no code fence, no commentary. ` +
+                `The object must follow this JSON Schema:\n${JSON.stringify(outputFormat.schema)}`
+              : `${input.task}\n\nAnswer with a single JSON object and nothing else — no prose ` +
+                `before or after it, no code fence. It must validate against this JSON Schema:\n` +
+                `${JSON.stringify(outputFormat.schema)}`,
       });
       return {
         model: this.model,
@@ -914,7 +948,22 @@ export class ResearchModel {
         });
         message = await stream.finalMessage();
         this.record(message);
-        const parsed = this.parseStreamedOutput(message, input.schema, input.normalize);
+        if (input.onResponse) {
+          try {
+            input.onResponse({
+              text: message.content.filter((block): block is Anthropic.TextBlock => block.type === 'text').map((block) => block.text).join(''),
+              stopReason: message.stop_reason ?? null,
+              requestId: message._request_id ?? null,
+              inputTokens: message.usage.input_tokens,
+              outputTokens: message.usage.output_tokens,
+              elapsedMs: Math.round(performance.now() - calledAt),
+              enforcement,
+            });
+          } catch (hookError) {
+            console.error('Raw response hook failed', { message: hookError instanceof Error ? hookError.message : 'unknown' });
+          }
+        }
+        const parsed = this.parseStreamedOutput(message, input.validationSchema ?? input.schema, input.normalize, input.jsonWrapperTag);
         normalizedFields = parsed.normalizedFields;
         outcome = 'completed';
         return parsed.data;
@@ -950,7 +999,7 @@ export class ResearchModel {
          * to the classification below instead of retrying again, whether or
          * not it would itself have classified as a schema refusal.
          */
-        if (attempted === 1 && enforcement === 'grammar' && error instanceof Anthropic.BadRequestError) {
+        if (attempted === 1 && enforcement === 'grammar' && error instanceof Anthropic.BadRequestError && input.allowEnforcementFallback !== false) {
           // The provider's own sentence about the schema, bounded: it names the offending keyword, never anything from the request body.
           schemaRefusal = { status: error.status ?? null, type: error.type ?? null, message: String(error.message ?? '').slice(0, 300) };
           if (isStructuredOutputSchemaRefusal(error)) {
@@ -1246,6 +1295,7 @@ export class ResearchModel {
     message: Anthropic.Message & { _request_id?: string | null },
     schema: z.ZodType<T>,
     normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] },
+    wrapperTag?: string,
   ): { data: T; normalizedFields: readonly string[] } {
     const requestId = message._request_id ?? undefined;
     const text = message.content
@@ -1261,22 +1311,21 @@ export class ResearchModel {
       );
     }
 
-    let json: unknown;
-    try {
-      /*
-       * A fenced answer is still an answer. An unconstrained call is asked for
-       * bare JSON and usually gives it, but a stray ```json wrapper is the one
-       * deviation worth absorbing rather than spending a retry on — it changes
-       * nothing about what the schema then has to accept.
-       */
-      json = JSON.parse(text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, ''));
-    } catch {
+    /*
+     * One balanced JSON object out of whatever surrounds it — a fence, the
+     * wrapper tag the prompt asked for, a sentence before or after. Never a
+     * greedy brace grab; a truncated or unparseable object is refused with
+     * the reason named (see `json-extract.ts`).
+     */
+    const extracted = extractJsonObject(text, wrapperTag ? { wrapperTag } : {});
+    if (!extracted.ok) {
       throw new ResearchModelError(
         'malformed_output',
-        `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}).`,
+        `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}; ${extracted.reason}: ${extracted.detail}).`,
         requestId,
       );
     }
+    const json: unknown = extracted.json;
 
     /*
      * Cosmetic normalization, if this caller supplied one — deterministic,

@@ -2,17 +2,18 @@ import type { BenchmarkTripRequest } from '@sidequest/bench';
 import { renderTravelerBriefXml, TRAVELER_BRIEF_VERSION, type TravelerBrief } from '@sidequest/core';
 import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import { describeEdge } from '@/lib/benchmark/baseline/generate';
+import { createHash } from 'node:crypto';
+import { z } from 'zod';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import {
   ANCHOR_CATEGORIES,
   ANCHOR_ROLES,
   DRAFT_TRANSPORTS,
   TRIP_ARCHETYPES,
   TRIP_DRAFT_SCHEMA_VERSION,
-  draftStructureIssues,
-  normalizeTripDraft,
-  tripDraftSchema,
   type TripDraft,
 } from './trip-draft';
+import { TRIP_DRAFT_JSON_TAG, grammarModeSuitable, normalizeTripDraftWire, tripDraftWireSchema, wireSchemaProfile, type WireIssue, type WireSchemaProfile } from './trip-draft-wire';
 
 /**
  * THE ONE COMPOSITION CALL — A TRAVELER BRIEF IN, A COMPLETE TRIP DRAFT OUT.
@@ -73,7 +74,7 @@ export interface CompositionContext {
   bookedFacts?: readonly string[];
 }
 
-export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-05.2';
+export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-05.4';
 
 /**
  * Output ceiling. A rich 14-day draft — every day with anchors, meals and
@@ -151,7 +152,7 @@ You may state travel judgement freely. You must not state as fact: exact opening
 </honesty_rules>
 
 <output_contract>
-Return only the structured draft the schema asks for. Trip level: archetype, purpose, routeRationale, assumptions, tradeoffs, bases (id, name, locality, nights, why, lodgingArea, lodgingStyle), days, omissions, unresolved, bookingPriorities, package (foodStrategy, transport summary and notes, beforeYouGo, packing, backups). Day level: dayNumber, baseId, theme, intensity, relocation, anchors in order (real name, locality, category, role core/secondary/optional/flex, rough minutes on site, how it is reached, why it fits), meals as intent, note, whyItFits. Every calendar day from 1 to N; nights across bases sum to the trip nights; base ids are short lowercase slugs. Think in proportion to the difficulty; keep reasoning brief and put the judgement into the draft itself.
+Return only the structured draft the schema asks for. Trip level: archetype, purpose (the traveller-fit rationale), routeRationale, assumptions, tradeoffs, stays (name = the town, village or area where the traveller sleeps — a real place name such as "Kilkenny" or "Killarney", never an invented hotel or a label like "Arrival Hotel"; locality; nights; why; lodgingArea = the neighbourhood or district to book in; lodgingStyle), days, omissions (name, reason), unresolved, bookingPriorities, foodStrategy, transportSummary, transportNotes, beforeYouGo, packing, backups (trigger, alternative). Day level: day (1..N), stay (the stay's name, where the traveller sleeps that night; the last day's stay is where they leave from), theme, intensity (light | moderate | intense), relocation (true on a day that moves to a new stay), activities in the order they happen (name, locality, category, role core | secondary | optional | flex, minutes on site, transport, why), breakfast, lunch, dinner as intent (or null), note, whyItFits. Every calendar day from 1 to N; nights across stays sum to the trip nights; each stay name is used verbatim by its days. Use null for a field you have nothing to say about. Think in proportion to the difficulty; keep reasoning brief and put the judgement into the draft itself.
 </output_contract>`;
 
 export function compositionUntrustedPayload(context: CompositionContext): Record<string, unknown> {
@@ -289,51 +290,99 @@ export function buildCompositionTask(context: CompositionContext): string {
     'Their free text, must-dos, dislikes, mobility notes and Discovery Board signals are in the untrusted payload under travellerOwnWords.',
     '',
     'WHAT TO RETURN',
-    `One draft covering day 1 to day ${days} in order, no day missing; every day names a base id from bases; nights sum to ${nights}.`,
-    `Archetypes: ${TRIP_ARCHETYPES.join(', ')}. Anchor categories: ${ANCHOR_CATEGORIES.join(', ')}. Roles: ${ANCHOR_ROLES.join(', ')}. Transport values: ${DRAFT_TRANSPORTS.join(', ')}.`,
-    'Base ids are short lowercase slugs. Every anchor carries its real name and, where the name could mean more than one place, a locality.',
+    `One draft covering day 1 to day ${days} in order, no day missing; every day names one of the stays by its exact name; nights across stays sum to ${nights}. A stay is named after the real town or area where the traveller sleeps (lodgingArea and lodgingStyle say where and how to book), never after a hotel.`,
+    `Archetypes: ${TRIP_ARCHETYPES.join(', ')}. Activity categories: ${ANCHOR_CATEGORIES.join(', ')}. Roles: ${ANCHOR_ROLES.join(', ')}. Transport values: ${DRAFT_TRANSPORTS.join(', ')}.`,
+    'Every activity carries its real name and, where the name could mean more than one place, a locality. Keep each prose field to a sentence or two; no web addresses, no markup.',
   ];
   return lines.join('\n');
 }
 
 export type CompositionOutcome =
-  | { ok: true; draft: TripDraft; normalizedFields: readonly string[] }
-  | { ok: false; failureKind: 'malformed_output' | 'model_unavailable' | 'budget_exhausted' | 'timeout'; detail: string };
+  | { ok: true; draft: TripDraft; normalizedFields: readonly string[]; enforcement: 'grammar' | 'prompt' }
+  | {
+      ok: false;
+      failureKind: 'malformed_output' | 'model_unavailable' | 'budget_exhausted' | 'timeout';
+      detail: string;
+      enforcement: 'grammar' | 'prompt';
+      /** Precise, sanitized diagnostics — extraction reason or normalization issues with paths, expected and received. */
+      issues?: readonly WireIssue[];
+      issueKind?: 'no_json' | 'structural' | 'semantic';
+    };
 
-/** Exactly one call. A failure is reported, never retried and never repaired by a second model call. */
-export async function generateTripDraft(input: { model: StructuredModel; context: CompositionContext }): Promise<CompositionOutcome> {
+export interface RawCompositionResponse {
+  text: string;
+  stopReason: string | null;
+  requestId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  elapsedMs: number;
+  enforcement: 'grammar' | 'prompt';
+}
+
+/** The wire schema exactly as the SDK sends it, its measurements, and the mode they decide. Computed once. */
+let wireDecision: { schemaSha256: string; profile: WireSchemaProfile; enforcement: 'grammar' | 'prompt'; reasons: string[] } | null = null;
+export function compositionWireDecision(): { schemaSha256: string; profile: WireSchemaProfile; enforcement: 'grammar' | 'prompt'; reasons: string[] } {
+  if (wireDecision) return wireDecision;
+  const format = zodOutputFormat(tripDraftWireSchema) as unknown as { schema: unknown };
+  const text = JSON.stringify(format.schema);
+  const profile = wireSchemaProfile(format.schema);
+  const verdict = grammarModeSuitable(profile);
+  wireDecision = { schemaSha256: createHash('sha256').update(text).digest('hex'), profile, enforcement: verdict.suitable ? 'grammar' : 'prompt', reasons: verdict.reasons };
+  return wireDecision;
+}
+
+/**
+ * Exactly one call. The mode is chosen here, from the measured wire schema,
+ * never by a paid request the provider refuses; the transport is told not to
+ * fall back. The visible answer reaches `onRawResponse` before any parsing;
+ * the parsed JSON goes through `normalizeTripDraftWire`, and a failure is
+ * reported with the exact paths — never retried and never repaired by a
+ * second model call.
+ */
+export async function generateTripDraft(input: { model: StructuredModel; context: CompositionContext; onRawResponse?: (raw: RawCompositionResponse) => void }): Promise<CompositionOutcome> {
+  const decision = compositionWireDecision();
+  const enforcement = decision.enforcement;
   if (input.model.callsRemaining <= 0) {
-    return { ok: false, failureKind: 'budget_exhausted', detail: 'The run reached its model-call ceiling before the draft could be composed.' };
+    return { ok: false, failureKind: 'budget_exhausted', detail: 'The run reached its model-call ceiling before the draft could be composed.', enforcement };
   }
-  let normalizedFields: readonly string[] = [];
+  let raw: unknown;
   try {
-    const draft = await input.model.structured({
+    raw = await input.model.structured({
       promptVersion: COMPOSITION_PROMPT_VERSION,
       instruction: COMPOSITION_INSTRUCTION,
       untrusted: compositionUntrustedPayload(input.context),
       task: buildCompositionTask(input.context),
-      schema: tripDraftSchema,
+      schema: tripDraftWireSchema,
+      validationSchema: z.unknown() as z.ZodType<unknown>,
+      schemaEnforcement: enforcement,
+      allowEnforcementFallback: false,
+      jsonWrapperTag: TRIP_DRAFT_JSON_TAG,
       effort: compositionEffort(),
       maxTokens: COMPOSITION_MAX_TOKENS,
       timeoutMs: COMPOSITION_TIMEOUT_MS,
       callLabel: 'trip_draft_composition',
       attempt: 1,
-      normalize: (raw) => {
-        const result = normalizeTripDraft(raw);
-        normalizedFields = result.normalizedFields;
-        return result;
-      },
+      ...(input.onRawResponse ? { onResponse: input.onRawResponse } : {}),
     });
-    const issues = draftStructureIssues(draft);
-    if (issues.length > 0) {
-      return { ok: false, failureKind: 'malformed_output', detail: `The draft is not internally consistent: ${issues.join('; ')}.` };
-    }
-    return { ok: true, draft, normalizedFields };
   } catch (error) {
     const code = (error as { code?: string } | null)?.code;
     const message = error instanceof Error ? error.message : 'The composition call failed.';
-    if (code === 'timeout') return { ok: false, failureKind: 'timeout', detail: message };
-    if (code === 'auth_rejected' || code === 'not_configured') return { ok: false, failureKind: 'model_unavailable', detail: message };
-    return { ok: false, failureKind: 'malformed_output', detail: message };
+    if (code === 'timeout') return { ok: false, failureKind: 'timeout', detail: message, enforcement };
+    if (code === 'auth_rejected' || code === 'not_configured') return { ok: false, failureKind: 'model_unavailable', detail: message, enforcement };
+    // Nothing usable came back (no JSON object, a truncated one, a transport failure): the transport's sentence names the reason.
+    return { ok: false, failureKind: 'malformed_output', detail: message, enforcement, issueKind: 'no_json', issues: [{ path: '', code: 'no_json', message }] };
   }
+  const normalized = normalizeTripDraftWire(raw, { days: input.context.request.dates.nights + 1 });
+  if (!normalized.ok) {
+    const first = normalized.issues[0];
+    return {
+      ok: false,
+      failureKind: 'malformed_output',
+      detail: `${normalized.kind === 'semantic' ? 'The draft is not a usable trip' : 'The draft could not be read'}: ${first ? `${first.path || 'root'} — ${first.message}${first.expected ? ` (expected ${first.expected}${first.received ? `, received ${first.received}` : ''})` : ''}` : 'no detail'}.`,
+      enforcement,
+      issueKind: normalized.kind,
+      issues: normalized.issues,
+    };
+  }
+  return { ok: true, draft: normalized.draft, normalizedFields: normalized.normalizedFields, enforcement };
 }

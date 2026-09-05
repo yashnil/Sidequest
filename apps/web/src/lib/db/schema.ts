@@ -130,6 +130,33 @@ CREATE TABLE IF NOT EXISTS trip_drafts (
   created_at    TEXT NOT NULL
 );
 
+-- COMPOSITION RELIABILITY — every composition attempt, raw, before any parse.
+-- The visible model text (never thinking), the mode, tokens, timing, the wire
+-- schema hash and — after the parse — the parser result and sanitized
+-- validation diagnostics. A completed, paid answer that the normalizer cannot
+-- read is reproducible from this row with zero further model calls. Several
+-- rows per trip: one per explicit attempt.
+CREATE TABLE IF NOT EXISTS composition_attempts (
+  id               TEXT PRIMARY KEY,
+  trip_id          TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  attempt          INTEGER NOT NULL,
+  model            TEXT NOT NULL,
+  prompt_version   TEXT NOT NULL,
+  enforcement      TEXT NOT NULL,
+  schema_sha256    TEXT NOT NULL,
+  stop_reason      TEXT,
+  request_id       TEXT,
+  input_tokens     INTEGER,
+  output_tokens    INTEGER,
+  elapsed_ms       INTEGER,
+  raw_text         TEXT,
+  parse_status     TEXT NOT NULL,
+  parse_json       TEXT,
+  normalized_json  TEXT,
+  draft_linked     INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS hybrid_plans (
   trip_id     TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
   plan_json   TEXT NOT NULL,

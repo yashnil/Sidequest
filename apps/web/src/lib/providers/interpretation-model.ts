@@ -135,6 +135,20 @@ export interface StructuredModel {
      * different function. See `ResearchModel.structured`.
      */
     normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] };
+    /**
+     * COMPOSITION RELIABILITY — the wire/canonical split. `schema` is what the
+     * model is asked to emit; `validationSchema` (loose, typically `z.unknown()`)
+     * is what the transport checks before returning, so the caller's own
+     * normalizer reads the raw object and reports precise paths. `jsonWrapperTag`
+     * names the XML tag the prompt mode asks for; `allowEnforcementFallback:
+     * false` forbids the paid grammar-refusal-then-prompt second request; and
+     * `onResponse` receives the visible text before any parsing. On the
+     * interface for the same reason `schemaEnforcement` is.
+     */
+    validationSchema?: z.ZodType<T>;
+    jsonWrapperTag?: string;
+    allowEnforcementFallback?: boolean;
+    onResponse?: (info: { text: string; stopReason: string | null; requestId: string | null; inputTokens: number; outputTokens: number; elapsedMs: number; enforcement: 'grammar' | 'prompt' }) => void;
   }): Promise<T>;
 }
 

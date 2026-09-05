@@ -20,7 +20,8 @@ import { isCompositionModelConfigured, isFixtureComposer, isGeocoderEnabled, isP
 import { reserveModelCalls } from '../compiler/daily-ceiling';
 import { verificationProviders } from './verification-providers';
 import { getIntent } from '../db/compiler-repository';
-import { getTripDraft, saveTripDraft } from '../db/draft-repository';
+import { getTripDraft, listCompositionAttempts, recordCompositionParse, saveCompositionAttempt, saveTripDraft } from '../db/draft-repository';
+import { randomUUID } from 'node:crypto';
 import { getProfile, getSelections, getTrip, saveItinerary, saveReadiness } from '../db/repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
@@ -28,7 +29,7 @@ import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-reposit
 import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
 import { composerModel } from '../benchmark/baseline/generate';
 import { buildHybridTripRequest } from './hybrid-request';
-import { buildCompositionTask, compositionUntrustedPayload, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
+import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { describeEdge } from '../benchmark/baseline/generate';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -85,9 +86,14 @@ import { saveFxRate } from '@/lib/db/intelligence-repository';
 
 export type GenerationMode = 'full' | 'quick';
 
+/** The one sentence a traveller sees when a draft could not be finished. No schema, no stop reason, no jargon. */
+export const TRAVELLER_COMPOSITION_FAILURE = 'Sidequest could not finish this draft. Your answers are saved — retry when you are ready.';
+
 export interface ProductionPlanResult {
   ok: boolean;
   error?: string;
+  /** DEV/operator diagnostics for a failed composition: precise paths, never shown to a traveller. */
+  diagnostics?: { failureKind: string; issueKind: string | null; detail: string; issues: readonly unknown[]; enforcement: string };
   result?: ReconcileResult;
   draft?: TripDraft;
   timings?: ProductionPlanTimingsMs;
@@ -255,22 +261,58 @@ export async function generateSidequestPlanForTrip(
   const regionlessWeather = region || !candidate ? null : fetchRegionlessWeather({ tripId, trip, envelope, candidate, now });
 
   // --- Composition: the one model call ----------------------------------------
+  /*
+   * COMPOSITION RELIABILITY — the visible answer is persisted the moment it
+   * arrives, before extraction or validation, under an attempt id; the
+   * parser's verdict is recorded on the same row afterwards. A completed,
+   * paid answer the normalizer refuses is reproducible from that row with
+   * no further model call (`composition_attempts`).
+   */
+  const attemptId = randomUUID();
+  const attemptNumber = listCompositionAttempts(tripId).length + 1;
+  const wire = compositionWireDecision();
   const compositionStartedMs = performance.now();
-  const outcome = await generateTripDraft({ model, context });
+  const outcome = await generateTripDraft({
+    model,
+    context,
+    onRawResponse: fixture || options.reuseStoredDraft
+      ? undefined
+      : (raw) => {
+          try {
+            saveCompositionAttempt({ id: attemptId, tripId, attempt: attemptNumber, model: composerModel(), promptVersion: COMPOSITION_PROMPT_VERSION, enforcement: raw.enforcement, schemaSha256: wire.schemaSha256, stopReason: raw.stopReason, requestId: raw.requestId, inputTokens: raw.inputTokens, outputTokens: raw.outputTokens, elapsedMs: raw.elapsedMs, rawText: raw.text, parseStatus: 'pending', now });
+          } catch (error) {
+            console.error('Could not persist the composition attempt', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+          }
+        },
+  });
   const compositionMs = since(compositionStartedMs);
   const modelCalls = model instanceof ResearchModel ? [...model.callLog] : [];
   const emptyTimings = (): ProductionPlanTimingsMs => ({ preparationMs, identityResolutionMs, compositionMs, placeResolutionMs: 0, routingMs: 0, operationalMs: 0, reconciliationMs: 0, verificationMs: 0, intelligenceMs: 0, persistenceMs: 0, totalMs: since(startedMs), deadlineReached: false });
   if (!outcome.ok) {
     /*
-     * A failed composition leaves no draft row, so its diagnostics would
-     * otherwise vanish with the request. Logged with the call record — never
-     * the prompt, never the response — so an operator can read what the
-     * provider said (a schema refusal, a timeout, a malformed answer).
+     * The precise reason goes to the attempt row and the server log (paths,
+     * codes, expected vs received — never the prompt); the traveller gets a
+     * plain sentence and an explicit Retry. Nothing here retries.
      */
-    console.error('Composition failed', { tripId, failureKind: outcome.failureKind, detail: outcome.detail.slice(0, 500), calls: modelCalls });
-    return { ok: false, error: `We could not compose a first draft just now. ${outcome.detail}`, timings: emptyTimings(), modelCalls };
+    const diagnostics = { failureKind: outcome.failureKind, issueKind: outcome.issueKind ?? null, detail: outcome.detail.slice(0, 500), issues: (outcome.issues ?? []).slice(0, 40), enforcement: outcome.enforcement };
+    if (!fixture && !options.reuseStoredDraft) {
+      try {
+        recordCompositionParse({ id: attemptId, parseStatus: outcome.failureKind === 'malformed_output' ? (outcome.issueKind ?? 'no_json') : 'model_failed', parse: diagnostics, draftLinked: false });
+      } catch {
+        /* the log line below still carries it */
+      }
+    }
+    console.error(`Composition failed: ${outcome.failureKind}${outcome.issueKind ? `/${outcome.issueKind}` : ''} — ${outcome.detail.slice(0, 300)}${outcome.issues?.length ? ` | issues: ${JSON.stringify(outcome.issues.slice(0, 10))}` : ''} | calls: ${JSON.stringify(modelCalls.map((call) => ({ ...(call as unknown as Record<string, unknown>), schemaValidationIssues: undefined })))}`);
+    return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, timings: emptyTimings(), modelCalls, diagnostics };
   }
   const draft = outcome.draft;
+  if (!fixture && !options.reuseStoredDraft) {
+    try {
+      recordCompositionParse({ id: attemptId, parseStatus: 'ok', parse: { enforcement: outcome.enforcement, normalizedFields: outcome.normalizedFields }, normalizedFields: outcome.normalizedFields, draftLinked: true });
+    } catch {
+      /* the draft row itself is the record of success */
+    }
+  }
   if (!options.reuseStoredDraft) saveTripDraft({ tripId, draft, modelCall: modelCalls[0] ?? null, now });
   options.onDraftGenerated?.(draft);
 

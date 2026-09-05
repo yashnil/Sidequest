@@ -51,6 +51,8 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    */
   const trip = await ownedTrip(id);
   if (!trip) notFound();
+  // Whether a Discovery Board exists to go back to; without one, recovery is an explicit "Retry the draft".
+  const boardAvailable = trip.basics.regionId !== DYNAMIC_REGION_ID || compiledRegionFor(id) !== null;
 
   /**
    * A stored plan that no longer parses is a real possibility across schema
@@ -98,6 +100,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       return (
         <Recovery
           tripId={id}
+          boardAvailable={boardAvailable}
           title="This plan was built by an earlier version of Sidequest"
           body="We could not recover enough of it to show you, so it needs one rebuild. Every choice you made on the board is kept — head back and press Rebuild."
         />
@@ -107,6 +110,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
     return (
       <Recovery
         tripId={id}
+        boardAvailable={boardAvailable}
         title="That saved plan is no longer readable"
         body="The stored itinerary does not match the current format, so we will not show you something we cannot trust. Rebuilding it from your board takes a moment and keeps all your selections."
       />
@@ -117,8 +121,9 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
     return (
       <Recovery
         tripId={id}
+        boardAvailable={boardAvailable}
         title="No trip built yet"
-        body="You have not built this trip yet. Head back to the board, confirm what you want, and press Build my trip."
+        body={boardAvailable ? 'You have not built this trip yet. Head back to the board, confirm what you want, and press Build my trip.' : 'Your answers are saved. Retrying starts one fresh draft from them.'}
       />
     );
   }
@@ -153,7 +158,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       {...model}
       itinerary={model.appliedItinerary}
       destinationName={trip.basics.destinationInput}
-      boardAvailable={trip.basics.regionId !== DYNAMIC_REGION_ID || compiledRegionFor(id) !== null}
+      boardAvailable={boardAvailable}
       lockedPlaceIds={getItineraryLocks(id).map((lock) => lock.placeId)}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
@@ -168,14 +173,15 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
   );
 }
 
-function Recovery({ tripId, title, body }: { tripId: string; title: string; body: string }) {
+function Recovery({ tripId, title, body, boardAvailable }: { tripId: string; title: string; body: string; boardAvailable: boolean }) {
+  // COMPOSITION RELIABILITY — a trip with no board (the normal interview path) recovers through an explicit Retry, never on load.
   return (
     <div className="mx-auto max-w-xl px-5 py-20 sm:px-8">
       <Panel className="p-8">
         <h1 className="font-display text-2xl text-ink">{title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">{body}</p>
-        <Link href={`/trips/${tripId}/discover`} className={`${buttonClass('primary')} mt-6`}>
-          Back to the Discovery Board
+        <Link href={boardAvailable ? `/trips/${tripId}/discover` : `/trips/${tripId}/questionnaire`} className={`${buttonClass('primary')} mt-6`} data-testid="recovery-primary">
+          {boardAvailable ? 'Back to the Discovery Board' : 'Retry the draft'}
         </Link>
       </Panel>
     </div>

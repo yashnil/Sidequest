@@ -1,0 +1,48 @@
+Here is the draft you asked for, wrapped as requested.
+
+<trip_draft_json>
+```json
+{
+  "archetype": "Road-Trip",
+  "purpose": "A slow west-coast loop for two walkers who want cliffs, pubs and one big night out — see https://example.com/ignored",
+  "routeRationale": "Clockwise from the airport so the longest drive comes first, while energy is high.",
+  "assumptions": ["You collect the hire car on arrival"],
+  "tradeoffs": ["The far north is skipped to keep drives under three hours"],
+  "stays": [
+    { "name": "Harbour Town", "locality": "West Coast", "nights": "2", "why": "Compact base with the cliffs 40 minutes away", "lodgingArea": "old harbour", "lodgingStyle": null, "confidence": 0.8 },
+    { "name": "Lake Village", "locality": null, "nights": 1, "why": "Halfway point on the loop" }
+  ],
+  "days": [
+    { "day": "1", "stay": "Harbour Town", "theme": "Arrive and settle", "intensity": "Light", "relocation": "no",
+      "activities": [
+        { "name": "Old Harbour walk", "locality": "Harbour Town", "category": "Neighbourhood", "role": "Must-do", "minutes": "90", "transport": "on foot", "why": "Stretch legs after the flight" },
+        { "name": "Old Harbour walk", "locality": "Harbour Town", "category": "neighbourhood", "role": "core", "minutes": 90, "transport": "walk", "why": "duplicate" }
+      ],
+      "breakfast": null, "lunch": "Chowder on the quay", "dinner": "Trad session pub", "note": null, "whyItFits": "A soft start you asked for" },
+    { "day": 2, "stay": "harbour town", "theme": "The cliffs", "intensity": "moderate", "relocation": false,
+      "activities": [
+        { "name": "Great Sea Cliffs", "locality": "West Coast", "category": "Cliffs", "role": "core", "minutes": 150, "transport": "Self-drive", "why": "The defining walk of this coast" },
+        { "name": "Coastal loop drive", "locality": null, "category": "scenic drive", "role": "Secondary", "minutes": 900, "transport": "car", "why": "Return the long way" }
+      ],
+      "breakfast": "Bakery near the hotel", "lunch": "Picnic at the cliffs", "dinner": "Seafood back in town", "note": "Wind can close the cliff path", "whyItFits": "Big walk, no rush" },
+    { "day": 3, "stay": "Lake Village", "theme": "Move inland", "intensity": "moderate", "relocation": true,
+      "activities": [
+        { "name": "Abbey ruins", "locality": "Lake Village", "category": "ruins", "role": "core", "minutes": 75, "transport": null, "why": "Quiet and photogenic" }
+      ],
+      "breakfast": null, "lunch": null, "dinner": "Lakeside inn", "note": null, "whyItFits": null },
+    { "day": 4, "stay": "Lake Village", "theme": "Home", "intensity": "light", "relocation": false,
+      "activities": [],
+      "breakfast": "Early at the inn", "lunch": null, "dinner": null, "note": "Airport 90 minutes away", "whyItFits": "Nothing after the drive" }
+  ],
+  "omissions": [{ "name": "Capital city museums", "reason": "You asked for coast, not city" }],
+  "unresolved": [],
+  "bookingPriorities": ["Hire car", "Cliff-path parking"],
+  "foodStrategy": ["Pubs most nights, one seafood splurge"],
+  "transportSummary": "Hire car for the whole loop.",
+  "transportNotes": ["Narrow roads: allow more time than the map says"],
+  "beforeYouGo": ["Check the cliff-path status the morning of day 2"]
+}
+```
+</trip_draft_json>
+
+Let me know if you would like the loop reversed.

@@ -107,6 +107,8 @@ export function InterviewWizard({
   });
   const [position, setPosition] = useState<string>(initialAnswers.interview?.position ?? UNDERSTANDING_POSITION);
   const [error, setError] = useState<string | null>(null);
+  /** COMPOSITION RELIABILITY — a build that failed keeps the answers and waits for an explicit Retry; nothing retries on its own. */
+  const [buildFailure, setBuildFailure] = useState<{ answers: QuestionnaireAnswers; message: string } | null>(null);
   const [call, setCall] = useState<{ id: string; label: string; value: string; decision: SmartDefault } | null>(null);
   const [pending, startTransition] = useTransition();
   const [panelOpen, setPanelOpen] = useState(position === UNDERSTANDING_POSITION);
@@ -199,22 +201,30 @@ export function InterviewWizard({
     go(firstOpen ?? REVIEW_POSITION, next);
   }
 
-  function planWithDefaults() {
-    const { answers: next } = applySmartDefaults({ answers, ctx: context, now: new Date(), ...(region ? { region } : {}) });
+  /** One Build = one composition. A failure shows the retry panel; the traveller decides whether to spend another call. */
+  function build(next: QuestionnaireAnswers) {
     setError(null);
+    setBuildFailure(null);
     startTransition(async () => {
       const result = await completeAndBuildAction(tripId, withPosition(next, REVIEW_POSITION));
-      if (!result.ok) setError(result.error ?? 'We could not build your trip just now.');
+      if (!result.ok) setBuildFailure({ answers: next, message: result.error ?? 'Sidequest could not finish this draft. Your answers are saved.' });
     });
   }
 
+  function planWithDefaults() {
+    const { answers: next } = applySmartDefaults({ answers, ctx: context, now: new Date(), ...(region ? { region } : {}) });
+    build(next);
+  }
+
   function finish(destination: CompletionDestination) {
+    if (destination === 'build') {
+      build(answers);
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const result =
-        destination === 'build'
-          ? await completeAndBuildAction(tripId, withPosition(answers, REVIEW_POSITION))
-          : destination === 'research'
+        destination === 'research'
             ? await exploreExperiencesAction(tripId, withPosition(answers, REVIEW_POSITION))
             : await completeQuestionnaireAction(tripId, withPosition(answers, REVIEW_POSITION), destination);
       if (!result.ok) setError(result.error ?? 'We could not save your profile.');
@@ -247,7 +257,7 @@ export function InterviewWizard({
   return (
     <div className="mx-auto max-w-7xl px-5 pb-16 sm:px-8" data-testid="interview" data-position={position} data-mode={mode}>
       <div className="flex flex-wrap items-center justify-between gap-3 pt-6">
-        <p className="label text-ink-faint">Before the research</p>
+        <p className="label text-ink-faint">Your trip preferences</p>
         {fixtureMode ? (
           <span className="inline-flex items-center gap-2 rounded-md border border-dashed border-amber bg-amber-soft px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
             Fixture planning data — not the live model
@@ -323,6 +333,29 @@ export function InterviewWizard({
         </div>
       ) : null}
 
+      {buildFailure ? (
+        <section className="mt-8 rounded-xl border border-line bg-surface p-6" data-testid="build-failure" role="alert" aria-live="polite">
+          <h2 className="font-display text-xl text-ink">Sidequest couldn&rsquo;t finish this draft.</h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">Your answers are saved. Retrying starts one fresh draft from them.</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button type="button" className={buttonClass('primary')} onClick={() => build(buildFailure.answers)} disabled={pending} data-testid="retry-draft">
+              {pending ? 'Drafting…' : 'Retry draft'}
+            </button>
+            <button
+              type="button"
+              className={buttonClass('secondary')}
+              onClick={() => {
+                setBuildFailure(null);
+                go(REVIEW_POSITION, buildFailure.answers);
+              }}
+              disabled={pending}
+              data-testid="back-to-preferences"
+            >
+              Back to preferences
+            </button>
+          </div>
+        </section>
+      ) : null}
       {error ? <ErrorNote>{error}</ErrorNote> : null}
     </div>
   );
@@ -461,7 +494,7 @@ function QuestionScreen({
 
   return (
     <div className="enter" data-testid={`interview-question-${def.id}`} data-module={def.module} data-tier={question.tier}>
-      <StagePath current={stage} note={`${Math.min(index + 1, Math.max(1, total))} of about ${Math.max(1, total)}`} />
+      <StagePath current={stage} note={`Question ${Math.min(index + 1, Math.max(1, total))}`} />
 
       {call && call.id !== def.id ? (
         <div className="slide-down mt-5 flex flex-wrap items-start gap-3 rounded-[var(--radius-card)] border border-accent/40 bg-accent-soft p-4" data-testid="interview-call">

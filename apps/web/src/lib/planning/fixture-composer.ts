@@ -193,6 +193,9 @@ export class FixtureComposer implements StructuredModel {
     this.usage.calls += 1;
     const draft = fixtureDraftFor(this.context, this.hints);
     const normalized = input.normalize ? input.normalize(draft).value : draft;
-    return input.schema.parse(normalized);
+    // The seam now receives the wire schema (what the model is asked to emit) with a loose validation
+    // schema; the fixture answers in canonical shape, which `normalizeTripDraftWire` accepts as an alias.
+    void input.schema;
+    return tripDraftSchema.parse(normalized) as unknown as T;
   }
 }
