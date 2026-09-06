@@ -85,16 +85,16 @@ test('dates can be a month or a season, and arrival can be a band', async ({ pag
   await arrival.selectOption({ label: 'Not booked yet' });
 });
 
-test('the live intent rail reflects what has been answered so far', async ({ page }) => {
+test('the summary line reflects what has been answered so far', async ({ page }) => {
+  // EXPERIENCE V2 — the stub card is gone; one line above the action carries the facts so far.
   await page.goto('/trips/new');
-  const rail = page.getByRole('complementary', { name: 'What we have so far' });
-  await expect(rail).toBeVisible();
-
   await page.getByLabel('Destination').fill('Harbour City');
-  await expect(rail).toContainText('Harbour City');
+  const summary = page.getByTestId('composer-summary');
+  await expect(summary).toBeVisible();
+  await expect(summary).toContainText('Harbour City');
 
   await page.getByRole('button', { name: 'One more adult' }).click();
-  await expect(rail).toContainText('3 adults');
+  await expect(summary).toContainText('3 adults');
 });
 
 test('the composer survives a refresh by starting clean rather than half-filled', async ({

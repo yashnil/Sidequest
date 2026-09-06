@@ -54,7 +54,7 @@ import {
   TransportChoice,
   WritingSpace,
 } from './interview/patterns';
-import { SketchFigure, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
+import { mapLayersFor, SketchFigure, TripProfileList, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
 import { DestinationMap, type DestinationGeometry } from './interview/DestinationMap';
 import { GenerationOverlay } from './interview/GenerationOverlay';
 import type { MapBasemap } from './map-adapter';
@@ -349,7 +349,7 @@ export function InterviewWizard({
         </div>
       ) : null}
 
-      {building && !buildFailure ? <GenerationOverlay destination={context.destination.name} /> : null}
+      {building && !buildFailure ? <GenerationOverlay destination={context.destination.name} geometry={geometry} tiles={tiles} /> : null}
       {buildFailure ? (
         <section className="mt-8 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-6" data-testid="build-failure" role="alert" aria-live="polite">
           <h2 className="font-display text-xl text-ink">Sidequest couldn&rsquo;t finish this draft.</h2>
@@ -462,8 +462,8 @@ function UnderstandingScreen({
         ) : null}
       </div>
       <div className="enter-slow min-w-0">
-        {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} /> : <SketchFigure sketch={sketch} />}
-        <p className="mt-2 text-xs text-ink-faint">{geometry ? 'The map frames your reach as you answer.' : 'The sketch redraws as you answer.'}</p>
+        {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} {...mapLayersFor(sketch, answers)} /> : <SketchFigure sketch={sketch} />}
+        <p className="mt-2 text-xs text-ink-faint">{geometry ? 'The map takes shape as you answer.' : 'The sketch redraws as you answer.'}</p>
       </div>
     </section>
   );
@@ -535,14 +535,14 @@ function QuestionScreen({
         </div>
       ) : null}
 
-      <p className="label mt-7 text-ink-faint">
+      <p className="mt-6 text-xs text-ink-faint">
         {question.tier === 'destination' ? 'Because of where you are going' : INTERVIEW_MODULE_LABELS[def.module]}
       </p>
-      {/* The question is the page's one level-one heading: every state of the interview has exactly one. */}
-      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
+      {/* The question is the page's one level-one heading: every state of the interview has exactly one. EXPERIENCE V2 — a title, not a poster. */}
+      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[28ch] text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
         {def.prompt(context, answers)}
       </h1>
-      <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-muted">{def.why(context)}</p>
+      <p className="mt-2 max-w-[62ch] type-body text-ink-muted">{def.why(context)}</p>
       {question.tier === 'destination' ? (
         <p className="sr-only" data-testid="interview-branch-reason">
           Asked {question.reason}.
@@ -558,7 +558,7 @@ function QuestionScreen({
         </div>
       ) : null}
 
-      <div className="mt-7">
+      <div className="mt-6">
         <QuestionControl
           question={def}
           options={options}
@@ -752,44 +752,34 @@ function ReviewScreen({
   return (
     <div className="enter" data-testid="interview-review">
       <StagePath current="ready" note={`${analytics.answered} answered · ${analytics.decided} decided by Sidequest`} />
-      <p className="label mt-7 text-accent">Your trip, so far</p>
-      <h1 ref={headingRef} tabIndex={-1} className="display-xl mt-2 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
-        {context.destination.name}, the way you travel
+      {/* EXPERIENCE V2 — the review is a reveal: the place, one sentence, a handful of statements, the map. */}
+      <p className="mt-6 text-xs text-ink-faint">Sidequest understands</p>
+      <h1 ref={headingRef} tabIndex={-1} className="display-xl mt-1.5 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
+        {context.destination.name}, your way
       </h1>
       {profile ? (
-        <p className="mt-3 max-w-2xl font-display text-xl leading-snug text-ink-muted" data-testid="interview-sentence">
+        <p className="mt-3 max-w-[60ch] type-body text-ink-muted" data-testid="interview-sentence">
           {sentenceFor(context, answers, sketch)}
         </p>
       ) : null}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-        <ul className="space-y-3" aria-label="How you travel, in short" data-testid="review-synthesis">
+        <ul className="divide-y divide-rule border-y border-rule" aria-label="How you travel, in short" data-testid="review-synthesis">
           {synthesis.map((line, i) => (
-            <li key={line.text} className="enter flex items-start gap-3" style={{ animationDelay: `${i * 40}ms` }}>
-              <span aria-hidden="true" className="mt-3 h-2 w-2 shrink-0 rounded-full bg-accent" />
-              <span className="font-display text-2xl leading-snug text-ink sm:text-3xl">
+            <li key={line.text} className="rise flex items-baseline gap-3 py-3" style={{ transitionDelay: `${i * 40}ms` }}>
+              <span aria-hidden="true" className={cx('mt-2 h-2 w-2 shrink-0 self-start rounded-full', line.assumed ? 'border border-ink-faint bg-paper' : 'bg-accent')} />
+              <span className="font-display text-2xl leading-snug text-ink">
                 {line.text}
-                {line.assumed ? <span className="ml-2 align-middle font-sans text-[10px] uppercase tracking-[0.14em] text-ink-faint">Sidequest's read</span> : null}
+                {line.assumed ? <span className="sr-only"> (Sidequest’s read)</span> : null}
               </span>
             </li>
           ))}
         </ul>
         <div>
-          {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} /> : <SketchFigure sketch={sketch} />}
-          <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <dt className="label text-ink-faint">Shape</dt>
-              <dd className="mt-1 text-ink">{sketch.shapeLabel}</dd>
-            </div>
-            <div>
-              <dt className="label text-ink-faint">Around</dt>
-              <dd className="mt-1 text-ink">{sketch.transport.label}</dd>
-            </div>
-            <div>
-              <dt className="label text-ink-faint">Range</dt>
-              <dd className="mt-1 text-ink">{sketch.rangeLabel}</dd>
-            </div>
-          </dl>
+          {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} {...mapLayersFor(sketch, answers)} /> : <SketchFigure sketch={sketch} />}
+          <div className="mt-3">
+            <TripProfileList sketch={sketch} />
+          </div>
         </div>
       </div>
 
@@ -827,31 +817,32 @@ function ReviewScreen({
         </div>
       ) : null}
 
-      <div className="mt-12 grid gap-8 lg:grid-cols-3">
-        <LedgerColumn title="You told us" blurb="Your own answers. These bind the plan." entries={ledger.told} testId="review-told" onJump={onJump} empty="Nothing answered yet — everything is Sidequest's read." />
-        <LedgerColumn title="Sidequest's read" blurb="Defaults we chose, with the reason. Change any of them." entries={ledger.assumed} testId="review-assumed" onJump={onJump} empty="Nothing assumed — you answered everything." assumed />
-        <section className="min-w-0" data-testid="review-hard">
+      <section className="mt-10 rule-top pt-5" data-testid="review-hard">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h3 className="flex items-center gap-2 font-display text-xl text-ink">
             <Glyph id="lock" className="h-4 w-4 text-clay" />
             Hard rules
           </h3>
-          <p className="mt-1 text-sm text-ink-muted">Filters the plan is reshaped around, never warned about.</p>
           {ledger.hard.length === 0 ? (
-            <p className="mt-4 text-sm text-ink">None — everything here is a preference.</p>
+            <p className="text-sm text-ink-muted">None — everything here is a preference.</p>
           ) : (
-            <ul className="mt-4 space-y-2 text-sm text-ink">
+            <ul className="flex flex-wrap gap-2 text-sm text-ink">
               {ledger.hard.map((entry) => (
-                <li key={entry.label} className="rounded-[var(--radius-card)] border-l-4 border-clay bg-clay-soft px-3 py-2">
+                <li key={entry.label} className="rounded-full border border-clay/40 bg-clay-soft px-3 py-1" title={entry.detail}>
                   {entry.label}
-                  {entry.detail ? <span className="block text-xs text-ink-muted">{entry.detail}</span> : null}
                 </li>
               ))}
             </ul>
           )}
-          <button type="button" onClick={() => onJump('hard_constraints')} className={cx('mt-3 text-sm text-accent underline underline-offset-4', FOCUS_RING)}>
+          <button type="button" onClick={() => onJump('hard_constraints')} className={cx('text-sm text-accent underline underline-offset-4', FOCUS_RING)}>
             Change the hard rules
           </button>
-        </section>
+        </div>
+      </section>
+
+      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+        <LedgerColumn title="You told us" blurb="Your own answers. These bind the plan." entries={ledger.told} testId="review-told" onJump={onJump} empty="Nothing answered yet — everything is Sidequest's read." />
+        <LedgerColumn title="Sidequest's read" blurb="Defaults we chose, with the reason. Change any of them." entries={ledger.assumed} testId="review-assumed" onJump={onJump} empty="Nothing assumed — you answered everything." assumed />
       </div>
 
       {unresolved.length > 0 ? (
@@ -946,8 +937,10 @@ function synthesisLines(answers: QuestionnaireAnswers, sketch: ReturnType<typeof
   if (!has('Crowds') && !has('Quiet') && !has('Famous')) {
     lines.push({ text: answers.iconicCrowdStrategy === 'see_it_anyway' ? 'Crowds are fine' : answers.iconicCrowdStrategy === 'quieter_alternative' ? 'Quiet over famous' : 'Famous places at quiet hours', assumed: answers.provenance.iconic_crowds?.source !== 'explicit' });
   }
-  lines.push({ text: `${sketch.transport.label}, ${sketch.rangeLabel.toLowerCase()}`, assumed: sketch.transport.assumed && sketch.rangeAssumed });
-  lines.push({ text: sketch.shapeLabel, assumed: sketch.shapeAssumed });
+  // Only what is settled is synthesised; an open question is not a line about the trip.
+  const movement = [!sketch.transport.open ? sketch.transport.label : null, !sketch.rangeOpen ? sketch.rangeLabel.toLowerCase() : null].filter(Boolean);
+  if (movement.length > 0) lines.push({ text: movement.join(', '), assumed: sketch.transport.assumed && (sketch.rangeOpen || sketch.rangeAssumed) });
+  if (!sketch.shapeOpen) lines.push({ text: sketch.shapeLabel, assumed: sketch.shapeAssumed });
   if (answers.provenance.budget?.source === 'explicit') {
     lines.push({ text: answers.budgetStyle === 'budget' ? 'Keeping it cheap' : answers.budgetStyle === 'luxury' ? 'Cost is not a filter' : answers.budgetStyle === 'premium' ? 'Paid experiences welcome' : 'Spend where it matters', assumed: false });
   }
@@ -957,7 +950,8 @@ function synthesisLines(answers: QuestionnaireAnswers, sketch: ReturnType<typeof
 function sentenceFor(context: InterviewContext, answers: QuestionnaireAnswers, sketch: ReturnType<typeof sketchFor>): string {
   const lead = sketch.lines[0]?.text.toLowerCase() ?? 'an open-ended trip';
   const pace = answers.pace === 'slow' ? 'slow' : answers.pace === 'fast' ? 'full' : 'balanced';
-  return `${capitalize(lead)}. ${capitalize(pace)} days, ${sketch.transport.label.toLowerCase()}, ${sketch.shapeLabel.toLowerCase()} — over ${context.destination.tripDays} ${context.destination.tripDays === 1 ? 'day' : 'days'} in ${context.destination.proseName}.`;
+  const settledParts = [!sketch.transport.open ? sketch.transport.label.toLowerCase() : 'how you get around still open', !sketch.shapeOpen ? sketch.shapeLabel.toLowerCase() : null].filter(Boolean).join(', ');
+  return `${capitalize(lead)}. ${capitalize(pace)} days, ${settledParts} — over ${context.destination.tripDays} ${context.destination.tripDays === 1 ? 'day' : 'days'} in ${context.destination.proseName}.`;
 }
 
 function capitalize(value: string): string {

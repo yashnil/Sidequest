@@ -45,6 +45,9 @@ export interface DestinationSuggestionView {
   context: string;
   highlight: [number, number][];
   matchedText: string;
+  /** EXPERIENCE V2 — the place's centre and published extent, for the canvas that frames it. */
+  center?: { lat: number; lng: number };
+  bounds?: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } } | null;
 }
 
 type State =

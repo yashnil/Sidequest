@@ -49,25 +49,21 @@ export function TripContextBar({ context }: { context: TripContext }) {
   ].filter((part): part is string => Boolean(part));
 
   return (
+    /*
+     * EXPERIENCE V2 — the strip reads as part of the shell: same ground as the
+     * header, sticky beneath it, the destination as the one strong word and the
+     * dates beside it. Orientation without a second headline.
+     */
     <div
-      className="flex min-w-0 items-center gap-2.5 border-b border-rule bg-paper-sunk/60 px-5 py-2 text-sm sm:px-8"
+      className="sticky top-[var(--chrome-height)] z-20 flex min-w-0 items-center gap-3 border-b border-rule bg-paper/95 px-5 py-1.5 text-sm backdrop-blur-[2px] sm:px-6"
       data-testid="trip-context"
     >
-      <span
-        className={cx('hidden shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] sm:inline', STAGE_TONE[context.stage] ?? 'text-ink-faint')}
-      >
-        {context.stage}
-      </span>
-      <span className="hidden h-3.5 w-px shrink-0 bg-rule sm:block" aria-hidden="true" />
-      <Link
-        href={`/trips/${context.tripId}/plan`}
-        className="min-w-0 truncate font-medium text-ink hover:text-pine"
-      >
+      <Link href={`/trips/${context.tripId}/plan`} className="min-w-0 truncate font-display text-base text-ink hover:text-pine">
         {context.destination}
       </Link>
-      {parts.length > 0 ? (
-        <span className="hidden shrink-0 text-ink-faint md:inline">{parts.join(' · ')}</span>
-      ) : null}
+      {parts.length > 0 ? <span className="hidden shrink-0 text-ink-faint sm:inline">{parts.join(' · ')}</span> : null}
+      <span className="flex-1" />
+      <span className={cx('shrink-0 text-[11px] font-medium uppercase tracking-[0.14em]', STAGE_TONE[context.stage] ?? 'text-ink-faint')}>{context.stage}</span>
     </div>
   );
 }

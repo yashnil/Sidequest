@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { INTEREST_LABELS, type Interest, type InterestLevel, type InterviewContext, type QuestionnaireAnswers } from '@sidequest/core';
+import { INTEREST_LABELS, questionById, type Interest, type InterestLevel, type InterviewContext, type QuestionnaireAnswers } from '@sidequest/core';
 import { cx, FOCUS_RING } from '../ui';
 import { Glyph, INTEREST_HUE, type GlyphId } from './glyphs';
 import { DestinationMap, type DestinationGeometry } from './DestinationMap';
@@ -25,10 +25,14 @@ export interface Sketch {
   bases: 1 | 2 | 3;
   shapeLabel: string;
   shapeAssumed: boolean;
-  transport: { glyph: GlyphId; label: string; assumed: boolean };
-  rangeKm: number;
+  /** True when nothing — answer, default or a confident destination read — has settled the shape yet. */
+  shapeOpen: boolean;
+  transport: { glyph: GlyphId; label: string; assumed: boolean; open: boolean };
+  /** A range ring is drawn only for a real constraint: an answer, or a decided default. Null draws no ring. */
+  rangeKm: number | null;
   rangeLabel: string;
   rangeAssumed: boolean;
+  rangeOpen: boolean;
   lines: { text: string; assumed: boolean }[];
   hue: number;
   leadInterest: Interest | null;
@@ -48,6 +52,32 @@ function explicit(answers: QuestionnaireAnswers, ...ids: string[]): boolean {
   return ids.some((id) => answers.provenance[id]?.source === 'explicit');
 }
 
+/** Answered or decided (smart default, destination prior, carried) — anything with provenance. */
+function settled(answers: QuestionnaireAnswers, ...ids: string[]): boolean {
+  return ids.some((id) => answers.provenance[id] !== undefined || answers.interview?.decided.includes(id));
+}
+
+const OPEN = 'Not decided yet';
+
+const TRANSPORT_BY_VALUE: Record<string, { glyph: GlyphId; label: string }> = {
+  rent_car: { glyph: 'car', label: 'A car' },
+  self_drive: { glyph: 'car', label: 'Self-drive, transfers where there is no road' },
+  mixed: { glyph: 'car', label: 'A car where it helps, local transport in town' },
+  guided: { glyph: 'guide', label: 'Guided, with transfers' },
+  taxis: { glyph: 'taxi', label: 'Taxis and rideshare' },
+  boats_transfers: { glyph: 'boat', label: 'Boats between islands' },
+  no_car: { glyph: 'transit', label: 'No car: shuttles, taxis and tours' },
+  transit_walk: { glyph: 'transit', label: 'On foot and by transit' },
+};
+
+const TRANSPORT_BY_MOVEMENT: Record<string, { glyph: GlyphId; label: string }> = {
+  car: TRANSPORT_BY_VALUE.rent_car!,
+  transit_walk: TRANSPORT_BY_VALUE.transit_walk!,
+  guided: TRANSPORT_BY_VALUE.guided!,
+  boat: TRANSPORT_BY_VALUE.boats_transfers!,
+  mixed: TRANSPORT_BY_VALUE.mixed!,
+};
+
 export function sketchFor(ctx: InterviewContext, answers: QuestionnaireAnswers): Sketch {
   const d = ctx.destination;
   const traits = new Set(d.traits);
@@ -57,29 +87,65 @@ export function sketchFor(ctx: InterviewContext, answers: QuestionnaireAnswers):
   const leadInterest = chosen[0]?.[0] ?? null;
 
   // --- shape ---------------------------------------------------------------
-  let bases: Sketch['bases'] = traits.has('broad_geography') ? 3 : traits.has('multi_base_likely') ? 2 : 1;
-  const tolerance = answers.baseMoveTolerance;
-  if (tolerance === 'stay_put') bases = 1;
-  else if (tolerance === 'move_once') bases = 2;
-  else if (tolerance === 'move_freely') bases = 3;
-  if (answers.scopeStrategy === 'depth' && bases > 2) bases = 2;
-  if (answers.scopeStrategy === 'breadth') bases = 3;
+  // Three sources, in order of authority: what was answered or decided, a confident
+  // destination read, and — for a trip of three days or fewer — the one base any
+  // short trip keeps. Anything else is open, and says so.
+  const assumption = d.assumption;
+  const confident = assumption?.confidence === 'high';
+  let bases: Sketch['bases'] = 1;
+  let shapeOpen = false;
+  const shapeSettled = settled(answers, 'base_moves', 'coverage_strategy');
+  if (shapeSettled) {
+    bases = traits.has('broad_geography') ? 3 : traits.has('multi_base_likely') ? 2 : 1;
+    const tolerance = answers.baseMoveTolerance;
+    if (tolerance === 'stay_put') bases = 1;
+    else if (tolerance === 'move_once') bases = 2;
+    else if (tolerance === 'move_freely') bases = 3;
+    if (answers.scopeStrategy === 'depth' && bases > 2) bases = 2;
+    if (answers.scopeStrategy === 'breadth') bases = 3;
+  } else if (assumption?.basesConfidence === 'high' && assumption.bases !== 'undecided') {
+    bases = assumption.bases === 'many' ? 3 : assumption.bases === 'few' ? 2 : 1;
+  } else if (ctx.traveller.tripDays <= 3) {
+    bases = 1;
+  } else {
+    shapeOpen = true;
+  }
   if (ctx.traveller.tripDays <= 3) bases = 1;
-  const shapeLabel = bases === 1 ? (traits.has('dense_urban') ? 'One base, the city on foot' : 'One base, days out from it') : bases === 2 ? 'Two bases, one move' : 'A moving route';
-  const shapeAssumed = !explicit(answers, 'base_moves', 'coverage_strategy');
+  const shapeLabel = shapeOpen ? OPEN : bases === 1 ? (traits.has('dense_urban') ? 'One base, the city on foot' : 'One base, days out from it') : bases === 2 ? 'Two bases, one move' : 'A moving route';
+  const shapeAssumed = !shapeOpen && !explicit(answers, 'base_moves', 'coverage_strategy');
 
   // --- transport -------------------------------------------------------------
+  // The answer when there is one; Sidequest's read when the evidence is strong; otherwise open.
   let transport: Sketch['transport'];
-  if (answers.willDrive) transport = { glyph: 'car', label: 'A car', assumed: !explicit(answers, 'transport_mode') };
-  else if (answers.guideWillingness === 'prefer') transport = { glyph: 'guide', label: 'Guided, with transfers', assumed: !explicit(answers, 'transport_mode') };
-  else if (traits.has('archipelago') && answers.boatsAndFerries === 'fine') transport = { glyph: 'boat', label: 'Boats between islands', assumed: !explicit(answers, 'transport_mode') };
-  else if (answers.transportPriority === 'least_stressful' && answers.privateTransfers === 'fine') transport = { glyph: 'taxi', label: 'Taxis and rideshare', assumed: !explicit(answers, 'transport_mode') };
-  else transport = { glyph: 'transit', label: 'On foot and by transit', assumed: !explicit(answers, 'transport_mode') };
+  if (settled(answers, 'transport_mode')) {
+    const value = String(questionById(ctx, answers, 'transport_mode')?.read(answers) ?? 'transit_walk');
+    const style = TRANSPORT_BY_VALUE[value] ?? TRANSPORT_BY_VALUE.transit_walk!;
+    transport = { ...style, assumed: !explicit(answers, 'transport_mode'), open: false };
+  } else if (confident && assumption && assumption.movement !== 'undecided') {
+    transport = { ...TRANSPORT_BY_MOVEMENT[assumption.movement]!, assumed: true, open: false };
+  } else {
+    transport = { glyph: 'compass', label: OPEN, assumed: false, open: true };
+  }
 
   // --- range --------------------------------------------------------------------
-  const rangeKm = traits.has('dense_urban') && answers.dayTripAppetite === 'stay_in_city' ? 8 : RANGE_KM[answers.regionalExpansion];
-  const rangeLabel = rangeKm <= 8 ? `${d.name} itself` : rangeKm <= 25 ? 'About half an hour out' : rangeKm <= 50 ? 'About an hour out' : rangeKm <= 100 ? 'Up to two hours out' : `The best of ${d.proseName}`;
-  const rangeAssumed = !explicit(answers, 'scenic_reach', 'day_trips');
+  // A city's reach is a question about day trips, not a driving radius; a region's is
+  // the scenic reach. Neither is drawn until it has been answered or decided.
+  let rangeKm: number | null = null;
+  let rangeLabel = OPEN;
+  let rangeOpen = true;
+  if (traits.has('dense_urban')) {
+    if (settled(answers, 'day_trips')) {
+      const appetite = answers.dayTripAppetite;
+      rangeKm = appetite === 'stay_in_city' ? 8 : appetite === 'several' ? 100 : 50;
+      rangeLabel = appetite === 'stay_in_city' ? 'Inside the city' : appetite === 'several' ? 'Day trips out of the city' : 'One day out of the city';
+      rangeOpen = false;
+    }
+  } else if (settled(answers, 'scenic_reach', 'day_trips')) {
+    rangeKm = RANGE_KM[answers.regionalExpansion];
+    rangeLabel = rangeKm <= 8 ? `${d.name} itself` : rangeKm <= 25 ? 'About half an hour out' : rangeKm <= 50 ? 'About an hour out' : rangeKm <= 100 ? 'Up to two hours out' : `The best of ${d.proseName}`;
+    rangeOpen = false;
+  }
+  const rangeAssumed = !rangeOpen && !explicit(answers, 'scenic_reach', 'day_trips');
 
   // --- personality lines ----------------------------------------------------------
   const lines: Sketch['lines'] = [];
@@ -106,10 +172,12 @@ export function sketchFor(ctx: InterviewContext, answers: QuestionnaireAnswers):
     bases,
     shapeLabel,
     shapeAssumed,
+    shapeOpen,
     transport,
     rangeKm,
     rangeLabel,
     rangeAssumed,
+    rangeOpen,
     lines: lines.slice(0, 5),
     hue: leadInterest ? INTEREST_HUE[leadInterest] : traits.has('dense_urban') ? 228 : traits.has('beach') || traits.has('archipelago') ? 199 : 150,
     leadInterest,
@@ -122,7 +190,7 @@ function capitalize(value: string): string {
 
 /** The figure: base, range ring, extra bases and their moves. Rings animate on change. */
 export function SketchFigure({ sketch, className }: { sketch: Sketch; className?: string }) {
-  const r = 12 + Math.min(88, Math.sqrt(sketch.rangeKm) * 6.4);
+  const r = sketch.rangeKm === null ? 34 : 12 + Math.min(88, Math.sqrt(sketch.rangeKm) * 6.4);
   const second = sketch.bases >= 2;
   const third = sketch.bases >= 3;
   return (
@@ -149,7 +217,7 @@ export function SketchFigure({ sketch, className }: { sketch: Sketch; className?
           </text>
         </g>
         <text x={12} y={208} fontSize={7.5} fill="var(--color-ink-muted)" letterSpacing={1.2}>
-          SKETCH · NOT TO SCALE · {sketch.rangeKm} KM RING
+          SKETCH · NOT TO SCALE{sketch.rangeKm === null ? ' · RANGE NOT DECIDED' : ` · ${sketch.rangeKm} KM RING`}
         </text>
       </svg>
       <div className="absolute top-3 left-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-rule bg-paper-raised text-ink">
@@ -159,61 +227,98 @@ export function SketchFigure({ sketch, className }: { sketch: Sketch; className?
   );
 }
 
-function Assumed({ on }: { on: boolean }) {
-  return on ? <span className="ml-1.5 align-middle text-[10px] uppercase tracking-[0.14em] text-ink-faint">assumed</span> : null;
+
+/**
+ * EXPERIENCE V2 — THE LIVE TRIP PROFILE.
+ *
+ * Not a ledger of every default: the strongest current decisions, each marked
+ * as the traveller's own (filled mark) or Sidequest's read (hollow mark), and
+ * open questions named as open. Above it, the map that reacts to those
+ * decisions. The testids the browser battery reads (`sketch-shape`,
+ * `sketch-transport`, `sketch-range`) stay on the same facts.
+ */
+function profileRows(sketch: Sketch): { key: string; label: string; value: string; assumed: boolean; open: boolean; testId?: string }[] {
+  const rows: { key: string; label: string; value: string; assumed: boolean; open: boolean; testId?: string }[] = [];
+  const lead = sketch.lines[0];
+  if (lead) rows.push({ key: 'lead', label: 'Leads with', value: lead.text, assumed: lead.assumed, open: false });
+  rows.push({ key: 'transport', label: 'Getting around', value: sketch.transport.label, assumed: sketch.transport.assumed, open: sketch.transport.open, testId: 'sketch-transport' });
+  rows.push({ key: 'shape', label: 'Shape', value: sketch.shapeLabel, assumed: sketch.shapeAssumed, open: sketch.shapeOpen, testId: 'sketch-shape' });
+  rows.push({ key: 'range', label: 'Reach', value: sketch.rangeLabel, assumed: sketch.rangeAssumed, open: sketch.rangeOpen, testId: 'sketch-range' });
+  for (const line of sketch.lines.slice(1, 4)) rows.push({ key: line.text, label: '', value: line.text, assumed: line.assumed, open: false });
+  return rows;
+}
+
+function ProfileMark({ assumed, open }: { assumed: boolean; open: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cx('mt-2 inline-block h-2 w-2 shrink-0 rounded-full', open ? 'border border-dashed border-ink-faint' : assumed ? 'border border-ink-faint bg-paper' : 'bg-accent')}
+    />
+  );
+}
+
+export function TripProfileList({ sketch, compact = false }: { sketch: Sketch; compact?: boolean }) {
+  const rows = profileRows(sketch);
+  return (
+    <div>
+      <ul className="divide-y divide-rule" data-testid="trip-profile">
+        {rows.map((row) => (
+          <li key={row.key} className="flex items-start gap-2.5 py-2">
+            <ProfileMark assumed={row.assumed} open={row.open} />
+            <span className="min-w-0 flex-1">
+              {row.label ? <span className="block text-[10px] uppercase tracking-[0.14em] text-ink-faint">{row.label}</span> : null}
+              <span className={cx('block text-sm leading-snug', row.open ? 'text-ink-faint' : 'text-ink')} {...(row.testId ? { 'data-testid': row.testId } : {})}>
+                {row.value}
+                {row.assumed && !row.open ? <span className="sr-only"> (Sidequest’s read)</span> : null}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {!compact ? (
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint" aria-hidden="true">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-accent" /> you said
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full border border-ink-faint bg-paper" /> Sidequest’s read
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full border border-dashed border-ink-faint" /> not decided yet
+          </span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The conceptual-layer props the sketch hands the map. */
+export function mapLayersFor(sketch: Sketch, answers: QuestionnaireAnswers): { bases: 1 | 2 | 3; movement: 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | null; dayTrips: 'stay_in_city' | 'one_day_trip' | 'several' | null } {
+  const glyph = sketch.transport.glyph;
+  const movement = sketch.transport.open ? null : glyph === 'car' ? (sketch.transport.label.startsWith('A car where') ? 'mixed' : 'car') : glyph === 'transit' ? 'transit_walk' : glyph === 'guide' ? 'guided' : glyph === 'boat' ? 'boat' : glyph === 'taxi' ? 'transit_walk' : null;
+  const dayTrips = !sketch.rangeOpen && answers.dayTripAppetite ? answers.dayTripAppetite : null;
+  return { bases: sketch.shapeOpen ? 1 : sketch.bases, movement, dayTrips };
 }
 
 export function TripSketchPanel({ ctx, answers, className, compact = false, geometry = null, tiles = null }: { ctx: InterviewContext; answers: QuestionnaireAnswers; className?: string; compact?: boolean; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
   const sketch = sketchFor(ctx, answers);
+  const layers = mapLayersFor(sketch, answers);
   return (
     <aside className={cx('min-w-0', className)} aria-label="Your trip so far" data-testid="trip-sketch">
-      <p className="label text-ink-faint">Your trip, so far</p>
-      <p className="mt-1.5 font-display text-2xl leading-tight text-ink">{sketch.destination}</p>
-      <p className="text-sm text-ink-muted">
-        {[sketch.scale, `${sketch.nights} ${sketch.nights === 1 ? 'night' : 'nights'}`].filter(Boolean).join(' · ')}
-      </p>
-      {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} className="mt-4" /> : <SketchFigure sketch={sketch} className="mt-4" />}
-      <dl className="mt-4 space-y-2.5 text-sm">
-        <div>
-          <dt className="label text-ink-faint">Shape</dt>
-          <dd className="text-ink" data-testid="sketch-shape">
-            {sketch.shapeLabel}
-            <Assumed on={sketch.shapeAssumed} />
-          </dd>
-        </div>
-        <div>
-          <dt className="label text-ink-faint">Getting around</dt>
-          <dd className="text-ink" data-testid="sketch-transport">
-            {sketch.transport.label}
-            <Assumed on={sketch.transport.assumed} />
-          </dd>
-        </div>
-        <div>
-          <dt className="label text-ink-faint">Range</dt>
-          <dd className="text-ink" data-testid="sketch-range">
-            {sketch.rangeLabel}
-            <Assumed on={sketch.rangeAssumed} />
-          </dd>
-        </div>
-        {!compact && sketch.lines.length > 0 ? (
-          <div>
-            <dt className="label text-ink-faint">Personality</dt>
-            <dd>
-              <ul className="mt-1 space-y-1" data-testid="sketch-lines">
-                {sketch.lines.map((line) => (
-                  <li key={line.text} className="enter flex items-baseline gap-2 text-ink">
-                    <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                    <span>
-                      {line.text}
-                      <Assumed on={line.assumed} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-display text-xl leading-tight text-ink">{sketch.destination}</p>
+        <p className="numeral shrink-0 text-xs text-ink-faint">
+          {[sketch.scale, `${sketch.nights} ${sketch.nights === 1 ? 'night' : 'nights'}`].filter(Boolean).join(' · ')}
+        </p>
+      </div>
+      {geometry ? (
+        <DestinationMap geometry={geometry} tiles={tiles} shape={layers.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} bases={layers.bases} movement={layers.movement} dayTrips={layers.dayTrips} className="mt-3" />
+      ) : (
+        <SketchFigure sketch={sketch} className="mt-3" />
+      )}
+      <div className="mt-3">
+        <TripProfileList sketch={sketch} compact={compact} />
+      </div>
     </aside>
   );
 }
@@ -238,7 +343,7 @@ export function TripSketchSheet({ ctx, answers, geometry = null, tiles = null }:
           <span>
             <span className="label block text-ink-faint">Your trip so far</span>
             <span className="block text-sm text-ink">
-              {sketch.shapeLabel} · {sketch.rangeLabel}
+              {[!sketch.shapeOpen ? sketch.shapeLabel : null, !sketch.transport.open ? sketch.transport.label : null, !sketch.rangeOpen ? sketch.rangeLabel : null].filter(Boolean).join(' · ') || 'Nothing decided yet'}
             </span>
           </span>
         </span>

@@ -57,6 +57,8 @@ test('a booking can change status and cost; the Verify section says when to look
   await page.getByTestId('booked-date').fill('2026-08-12');
   await page.getByTestId('booked-end-date').fill('2026-08-16');
   await page.getByTestId('booked-save').click();
+  // EXPERIENCE V2 — bookings are one Plan segment; the saved item lists there.
+  await page.getByTestId('plan-tab-bookings').click();
   const status = page.getByTestId('booked-status').first();
   await expect(status).toBeVisible({ timeout: 15_000 });
   await status.selectOption('idea');
@@ -70,6 +72,7 @@ test('a booking can change status and cost; the Verify section says when to look
   await expect(page.locator('[data-testid="hub-recheck"] li').first()).toHaveAttribute('data-window', /.+/);
 
   await openHubView(page, 'plan');
+  await page.getByTestId('plan-tab-stays').click();
   const discover = page.getByTestId('discover-stays-button').first();
   await discover.scrollIntoViewIfNeeded();
   await discover.click();

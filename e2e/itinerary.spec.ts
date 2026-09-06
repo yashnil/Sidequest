@@ -60,7 +60,7 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
 
   // Real scheduled content: a stop with a time, a meal, and travel between them.
   await expect(page.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
-  await expect(page.locator('#hub-view-days').getByRole('heading', { level: 3, name: /\d+ km|estimate|timing not/ }).first()).toBeVisible();
+  await expect(page.locator('#hub-view-days').getByRole('heading', { level: 3, name: /\d+ km|estimate|timing to confirm|timing not/ }).first()).toBeVisible();
   // The day says where its hours went, and free time is a deliberate block.
   await expect(page.getByText(/(\d+ min|\d+ hr( \d+ min)?) at stops/).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Free time' }).first()).toBeVisible();
@@ -122,7 +122,9 @@ test('changing the board and rebuilding produces a different trip', async ({ pag
   const scheduled = await page.getByRole('heading', { level: 3 }).allTextContents();
   expect(scheduled.length).toBeGreaterThan(0);
 
-  await page.getByRole('link', { name: 'Back to the board' }).click();
+  // EXPERIENCE V2 — on a phone the band keeps three controls; the board link sits under More.
+  if ((page.viewportSize()?.width ?? 1440) < 640) await page.getByText('More', { exact: true }).first().click();
+  await page.getByRole('link', { name: 'Back to the board' }).first().click();
   await expect(page).toHaveURL(/\/discover$/);
 
   // Skip everything currently included, then include one specific place.
@@ -228,7 +230,8 @@ test('the itinerary is reachable and readable by keyboard', async ({ page }, tes
   await page.keyboard.press('Enter');
 
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
-  const back = page.getByRole('link', { name: 'Back to the board' });
+  if ((page.viewportSize()?.width ?? 1440) < 640) await page.getByText('More', { exact: true }).first().click();
+  const back = page.getByRole('link', { name: 'Back to the board' }).first();
   await back.focus();
   await expect(back).toBeFocused();
 });

@@ -32,20 +32,28 @@ test('the hub has every section, calm by default, with urgent items only where t
   const nav = page.viewportSize()!.width < 640 ? page.getByTestId('trip-hub-bottom-nav') : page.getByTestId('trip-hub-nav');
   await expect(nav).toBeVisible();
   for (const id of ['overview', 'days', 'map', 'plan', 'prepare']) {
-    await expect(page.viewportSize()!.width < 640 ? page.getByTestId(`hub-bottom-${id}`) : page.getByTestId(`hub-link-${id}`)).toBeVisible();
+    // EXPERIENCE V2 — the phone bar holds four views; Overview is the band's title link.
+    const phone = page.viewportSize()!.width < 640;
+    await expect(phone ? (id === 'overview' ? page.getByTestId('hub-overview-link') : page.getByTestId(`hub-bottom-${id}`)) : page.getByTestId(`hub-link-${id}`)).toBeVisible();
   }
   await expect(page.getByTestId('hub-overview')).toBeVisible();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('trip-confidence').first()).toBeVisible();
   await openHubView(page, 'plan');
   await expect(page.getByTestId('hub-stays')).toBeVisible();
   await expect(page.getByTestId('hub-base').first()).toBeVisible();
+  // EXPERIENCE V2 — Plan is one segment at a time.
+  await page.getByTestId('plan-tab-transport').click();
   await expect(page.getByTestId('hub-transport')).toBeVisible();
   await expect(page.getByTestId('hub-terminal-arriving')).toBeVisible();
   await expect(page.getByTestId('hub-terminal-leaving')).toBeVisible();
+  await page.getByTestId('plan-tab-food').click();
   await expect(page.getByTestId('hub-food')).toBeVisible();
   await expect(page.getByTestId('hub-food-day').first()).toBeVisible();
+  await page.getByTestId('plan-tab-budget').click();
   await expect(page.getByTestId('hub-budget')).toBeVisible();
   await expect(page.getByTestId('hub-budget')).toContainText(/Ranges, not quotes/);
+  await page.getByTestId('plan-tab-bookings').click();
   await expect(page.getByTestId('hub-bookings')).toBeVisible();
   await openHubView(page, 'prepare');
   await expect(page.getByTestId('hub-book-first')).toBeVisible();
@@ -166,6 +174,7 @@ test('optimise my existing plan: the traveller’s places are checked and the pl
   await waitUntilInteractive(defaults);
   await defaults.click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 90_000 });
+  await openHubView(page, 'prepare');
   const critique = page.getByTestId('hub-critique');
   await expect(critique).toBeVisible();
   await expect(critique).toContainText(/Your plan, checked/);

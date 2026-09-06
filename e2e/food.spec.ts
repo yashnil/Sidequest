@@ -39,6 +39,7 @@ async function buildTrip(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
   await openHubView(page, 'plan');
+  await page.getByTestId('plan-tab-food').click();
   await expect(page.getByRole('heading', { name: 'Eating' }).first()).toBeVisible();
 }
 
@@ -143,6 +144,7 @@ test('the plan survives a refresh unchanged, then changes when the preference do
   expect(before.length, 'the plan should have scheduled something').toBeGreaterThan(0);
   await page.reload();
   await openHubView(page, 'plan');
+  await page.getByTestId('plan-tab-food').click();
   await expect(page.getByRole('heading', { name: 'Eating' }).first()).toBeVisible();
   expect(await plan()).toEqual(before);
 

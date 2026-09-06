@@ -140,8 +140,10 @@ describe('the browser suite configuration', () => {
 
     for (const project of projects) {
       if (project.name === 'tablet') continue;
+      // Every responsive spec must be ignored; a project may ignore more (the Today-mode spec
+      // needs the fixture clock and runs only under `playwright.today.config.ts`).
       expect(asSet(project.testIgnore), `${project.name} would re-run a responsive spec`).toEqual(
-        expected,
+        expect.arrayContaining(expected),
       );
     }
   });

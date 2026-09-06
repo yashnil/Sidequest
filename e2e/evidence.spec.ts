@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView } from './support/hub';
+import { openHubView, openPrepareNotes } from './support/hub';
 import { compileRegion, CULTURAL_INTERVIEW, completeQuestionnaire } from './support/trip';
 
 /**
@@ -116,6 +116,7 @@ test('the itinerary carries a preparation list built from what the plan schedule
   await build.click();
   await page.waitForURL(/itinerary/, { timeout: 60_000 });
   await openHubView(page, 'prepare');
+  await openPrepareNotes(page);
 
   const prep = page.getByTestId('before-you-go');
   await expect(prep).toBeVisible();
@@ -136,9 +137,11 @@ test('the preparation list survives a refresh, because it is derived from the st
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await page.waitForURL(/itinerary/, { timeout: 60_000 });
   await openHubView(page, 'prepare');
+  await openPrepareNotes(page);
 
   const before = await page.getByTestId('before-you-go').innerText();
   await page.goto(`/trips/${id}/itinerary#prepare`);
+  await openPrepareNotes(page);
   await expect(page.getByTestId('before-you-go')).toBeVisible();
   expect(await page.getByTestId('before-you-go').innerText()).toBe(before);
 });

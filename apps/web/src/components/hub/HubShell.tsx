@@ -92,8 +92,8 @@ export function HubShell({
 
   return (
     <div id="trip-hub" data-hub-view={view} {...(printAppendix ? { 'data-print-appendix': 'true' } : {})} className="scroll-mt-[var(--chrome-height)]">
-      <nav aria-label="Trip hub" className="sticky top-[var(--chrome-height)] z-20 -mx-5 border-b border-rule bg-paper/92 px-5 backdrop-blur-sm print:hidden max-sm:hidden sm:-mx-8 sm:px-8" data-testid="trip-hub-nav">
-        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto py-1.5" role="tablist" aria-labelledby={labelId}>
+      <nav aria-label="Trip hub" className="sticky top-[var(--chrome-height)] z-20 -mx-5 border-b border-rule bg-paper/95 px-5 backdrop-blur-[2px] print:hidden max-sm:hidden sm:-mx-6 sm:px-6" data-testid="trip-hub-nav">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-1 overflow-x-auto" role="tablist" aria-labelledby={labelId}>
           <span id={labelId} className="sr-only">
             Trip hub views
           </span>
@@ -111,12 +111,12 @@ export function HubShell({
                 data-testid={`hub-link-${entry.id}`}
                 onClick={() => select(entry.id)}
                 className={cx(
-                  'relative inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors duration-[var(--motion-fast)]',
-                  active ? 'bg-ink text-paper' : 'text-ink-muted hover:bg-paper-sunk hover:text-ink',
+                  'pressable relative inline-flex min-h-11 shrink-0 items-center gap-2 px-3.5 text-sm font-medium transition-colors duration-[var(--motion-fast)]',
+                  active ? 'text-ink after:absolute after:inset-x-3.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--color-route)]' : 'text-ink-muted hover:text-ink',
                 )}
               >
                 {entry.label}
-                {badge ? <span className={cx('numeral rounded-full px-1.5 text-[10px] leading-4', active ? 'bg-paper/20 text-paper' : 'bg-accent text-paper')}>{badge}</span> : null}
+                {badge ? <span className={cx('numeral rounded-full px-1.5 text-[10px] leading-4', active ? 'bg-ink text-paper' : 'bg-paper-sunk text-ink-muted')}>{badge}</span> : null}
               </button>
             );
           })}
@@ -137,10 +137,15 @@ export function HubShell({
         </section>
       ))}
 
-      {/* Phones: the same five views as a bottom bar, one hand. */}
+      {/*
+        Phones: four views in a bottom bar, one hand. Overview is not a tab down
+        here — it is the trip's own header, reached from the band's title
+        (`hub-overview-link`) — so the bar holds the four things a traveller
+        does with a plan on the move.
+      */}
       <nav aria-label="Trip hub" className="fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm print:hidden sm:hidden" data-testid="trip-hub-bottom-nav">
-        <div className="grid grid-cols-5" role="tablist" aria-label="Trip hub views">
-          {HUB_VIEWS.map((entry) => {
+        <div className="grid grid-cols-4" role="tablist" aria-label="Trip hub views">
+          {HUB_VIEWS.filter((entry) => entry.id !== 'overview').map((entry) => {
             const active = entry.id === view;
             const badge = badges[entry.id];
             return (

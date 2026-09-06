@@ -121,3 +121,47 @@ describe('screening signals from stored intake state', () => {
     expect(carriedFieldsFor(undecided, [])).not.toContain('shape');
   });
 });
+
+/**
+ * DESTINATION-AWARE INTERVIEW GLOBALITY — the founder's own stored shape.
+ *
+ * `fixtures/dense-city-pick.json` is a real trip intent recorded on 2026-09-06:
+ * a dense city picked from the destination index, with no resolver run, no
+ * scope and no preflight. Before this pass the pick reached the screening as
+ * a bare name; the index row's population and the pick's feature type now do.
+ */
+import densePick from './fixtures/dense-city-pick.json';
+
+describe('a composer pick from the destination index', () => {
+  const pick = densePick as unknown as { trip: Trip; intent: TripIntentRecord; indexEntry: Parameters<typeof screeningSignalsFor>[0]['indexEntry'] };
+
+  it('reads the feature type and the index row as identity signals', () => {
+    const signals = screeningSignalsFor({ trip: pick.trip, intent: pick.intent, region: null, indexEntry: pick.indexEntry });
+    expect(signals.entityType).toBe('city');
+    expect(signals.breadth).toBe('city');
+    expect(signals.featureType).toBe('city');
+    expect(signals.population).toBe(7_534_200);
+    expect(signals.prominence).toBe(99);
+  });
+
+  it('screens as a dense, transit-rich city with a confident transit read — never a car or a driving radius', () => {
+    const context = destinationContextFor({ trip: pick.trip, intent: pick.intent, region: null, indexEntry: pick.indexEntry });
+    expect(context.traits).toEqual(expect.arrayContaining(['dense_urban', 'transit_rich', 'walk_heavy', 'food_dense']));
+    expect(context.traits).not.toContain('road_trip_region');
+    expect(context.traits).not.toContain('car_dependent');
+    expect(context.assumption).toMatchObject({ movement: 'transit_walk', bases: 'one', confidence: 'high' });
+    expect(context.evidence).toBe('screened');
+  });
+
+  it('without the index row the feature type still carries the city reading, at lower evidence', () => {
+    const context = destinationContextFor({ trip: pick.trip, intent: pick.intent, region: null });
+    expect(context.traits).toContain('dense_urban');
+    expect(context.assumption?.movement).toBe('transit_walk');
+  });
+
+  it('an index row for a different pick is ignored rather than trusted', () => {
+    const other = { ...pick.indexEntry!, id: 'overture:somewhere-else' };
+    const signals = screeningSignalsFor({ trip: pick.trip, intent: pick.intent, region: null, indexEntry: other });
+    expect(signals.population).toBeUndefined();
+  });
+});

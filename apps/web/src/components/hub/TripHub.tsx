@@ -69,9 +69,9 @@ export function HubNav({ urgent }: { urgent: number }) {
 
 function SectionHeader({ id, title, blurb, testId }: { id: string; title: string; blurb: string; testId?: string }) {
   return (
-    <div className="border-t-2 border-ink pt-5" id={id} {...(testId ? { 'data-testid': testId } : {})}>
-      <h2 className="display-md text-ink">{title}</h2>
-      <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">{blurb}</p>
+    <div className="pt-2" id={id} {...(testId ? { 'data-testid': testId } : {})}>
+      <h2 className="type-title text-ink">{title}</h2>
+      <p className="mt-1.5 max-w-[62ch] type-small text-ink-muted">{blurb}</p>
     </div>
   );
 }
@@ -272,7 +272,7 @@ export function FoodSection({ intel, tripId, itinerary, coordinates = {} }: { in
   return (
     <div className="mt-6" data-testid="hub-food">
       <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {f.days.map((day) => (
+        {f.days.filter((day) => day.meals.some((m) => m.role !== 'skip') || day.provisioning.length > 0).map((day) => (
           <li key={day.dayNumber} className={cx('rounded-[var(--radius-card)] border p-3', day.remote ? 'border-amber bg-amber-soft/40' : 'border-rule bg-paper-raised')} data-testid="hub-food-day" data-remote={day.remote}>
             <p className="font-display text-base text-ink">
               Day {day.dayNumber}

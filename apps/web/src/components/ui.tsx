@@ -23,7 +23,7 @@ export function cx(...values: (string | false | null | undefined)[]): string {
  * button's own edge, which on a filled primary button is invisible.
  */
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm font-medium transition-[background-color,border-color,color,transform] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
+  'pressable inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm font-medium transition-[background-color,border-color,color,transform] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
 
 const BUTTON_VARIANTS = {
   primary: 'bg-ink text-paper hover:bg-ink-muted',

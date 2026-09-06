@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { TripComposer } from '@/components/TripComposer';
+import { resolveMapBasemap } from '@/components/map-adapter';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,10 +45,11 @@ export default async function NewTripPage({
   const improving = params.have === 'plan';
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
+    <div className="mx-auto max-w-[1600px] px-5 pt-4 pb-10 sm:px-6 sm:pt-5">
       <TripComposer
         defaults={{ startDate: isoDate(30), endDate: isoDate(36) }}
         intent={improving ? 'has_plan' : 'new'}
+        tiles={resolveMapBasemap(process.env)}
       />
     </div>
   );

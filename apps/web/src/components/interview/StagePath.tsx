@@ -5,8 +5,12 @@ import { cx } from '../ui';
  *
  * The interview is adaptive, so "Question 8 of 14" is a promise it cannot
  * keep. Five stages can be kept: basics are done on arrival, then what you
- * love, your rhythm, logistics, ready. The current stage is filled in ochre;
- * the count is a quiet secondary note for anybody who wants it.
+ * love, your rhythm, logistics, ready.
+ *
+ * EXPERIENCE V2 — drawn as a route: a thin line with a mark per stage, the
+ * current one filled in the route colour and named, the others as points with
+ * their names small beside them on a desktop and hidden on a phone (kept for
+ * assistive technology). No pills, no aeroplane.
  */
 export const STAGES = ['basics', 'love', 'rhythm', 'logistics', 'ready'] as const;
 export type Stage = (typeof STAGES)[number];
@@ -32,35 +36,24 @@ export function stageOf(questionId: string | null): Stage {
 export function StagePath({ current, note }: { current: Stage; note?: string }) {
   const index = STAGES.indexOf(current);
   return (
-    <nav aria-label="Interview progress" className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <ol className="flex items-center gap-1.5" role="list">
+    <nav aria-label="Interview progress" className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="stage-path">
+      <ol className="flex items-center" role="list">
         {STAGES.map((stage, i) => {
           const done = i < index;
           const now = i === index;
           return (
-            <li key={stage} className="flex items-center gap-1.5">
-              {/*
-                On a phone the four stages that are not current collapse to
-                dots — five spelled-out pills wrap to three lines at 390px and
-                the path stops reading as a path. The label stays in the DOM
-                for assistive technology.
-              */}
-              <span
-                className={cx(
-                  'flex items-center gap-1.5 whitespace-nowrap rounded-full border text-[11px] font-medium uppercase tracking-[0.12em] transition-colors duration-[var(--motion-base)]',
-                  now ? 'border-accent bg-accent px-2.5 py-1 text-paper' : done ? 'border-ink text-ink max-sm:bg-ink sm:px-2.5 sm:py-1' : 'border-rule text-ink-faint sm:px-2.5 sm:py-1',
-                  !now && 'max-sm:h-2.5 max-sm:w-2.5',
-                )}
-                aria-current={now ? 'step' : undefined}
-              >
-                {done ? (
-                  <span aria-hidden="true" className="text-[10px] max-sm:hidden">
-                    ✓
-                  </span>
-                ) : null}
-                <span className={now ? '' : 'max-sm:sr-only'}>{STAGE_LABELS[stage]}</span>
+            <li key={stage} className="flex items-center">
+              <span className={cx('flex items-center gap-1.5', now && 'rounded-full bg-ink px-2.5 py-0.5')} aria-current={now ? 'step' : undefined}>
+                <span
+                  aria-hidden="true"
+                  className={cx(
+                    'inline-block shrink-0 rounded-full transition-colors duration-[var(--motion-base)]',
+                    now ? 'h-1.5 w-1.5 bg-[var(--color-route-bright)]' : done ? 'h-2 w-2 bg-ink' : 'h-2 w-2 border border-ink-faint bg-paper',
+                  )}
+                />
+                <span className={cx('whitespace-nowrap text-[11px] font-medium tracking-wide', now ? 'text-paper' : done ? 'text-ink max-lg:sr-only' : 'text-ink-faint max-lg:sr-only')}>{STAGE_LABELS[stage]}</span>
               </span>
-              {i < STAGES.length - 1 ? <span aria-hidden="true" className={cx('h-px w-3 max-sm:w-1.5', i < index ? 'bg-ink' : 'bg-rule')} /> : null}
+              {i < STAGES.length - 1 ? <span aria-hidden="true" className={cx('mx-1.5 h-px w-4 sm:w-7', i < index ? 'bg-ink' : 'bg-rule')} /> : null}
             </li>
           );
         })}

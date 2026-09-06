@@ -58,6 +58,13 @@ export const CLASS_INTEREST_PACKS: Record<DestinationClass, readonly Interest[]>
     'easy_nature_walks',
     'scenic_viewpoints',
     'photography_golden_hour',
+    /*
+     * Hiking is offered to a city too. Most cities people travel to sit
+     * against hills, a coast or a country park, and withholding the question
+     * because the destination is "urban" was a claim from ignorance: the
+     * trail-rich harbour city and the flat river city are both cities.
+     */
+    'hiking',
   ],
   coastal: [
     'beaches_and_swimming',

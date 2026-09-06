@@ -1,0 +1,146 @@
+{
+  "note": "Recorded from a real founder test on 2026-09-06: a dense city picked from the destination index (Overture release 2026-07-22.0). Stored exactly as the intake left it: no resolver run, no scope, no preflight — a feature type, a centre and an index row. Coordinates and names are the catalogue's own.",
+  "trip": {
+    "id": "hk-like",
+    "basics": {
+      "mode": "known_destination",
+      "destinationInput": "Hong Kong",
+      "regionId": "dynamic",
+      "startDate": "2026-10-13",
+      "endDate": "2026-10-18",
+      "arrivalTime": "16:00",
+      "departureTime": "09:00",
+      "adults": 2,
+      "children": 0,
+      "travelerNeeds": []
+    },
+    "status": "draft",
+    "createdAt": "2026-09-06T00:21:36.507Z",
+    "updatedAt": "2026-09-06T00:21:36.507Z"
+  },
+  "intent": {
+    "tripId": "hk-like",
+    "mode": "known_destination",
+    "destinationQuery": "Hong Kong",
+    "resolution": null,
+    "selectedCandidateId": null,
+    "clarifications": {
+      "schemaVersion": 1,
+      "questions": [],
+      "answers": []
+    },
+    "scope": null,
+    "scopeRevision": 0,
+    "selectedCompiledRegionId": null,
+    "discoveryPreferences": null,
+    "composer": {
+      "schemaVersion": 1,
+      "mode": "known_destination",
+      "mustDoDecisions": [],
+      "destination": {
+        "entryId": "overture:7f99b544-4e68-4574-98d8-ca4de48a0607",
+        "catalog": "overture",
+        "sourceId": "7f99b544-4e68-4574-98d8-ca4de48a0607",
+        "releaseId": "2026-07-22.0",
+        "displayName": "Hong Kong",
+        "localName": "香港 Hong Kong",
+        "qualifiedName": "Hong Kong, Central and Western District",
+        "featureType": "city",
+        "center": {
+          "lat": 22.281831741333008,
+          "lng": 114.15828704833984
+        },
+        "countryCode": "HK",
+        "aliases": [
+          "Гонконг",
+          "香港",
+          "هونغ كونغ"
+        ],
+        "hierarchy": [
+          "China",
+          "Hong Kong",
+          "Central and Western District"
+        ],
+        "selectedAt": "2026-09-06T00:21:36.497Z"
+      },
+      "destinationQuery": "Hong Kong",
+      "dates": {
+        "mode": "undecided",
+        "startDate": "2026-10-13",
+        "endDate": "2026-10-18",
+        "year": 2026,
+        "wantsRecommendation": true
+      },
+      "duration": {
+        "mode": "fixed",
+        "nights": 5,
+        "wantsRecommendation": false
+      },
+      "arrival": {
+        "precision": "afternoon"
+      },
+      "departure": {
+        "precision": "morning"
+      },
+      "adults": 2,
+      "children": 0,
+      "travelerNeeds": [],
+      "themes": [],
+      "skipped": [],
+      "updatedAt": "2026-09-06T00:21:36.497Z"
+    },
+    "selectedDestination": {
+      "entryId": "overture:7f99b544-4e68-4574-98d8-ca4de48a0607",
+      "catalog": "overture",
+      "sourceId": "7f99b544-4e68-4574-98d8-ca4de48a0607",
+      "releaseId": "2026-07-22.0",
+      "displayName": "Hong Kong",
+      "localName": "香港 Hong Kong",
+      "qualifiedName": "Hong Kong, Central and Western District",
+      "featureType": "city",
+      "center": {
+        "lat": 22.281831741333008,
+        "lng": 114.15828704833984
+      },
+      "countryCode": "HK",
+      "aliases": [
+        "Гонконг",
+        "香港",
+        "هونغ كونغ"
+      ],
+      "hierarchy": [
+        "China",
+        "Hong Kong",
+        "Central and Western District"
+      ],
+      "selectedAt": "2026-09-06T00:21:36.497Z"
+    },
+    "preflight": null
+  },
+  "indexEntry": {
+    "id": "overture:7f99b544-4e68-4574-98d8-ca4de48a0607",
+    "catalog": "overture",
+    "sourceId": "7f99b544-4e68-4574-98d8-ca4de48a0607",
+    "featureType": "city",
+    "displayName": "Hong Kong",
+    "localName": "香港 Hong Kong",
+    "aliases": [
+      "Гонконг",
+      "香港",
+      "هونغ كونغ"
+    ],
+    "countryCode": "HK",
+    "hierarchy": [
+      "China",
+      "Hong Kong",
+      "Central and Western District"
+    ],
+    "center": {
+      "lat": 22.281831741333008,
+      "lng": 114.15828704833984
+    },
+    "population": 7534200,
+    "prominence": 99,
+    "wikidataId": "Q8646"
+  }
+}

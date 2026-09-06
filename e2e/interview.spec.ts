@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView } from './support/hub';
+import { openHubView, openPrepareNotes } from './support/hub';
 import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope, waitUntilInteractive } from './support/trip';
 
 /**
@@ -155,6 +155,7 @@ test('Plan with smart defaults composes a trip straight from the understanding s
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await expect(page.getByTestId('trip-snapshot')).toBeVisible();
   await openHubView(page, 'prepare');
+  await openPrepareNotes(page);
   await expect(page.getByTestId('prepare')).toBeVisible();
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   // The DEV-only fixture badge is deliberately absent here: this suite drives a production build.
@@ -191,6 +192,7 @@ test('the itinerary carries the overview map, day maps with honest legs, compact
   await openHubView(page, 'plan');
   await expect(page.getByTestId('where-to-stay').first()).toBeVisible();
   await openHubView(page, 'prepare');
+  await openPrepareNotes(page);
   for (const id of ['prepare', 'before-you-go', 'packing-list']) {
     await expect(page.getByTestId(id).first(), id).toBeVisible();
   }

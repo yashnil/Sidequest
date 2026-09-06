@@ -65,7 +65,7 @@ describe('--chrome-height is the height of the chrome', () => {
      * and the "New trip" link. Its vertical padding and its tallest child are
      * the whole of the height.
      */
-    const paddingStep = /className="mx-auto flex max-w-7xl[^"]*\bpy-([\d.]+)\b/.exec(CHROME);
+    const paddingStep = /className="mx-auto flex max-w-[^\s"]+[^"]*\bpy-([\d.]+)\b/.exec(CHROME);
     expect(paddingStep, 'the header row must declare its vertical padding as py-*').not.toBeNull();
     const paddingRem = Number(paddingStep![1]) * STEP_REM * 2;
 

@@ -12,6 +12,7 @@ import {
   interestOfferFromEntityType,
   normalizeAnswers,
   type QuestionnaireContext,
+  FEATURE_TYPE_ENTITY,
 } from '@sidequest/core';
 import { resolveRegion } from '@sidequest/core/data';
 import { carAvailableFromAnswers } from '@sidequest/compiler';
@@ -20,6 +21,7 @@ import { Panel } from '@/components/ui';
 import { getAnswers, getProfile } from '@/lib/db/repository';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
+import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { interviewContextFor } from '@/lib/interview/screening';
 import { compiledRegionFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
 import { isFixtureComposer } from '@/lib/providers/switches';
@@ -56,10 +58,18 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
   const tripDays = countTripDays(trip.basics.startDate, trip.basics.endDate);
   const seeded = trip.basics.regionId === DYNAMIC_REGION_ID ? null : resolveRegion(trip.basics.destinationInput);
 
+  /*
+   * DESTINATION-AWARE INTERVIEW GLOBALITY — a composer pick is an identity.
+   * Its feature type names the kind of place, and its index row carries the
+   * population and extent; both reach the screening and the interest offer.
+   */
+  const picked = intent?.selectedDestination ?? null;
+  const pickedEntityType = picked ? FEATURE_TYPE_ENTITY[picked.featureType] : undefined;
+  const indexEntry = picked ? destinationEntryById(picked.entryId) : null;
   const offer =
     resolved.ok && resolved.context.region.interestOffer
       ? resolved.context.region.interestOffer
-      : interestOfferFromEntityType(intent?.scope?.destinationEntityType ?? intent?.resolution?.candidates[0]?.entityType ?? 'unknown');
+      : interestOfferFromEntityType(intent?.scope?.destinationEntityType ?? intent?.resolution?.candidates[0]?.entityType ?? pickedEntityType ?? 'unknown');
 
   const context: QuestionnaireContext = {
     travelerNeeds: trip.basics.travelerNeeds,
@@ -115,6 +125,7 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
     intent,
     region: resolved.ok ? resolved.context : null,
     seeded,
+    indexEntry,
     offeredInterests: offer.interests,
     carried,
     answers: initialAnswers,

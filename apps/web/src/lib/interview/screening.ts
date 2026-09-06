@@ -1,10 +1,13 @@
 import {
   countTripDays,
+  FEATURE_TYPE_BREADTH,
+  FEATURE_TYPE_ENTITY,
   interestOffer,
   screenDestination,
   tripMonths,
   type CompiledRegion,
   type DestinationClassSignal,
+  type DestinationIndexEntry,
   type DestinationQuestionContext,
   type Interest,
   type InterviewContext,
@@ -39,6 +42,14 @@ export interface ScreeningInputs {
   region: RegionContext | null;
   /** The authored region when the trip is against one (the seeded Eastern Sierra today). */
   seeded?: Region | null;
+  /**
+   * DESTINATION-AWARE INTERVIEW GLOBALITY — the destination index row behind a
+   * composer pick, when the page could read it. The pick itself carries only a
+   * feature type and a centre; the row carries the population, extent and
+   * prominence that tell a seven-million-person city from a village. Read by
+   * the page (one synchronous SQLite lookup), never fetched here.
+   */
+  indexEntry?: DestinationIndexEntry | null;
 }
 
 export function screeningSignalsFor(input: ScreeningInputs): ScreeningSignals {
@@ -65,17 +76,25 @@ export function screeningSignalsFor(input: ScreeningInputs): ScreeningSignals {
   if (seededCopy?.proseName) signals.proseName = seededCopy.proseName;
 
   // --- identity -----------------------------------------------------------------
-  const entityType = scope?.destinationEntityType ?? candidate?.entityType;
+  // The composer's pick is an identity too: a city chosen from the destination
+  // index used to reach the screening as nothing but a name, which is how a
+  // seven-million-person city was interviewed about hot springs and hire cars.
+  const pickedEntity = selected ? FEATURE_TYPE_ENTITY[selected.featureType] : undefined;
+  const pickedBreadth = selected ? FEATURE_TYPE_BREADTH[selected.featureType] : undefined;
+  const entityType = scope?.destinationEntityType ?? candidate?.entityType ?? (pickedEntity && pickedEntity !== 'unknown' ? pickedEntity : undefined);
   if (entityType) signals.entityType = entityType;
-  const breadth = scope?.breadth ?? candidate?.breadth;
+  const breadth = scope?.breadth ?? candidate?.breadth ?? (pickedEntity && pickedEntity !== 'unknown' ? pickedBreadth : undefined);
   if (breadth) signals.breadth = breadth;
   if (selected?.featureType) signals.featureType = selected.featureType;
   const countryCode = scope?.countryCode ?? candidate?.countryCode ?? selected?.countryCode;
   if (countryCode) signals.countryCode = countryCode;
   const center = scope?.center ?? candidate?.center ?? selected?.center ?? region?.region.baseCoordinates;
   if (center) signals.center = center;
-  const bounds = scope?.administrativeBoundary ?? scope?.bounds ?? candidate?.bounds ?? selected?.bounds;
+  const entry = input.indexEntry && selected && input.indexEntry.id === selected.entryId ? input.indexEntry : null;
+  const bounds = scope?.administrativeBoundary ?? scope?.bounds ?? candidate?.bounds ?? selected?.bounds ?? entry?.bounds;
   if (bounds) signals.bounds = bounds;
+  if (entry?.population !== undefined) signals.population = entry.population;
+  if (entry?.prominence !== undefined) signals.prominence = entry.prominence;
 
   // --- the scope's own transport reading ----------------------------------------------
   if (scope) {

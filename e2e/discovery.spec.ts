@@ -28,7 +28,7 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
   // The profile is reflected back before anything is generated: the review
   // opens with the trip in one sentence and the sketch's shape / range facts.
   await expect(page.getByTestId('interview-sentence')).toContainText(/over \d+ days/);
-  await expect(page.getByText('Range', { exact: true })).toBeVisible();
+  await expect(page.getByText('Reach', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 

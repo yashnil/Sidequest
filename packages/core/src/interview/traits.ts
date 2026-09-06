@@ -25,6 +25,7 @@ export const DESTINATION_TRAITS = [
   'transit_rich',
   'walk_heavy',
   'road_trip_region',
+  'car_dependent',
   'multi_base_likely',
   'broad_geography',
   'compact_country',
@@ -53,6 +54,7 @@ export const DESTINATION_TRAIT_LABELS: Record<DestinationTrait, string> = {
   transit_rich: 'Good public transport',
   walk_heavy: 'Best explored on foot',
   road_trip_region: 'A region you drive',
+  car_dependent: 'Little reaches the best of it without a car',
   multi_base_likely: 'Probably more than one base',
   broad_geography: 'Too big to see all of it',
   compact_country: 'Compact enough to cross',
@@ -88,6 +90,8 @@ export interface ScreeningSignals {
   center?: { lat: number; lng: number };
   bounds?: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } };
   population?: number;
+  /** The destination index's own 0–100 prominence, when the traveller picked from it. */
+  prominence?: number;
   tripDays: number;
   startDate?: string;
   months?: readonly number[];
@@ -130,9 +134,25 @@ export interface ScreeningSignals {
 
 export type ScreeningEvidence = 'screened' | 'partial' | 'none';
 
+/**
+ * DESTINATION-AWARE INTERVIEW GLOBALITY — AN ASSUMPTION CARRIES ITS CONFIDENCE.
+ *
+ * `high` means the evidence points one way strongly enough that Sidequest may
+ * show it as its read and use it as a smart default. `low` means the shape is
+ * plausible but unproven; the interview asks the question early instead of
+ * displaying the guess. `undecided` is the honest value when nothing points
+ * anywhere: it is never rendered as "a car, assumed".
+ */
+export type AssumptionConfidence = 'high' | 'low';
+
 export interface DestinationAssumption {
-  bases: 'one' | 'few' | 'many';
-  movement: 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed';
+  bases: 'one' | 'few' | 'many' | 'undecided';
+  movement: 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | 'undecided';
+  /** How sure the movement reading is. The sidebar and smart defaults act on `high` only. */
+  confidence: AssumptionConfidence;
+  /** How sure the base-count reading is, separately: a car can be certain while the number of beds is not. */
+  basesConfidence: AssumptionConfidence;
+  /** What the evidence supports, or why it supports nothing yet. */
   sentence: string;
 }
 
@@ -224,14 +244,17 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   const allowed = new Set(transport?.allowedModes ?? []);
   const featureType = signals.featureType;
 
+  // A city picked from the destination index arrives as a feature type, not an entity type; both count.
+  const urbanFeature = featureType === 'city' || featureType === 'town';
   let signalCount = 0;
-  for (const value of [entity, breadth, signals.bounds, signals.population, signals.climate, transport, compiled, signals.seededClass, signals.offerClasses]) {
+  for (const value of [entity, breadth, signals.bounds, signals.population, signals.prominence, signals.climate, transport, compiled, signals.seededClass, signals.offerClasses, urbanFeature || featureType === 'island' || featureType === 'national_park' || featureType === 'protected_area' ? featureType : undefined]) {
     if (value !== undefined && value !== null) signalCount += 1;
   }
 
   // --- urban ------------------------------------------------------------------
-  const urbanEntity = entity === 'city' || entity === 'metro_area' || entity === 'neighbourhood';
-  if (urbanEntity) add('dense_urban', `You named ${SCALE_LABEL[entity!].toLowerCase()}.`);
+  const urbanEntity = entity === 'city' || entity === 'metro_area' || entity === 'neighbourhood' || (entity === undefined && urbanFeature);
+  if (urbanEntity && entity) add('dense_urban', `You named ${SCALE_LABEL[entity].toLowerCase()}.`);
+  else if (urbanEntity) add('dense_urban', `You named a ${featureType}.`);
   else if (classes.has('urban') && !classes.has('mountain') && (rank === undefined || rank <= 1)) {
     add('dense_urban', 'What is known about this place is mostly built and inhabited.');
   }
@@ -254,6 +277,9 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
     }
   } else if (transport?.primaryMode === 'walk' && rank !== undefined && rank <= 1) {
     add('walk_heavy', 'The trip scope assumes walking as the way around.');
+  } else if (transport?.primaryMode === 'rail' || ((compiled?.transitMeasured ?? 0) > 0 && compiled?.hasScheduledNetwork)) {
+    // A rail-oriented region: the trains are the way around, whatever the breadth.
+    add('transit_rich', transport?.primaryMode === 'rail' ? 'The trip scope assumes trains as the way around.' : 'Scheduled public transport was measured across this region.');
   }
 
   // --- islands and water --------------------------------------------------------
@@ -284,6 +310,10 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   if ((compiled?.carOnlyShare ?? 0) >= 0.5) add('road_trip_region', `${Math.round(compiled!.carOnlyShare! * 100)}% of what was found here has no way in but a drive.`);
   if (signals.seededClass === 'mountain' && !urbanEntity) add('road_trip_region', 'The best of this region is spread along its roads.');
   if (compiled?.matrixMode === 'car' && rank !== undefined && rank >= 2) add('road_trip_region', 'Travel times here were measured by road.');
+  // Car dependence is claimed only on evidence about access, never on the shape of the name.
+  if ((compiled?.carOnlyShare ?? 0) >= 0.5) add('car_dependent', `${Math.round(compiled!.carOnlyShare! * 100)}% of what was found here has no way in but a drive.`);
+  else if (transport?.primaryMode === 'drive' && transport.carAvailable !== false) add('car_dependent', 'The trip scope assumes driving as the way around.');
+  else if (signals.seededClass === 'mountain' && !urbanEntity) add('car_dependent', 'The best of this region is spread along its roads.');
 
   if (breadth === 'country' || breadth === 'multi_country') {
     if (extentKm !== undefined && extentKm <= 600) add('compact_country', `About ${extentKm} km corner to corner — crossable in a day.`);
@@ -344,8 +374,8 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   if (traits.has('cold_sensitive')) understanding.push(traits.get('cold_sensitive')!);
   if (traits.has('winter_access')) understanding.push(traits.get('winter_access')!);
 
-  const assumption = assumptionFor(traits, nights);
   const proseName = signals.proseName ?? signals.name;
+  const assumption = assumptionFor(traits, nights, proseName);
 
   return {
     name: signals.name,
@@ -365,24 +395,59 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   };
 }
 
-function assumptionFor(traits: Map<DestinationTrait, string>, nights: number): DestinationAssumption | undefined {
+function assumptionFor(traits: Map<DestinationTrait, string>, nights: number, name: string): DestinationAssumption | undefined {
   if (traits.size === 0) return undefined;
-  const bases: DestinationAssumption['bases'] = traits.has('broad_geography')
-    ? 'many'
-    : traits.has('multi_base_likely')
-      ? 'few'
-      : 'one';
-  const movement: DestinationAssumption['movement'] = traits.has('guide_transfer_likely')
-    ? 'guided'
-    : traits.has('archipelago') && !traits.has('road_trip_region')
-      ? 'boat'
-      : traits.has('transit_rich') || (traits.has('dense_urban') && !traits.has('road_trip_region'))
-        ? 'transit_walk'
-        : traits.has('road_trip_region') || traits.has('mountain') || traits.has('compact_country')
-          ? 'car'
-          : 'mixed';
+  const has = (t: DestinationTrait) => traits.has(t);
+
+  // --- bases -------------------------------------------------------------------
+  let bases: DestinationAssumption['bases'] = 'undecided';
+  let basesConfident = false;
+  if (has('broad_geography')) {
+    bases = 'many';
+    basesConfident = true;
+  } else if (has('multi_base_likely')) {
+    bases = 'few';
+    basesConfident = true;
+  } else if (has('dense_urban') && !has('road_trip_region')) {
+    bases = 'one';
+    basesConfident = true;
+  } else if (has('island') || has('wilderness') || has('compact_country') || has('road_trip_region') || has('mountain')) {
+    bases = 'one';
+  }
+
+  // --- movement: strong evidence names a mode, weak evidence names a question ------
+  let movement: DestinationAssumption['movement'] = 'undecided';
+  let movementConfident = false;
+  if (has('guide_transfer_likely')) {
+    movement = 'guided';
+    movementConfident = true;
+  } else if (has('archipelago') && !has('road_trip_region')) {
+    movement = 'boat';
+    movementConfident = true;
+  } else if (has('transit_rich')) {
+    movement = 'transit_walk';
+    movementConfident = true;
+  } else if (has('car_dependent') || has('road_trip_region')) {
+    movement = 'car';
+    movementConfident = true;
+  } else if (has('dense_urban')) {
+    movement = 'transit_walk';
+  } else if (has('mountain') || has('compact_country') || has('wilderness')) {
+    movement = 'car';
+  }
+
+  const confidence: AssumptionConfidence = movementConfident ? 'high' : 'low';
+  const basesConfidence: AssumptionConfidence = basesConfident ? 'high' : 'low';
   const basesPhrase =
-    bases === 'one' ? 'keep one main base' : bases === 'few' ? 'move between a couple of bases' : 'choose a coherent subset and move between a few bases';
+    bases === 'one'
+      ? has('dense_urban')
+        ? 'keep one base and cover the city from it'
+        : 'keep one main base'
+      : bases === 'few'
+        ? 'move between a couple of bases'
+        : bases === 'many'
+          ? 'choose a coherent subset and move between a few bases'
+          : null;
   const movementPhrase =
     movement === 'car'
       ? 'use a car to reach the region'
@@ -392,9 +457,18 @@ function assumptionFor(traits: Map<DestinationTrait, string>, nights: number): D
           ? 'rely on guides or arranged transfers for the remote parts'
           : movement === 'boat'
             ? 'move by boat between islands'
-            : 'mix a car with local transport';
-  const sentence = `Sidequest would probably ${basesPhrase} and ${movementPhrase}${nights > 0 ? '' : ''}. We'll check that assumption with you.`;
-  return { bases, movement, sentence };
+            : null;
+  void nights;
+  let sentence: string;
+  if (confidence === 'high' && movementPhrase) {
+    sentence = `Sidequest would probably ${basesPhrase && basesConfident ? `${basesPhrase} and ` : ''}${movementPhrase}. We'll check that assumption with you.`;
+  } else if (movementPhrase) {
+    sentence = `${name} could work ${movement === 'car' ? 'with a car' : movement === 'transit_walk' ? 'on foot and by public transport' : movementPhrase}, but the evidence is thin, so how you get around is the first thing we ask.`;
+    // (movement is never 'mixed' here: the screening only ever names car, transit, guided, boat or undecided.)
+  } else {
+    sentence = `Sidequest is not assuming how you will get around ${name} yet; that is the first thing we ask.`;
+  }
+  return { bases, movement, confidence, basesConfidence, sentence };
 }
 
 export function hasTrait(context: DestinationQuestionContext, trait: DestinationTrait): boolean {

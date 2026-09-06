@@ -74,6 +74,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         context: suggestion.hierarchy.join(' · '),
         highlight: suggestion.highlight,
         matchedText: suggestion.matchedText,
+        // EXPERIENCE V2 — where it is, so the new-trip canvas can frame it the moment it is picked. Coordinates are not source ids.
+        center: suggestion.center,
+        bounds: suggestion.bounds ?? null,
       })),
     });
   }

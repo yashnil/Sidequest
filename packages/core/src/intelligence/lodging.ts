@@ -242,7 +242,7 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
   return lodgingIntelligenceSchema.parse({
     bases,
     shortlist: properties.map((p) => ({ baseId: p.baseId, name: p.name, why: p.why, priceTier: p.priceTier, source: p.source })),
-    shortlistBasis: properties.length > 0 ? 'Ranked by fit to this plan, not by review score. Availability and price are not live.' : 'No accommodation provider is configured, so Sidequest recommends areas rather than properties. Availability and prices are unknown until you look.',
+    shortlistBasis: properties.length > 0 ? 'Ranked by fit to this plan, not by review score. Availability and price are not live.' : 'Sidequest recommends the area to stay in rather than a named hotel. Prices and availability are yours to check.',
     hotelChangeNote,
     churn: { level: churn, hotelChanges: moves, nights: totalNights, baseCount: bases.length, oneNightStays, averageNightsPerBase, simplerRoute },
   });

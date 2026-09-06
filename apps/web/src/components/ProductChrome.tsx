@@ -42,37 +42,21 @@ export function ProductChrome({ children }: { children: React.ReactNode }) {
         being the two longest. A solid ground costs nothing and is the only way a
         sticky header over dense editorial content stays readable.
       */}
-      <header className="sticky top-0 z-30 border-b border-rule bg-paper">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3.5 sm:px-8">
-          <Link
-            href="/"
-            className="shrink-0 font-display text-xl tracking-tight text-ink"
-            aria-label="Sidequest home"
-          >
+      {/*
+        EXPERIENCE V2 — A RESTRAINED SHELL, 56 PX TALL.
+
+        Wordmark, room in the middle for the page's own trip context (rendered by
+        the page beneath this bar, since the shell may not name a place — see
+        `shell.spec.ts`), and the one utility link. Opaque, not frosted: 14 px
+        type under a small blur smears rather than dissolves.
+      */}
+      <header className="sticky top-0 z-30 border-b border-rule bg-paper" data-testid="product-chrome">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-4 px-5 py-1.5 sm:px-6">
+          <Link href="/" className="inline-flex min-h-11 shrink-0 items-center font-display text-[1.375rem] leading-none tracking-tight text-ink" aria-label="Sidequest home">
             Sidequest
           </Link>
-          {/*
-            Nothing else lives up here.
-
-            Trip context is rendered by the page that knows about the trip,
-            immediately below this bar. The alternative — a slot the layout
-            fills — would mean the shell reading the database on every request
-            to decide what to say, which is how a global header comes to hold a
-            destination-specific claim in the first place.
-          */}
           <span className="flex-1" />
-          {/*
-            44 px of target, not 20.
-
-            WCAG 2.5.5. This was a bare line of 14 px text — about twenty pixels
-            tall — and it is the only global navigation control in the product,
-            sitting in the top corner where a thumb is least accurate. The
-            padding does it; the type size and the visual weight are unchanged.
-          */}
-          <Link
-            href="/trips/new"
-            className="inline-flex min-h-11 shrink-0 items-center px-2 text-sm text-ink-muted hover:text-pine"
-          >
+          <Link href="/trips/new" className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm text-ink-muted hover:bg-paper-sunk hover:text-ink">
             New trip
           </Link>
         </div>
@@ -89,8 +73,8 @@ export function ProductChrome({ children }: { children: React.ReactNode }) {
       <main id="main" tabIndex={-1} className="flex-1 outline-none">
         {children}
       </main>
-      <footer className="mt-16 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))] border-t border-rule">
-        <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8">
+      <footer className="mt-12 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))] border-t border-rule">
+        <div className="mx-auto max-w-[1600px] px-5 py-6 sm:px-6">
           <p className="measure text-xs leading-relaxed text-ink-faint">
             Sidequest plans from published sources — map data, official pages, climate records —
             and each of them is incomplete somewhere. A finished plan is frozen to the day it was

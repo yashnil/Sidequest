@@ -164,6 +164,8 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
   // hours the composed day leads with; the gondola's own window is asserted above.
   await expect(page.getByText(/sets the shape of this day/).first()).toBeVisible();
   // And where the hours came from, with no claim to have checked today.
+  // EXPERIENCE V2 — the source of the hours sits behind the stop's details disclosure.
+  await page.locator('#hub-view-days [data-testid="stop-details"]').evaluateAll((els) => els.forEach((el) => el.setAttribute('open', '')));
   await expect(page.getByText(/Hours from/).first()).toBeVisible();
   await expect(page.getByText(/We have not checked today/).first()).toBeVisible();
 
@@ -245,6 +247,7 @@ test('the grounds are still schedulable on a day the visitor centre is shut', as
   await expect(
     page.getByRole('heading', { name: 'Manzanar National Historic Site', exact: true }),
   ).toBeVisible();
+  await page.locator('#hub-view-days [data-testid="stop-details"]').evaluateAll((els) => els.forEach((el) => el.setAttribute('open', '')));
   await expect(page.getByText(/Signed for daylight use only/).first()).toBeVisible();
   // No borrowed schedule: the grounds show no opening window.
   await expect(page.getByText(/Open 09:00–16:30/)).toHaveCount(0);

@@ -6,10 +6,15 @@
  * things that carry meaning (fit, season, warnings).
  */
 @theme {
-  --color-paper: #f8f4ec;
+  /*
+   * EXPERIENCE V2 — the paper cools a step and the atlas ink arrives. The canvas
+   * is still warm, but it no longer reads as beige against beige: structure comes
+   * from ink rules and from the deep cartographic ground under every trip.
+   */
+  --color-paper: #f6f3ed;
   --color-paper-raised: #fffdf9;
-  --color-paper-sunk: #efe8db;
-  --color-ink: #1b1a17;
+  --color-paper-sunk: #eeeae1;
+  --color-ink: #17181a;
   --color-ink-muted: #57534e;
   /*
    * THE FAINTEST INK IS STILL BODY TEXT.
@@ -31,7 +36,7 @@
    * offline assertion over this parsed value — `globals.contrast.test.ts`.
    */
   --color-ink-faint: #6e6861;
-  --color-rule: #e0d8ca;
+  --color-rule: #dfd8ca;
 
   /*
    * THE ACCENT: ochre, reserved for the traveller's own choices and the one
@@ -98,10 +103,23 @@
    * legacy paper/pine/amber/clay names above remain the same colours and stay
    * valid throughout the codebase.
    */
-  --color-canvas: #f8f4ec;
+  --color-canvas: #f6f3ed;
   --color-surface: #fffdf9;
   --color-surface-elevated: #ffffff;
-  --color-border: #e0d8ca;
+  --color-surface-raised: #ffffff;
+  --color-surface-muted: #eeeae1;
+  --color-ink-secondary: #57534e;
+  --color-border: #dfd8ca;
+  --color-accent-muted: #f5e3d6;
+  --color-critical: #9a3f36;
+  /* The atlas: the deep cartographic ground under a trip's name, the generation screen and the map rail. */
+  --color-atlas: #101d24;
+  --color-atlas-raised: #16262f;
+  --color-atlas-ink: #e9eef0;
+  --color-atlas-muted: #9fb3bb;
+  --color-route: #1f6f8b;
+  --color-route-muted: #dbe9ee;
+  --color-route-bright: #6fc0d8;
   --color-success: #2f5d50;
   --color-warning: #96521c;
   --color-danger: #9a3f36;
@@ -140,7 +158,7 @@
    * `ProductChrome.tsx`'s own classes and fails if they drift apart again,
    * which is the only reason this comment can be trusted.
    */
-  --chrome-height: calc(2.75rem + 1.75rem + 1px);
+  --chrome-height: calc(2.75rem + 0.75rem + 1px);
 
   --radius-control: 0.5rem;
   --radius-card: 0.75rem;
@@ -190,7 +208,19 @@
     --color-canvas: #14130f;
     --color-surface: #1e1c18;
     --color-surface-elevated: #26231d;
+    --color-surface-raised: #26231d;
+    --color-surface-muted: #26231d;
+    --color-ink-secondary: #b8b1a6;
     --color-border: #35312a;
+    --color-accent-muted: #3a2519;
+    --color-critical: #e29a90;
+    --color-atlas: #0b1418;
+    --color-atlas-raised: #12202a;
+    --color-atlas-ink: #e9eef0;
+    --color-atlas-muted: #9fb3bb;
+    --color-route: #7fbfd6;
+    --color-route-muted: #1d2f36;
+    --color-route-bright: #9ad6ea;
     --color-success: #8cc0ad;
     --color-warning: #e0a066;
     --color-danger: #e29a90;
@@ -277,17 +307,25 @@
    * scale; everything below them steps down deliberately. Clamped so a phone
    * gets a real headline too, not a shrunk desktop one.
    */
+  /* EXPERIENCE V2 — cinematic where it counts, never half the viewport. */
   .display-hero {
     font-family: var(--font-display);
-    font-size: clamp(2.75rem, 2rem + 3.2vw, 5.25rem);
-    line-height: 0.98;
+    font-size: clamp(2.5rem, 1.9rem + 2.4vw, 3.75rem);
+    line-height: 1;
     letter-spacing: -0.02em;
   }
   .display-xl {
     font-family: var(--font-display);
-    font-size: clamp(2.125rem, 1.6rem + 1.9vw, 3.25rem);
+    font-size: clamp(2rem, 1.5rem + 1.6vw, 3rem);
     line-height: 1.04;
     letter-spacing: -0.015em;
+  }
+  /* The atlas band's destination name: large, tight, drawn over the map ground. */
+  .display-atlas {
+    font-family: var(--font-display);
+    font-size: clamp(2.75rem, 2rem + 3.4vw, 5.5rem);
+    line-height: 0.94;
+    letter-spacing: -0.025em;
   }
   .display-lg {
     font-family: var(--font-display);
@@ -349,6 +387,9 @@
    * packet needs every view to print. On screen only the active view shows.
    */
   .hub-view[data-active="false"] {
+    display: none;
+  }
+  .plan-panel[data-active="false"] {
     display: none;
   }
   /* Approximate time: the ≈ that says "estimated" without a paragraph. */
@@ -489,6 +530,115 @@
     );
     background-size: 22px 22px;
   }
+
+  /*
+   * EXPERIENCE V2 — THE ATLAS GROUND.
+   *
+   * Deep cartographic ink with a faint graticule: the surface a destination's
+   * name is set on, the generation screen, the map rail's frame. One utility,
+   * so every dark ground in the product is the same ground.
+   */
+  .atlas {
+    background-color: var(--color-atlas);
+    color: var(--color-atlas-ink);
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+      radial-gradient(ellipse at 80% 20%, rgb(111 192 216 / 0.14), transparent 55%);
+    background-size:
+      48px 48px,
+      48px 48px,
+      100% 100%;
+  }
+  .atlas-muted {
+    color: var(--color-atlas-muted);
+  }
+  /* Controls that were designed for paper sit on the atlas as quiet outlined pills. */
+  .atlas-actions > button,
+  .atlas-actions > form button,
+  .atlas-actions > div > button,
+  .atlas-actions > span > button {
+    background: transparent !important;
+    border: 1px solid rgb(255 255 255 / 0.2) !important;
+    color: var(--color-atlas-ink) !important;
+    border-radius: 9999px !important;
+    min-height: 2.5rem;
+    box-shadow: none !important;
+  }
+  .atlas-actions > button:hover,
+  .atlas-actions > form button:hover,
+  .atlas-actions > div > button:hover,
+  .atlas-actions > span > button:hover {
+    background: rgb(255 255 255 / 0.1) !important;
+    border-color: rgb(255 255 255 / 0.4) !important;
+  }
+  /* A route as a rule: the drawn line that structures a base sequence, a stage path, a day rail. */
+  .route-rule {
+    background-image: linear-gradient(to right, var(--color-route) 0 6px, transparent 6px 10px);
+    background-size: 10px 2px;
+    background-repeat: repeat-x;
+    height: 2px;
+  }
+  /* Entrance on mount without JavaScript: a rise from below, once. */
+  .rise {
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      opacity var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out);
+    @starting-style {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  /* A selected pin's one-time ring. */
+  .pulse-once {
+    animation: sq-pulse-once 700ms var(--ease-out) 1;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  @keyframes sq-pulse-once {
+    from {
+      transform: scale(0.6);
+      opacity: 0.9;
+    }
+    to {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+  /* Tactile press for buttons and selectable cards. */
+  .pressable {
+    transition:
+      transform var(--motion-fast) var(--ease-out),
+      background-color var(--motion-fast) var(--ease-out),
+      border-color var(--motion-fast) var(--ease-out),
+      box-shadow var(--motion-fast) var(--ease-out);
+  }
+  .pressable:active {
+    transform: translateY(1px) scale(0.99);
+  }
+  /* Route reveal: a path drawn once, from the first base to the last. */
+  .route-reveal {
+    stroke-dasharray: 1200;
+    stroke-dashoffset: 1200;
+    animation: sq-route-reveal 900ms var(--ease-out) forwards;
+  }
+  @keyframes sq-route-reveal {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  /* A disclosure's content arrives from above, once, when opened. */
+  details[open] > :not(summary) {
+    animation: sq-slide-down var(--motion-fast) var(--ease-out) both;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -578,7 +728,8 @@
     break-before: page;
   }
   /* Every hub view prints, in order, whatever tab was open on screen. */
-  [data-hub-view] .hub-view {
+  [data-hub-view] .hub-view,
+  [data-hub-view] .plan-panel {
     display: block !important;
   }
   /* The appendix disclosure prints open when asked for. */
@@ -704,6 +855,17 @@
   .paper-grain,
   .plate {
     background-image: none !important;
+  }
+  /* The atlas band prints as paper: no dark ground, ink text, the route rule in black. */
+  .atlas {
+    background: none !important;
+    color: #000000 !important;
+    border: 1px solid #000000;
+  }
+  .atlas .atlas-muted,
+  .atlas [class*='atlas-ink'],
+  .atlas [class*='atlas-muted'] {
+    color: #333333 !important;
   }
   /* Disclosures print closed unless marked as packet content. */
   details[data-print="open"] {

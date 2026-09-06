@@ -11,6 +11,9 @@ import {
   TRAVELER_NEED_LABELS,
   type TripComposerAnswers,
 } from '@sidequest/core';
+import { DestinationCanvas } from './DestinationCanvas';
+import type { DestinationGeometry } from './interview/DestinationMap';
+import type { MapBasemap } from './map-adapter';
 import { DestinationCombobox, type DestinationSuggestionView } from './DestinationCombobox';
 import {
   Choice,
@@ -62,6 +65,7 @@ export function TripComposer({
   defaults,
   editing,
   intent = 'new',
+  tiles = null,
 }: {
   defaults: { startDate: string; endDate: string };
   /**
@@ -85,6 +89,8 @@ export function TripComposer({
    * would be a second text box that reads better and does less.
    */
   intent?: 'new' | 'has_plan';
+  /** A basemap resolved on the server, for the canvas; null draws the destination's geometry only. */
+  tiles?: MapBasemap | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -102,6 +108,9 @@ export function TripComposer({
     ...(prior?.avoid ? { avoid: prior.avoid } : {}),
     ...(prior?.origin ? { origin: prior.origin } : {}),
   });
+  const [geometry, setGeometry] = useState<DestinationGeometry | null>(
+    prior?.destination?.center ? { name: prior.destination.displayName, center: prior.destination.center, bounds: prior.destination.bounds ?? null, featureType: prior.destination.featureType } : null,
+  );
   const [dateMode, setDateMode] = useState<TripComposerAnswers['dates']['mode']>(
     prior?.dates.mode ?? 'exact',
   );
@@ -215,71 +224,68 @@ export function TripComposer({
 
   return (
     <div className="pb-24 lg:pb-0">
-      {/* ---- 1. Where: the one big question ------------------------------ */}
-      <section className="enter" aria-labelledby="composer-where">
-        <p className="label text-accent">{intent === 'has_plan' ? 'A plan you already have' : 'New trip'}</p>
-        <h1 id="composer-where" className="display-hero mt-3 text-ink">
-          {intent === 'has_plan' ? 'Where is the plan taking you?' : 'Where do you want to go?'}
-        </h1>
-        <div className="mt-8 max-w-3xl">
-          <DestinationCombobox
-            name="destination"
-            label="Destination"
-            size="hero"
-            hint="A city, a region, a national park or a whole country — we will work out how much of it a trip can hold."
-            autoFocus
-            /*
-             * Seeded when editing, so the screen opens on what the traveller
-             * actually said rather than on an empty box. Without this the edit
-             * route reproduces the defect it exists to fix — a blank form.
-             */
-            {...(prior?.destinationQuery ? { defaultValue: prior.destinationQuery } : {})}
-            onSelect={(suggestion: DestinationSuggestionView | null) =>
-              patch({
-                destinationEntryId: suggestion?.id ?? null,
-                ...(suggestion ? { destinationText: suggestion.displayName } : {}),
-              })
-            }
-            onTextChange={(text) => patch({ destinationText: text })}
-          />
-          {fieldErrors.destination ? <ErrorNote>{fieldErrors.destination}</ErrorNote> : null}
-        </div>
-
-        {/*
-          THE PLACES A PLAN ALREADY HAS, ASKED FOR WHERE THEY MATTER.
-
-          Same field, same pipeline, promoted. For somebody arriving from "I
-          already have a plan" this is the whole reason they came.
-        */}
-        {intent === 'has_plan' && hasDestination ? (
-          <div className="enter mt-8 max-w-3xl">
-            <FieldLabel htmlFor="mustDo">Which places does your plan already have?</FieldLabel>
-            <textarea
-              id="mustDo"
-              rows={4}
-              maxLength={600}
-              value={draft.mustDo ?? ''}
-              onChange={(event) => patch({ mustDo: event.target.value })}
-              className={cx(inputClass, 'resize-y')}
-              placeholder="One per line, or however you have them written down."
-            />
-            <p className="mt-2 text-xs leading-relaxed text-ink-muted">
-              We look each one up on the map and show you what we made of it before it changes
-              anything. Anything we cannot find, cannot reach, or cannot fit into your dates is
-              named with the reason rather than dropped quietly.
-            </p>
+      {/* ---- 1. Where: the one big question, on the atlas ------------------ */}
+      <section className="atlas rounded-[var(--radius-plate)] px-5 py-6 sm:px-8 sm:py-8" aria-labelledby="composer-where" data-testid="composer-hero">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-center">
+          <div className="min-w-0">
+            <p className="type-small atlas-muted">{intent === 'has_plan' ? 'A plan you already have' : 'New trip'}</p>
+            <h1 id="composer-where" className="display-hero mt-2 text-[var(--color-atlas-ink)]">
+              {intent === 'has_plan' ? 'Where is the plan taking you?' : 'Where do you want to go?'}
+            </h1>
+            <div className="composer-field mt-6 max-w-2xl">
+              <DestinationCombobox
+                name="destination"
+                label="Destination"
+                size="hero"
+                hint="A city, a region, a national park or a whole country — we will work out how much of it a trip can hold."
+                autoFocus
+                {...(prior?.destinationQuery ? { defaultValue: prior.destinationQuery } : {})}
+                onSelect={(suggestion: DestinationSuggestionView | null) => {
+                  patch({
+                    destinationEntryId: suggestion?.id ?? null,
+                    ...(suggestion ? { destinationText: suggestion.displayName } : {}),
+                  });
+                  setGeometry(suggestion?.center ? { name: suggestion.displayName, center: suggestion.center, bounds: suggestion.bounds ?? null, featureType: suggestion.featureType } : null);
+                }}
+                onTextChange={(text) => {
+                  patch({ destinationText: text });
+                  if (geometry && text.trim() !== geometry.name) setGeometry(null);
+                }}
+              />
+              {fieldErrors.destination ? <ErrorNote>{fieldErrors.destination}</ErrorNote> : null}
+            </div>
+            {!hasDestination ? <p className="mt-4 max-w-xl type-small atlas-muted">Dates and travellers open as you go. How you like to travel is the next screen.</p> : null}
+            {intent === 'has_plan' && hasDestination ? (
+              <div className="rise mt-6 max-w-2xl">
+                <label htmlFor="mustDo" className="block text-sm font-medium text-[var(--color-atlas-ink)]">
+                  Which places does your plan already have?
+                </label>
+                <textarea
+                  id="mustDo"
+                  rows={3}
+                  maxLength={600}
+                  value={draft.mustDo ?? ''}
+                  onChange={(event) => patch({ mustDo: event.target.value })}
+                  className="mt-2 w-full resize-y rounded-[var(--radius-control)] border border-white/20 bg-white/5 px-3.5 py-2.5 text-[var(--color-atlas-ink)] placeholder:text-[var(--color-atlas-muted)]"
+                  placeholder="One per line, or however you have them written down."
+                />
+                <p className="mt-2 type-small atlas-muted">We look each one up on the map and say what we made of it before it changes anything. Anything we cannot find, reach or fit is named with the reason rather than dropped quietly.</p>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        {!hasDestination ? (
-          <p className="mt-6 max-w-xl text-sm leading-relaxed text-ink-muted">
-            Start typing. Dates and travellers open as you go; how you like to travel is the next
-            screen.
-          </p>
-        ) : null}
+          <DestinationCanvas geometry={geometry} tiles={tiles} className="hidden lg:block" />
+          {geometry ? <DestinationCanvas geometry={geometry} tiles={tiles} className="rise lg:hidden" /> : null}
+        </div>
+        <style>{`
+          .composer-field label { color: var(--color-atlas-muted); }
+          .composer-field input { color: var(--color-atlas-ink); border-color: rgb(255 255 255 / 0.35); background: transparent; }
+          .composer-field input::placeholder { color: var(--color-atlas-muted); }
+          .composer-field input:focus { border-color: var(--color-route-bright); }
+        `}</style>
       </section>
 
-      <div className={cx('grid gap-10 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-14', hasDestination ? 'mt-12' : 'mt-8')}>
-        <div className="space-y-12">
+      <div className={cx('grid gap-10', hasDestination ? 'mt-10' : 'mt-6')}>
+        <div className="mx-auto w-full max-w-3xl space-y-10">
           {/* ---- 2. When ------------------------------------------------ */}
           {hasDestination ? (
             <Section step={2} title="When?">
@@ -462,25 +468,18 @@ export function TripComposer({
           {error ? <ErrorNote>{error}</ErrorNote> : null}
 
           {hasDestination ? (
-            <div className="hidden flex-wrap items-center gap-4 border-t border-rule pt-7 lg:flex">
+            <div className="hidden flex-wrap items-center justify-between gap-4 border-t border-rule pt-6 lg:flex" data-testid="composer-summary">
+              <p className="numeral type-small text-ink-muted">
+                <span className="font-display text-base text-ink">{draft.destinationText?.trim()}</span> · {datesSoFar}
+                {nightsSoFar ? ` · ${nightsSoFar}` : ''} · {travellersSoFar} · arriving {ARRIVAL_PRECISION_LABELS[arrival].toLowerCase()}
+              </p>
               <button type="button" className={buttonClass('primary', 'lg')} disabled={!canSubmit} onClick={submit}>
                 {pending ? 'Saving…' : 'Continue'}
               </button>
-              <span className="text-sm text-ink-faint">Next: a short interview about how you travel. Nothing is researched or bought yet.</span>
             </div>
           ) : null}
         </div>
 
-        {/* ---- The trip stub ------------------------------------------- */}
-        <aside className="min-w-0 lg:sticky lg:top-[calc(var(--chrome-height)+1.5rem)] lg:self-start" aria-label="What we have so far">
-          <TripStub
-            destination={draft.destinationText?.trim() || null}
-            dates={datesSoFar}
-            nights={nightsSoFar}
-            arrival={ARRIVAL_PRECISION_LABELS[arrival]}
-            travellers={travellersSoFar}
-          />
-        </aside>
       </div>
 
       {/* ---- Mobile: the one action, always reachable ------------------- */}
@@ -528,104 +527,17 @@ function nightsBetween(start: string, end: string): number {
  * the controls. Sections enter as the ones above them are answered.
  */
 function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
+  /* EXPERIENCE V2 — a titled run of the page, not a boxed step. */
   return (
-    <section aria-labelledby={`composer-step-${step}`} className="enter">
-      <div className="flex items-baseline gap-4">
-        <span aria-hidden="true" className="numeral text-sm text-accent">
-          {String(step).padStart(2, '0')}
-        </span>
-        <h2 id={`composer-step-${step}`} className="display-md text-ink">
-          {title}
-        </h2>
-      </div>
-      <div className="mt-5 sm:pl-10">{children}</div>
+    <section className="rise rule-top pt-6" aria-labelledby={`composer-step-${step}`} data-testid={`composer-step-${step}`}>
+      <h2 id={`composer-step-${step}`} className="type-section text-ink">
+        {title}
+      </h2>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
 
-/**
- * THE TRIP STUB.
- *
- * What the composer knows so far, drawn as a ticket rather than listed as a
- * table: the destination lettered on a plate, the length as a numeral, and the
- * few facts that decide what we research. It fills in as the traveller answers,
- * which is the first time the product visibly learns something from them.
- */
-function TripStub({
-  destination,
-  dates,
-  nights,
-  arrival,
-  travellers,
-}: {
-  destination: string | null;
-  dates: string;
-  nights: string | null;
-  arrival: string;
-  travellers: string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-[var(--radius-plate)] border border-rule bg-paper-raised">
-      <div className="plate relative h-40 px-5 pt-4" style={{ '--plate-hue': 38 } as React.CSSProperties}>
-        <p className="label text-ink-faint">So far</p>
-        <svg viewBox="0 0 320 120" className="absolute inset-x-0 bottom-0 h-24 w-full" aria-hidden="true">
-          <circle cx="160" cy="80" r="46" fill="none" stroke="var(--color-ink)" strokeOpacity="0.25" strokeDasharray="3 4" />
-          <rect x="155" y="75" width="10" height="10" fill="var(--color-ink)" />
-        </svg>
-      </div>
-      <div className="px-5 py-4">
-        <p className={cx('font-display text-2xl leading-tight', destination ? 'text-ink' : 'text-ink-faint')}>{destination ?? 'Somewhere'}</p>
-        <p className="mt-1 text-sm text-ink-muted">{dates}</p>
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <Fact label="Length" value={nights ?? '—'} />
-          <Fact label="Travellers" value={travellers} />
-          <div className="col-span-2">
-            <Fact label="Arriving" value={arrival} />
-          </div>
-        </dl>
-        <p className="mt-4 border-t border-rule pt-3 text-xs leading-relaxed text-ink-faint">
-          How you like to travel — pace, transport, food, what you are here for — is the next screen, one question at a time. Nothing is stored until you press the button.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="label text-ink-faint">{label}</dt>
-      <dd className="mt-0.5 truncate text-ink">{value}</dd>
-    </div>
-  );
-}
-
-/**
- * A HEAD COUNT, WITH THE THREE SEMANTICS A BARE NUMBER INPUT DOES NOT HAVE.
- *
- * The founder test reported a traveller count that read `01`, and the mechanism
- * is worth stating because it is not obvious. A controlled `type="number"` was
- * bound to a number and updated with `Number(event.target.value)`. Clearing the
- * children field yields `''`, `Number('')` is `0`, and `0` is the value already
- * in state — so React bails out of the re-render, the DOM keeps the empty
- * string it has, and the next keystroke makes it `"01"`. For adults the same
- * path silently wrote `0`, below the `min` the markup advertised, and the only
- * complaint arrived from the server at submit time.
- *
- * Three fixes, all of which have to be here rather than in the caller:
- *
- * 1. **The text is the state.** An empty field stays empty while it is being
- *    typed in, instead of snapping to a number nobody chose.
- * 2. **Empty means unset, not zero.** It is reported as the minimum on blur,
- *    which is the only defensible reading of "how many adults" left blank.
- * 3. **The bounds are enforced where they are declared.** `min` and `max` on a
- *    number input are advisory outside a submitting form, and this form does
- *    not submit — the button is a `type="button"`. So they are clamped on blur.
- *
- * Stepper buttons because this is a phone-first control: forty-four-pixel
- * targets beat a spinner two pixels tall, and they make the bounds visible by
- * disabling at the ends.
- */
 function CountField({
   id,
   label,

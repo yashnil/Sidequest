@@ -1,3 +1,4 @@
+import { UNIVERSAL_INTERESTS } from '../interests/vocabulary';
 import {
   INTEREST_LABELS,
   INTERESTS,
@@ -180,10 +181,11 @@ function signatureInterests(ctx: InterviewContext): Interest[] {
   const push = (...items: Interest[]) => {
     for (const item of items) if (!out.includes(item)) out.push(item);
   };
-  if (hasTrait(d, 'dense_urban')) push('neighbourhoods_and_local_life', 'food_and_towns', 'markets_and_street_food', 'museums_and_galleries', 'architecture_and_landmarks', 'history_and_culture');
+  // A city leads with what cities do — eating, streets, culture — and keeps a way out to the hills and the water.
+  if (hasTrait(d, 'dense_urban')) push('food_and_towns', 'neighbourhoods_and_local_life', 'history_and_culture', 'markets_and_street_food', 'scenic_viewpoints', 'museums_and_galleries', 'architecture_and_landmarks', 'easy_nature_walks', 'hiking');
   if (hasTrait(d, 'mountain')) push('hiking', 'scenic_viewpoints', 'lakes_and_rivers', 'scenic_drives', 'easy_nature_walks', 'wildlife');
   if (hasTrait(d, 'wilderness')) push('wildlife', 'hiking', 'easy_nature_walks', 'scenic_viewpoints', 'stargazing');
-  if (hasTrait(d, 'beach') || hasTrait(d, 'island') || hasTrait(d, 'archipelago')) push('beaches_and_swimming', 'scenic_viewpoints', 'wildlife', 'food_and_towns');
+  if (hasTrait(d, 'beach') || hasTrait(d, 'island') || hasTrait(d, 'archipelago')) push('beaches_and_swimming', 'scenic_viewpoints', 'food_and_towns', 'wildlife', 'easy_nature_walks');
   if (hasTrait(d, 'road_trip_region') || hasTrait(d, 'compact_country')) push('scenic_drives', 'scenic_viewpoints', 'history_and_culture', 'food_and_towns', 'easy_nature_walks');
   if (hasTrait(d, 'broad_geography')) push('history_and_culture', 'food_and_towns', 'scenic_viewpoints', 'neighbourhoods_and_local_life');
   if (hasTrait(d, 'food_dense')) push('food_and_towns', 'markets_and_street_food');
@@ -191,23 +193,94 @@ function signatureInterests(ctx: InterviewContext): Interest[] {
 }
 
 /**
- * The five to eight categories the priorities screen shows first.
+ * DESTINATION-AWARE INTERVIEW GLOBALITY — WHICH FAMILY AN INTEREST BELONGS TO.
  *
- * Composer themes first (the traveller already said them), then the shape's
- * signature, then what the offer holds, then the universal rest. Everything in
- * the offer remains reachable behind "More interests".
+ * Never shown to a traveller. The first screen is capped per family so that
+ * one theme cannot monopolise it: the vocabulary's own order opens with eight
+ * outdoor rows, and a destination nobody had screened yet used to inherit
+ * exactly that order — hiking, nature walks, viewpoints, lakes, scenic drives,
+ * wildlife, geothermal, hot springs — for a city of seven million.
+ */
+export const INTEREST_FAMILIES = ['outdoors', 'scenery', 'water', 'nature_science', 'food', 'culture', 'urban_life'] as const;
+export type InterestFamily = (typeof INTEREST_FAMILIES)[number];
+export const INTEREST_FAMILY: Record<Interest, InterestFamily> = {
+  hiking: 'outdoors',
+  easy_nature_walks: 'outdoors',
+  scenic_viewpoints: 'scenery',
+  scenic_drives: 'scenery',
+  photography_golden_hour: 'scenery',
+  stargazing: 'scenery',
+  lakes_and_rivers: 'water',
+  beaches_and_swimming: 'water',
+  hot_springs: 'water',
+  wildlife: 'nature_science',
+  geology_and_geothermal: 'nature_science',
+  food_and_towns: 'food',
+  markets_and_street_food: 'food',
+  history_and_culture: 'culture',
+  museums_and_galleries: 'culture',
+  architecture_and_landmarks: 'culture',
+  neighbourhoods_and_local_life: 'urban_life',
+};
+/** Rows on the first priorities screen. */
+export const FIRST_SCREEN_INTERESTS = 8;
+/** At most this many rows from one family on that screen. */
+export const MAX_PER_FAMILY = 2;
+/** Families every destination can serve; one row from each is guaranteed a place when the offer holds one. */
+const GUARANTEED_FAMILIES: readonly InterestFamily[] = ['food', 'culture'];
+
+/**
+ * The eight categories the priorities screen shows first, ranked and then
+ * balanced.
+ *
+ * Rank: what the traveller already said (composer themes, chosen rows), then
+ * the destination's signature, then the universal core, then the rest of the
+ * offer in its own order. Balance: at most `MAX_PER_FAMILY` rows per family,
+ * with the best food and culture rows guaranteed a place, so a mountain
+ * region still asks about eating and a harbour city still offers the hills.
+ * Everything in the offer remains reachable behind "More interests".
  */
 export function priorityOffer(ctx: InterviewContext, answers: QuestionnaireAnswers): Interest[] {
   const offered = ctx.traveller.offeredInterests.length > 0 ? ctx.traveller.offeredInterests : INTERESTS;
-  const out: Interest[] = [];
+  const ranked: Interest[] = [];
   const push = (interest: Interest) => {
-    if (!out.includes(interest) && offered.includes(interest)) out.push(interest);
+    if (!ranked.includes(interest) && offered.includes(interest)) ranked.push(interest);
   };
+  const chosen = chosenInterests(answers);
   for (const theme of ctx.traveller.composerThemes ?? []) for (const interest of THEME_INTERESTS[theme] ?? []) push(interest);
-  for (const interest of chosenInterests(answers)) push(interest);
+  for (const interest of chosen) push(interest);
   for (const interest of signatureInterests(ctx)) push(interest);
+  for (const interest of UNIVERSAL_INTERESTS) push(interest);
   for (const interest of offered) push(interest);
-  return out.slice(0, 8);
+
+  const out: Interest[] = [];
+  const perFamily = new Map<InterestFamily, number>();
+  const take = (interest: Interest) => {
+    if (out.includes(interest)) return;
+    out.push(interest);
+    perFamily.set(INTEREST_FAMILY[interest], (perFamily.get(INTEREST_FAMILY[interest]) ?? 0) + 1);
+  };
+  // What the traveller already chose is never balanced away.
+  for (const interest of ranked) if (chosen.includes(interest)) take(interest);
+  // One row from each guaranteed family, the best-ranked one.
+  for (const family of GUARANTEED_FAMILIES) {
+    if (out.length >= FIRST_SCREEN_INTERESTS) break;
+    if ((perFamily.get(family) ?? 0) > 0) continue;
+    const best = ranked.find((interest) => INTEREST_FAMILY[interest] === family && !out.includes(interest));
+    if (best) take(best);
+  }
+  // The rest by rank, capped per family.
+  for (const interest of ranked) {
+    if (out.length >= FIRST_SCREEN_INTERESTS) break;
+    if ((perFamily.get(INTEREST_FAMILY[interest]) ?? 0) >= MAX_PER_FAMILY) continue;
+    take(interest);
+  }
+  // A small offer relaxes the cap rather than showing an emptier screen.
+  for (const interest of ranked) {
+    if (out.length >= FIRST_SCREEN_INTERESTS) break;
+    take(interest);
+  }
+  return out.slice(0, Math.max(FIRST_SCREEN_INTERESTS, chosen.length));
 }
 
 function choice(def: Omit<QuestionDefinition, 'kind' | 'hardCapable' | 'optional'> & { kind?: 'single' | 'scenario'; hardCapable?: boolean; optional?: boolean }): QuestionDefinition {
@@ -385,14 +458,16 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
       { value: 'rent_car', label: 'Rent a car', detail: t(ctx, 'road_trip_region') || t(ctx, 'mountain') ? 'Most of what is worth seeing here sits at the end of a drive' : 'Freedom to reach the far corners' },
       { value: 'no_car', label: 'No car', detail: 'Shuttles, tours, taxis and whatever runs to a timetable' },
       { value: 'transit_walk', label: 'On foot and by public transport', detail: 'Where it goes, and nowhere it does not' },
+      { value: 'mixed', label: 'A mix, whatever works', detail: 'A car for the far stops, local transport in town' },
     ];
   },
   impacts: ['transportation_mode', 'scope', 'base_count', 'trip_archetype', 'driving'],
   burden: 1,
   criticality: 3,
   carriedFields: ['willDrive'],
-  relevance: () => 1,
-  read: (answers) => (answers.willDrive ? (answers.guideWillingness === 'prefer' ? 'self_drive' : 'rent_car') : answers.guideWillingness === 'prefer' ? 'guided' : answers.privateTransfers === 'fine' && answers.transportPriority === 'least_stressful' ? 'taxis' : answers.boatsAndFerries === 'fine' && answers.privateTransfers === 'fine' ? 'boats_transfers' : 'transit_walk'),
+  // When the destination's shape does not settle the mode, this is asked first: uncertainty becomes a question, not a default.
+  relevance: (ctx) => (ctx.destination.assumption?.confidence === 'high' ? 1 : 1.5),
+  read: (answers) => (answers.willDrive ? (answers.guideWillingness === 'prefer' ? 'self_drive' : answers.privateTransfers === 'fine' ? 'mixed' : 'rent_car') : answers.guideWillingness === 'prefer' ? 'guided' : answers.privateTransfers === 'fine' && answers.transportPriority === 'least_stressful' ? 'taxis' : answers.boatsAndFerries === 'fine' && answers.privateTransfers === 'fine' ? 'boats_transfers' : 'transit_walk'),
   apply: (value) => {
     switch (String(value)) {
       case 'rent_car':
@@ -420,7 +495,8 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
     if (movement === 'guided') return { value: 'guided', reason: `We'll assume guided legs and arranged transfers for the remote parts of ${ctx.destination.proseName}, and self-drive nowhere it is not needed.`, source: 'destination_prior' };
     if (movement === 'boat') return { value: 'boats_transfers', reason: `We'll assume boats and local transfers between islands, which is how ${ctx.destination.proseName} is usually done.`, source: 'destination_prior' };
     if (movement === 'car') return { value: 'rent_car', reason: `We'll assume a hire car, because most of what is worth seeing around ${ctx.destination.proseName} sits at the end of a drive.`, source: 'destination_prior' };
-    return { value: 'rent_car', reason: "We'll assume a hire car so nothing is out of reach; change this if you would rather not drive.", source: 'smart_default' };
+    // Nothing supports one mode over another: the least committal choice, said plainly — never "a car" because no better evidence exists.
+    return { value: 'mixed', reason: `We don't know ${ctx.destination.proseName} well enough to pick one way around, so the plan may use a hire car for the far stops and local transport in town; change this if you would rather not drive.`, source: 'smart_default' };
   },
 });
 

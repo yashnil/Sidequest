@@ -395,6 +395,7 @@ export function InteractiveMap({
                       }
                     }}
                   />
+                  {isFocused ? <circle key={`pulse-${marker.id}`} cx={x} cy={y} r={stop ? 10 : 6.5} fill="none" stroke="var(--color-route)" strokeWidth={2} className="pulse-once" aria-hidden="true" /> : null}
                   <circle
                     cx={x}
                     cy={y}
@@ -456,11 +457,10 @@ export function InteractiveMap({
             </span>
           ) : null}
           {markers.some((m) => m.kind === 'stop') ? <span>Numbered in the order of the day.</span> : null}
-          {hasMeasured ? <span>Solid and long-dashed lines are measured legs (drive, transit); dotted is on foot.</span> : null}
-          {hasRouteShape ? <span>Curved lines follow the measured road.</span> : null}
-          {hasStraightMeasured ? <span>A straight measured line has a real duration but no recorded shape.</span> : null}
-          {hasEstimated ? <span>Umber dashes are legs Sidequest estimated from map distance.</span> : null}
-          {hasUnmeasured || markers.some((m) => m.kind === 'place') ? <span>Short-dashed lines are straight connectors, not routes.</span> : null}
+          {hasMeasured ? <span>Solid lines: measured legs{hasStraightMeasured ? ' (straight where no road shape was recorded)' : ''}; dotted: on foot.</span> : null}
+          {hasRouteShape && !hasMeasured ? <span>Curved lines follow the measured road.</span> : null}
+          {hasEstimated ? <span>Umber dashes: estimated from map distance.</span> : null}
+          {hasUnmeasured || markers.some((m) => m.kind === 'place') ? <span>Short dashes: straight connectors, not routes.</span> : null}
           {caption}
           {tiles ? <span>Basemap: {tiles.attribution}.</span> : <span>Positions come from the source records; no basemap is configured.</span>}
         </figcaption>

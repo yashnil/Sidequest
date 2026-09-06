@@ -94,7 +94,7 @@ export function StopEditMenu({
           setOffers(null);
           setStatus(null);
         }}
-        className="rounded-md px-2 py-1 text-ink-faint transition-colors hover:bg-paper-sunk hover:text-ink"
+        className="pressable inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-transparent px-2 text-ink-muted transition-colors hover:border-rule hover:bg-paper-sunk hover:text-ink"
       >
         {locked ? '🔒' : '⋯'}
       </button>

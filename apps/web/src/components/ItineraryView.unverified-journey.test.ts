@@ -132,7 +132,7 @@ describe('the finished document, on a trip whose scheduled journeys nobody could
      * "Travel to X" — one row contradicting itself, which is how a reader
      * decides which half to believe.
      */
-    expect(TEXT).toContain('Journey not verified');
+    expect(TEXT).toContain('timing to confirm');
 
     const proxies = PLAN.days
       .flatMap((day) => day.items)
