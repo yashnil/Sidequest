@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { completeQuestionnaire } from './support/trip';
 
 /**
@@ -102,6 +103,8 @@ async function build(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Mammoth Lakes', exact: true })).toBeVisible();
+  // PRODUCTION UI V1 — stops, hours, conflicts and day weather live under Days.
+  await openHubView(page, 'days');
 }
 
 test('the board states opening hours against the traveller’s own dates', async ({ page }) => {

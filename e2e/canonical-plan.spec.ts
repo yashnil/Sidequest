@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip, compileRegion } from './support/trip';
+import { openHubView } from './support/hub';
 
 /**
  * THE CANONICAL GENERATION PATH, PRESSED FROM THE REAL BUTTONS.
@@ -28,25 +29,31 @@ async function reachMammothBoard(page: Page) {
 }
 
 async function expectCanonicalItinerary(page: Page) {
-  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await expect(page.getByTestId('route-bases')).toBeVisible();
+  // PRODUCTION UI V1 — the hub is five views; the days live under Days.
+  await openHubView(page, 'days');
   for (const dayNumber of [1, 2, 3, 4]) {
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
   // Real content on every day: activities and meals, never the stale "Nothing scheduled" copy beside content.
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
+  // A stop nothing could verify is kept and labelled ("Confirm later"), not dropped; a checked one says so.
+  await expect(page.getByRole('heading', { name: 'A Quiet Overlook Nobody Documented', exact: true })).toBeVisible();
+  const days = page.locator('#hub-view-days');
+  await expect(days.getByText('Confirm later').first()).toBeVisible();
+  await expect(days.getByText('Checked').first()).toBeVisible();
+  await openHubView(page, 'plan');
   await expect(page.getByTestId('where-to-stay')).toBeVisible();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('packing-list')).toBeVisible();
   await expect(page.getByTestId('before-you-go')).toBeVisible();
   await expect(page.getByTestId('before-you-go')).toContainText(/entry requirements/i);
   await expect(page.getByTestId('backups')).toBeVisible();
   await expect(page.getByTestId('considered-and-left-out')).toBeVisible();
-  // A stop nothing could verify is kept and labelled, not dropped.
-  await expect(page.getByRole('heading', { name: 'A Quiet Overlook Nobody Documented', exact: true })).toBeVisible();
-  await expect(page.getByText('Not yet verified').first()).toBeVisible();
-  await expect(page.getByText('Verified').first()).toBeVisible();
+  await openHubView(page, 'overview');
 }
 
 test('Build my trip runs the canonical path and renders the reconciled itinerary with its package', async ({ page }) => {
@@ -55,9 +62,11 @@ test('Build my trip runs the canonical path and renders the reconciled itinerary
   await expectCanonicalItinerary(page);
 
   // Persisted: a reload shows the same plan, including the package sections.
+  await openHubView(page, 'days');
   const heading = await page.getByRole('heading', { name: /^Day 2/ }).textContent();
   await page.reload();
   await expect(page.getByRole('heading', { name: /^Day 2/ })).toHaveText(heading ?? '');
+  await openHubView(page, 'overview');
   await expect(page.getByTestId('route-overview')).toBeVisible();
 });
 
@@ -114,14 +123,16 @@ test('Plan with smart defaults composes a complete trip before any question is a
   const defaults = page.getByTestId('interview-smart-defaults');
   await expect(defaults).toBeVisible({ timeout: 20_000 });
   await defaults.click();
-  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
+  await openHubView(page, 'days');
   for (const dayNumber of [1, 2, 3, 4]) {
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
+  await expect(page.locator('#hub-view-days').getByText('Confirm later').first()).toBeVisible();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('packing-list')).toBeVisible();
-  await expect(page.getByText('Not yet verified').first()).toBeVisible();
 });
 
 test('Build my trip from the interview review, with no research and no board, verifies through the geocoder alone', async ({ page }) => {
@@ -130,7 +141,7 @@ test('Build my trip from the interview review, with no research and no board, ve
   await completeQuestionnaire(page);
   await expect(page.getByTestId('interview-build-board')).toHaveCount(0);
   await page.getByTestId('interview-build-trip').click();
-  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
 });
@@ -143,7 +154,8 @@ test('Explore experiences first, then the board, verifies against the compiled r
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
-  await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
-  await expect(page.getByText('Verified').first()).toBeVisible();
+  await openHubView(page, 'days');
+  await expect(page.locator('#hub-view-days').getByText('Checked').first()).toBeVisible();
 });

@@ -1,0 +1,212 @@
+{
+  "version": 4,
+  "interests": {
+    "hiking": "low",
+    "easy_nature_walks": "low",
+    "scenic_viewpoints": "core",
+    "lakes_and_rivers": "low",
+    "scenic_drives": "low",
+    "wildlife": "low",
+    "geology_and_geothermal": "low",
+    "hot_springs": "low",
+    "history_and_culture": "core",
+    "food_and_towns": "core",
+    "photography_golden_hour": "low",
+    "stargazing": "low",
+    "museums_and_galleries": "low",
+    "architecture_and_landmarks": "low",
+    "neighbourhoods_and_local_life": "frequent",
+    "markets_and_street_food": "low",
+    "beaches_and_swimming": "low"
+  },
+  "pace": "fast",
+  "dayStart": "normal",
+  "dailyIntensity": "moderate",
+  "freeTime": "balanced",
+  "budgetStyle": "midrange",
+  "discoveryMix": "balanced",
+  "crowdTolerance": "dont_mind",
+  "avoidTouristTraps": false,
+  "transport": {
+    "willDrive": true,
+    "comfortableMountainRoads": true,
+    "comfortableGravelRoads": false,
+    "maxDailyDriveMinutes": 150,
+    "maxDailyTransportMinutes": 240,
+    "willUseShuttles": true,
+    "maxAccessWalkMinutes": 25,
+    "priority": "best_value"
+  },
+  "food": {
+    "breakfastStyle": "coffee_light",
+    "style": "local_casual",
+    "specialMealAppetite": "one",
+    "willPackLunch": true,
+    "dietaryNeeds": [],
+    "dietaryStrict": false,
+    "specialMealBudget": 1,
+    "everydayPriceBand": "moderate",
+    "wantsBreakfastVenue": true
+  },
+  "regionalExpansion": "nearby_60",
+  "detourToleranceMinutes": 60,
+  "avoidances": [],
+  "preferenceSignals": [],
+  "accessibility": {
+    "mobilityLimited": false
+  },
+  "interview": {
+    "baseMoveTolerance": "move_if_it_saves_time",
+    "iconicCrowdStrategy": "see_it_anyway",
+    "convenienceSpend": "balance",
+    "lodgingStyle": "no_preference",
+    "rusticLodgingOk": true,
+    "guideWillingness": "sometimes",
+    "privateTransfers": "if_needed",
+    "boatsAndFerries": "fine",
+    "internalFlights": "prefer_not",
+    "remoteComfort": "fine",
+    "altitudeComfort": "fine",
+    "hikeAppetite": "half_day",
+    "walkingTolerance": "moderate",
+    "stairsAndHills": "fine",
+    "lateNights": "sometimes",
+    "dayTripAppetite": "one_day_trip",
+    "scopeStrategy": "best_subset",
+    "everyoneEveryDay": true,
+    "mustInclude": [],
+    "mustAvoid": []
+  },
+  "hard": [],
+  "provenance": {
+    "priorities": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:02.672Z"
+    },
+    "priority_role:scenic_viewpoints": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:05.135Z"
+    },
+    "priority_role:history_and_culture": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:06.197Z"
+    },
+    "priority_role:food_and_towns": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:07.293Z"
+    },
+    "transport_mode": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:09.722Z"
+    },
+    "effort": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:13.309Z"
+    },
+    "iconic_crowds": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:16.318Z"
+    },
+    "budget": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:22:20.905Z"
+    },
+    "day_shape": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:23:42.404Z"
+    },
+    "dietary": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:23:45.387Z"
+    },
+    "food_tradeoff": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:23:47.946Z"
+    },
+    "coverage_strategy": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:23:52.200Z"
+    },
+    "base_moves": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:24:00.156Z"
+    },
+    "daily_driving": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:24:04.804Z"
+    },
+    "internal_flights": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:24:10.418Z"
+    },
+    "weather_avoidances": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:24:13.326Z"
+    },
+    "hard_constraints": {
+      "source": "explicit",
+      "strength": "strong",
+      "confidence": 1,
+      "at": "2026-09-05T19:24:17.176Z"
+    }
+  },
+  "derived": {
+    "maxPhysicalIntensity": "strenuous",
+    "preferredPhysicalIntensity": "moderate",
+    "comfortableCostLevel": 2,
+    "activitySlotsPerDay": 4,
+    "frequencyCaps": {
+      "hiking": 1,
+      "easy_nature_walks": 1,
+      "scenic_viewpoints": 10,
+      "lakes_and_rivers": 1,
+      "scenic_drives": 1,
+      "wildlife": 1,
+      "geology_and_geothermal": 1,
+      "hot_springs": 1,
+      "history_and_culture": 10,
+      "food_and_towns": 10,
+      "photography_golden_hour": 1,
+      "stargazing": 1,
+      "museums_and_galleries": 1,
+      "architecture_and_landmarks": 1,
+      "neighbourhoods_and_local_life": 6,
+      "markets_and_street_food": 1,
+      "beaches_and_swimming": 1
+    },
+    "effectiveDetourMinutes": 60,
+    "hiddenGemTarget": 0.45
+  }
+}

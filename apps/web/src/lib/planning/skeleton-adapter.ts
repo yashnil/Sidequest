@@ -1013,6 +1013,13 @@ export interface ResolvedBase {
   name: string;
   nights: number;
   identity: ResolvedBaseIdentity | null;
+  /** PRODUCT RECOVERY V1 — the traveller-facing name of the place they sleep (the town, or the lodge the draft meant); `name` stays the draft's own string. */
+  displayName?: string;
+  /** What the geocoder or provider called the matched record. */
+  canonicalName?: string;
+  /** The draft's stated locality, when it gave one. */
+  locality?: string;
+  baseKind?: 'locality' | 'neighbourhood' | 'lodging_property' | 'lodge' | 'camp' | 'remote_base' | 'other';
 }
 
 export function identityFromPlace(place: Place): ResolvedBaseIdentity {
@@ -1343,15 +1350,18 @@ export async function resolveSkeletonBase(
   }
 
   // Tier 2 — the compiler's own base-eligible list, exact normalized name.
-  if (stated) {
-    const target = normalizeName(base.name);
+  // PRODUCT RECOVERY V1 — a model draft carries no stated coordinate, and a
+  // compiled base that matches the name exactly is still real evidence; it
+  // used to be skipped for drafts, which sent every base to the geocoder.
+  {
+    const target = normalizeName(base.name.split(',')[0]!);
     const nameMatches = (context.compiledBases ?? []).filter((b) => normalizeName(displayNameOf(b)) === target);
     if (nameMatches.length === 1) {
       const match = nameMatches[0]!;
       return {
         identity: identityFromBaseCandidate(match),
         method: 'compiled_base_exact_name',
-        distanceKm: haversineKm(stated, match.coordinates),
+        distanceKm: stated ? haversineKm(stated, match.coordinates) : null,
         ambiguous: false,
         provenance: 'compiled_region_bases',
         geographicScopeOutcome: null,

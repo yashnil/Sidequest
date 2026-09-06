@@ -186,7 +186,7 @@ function day(dayNumber: number, date: string, items: Partial<ItineraryItem>[], w
     theme: 'Test',
     window: { ...window, usableMinutes: window.endMinute - window.startMinute },
     items: items.map((item, i) => ({ id: `i${i}`, kind: 'activity', title: `Stop ${i}`, startMinute: 9 * 60, endMinute: 10 * 60, durationMinutes: 60, reason: 'r', weatherSensitive: false, ...item }) as ItineraryItem),
-    totals: { activityMinutes: 0, travelMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, travelKm: 0, freeMinutes: 0, strenuousCount: 0, unmeasuredLegCount: 0 },
+    totals: { activityMinutes: 0, travelMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, estimatedMinutes: 0, allowanceMinutes: 0, travelKm: 0, freeMinutes: 0, strenuousCount: 0, unmeasuredLegCount: 0 },
     transport: { primaryMode: 'drive', modes: ['drive'], serviceIds: [], parkingNotes: [], accessNotes: [], verifyBeforeTravel: [] },
     availability: { flexiblePlaceIds: [], cautions: [], verifyBeforeTravel: [], bookings: [] },
     weather: { evidence: 'unavailable', summary: 'n/a', precipitationProbabilityPercent: null, decisions: [], cautions: [], backups: [], provider: 'none', attribution: 'none' },

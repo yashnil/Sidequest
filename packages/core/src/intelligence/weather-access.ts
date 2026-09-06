@@ -48,7 +48,7 @@ function clock(minute: number): string {
   return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 }
 
-export function buildWeatherIntelligence(input: { itinerary: Itinerary; categoryOf: (item: ItineraryItem) => string; packageBackups: readonly { trigger: string; alternative: string }[] }): WeatherIntelligence {
+export function buildWeatherIntelligence(input: { itinerary: Itinerary; categoryOf: (item: ItineraryItem) => string; packageBackups: readonly { trigger: string; alternative: string; dayNumbers?: number[] }[] }): WeatherIntelligence {
   const days = input.itinerary.days.map((day) => {
     const kind: (typeof WEATHER_KINDS)[number] = day.weather.evidence === 'forecast' ? 'forecast' : day.weather.evidence === 'historical_pattern' ? 'climate' : 'unavailable';
     const sensitiveItems = day.items
@@ -65,7 +65,8 @@ export function buildWeatherIntelligence(input: { itinerary: Itinerary; category
         });
       });
     const backup = day.weather.backups[0];
-    const rainBackup = input.packageBackups.find((b) => /rain|weather|storm|wind|fog|snow/i.test(b.trigger));
+    // PRODUCT RECOVERY V1 — only a backup matched to this day may stand in for its weather fallback.
+    const rainBackup = input.packageBackups.find((b) => /rain|weather|storm|wind|fog|snow|visibility/i.test(b.trigger) && b.dayNumbers?.includes(day.dayNumber));
     const fallback = backup ? `${backup.name} — ${backup.why}` : rainBackup ? rainBackup.alternative : undefined;
     return dayWeatherSemanticsSchema.parse({
       dayNumber: day.dayNumber,

@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS itinerary_days (
   weather_json   TEXT NOT NULL DEFAULT '{}',
   food_json      TEXT NOT NULL DEFAULT '{}',
   warnings_json  TEXT NOT NULL DEFAULT '[]',
+  timing_json    TEXT NOT NULL DEFAULT 'null',
   PRIMARY KEY (trip_id, day_number)
 );
 
@@ -1625,6 +1626,8 @@ export const COLUMN_MIGRATIONS: readonly {
    */
   { table: 'itineraries', column: 'package_json', definition: 'TEXT' },
   { table: 'itinerary_days', column: 'food_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  /** PRODUCT RECOVERY V1 — the day's time precision (measured / estimated / band) and its estimated and unknown leg counts. `null` on plans stored before it existed. */
+  { table: 'itinerary_days', column: 'timing_json', definition: "TEXT NOT NULL DEFAULT 'null'" },
   /**
    * Added when claims gained supersession.
    *

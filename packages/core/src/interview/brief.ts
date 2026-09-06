@@ -152,7 +152,8 @@ export function buildTravelerBrief(input: {
     assumptions.push(`Priorities were assumed from the destination${provenance.priorities?.reason ? ` — ${provenance.priorities.reason}` : ''}`);
   }
   const priorities = chosen.map(([interest, level]) => {
-    const role = provenance[`priority_role:${interest}`];
+    // The role is explicit when the traveller answered it on its own screen or on the one-screen matrix.
+    const role = provenance[`priority_role:${interest}`] ?? provenance.priority_roles;
     return { theme: INTEREST_LABELS[interest].toLowerCase(), frequency: LEVEL_PHRASE[level], assumed: !(priorityExplicit && (role === undefined || isExplicit(role))) };
   });
   const secondary = secondaryLevels.map(([interest, level]) => `${INTEREST_LABELS[interest].toLowerCase()} (${LEVEL_PHRASE[level]})${mark(priorityExplicit)}`);

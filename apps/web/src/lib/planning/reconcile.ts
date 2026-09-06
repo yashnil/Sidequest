@@ -44,6 +44,15 @@ import {
   placeClassFor,
   type OperationalEvidence,
   type ScheduledOperational,
+  anchorKindOf,
+  lookupPriorityFor,
+  mealSlotOf,
+  estimateLegMinutes,
+  plausibleModeFor,
+  unknownLegAllowanceMinutes,
+  dayPrecisionOf,
+  type AnchorKind,
+  type BaseKind,
 } from '@sidequest/core';
 import {
   AUTHORITATIVE_NO_ROUTE,
@@ -59,6 +68,8 @@ import {
   normalizeName,
   pickAnchorGeocoderWinner,
   resolveSkeletonBase,
+  isLocalityCandidate,
+  haversineKm,
   type ConfirmationMemo,
   confirmMandatoryLeg,
   type GeocodedLocality,
@@ -104,6 +115,10 @@ import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAn
 /** A place identity a dedicated places provider (Google Places identity level, Overture, OSM) resolved — never a geocoder guess. */
 /** How many identity lookups run at once. Small: providers rate-limit, and the budget counts every call. */
 const ANCHOR_RESOLUTION_CONCURRENCY = 4;
+/** Bases resolve a few at a time as well; the geocoder's own rate gate still serialises the wire. */
+const BASE_RESOLUTION_CONCURRENCY = 3;
+/** A landmark that resolved for a locality base is trusted for position only when it sits inside the town it names. */
+const LANDMARK_WITHIN_TOWN_KM = 15;
 
 async function mapConcurrent<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
@@ -155,6 +170,15 @@ export interface ReconcileContext extends SkeletonPlanningContext {
   operationalEvidence?: (input: { placeId: string; providerRef?: string; provider: string; name: string; placeClass: PlaceClass }) => Promise<OperationalEvidence | null>;
   /** Returns true once the bounded verification deadline has passed; later provider lookups are skipped and reported. */
   deadlineReached?: () => boolean;
+  /**
+   * PRODUCT RECOVERY V1 — route-aware weather. Once the bases have a position,
+   * the reconciler may ask for a climate or forecast point per base (bounded
+   * by the caller) instead of one national centroid for every day. Null or a
+   * throw leaves the dataset the context already holds.
+   */
+  weatherForBases?: (locations: readonly { id: string; label: string; coordinates: { lat: number; lng: number } }[]) => Promise<WeatherDataset | null>;
+  /** PRODUCT RECOVERY V1 — a booked departure's leave-by minute on the last day; the last window closes there, as a hard edge. */
+  lastDayLeaveByMinute?: number;
   /** Names the traveller explicitly asked for (board must-includes, free-text must-dos); losing one is a decision, not a caution. */
   mustIncludeNames?: readonly string[];
 }
@@ -176,6 +200,8 @@ export interface ReconciledAnchor {
   operationalClass?: PlaceClass;
   durationMinutes: number;
   durationBasis: 'place_record' | 'model_estimate' | 'category_default';
+  /** PRODUCT RECOVERY V1 — what kind of thing the model wrote; decides whether a lookup happens and how the item is presented. */
+  kind: AnchorKind;
 }
 
 export interface ReconcileResult {
@@ -429,6 +455,36 @@ function settleAmbiguousBase(candidates: readonly { sourceId: string; name: stri
   return null;
 }
 
+/** What kind of place the draft says the traveller sleeps in. Lodges and camps keep their own names; towns are localities. */
+function draftBaseKind(base: { name: string; lodgingStyle?: string; lodgingArea?: string }): BaseKind {
+  const text = `${base.name} ${base.lodgingStyle ?? ''}`;
+  if (/\b(tented|camp|campsite|bush camp|mobile camp)\b/i.test(text)) return 'camp';
+  if (/\b(lodge|homestay|hut|cabin|ranch|estancia|ryokan|farm ?stay|eco.?lodge|retreat|manor|castle hotel)\b/i.test(text)) return 'lodge';
+  if (/\b(hotel|inn|guesthouse|hostel|resort|b&b|apartment|riad|pousada|pension|villa)\b/i.test(base.name)) return 'lodging_property';
+  if (/\b(quarter|district|neighbourhood|neighborhood|old town|centre|center|downtown)\b/i.test(base.name)) return 'neighbourhood';
+  return 'locality';
+}
+
+/**
+ * The traveller-facing base name. A lodge or camp is what the draft called
+ * it; a town is the draft's own locality whenever the matched record names
+ * the same settlement ("Kinsale Urban" ⊃ "Kinsale", "Reykjavík" ≈ "Reykjavik")
+ * or is a landmark inside it; only a settlement record with a genuinely
+ * different name (a spelling the geocoder corrected) replaces the draft's.
+ */
+function baseDisplayName(input: { kind: BaseKind; draftName: string; localityName: string; canonicalName: string | undefined; landmark: boolean }): string {
+  if (input.kind === 'lodge' || input.kind === 'camp' || input.kind === 'lodging_property') return input.draftName;
+  if (!input.canonicalName || input.landmark) return input.localityName;
+  const canonical = normalizeName(input.canonicalName);
+  const draftName = normalizeName(input.draftName);
+  const locality = normalizeName(input.localityName);
+  // The same settlement under its own spelling ("Reykjavík" for "Reykjavik") keeps the record's spelling; an administrative variant ("Kinsale Urban", "Zanzibar City") yields to the traveller's word.
+  if (canonical === draftName || canonical === locality) return input.canonicalName;
+  if (canonical.includes(draftName) || draftName.includes(canonical)) return input.draftName;
+  if (canonical.includes(locality) || locality.includes(canonical)) return input.localityName;
+  return input.canonicalName;
+}
+
 /* ------------------------------------------------------------------ *
  * Weather summary — read, never fetched
  * ------------------------------------------------------------------ */
@@ -515,7 +571,11 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const dates = tripDates(context.basics.startDate, context.basics.endDate);
   const config = resolveConfig();
   const backBy = context.profile.interview?.mustBeBackByMinute;
-  const windows: PlannedDay[] = buildDailyWindows(context.basics, context.profile, config).map((day) => {
+  const windows: PlannedDay[] = buildDailyWindows(context.basics, context.profile, config).map((day, index, all) => {
+    if (index === all.length - 1 && context.lastDayLeaveByMinute !== undefined && context.lastDayLeaveByMinute < day.window.endMinute) {
+      const endMinute = Math.max(day.window.startMinute, context.lastDayLeaveByMinute);
+      day = { ...day, window: { ...day.window, endMinute, usableMinutes: endMinute - day.window.startMinute, note: [day.window.note, `Leave base by ${formatClock(endMinute)} for your booked departure.`].filter(Boolean).join(' ') }, capacityMinutes: Math.min(day.capacityMinutes, endMinute - day.window.startMinute) };
+    }
     /*
      * A hard "back at base by" hour closes every day's window at that minute,
      * on top of the pace-derived end and the departure edge. Hard because the
@@ -533,39 +593,78 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const deadline = () => context.deadlineReached?.() ?? false;
 
   // --- Bases: deterministic identity, never the model ------------------------
-  let bases: ResolvedBase[] = [];
-  for (const base of draft.bases) {
+  /*
+   * PRODUCT RECOVERY V1 — A BASE IS A PLACE TO SLEEP, NAMED FOR THE TRAVELLER.
+   *
+   * The live Ireland build asked the geocoder for "Dublin, Dublin, Ireland"
+   * (name and locality doubled) and took the single hit it got back — Trinity
+   * College Dublin — as the overnight base; "Dingle" became Dingle Distillery
+   * and "Kinsale" read as the administrative "Kinsale Urban". Three rules now
+   * stand between a geocoder record and a base name: the locality is asked
+   * for once, never doubled; a landmark that answers for a town is kept for
+   * its position only when it sits inside that town, and a settlement is
+   * looked for once more; and the traveller-facing name is the draft's own
+   * locality (or the lodge/camp the draft meant), never the record's label.
+   */
+  const baseResolutions = await mapConcurrent(draft.bases, BASE_RESOLUTION_CONCURRENCY, async (base) => {
     if (deadline()) {
       providerNotes.push(`Base "${base.name}" was not looked up: the verification deadline had passed.`);
-      bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null });
-      continue;
+      return { base, outcome: null, settled: null, landmarkFallback: false, secondLookup: null as { name: string; sourceId: string; coordinates: { lat: number; lng: number } } | null };
     }
-    const outcome = await resolveSkeletonBase({ id: base.id, placeIndex: null, name: base.locality ? `${base.name}, ${base.locality}` : base.name, nights: base.nights, why: base.why }, EMPTY_PACKET, context);
-    if (outcome.ambiguous && outcome.candidates) {
-      // A draft carries no stated coordinate for the geocoder ranking to lean
-      // on, so a real town returned twice (its centre and its municipality) or
-      // beside a namesake island reads as "ambiguous" there. Settle the cases
-      // that are not actually ambiguous — one clear locality, or several that
-      // are the same settlement — and leave a genuine two-town tie unresolved.
-      const settled = settleAmbiguousBase(outcome.candidates);
-      if (settled) {
-        deviations.push({ kind: 'base_resolved_via_geocoder', detail: `"${base.name}" resolved through a deterministic geocoder lookup (${settled.name}; the other matches were the same settlement or not a settlement).`, replacementPlaceId: settled.sourceId });
-        bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: { id: settled.sourceId, name: settled.name, coordinates: settled.coordinates } });
-        continue;
+    const localityName = base.locality ?? base.name;
+    const query = base.locality && normalizeName(base.locality) !== normalizeName(base.name) ? `${base.name}, ${base.locality}` : base.name;
+    const outcome = await resolveSkeletonBase({ id: base.id, placeIndex: null, name: query, nights: base.nights, why: base.why }, EMPTY_PACKET, context);
+    const settled = outcome.ambiguous && outcome.candidates ? settleAmbiguousBase(outcome.candidates) : null;
+    const identity = settled ? { id: settled.sourceId, name: settled.name, coordinates: settled.coordinates } : outcome.identity && !outcome.ambiguous ? outcome.identity : null;
+    const hitIsLocality = settled ? settled.isLocality : outcome.candidates?.find((c) => c.sourceId === identity?.id)?.isLocality ?? (outcome.method && outcome.method !== 'geocoder' ? true : undefined);
+    const kind = draftBaseKind(base);
+    let secondLookup: { name: string; sourceId: string; coordinates: { lat: number; lng: number } } | null = null;
+    let landmarkFallback = false;
+    if (identity && hitIsLocality === false && (kind === 'locality' || kind === 'neighbourhood') && context.geocodeLocality && !deadline()) {
+      // A landmark answered for a town. Ask for the town itself, once, and take a settlement near the landmark.
+      try {
+        const results = normalizeName(query) === normalizeName(localityName) ? [] : await context.geocodeLocality(`${localityName}, ${context.region.name}`);
+        const settlements = results
+          .filter((r) => isLocalityCandidate(r))
+          .filter((r) => assessGeographicScope({ point: r, countryCode: r.countryCode, region: context.region, scope: context.destinationScope, subregions: context.subregionGeometries, evidenceCandidates: context.candidates }).accepted)
+          .map((r) => ({ r, km: haversineKm(identity.coordinates, r) }))
+          .sort((a, b) => a.km - b.km);
+        const pick = settlements.find((c) => c.km <= LANDMARK_WITHIN_TOWN_KM) ?? [...settlements].sort((a, b) => (b.r.importance ?? 0) - (a.r.importance ?? 0))[0];
+        if (pick) secondLookup = { name: pick.r.name, sourceId: pick.r.sourceId, coordinates: { lat: pick.r.lat, lng: pick.r.lng } };
+        else landmarkFallback = true;
+      } catch {
+        landmarkFallback = true;
       }
     }
-    if (outcome.identity && !outcome.ambiguous) {
+    return { base, outcome, settled, landmarkFallback, secondLookup };
+  });
+  let bases: ResolvedBase[] = [];
+  for (const resolution of baseResolutions) {
+    const { base, outcome, settled, secondLookup, landmarkFallback } = resolution;
+    const kind = draftBaseKind(base);
+    const localityName = base.locality ?? base.name;
+    if (!outcome) {
+      bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null, displayName: kind === 'lodge' || kind === 'camp' ? base.name : localityName, locality: localityName, baseKind: kind });
+      continue;
+    }
+    let identity: ResolvedBaseIdentity | null = null;
+    if (secondLookup) {
+      identity = { id: secondLookup.sourceId, name: secondLookup.name, coordinates: secondLookup.coordinates };
+      deviations.push({ kind: 'base_resolved_via_geocoder', detail: `"${base.name}" first matched a landmark (${settled?.name ?? outcome.identity?.name ?? 'a non-settlement record'}); the town itself (${secondLookup.name}) was looked up and is the base.`, replacementPlaceId: secondLookup.sourceId });
+    } else if (settled) {
+      deviations.push({ kind: 'base_resolved_via_geocoder', detail: `"${base.name}" resolved through a deterministic geocoder lookup (${settled.name}; the other matches were the same settlement or not a settlement).`, replacementPlaceId: settled.sourceId });
+      identity = { id: settled.sourceId, name: settled.name, coordinates: settled.coordinates };
+    } else if (outcome.identity && !outcome.ambiguous) {
       if (outcome.method === 'geocoder') {
-        deviations.push({ kind: 'base_resolved_via_geocoder', detail: `"${base.name}" resolved through a deterministic geocoder lookup (${outcome.identity.name}).`, replacementPlaceId: outcome.identity.id });
+        deviations.push({ kind: 'base_resolved_via_geocoder', detail: `"${base.name}" resolved through a deterministic geocoder lookup (${outcome.identity.name}).${landmarkFallback ? ' The record is a landmark inside the town; the base is named for the town and placed at that point.' : ''}`, replacementPlaceId: outcome.identity.id });
       }
       // A base that resolved to the region's own home base through a board
       // place record is routed under the matrix's routing id for that base,
       // so its legs are measured rather than left unmeasured over an id mismatch.
-      const identity =
+      identity =
         !context.matrix.ids.includes(outcome.identity.id) && context.matrix.ids.includes(context.baseId) && normalizeName(outcome.identity.name) === normalizeName(context.region.baseName)
           ? { ...outcome.identity, id: context.baseId }
           : outcome.identity;
-      bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity });
     } else {
       deviations.push({
         kind: 'base_unresolved',
@@ -573,8 +672,10 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
           ? `"${base.name}" matched more than one real place equally well; kept by name without a coordinate, so legs to and from it are unmeasured.`
           : `"${base.name}" could not be confirmed as a real place by the board, the compiled region or a geocoder; kept by name, legs unmeasured.`,
       });
-      bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null });
     }
+    const canonicalName = identity?.name;
+    const displayName = baseDisplayName({ kind, draftName: base.name, localityName, canonicalName, landmark: landmarkFallback || (identity !== null && !secondLookup && (settled ? !settled.isLocality : outcome.candidates?.find((c) => c.sourceId === identity?.id)?.isLocality === false)) });
+    bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity, displayName, ...(canonicalName ? { canonicalName } : {}), locality: localityName, baseKind: kind });
   }
   // Consecutive same-identity stays merge; a loop's return is not a duplicate.
   const merged: ResolvedBase[] = [];
@@ -706,41 +807,92 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     }
   }
 
+  // --- Route-aware weather: one point per base, when the caller offers it ------
+  let weather: WeatherDataset = context.weather;
+  if (context.weatherForBases && !deadline()) {
+    const seen = new Set<string>();
+    const locations = bases.flatMap((b) => {
+      if (!b.identity || seen.has(b.identity.id)) return [];
+      seen.add(b.identity.id);
+      return [{ id: b.identity.id, label: b.displayName ?? b.name, coordinates: b.identity.coordinates }];
+    });
+    if (locations.length > 0) {
+      try {
+        const dataset = await context.weatherForBases(locations);
+        if (dataset) weather = dataset;
+      } catch {
+        providerNotes.push('Weather for the bases could not be fetched; the destination-wide pattern stands for every day.');
+      }
+    }
+  }
+
   // --- Anchors: identity, then day-local routing ------------------------------
   /*
-   * QUALITY V1 — identity lookups are independent of each other, so they run
-   * a few at a time instead of one after another: a 30-anchor draft against a
-   * places provider used to spend most of the verification budget waiting in
-   * sequence. Order is preserved by index; the deadline is still consulted
-   * inside each lookup; provider notes are appended in completion order.
+   * PRODUCT RECOVERY V1 — WHAT IS LOOKED UP, AND IN WHAT ORDER.
+   *
+   * Not every line the model wrote is a place. `anchorKindOf` sorts each
+   * anchor into a named place (must resolve), an area or route experience
+   * (geocoded for the map when time allows), a generic experience (never
+   * looked up, never called "not verified") or a meal (folded into the day's
+   * meal intent — the live Ireland build scheduled "Killarney town pub
+   * dinner" as an 11:15 attraction and then added a second dinner at 18:00).
+   * Lookups run core named places first, then secondary, then areas, a few
+   * at a time; the deadline is consulted inside each lookup, so when it
+   * fires it is the map decoration that goes unverified, not Kilkenny Castle.
    */
-  const anchorJobs = draft.days.flatMap((day) => day.anchors.map((anchor, index) => ({ day, anchor, index })));
-  const resolvedAnchors = await mapConcurrent(anchorJobs, ANCHOR_RESOLUTION_CONCURRENCY, (job) => resolveDraftAnchor(job.anchor, context, providerNotes));
+  const anchorJobs = draft.days.flatMap((day) =>
+    day.anchors.map((anchor, index) => {
+      const kind = anchorKindOf(anchor);
+      return { day, anchor, index, kind, priority: lookupPriorityFor(kind, anchor.role) };
+    }),
+  );
+  type ResolvedFields = Pick<ReconciledAnchor, 'verification' | 'identity' | 'place' | 'candidate' | 'method' | 'providerIdentity'>;
+  const NOT_LOOKED_UP: ResolvedFields = { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+  const resolvedAnchors: ResolvedFields[] = anchorJobs.map(() => NOT_LOOKED_UP);
+  const lookupOrder = anchorJobs
+    .map((job, jobIndex) => ({ job, jobIndex }))
+    .filter(({ job }) => job.priority !== null)
+    .sort((a, b) => a.job.priority! - b.job.priority! || a.jobIndex - b.jobIndex);
+  const lookedUp = await mapConcurrent(lookupOrder, ANCHOR_RESOLUTION_CONCURRENCY, ({ job }) => resolveDraftAnchor(job.anchor, context, providerNotes));
+  lookupOrder.forEach(({ jobIndex }, i) => {
+    resolvedAnchors[jobIndex] = lookedUp[i]!;
+  });
   const anchors: ReconciledAnchor[] = [];
+  const mealFolds = new Map<number, Partial<Record<'breakfast' | 'lunch' | 'dinner', string>>>();
+  const mealFoldNotes = new Map<string, string>();
   for (const [jobIndex, job] of anchorJobs.entries()) {
-    const { day, anchor, index } = job;
-    {
-      const resolved = resolvedAnchors[jobIndex]!;
-      // A verified place's own typical visit length is evidence and wins over
-      // the model's estimate; the estimate wins over a category default.
-      const placeMinutes = resolved.verification === 'verified' ? resolved.place?.typicalDurationMinutes : undefined;
-      const durationMinutes = placeMinutes ?? anchor.estimatedDurationMinutes ?? CATEGORY_DEFAULT_MINUTES[anchor.category];
-      anchors.push({
-        id: draftAnchorId(day.dayNumber, index, anchor.name),
-        dayNumber: day.dayNumber,
-        index,
-        draft: anchor,
-        ...resolved,
-        durationMinutes,
-        durationBasis: placeMinutes ? 'place_record' : anchor.estimatedDurationMinutes ? 'model_estimate' : 'category_default',
-      });
-      if (resolved.method === 'places') {
-        deviations.push({ kind: 'anchor_resolved_via_places', detail: `"${anchor.name}" (day ${day.dayNumber}) matched a places provider record (${resolved.identity!.name}, ${resolved.providerIdentity?.confidence ?? 'probable'} match); hours and access are looked up separately.`, skeletonDayNumber: day.dayNumber, replacementPlaceId: resolved.identity!.id });
-      } else if (resolved.method === 'geocoder') {
-        deviations.push({ kind: 'anchor_resolved_via_geocoder', detail: `"${anchor.name}" (day ${day.dayNumber}) confirmed as a real place by a geocoder (${resolved.identity!.name}); no board evidence for hours or access.`, skeletonDayNumber: day.dayNumber, replacementPlaceId: resolved.identity!.id });
-      } else if (resolved.verification === 'unverified') {
-        deviations.push({ kind: 'anchor_unverified', detail: `"${anchor.name}" (day ${day.dayNumber}) could not be independently confirmed as a specific place; kept as an honestly-uncertain proposal.`, skeletonDayNumber: day.dayNumber });
-      }
+    const { day, anchor, index, kind } = job;
+    const resolved = resolvedAnchors[jobIndex]!;
+    // A verified place's own typical visit length is evidence and wins over
+    // the model's estimate; the estimate wins over a category default.
+    const placeMinutes = resolved.verification === 'verified' ? resolved.place?.typicalDurationMinutes : undefined;
+    const durationMinutes = placeMinutes ?? anchor.estimatedDurationMinutes ?? CATEGORY_DEFAULT_MINUTES[anchor.category];
+    const id = draftAnchorId(day.dayNumber, index, anchor.name);
+    anchors.push({
+      id,
+      dayNumber: day.dayNumber,
+      index,
+      draft: anchor,
+      ...resolved,
+      durationMinutes,
+      durationBasis: placeMinutes ? 'place_record' : anchor.estimatedDurationMinutes ? 'model_estimate' : 'category_default',
+      kind,
+    });
+    if (kind === 'meal') {
+      const slot = mealSlotOf(anchor.name);
+      const current = mealFolds.get(day.dayNumber) ?? {};
+      const existing = day.meals?.[slot] ?? current[slot];
+      if (!existing) current[slot] = anchor.name;
+      mealFolds.set(day.dayNumber, current);
+      mealFoldNotes.set(id, existing ? `Written as a stop; it is the day's ${slot} (${existing}).` : `Written as a stop; it is the day's ${slot}.`);
+      continue;
+    }
+    if (resolved.method === 'places') {
+      deviations.push({ kind: 'anchor_resolved_via_places', detail: `"${anchor.name}" (day ${day.dayNumber}) matched a places provider record (${resolved.identity!.name}, ${resolved.providerIdentity?.confidence ?? 'probable'} match); hours and access are looked up separately.`, skeletonDayNumber: day.dayNumber, replacementPlaceId: resolved.identity!.id });
+    } else if (resolved.method === 'geocoder') {
+      deviations.push({ kind: 'anchor_resolved_via_geocoder', detail: `"${anchor.name}" (day ${day.dayNumber}) confirmed as a real place by a geocoder (${resolved.identity!.name}); no board evidence for hours or access.`, skeletonDayNumber: day.dayNumber, replacementPlaceId: resolved.identity!.id });
+    } else if (resolved.verification === 'unverified' && kind === 'named_place') {
+      deviations.push({ kind: 'anchor_unverified', detail: `"${anchor.name}" (day ${day.dayNumber}) could not be independently confirmed as a specific place; kept as an honestly-uncertain proposal.`, skeletonDayNumber: day.dayNumber });
     }
   }
 
@@ -797,6 +949,11 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const daysUntil = (date: string) => Math.round((Date.parse(`${date}T00:00:00Z`) - (context.now ?? new Date()).getTime()) / 86_400_000);
 
   for (const anchor of anchors) {
+    if (anchor.kind === 'meal') {
+      dispositionOf.set(anchor.id, 'folded_into_meal');
+      scheduledDayOf.set(anchor.id, anchor.dayNumber);
+      continue;
+    }
     dispositionOf.set(anchor.id, anchor.verification === 'verified' ? 'preserved_with_verified_facts' : anchor.verification === 'partially_verified' ? 'preserved' : 'retained_unverified');
     scheduledDayOf.set(anchor.id, anchor.dayNumber);
     if (!anchor.place && anchor.operationalEvidence && anchor.identity && anchor.operationalClass) {
@@ -898,18 +1055,21 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const days: ItineraryDay[] = [];
   let legsMeasured = 0;
   let legsUnmeasured = 0;
+  let legsEstimated = 0;
   const draftDayByNumber = new Map(draft.days.map((d) => [d.dayNumber, d] as const));
 
   for (let d = 0; d < dates.length; d += 1) {
     const dayNumber = d + 1;
     const date = dates[d]!;
     const window = windows[d]!;
-    const draftDay = draftDayByNumber.get(dayNumber);
+    const draftDayRaw = draftDayByNumber.get(dayNumber);
+    const folds = mealFolds.get(dayNumber);
+    const draftDay = draftDayRaw && folds ? { ...draftDayRaw, meals: { ...(draftDayRaw.meals ?? {}), ...folds } } : draftDayRaw;
     const base = baseForDate[d] ?? null;
     const previousBase = d > 0 ? (baseForDate[d - 1] ?? null) : null;
     const relocation = Boolean(previousBase && base && previousBase !== base);
     const dayAnchors = anchors
-      .filter((a) => scheduledDayOf.get(a.id) === dayNumber && !String(dispositionOf.get(a.id)).startsWith('rejected'))
+      .filter((a) => a.kind !== 'meal' && scheduledDayOf.get(a.id) === dayNumber && !String(dispositionOf.get(a.id)).startsWith('rejected'))
       .sort((a, b) => (a.dayNumber === b.dayNumber ? a.index - b.index : a.dayNumber - b.dayNumber));
 
     const laid = layoutDay({
@@ -929,6 +1089,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       isLast: d === dates.length - 1,
       confirmationMemo,
       measuredAt: (context.now ?? new Date()).toISOString(),
+      weather,
     });
     for (const dropped of laid.dropped) {
       dispositionOf.set(dropped.anchor.id, dropped.disposition);
@@ -947,6 +1108,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     }
     legsMeasured += laid.legsMeasured;
     legsUnmeasured += laid.legsUnmeasured;
+    legsEstimated += laid.legsEstimated;
     days.push(laid.day);
   }
 
@@ -989,8 +1151,9 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       category: anchor.draft.category,
       disposition,
       verification: anchor.verification,
+      anchorKind: anchor.kind,
       ...(anchor.identity ? { placeId: anchor.identity.id } : {}),
-      ...(anchorNote.get(anchor.id) ? { note: anchorNote.get(anchor.id)! } : {}),
+      ...(anchorNote.get(anchor.id) ?? mealFoldNotes.get(anchor.id) ? { note: (anchorNote.get(anchor.id) ?? mealFoldNotes.get(anchor.id))! } : {}),
       ...(anchor.identity && anchor.method
         ? {
             identity: {
@@ -1023,7 +1186,12 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       const draftBase = draft.bases.find((b) => b.id === base.skeletonBaseId.split('#')[0]);
       return {
         id: base.skeletonBaseId,
-        name: base.identity?.name ?? base.name,
+        name: base.displayName ?? base.identity?.name ?? base.name,
+        ...(base.displayName ? { displayName: base.displayName } : {}),
+        ...(base.canonicalName ?? base.identity?.name ? { canonicalName: (base.canonicalName ?? base.identity?.name)! } : {}),
+        ...(base.locality ? { locality: base.locality } : {}),
+        ...(base.baseKind ? { baseKind: base.baseKind } : {}),
+        ...(base.identity ? { coordinates: base.identity.coordinates } : {}),
         nights: base.nights,
         why: draftBase?.why ?? 'Inserted by Sidequest so that no single transfer exceeds your daily driving limit.',
         ...(draftBase?.lodgingArea ? { area: draftBase.lodgingArea } : {}),
@@ -1037,7 +1205,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     transport: { summary: draft.package.transport.summary, notes: [...draft.package.transport.notes] },
     beforeYouGo: [...draft.package.beforeYouGo],
     packing: [...draft.package.packing],
-    backups: draft.package.backups.map((b) => ({ ...b })),
+    backups: matchBackupsToDays(draft.package.backups, days, anchors, baseForDate),
     omissions: draft.omissions.map((o) => ({ ...o })),
     unresolved: [...draft.unresolved],
     bookingPriorities: [...(draft.bookingPriorities ?? [])],
@@ -1051,6 +1219,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       rejected: rejectedCount,
       legsMeasured,
       legsUnmeasured,
+      legsEstimated,
       deadlineReached: deadline(),
       providerNotes,
     },
@@ -1075,11 +1244,11 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     tripId: context.tripId,
     regionId: context.region.id,
     baseId: bases[0]?.identity?.id ?? context.baseId,
-    baseName: bases[0]?.identity?.name ?? bases[0]?.name ?? context.region.baseName,
+    baseName: bases[0]?.displayName ?? bases[0]?.identity?.name ?? bases[0]?.name ?? context.region.baseName,
     startDate: context.basics.startDate,
     endDate: context.basics.endDate,
     status: issues.some((i) => i.severity === 'error') || unscheduled.some((u) => u.wasManual) ? 'needs_decision' : issues.length > 0 || legsUnmeasured > 0 || pkg.verification.unverified > 0 ? 'ready_with_cautions' : 'ready',
-    summary: `${draft.purpose} ${bases.length > 1 ? `${bases.length} bases: ${bases.map((b) => `${b.identity?.name ?? b.name} (${b.nights} night${b.nights === 1 ? '' : 's'})`).join(' → ')}.` : `One base: ${bases[0]?.identity?.name ?? bases[0]?.name ?? ''}.`} ${scheduledCount} of ${anchors.length} proposed experiences are on the plan${rejectedCount > 0 ? `; ${rejectedCount} taken off on evidence` : ''}.`,
+    summary: `${draft.purpose} ${bases.length > 1 ? `${bases.length} bases: ${bases.map((b) => `${b.displayName ?? b.identity?.name ?? b.name} (${b.nights} night${b.nights === 1 ? '' : 's'})`).join(' → ')}.` : `One base: ${bases[0]?.displayName ?? bases[0]?.identity?.name ?? bases[0]?.name ?? ''}.`} ${scheduledCount} of ${anchors.length} proposed experiences are on the plan${rejectedCount > 0 ? `; ${rejectedCount} taken off on evidence` : ''}.`,
     transportStrategy: {
       primaryMode,
       secondaryMode: primaryMode === 'drive' ? 'walk' : permitted.has('drive') ? 'drive' : null,
@@ -1100,7 +1269,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
         unverifiedMinutes: totals.unverifiedMinutes,
         driveKm: Math.round(totals.driveKm * 10) / 10,
       },
-      dataDisclosure: `${legsMeasured} of ${legsMeasured + legsUnmeasured} travel legs were measured by ${routerName}; the rest are unmeasured and shown as such. Base transfers were checked against your ${hardCeiling}-minute daily limit.`,
+      dataDisclosure: `${legsMeasured} of ${legsMeasured + legsUnmeasured} travel legs were measured by ${routerName}; ${legsEstimated > 0 ? `${legsEstimated} carry Sidequest's own estimate from map distance` : 'none were estimated'}${legsUnmeasured - legsEstimated > 0 ? ` and ${legsUnmeasured - legsEstimated} hold an allowance shown as a part of the day` : ''}. Base transfers were checked against your ${hardCeiling}-minute daily limit where measured.`,
     },
     foodPlan: {
       headline: draft.package.foodStrategy[0] ?? 'Meals follow the route.',
@@ -1196,6 +1365,8 @@ interface DayLayoutInput {
   confirmationMemo?: ConfirmationMemo;
   /** When the reconciliation ran — stamped on measured legs. */
   measuredAt?: string;
+  /** The weather dataset days read from — the route-aware one when the caller fetched it. */
+  weather: WeatherDataset;
 }
 
 interface DroppedAnchor {
@@ -1208,9 +1379,11 @@ interface Point {
   id: string;
   name: string;
   coordinates: { lat: number; lng: number } | null;
+  /** The town this point sits in, when known — lets an untimed leg inside one town hold a small allowance rather than a transfer's. */
+  locality?: string;
 }
 
-function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: DroppedAnchor[]; legsMeasured: number; legsUnmeasured: number } {
+function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: DroppedAnchor[]; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
   const dropped: DroppedAnchor[] = [];
   let kept = [...input.anchors];
   const ceiling = input.hardCeiling;
@@ -1230,25 +1403,34 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
     const attempt = attemptLayout(input, kept);
     // The traveller's own hard ceiling: at the wheel on a driving trip, every
     // measured minute in motion on a car-free one.
-    const measuredInMotion = input.context.matrix.mode === 'car' ? attempt.day.totals.driveMinutes : attempt.day.totals.travelMinutes;
+    const t = attempt.day.totals;
+    const measuredInMotion = input.context.matrix.mode === 'car' ? t.driveMinutes : t.driveMinutes + t.transitMinutes + t.walkMinutes + t.waitMinutes + t.unverifiedMinutes;
     const overDrive = !input.relocation && measuredInMotion > ceiling;
-    const overWindow = attempt.overflowMinutes > tolerance;
+    /*
+     * PRODUCT RECOVERY V1 — an estimate is not evidence. Travel Sidequest only
+     * estimated (or merely held an allowance for) may make a day run long, and
+     * the day says so; it never removes a stop the model placed. Only a
+     * measured overrun past an ordinary day's end, or any overrun past a hard
+     * edge (departure, a hard back-by hour), takes something off.
+     */
+    const softMinutes = hardEnd ? 0 : t.estimatedMinutes + t.allowanceMinutes;
+    const overWindow = attempt.overflowMinutes > tolerance + softMinutes;
     if (!overDrive && !overWindow) {
       const day = attempt.overflowMinutes > 0
-        ? { ...attempt.day, warnings: [...attempt.day.warnings, `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end.`] }
+        ? { ...attempt.day, warnings: [...attempt.day.warnings, attempt.overflowMinutes > tolerance ? `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end on estimated travel times; nothing was taken off, because an estimate is not evidence.` : `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end.`] }
         : attempt.day;
-      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured };
+      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
     }
     const victim = [...kept].sort((a, b) => ROLE_RANK[b.draft.role] - ROLE_RANK[a.draft.role] || b.index - a.index)[0];
-    if (!victim) return { day: attempt.day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured };
+    if (!victim) return { day: attempt.day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
     if (victim.draft.role === 'core' && overDrive === false && !hardEnd) {
       // Core-only overflow on an ordinary day is kept as a long day and said so; core anchors are never dropped for room.
       const day = { ...attempt.day, warnings: [...attempt.day.warnings, `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end; every stop on it was marked essential, so nothing was taken off.`] };
-      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured };
+      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
     }
     if (victim.draft.role === 'core' && overDrive && kept.length === 1) {
       const day = { ...attempt.day, warnings: [...attempt.day.warnings, `Measured travel on this day (${measuredInMotion} min) exceeds your ${ceiling}-minute limit and the only stop is essential; kept, flagged for your decision.`] };
-      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured };
+      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
     }
     kept = kept.filter((a) => a.id !== victim.id);
     dropped.push({
@@ -1265,21 +1447,21 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
   }
 }
 
-function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor[]): { day: ItineraryDay; overflowMinutes: number; legsMeasured: number; legsUnmeasured: number } {
+function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor[]): { day: ItineraryDay; overflowMinutes: number; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
   const { context, window, draftDay, base, previousBase } = input;
   const canDrive = context.profile.transport.willDrive;
   const items: ItineraryItem[] = [];
   let clock = window.window.startMinute;
   let legsMeasured = 0;
   let legsUnmeasured = 0;
+  let legsEstimated = 0;
   const modes: TransportMode[] = [];
-  const totals = { driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, travelKm: 0, activityMinutes: 0, unmeasuredLegCount: 0 };
+  const totals = { driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, estimatedMinutes: 0, allowanceMinutes: 0, travelKm: 0, activityMinutes: 0, unmeasuredLegCount: 0 };
   let hadLunch = false;
 
-  const startPoint: Point = previousBase && input.relocation
-    ? { id: previousBase.identity?.id ?? `base:${previousBase.skeletonBaseId}`, name: previousBase.identity?.name ?? previousBase.name, coordinates: previousBase.identity?.coordinates ?? null }
-    : { id: base?.identity?.id ?? `base:${base?.skeletonBaseId ?? 'unknown'}`, name: base?.identity?.name ?? base?.name ?? 'your base', coordinates: base?.identity?.coordinates ?? null };
-  const endPoint: Point = { id: base?.identity?.id ?? `base:${base?.skeletonBaseId ?? 'unknown'}`, name: base?.identity?.name ?? base?.name ?? 'your base', coordinates: base?.identity?.coordinates ?? null };
+  const pointFor = (b: ResolvedBase): Point => ({ id: b.identity?.id ?? `base:${b.skeletonBaseId}`, name: b.displayName ?? b.identity?.name ?? b.name, coordinates: b.identity?.coordinates ?? null, ...(b.locality ?? b.displayName ? { locality: (b.locality ?? b.displayName)! } : {}) });
+  const startPoint: Point = previousBase && input.relocation ? pointFor(previousBase) : base ? pointFor(base) : { id: 'base:unknown', name: 'your base', coordinates: null };
+  const endPoint: Point = base ? pointFor(base) : { id: 'base:unknown', name: 'your base', coordinates: null };
 
   /**
    * A meal sits at its natural hour, never before it, and never past the
@@ -1324,21 +1506,24 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
   };
 
   const memoFor = (a: string, b: string) => input.confirmationMemo?.get(`${a}=>${b}`) ?? input.confirmationMemo?.get(`${b}=>${a}`) ?? null;
+  /*
+   * PRODUCT RECOVERY V1 — UNKNOWN TRAVEL TIME IS NEVER ZERO.
+   *
+   * Every leg lands in exactly one duration state (see `core/travel/estimate`):
+   * measured (a router timed this pair); estimated (both ends have a position,
+   * so Sidequest holds a mode-aware figure from map distance, labelled as an
+   * estimate and never as a road measurement); unknown (one end has no
+   * position — the schedule holds a conservative allowance and the day is
+   * shown in parts of the day, never in fake minutes). The model's transport
+   * hint is checked against the geometry first: a "walk" over 75 km of open
+   * country is a drive for a driver and transit for everyone else.
+   */
   const pushLeg = (from: Point, to: Point, hint: DraftTransport | undefined, role: TravelSegment['role']) => {
     if (from.id === to.id) return;
     // LIVE WORLD V1 — on a transit-mode trip a metro/rail/bus hint is what the network measures, not a mode the road router refuses.
     const routable = roadRoutable(hint) || (context.matrix.mode === 'transit' && (hint === 'metro' || hint === 'rail' || hint === 'bus'));
     let measured = from.coordinates && to.coordinates && routable ? measuredLeg(context.matrix, input.extraMatrix, from.id, to.id) : null;
     let confirmation = measured ? memoFor(from.id, to.id) : null;
-    /*
-     * LIVE WORLD V1 — the relocation leg of a base-move day.
-     *
-     * The day's last stop to the new base is rarely in the ledger, but the
-     * base-to-base leg was confirmed directly (that is what the drive-cap
-     * check measured). Rather than lose a measured figure the traveller reads
-     * as "how long is the drive to the next hotel", the transfer leg carries
-     * it, flagged `viaBases` because the day's stops sit en route.
-     */
     let viaBases = false;
     if (!measured && role === 'transfer' && input.previousBase?.identity && input.base?.identity && routable) {
       const prevId = input.previousBase.identity.id;
@@ -1350,14 +1535,35 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
         viaBases = true;
       }
     }
-    // A direct confirmation of this exact pair is the more specific figure than a matrix cell; it wins, with its basis.
     if (measured && confirmation && confirmation.minutes !== null) measured = { minutes: confirmation.minutes, km: confirmation.km ?? measured.km };
-    const mode = transportModeFor(hint, context.matrix.mode, canDrive);
-    const unmeasuredReason: TravelSegment['unmeasuredReason'] = !routable || mode === 'unsupported' || mode === 'ferry' || mode === 'private_transfer' ? 'mode_not_routed' : 'no_route_found';
-    const minutes = measured?.minutes ?? null;
+    const hinted = transportModeFor(hint, context.matrix.mode, canDrive);
+    /*
+     * An unresolved stop that the draft places in the base's own town (a
+     * "Latin Quarter evening walk" in Galway) has no coordinate of its own,
+     * but the town does: the base stands in for it, so the leg into town is
+     * estimated rather than left as an allowance, and a "walk" from the
+     * Burren into Galway is seen for the 40 km it is.
+     */
+    const baseLocality = base?.locality ?? base?.displayName;
+    const proxyFor = (point: Point) => point.coordinates ?? (point.locality && base?.identity && baseLocality && normalizeName(point.locality) === normalizeName(baseLocality) ? base.identity.coordinates : null);
+    const fromCoordinates = proxyFor(from);
+    const toCoordinates = proxyFor(to);
+    const straightLineKm = fromCoordinates && toCoordinates ? haversineKm(fromCoordinates, toCoordinates) : null;
+    // Two distinct identities at the same spot (a town and its own harbour walk) are one place: no leg, no minutes.
+    if (!measured && straightLineKm !== null && straightLineKm <= 0.15) return;
+    const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
+    const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), canDrive, transitTrip: context.matrix.mode === 'transit' });
+    const mode = plausible.mode;
+    const estimate = !measured && routable && fromCoordinates && toCoordinates ? estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode }) : null;
+    const noRouteAnswered = ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;
+    const unmeasuredReason: TravelSegment['unmeasuredReason'] = !routable || mode === 'unsupported' || mode === 'ferry' || mode === 'private_transfer' ? 'mode_not_routed' : noRouteAnswered ? 'no_route_found' : 'provider_unavailable';
+    const minutes = measured?.minutes ?? estimate?.minutes ?? null;
     const km = measured?.km ?? null;
     const geometry = confirmation?.geometry && confirmation.geometry.length > 1 ? encodePolyline(simplifyPolyline(confirmation.geometry)) : undefined;
-    const basis: TravelSegment['basis'] = measured ? (confirmation?.basis ?? (context.matrix.mode === 'transit' ? 'scheduled' : 'static')) : undefined;
+    const basis: TravelSegment['basis'] = measured ? (confirmation?.basis ?? (context.matrix.mode === 'transit' ? 'scheduled' : 'static')) : estimate ? 'estimated' : undefined;
+    const sameLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) === normalizeName(to.locality));
+    const allowance = !measured && !estimate ? unknownLegAllowanceMinutes({ mode, sameLocality, role }) : null;
+    const stamp = input.measuredAt ?? new Date().toISOString();
     const travel: TravelSegment = {
       fromId: from.id,
       toId: to.id,
@@ -1367,31 +1573,37 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       km,
       mode,
       role,
-      provenance: measured ? 'measured' : 'unmeasured',
-      ...(measured ? {} : { unmeasuredReason }),
-      ...(measured && basis ? { basis } : {}),
-      ...(measured ? { measuredAt: confirmation?.measuredAt ?? input.measuredAt ?? new Date().toISOString(), provider: confirmation?.provider ?? (context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
+      provenance: measured ? 'measured' : estimate ? 'estimated' : 'unmeasured',
+      ...(measured || estimate ? {} : { unmeasuredReason }),
+      ...(basis ? { basis } : {}),
+      ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
+      ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
+      ...(plausible.corrected ? { modeCorrectedFrom: hinted } : {}),
       ...(confirmation?.staticMinutes !== undefined ? { staticMinutes: confirmation.staticMinutes } : {}),
       ...(confirmation?.effectiveDepartAt ? { effectiveDepartAt: confirmation.effectiveDepartAt } : {}),
       ...(confirmation?.transitSummary ? { transitSummary: confirmation.transitSummary } : {}),
       ...(geometry ? { geometry } : {}),
       ...(viaBases ? { viaBases: true as const } : {}),
     };
-    const duration = minutes ?? 0;
+    const duration = measured ? measured.minutes : estimate ? estimate.minutes : allowance!;
+    const precision: NonNullable<ItineraryItem['timing']>['precision'] = measured ? (basis === 'scheduled' ? 'fixed' : 'measured') : estimate ? 'estimated' : 'band';
     items.push({
       id: `d${input.dayNumber}-leg-${items.length}`,
       kind: 'travel',
-      title: `${measured ? `${labelFor(mode)} to` : `Travel to`} ${to.name}`,
+      title: `${measured || estimate ? `${labelFor(mode)} to` : 'Travel to'} ${to.name}`,
       startMinute: clamp(clock),
       endMinute: clamp(clock + duration),
       durationMinutes: clamp(clock + duration) - clamp(clock),
       travel,
       reason: measured
-        ? `${minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
-        : hint && !roadRoutable(hint)
-          ? `${hint.replace(/_/g, ' ')} — a journey Sidequest's road router cannot measure; confirm timing locally.`
-          : 'Travel time not measured for this leg; treat the day as approximate here.',
+        ? `${measured.minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
+        : estimate
+          ? `About ${estimate.minutes} min by ${labelFor(mode).toLowerCase()}, estimated from map distance (roughly ${estimate.approxKm} km) — not a measured route.${plausible.corrected ? ` The plan said ${labelFor(hinted).toLowerCase()}; ${Math.round(straightLineKm ?? 0)} km apart is not a ${labelFor(hinted).toLowerCase()}.` : ''}`
+          : hint && !roadRoutable(hint)
+            ? `${hint.replace(/_/g, ' ')} — a journey Sidequest's road router cannot measure; the day holds ${duration} minutes for it and shows times as parts of the day.`
+            : `Travel time not measured or estimated for this leg; the day holds a ${duration}-minute allowance and shows times as parts of the day.`,
       weatherSensitive: false,
+      timing: { precision, ...(allowance !== null ? { allowanceMinutes: allowance } : {}) },
     });
     clock += duration;
     if (measured) {
@@ -1404,6 +1616,12 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     } else {
       legsUnmeasured += 1;
       totals.unmeasuredLegCount += 1;
+      if (estimate) {
+        legsEstimated += 1;
+        totals.estimatedMinutes += duration;
+      } else {
+        totals.allowanceMinutes += duration;
+      }
     }
     if (!modes.includes(mode)) modes.push(mode);
   };
@@ -1412,7 +1630,8 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
 
   let cursor = startPoint;
   for (const anchor of anchors) {
-    const target: Point = { id: anchor.identity?.id ?? `draft:${anchor.id}`, name: anchor.identity?.name ?? anchor.draft.name, coordinates: anchor.identity?.coordinates ?? null };
+    // The plan keeps the name the model wrote; a geocoder's record name ("Trinity College Dublin" for "Trinity College and the Book of Kells") is matched against, never shown as the stop.
+    const target: Point = { id: anchor.identity?.id ?? `draft:${anchor.id}`, name: anchor.draft.name, coordinates: anchor.identity?.coordinates ?? null, ...(anchor.draft.locality ? { locality: anchor.draft.locality } : {}) };
     pushLeg(cursor, target, anchor.draft.transport, 'approach');
     if (!hadLunch && clock >= LUNCH_EARLIEST && clock <= LUNCH_LATEST) {
       hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
@@ -1438,7 +1657,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     }
     const end = start + anchor.durationMinutes;
     const verificationCopy =
-      anchor.verification === 'verified'
+      anchor.verification === 'verified' || anchor.kind !== 'named_place'
         ? undefined
         : anchor.verification === 'partially_verified'
           ? 'A real place at this name was confirmed; hours and access have not been.'
@@ -1503,13 +1722,15 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
   const freeMinutes = freeItems.reduce((s, i) => s + i.durationMinutes, 0);
   const allItems = [...ordered, ...freeItems].sort((a, b) => a.startMinute - b.startMinute || (a.kind === 'free_time' ? 1 : -1));
 
-  const travelMinutes = totals.driveMinutes + totals.transitMinutes + totals.walkMinutes + totals.waitMinutes + totals.unverifiedMinutes;
+  const travelMinutes = totals.driveMinutes + totals.transitMinutes + totals.walkMinutes + totals.waitMinutes + totals.unverifiedMinutes + totals.estimatedMinutes + totals.allowanceMinutes;
   const primaryMode: TransportMode = modes.length > 0 ? modes.reduce((best, mode) => (minutesByMode(allItems, mode) > minutesByMode(allItems, best) ? mode : best), modes[0]!) : canDrive ? 'drive' : 'walk';
   const warnings: string[] = [];
-  const unverifiedCount = anchors.filter((a) => a.verification !== 'verified').length;
+  const unverifiedCount = anchors.filter((a) => a.kind === 'named_place' && a.verification !== 'verified').length;
   if (unverifiedCount > 0) warnings.push(`${unverifiedCount} stop${unverifiedCount === 1 ? '' : 's'} on this day ${unverifiedCount === 1 ? 'has' : 'have'} not been fully verified — hours and access are approximate until confirmed locally.`);
-  if (totals.unmeasuredLegCount > 0) warnings.push(`${totals.unmeasuredLegCount} travel leg${totals.unmeasuredLegCount === 1 ? '' : 's'} on this day ${totals.unmeasuredLegCount === 1 ? 'is' : 'are'} unmeasured; the timings around ${totals.unmeasuredLegCount === 1 ? 'it are' : 'them are'} a floor, not a promise.`);
-  if (input.relocation && previousBase && base) warnings.push(`You move from ${previousBase.identity?.name ?? previousBase.name} to ${base.identity?.name ?? base.name} today.`);
+  const unknownLegs = legsUnmeasured - legsEstimated;
+  if (unknownLegs > 0) warnings.push(`${unknownLegs} travel leg${unknownLegs === 1 ? '' : 's'} on this day could not be timed; times are shown as parts of the day.`);
+  else if (legsEstimated > 0) warnings.push(`Travel times on this day are Sidequest's estimates from map distance, not measured routes.`);
+  if (input.relocation && previousBase && base) warnings.push(`You move from ${previousBase.displayName ?? previousBase.identity?.name ?? previousBase.name} to ${base.displayName ?? base.identity?.name ?? base.name} today.`);
 
   const anchoredHours = ordered.find((i) => i.kind === 'activity' && i.hours);
   const day: ItineraryDay = {
@@ -1538,7 +1759,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       verifyBeforeTravel: anchors.filter((a) => a.verification !== 'verified').map((a) => `${a.draft.name}: hours not verified.`),
       bookings: [],
     },
-    weather: weatherSummaryFor(context.weather, input.date, endPoint.coordinates ?? startPoint.coordinates),
+    weather: weatherSummaryFor(input.weather, input.date, endPoint.coordinates ?? startPoint.coordinates),
     food: {
       summary: draftDay?.meals ? [draftDay.meals.breakfast, draftDay.meals.lunch, draftDay.meals.dinner].filter(Boolean).join(' · ') || 'Meals are time held on this day.' : 'Meals are time held on this day; nothing has been booked.',
       slots: ordered.filter((i) => i.kind === 'meal').map((i) => i.id.endsWith('breakfast') ? 'breakfast' : i.id.endsWith('lunch') ? 'lunch' : 'dinner'),
@@ -1548,8 +1769,9 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     },
     intensity: draftDay?.intensity ?? 'light',
     warnings,
+    timing: { precision: ((p) => (p === 'fixed' ? 'measured' : p))(dayPrecisionOf(allItems)), estimatedLegs: legsEstimated, unknownLegs },
   };
-  return { day, overflowMinutes, legsMeasured, legsUnmeasured };
+  return { day, overflowMinutes, legsMeasured, legsUnmeasured, legsEstimated };
 }
 
 function minutesByMode(items: readonly ItineraryItem[], mode: TransportMode): number {
@@ -1731,4 +1953,53 @@ function nameVenuesForDay(
     named += 1;
   }
   return named;
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Backups belong to days
+ * ------------------------------------------------------------------ */
+
+const BACKUP_STOPWORDS = new Set(['the', 'and', 'or', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'if', 'for', 'with', 'day', 'very', 'heavy', 'rain', 'wind', 'weather', 'fully', 'booked', 'closed', 'closes', 'crowded', 'poor', 'visibility', 'path', 'walk', 'time', 'instead', 'prioritise', 'prioritize', 'early', 'shelter', 'town', 'visit', 'substitute', 'conditions', 'worsen', 'cliff', 'loop', 'side', 'stop', 'stops', 'view', 'viewpoints', 'gardens', 'grounds', 'ticket', 'which', 'remain', 'accessible', 'without', 'village', 'museum', 'distillery', 'monument', 'far', 'western', 'main']);
+
+/**
+ * PRODUCT RECOVERY V1 — a backup can only appear on a day it was written for
+ * or provably belongs to. The draft's backups carry no day, so each is matched
+ * deterministically against the day's own text: base, theme, anchor names and
+ * localities. Matching is by distinctive place tokens (four letters or more,
+ * not a stopword); a backup no day claims is attached to none, and the
+ * intelligence layer says "keep this afternoon flexible" instead of pasting
+ * the Ring of Kerry onto a Dublin evening.
+ */
+function backupTokens(text: string): string[] {
+  return normalizeName(text)
+    .split(' ')
+    .filter((t) => t.length >= 4 && !BACKUP_STOPWORDS.has(t));
+}
+
+function matchBackupsToDays(
+  backups: readonly { trigger: string; alternative: string }[],
+  days: readonly ItineraryDay[],
+  anchors: readonly ReconciledAnchor[],
+  baseForDate: readonly (ResolvedBase | null)[],
+): TripPackage['backups'] {
+  const dayText = days.map((day, i) => {
+    const base = baseForDate[i];
+    const own = anchors.filter((a) => a.dayNumber === day.dayNumber);
+    return new Set(
+      backupTokens(
+        [day.theme, day.baseName, base?.locality ?? '', base?.name ?? '', ...own.map((a) => `${a.draft.name} ${a.draft.locality ?? ''}`)].join(' '),
+      ),
+    );
+  });
+  return backups.map((backup) => {
+    const tokens = backupTokens(`${backup.trigger} ${backup.alternative}`);
+    const scored = days
+      .map((day, i) => ({ dayNumber: day.dayNumber, hits: tokens.filter((t) => dayText[i]!.has(t)).length }))
+      .filter((d) => d.hits > 0)
+      .sort((a, b) => b.hits - a.hits);
+    const best = scored[0]?.hits ?? 0;
+    const dayNumbers = scored.filter((d) => d.hits >= Math.max(1, Math.ceil(best / 2))).map((d) => d.dayNumber);
+    return { trigger: backup.trigger, alternative: backup.alternative, dayNumbers, match: dayNumbers.length > 0 ? ('geographic' as const) : ('none' as const) };
+  });
 }

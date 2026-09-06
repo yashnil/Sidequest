@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope, waitUntilInteractive } from './support/trip';
 
 /**
@@ -153,6 +154,7 @@ test('Plan with smart defaults composes a trip straight from the understanding s
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 90_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await expect(page.getByTestId('trip-snapshot')).toBeVisible();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('prepare')).toBeVisible();
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   // The DEV-only fixture badge is deliberately absent here: this suite drives a production build.
@@ -165,22 +167,32 @@ test('the itinerary carries the overview map, day maps with honest legs, compact
   await completeQuestionnaire(page);
   await page.getByTestId('interview-build-trip').click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 90_000 });
-  await expect(page.getByTestId('trip-overview-map')).toBeVisible();
-  const dayMaps = page.getByTestId('day-map');
-  await expect(dayMaps.first()).toBeVisible();
+  // PRODUCTION UI V1 — the overview carries the trip map; Days carries the day maps (a sticky
+  // focus map beside the days on desktop, one map per day card below lg).
+  const overviewMap = page.locator('#hub-view-overview').getByTestId('trip-overview-map');
+  await expect(overviewMap).toBeVisible();
   // No straight line is ever labelled a route.
-  await expect(page.getByTestId('trip-overview-map')).toContainText(/not routes/);
-  // Recurring uncertainty is a chip, not a paragraph per day.
+  await expect(overviewMap).toContainText(/not routes/);
+  await openHubView(page, 'days');
+  const desktop = (page.viewportSize()?.width ?? 1440) >= 1024;
+  const dayMaps = desktop ? page.getByTestId('day-focus-map') : page.getByTestId('day-map');
+  await expect(dayMaps.first()).toBeVisible();
+  // Recurring uncertainty is a chip on the stop, not a paragraph per day: a day's warning box
+  // carries only what is specific to that day, never the repeated verification caveat.
   const warnings = page.locator('[data-testid^="day-warnings-"]');
   if ((await warnings.count()) > 0) {
-    await expect(warnings.first().getByText(/not yet verified|unmeasured/).first()).toBeVisible();
-  }
-  for (const id of ['prepare', 'before-you-go', 'packing-list', 'packing-checklist', 'where-to-stay']) {
-    await expect(page.getByTestId(id).first(), id).toBeVisible();
+    await expect(warnings.first()).toBeVisible();
+    await expect(warnings.first()).not.toContainText(/could not be independently confirmed/);
   }
   // Pressing a day-map stop focuses its timeline row.
   const pin = dayMaps.first().getByRole('button').first();
   await pin.click();
   await expect(pin).toHaveAttribute('aria-pressed', 'true');
+  await openHubView(page, 'plan');
+  await expect(page.getByTestId('where-to-stay').first()).toBeVisible();
+  await openHubView(page, 'prepare');
+  for (const id of ['prepare', 'before-you-go', 'packing-list']) {
+    await expect(page.getByTestId(id).first(), id).toBeVisible();
+  }
   await shot(page, 'itinerary', testInfo.project.name);
 });

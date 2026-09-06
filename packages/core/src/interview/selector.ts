@@ -126,11 +126,11 @@ export function planInterview(input: { ctx: InterviewContext; answers: Questionn
   const core = candidates.filter((q) => q.tier === 'core');
   const pinnedFirst = core.filter((q) => q.id === 'priorities');
   const pinnedLast = core.filter((q) => q.id === 'hard_constraints');
-  const roles = core.filter((q) => q.id.startsWith('priority_role:'));
+  const roles = core.filter((q) => q.id === 'priority_roles' || q.id.startsWith('priority_role:'));
   const middle = core.filter((q) => !pinnedFirst.includes(q) && !pinnedLast.includes(q) && !roles.includes(q)).sort(byScore);
   const demoted = new Set<string>();
   // Roles past the budget wait in fine-tune, unless already answered.
-  roles.filter((q) => q.status === 'open').slice(CORE_ROLE_BUDGET).forEach((q) => demoted.add(q.id));
+  roles.filter((q) => q.status === 'open' && q.id !== 'priority_roles').slice(CORE_ROLE_BUDGET).forEach((q) => demoted.add(q.id));
   const middleVisible = middle.filter((q) => !q.hidden);
   if (middleVisible.length > CORE_BUDGET) {
     const demotable = middleVisible

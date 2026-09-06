@@ -609,6 +609,7 @@ interface ItineraryDayRow {
   weather_json: string;
   food_json: string;
   warnings_json: string;
+  timing_json?: string | null;
 }
 
 /**
@@ -681,8 +682,8 @@ export function saveItinerary(itinerary: Itinerary): void {
     const insertDay = db.prepare(
       `INSERT INTO itinerary_days (trip_id, day_number, date, base_id, base_name, theme, intensity,
          window_json, totals_json, transport_json, availability_json, weather_json, food_json,
-         warnings_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         warnings_json, timing_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertItem = db.prepare(
       `INSERT INTO itinerary_items (trip_id, day_number, position, kind, place_id, start_minute, end_minute, item_json)
@@ -705,6 +706,7 @@ export function saveItinerary(itinerary: Itinerary): void {
         JSON.stringify(day.weather),
         JSON.stringify(day.food),
         JSON.stringify(day.warnings),
+        JSON.stringify(day.timing ?? null),
       );
       day.items.forEach((item, position) => {
         insertItem.run(
@@ -788,6 +790,7 @@ export function getItinerary(tripId: string): Itinerary | null {
       weather: JSON.parse(row.weather_json),
       food: JSON.parse(row.food_json),
       warnings: JSON.parse(row.warnings_json),
+      ...(row.timing_json && row.timing_json !== 'null' ? { timing: JSON.parse(row.timing_json) } : {}),
       items: itemsByDay.get(row.day_number) ?? [],
     })),
   });

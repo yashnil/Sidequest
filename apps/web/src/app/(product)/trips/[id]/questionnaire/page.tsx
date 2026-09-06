@@ -24,6 +24,7 @@ import { interviewContextFor } from '@/lib/interview/screening';
 import { compiledRegionFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
 import { isFixtureComposer } from '@/lib/providers/switches';
 import { providerReadiness } from '@/lib/compiler/readiness';
+import { resolveMapBasemap } from '@/components/map-adapter';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,6 +122,19 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
 
   const boardAwaitingProfile = compiledRegionFor(id) !== null && !getProfile(id);
 
+  /*
+   * PRODUCTION UI V1 — where the destination is, for the real map in the
+   * interview's rail: the selected destination's own centre and published
+   * bounds, or the compiled region's base point. Null when nothing resolved.
+   */
+  const selected = intent?.selectedDestination ?? intent?.resolution?.candidates.find((c) => c.id === (intent?.selectedCandidateId ?? intent?.resolution?.unambiguousCandidateId)) ?? intent?.resolution?.candidates[0] ?? null;
+  const geometry = selected?.center
+    ? { name: selected.displayName ?? trip.basics.destinationInput, center: selected.center, bounds: selected.bounds ?? null, featureType: 'entityType' in selected ? selected.entityType : selected.featureType }
+    : resolved.ok
+      ? { name: resolved.context.region.name, center: resolved.context.region.baseCoordinates, bounds: null }
+      : null;
+  const tiles = resolveMapBasemap(process.env);
+
   const wizard = (
     <InterviewWizard
       /*
@@ -137,6 +151,8 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       boardAvailable={resolved.ok}
       researchAvailable={trip.basics.regionId === DYNAMIC_REGION_ID && intent?.selectedDestination !== null && providerReadiness().ready}
       fixtureMode={process.env.NODE_ENV !== 'production' && isFixtureComposer()}
+      geometry={geometry}
+      tiles={tiles}
       {...(interpretation
         ? { interpretation: { set: interpretation, mustDo: intent?.composer?.mustDo ?? '', avoid: intent?.composer?.avoid ?? '' } }
         : {})}

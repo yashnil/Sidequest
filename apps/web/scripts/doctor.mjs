@@ -218,6 +218,21 @@ mark(
       : 'valhalla, production endpoint configured (SIDEQUEST_ROUTES_URL set to something other than the public demo host)',
 );
 /*
+ * PRODUCT RECOVERY V1 — the routing hierarchy as one line: what the local
+ * router covers (declared by the operator, checked before every request), and
+ * whether a global router stands behind it. Google Routes stays an explicit
+ * opt-in under the project's terms review and is reported by the generic
+ * capability loop below, never here.
+ */
+{
+  const coverage = process.env.SIDEQUEST_ROUTES_COVERAGE?.trim() || '';
+  const orsChosen = (process.env.SIDEQUEST_ROUTES_GLOBAL_PROVIDER ?? '').trim().toLowerCase() === 'openrouteservice';
+  const orsReady = orsChosen && ((process.env.OPENROUTESERVICE_API_KEY ?? '').length > 0 || (process.env.SIDEQUEST_ROUTES_FIXTURE ?? '').length > 0);
+  say(
+    `  · Routing hierarchy — Valhalla ${routesState === 'off' ? 'off' : `configured, coverage ${coverage || 'not declared (every leg attempted)'}`} / openrouteservice ${orsReady ? `configured${process.env.SIDEQUEST_ROUTES_FIXTURE ? ' (recorded fixture)' : ''}` : orsChosen ? 'chosen but no OPENROUTESERVICE_API_KEY' : 'off'} / Google Routes — adapter, request-time opt-in only`,
+  );
+}
+/*
  * QUALITY V1 — two different things share one credential. Composition (the
  * one model call that writes the trip) needs only ANTHROPIC_API_KEY, or the
  * fixture composer. Research (compiling a destination for the optional

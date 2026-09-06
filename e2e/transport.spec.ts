@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { mkdirSync } from 'node:fs';
 import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } from './support/trip';
 
@@ -42,6 +43,7 @@ async function finishToBoard(page: Page) {
 async function build(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await openHubView(page, 'plan');
   await expect(page.getByRole('heading', { name: 'Getting around' })).toBeVisible();
 }
 
@@ -131,9 +133,16 @@ test('a car trip produces a strategy and a multimodal access day', async ({ page
    * legs on a canonical plan — the stop is kept and the day says what it
    * could not verify, rather than narrating a timetable it never read.
    */
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('transport-notes')).toBeVisible();
-  await expect(page.getByText(/measured|not measured/).first()).toBeVisible();
-  await expect(page.getByText(/travel legs were measured by/).first()).toBeVisible();
+  // The routing disclosure sits with the transport strategy under Plan.
+  await openHubView(page, 'plan');
+  await expect(page.locator('#hub-view-plan').getByText(/travel legs were measured by/).first()).toBeVisible();
+  // Every leg on the days says how its time was arrived at: a measured distance, an estimate, or not measured.
+  await openHubView(page, 'days');
+  const firstLeg = page.locator('#hub-view-days [data-row-kind="travel"]').first();
+  await expect(firstLeg).toBeVisible();
+  await expect(firstLeg).toContainText(/\d+ km|estimate|not measured|timing not|timing from the operator/);
 
   // The centrepiece of this slice, captured for a human to look at. The
   // multimodal day is the one screen that cannot be judged from assertions.
@@ -156,7 +165,8 @@ test('the transport plan survives a refresh', async ({ page }) => {
     .textContent();
   await page.reload();
 
-  await expect(page).toHaveURL(/\/itinerary$/);
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/);
+  await openHubView(page, 'plan');
   await expect(page.getByRole('heading', { name: 'Getting around' })).toBeVisible();
   await expect(page.getByText('At the wheel', { exact: true }).locator('..')).toHaveText(
     before ?? '',
@@ -186,6 +196,7 @@ test('dropping the car rebuilds into a different, still-workable plan', async ({
 
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await openHubView(page, 'plan');
 
   // The strategy changed, and nothing on the plan asks them to drive.
   await expect(page.getByRole('heading', { name: 'Getting around' })).toBeVisible();
@@ -228,6 +239,7 @@ test('a manual pick broken by a transport answer stays visible with a way out', 
 
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await openHubView(page, 'days');
 
   // And the itinerary offers routes that actually resolve it.
   await expect(

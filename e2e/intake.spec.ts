@@ -153,15 +153,15 @@ test.describe('the questionnaire remembers where you were', () => {
 
     await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
     await page.getByTestId('interview-continue').click();
-    await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+    await expect(page.getByTestId('interview-question-priority_roles')).toBeVisible();
 
     /* Answer the second screen, step back, and come forward again. */
     const chosen = page.locator('input[type=radio][value="couple"]');
     await chosen.check();
     await page.getByTestId('interview-continue').click();
-    await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeHidden();
+    await expect(page.getByTestId('interview-question-priority_roles')).toBeHidden();
     await page.getByRole('button', { name: 'Back' }).click();
-    await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+    await expect(page.getByTestId('interview-question-priority_roles')).toBeVisible();
     await expect(page.locator('input[type=radio][value="couple"]')).toBeChecked();
   });
 

@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
+import { openHubView } from './support/hub';
+
+/** The hub nav that exists at this viewport: the segmented bar on desktop, the bottom bar on phones. */
+function hubNav(page: Page) {
+  return (page.viewportSize()?.width ?? 1440) < 640 ? page.getByTestId('trip-hub-bottom-nav') : page.getByTestId('trip-hub-nav');
+}
 
 /**
  * LIVE WORLD V1 — browser acceptance, fixture mode, zero spend.
@@ -17,12 +23,13 @@ async function buildWithDefaults(page: Page): Promise<string> {
   await waitUntilInteractive(defaults);
   await defaults.click();
   await page.waitForURL(/\/itinerary$/, { timeout: 120_000 });
-  await expect(page.getByTestId('trip-hub-nav')).toBeVisible();
+  await expect(hubNav(page)).toBeVisible();
   return id;
 }
 
 test('a stop can be moved later, a stop of your own added, and a day fixed — without a model call', async ({ page }) => {
   await buildWithDefaults(page);
+  await openHubView(page, 'days');
   const controls = page.getByTestId('stop-day-controls').first();
   await waitUntilInteractive(controls);
   await controls.getByRole('button', { name: /Move, re-time or keep/ }).click();
@@ -44,6 +51,7 @@ test('a stop can be moved later, a stop of your own added, and a day fixed — w
 
 test('a booking can change status and cost; the Verify section says when to look again; stays can be found without a price', async ({ page }) => {
   await buildWithDefaults(page);
+  await openHubView(page, 'plan');
   await page.getByTestId('booked-add').first().click();
   await page.getByTestId('booked-title').fill('Hotel by the creek');
   await page.getByTestId('booked-date').fill('2026-08-12');
@@ -54,11 +62,14 @@ test('a booking can change status and cost; the Verify section says when to look
   await status.selectOption('idea');
   await expect(page.getByTestId('booked-item').first()).toContainText(/idea/, { timeout: 15_000 });
   await page.reload();
+  await openHubView(page, 'plan');
   await expect(page.getByTestId('booked-item').first()).toContainText(/idea/);
 
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('hub-recheck')).toBeVisible();
   await expect(page.locator('[data-testid="hub-recheck"] li').first()).toHaveAttribute('data-window', /.+/);
 
+  await openHubView(page, 'plan');
   const discover = page.getByTestId('discover-stays-button').first();
   await discover.scrollIntoViewIfNeeded();
   await discover.click();
@@ -71,6 +82,7 @@ test('a booking can change status and cost; the Verify section says when to look
 
 test('verified stops hand off to a map app, measured legs draw as routes or straight lines, and the plan opens offline', async ({ page, context }) => {
   await buildWithDefaults(page);
+  await openHubView(page, 'days');
   await expect(page.getByTestId('stop-navigation').first()).toBeVisible();
   const anchor = page.getByTestId('stop-navigation').first().getByRole('link').first();
   await expect(anchor).toHaveAttribute('href', /google\.com\/maps\/search/);
@@ -81,9 +93,9 @@ test('verified stops hand off to a map app, measured legs draw as routes or stra
   // Let the worker take control and cache the shell.
   await page.waitForTimeout(1_000);
   await page.reload();
-  await expect(page.getByTestId('trip-hub-nav')).toBeVisible();
+  await expect(hubNav(page)).toBeVisible();
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByTestId('trip-hub-nav')).toBeVisible({ timeout: 20_000 });
+  await expect(hubNav(page)).toBeVisible({ timeout: 20_000 });
   await context.setOffline(false);
 });

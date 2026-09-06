@@ -49,12 +49,15 @@ import {
   OptionCards,
   RangeMapChoice,
   RhythmChoice,
-  RoleMeter,
+  RoleMeter, RoleMatrix,
   SpectrumChoice,
   TransportChoice,
   WritingSpace,
 } from './interview/patterns';
 import { SketchFigure, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
+import { DestinationMap, type DestinationGeometry } from './interview/DestinationMap';
+import { GenerationOverlay } from './interview/GenerationOverlay';
+import type { MapBasemap } from './map-adapter';
 import { StagePath, stageOf } from './interview/StagePath';
 import {
   completeAndBuildAction,
@@ -89,9 +92,14 @@ export function InterviewWizard({
   boardAvailable,
   researchAvailable,
   fixtureMode = false,
+  geometry = null,
+  tiles = null,
 }: {
   tripId: string;
   context: InterviewContext;
+  /** PRODUCTION UI V1 — the resolved destination's position and extent, for the real map in the rail. */
+  geometry?: DestinationGeometry | null;
+  tiles?: MapBasemap | null;
   region?: QuestionnaireContext['region'];
   initialAnswers: QuestionnaireAnswers;
   interpretation?: { set: InterpretationSet; mustDo: string; avoid: string };
@@ -202,12 +210,18 @@ export function InterviewWizard({
   }
 
   /** One Build = one composition. A failure shows the retry panel; the traveller decides whether to spend another call. */
+  const [building, setBuilding] = useState(false);
   function build(next: QuestionnaireAnswers) {
     setError(null);
     setBuildFailure(null);
+    setBuilding(true);
     startTransition(async () => {
       const result = await completeAndBuildAction(tripId, withPosition(next, REVIEW_POSITION));
-      if (!result.ok) setBuildFailure({ answers: next, message: result.error ?? 'Sidequest could not finish this draft. Your answers are saved.' });
+      if (!result.ok) {
+        setBuilding(false);
+        setBuildFailure({ answers: next, message: result.error ?? 'Sidequest could not finish this draft. Your answers are saved.' });
+      }
+      // On success the action redirects to the itinerary; the overlay stays until the new page paints.
     });
   }
 
@@ -272,7 +286,7 @@ export function InterviewWizard({
       ) : null}
 
       {position === UNDERSTANDING_POSITION ? (
-        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} {...(researchAvailable && !boardAvailable ? { onExplore: exploreFirst } : {})} />
+        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} geometry={geometry} tiles={tiles} {...(researchAvailable && !boardAvailable ? { onExplore: exploreFirst } : {})} />
       ) : null}
 
       {inInterview || position === REVIEW_POSITION ? (
@@ -299,6 +313,8 @@ export function InterviewWizard({
             ) : null}
             {position === REVIEW_POSITION ? (
               <ReviewScreen
+                geometry={geometry}
+                tiles={tiles}
                 context={context}
                 qContext={qContext}
                 answers={answers}
@@ -319,22 +335,23 @@ export function InterviewWizard({
             ) : null}
             {current ? (
               <div className="mt-8 lg:hidden">
-                <TripSketchSheet ctx={context} answers={answers} />
+                <TripSketchSheet ctx={context} answers={answers} geometry={geometry} tiles={tiles} />
               </div>
             ) : null}
           </div>
           {current ? (
             <div className="hidden lg:block">
               <div className="sticky top-[calc(var(--chrome-height)+1.5rem)]">
-                <TripSketchPanel ctx={context} answers={answers} />
+                <TripSketchPanel ctx={context} answers={answers} geometry={geometry} tiles={tiles} />
               </div>
             </div>
           ) : null}
         </div>
       ) : null}
 
+      {building && !buildFailure ? <GenerationOverlay destination={context.destination.name} /> : null}
       {buildFailure ? (
-        <section className="mt-8 rounded-xl border border-line bg-surface p-6" data-testid="build-failure" role="alert" aria-live="polite">
+        <section className="mt-8 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-6" data-testid="build-failure" role="alert" aria-live="polite">
           <h2 className="font-display text-xl text-ink">Sidequest couldn&rsquo;t finish this draft.</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">Your answers are saved. Retrying starts one fresh draft from them.</p>
           <div className="mt-5 flex flex-wrap gap-3">
@@ -374,6 +391,8 @@ function UnderstandingScreen({
   onStart,
   onDefaults,
   onExplore,
+  geometry = null,
+  tiles = null,
 }: {
   context: InterviewContext;
   answers: QuestionnaireAnswers;
@@ -383,6 +402,8 @@ function UnderstandingScreen({
   onStart: () => void;
   onDefaults: () => void;
   onExplore?: () => void;
+  geometry?: DestinationGeometry | null;
+  tiles?: MapBasemap | null;
 }) {
   const d = context.destination;
   const sketch = sketchFor(context, answers);
@@ -441,8 +462,8 @@ function UnderstandingScreen({
         ) : null}
       </div>
       <div className="enter-slow min-w-0">
-        <SketchFigure sketch={sketch} />
-        <p className="mt-2 text-xs text-ink-faint">The sketch redraws as you answer.</p>
+        {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} /> : <SketchFigure sketch={sketch} />}
+        <p className="mt-2 text-xs text-ink-faint">{geometry ? 'The map frames your reach as you answer.' : 'The sketch redraws as you answer.'}</p>
       </div>
     </section>
   );
@@ -486,7 +507,7 @@ function QuestionScreen({
   const def = question.definition;
   const resolved = question.status !== 'open';
   const seededInterests = def.kind === 'interests' ? (def.read(answers) as Interest[]) : [];
-  const [draft, setDraft] = useState<unknown>(() => (resolved ? def.read(answers) : def.kind === 'interests' && seededInterests.length > 0 ? seededInterests : initialDraft(def)));
+  const [draft, setDraft] = useState<unknown>(() => (resolved || def.kind === 'interest_roles' ? def.read(answers) : def.kind === 'interests' && seededInterests.length > 0 ? seededInterests : initialDraft(def)));
   const [touched, setTouched] = useState(resolved || seededInterests.length > 0 || EMPTY_IS_AN_ANSWER.has(def.kind));
   const options = def.options?.(context, answers) ?? [];
   const canContinue = touched && draftIsUsable(def, draft);
@@ -619,7 +640,7 @@ function draftIsUsable(def: QuestionDefinition, draft: unknown): boolean {
 }
 
 /** Kinds where an untouched control is a real answer ("nothing"), so Continue is never withheld. */
-const EMPTY_IS_AN_ANSWER = new Set<QuestionDefinition['kind']>(['hard_constraints', 'multi', 'dietary', 'names', 'text']);
+const EMPTY_IS_AN_ANSWER = new Set<QuestionDefinition['kind']>(['hard_constraints', 'multi', 'dietary', 'names', 'text', 'interest_roles']);
 const SCENARIO_LETTERED = new Set(['iconic_crowds', 'food_tradeoff', 'base_moves', 'coverage_strategy', 'convenience_spend']);
 const SPECTRUM = new Set(['effort', 'walking_tolerance', 'hike_appetite']);
 const RANGE = new Set(['scenic_reach', 'day_trips']);
@@ -642,6 +663,7 @@ function QuestionControl({
 }) {
   const id = question.id;
   if (question.kind === 'interests') return <InterestGrid context={context} offered={options} value={(value as Interest[]) ?? []} onChange={onChange} />;
+  if (question.kind === 'interest_roles') return <RoleMatrix name={id} options={options} value={(value as Record<string, string>) ?? {}} onChange={onChange} interests={Object.keys((question.read(answers) ?? {}) as Record<string, string>) as Interest[]} />;
   if (id.startsWith('priority_role:')) return <RoleMeter name={id} options={options} value={value as string | undefined} onChange={onChange} interest={id.slice('priority_role:'.length) as Interest} />;
   if (id === 'transport_mode') return <TransportChoice name={id} options={options} value={value as string | undefined} onChange={onChange} />;
   if (id === 'day_shape') return <RhythmChoice name={id} options={options} value={value as string | undefined} onChange={onChange} />;
@@ -689,6 +711,8 @@ function ReviewScreen({
   onPersonalize,
   onFinish,
   onUpdate,
+  geometry = null,
+  tiles = null,
 }: {
   context: InterviewContext;
   qContext: QuestionnaireContext;
@@ -706,6 +730,8 @@ function ReviewScreen({
   onPersonalize: () => void;
   onFinish: (destination: CompletionDestination) => void;
   onUpdate: (patch: Partial<QuestionnaireAnswers>) => void;
+  geometry?: DestinationGeometry | null;
+  tiles?: MapBasemap | null;
 }) {
   const [rangeKept, setRangeKept] = useState(false);
   const ledger = useMemo(() => reviewLedger(context, answers, plan), [context, answers, plan]);
@@ -749,7 +775,7 @@ function ReviewScreen({
           ))}
         </ul>
         <div>
-          <SketchFigure sketch={sketch} />
+          {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} /> : <SketchFigure sketch={sketch} />}
           <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
             <div>
               <dt className="label text-ink-faint">Shape</dt>

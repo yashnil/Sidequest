@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { intelligenceDiagnostics, travelIntelligenceSchema, type BookedPlanItem, type TravelIntelligence, type TravelReadinessProfile } from '@sidequest/core';
 import { reconcileTripDraft } from '../planning/reconcile';
 import { draftOf, fictionalWorld, type DayShape, type FictionalPlace, type FictionalWorldOptions } from '../planning/acceptance/harness';
-import { applyBookedFacts } from './booked-reconcile';
+import { applyBookedFacts, bookedLeaveByMinute } from './booked-reconcile';
 import { buildTravelIntelligence } from './build';
 
 /**
@@ -33,7 +33,8 @@ interface Shape {
 async function run(shape: Shape) {
   const world = fictionalWorld(shape.world);
   const draft = draftOf({ bases: shape.bases, days: shape.days });
-  const result = await reconcileTripDraft({ draft, context: world.context });
+  const leaveBy = bookedLeaveByMinute(shape.booked ?? [], world.trip.basics.endDate);
+  const result = await reconcileTripDraft({ draft, context: { ...world.context, ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}) } });
   expect(result.ok).toBe(true);
   const anchors = draft.days.reduce((n, d) => n + d.anchors.length, 0);
   expect(result.dispositions).toHaveLength(anchors);
@@ -145,7 +146,7 @@ const SHAPES: Shape[] = [
     countryCode: 'IT',
     expect: (intel) => {
       expect(intel.lodging.bases).toHaveLength(3);
-      expect(intel.bookings.items.filter((b) => b.kind === 'accommodation')).toHaveLength(3);
+      expect(intel.bookings.items.filter((b) => b.kind === 'accommodation' && !b.memberIds)).toHaveLength(3);
       expect(intel.transport.options.length).toBeGreaterThan(0);
       expect(intel.lodging.hotelChangeNote).toMatch(/2 hotel changes/);
     },
@@ -324,7 +325,7 @@ const SHAPES: Shape[] = [
       expect(intel.bookings.honored.length).toBeGreaterThanOrEqual(3);
       expect(intel.lodging.bases[0]!.booked?.title).toBe('Hotel Nord');
       expect(intel.lodging.bases[0]!.basis).toBe('booked');
-      expect(intel.bookings.items.find((b) => b.kind === 'accommodation')!.status).toBe('booked');
+      expect(intel.bookings.items.find((b) => b.kind === 'accommodation' && !b.memberIds)!.status).toBe('booked');
       expect(intel.transport.terminal.departure.basis).toBe('booked');
       expect(intel.transport.terminal.departureRespected).toBe(true);
       expect(intel.budget.booked.some((b) => b.currency === 'EUR' && b.amount === 540)).toBe(true);

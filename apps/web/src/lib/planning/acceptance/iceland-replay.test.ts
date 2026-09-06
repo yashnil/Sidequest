@@ -290,7 +290,7 @@ describe('saved Iceland draft, through the travel-intelligence pipeline offline'
 
     // BOOK FIRST exists and is honest: rental car and every base, nothing marked limited without evidence.
     expect(intel.bookings.items.some((b) => b.kind === 'rental_vehicle' && b.priority === 'book_first')).toBe(true);
-    expect(intel.bookings.items.filter((b) => b.kind === 'accommodation')).toHaveLength(7);
+    expect(intel.bookings.items.filter((b) => b.kind === 'accommodation' && !b.memberIds)).toHaveLength(7);
     expect(intel.bookings.items.every((b) => b.capacityEvidence === 'unknown' || b.authority !== 'model_proposal')).toBe(true);
 
     // Readiness: international, visa unverified with official links, passport arithmetic from the traveller's own month.

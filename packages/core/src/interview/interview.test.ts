@@ -240,8 +240,11 @@ describe('the selector', () => {
     let answers = fresh(ctx);
     answers = answerQuestion({ answers, ctx, question: questionById(ctx, answers, 'priorities')!, value: ['hiking', 'lakes_and_rivers'], now: NOW });
     const plan = planInterview({ ctx, answers });
-    expect(plan.shown).toContain('priority_role:hiking');
-    expect(plan.shown).toContain('priority_role:lakes_and_rivers');
+    // PRODUCT RECOVERY V1 — one matrix screen carries every chosen interest's role; the per-interest screens are hidden but still addressable.
+    expect(plan.shown).toContain('priority_roles');
+    expect(plan.shown.filter((id) => id.startsWith('priority_role:'))).toEqual([]);
+    const matrix = questionById(ctx, answers, 'priority_roles')!;
+    expect(Object.keys(matrix.read(answers) as Record<string, string>)).toEqual(['hiking', 'lakes_and_rivers']);
     expect(plan.shown).not.toContain('priority_role:stargazing');
     // The core trade-offs survive the roles: day shape, crowds and food are still asked.
     for (const id of ['day_shape', 'iconic_crowds', 'food_tradeoff', 'transport_mode', 'effort']) expect(plan.shown, id).toContain(id);

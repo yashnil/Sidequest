@@ -46,17 +46,25 @@ export function buildResilience(input: { itinerary: Itinerary; pkg: TripPackage 
     if (index === 0) triggers.push('Late arrival: everything today is optional.');
     if (day.intensity === 'intense') triggers.push('Fatigue: drop the last stop, not the first.');
     if (dayAccess.some((a) => a.state === 'reservation_required' || a.state === 'permit_required')) triggers.push('Sold out: a booked stop that did not book falls back to the flex items.');
+    /*
+     * PRODUCT RECOVERY V1 — a backup belongs to a day only when it was written
+     * for it or deterministically matched to it (`package.backups[].dayNumbers`,
+     * set by the reconciler from the day's own places). Nothing is assigned by
+     * position any more; a day with no compatible backup says so plainly.
+     */
     const weatherBackup = day.weather.backups[0];
-    const pkgBackup = backups[index % Math.max(1, backups.length)];
+    const pkgBackup = backups.find((b) => b.dayNumbers?.includes(day.dayNumber));
     const fallback = weatherBackup
       ? { name: weatherBackup.name, trigger: weatherBackup.trigger, why: weatherBackup.why, verified: true }
       : pkgBackup
-        ? { name: pkgBackup.alternative, trigger: pkgBackup.trigger, why: 'Proposed by the composing model; not independently verified.', verified: false }
-        : undefined;
+        ? { name: pkgBackup.alternative, trigger: pkgBackup.trigger, why: 'Proposed by the composing model for this part of the trip; not independently verified.', verified: false }
+        : flexItems.length > 0
+          ? { name: `Keep the afternoon flexible: ${flexItems[0]} can move or go.`, trigger: 'Anything that runs late or closes', why: 'No day-specific alternative was written for this day; the optional stop is the slack.', verified: false }
+          : { name: 'Keep this afternoon flexible.', trigger: 'Anything that runs late or closes', why: 'No day-specific alternative was written for this day.', verified: false };
     return dayResilienceSchema.parse({
       dayNumber: day.dayNumber,
       planA: day.theme,
-      ...(fallback ? { fallback } : {}),
+      fallback,
       flexItems,
       triggers,
       ...(w?.decisionPoint ? { decisionPoint: w.decisionPoint } : {}),

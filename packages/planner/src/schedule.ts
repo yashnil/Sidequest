@@ -3127,6 +3127,8 @@ export function buildDay(
       activityMinutes: layout.activityMinutes,
       travelMinutes: layout.travelMinutes,
       driveMinutes: layout.driveMinutes,
+      estimatedMinutes: 0,
+      allowanceMinutes: 0,
       transitMinutes: layout.transitMinutes,
       walkMinutes: layout.walkMinutes,
       waitMinutes: layout.waitMinutes,

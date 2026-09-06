@@ -15,12 +15,16 @@ export function TripOverviewMap({
   base,
   tiles = null,
   summary,
+  width = 640,
+  height = 340,
 }: {
   markers: readonly (MapMarker & { dayNumber: number })[];
   connectors: readonly MapConnector[];
   base: { name: string; coordinates: { lat: number; lng: number } } | null;
   tiles?: MapBasemap | null;
   summary: string;
+  width?: number;
+  height?: number;
 }) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   if (markers.length === 0) return null;
@@ -35,11 +39,12 @@ export function TripOverviewMap({
         setFocusedId(id);
         const marker = markers.find((m) => m.id === id);
         if (!marker) return;
-        document.getElementById(`day-${marker.dayNumber}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // The day lives in the Days view; land there, then on the day.
+        window.location.hash = `day-${marker.dayNumber}`;
       }}
       tiles={tiles}
-      width={640}
-      height={340}
+      width={width}
+      height={height}
       summary={summary}
       pinLabel={(marker) => `${marker.name}, day ${(marker as MapMarker & { dayNumber?: number }).dayNumber ?? ''}`.trim()}
       caption={<span>Press a stop to jump to its day.</span>}

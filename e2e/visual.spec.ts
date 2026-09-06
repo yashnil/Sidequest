@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { completeQuestionnaire } from './support/trip';
 import { mkdirSync } from 'node:fs';
 import {
@@ -63,8 +64,10 @@ test('captures the journey and stays free of console errors and overflow', async
 
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
-  await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
   await shot('11-itinerary');
+  await openHubView(page, 'days');
+  await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
+  await shot('12-itinerary-days');
 
   expectNoRuntimeProblems(problems);
 });

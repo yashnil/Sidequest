@@ -40,13 +40,15 @@ export function buildSafety(input: { itinerary: Itinerary; readiness: TripReadin
   for (const warning of input.itinerary.transportStrategy.seasonalWarnings) practical.push(safetyEntrySchema.parse({ bucket: 'practical', title: 'Seasonal road or route limit', detail: warning }));
   for (const day of input.itinerary.days) {
     for (const item of day.items) {
-      if (item.accessWarning) practical.push(safetyEntrySchema.parse({ bucket: 'practical', title: item.title, detail: item.accessWarning, dayNumbers: [day.dayNumber] }));
+      // A verification caveat ("could not be independently confirmed") is a confidence state, not a safety caution; the Verify view carries it.
+      if (item.accessWarning && !/could not be independently confirmed|hours and access have not been/i.test(item.accessWarning)) practical.push(safetyEntrySchema.parse({ bucket: 'practical', title: item.title, detail: item.accessWarning, dayNumbers: [day.dayNumber] }));
       if (item.daylightOnly) practical.push(safetyEntrySchema.parse({ bucket: 'practical', title: `${item.title}: daylight only`, detail: item.daylight ? `Signed for daylight use; placed inside sunrise to sunset for the date.` : 'Signed for daylight use; sunrise and sunset were not resolved — check the light.', dayNumbers: [day.dayNumber] }));
     }
     for (const caution of day.weather.cautions) practical.push(safetyEntrySchema.parse({ bucket: 'practical', title: `Day ${day.dayNumber} weather`, detail: caution, dayNumbers: [day.dayNumber] }));
   }
   if (input.remote) practical.push(safetyEntrySchema.parse({ bucket: 'practical', title: 'Remote sections', detail: 'Tell someone your route for the remote days, carry water and a charged phone, and do not count on signal.' }));
-  const unmeasuredDays = input.itinerary.days.filter((d) => d.totals.unmeasuredLegCount > 0);
+  // Only a leg nobody could time OR estimate is "untimed"; an estimated leg carries a believable figure the day already holds.
+  const unmeasuredDays = input.itinerary.days.filter((d) => d.totals.allowanceMinutes > 0 || (d.totals.unmeasuredLegCount > 0 && d.totals.estimatedMinutes === 0 && d.totals.allowanceMinutes === 0));
   if (unmeasuredDays.length > 0) unknown.push(safetyEntrySchema.parse({ bucket: 'unknown', title: 'Untimed transfers', detail: `${unmeasuredDays.length} day${unmeasuredDays.length === 1 ? '' : 's'} carry a leg nobody could time. Leave slack around them.`, dayNumbers: unmeasuredDays.map((d) => d.dayNumber) }));
   const dedupe = (list: SafetyEntry[]) => list.filter((e, i, all) => all.findIndex((x) => x.title === e.title && x.detail === e.detail) === i);
   return safetyIntelligenceSchema.parse({ official: dedupe(official), practical: dedupe(practical).slice(0, 12), unknown: dedupe(unknown) });

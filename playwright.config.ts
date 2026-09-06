@@ -28,6 +28,8 @@ const MOBILE = viewport('mobile');
  * tablet width, which is the width it exists for.
  */
 const RESPONSIVE_SPEC = ['**/viewports.spec.ts', '**/benchmark-viewports.spec.ts'];
+/** Today mode needs the fixture clock; `playwright.today.config.ts` runs it and clears this ignore. */
+const TODAY_SPEC = '**/live-world-today.spec.ts';
 
 /**
  * The port is not defined here. `config.port` in the root package.json is the one
@@ -173,12 +175,12 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'light' },
-      testIgnore: RESPONSIVE_SPEC,
+      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC],
     },
     {
       name: 'desktop-dark',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'dark' },
-      testIgnore: RESPONSIVE_SPEC,
+      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC],
     },
     {
       // Chromium at an iPhone viewport. This verifies responsive layout and touch
@@ -188,7 +190,7 @@ export default defineConfig({
       // viewport is stated, for the reason above.
       name: 'mobile',
       use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: MOBILE },
-      testIgnore: RESPONSIVE_SPEC,
+      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC],
     },
     /**
      * The tablet width, and only the responsive spec at it.

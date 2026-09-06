@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire } from './support/trip';
+import { openHubView } from './support/hub';
 
 /**
  * The slice this proves: a traveller confirms a board, presses Build my trip, and
@@ -27,6 +28,8 @@ async function buildTrip(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Mammoth Lakes', exact: true })).toBeVisible();
+  // PRODUCTION UI V1 — the itinerary is the Days view of the hub.
+  await openHubView(page, 'days');
 }
 
 test('board to a real day-by-day itinerary', async ({ page }) => {
@@ -57,7 +60,7 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
 
   // Real scheduled content: a stop with a time, a meal, and travel between them.
   await expect(page.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
-  await expect(page.getByText(/measured|not measured/).first()).toBeVisible();
+  await expect(page.locator('#hub-view-days').getByRole('heading', { level: 3, name: /\d+ km|estimate|timing not/ }).first()).toBeVisible();
   // The day says where its hours went, and free time is a deliberate block.
   await expect(page.getByText(/(\d+ min|\d+ hr( \d+ min)?) at stops/).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Free time' }).first()).toBeVisible();
@@ -106,7 +109,8 @@ test('the itinerary survives a refresh', async ({ page }) => {
   const before = await page.getByRole('heading', { name: /^Day 2/ }).textContent();
   await page.reload();
 
-  await expect(page).toHaveURL(/\/itinerary$/);
+  await expect(page).toHaveURL(/\/itinerary/);
+  await openHubView(page, 'days');
   await expect(page.getByRole('heading', { name: /^Day 2/ })).toHaveText(before ?? '');
   await expect(page.getByRole('heading', { name: /^Day 4/ })).toBeVisible();
 });
@@ -133,6 +137,7 @@ test('changing the board and rebuilding produces a different trip', async ({ pag
 
   await page.getByRole('button', { name: 'Rebuild my trip' }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await openHubView(page, 'days');
 
   // The skipped place must not appear anywhere in the rebuilt plan.
   await expect(page.getByRole('heading', { name: 'Convict Lake', exact: true })).toHaveCount(0);

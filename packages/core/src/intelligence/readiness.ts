@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { languageName, sharesLanguage, type CountryFacts } from '../reference/countries';
 import { claim, type SourceClaim } from './claims';
 
 /**
@@ -204,6 +205,14 @@ export const readinessEntrySchema = z.object({
   /** When in the run-up this belongs. */
   phase: z.enum(['do_now', 'do_before_booking', 'one_month_out', 'one_week_out', 'day_before', 'keep_offline']),
   claimId: z.string().min(1).optional(),
+  /**
+   * PRODUCT RECOVERY V1 — `primary` entries are the three to seven things this
+   * traveller on this trip actually needs to see; `more` is the generic
+   * international checklist, kept complete behind "More travel checks".
+   */
+  tier: z.enum(['primary', 'more']).default('primary'),
+  /** Reference facts behind the entry (currency, driving side, emergency number) — bundled reference data, labelled as such. */
+  facts: z.array(z.string().min(1)).optional(),
 });
 export type ReadinessEntry = z.infer<typeof readinessEntrySchema>;
 
@@ -232,6 +241,14 @@ export interface ReadinessInput {
   water: boolean;
   registry?: OfficialTravelSourceRegistry;
   now: Date;
+  /** PRODUCT RECOVERY V1 — bundled reference facts for the destination country (`data/countries.ts`), when known. */
+  destinationFacts?: CountryFacts | null;
+  /** Reference facts for the traveller's home country, when a citizenship or residence is known. */
+  homeFacts?: CountryFacts | null;
+  /** Languages the traveller speaks (ISO 639-1), when stated; absent means unknown. */
+  travellerLanguages?: readonly string[];
+  /** Whether the destination is English-speaking enough that no translation aid is needed by default. */
+  daysUntilTrip?: number;
 }
 
 function monthsBetween(fromIso: string, toIso: string): number {
@@ -258,7 +275,7 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
   const international: TripReadinessPacket['international'] = !input.destinationCountry || home.size === 0 ? 'unknown' : home.has(input.destinationCountry) ? 'no' : 'yes';
   const checkedAt = input.now.toISOString();
   const claims: SourceClaim[] = [];
-  const entries: ReadinessEntry[] = [];
+  const entries: z.input<typeof readinessEntrySchema>[] = [];
   const fa = registry.foreignAffairsFor(citizenship);
   const iata = registry.iata();
   const health = registry.publicHealthFor(citizenship);
@@ -329,31 +346,37 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
 
   // Transit -------------------------------------------------------------------
   if (profile && profile.transitCountries.length > 0) {
-    entries.push({ kind: 'transit', title: 'Transit countries', state: 'unverified', summary: `You pass through ${profile.transitCountries.join(', ')}. Airside transit rules differ from entry rules and are not verified by Sidequest.`, action: 'Check transit requirements for each connection.', links: [{ name: iata.name, url: iata.url }], blocking: false, phase: 'do_before_booking' });
+    entries.push({ kind: 'transit', title: 'Transit countries', state: 'unverified', summary: `You pass through ${profile.transitCountries.join(', ')}. Airside transit rules differ from entry rules and are not verified by Sidequest.`, action: 'Check transit requirements for each connection.', links: [{ name: iata.name, url: iata.url }], blocking: false, phase: 'do_before_booking', tier: 'more' });
   }
 
   // Health documents ----------------------------------------------------------
   if (international !== 'no') {
     const id = 'claim:health-document';
     claims.push(claim({ id, kind: 'health_document', subject: country, claim: `Vaccination or health-document requirements for ${country} are not verified by Sidequest.`, authority: 'model_proposal', sourceName: 'Sidequest', state: 'unverified', checkedAt }));
-    entries.push({ kind: 'health_document', title: 'Vaccinations and health documents', state: 'unverified', summary: `Some destinations require proof of vaccination or health declarations. Sidequest has not verified ${country}’s requirements.`, action: 'Check the official travel-health source for your destination, ideally six weeks before you go.', links: [{ name: health.name, url: health.url }], blocking: false, phase: 'one_month_out', claimId: id });
+    entries.push({ kind: 'health_document', title: 'Vaccinations and health documents', state: 'unverified', summary: `Some destinations require proof of vaccination or health declarations. Sidequest has not verified ${country}’s requirements.`, action: 'Check the official travel-health source for your destination, ideally six weeks before you go.', links: [{ name: health.name, url: health.url }], blocking: false, phase: 'one_month_out', claimId: id, tier: 'more' });
   }
 
   // Driving documents ---------------------------------------------------------
   if (input.drives) {
     const licence = profile?.drivingLicenceCountry;
     const domesticLicence = licence && input.destinationCountry && licence === input.destinationCountry;
+    const facts = input.destinationFacts ?? null;
+    const home = input.homeFacts ?? null;
+    const sideDiffers = facts && home ? facts.drivingSide !== home.drivingSide : null;
+    const sideFact = facts ? `Traffic drives on the ${facts.drivingSide} in ${country}${sideDiffers === true ? ` — the opposite side from ${home!.name}` : sideDiffers === false ? ', the same side as at home' : ''}.` : null;
     entries.push({
       kind: 'driving_document',
-      title: 'Driving documents',
+      title: 'Driving',
       state: domesticLicence ? 'not_applicable' : international === 'no' ? 'not_applicable' : 'unverified',
       summary: domesticLicence || international === 'no'
         ? 'Your own licence covers driving here. Carry it, plus the rental agreement.'
-        : `This plan involves driving. Whether ${country} accepts your licence alone or requires an International Driving Permit is not verified by Sidequest. Rental desks also set their own minimum age and licence-age rules.`,
-      action: domesticLicence || international === 'no' ? undefined : 'Confirm licence acceptance and IDP requirements before you book the car.',
+        : `Whether ${country} accepts your licence alone or requires an International Driving Permit is not verified by Sidequest. Rental desks set their own minimum age and licence-age rules, and the excess (deductible) on the rental is worth deciding before you book.${sideFact ? ` ${sideFact}` : ''}`,
+      action: domesticLicence || international === 'no' ? undefined : 'Confirm licence and IDP rules; decide the rental excess cover.',
       links: fa ? [{ name: fa.name, url: fa.url }] : [{ name: iata.name, url: iata.url }],
       blocking: false,
       phase: 'do_before_booking',
+      tier: 'primary',
+      ...(sideFact ? { facts: [sideFact] } : {}),
     });
   }
 
@@ -373,33 +396,90 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
       links: fa ? [{ name: fa.name, url: fa.url }] : [{ name: iata.name, url: iata.url }],
       blocking: false,
       phase: 'do_now',
+      tier: 'more',
     });
-    entries.push({ kind: 'local_law', title: 'Local laws and customs', state: 'unverified', summary: 'Rules that surprise visitors — drones, medication, dress, photography, alcohol — are listed in the official advice for the destination.', links: fa ? [{ name: fa.name, url: fa.url }] : [], blocking: false, phase: 'one_week_out' });
+    entries.push({ kind: 'local_law', title: 'Local laws and customs', state: 'unverified', summary: 'Rules that surprise visitors — drones, medication, dress, photography, alcohol — are listed in the official advice for the destination.', links: fa ? [{ name: fa.name, url: fa.url }] : [], blocking: false, phase: 'one_week_out', tier: 'more' });
   }
-  entries.push({
-    kind: 'emergency',
-    title: 'Emergency contacts',
-    state: 'unverified',
-    summary: international === 'no' ? 'Save the local emergency number and the address of where you are sleeping each night.' : `Save the local emergency number for ${country} and the nearest consulate for your country. Sidequest has not resolved the consulate address for this trip.`,
-    action: 'Save these on your phone and on paper.',
-    links: international === 'no' ? [] : [{ name: registry.embassyFinder().name, url: registry.embassyFinder().url }],
-    blocking: false,
-    phase: 'keep_offline',
-  });
+  {
+    const facts = input.destinationFacts ?? null;
+    const number = facts ? `${facts.emergency}${facts.emergencyNotes ? ` (${facts.emergencyNotes})` : ''}` : null;
+    entries.push({
+      kind: 'emergency',
+      title: 'Emergency',
+      state: facts ? 'confirmed' : 'unverified',
+      summary: number
+        ? `Emergency number in ${country}: ${number}. Save it with the address of where you sleep each night${international === 'no' ? '.' : ', and the nearest consulate for your country.'}`
+        : international === 'no'
+          ? 'Save the local emergency number and the address of where you are sleeping each night.'
+          : `Save the local emergency number for ${country} and the nearest consulate for your country. Sidequest has not resolved the consulate address for this trip.`,
+      action: 'Save these on your phone and on paper.',
+      links: international === 'no' ? [] : [{ name: registry.embassyFinder().name, url: registry.embassyFinder().url }],
+      blocking: false,
+      phase: 'keep_offline',
+      tier: 'primary',
+      ...(number ? { facts: [`Emergency number ${number} (reference data).`] } : {}),
+    });
+  }
 
   // Health / insurance ----------------------------------------------------------
-  entries.push({ kind: 'insurance', title: 'Travel medical insurance', state: 'unverified', summary: international === 'no' ? 'Check whether your usual cover applies away from home, especially for outdoor activity and cancellations.' : 'Your home health cover rarely applies abroad. Arrange travel medical insurance that covers cancellation, medical evacuation and the activities on this plan.', action: 'Arrange or confirm cover.', links: [], blocking: false, phase: 'one_month_out' });
+  entries.push({ kind: 'insurance', title: 'Travel medical insurance', state: 'unverified', summary: international === 'no' ? 'Check whether your usual cover applies away from home, especially for outdoor activity and cancellations.' : 'Your home health cover rarely applies abroad. Arrange travel medical insurance that covers cancellation, medical evacuation and the activities on this plan.', action: 'Arrange or confirm cover.', links: [], blocking: false, phase: 'one_month_out', tier: international === 'yes' ? 'primary' : 'more' });
   if (input.strenuous || input.water || input.remote) {
-    entries.push({ kind: 'activity_insurance', title: 'Activity cover', state: 'unverified', summary: `This plan includes ${[input.strenuous ? 'strenuous hiking' : null, input.water ? 'water activity' : null, input.remote ? 'remote areas' : null].filter(Boolean).join(', ')}. Many policies exclude these unless added.`, action: 'Check the activity exclusions on your policy.', links: [], blocking: false, phase: 'one_month_out' });
+    entries.push({ kind: 'activity_insurance', title: 'Activity cover', state: 'unverified', summary: `This plan includes ${[input.strenuous ? 'strenuous hiking' : null, input.water ? 'water activity' : null, input.remote ? 'remote areas' : null].filter(Boolean).join(', ')}. Many policies exclude these unless added.`, action: 'Check the activity exclusions on your policy.', links: [], blocking: false, phase: 'one_month_out', tier: 'more' });
   }
-  entries.push({ kind: 'medication', title: 'Medicines', state: 'unverified', summary: 'Bring any prescription medicines you need in their original packaging, with enough for delays, and verify destination restrictions on controlled substances. Sidequest never infers what you take.', links: [{ name: health.name, url: health.url }], blocking: false, phase: 'one_week_out' });
+  entries.push({ kind: 'medication', title: 'Medicines', state: 'unverified', summary: 'Bring any prescription medicines you need in their original packaging, with enough for delays, and verify destination restrictions on controlled substances. Sidequest never infers what you take.', links: [{ name: health.name, url: health.url }], blocking: false, phase: 'one_week_out', tier: 'more' });
 
   // Practical -------------------------------------------------------------------
-  entries.push({ kind: 'currency_payment', title: 'Money', state: 'unverified', summary: international === 'no' ? 'Your usual cards work. Carry some cash for places that do not take them.' : 'Confirm card acceptance and ATM availability for your destination, tell your bank you are travelling, and carry some local cash for small places.', links: [], blocking: false, phase: 'one_week_out' });
-  entries.push({ kind: 'connectivity', title: 'Staying connected', state: 'unverified', summary: input.remote ? 'Parts of this plan are remote. Download offline maps and the plan itself; do not rely on a signal.' : international === 'no' ? 'Download offline maps for the areas you will be in.' : 'Decide between roaming, a local SIM or an eSIM before you land, and download offline maps.', links: [], blocking: false, phase: 'one_week_out' });
-  if (international !== 'no') {
-    entries.push({ kind: 'electricity', title: 'Plugs and voltage', state: 'unverified', summary: 'Check the plug type and voltage for your destination; Sidequest does not carry this dataset yet.', links: [], blocking: false, phase: 'day_before' });
-    entries.push({ kind: 'language', title: 'Language', state: 'unverified', summary: 'Download an offline translation pack for the local language if it is not one you speak.', links: [], blocking: false, phase: 'day_before' });
+  {
+    const facts = input.destinationFacts ?? null;
+    const home = input.homeFacts ?? null;
+    const sameCurrency = facts && home ? facts.currency === home.currency : null;
+    entries.push({
+      kind: 'currency_payment',
+      title: 'Money',
+      state: facts ? 'confirmed' : 'unverified',
+      summary: international === 'no'
+        ? 'Your usual cards work. Carry some cash for places that do not take them.'
+        : facts
+          ? `${country} uses the ${facts.currency}${sameCurrency === true ? ', the same as at home' : ''}. Tell your bank you are travelling, and carry some ${facts.currency} cash for small places and rural stops.`
+          : 'Confirm card acceptance and ATM availability for your destination, tell your bank you are travelling, and carry some local cash for small places.',
+      links: [],
+      blocking: false,
+      phase: 'one_week_out',
+      tier: international === 'no' || sameCurrency === true ? 'more' : 'primary',
+      ...(facts ? { facts: [`Currency ${facts.currency} (reference data).`] } : {}),
+    });
+    entries.push({ kind: 'connectivity', title: 'Staying connected', state: 'unverified', summary: input.remote ? 'Parts of this plan are remote. Download offline maps and the plan itself; do not rely on a signal.' : international === 'no' ? 'Download offline maps for the areas you will be in.' : 'Decide between roaming, a local SIM or an eSIM before you land, and download offline maps.', links: [], blocking: false, phase: 'one_week_out', tier: input.remote ? 'primary' : 'more' });
+    if (international !== 'no') {
+      const plugDiffers = facts && home ? !facts.plugs.some((p) => home.plugs.includes(p)) || Math.abs(facts.voltage - home.voltage) > 30 : null;
+      entries.push({
+        kind: 'electricity',
+        title: 'Plugs and voltage',
+        state: facts ? 'confirmed' : 'unverified',
+        summary: facts ? `${country} uses type ${facts.plugs.join('/')} sockets at ${facts.voltage} V${plugDiffers === true ? ` — different from ${home!.name}; bring an adapter${Math.abs(facts.voltage - home!.voltage) > 30 ? ' and check your chargers accept the voltage' : ''}.` : plugDiffers === false ? '; your plugs fit.' : '.'}` : 'Check the plug type and voltage for your destination.',
+        links: [],
+        blocking: false,
+        phase: 'day_before',
+        tier: plugDiffers === true ? 'primary' : 'more',
+        ...(facts ? { facts: [`Plugs ${facts.plugs.join('/')}, ${facts.voltage} V (reference data).`] } : {}),
+      });
+      const shared = sharesLanguage(facts, input.travellerLanguages ?? (home ? home.languages : undefined));
+      const englishSpoken = facts?.languages.includes('en') ?? false;
+      entries.push({
+        kind: 'language',
+        title: 'Language',
+        state: facts ? 'confirmed' : 'unverified',
+        summary: facts
+          ? shared === true || (englishSpoken && shared === null)
+            ? `${facts.languages.map(languageName).join(' and ')} ${facts.languages.length === 1 ? 'is' : 'are'} spoken in ${country}; you will get by without a translation aid.`
+            : `${facts.languages.map(languageName).join(' and ')} ${facts.languages.length === 1 ? 'is' : 'are'} spoken in ${country}. Download an offline translation pack for ${languageName(facts.languages[0]!)} if it is not one you speak.`
+          : 'Download an offline translation pack for the local language if it is not one you speak.',
+        links: [],
+        blocking: false,
+        phase: 'day_before',
+        tier: facts && (shared === true || (englishSpoken && shared === null)) ? 'more' : 'primary',
+        ...(facts ? { facts: [`Languages ${facts.languages.map(languageName).join(', ')} (reference data).`] } : {}),
+      });
+    }
   }
 
   const coverage = registry.coverageFor(citizenship);

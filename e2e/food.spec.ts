@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } from './support/trip';
 
 /** Same directory the rest of the suite writes to, created before use. */
@@ -37,6 +38,7 @@ async function finishQuestionnaire(page: Page) {
 async function buildTrip(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await openHubView(page, 'plan');
   await expect(page.getByRole('heading', { name: 'Eating' }).first()).toBeVisible();
 }
 
@@ -77,7 +79,8 @@ test('a built trip names real places, and says where the facts came from', async
   await expect(eating).not.toContainText('$');
   await expect(eating.getByText(/have not checked today/i)).toBeVisible();
 
-  // At least one meal names somewhere, with a reason that talks about the route.
+  // At least one meal names somewhere, with a reason that talks about the route (on its day).
+  await openHubView(page, 'days');
   await expect(page.getByText(/on the way|right on the route|off the route/i).first()).toBeVisible();
 });
 
@@ -130,11 +133,16 @@ test('the plan survives a refresh unchanged, then changes when the preference do
    * it names — so they are stable across a reload and they are exactly what a
    * different way of eating is supposed to move.
    */
-  const plan = () => page.getByRole('heading', { level: 3 }).allTextContents();
+  // The headings are read under Days, where the timeline is; the hub shows one view at a time.
+  const plan = async () => {
+    await openHubView(page, 'days');
+    return page.getByRole('heading', { level: 3 }).allTextContents();
+  };
 
   const before = await plan();
   expect(before.length, 'the plan should have scheduled something').toBeGreaterThan(0);
   await page.reload();
+  await openHubView(page, 'plan');
   await expect(page.getByRole('heading', { name: 'Eating' }).first()).toBeVisible();
   expect(await plan()).toEqual(before);
 

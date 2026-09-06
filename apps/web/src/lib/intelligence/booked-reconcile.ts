@@ -64,6 +64,21 @@ function shiftAround(day: ItineraryDay, locked: ItineraryItem): { day: Itinerary
   return { day: recomputeTotals({ ...day, items: [...kept, ...free].sort((a, b) => a.startMinute - b.startMinute) }), displaced };
 }
 
+/**
+ * PRODUCT RECOVERY V1 — the leave-by minute a booked departure imposes on the
+ * last day, so the reconciler can lay that day out against the real edge
+ * instead of discovering the overflow afterwards. Null when nothing booked
+ * departs that day.
+ */
+export function bookedLeaveByMinute(booked: readonly BookedPlanItem[], lastDate: string): number | null {
+  const departures = booked.filter((b) => b.status !== 'idea' && (b.type === 'flight' || b.type === 'train' || b.type === 'ferry') && b.date === lastDate && b.startTime);
+  if (departures.length === 0) return null;
+  const earliest = departures.reduce((min, b) => Math.min(min, minuteOf(b.startTime!)), 1440);
+  const kind = departures.find((b) => minuteOf(b.startTime!) === earliest)!.type;
+  const buffer = kind === 'flight' ? TERMINAL_BUFFERS.checkInUnknown : TERMINAL_BUFFERS.stationBuffer;
+  return Math.max(0, earliest - buffer - TERMINAL_BUFFERS.transferEstimate);
+}
+
 export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanItem[]): BookedReconciliation {
   const honored: string[] = [];
   const conflicts: string[] = [];
@@ -140,7 +155,8 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
      * them to move or drop. A zero-length travel stub is noise.
      */
     const late = last.items.filter((i) => i.kind === 'activity' && i.endMinute > leaveBy && !isBookedItemId(i.id));
-    const removed = last.items.filter((i) => (i.kind === 'meal' || (i.kind === 'travel' && i.durationMinutes === 0) || i.kind === 'rest') && i.endMinute > leaveBy && i.startMinute >= leaveBy);
+    // PRODUCT RECOVERY V1 — a travel allowance or estimate that starts after the leave-by time is scheduling scaffolding, not a journey the traveller makes; it goes with the meal. A measured leg is kept and named like an activity.
+    const removed = last.items.filter((i) => (i.kind === 'meal' || (i.kind === 'travel' && (i.durationMinutes === 0 || i.travel?.provenance !== 'measured')) || i.kind === 'rest') && i.endMinute > leaveBy && i.startMinute >= leaveBy);
     for (const i of late) conflicts.push(`Booked: your ${kind} at ${clock(earliest)} means leaving base by ${clock(leaveBy)}; "${i.title}" on day ${last.dayNumber} runs past that.`);
     const trimmed = last.items
       .filter((i) => !removed.includes(i))

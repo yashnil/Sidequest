@@ -48,6 +48,11 @@ function alternativeValue(question: (typeof INTERVIEW_QUESTIONS)[number], ctx: I
   switch (question.id) {
     case 'priorities':
       return ['wildlife', 'markets_and_street_food'];
+    case 'priority_roles': {
+      const current = (question.read(answers) ?? {}) as Record<string, string>;
+      if (Object.keys(current).length === 0) return { wildlife: 'most_days' };
+      return Object.fromEntries(Object.keys(current).map((interest) => [interest, current[interest] === 'most_days' ? 'once' : 'most_days']));
+    }
     case 'names':
       return { include: ['Cliffs of the Ninth'], avoid: ['Tourist Trap Tower'] };
     case 'hard_constraints':

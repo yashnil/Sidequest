@@ -46,6 +46,8 @@ export const lodgingIntelligenceSchema = z.object({
   shortlist: z.array(z.object({ baseId: z.string().min(1), name: z.string().min(1), why: z.string().min(1), priceTier: priceTierSchema, source: z.string().min(1) })).default([]),
   shortlistBasis: z.string().min(1),
   hotelChangeNote: z.string().min(1),
+  /** PRODUCT RECOVERY V1 — the hotel-churn facts behind the note; never a universal score. */
+  churn: z.object({ level: z.enum(['settled', 'moderate', 'aggressive']), hotelChanges: z.number().int().min(0), nights: z.number().int().min(0), baseCount: z.number().int().min(0), oneNightStays: z.array(z.string().min(1)), averageNightsPerBase: z.number().min(0), simplerRoute: z.array(z.string().min(1)) }).optional(),
 });
 export type LodgingIntelligence = z.infer<typeof lodgingIntelligenceSchema>;
 
@@ -216,16 +218,32 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
   const properties = input.properties ?? [];
   const moves = Math.max(0, bases.length - 1);
   const tolerance = profile.interview.baseMoveTolerance;
+  /*
+   * PRODUCT RECOVERY V1 — hotel churn is named, not excused. Six changes in
+   * nine nights is a fast-moving route whatever the traveller ticked; the note
+   * says so and the numbers travel with it. No fake score, and no invented
+   * "simpler route": a simpler alternative is offered only where the plan
+   * itself holds one (a one-night base between two longer stays that could
+   * be folded — named, never fabricated).
+   */
+  const totalNights = bases.reduce((n, b) => n + b.nights, 0);
+  const oneNightStays = bases.filter((b) => b.nights === 1).map((b) => b.name);
+  const averageNightsPerBase = bases.length > 0 ? Math.round((totalNights / bases.length) * 10) / 10 : totalNights;
+  const churn: 'settled' | 'moderate' | 'aggressive' = moves === 0 ? 'settled' : totalNights > 0 && moves / totalNights >= 0.5 || (oneNightStays.length >= 3 && moves >= 4) ? 'aggressive' : 'moderate';
+  const simplerRoute = churn === 'aggressive' ? bases.filter((b, i) => b.nights === 1 && i > 0 && i < bases.length - 1 && (bases[i - 1]!.nights >= 2 || bases[i + 1]!.nights >= 2)).map((b) => `${b.name} could be a day trip from ${bases[bases.indexOf(b) - 1]!.nights >= 2 ? bases[bases.indexOf(b) - 1]!.name : bases[bases.indexOf(b) + 1]!.name} instead of a one-night stop`) : [];
   const hotelChangeNote =
     moves === 0
       ? 'One base for the whole trip: unpack once.'
-      : tolerance === 'stay_put'
-        ? `${moves} ${moves === 1 ? 'hotel change' : 'hotel changes'} on a plan for someone who asked to stay put — the route needed it; each move is on a day marked as a transfer.`
-        : `${moves} ${moves === 1 ? 'hotel change' : 'hotel changes'}, within what you said you would accept.`;
+      : churn === 'aggressive'
+        ? `This is a fast-moving route: ${moves} hotel changes in ${totalNights} nights, ${oneNightStays.length} of them one-night stays (${oneNightStays.join(', ')}).${tolerance === 'stay_put' ? ' You asked to stay put; the route needed the moves and each is on a transfer day.' : tolerance === 'move_freely' ? ' You said you would move as often as the route wants.' : ''}${simplerRoute.length > 0 ? ` Simpler: ${simplerRoute[0]}.` : ''}`
+        : tolerance === 'stay_put'
+          ? `${moves} ${moves === 1 ? 'hotel change' : 'hotel changes'} on a plan for someone who asked to stay put — the route needed it; each move is on a day marked as a transfer.`
+          : `${moves} ${moves === 1 ? 'hotel change' : 'hotel changes'} over ${totalNights} nights, about ${averageNightsPerBase} nights per base.`;
   return lodgingIntelligenceSchema.parse({
     bases,
     shortlist: properties.map((p) => ({ baseId: p.baseId, name: p.name, why: p.why, priceTier: p.priceTier, source: p.source })),
     shortlistBasis: properties.length > 0 ? 'Ranked by fit to this plan, not by review score. Availability and price are not live.' : 'No accommodation provider is configured, so Sidequest recommends areas rather than properties. Availability and prices are unknown until you look.',
     hotelChangeNote,
+    churn: { level: churn, hotelChanges: moves, nights: totalNights, baseCount: bases.length, oneNightStays, averageNightsPerBase, simplerRoute },
   });
 }

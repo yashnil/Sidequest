@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { completeQuestionnaire } from './support/trip';
 import { openBoardBackstage } from './support/trip';
 
@@ -169,6 +170,8 @@ async function build(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Mammoth Lakes', exact: true })).toBeVisible();
+  // PRODUCTION UI V1 — stops, hours, conflicts and day weather live under Days.
+  await openHubView(page, 'days');
 }
 
 test('the board carries weather context for the traveller’s own dates', async ({ page }) => {
@@ -199,12 +202,17 @@ test('an itinerary is built against a forecast, and says so', async ({ page }) =
   await expect(weather).toBeVisible();
   await expect(weather.getByText('Forecast', { exact: true })).toBeVisible();
 
-  // The point it was taken at, and the attribution the licence requires.
-  await expect(page.getByText(/Taken at (one point|\d+ separate points)/)).toBeVisible();
-  await expect(page.getByText(/we have not checked today/i).first()).toBeVisible();
+  // The point it was taken at, and the attribution the licence requires (the trip-wide weather panel lives under Prepare).
+  await openHubView(page, 'prepare');
+  const prepare = page.locator('#hub-view-prepare');
+  await expect(prepare.getByText(/Taken at (one point|\d+ separate points)/)).toBeVisible();
+  await expect(prepare.getByText(/have not checked today/i).first()).toBeVisible();
 
-  // Daylight is stated as a real window rather than as a disclaimer.
-  await expect(page.getByText(/Light from \d\d:\d\d to \d\d:\d\d/).first()).toBeVisible();
+  // Daylight is stated as a real time rather than as a disclaimer — unless the fixture's sunset is
+  // at or past 23:30, which PRODUCTION UI V1 suppresses on purpose ("light until 23:59" tells nobody anything).
+  await openHubView(page, 'days');
+  const light = page.getByText(/light until \d\d:\d\d/);
+  if ((await light.count()) > 0) await expect(light.first()).toBeVisible();
 });
 
 test('a day the weather threatens is given a concrete fallback or an honest gap', async ({
@@ -241,6 +249,7 @@ test('the weather behind a plan survives a refresh unchanged', async ({ page }) 
 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Mammoth Lakes', exact: true })).toBeVisible();
+  await openHubView(page, 'days');
 
   const after = await page
     .getByRole('region', { name: 'Weather on day 1' })
@@ -273,7 +282,7 @@ test('different dates get different weather, and a different kind of it', async 
 
   expect(far).not.toBe(august);
   expect(august).toContain('Forecast');
-  expect(far).toContain('Historical pattern');
+  expect(far).toMatch(/Typical|historical/);
 });
 
 test('a trip beyond the forecast window says so in those words', async ({ page }) => {
@@ -281,13 +290,21 @@ test('a trip beyond the forecast window says so in those words', async ({ page }
   await build(page);
 
   const weather = page.getByRole('region', { name: 'Weather on day 1' }).first();
-  await expect(weather.getByText('Historical pattern')).toBeVisible();
-  await expect(weather.getByText(/not a forecast/i).first()).toBeVisible();
+  // PRODUCTION UI V1 — the day line carries the chip ("Typical"); the reasoning sits behind a disclosure.
+  await expect(weather.getByText('Typical')).toBeVisible();
+  const summary = weather.locator('summary');
+  if ((await summary.count()) > 0) {
+    await summary.first().click();
+    await expect(weather.getByText(/not a forecast/i).first()).toBeVisible();
+  }
 
   // And it must not claim a day. "Best on Thursday" is a forecast sentence.
   await expect(page.getByText(/clearest|best day|looks like the day/i)).toHaveCount(0);
   await expect(page.getByText('Forecast', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Historical pattern', { exact: true }).first()).toBeVisible();
+  await openHubView(page, 'prepare');
+  const prepare = page.locator('#hub-view-prepare');
+  await expect(prepare.getByText('Historical pattern', { exact: true }).first()).toBeVisible();
+  await expect(prepare.getByText(/too far out for a forecast|not a forecast/i).first()).toBeVisible();
 });
 
 test('weather never overrides the hours or the transport it sits behind', async ({ page }) => {

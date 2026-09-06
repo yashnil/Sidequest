@@ -128,13 +128,18 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
 
   const primary = itinerary.transportStrategy.primaryMode;
   const driveKm = itinerary.transportStrategy.totals.driveKm;
+  /*
+   * PRODUCT RECOVERY V1 — fuel follows the evidence. Measured km price fuel
+   * exactly; km Sidequest only estimated from map distance price a wide band
+   * and say so; when nothing was measured or estimated the line carries the
+   * rental alone and says fuel is not included, rather than "fuel for 0 km".
+   */
+  const estimatedKm = itinerary.days.reduce((sum, day) => sum + day.items.reduce((s, item) => s + (item.kind === 'travel' && item.travel?.provenance === 'estimated' && item.travel.mode === 'drive' ? (item.travel.estimate?.approxKm ?? 0) : 0), 0), 0);
   if (primary === 'drive' || driveKm > 0) {
-    push('car_fuel_tolls_parking', RENTAL_DAY[style], days, false, `${days} rental days plus fuel for about ${Math.round(driveKm)} km`, ['Rental, basic insurance, fuel'], ['Tolls, parking, one-way fees, full excess cover']);
-    if (driveKm > 0) {
-      const fuel = lines[lines.length - 1]!;
-      fuel.low += Math.round(FUEL_PER_KM[0] * driveKm);
-      fuel.high += Math.round(FUEL_PER_KM[1] * driveKm);
-    }
+    const fuelBasis = driveKm > 0 ? `fuel for about ${Math.round(driveKm)} km of measured driving` : estimatedKm > 0 ? `fuel for roughly ${Math.round(estimatedKm / 50) * 50} km, estimated from map distance` : 'fuel not included — no leg was measured or estimated';
+    const fuelKm = driveKm > 0 ? driveKm : estimatedKm;
+    const fuelBand: [number, number] = driveKm > 0 ? FUEL_PER_KM : [FUEL_PER_KM[0] * 0.8, FUEL_PER_KM[1] * 1.3];
+    push('car_fuel_tolls_parking', [RENTAL_DAY[style][0] + (fuelBand[0] * fuelKm) / days, RENTAL_DAY[style][1] + (fuelBand[1] * fuelKm) / days], days, false, `${days} rental days plus ${fuelBasis}`, ['Rental, basic insurance', ...(fuelKm > 0 ? ['Fuel'] : [])], ['Tolls, parking, one-way fees, full excess cover', ...(fuelKm > 0 ? [] : ['Fuel'])], fuelKm > 0 && driveKm === 0 ? 'estimate_from_style_bands' : undefined);
   }
   if (primary === 'rail' || primary === 'public_bus' || primary === 'walk') {
     push('local_transport', LOCAL_TRANSIT_DAY, days, true, `${days} days of local transit`, ['Metro, bus, tram'], ['Taxis late at night'], 'derived_from_plan');

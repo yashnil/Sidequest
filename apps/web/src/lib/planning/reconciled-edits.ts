@@ -44,13 +44,18 @@ function refillFreeTime(day: ItineraryDay, items: readonly ItineraryItem[]): Iti
 }
 
 function recomputeTotals(day: ItineraryDay, items: readonly ItineraryItem[]): ItineraryDay['totals'] {
-  const totals = { activityMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, travelKm: 0, freeMinutes: 0, unmeasuredLegCount: 0 };
+  const totals = { activityMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, estimatedMinutes: 0, allowanceMinutes: 0, travelKm: 0, freeMinutes: 0, unmeasuredLegCount: 0 };
   for (const item of items) {
     if (item.kind === 'activity') totals.activityMinutes += item.durationMinutes;
     else if (item.kind === 'free_time') totals.freeMinutes += item.durationMinutes;
     else if (item.kind === 'travel' && item.travel) {
-      if (item.travel.provenance === 'unmeasured') totals.unmeasuredLegCount += 1;
-      else {
+      if (item.travel.provenance === 'unmeasured') {
+        totals.unmeasuredLegCount += 1;
+        totals.allowanceMinutes += item.durationMinutes;
+      } else if (item.travel.provenance === 'estimated') {
+        totals.unmeasuredLegCount += 1;
+        totals.estimatedMinutes += item.durationMinutes;
+      } else {
         const mode = item.travel.mode;
         if (mode === 'drive') totals.driveMinutes += item.durationMinutes;
         else if (mode === 'walk') totals.walkMinutes += item.durationMinutes;
@@ -62,7 +67,7 @@ function recomputeTotals(day: ItineraryDay, items: readonly ItineraryItem[]): It
   }
   return {
     ...totals,
-    travelMinutes: totals.driveMinutes + totals.transitMinutes + totals.walkMinutes + totals.waitMinutes + totals.unverifiedMinutes,
+    travelMinutes: totals.driveMinutes + totals.transitMinutes + totals.walkMinutes + totals.waitMinutes + totals.unverifiedMinutes + totals.estimatedMinutes + totals.allowanceMinutes,
     travelKm: Math.round(totals.travelKm * 10) / 10,
     strenuousCount: day.totals.strenuousCount,
   };

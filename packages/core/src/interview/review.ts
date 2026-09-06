@@ -57,6 +57,12 @@ export function describeAnswer(question: QuestionDefinition, ctx: InterviewConte
       if (chosen.length === 0) return 'Nothing chosen yet';
       return chosen.map((interest) => `${INTEREST_LABELS[interest]} (${LEVEL_WORD[answers.interests[interest] ?? 'low']})`).join(', ');
     }
+    case 'interest_roles': {
+      const record = (value ?? {}) as Record<string, string>;
+      const entries = Object.keys(record) as Interest[];
+      if (entries.length === 0) return 'Nothing chosen yet';
+      return entries.map((interest) => `${INTEREST_LABELS[interest]}: ${LEVEL_WORD[answers.interests[interest] ?? 'low']}`).join(' · ');
+    }
     case 'dietary': {
       const record = (value ?? {}) as { needs?: string[]; strict?: boolean };
       if (!record.needs || record.needs.length === 0) return 'Nothing stated';

@@ -346,7 +346,7 @@ test('the questionnaire adapts and refuses to continue on an empty profile', asy
   await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
   await page.getByTestId('interview-continue').click();
   // Choosing hiking unlocks the question about how big a role it plays.
-  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+  await expect(page.getByTestId('interview-question-priority_roles')).toBeVisible();
 
   /*
    * The car answer reshapes the rest of the interview: without a car the
@@ -368,7 +368,7 @@ test('questionnaire progress survives a refresh mid-flow', async ({ page }) => {
   await start.click();
   await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
   await page.getByTestId('interview-continue').click();
-  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+  await expect(page.getByTestId('interview-question-priority_roles')).toBeVisible();
 
   await page.reload();
 
@@ -377,7 +377,7 @@ test('questionnaire progress survives a refresh mid-flow', async ({ page }) => {
    * question id rather than an index, so a plan that grew (choosing hiking added
    * a role question) still resumes on the same screen.
    */
-  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+  await expect(page.getByTestId('interview-question-priority_roles')).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('checkbox', { name: 'Hiking', exact: true })).toBeChecked();
 });
@@ -400,5 +400,5 @@ test('the whole journey is reachable by keyboard', async ({ page }, testInfo) =>
 
   await page.getByTestId('interview-continue').focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('interview-question-priority_role:hiking')).toBeVisible();
+  await expect(page.getByTestId('interview-question-priority_roles')).toBeVisible();
 });

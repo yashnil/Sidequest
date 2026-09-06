@@ -37,7 +37,7 @@ export interface MapMarker {
   travelMinutes?: number | null;
 }
 
-export type MapConnectorStyle = 'measured_drive' | 'measured_transit' | 'measured_walk' | 'unmeasured' | 'sightline';
+export type MapConnectorStyle = 'measured_drive' | 'measured_transit' | 'measured_walk' | 'estimated' | 'unmeasured' | 'sightline';
 
 export interface MapConnector {
   id: string;
@@ -65,6 +65,8 @@ export interface InteractiveMapProps {
   className?: string;
   /** "<name>, 20 min from base" for a board pin; "Stop 3: <name>" for a day stop. */
   pinLabel?: (marker: MapMarker) => string;
+  /** PRODUCTION UI V1 — points the initial fit must include without drawing them (a destination's extent, a stated reach). */
+  fitPoints?: readonly GeoPoint[];
 }
 
 const INSETS = { top: 18, right: 18, bottom: 18, left: 18 };
@@ -110,10 +112,12 @@ function viewportFor(view: View, width: number, height: number): MapViewport {
   };
 }
 
+/* PRODUCTION UI V1 — map colour is functional: the measured route in cartographic teal, an estimated leg in umber dashes, an untimed leg as a faint short-dashed connector. */
 const CONNECTOR_STYLE: Record<MapConnectorStyle, { stroke: string; dash?: string; width: number; opacity: number }> = {
-  measured_drive: { stroke: 'var(--color-slate-blue)', width: 2.5, opacity: 0.9 },
-  measured_transit: { stroke: 'var(--color-slate-blue)', dash: '8 4', width: 2.5, opacity: 0.9 },
+  measured_drive: { stroke: 'var(--color-map-route)', width: 3, opacity: 0.95 },
+  measured_transit: { stroke: 'var(--color-map-route)', dash: '9 5', width: 3, opacity: 0.95 },
   measured_walk: { stroke: 'var(--color-pine)', dash: '2 4', width: 2.5, opacity: 0.9 },
+  estimated: { stroke: 'var(--color-map-secondary)', dash: '6 5', width: 2.25, opacity: 0.85 },
   unmeasured: { stroke: 'var(--color-ink-faint)', dash: '3 4', width: 1.5, opacity: 0.7 },
   sightline: { stroke: 'var(--color-pine)', dash: '3 4', width: 1.5, opacity: 0.55 },
 };
@@ -132,10 +136,11 @@ export function InteractiveMap({
   caption,
   className,
   pinLabel,
+  fitPoints = [],
 }: InteractiveMapProps) {
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
-  const points = useMemo<GeoPoint[]>(() => [...markers.map((m) => m.coordinates), ...(base ? [base.coordinates] : [])], [markers, base]);
+  const points = useMemo<GeoPoint[]>(() => [...markers.map((m) => m.coordinates), ...(base ? [base.coordinates] : []), ...fitPoints], [markers, base, fitPoints]);
   const fitKey = points.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join('|');
   const fitted = useMemo(() => fitView(points, width, height), [fitKey, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
   const [view, setView] = useState<View>(fitted);
@@ -212,6 +217,8 @@ export function InteractiveMap({
 
   const baseAt = base ? viewport.project(base.coordinates) : null;
   const focused = placed.find((entry) => entry.marker.id === focusedId) ?? null;
+  /* Names beside the pins when the drawing is sparse enough to read them; a basemap's own labels take over otherwise. */
+  const labelAll = markers.filter((m) => m.name).length <= 14 && width >= 400;
 
   const ring = useMemo(() => {
     if (!base) return null;
@@ -236,6 +243,7 @@ export function InteractiveMap({
   const hasMeasured = connectors.some((c) => c.style.startsWith('measured'));
   const hasRouteShape = connectors.some((c) => c.path && c.path.length > 1);
   const hasStraightMeasured = connectors.some((c) => c.style.startsWith('measured') && !(c.path && c.path.length > 1));
+  const hasEstimated = connectors.some((c) => c.style === 'estimated');
   const hasUnmeasured = connectors.some((c) => c.style === 'unmeasured' || c.style === 'sightline');
 
   function onKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
@@ -316,10 +324,22 @@ export function InteractiveMap({
               </>
             ) : null}
 
+            {!tiles ? (
+              /* PRODUCTION UI V1 — with no basemap, a faint graticule says "this is a map" and gives the eye a scale; nothing here claims a coastline or a road. */
+              <g pointerEvents="none" opacity={0.35}>
+                {Array.from({ length: Math.ceil(width / 64) + 1 }, (_, i) => (
+                  <line key={`v${i}`} x1={i * 64} y1={0} x2={i * 64} y2={height} stroke="var(--color-rule)" strokeWidth={1} />
+                ))}
+                {Array.from({ length: Math.ceil(height / 64) + 1 }, (_, i) => (
+                  <line key={`h${i}`} x1={0} y1={i * 64} x2={width} y2={i * 64} stroke="var(--color-rule)" strokeWidth={1} />
+                ))}
+              </g>
+            ) : null}
+
             {ring ? (
               <>
                 <path d={ring.path} fill="none" stroke="var(--color-ink-faint)" strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
-                <text x={baseAt ? baseAt.x : width / 2} y={baseAt ? baseAt.y - 8 : 12} textAnchor="middle" fontSize={9} fill="var(--color-ink-faint)" stroke="var(--color-paper-sunk)" strokeWidth={2.5} paintOrder="stroke">
+                <text x={baseAt ? baseAt.x : width / 2} y={baseAt ? baseAt.y - ring.km / viewport.kmPerPixelAt(base!.coordinates.lat) - 4 : 12} textAnchor="middle" fontSize={9} fill="var(--color-ink-faint)" stroke="var(--color-paper-sunk)" strokeWidth={2.5} paintOrder="stroke">
                   {ring.km} km
                 </text>
               </>
@@ -389,6 +409,11 @@ export function InteractiveMap({
                       {marker.order}
                     </text>
                   ) : null}
+                  {labelAll && marker.name && !isFocused ? (
+                    <text x={x + (stop ? 12 : 8)} y={y + 3.5} fontSize={10} fill="var(--color-ink-muted)" stroke="var(--color-paper-sunk)" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none">
+                      {marker.name.length > 28 ? `${marker.name.slice(0, 27)}…` : marker.name}
+                    </text>
+                  ) : null}
                 </g>
               );
             })}
@@ -434,6 +459,7 @@ export function InteractiveMap({
           {hasMeasured ? <span>Solid and long-dashed lines are measured legs (drive, transit); dotted is on foot.</span> : null}
           {hasRouteShape ? <span>Curved lines follow the measured road.</span> : null}
           {hasStraightMeasured ? <span>A straight measured line has a real duration but no recorded shape.</span> : null}
+          {hasEstimated ? <span>Umber dashes are legs Sidequest estimated from map distance.</span> : null}
           {hasUnmeasured || markers.some((m) => m.kind === 'place') ? <span>Short-dashed lines are straight connectors, not routes.</span> : null}
           {caption}
           {tiles ? <span>Basemap: {tiles.attribution}.</span> : <span>Positions come from the source records; no basemap is configured.</span>}

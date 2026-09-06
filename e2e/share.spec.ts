@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { waitUntilInteractive, completeQuestionnaire } from './support/trip';
+import { openHubView } from './support/hub';
 
 /**
  * THE SHARE LINK, END TO END: MINTED BY THE OWNER, READ BY A STRANGER.
@@ -83,15 +84,17 @@ test('a share link opens the plan, read-only, for a browser that never saw the t
   await reader.goto(url);
   await expect(reader.getByRole('heading', { name: 'Mammoth Lakes', exact: true })).toBeVisible();
   await expect(reader.getByText('Shared with you')).toBeVisible();
+  // The shared copy carries the whole package, not only the days.
+  await expect(reader.getByTestId('route-overview')).toBeVisible();
+  await openHubView(reader, 'days');
   for (const dayNumber of [1, 2, 3, 4]) {
     await expect(
       reader.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) }),
     ).toBeVisible();
   }
   await expect(reader.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
-  await expect(reader.getByText(/measured|not measured/).first()).toBeVisible();
-  // The shared copy carries the whole package, not only the days.
-  await expect(reader.getByTestId('route-overview')).toBeVisible();
+  await expect(reader.locator('#hub-view-days').getByRole('heading', { level: 3, name: /\d+ km|estimate|timing not/ }).first()).toBeVisible();
+  await openHubView(reader, 'prepare');
   await expect(reader.getByTestId('packing-list')).toBeVisible();
   // The licence notice survives into the shared copy; the data obligation
   // follows the plan wherever it is read.
@@ -108,7 +111,7 @@ test('a share link opens the plan, read-only, for a browser that never saw the t
   const html = await reader.content();
   expect(html, 'the shared page leaked the trip id').not.toContain(tripId!);
 
-  // Print works from the shared copy: the print stylesheet applies here too.
+  // Print works from the shared copy: the print stylesheet applies here too, and every view prints.
   await reader.emulateMedia({ media: 'print' });
   await expect(reader.getByTestId('day-rail')).toBeHidden();
   await expect(reader.getByRole('heading', { name: /^Day 1/ })).toBeVisible();

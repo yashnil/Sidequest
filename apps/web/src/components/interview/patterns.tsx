@@ -228,6 +228,65 @@ export function RoleMeter({ name, options, value, onChange, interest }: { name: 
 }
 
 // ---------------------------------------------------------------------------
+// Role matrix: every chosen interest × the role it should play, on one screen
+// ---------------------------------------------------------------------------
+
+/**
+ * PRODUCT RECOVERY V1 — five chosen interests were five screens. This is one:
+ * a row per interest, the same four roles across, radio semantics per row so
+ * the keyboard walks it naturally. Compact on phones (labels wrap under the
+ * pips), roomy on desktop.
+ */
+export function RoleMatrix({ name, options, value, onChange, interests }: { name: string; options: readonly InterviewOption[]; value: Record<string, string>; onChange: (value: Record<string, string>) => void; interests: readonly Interest[] }) {
+  return (
+    <div className="min-w-0 divide-y divide-rule" role="group" aria-label="What should lead the trip">
+      <div className="hidden gap-2 pb-2 sm:grid sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]" aria-hidden="true">
+        <span />
+        {options.map((option) => (
+          <span key={option.value} className="text-center text-xs leading-snug text-ink-muted">
+            {option.label}
+          </span>
+        ))}
+      </div>
+      {interests.map((interest) => {
+        const current = value[interest];
+        return (
+          <fieldset key={interest} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))] sm:items-center">
+            <legend className="sr-only">{INTEREST_LABELS[interest]}</legend>
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <span className="plate inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-control)]" style={{ '--plate-hue': INTEREST_HUE[interest] } as React.CSSProperties}>
+                <Glyph id={INTEREST_GLYPH[interest]} className="h-4.5 w-4.5 text-ink" />
+              </span>
+              <span className="font-display text-lg leading-tight text-ink">{INTEREST_LABELS[interest]}</span>
+            </div>
+            <div className="contents max-sm:flex max-sm:flex-wrap max-sm:gap-1.5">
+              {options.map((option, i) => {
+                const on = current === option.value;
+                const index = options.findIndex((o) => o.value === current);
+                return (
+                  <label key={option.value} className={cx('relative flex min-h-11 cursor-pointer items-center justify-center rounded-[var(--radius-control)] border px-2.5 py-2 text-center text-sm leading-snug transition-colors duration-[var(--motion-fast)]', FOCUS_RING, on ? 'border-accent bg-accent-soft text-accent-strong' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')} title={option.detail}>
+                    <input type="radio" name={`${name}:${interest}`} value={option.value} checked={on} onChange={() => onChange({ ...value, [interest]: option.value })} className={OVERLAY_INPUT} />
+                    <span className="flex flex-col items-center gap-1.5">
+                      <span className="flex gap-0.5" aria-hidden="true">
+                        {[0, 1, 2, 3].map((step) => (
+                          <span key={step} className={cx('h-1 w-3 rounded-full', step <= i && index >= i ? 'bg-accent' : step <= i ? 'bg-ink-faint/50' : 'bg-rule')} />
+                        ))}
+                      </span>
+                      <span className="sm:hidden">{option.label}</span>
+                      <span className="sr-only sm:not-sr-only sm:hidden">{option.label}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Transport: mode cards with the consequence stated
 // ---------------------------------------------------------------------------
 

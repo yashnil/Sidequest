@@ -1,5 +1,16 @@
 import type { Metadata, Viewport } from 'next';
+import { Instrument_Sans, Instrument_Serif } from 'next/font/google';
 import './globals.css';
+
+/*
+ * PRODUCTION UI V1 — one distinctive pairing, self-hosted at build time by
+ * next/font (no runtime fetch, no layout shift): Instrument Serif for
+ * editorial display, Instrument Sans (variable) for everything a traveller
+ * scans. Both are OFL-licensed Google Fonts. Exposed as CSS variables the
+ * theme reads; system fallbacks stay in the stack.
+ */
+const displayFont = Instrument_Serif({ subsets: ['latin', 'latin-ext'], weight: '400', style: ['normal', 'italic'], variable: '--font-instrument-serif', display: 'swap' });
+const uiFont = Instrument_Sans({ subsets: ['latin', 'latin-ext'], variable: '--font-instrument-sans', display: 'swap' });
 
 /**
  * THE DOCUMENT, AND NOTHING ELSE.
@@ -43,7 +54,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${displayFont.variable} ${uiFont.variable}`}>
       <body className="flex min-h-dvh flex-col paper-grain">{children}</body>
     </html>
   );

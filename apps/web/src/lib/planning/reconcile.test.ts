@@ -41,9 +41,13 @@ describe('missing evidence never removes content', () => {
     const result = await reconcileTripDraft({ draft, context: world.context });
     expect(result.dispositions[0]!.disposition).toBe('preserved');
     const leg = result.itinerary.days[0]!.items.find((i) => i.kind === 'travel');
-    expect(leg?.travel?.provenance).toBe('unmeasured');
-    expect(leg?.travel?.unmeasuredReason).toBe('no_route_found');
+    // PRODUCT RECOVERY V1 — both ends have a position, so the leg carries Sidequest's own estimate: never "no route", never a measurement, never zero.
+    expect(leg?.travel?.provenance).toBe('estimated');
+    expect(leg?.travel?.estimateKind).toBe('geo');
+    expect(leg?.travel?.unmeasuredReason).toBeUndefined();
+    expect(leg?.durationMinutes).toBeGreaterThan(0);
     expect(result.itinerary.package?.verification.legsUnmeasured).toBeGreaterThan(0);
+    expect(result.itinerary.package?.verification.legsEstimated).toBeGreaterThan(0);
   });
 
   it('a base the geocoder cannot resolve stays in the trip by name with unmeasured legs', async () => {

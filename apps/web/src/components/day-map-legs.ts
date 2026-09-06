@@ -22,6 +22,7 @@ export interface DayMapModel {
 
 function styleFor(mode: TransportMode, provenance: string): MapConnectorStyle {
   if (provenance === 'unmeasured') return 'unmeasured';
+  if (provenance === 'estimated') return 'estimated';
   switch (mode) {
     case 'walk':
     case 'bicycle':

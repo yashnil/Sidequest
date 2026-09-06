@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { INTEREST_LABELS, type Interest, type InterestLevel, type InterviewContext, type QuestionnaireAnswers } from '@sidequest/core';
 import { cx, FOCUS_RING } from '../ui';
 import { Glyph, INTEREST_HUE, type GlyphId } from './glyphs';
+import { DestinationMap, type DestinationGeometry } from './DestinationMap';
+import type { MapBasemap } from '../map-adapter';
 
 /**
  * THE LIVING TRIP SKETCH.
@@ -161,7 +163,7 @@ function Assumed({ on }: { on: boolean }) {
   return on ? <span className="ml-1.5 align-middle text-[10px] uppercase tracking-[0.14em] text-ink-faint">assumed</span> : null;
 }
 
-export function TripSketchPanel({ ctx, answers, className, compact = false }: { ctx: InterviewContext; answers: QuestionnaireAnswers; className?: string; compact?: boolean }) {
+export function TripSketchPanel({ ctx, answers, className, compact = false, geometry = null, tiles = null }: { ctx: InterviewContext; answers: QuestionnaireAnswers; className?: string; compact?: boolean; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
   const sketch = sketchFor(ctx, answers);
   return (
     <aside className={cx('min-w-0', className)} aria-label="Your trip so far" data-testid="trip-sketch">
@@ -170,7 +172,7 @@ export function TripSketchPanel({ ctx, answers, className, compact = false }: { 
       <p className="text-sm text-ink-muted">
         {[sketch.scale, `${sketch.nights} ${sketch.nights === 1 ? 'night' : 'nights'}`].filter(Boolean).join(' · ')}
       </p>
-      <SketchFigure sketch={sketch} className="mt-4" />
+      {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} className="mt-4" /> : <SketchFigure sketch={sketch} className="mt-4" />}
       <dl className="mt-4 space-y-2.5 text-sm">
         <div>
           <dt className="label text-ink-faint">Shape</dt>
@@ -217,7 +219,7 @@ export function TripSketchPanel({ ctx, answers, className, compact = false }: { 
 }
 
 /** On a phone: a sheet that opens from a slim bar. */
-export function TripSketchSheet({ ctx, answers }: { ctx: InterviewContext; answers: QuestionnaireAnswers }) {
+export function TripSketchSheet({ ctx, answers, geometry = null, tiles = null }: { ctx: InterviewContext; answers: QuestionnaireAnswers; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
   const [open, setOpen] = useState(false);
   const sketch = sketchFor(ctx, answers);
   return (
@@ -243,7 +245,7 @@ export function TripSketchSheet({ ctx, answers }: { ctx: InterviewContext; answe
         <span className="text-sm text-accent">{open ? 'Hide' : 'Show'}</span>
       </button>
       <div id="trip-sketch-sheet-body" className={cx('enter mt-3', !open && 'hidden')}>
-        <TripSketchPanel ctx={ctx} answers={answers} />
+        <TripSketchPanel ctx={ctx} answers={answers} geometry={geometry} tiles={tiles} />
       </div>
     </div>
   );

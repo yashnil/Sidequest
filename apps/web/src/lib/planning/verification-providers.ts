@@ -2,7 +2,11 @@ import 'server-only';
 import type { DestinationResolver, RoutingProvider, TransitRoutingProvider } from '@sidequest/compiler';
 import { compilerProviderChoice, compilerProviders } from '../compiler/providers';
 import { createOpenResolver, createOpenRouting, emptyVerificationDiagnostics, type VerificationDiagnostics } from '../providers/open-verification';
-import { isGeocoderEnabled, isRoutesProviderEnabled } from '../providers/switches';
+import { isGeocoderEnabled, isGlobalRoutesProviderEnabled, isRoutesProviderEnabled } from '../providers/switches';
+import { routingCoverageFromEnv } from '../providers/routing-coverage';
+import { createCompositeRouting } from '../providers/routing-composite';
+import { createOrsRouting } from '../providers/openrouteservice';
+import { loadRecordedRoutes, recordedRoutesFetch } from '../providers/openrouteservice-fixture';
 
 /**
  * WHAT THE CANONICAL BUILD MAY REACH TO VERIFY A DRAFT — NEVER THE RESEARCH MODEL.
@@ -31,9 +35,20 @@ export function verificationProviders(candidateId?: string): VerificationProvide
     const { providers } = compilerProviders(candidateId);
     return { resolver: providers.resolver, routing: providers.routing, transit: providers.transit ?? null, diagnostics };
   }
+  /*
+   * PRODUCT RECOVERY V1 — the routing hierarchy: local Valhalla inside its
+   * declared coverage → openrouteservice when configured → nothing. Coverage
+   * is checked before any request; a recorded fixture replaces only the
+   * socket of the global router.
+   */
+  const local = isRoutesProviderEnabled() ? createOpenRouting(diagnostics) : null;
+  const recorded = process.env.SIDEQUEST_ROUTES_FIXTURE;
+  const global = isGlobalRoutesProviderEnabled()
+    ? createOrsRouting(diagnostics, recorded ? { fetchImpl: recordedRoutesFetch(loadRecordedRoutes(recorded)), apiKey: 'recorded-fixture' } : {})
+    : null;
   return {
     resolver: isGeocoderEnabled() ? createOpenResolver({ diagnostics }) : null,
-    routing: isRoutesProviderEnabled() ? createOpenRouting(diagnostics) : null,
+    routing: createCompositeRouting({ local, localCoverage: routingCoverageFromEnv(), global }),
     transit: null,
     diagnostics,
   };

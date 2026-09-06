@@ -74,6 +74,8 @@ export type ResponseKind =
   | 'scenario'
   | 'multi'
   | 'interests'
+  /** PRODUCT RECOVERY V1 — one screen: every chosen interest × its role. */
+  | 'interest_roles'
   | 'dietary'
   | 'hard_constraints'
   | 'budget'
@@ -271,6 +273,51 @@ const ROLE_OPTIONS: InterviewOption[] = [
 const ROLE_LEVEL: Record<string, InterestLevel> = { once: 'occasional', couple: 'frequent', most_days: 'core', build_around: 'core' };
 const LEVEL_ROLE: Partial<Record<InterestLevel, string>> = { occasional: 'once', frequent: 'couple', core: 'most_days' };
 
+/**
+ * PRODUCT RECOVERY V1 — ONE SCREEN FOR EVERY CHOSEN INTEREST'S ROLE.
+ *
+ * Five chosen interests used to mean five screens of "What role should X
+ * play?". This asks the same question once, as a matrix: each chosen interest
+ * on its own row, the same four roles across. The per-interest questions stay
+ * in the catalog for the brief, analytics and "Decide for me" (hidden, never
+ * shown) so nothing that reads `priority_role:<interest>` breaks.
+ */
+export const PRIORITY_ROLES: QuestionDefinition = {
+  id: 'priority_roles',
+  module: 'priorities',
+  tier: 'core',
+  kind: 'interest_roles',
+  prompt: () => 'What should lead the trip?',
+  why: () => 'How often something appears is a different question from whether you like it. Two hikes in four days is a different trip from one every morning.',
+  options: () => ROLE_OPTIONS,
+  impacts: ['activity_frequency', 'day_density'],
+  hardCapable: false,
+  burden: 2,
+  criticality: 2,
+  optional: true,
+  dependsOn: ['priorities'],
+  relevance: (_ctx, answers) => (chosenInterests(answers).length > 0 ? 1 : 0),
+  read: (answers) => Object.fromEntries(chosenInterests(answers).map((interest) => [interest, LEVEL_ROLE[answers.interests[interest] ?? 'low'] ?? 'couple'])),
+  apply: (value, answers) => {
+    const record = (value && typeof value === 'object' ? (value as Record<string, unknown>) : {}) as Record<string, unknown>;
+    const interests = { ...answers.interests };
+    // Every row the traveller set; a role for an interest not yet chosen chooses it.
+    for (const [key, raw] of Object.entries(record)) {
+      if (!(INTERESTS as readonly string[]).includes(key)) continue;
+      const role = String(raw ?? '');
+      if (ROLE_LEVEL[role]) interests[key as Interest] = ROLE_LEVEL[role]!;
+    }
+    return { interests };
+  },
+  smartDefault: (ctx, answers) => {
+    const role = ctx.destination.tripDays >= 5 ? 'couple' : 'once';
+    const chosen = chosenInterests(answers);
+    // The first pick leads; the rest are woven through.
+    const value = Object.fromEntries(chosen.map((interest, index) => [interest, index === 0 ? 'most_days' : role]));
+    return { value, reason: chosen.length > 0 ? `${INTEREST_LABELS[chosen[0]!]} leads; the rest appear ${role === 'couple' ? 'a couple of times' : 'once'} across ${ctx.destination.tripDays} days.` : 'Nothing chosen yet.', source: 'smart_default' };
+  },
+};
+
 export function roleQuestionFor(interest: Interest, position: number): QuestionDefinition {
   const label = INTEREST_LABELS[interest].toLowerCase();
   return {
@@ -287,7 +334,8 @@ export function roleQuestionFor(interest: Interest, position: number): QuestionD
     criticality: 1,
     optional: true,
     dependsOn: ['priorities'],
-    relevance: (_ctx, answers) => (CHOSEN_LEVELS.includes(answers.interests[interest] ?? 'low') ? 1 : 0),
+    // Hidden from the interview: the matrix question asks this for every chosen interest at once. Kept for the brief, analytics and by-id reads.
+    relevance: () => 0,
     read: (answers) => LEVEL_ROLE[answers.interests[interest] ?? 'low'],
     apply: (value, answers) => ({ interests: { ...answers.interests, [interest]: ROLE_LEVEL[String(value)] ?? 'frequent' } }),
     smartDefault: (ctx) => ({
@@ -866,13 +914,14 @@ const BASE_MOVES: QuestionDefinition = choice({
   module: 'road_trip',
   tier: 'destination',
   kind: 'scenario',
-  prompt: () => 'Changing hotels once would save several hours of backtracking.',
-  why: () => 'This decides the route architecture: one base with long days, or a moving route with short ones.',
+  // PRODUCT RECOVERY V1 — a preference, not a claim. Nothing is measured at interview time, so no saving is stated.
+  prompt: () => 'Would you change hotels when it meaningfully reduces backtracking?',
+  why: () => 'This decides the route architecture: one base with longer days out, or a moving route with shorter ones. Sidequest measures the actual saving when it builds the trip.',
   options: () => [
-    { value: 'move_once', label: 'Move', detail: 'One change is fine if it saves real time' },
+    { value: 'move_once', label: 'Once, if it helps', detail: 'One change is fine when it clearly saves time' },
     { value: 'stay_put', label: 'Stay put', detail: 'One base, even if two days run longer' },
-    { value: 'move_if_it_saves_time', label: 'Decide by how much time it saves', detail: 'Move only when the saving is clear' },
-    { value: 'move_freely', label: 'Move as often as the route wants', detail: 'A circuit, a new bed most nights' },
+    { value: 'move_if_it_saves_time', label: 'Only when the saving is clear', detail: 'Decide by how much time a move saves' },
+    { value: 'move_freely', label: 'As often as the route wants', detail: 'A circuit, a new bed most nights' },
   ],
   impacts: ['hotel_switching', 'base_count', 'trip_archetype', 'driving'],
   burden: 1,
@@ -1003,7 +1052,13 @@ const INTERNAL_FLIGHTS: QuestionDefinition = choice({
   hardCapable: true,
   burden: 1,
   criticality: 1,
-  relevance: (ctx) => (t(ctx, 'internal_flight_likely') ? 1 : t(ctx, 'archipelago') || t(ctx, 'broad_geography') ? 0.5 : 0),
+  /*
+   * PRODUCT RECOVERY V1 — asked only when the destination's own extent makes an
+   * internal flight a real planning decision (`internal_flight_likely`: about
+   * 900 km across, or islands hundreds of km apart, or a scope that accepts
+   * air transfers). A broad country like Ireland is not one; it was asked.
+   */
+  relevance: (ctx) => (t(ctx, 'internal_flight_likely') ? 1 : 0),
   read: (answers) => answers.internalFlights,
   apply: (value) => ({ internalFlights: (['fine', 'prefer_not', 'cannot'].includes(String(value)) ? String(value) : 'fine') as QuestionnaireAnswers['internalFlights'] }),
   smartDefault: () => ({ value: 'fine', reason: "We'll use a short flight where it saves a whole day, and say so.", source: 'destination_prior' }),
@@ -1343,7 +1398,7 @@ export function interviewCatalog(ctx: InterviewContext, answers: QuestionnaireAn
   const chosen = priorityOffer(ctx, answers).filter((interest) => chosenInterests(answers).includes(interest));
   const extra = chosenInterests(answers).filter((interest) => !chosen.includes(interest));
   const roles = [...chosen, ...extra].map((interest, index) => roleQuestionFor(interest, index));
-  return [...CORE_QUESTIONS, ...roles, ...DESTINATION_QUESTIONS, ...FINE_TUNE_QUESTIONS];
+  return [...CORE_QUESTIONS, PRIORITY_ROLES, ...roles, ...DESTINATION_QUESTIONS, ...FINE_TUNE_QUESTIONS];
 }
 
 export function questionById(ctx: InterviewContext, answers: QuestionnaireAnswers, id: string): QuestionDefinition | undefined {
@@ -1353,6 +1408,7 @@ export function questionById(ctx: InterviewContext, answers: QuestionnaireAnswer
     const position = priorityOffer(ctx, answers).indexOf(interest);
     return roleQuestionFor(interest, position < 0 ? 99 : position);
   }
+  if (id === 'priority_roles') return PRIORITY_ROLES;
   return INTERVIEW_QUESTIONS.find((question) => question.id === id);
 }
 

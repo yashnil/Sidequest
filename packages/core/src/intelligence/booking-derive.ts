@@ -74,7 +74,9 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
         title: `${base.nights} night${base.nights === 1 ? '' : 's'} in ${base.name}`,
         kind: 'accommodation',
         necessity: 'required',
-        priority: index === 0 || remote ? 'book_first' : priority,
+        // A remote bed is scarce and stands on its own; every other base is a member of the one "stays" dependency below.
+        priority: remote ? 'book_first' : priority === 'book_first' ? 'book_soon' : priority,
+        group: 'stays',
         reason: remote ? 'A remote base with few beds; the route depends on sleeping here.' : index === 0 ? 'The first night anchors the arrival day.' : `The route sleeps here for ${base.nights} night${base.nights === 1 ? '' : 's'}.`,
         ...(firstDay ? { dayNumber: firstDay.dayNumber, date: firstDay.date } : {}),
         baseId: base.id,
@@ -86,6 +88,32 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
       }),
     );
   });
+
+  // The stays, as one dependency ------------------------------------------------------
+  const stayItems = items.filter((i) => i.kind === 'accommodation');
+  if (stayItems.length > 0) {
+    const nights = bases.reduce((n, b) => n + b.nights, 0);
+    const bookedStays = stayItems.filter((i) => i.status === 'booked').length;
+    const heldStays = stayItems.filter((i) => i.status === 'soft_hold').length;
+    items.unshift(
+      bookingItemSchema.parse({
+        id: 'booking:stays',
+        title: `Stays: ${bases.filter((b) => b.nights > 0).length} base${bases.filter((b) => b.nights > 0).length === 1 ? '' : 's'}, ${nights} night${nights === 1 ? '' : 's'}`,
+        kind: 'accommodation',
+        necessity: 'required',
+        priority: 'book_first',
+        group: 'stays',
+        memberIds: stayItems.map((i) => i.id),
+        reason: bookedStays === stayItems.length ? 'Every base has a bed.' : `${stayItems.length - bookedStays} of ${stayItems.length} bases still need a bed; the route depends on all of them.`,
+        dayNumber: 1,
+        date: itinerary.startDate,
+        capacityEvidence: 'unknown',
+        status: bookedStays === stayItems.length ? 'booked' : bookedStays + heldStays > 0 ? 'soft_hold' : 'open',
+        travelerAction: 'Book a bed at each base, first night first',
+        authority: 'model_proposal',
+      }),
+    );
+  }
 
   // The car the route needs -----------------------------------------------------------
   /*

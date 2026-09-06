@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import {
   answerEveryQuestion,
   openHowThisWasBuilt,
@@ -435,8 +436,10 @@ test('a plan whose every stop outruns a day is still delivered, and says its day
    */
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
-  await expect(page.getByText(/runs about \d+ minutes past your usual end|exceeds your \d+-minute limit/).first()).toBeVisible();
   await expect(page.getByText(/^(Ready, with cautions|Needs a decision)$/)).toBeVisible();
+  // PRODUCTION UI V1 — the day warnings live under Days.
+  await openHubView(page, 'days');
+  await expect(page.getByText(/runs about \d+ minutes past your usual end|exceeds your \d+-minute limit/).first()).toBeVisible();
 
   // Persisted: the itinerary page shows it again on a fresh load.
   await page.goto(`/trips/${id}/itinerary`);

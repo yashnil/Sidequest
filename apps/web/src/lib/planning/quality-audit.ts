@@ -34,6 +34,12 @@ export const QUALITY_CHECK_IDS = [
   'scope_disciplined',
   'base_changes_coherent',
   'rest_is_deliberate',
+  /* PRODUCT RECOVERY V1 — temporal plausibility, provider or no provider. */
+  'no_zero_minute_travel',
+  'mode_plausible',
+  'meals_in_window',
+  'stops_follow_transfers',
+  'bases_are_places_to_sleep',
 ] as const;
 export type QualityCheckId = (typeof QUALITY_CHECK_IDS)[number];
 
@@ -187,6 +193,35 @@ export function auditItinerary(input: {
   const restDays = draft.days.filter((day) => day.anchors.length === 0);
   const unlabelledRest = restDays.filter((day) => !(day.intensity === 'light' || /rest|free|relax|recover|slow|beach|pool|at leisure/i.test(`${day.theme} ${day.note ?? ''}`)));
   add('rest_is_deliberate', unlabelledRest.length === 0, 'warning', restDays.length === 0 ? 'no empty draft day' : unlabelledRest.length === 0 ? `${restDays.length} deliberate rest day(s)` : `days ${unlabelledRest.map((d) => d.dayNumber).join(', ')} are empty without being called rest`);
+
+  // --- temporal plausibility -------------------------------------------------------------
+  /*
+   * PRODUCT RECOVERY V1 — the checks the Ireland build would have failed. They
+   * run whatever providers answered: a schedule that moves 90 km in zero
+   * minutes, walks between counties, eats dinner at 11:15 or starts a stop
+   * before its transfer could finish is structurally impossible, and no real
+   * trip may persist that way. Like every check here, they never delete.
+   */
+  const legs = itinerary.days.flatMap((day) => day.items.filter((i) => i.kind === 'travel' && i.travel).map((i) => ({ day, item: i, travel: i.travel! })));
+  const zeroLegs = legs.filter(({ item, travel }) => item.durationMinutes === 0 && travel.fromId !== travel.toId);
+  add('no_zero_minute_travel', zeroLegs.length === 0, 'error', zeroLegs.length === 0 ? `${legs.length} travel legs all hold time` : `${zeroLegs.length} leg(s) between different places take zero minutes: ${zeroLegs.slice(0, 3).map(({ day, travel }) => `day ${day.dayNumber} ${travel.fromName} → ${travel.toName}`).join('; ')}`);
+  const implausibleWalks = legs.filter(({ travel }) => travel.mode === 'walk' && ((travel.km ?? 0) > 4 || (travel.estimate?.straightLineKm ?? 0) > 3));
+  add('mode_plausible', implausibleWalks.length === 0, 'error', implausibleWalks.length === 0 ? 'no walk covers more ground than a walk can' : `${implausibleWalks.length} walking leg(s) over 3 km: ${implausibleWalks.slice(0, 3).map(({ day, travel }) => `day ${day.dayNumber} ${travel.fromName} → ${travel.toName}`).join('; ')}`);
+  const mealsOutOfWindow = itinerary.days.flatMap((day) => day.items.filter((i) => (i.kind === 'meal' && ((/^dinner/i.test(i.title) && i.startMinute < 17 * 60) || (/^lunch/i.test(i.title) && (i.startMinute < 11 * 60 || i.startMinute > 15 * 60 + 30)) || (/^breakfast/i.test(i.title) && i.startMinute > 11 * 60))) || (i.kind === 'activity' && /\b(dinner|supper)\b/i.test(i.title) && i.startMinute < 17 * 60)).map((i) => `day ${day.dayNumber}: ${i.title} at ${String(Math.floor(i.startMinute / 60)).padStart(2, '0')}:${String(i.startMinute % 60).padStart(2, '0')}`));
+  add('meals_in_window', mealsOutOfWindow.length === 0, 'error', mealsOutOfWindow.length === 0 ? 'every meal sits at a mealtime' : mealsOutOfWindow.slice(0, 4).join('; '));
+  const earlyStops = itinerary.days.flatMap((day) => {
+    const ordered = [...day.items].filter((i) => i.kind !== 'free_time').sort((a, b) => a.startMinute - b.startMinute || (a.kind === 'travel' ? -1 : 1));
+    const found: string[] = [];
+    for (let i = 1; i < ordered.length; i += 1) {
+      const prev = ordered[i - 1]!;
+      const cur = ordered[i]!;
+      if (prev.kind === 'travel' && cur.startMinute < prev.endMinute) found.push(`day ${day.dayNumber}: ${cur.title} starts before ${prev.title} ends`);
+    }
+    return found;
+  });
+  add('stops_follow_transfers', earlyStops.length === 0, 'error', earlyStops.length === 0 ? 'no stop starts before the leg that reaches it ends' : earlyStops.slice(0, 4).join('; '));
+  const landmarkBases = (itinerary.package?.bases ?? []).filter((b) => /\b(college|university|distillery|brewery|museum|castle|cathedral|church|abbey|airport|station|shop|store|gallery)\b/i.test(b.name) && b.baseKind !== 'lodging_property' && b.baseKind !== 'lodge' && b.baseKind !== 'camp');
+  add('bases_are_places_to_sleep', landmarkBases.length === 0, 'error', landmarkBases.length === 0 ? 'every base is a town, area or lodging' : `base(s) named for a landmark: ${landmarkBases.map((b) => b.name).join(', ')}`);
 
   const errors = checks.filter((c) => !c.ok && c.severity === 'error').length;
   const warnings = checks.filter((c) => !c.ok && c.severity === 'warning').length;

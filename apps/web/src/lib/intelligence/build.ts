@@ -36,6 +36,7 @@ import {
   type TravelerProfile,
   type TripBasics,
   type TripComposerAnswers,
+  countryFacts,
 } from '@sidequest/core';
 /** The only part of the draft the intelligence reads: anchor names and the model's transport hints. */
 export interface DraftHints {
@@ -220,6 +221,10 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
     strenuous,
     water,
     now,
+    // PRODUCT RECOVERY V1 — bundled reference facts (currency, driving side, emergency number, plugs, languages); never the model's word.
+    destinationFacts: countryFacts(input.destination.countryCode),
+    homeFacts: countryFacts(input.readinessProfile?.residence ?? input.readinessProfile?.citizenship),
+    daysUntilTrip,
   });
   claims.push(...readiness.claims);
 
@@ -304,7 +309,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
         subject: `day:${day.dayNumber}`,
         claim: `Day ${day.dayNumber}: ${day.summary}`,
         authority: day.kind === 'unavailable' ? 'model_proposal' : 'authoritative_structured',
-        sourceName: day.kind === 'unavailable' ? 'No weather provider' : itinerary.days[0]!.weather.provider,
+        sourceName: day.kind === 'unavailable' ? 'No weather provider' : (itinerary.days.find((d) => d.dayNumber === day.dayNumber)?.weather.provider ?? itinerary.days[0]!.weather.provider),
         state: day.kind === 'unavailable' ? 'unverified' : 'confirmed',
         checkedAt,
         notes: [day.horizonNote],

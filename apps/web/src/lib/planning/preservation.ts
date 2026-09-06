@@ -30,6 +30,8 @@ export const PRESERVATION_CATEGORIES = [
   'rejected_contradiction',
   'rejected_hard_constraint',
   'capacity_conflict',
+  /** PRODUCT RECOVERY V1 — a food anchor folded into the day's meal intent: kept, as a meal. */
+  'folded_into_meal',
 ] as const;
 export type PreservationCategory = (typeof PRESERVATION_CATEGORIES)[number];
 
@@ -80,10 +82,12 @@ export function preservationCategoryOf(disposition: PackageAnchor['disposition']
       return 'rejected_hard_constraint';
     case 'unscheduled_capacity':
       return 'capacity_conflict';
+    case 'folded_into_meal':
+      return 'folded_into_meal';
   }
 }
 
-const KEPT: ReadonlySet<PreservationCategory> = new Set(['preserved', 'verified', 'partially_verified', 'retained_unverified', 'moved', 'substituted']);
+const KEPT: ReadonlySet<PreservationCategory> = new Set(['preserved', 'verified', 'partially_verified', 'retained_unverified', 'moved', 'substituted', 'folded_into_meal']);
 
 export function buildPreservationReport(draft: TripDraft, itinerary: Itinerary): DraftPreservationReport {
   const dispositions = itinerary.package?.anchors ?? [];
@@ -148,6 +152,7 @@ export function describePreservation(report: DraftPreservationReport): string {
   if (report.counts.rejected_contradiction > 0) parts.push(`${report.counts.rejected_contradiction} removed because the evidence contradicted them`);
   if (report.counts.rejected_hard_constraint > 0) parts.push(`${report.counts.rejected_hard_constraint} removed to respect a limit you set`);
   if (report.counts.capacity_conflict > 0) parts.push(`${report.counts.capacity_conflict} left off because the day was full`);
+  if (report.counts.folded_into_meal > 0) parts.push(`${report.counts.folded_into_meal} written as a meal rather than a stop`);
   if (report.counts.retained_unverified > 0) parts.push(`${report.counts.retained_unverified} kept without verification`);
   return `${parts.join('; ')}.`;
 }

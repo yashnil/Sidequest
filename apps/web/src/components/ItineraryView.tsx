@@ -45,7 +45,11 @@ import type { MapBasemap } from './map-adapter';
 import { formatMinutes } from '@/lib/format';
 import { dayRouteLinks, mapModeFor } from '@/lib/maps';
 import { PrintButton } from './PrintButton';
-import { BackupsSection, BeforeYouGoSection, BookFirstSection, BudgetSection, CritiquePanel, FoodSection, HubNav, HubUrgent, OverviewSection, PackSection, StaysSection, TodaySection, TransportSection, VerifySection } from './hub/TripHub';
+import { HubShell, type HubViewId } from './hub/HubShell';
+import { DayFocusLink, DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, type DayFocusModel } from './hub/DayFocus';
+import { TripConfidence, VERIFICATION_WORD as VERIFICATION_CHIP_WORD } from './hub/TripConfidence';
+import { dayPartFor, type AnchorKind } from '@sidequest/core';
+import { BackupsSection, BeforeYouGoSection, BookFirstSection, BudgetSection, CritiquePanel, FoodSection, HubUrgent, OverviewSection, PackSection, StaysSection, TodaySection, TransportSection, VerifySection } from './hub/TripHub';
 import { AddStopForm, FixDayButton, StopDayControls } from '@/app/(product)/trips/[id]/itinerary/live-controls';
 import { legDirectionsLinks, navModeFor, placeNavigationLinks } from '@/lib/navigation-links';
 import type { BookedPlanItem, TravelIntelligence, TravelReadinessProfile } from '@sidequest/core';
@@ -288,8 +292,14 @@ export function ItineraryView({
   bookedHonored = [],
   bookedConflicts = [],
   readinessProfile = null,
+  printAppendix = false,
+  initialView = 'overview',
 }: {
   itinerary: Itinerary;
+  /** PRODUCTION UI V1 — `?appendix=1`: the evidence appendix prints with the packet. */
+  printAppendix?: boolean;
+  /** Which of the five hub views opens first (the hash still wins on the client). */
+  initialView?: HubViewId;
   /** The travel-intelligence layer. Null only for a plan built before it existed. */
   intelligence?: TravelIntelligence | null;
   /** LIVE WORLD V1 — Today mode; inactive outside the trip's dates. */
@@ -433,201 +443,167 @@ export function ItineraryView({
     if (anchor.placeId) anchorRoles[anchor.placeId] = anchor.role;
   }
   for (const anchor of itinerary.package?.anchors ?? []) verificationByItemId[anchor.id] = anchor.verification;
+  /* PRODUCTION UI V1 — what kind of thing each stop is; only a named place is ever called "not verified". */
+  const anchorKinds: Record<string, AnchorKind> = {};
+  for (const anchor of itinerary.package?.anchors ?? []) if (anchor.anchorKind) anchorKinds[anchor.id] = anchor.anchorKind;
   /** The plate hue: the first day that has a dominant kind of place. See `dayIdentity`. */
   const heroHue = itinerary.days.map((day) => dayIdentity(day, images, rationale).hue).find((hue) => hue !== null) ?? 38;
+  /* The sticky desktop map's per-day drawings, computed once on the server. */
+  const dayFocusModels: DayFocusModel[] = itinerary.days.map((day) => {
+    const model = dayMapModel({ day, coordinates, nameOf: (placeId, fallback) => rationale[placeId]?.name ?? fallback });
+    return { dayNumber: day.dayNumber, date: day.date, theme: day.theme, baseName: day.baseName, base: model.base, markers: model.markers, connectors: model.connectors, omitted: model.omitted };
+  });
+  const openBookFirst = intelligence ? intelligence.bookings.items.filter((b) => b.priority === 'book_first' && b.status === 'open' && !b.memberIds).length + (intelligence.bookings.items.some((b) => b.memberIds && b.status === 'open') ? 1 : 0) : 0;
+  const stopCount = itinerary.days.reduce((sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length, 0);
 
-  return (
-    <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-14">
-      {/*
-        THE PLAN OPENS AS A PLATE.
-
-        The whole page is the one artifact a traveller carries, and it opened
-        as eleven-pixel grey text under a heading. The header is now drawn on
-        the same contour plate the board and the interview use, tinted with
-        the hue of the first day that has one — a lakes trip opens the colour
-        lakes are throughout the product — so the plan reads as a document of
-        this trip rather than as a template.
-      */}
-      <header
-        className="plate relative overflow-hidden rounded-[var(--radius-plate)] border border-rule px-6 py-8 sm:px-10 sm:py-12"
-        style={{ '--plate-hue': heroHue, '--plate-x': '85%', '--plate-y': '20%' } as React.CSSProperties}
-      >
-        <p className="label text-accent-strong">
-          {tripId ? 'Your trip' : 'Shared with you'}
-        </p>
-        <h1 className="display-hero mt-3 text-ink">
-          {multiBase && destinationName ? destinationName : <PlaceName entity={baseEntity} />}
-        </h1>
-        <p className="mt-3 text-ink-muted">
-          {dateLabel} · {itinerary.days.length} days ·{' '}
-          {multiBase ? (
-            <>{itinerary.package!.bases.length} bases, {itinerary.package!.bases.map((base) => base.name).join(' → ')}</>
-          ) : (
-            <>
-              based in <PlaceName entity={baseEntity} showLocal={false} />
-            </>
-          )}
-        </p>
-
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Badge tone={STATUS_TONE[itinerary.status]}>{status.label}</Badge>
-          <span className="text-sm text-ink-muted">{status.blurb}</span>
+  const days = (
+    <DayFocusProvider initial={itinerary.days[0]?.dayNumber ?? 1}>
+      <div className="lg:grid lg:grid-cols-[minmax(0,58fr)_minmax(320px,42fr)] lg:items-start lg:gap-8">
+        <div className="min-w-0">
+          <div id="itinerary" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
+          <DayRail days={itinerary.days} />
+          <ol className="space-y-10">
+            {itinerary.days.map((day) => (
+              <li key={day.dayNumber} className="break-inside-avoid">
+                <DayFocusTarget dayNumber={day.dayNumber}>
+                  <DayCard
+                    day={day}
+                    renderedAt={renderedAt}
+                    coordinates={coordinates}
+                    tripId={tripId}
+                    lockedPlaceIds={new Set(lockedPlaceIds)}
+                    images={images}
+                    rationale={rationale}
+                    verification={verificationByItemId}
+                    anchorKinds={anchorKinds}
+                    isFirst={day.dayNumber === itinerary.days[0]?.dayNumber}
+                    isLast={day.dayNumber === itinerary.days[itinerary.days.length - 1]?.dayNumber}
+                    tiles={tiles}
+                    dayCount={itinerary.days.length}
+                    anchorRoles={anchorRoles}
+                  />
+                </DayFocusTarget>
+              </li>
+            ))}
+          </ol>
+          {conflicts.length > 0 ? (
+            <Panel className="mt-8 border-clay p-5">
+              <h2 className="type-section text-clay">
+                {conflicts.length === 1 ? 'One thing you picked' : `${conflicts.length} things you picked`} could not be scheduled
+              </h2>
+              <p className="mt-1 type-small text-ink-muted">We would rather tell you than quietly drop it or break a limit you set.</p>
+              <ul className="mt-4 space-y-3">
+                {conflicts.map((entry) => (
+                  <li key={entry.placeId} className="text-sm">
+                    <span className="font-medium text-ink">{entry.name}</span>
+                    <span className="block text-ink-muted">{entry.reason}</span>
+                    {entry.suggestedRemedy ? <span className="mt-0.5 block text-ink-faint">Smallest fix: {entry.suggestedRemedy}</span> : null}
+                  </li>
+                ))}
+              </ul>
+              {tripId ? (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
+                    Change what is on the board
+                  </Link>
+                  <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('secondary', 'sm')}>
+                    Change how you are getting around
+                  </Link>
+                </div>
+              ) : null}
+            </Panel>
+          ) : null}
         </div>
-
-        <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-muted">{itinerary.summary}</p>
-      </header>
-
-      <div className="mt-5 flex flex-wrap gap-2 print:hidden">
-        <PrintButton />
-        {tripId ? (
-          <>
-            {/*
-              A plain download link, not an action: the route builds the file on
-              request and the browser saves it. Calendar apps open .ics natively.
-            */}
-            <a
-              href={`/trips/${tripId}/itinerary/calendar`}
-              download
-              className={buttonClass('secondary', 'sm')}
-            >
-              Calendar file (.ics)
-            </a>
-            {boardAvailable ? (
-              <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
-                Back to the board
-              </Link>
-            ) : (
-              <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('secondary', 'sm')}>
-                Change my answers
-              </Link>
-            )}
-            <ShareControl tripId={tripId} />
-            {itinerary.package ? <RegenerateButton tripId={tripId} /> : null}
-          </>
-        ) : null}
+        <DayFocusMap days={dayFocusModels} tiles={tiles} />
       </div>
-      {/* Opens every collapsed disclosure for print, closes them after. */}
-      <PrintExpand />
+    </DayFocusProvider>
+  );
 
-      {intelligence ? <HubNav urgent={intelligence.bookings.items.filter((b) => b.priority === 'book_first' && b.status === 'open').length} /> : null}
+  const overview = (
+    <div>
       {intelligence ? <HubUrgent intel={intelligence} /> : null}
       {today?.active ? <TodaySection today={today} minuteLabel={(minute) => formatMinuteOfDay(minute)} /> : null}
       {intelligence ? <CritiquePanel intel={intelligence} /> : null}
-
       <div id="overview" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]">
         <TripSnapshot itinerary={itinerary} coordinates={coordinates} images={images} rationale={rationale} tiles={tiles} personality={personality} dateLabel={dateLabel} />
         {intelligence ? <OverviewSection intel={intelligence} /> : null}
       </div>
-
       {itinerary.package ? <RouteOverview pkg={itinerary.package} /> : null}
+      <div className="mt-10 grid gap-8 lg:grid-cols-2">
+        <TripConfidence pkg={itinerary.package} intel={intelligence} />
+        {intelligence ? (
+          <div className="rule-top pt-5" data-testid="overview-book-first">
+            <h2 className="type-section text-ink">Book first</h2>
+            <ul className="mt-3 divide-y divide-rule">
+              {intelligence.bookings.items
+                .filter((b) => b.priority === 'book_first' && b.status === 'open')
+                .slice(0, 4)
+                .map((b) => (
+                  <li key={b.id} className="flex items-baseline justify-between gap-3 py-2 type-small">
+                    <span className="text-ink">{b.title}</span>
+                    <span className="type-meta shrink-0">{b.date ?? ''}</span>
+                  </li>
+                ))}
+            </ul>
+            <a href="#prepare" className="mt-2 inline-block type-small text-accent underline underline-offset-4">
+              Everything to arrange
+            </a>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 
-      {conflicts.length > 0 ? (
-        <Panel className="mt-8 border-clay p-5">
-          <h2 className="font-display text-lg text-clay">
-            {conflicts.length === 1 ? 'One thing you picked' : `${conflicts.length} things you picked`} could not be scheduled
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            We would rather tell you than quietly drop it or break a limit you set.
-          </p>
-          <ul className="mt-4 space-y-3">
-            {conflicts.map((entry) => (
-              <li key={entry.placeId} className="text-sm">
-                <span className="font-medium text-ink">{entry.name}</span>
-                <span className="block text-ink-muted">{entry.reason}</span>
-                {entry.suggestedRemedy ? (
-                  <span className="mt-0.5 block text-ink-faint">
-                    Smallest fix: {entry.suggestedRemedy}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {/*
-            Every route here goes somewhere that can actually resolve it — so
-            on the shared, read-only copy there is nowhere to send anybody, and
-            the list stands on its own as the honest account of what is not in
-            the plan.
-          */}
-          {tripId ? (
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
-                Change what is on the board
-              </Link>
-              <Link
-                href={`/trips/${tripId}/questionnaire`}
-                className={buttonClass('secondary', 'sm')}
-              >
-                Change how you are getting around
-              </Link>
-            </div>
-          ) : null}
-        </Panel>
-      ) : null}
+  const mapView = (
+    <div className="pt-6" data-testid="hub-map-view">
+      <TripSnapshotMap itinerary={itinerary} coordinates={coordinates} rationale={rationale} tiles={tiles} large dayModels={dayFocusModels} />
+      <p className="mt-3 type-small text-ink-muted">Bases are squares, stops are dots; press a stop to open its day. Measured legs follow the road; estimated legs are dashed in umber.</p>
+    </div>
+  );
 
-      <div id="itinerary" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
-      <DayRail days={itinerary.days} />
-
-      <ol className="space-y-12">
-        {itinerary.days.map((day) => (
-          <li key={day.dayNumber} className="break-inside-avoid">
-            <DayCard
-              day={day}
-              renderedAt={renderedAt}
-              coordinates={coordinates}
-              tripId={tripId}
-              lockedPlaceIds={new Set(lockedPlaceIds)}
-              images={images}
-              rationale={rationale}
-              verification={verificationByItemId}
-              isFirst={day.dayNumber === itinerary.days[0]?.dayNumber}
-              isLast={day.dayNumber === itinerary.days[itinerary.days.length - 1]?.dayNumber}
-              tiles={tiles}
-              dayCount={itinerary.days.length}
-              anchorRoles={anchorRoles}
-            />
-          </li>
-        ))}
-      </ol>
-
+  const plan = (
+    <div>
       {intelligence ? <StaysSection intel={intelligence} {...(tripId ? { tripId } : {})} itinerary={itinerary} coordinates={coordinates} /> : null}
-
-      <section className="mt-14 border-t-2 border-ink scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="getting-around" data-testid="hub-getting-around">
+      <section className="mt-14 rule-strong scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="getting-around" data-testid="hub-getting-around">
         <TransportPlan strategy={itinerary.transportStrategy} />
         {intelligence ? <TransportSection intel={intelligence} /> : null}
       </section>
-
-      <section className="mt-14 border-t-2 border-ink scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="food" data-testid="hub-food-section">
-        <FoodPlanPanel plan={itinerary.foodPlan} {...(itinerary.package ? { strategy: itinerary.package.foodStrategy } : {})} />
+      <section className="mt-14 rule-strong scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="food" data-testid="hub-food-section">
+        <FoodPlanPanel plan={itinerary.foodPlan} {...(itinerary.package ? { strategy: itinerary.package.foodStrategy } : {})} {...(intelligence ? { intel: intelligence } : {})} />
         {intelligence ? <FoodSection intel={intelligence} {...(tripId ? { tripId } : {})} itinerary={itinerary} coordinates={coordinates} /> : null}
       </section>
+      {intelligence ? <BudgetSection intel={intelligence} /> : null}
+      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} view="bookings" /> : null}
+      {!itinerary.package && lodgingAreas.length > 0 ? <WhereToStayLegacy areas={lodgingAreas} /> : null}
+    </div>
+  );
 
-      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} /> : null}
+  const prepare = (
+    <div>
+      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} view="book-first" /> : null}
       {intelligence ? <BeforeYouGoSection intel={intelligence} {...(tripId ? { tripId } : {})} readinessProfile={readinessProfile} checks={checks.checklist} /> : null}
       {intelligence ? <PackSection intel={intelligence} {...(tripId ? { tripId } : {})} checks={checks.packing} /> : null}
-      {intelligence ? <BudgetSection intel={intelligence} /> : null}
-
       <section className="mt-14" aria-labelledby="backups" data-testid="hub-backups-section">
-        <div className="border-t-2 border-ink pt-5 scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="backups">
+        <div className="rule-strong pt-5 scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="backups">
           <h2 className="display-md text-ink">Backups</h2>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">Plan A is the day as written. Each day carries its fallback, the stops that can move, and the moment to decide.</p>
+          <p className="mt-1.5 max-w-2xl type-small text-ink-muted">Plan A is the day as written. Each day carries its own fallback, the stops that can move, and the moment to decide.</p>
         </div>
         <WeatherPlan itinerary={itinerary} {...(timeZone ? { timeZone } : {})} />
-        {intelligence ? <BackupsSection intel={intelligence} /> : null}
+        {intelligence ? (
+          <div data-testid="backups">
+            <BackupsSection intel={intelligence} />
+          </div>
+        ) : null}
         <KeepFlexible itinerary={itinerary} />
       </section>
-
       {intelligence ? <VerifySection intel={intelligence} manifest={recheck} /> : null}
-
       {worthSkipping.length > 0 ? (
-        <section className="mt-14 border-t border-rule pt-8">
+        <section className="mt-14 rule-top pt-8" data-print="appendix">
           <h2 className="display-md text-ink">Worth skipping</h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            Popular or nearby, and still a poor match for how you said you travel. Skipping them
-            is a decision, not an oversight.
-          </p>
+          <p className="mt-1 type-small text-ink-muted">Popular or nearby, and still a poor match for how you said you travel. Skipping them is a decision, not an oversight.</p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {worthSkipping.map((entry) => (
-              <li key={entry.name} className="rounded-lg border border-rule p-3 text-sm">
+              <li key={entry.name} className="rule-top pt-3 text-sm">
                 <span className="font-medium text-ink">{entry.name}</span>
                 <span className="mt-0.5 block text-ink-muted">{entry.reason}</span>
               </li>
@@ -635,40 +611,15 @@ export function ItineraryView({
           </ul>
         </section>
       ) : null}
-
-      <PreparationHub itinerary={itinerary} preparation={preparation} verifiedAreas={lodgingAreas} />
-
+      <PreparationHub itinerary={itinerary} preparation={preparation} verifiedAreas={lodgingAreas} hasIntelligence={Boolean(intelligence)} />
       {itinerary.package ? <ConsideredPanel pkg={itinerary.package} /> : null}
-
-      {!itinerary.package && lodgingAreas.length > 0 ? (
-        <section className="mt-14 border-t border-rule pt-8">
-          <h2 className="display-md text-ink">Where to stay</h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            Areas, not hotels. Which part of the map puts you closest to the days above.
-          </p>
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-            {lodgingAreas.map((area) => (
-              <li key={area.name} className="rounded-lg border border-rule p-3 text-sm">
-                <span className="font-medium text-ink">{area.name}</span>
-                <span className="mt-0.5 block text-ink-muted">{area.rationale}</span>
-                {area.tradeoffs.length > 0 ? (
-                  <span className="mt-1.5 block text-ink-muted">
-                    {area.tradeoffs.join(' · ')}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       {dropped.length > 0 ? (
-        <section className="mt-14 border-t border-rule pt-8">
+        <section className="mt-14 rule-top pt-8" data-print="appendix">
           <h2 className="display-md text-ink">{droppedHeading(dropped)}</h2>
-          <p className="mt-1 text-sm text-ink-muted">{droppedBlurb(dropped)}</p>
+          <p className="mt-1 type-small text-ink-muted">{droppedBlurb(dropped)}</p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {dropped.map((entry) => (
-              <li key={entry.placeId} className="rounded-lg border border-rule p-3 text-sm">
+              <li key={entry.placeId} className="rule-top pt-3 text-sm">
                 <span className="font-medium text-ink">{entry.name}</span>
                 <span className="mt-0.5 block text-ink-muted">{entry.reason}</span>
               </li>
@@ -676,71 +627,188 @@ export function ItineraryView({
           </ul>
         </section>
       ) : null}
-
       {openIssues.length > 0 ? (
-        <section className="mt-14 border-t border-rule pt-8">
+        <section className="mt-14 rule-top pt-8" data-print="appendix">
           <h2 className="display-md text-ink">Worth reading</h2>
           <ul className="mt-4 space-y-2">
             {openIssues.map((issue, index) => (
               <li key={`${issue.code}-${index}`} className="flex gap-2 text-sm">
-                <span
-                  aria-hidden="true"
-                  className={cx(issue.severity === 'error' ? 'text-clay' : 'text-amber')}
-                >
+                <span aria-hidden="true" className={cx(issue.severity === 'error' ? 'text-clay' : 'text-amber')}>
                   ▲
                 </span>
                 <span className="text-ink-muted">
                   {issue.message}
-                  {issue.wasResolvedByRemoval ? (
-                    /*
-                     * The finding is real and the hazard is gone. Without this
-                     * sentence "the place we chose cannot meet your dietary
-                     * requirement" reads as a live problem about a venue that
-                     * appears nowhere in the plan.
-                     */
-                    <span className="text-ink-faint">
-                      {' '}
-                      We took it off the plan rather than leave it in — nothing above depends on it.
-                    </span>
-                  ) : null}
+                  {issue.wasResolvedByRemoval ? <span className="text-ink-faint"> We took it off the plan rather than leave it in — nothing above depends on it.</span> : null}
                 </span>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
-
-      {/*
-        Where the numbers came from is stated once, in the transport section that
-        owns them. Repeating it here made the same disclosure appear twice on one
-        page, which reads as boilerplate and gets skipped. What is left is the
-        thing nothing else says: what the planner changed while building.
-      */}
       {itinerary.diagnostics.revisions.length > 0 ? (
-        <footer className="mt-14 border-t border-rule pt-6 text-xs leading-relaxed text-ink-faint">
-          Adjusted {itinerary.diagnostics.revisions.length}{' '}
-          {itinerary.diagnostics.revisions.length === 1 ? 'time' : 'times'} while planning:{' '}
+        <footer className="mt-14 rule-top pt-6 text-xs leading-relaxed text-ink-faint" data-print="appendix">
+          Adjusted {itinerary.diagnostics.revisions.length} {itinerary.diagnostics.revisions.length === 1 ? 'time' : 'times'} while planning:{' '}
           {itinerary.diagnostics.revisions.map((revision) => revision.description).join(' ')}
         </footer>
       ) : null}
+    </div>
+  );
+
+  return (
+    <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
+      {/*
+        PRODUCTION UI V1 — THE PLAN OPENS AS A COMPACT PLATE, THEN FIVE VIEWS.
+
+        The hero is one screen: the trip's name in the display face, the dates
+        and shape in one line, the status and the summary. Everything a
+        traveller does with the trip sits under the segmented nav below it —
+        Overview, Days, Map, Plan, Prepare — with the itinerary and its map
+        side by side on a desktop.
+      */}
+      <header
+        className="plate relative overflow-hidden rounded-[var(--radius-plate)] border border-rule px-6 py-7 sm:px-9 sm:py-9"
+        style={{ '--plate-hue': heroHue, '--plate-x': '85%', '--plate-y': '20%' } as React.CSSProperties}
+      >
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div className="min-w-0 max-w-3xl">
+            <p className="type-meta">{tripId ? 'Your trip' : 'Shared with you'}</p>
+            <h1 className="display-xl mt-2 text-ink">
+              {multiBase && destinationName ? destinationName : <PlaceName entity={baseEntity} />}
+            </h1>
+            <p className="mt-3 type-body text-ink-muted">
+              {dateLabel} · {itinerary.days.length} days · {stopCount} stops
+              {multiBase ? <> · {itinerary.package!.bases.length} bases</> : <> · based in <PlaceName entity={baseEntity} showLocal={false} /></>}
+            </p>
+            {multiBase ? (
+              <p className="mt-1 type-small text-ink-muted" data-testid="hero-route">
+                {itinerary.package!.bases.map((base) => base.name).join(' → ')}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <Badge tone={STATUS_TONE[itinerary.status]}>{status.label}</Badge>
+            <span className="max-w-xs type-meta sm:text-right">{status.blurb}</span>
+          </div>
+        </div>
+        <p className="mt-5 max-w-2xl type-small leading-relaxed text-ink-muted">{itinerary.summary}</p>
+        <div className="mt-5 flex flex-wrap gap-2 print:hidden">
+          <PrintButton />
+          {tripId ? (
+            <>
+              <a href={`/trips/${tripId}/itinerary/calendar`} download className={buttonClass('secondary', 'sm')}>
+                Calendar file (.ics)
+              </a>
+              <ShareControl tripId={tripId} />
+              {boardAvailable ? (
+                <Link href={`/trips/${tripId}/discover`} className={buttonClass('secondary', 'sm')}>
+                  Back to the board
+                </Link>
+              ) : (
+                <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('secondary', 'sm')}>
+                  Change my answers
+                </Link>
+              )}
+              {itinerary.package ? <RegenerateButton tripId={tripId} /> : null}
+              <details className="relative">
+                <summary className={cx(buttonClass('ghost', 'sm'), 'list-none cursor-pointer')}>More</summary>
+                <div className="absolute z-10 mt-1 flex min-w-60 flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 shadow-[var(--shadow-panel)]">
+                  {boardAvailable ? (
+                    <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('ghost', 'sm')}>
+                      Change my answers
+                    </Link>
+                  ) : null}
+                  <a href={`/trips/${tripId}/itinerary?appendix=1`} className={buttonClass('ghost', 'sm')}>
+                    Print with evidence appendix
+                  </a>
+                </div>
+              </details>
+            </>
+          ) : null}
+        </div>
+      </header>
+      {/* Opens every disclosure marked for the packet before print, closes them after. */}
+      <PrintExpand />
+
+      <HubShell
+        views={{ overview, days, map: mapView, plan, prepare }}
+        badges={{ days: itinerary.days.length, ...(openBookFirst > 0 ? { prepare: openBookFirst } : {}) }}
+        printAppendix={printAppendix}
+        initialView={initialView}
+      />
 
       {attributions.length > 0 ? (
-        /**
-         * The licence text, verbatim, on the page a traveller takes with them.
-         *
-         * Not `print:hidden` — this is the one part of the page furniture that
-         * has to survive into the printed copy, because the obligation follows
-         * the data rather than the screen.
-         */
-        <p
-          data-testid="itinerary-attribution"
-          className="mt-10 border-t border-rule pt-6 text-[11px] leading-relaxed text-ink-faint"
-        >
-          {attributions.join(' · ')}. Place data is normalised from these sources; the plan,
-          the timings and the reasoning are ours.
+        <p data-testid="itinerary-attribution" className="mt-10 rule-top pt-6 text-[11px] leading-relaxed text-ink-faint">
+          {attributions.join(' · ')}. Place data is normalised from these sources; the plan, the timings and the reasoning are ours.
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** The whole trip on one large map — the Map view. */
+function TripSnapshotMap({ itinerary, coordinates, rationale, tiles, large = false, dayModels = [] }: { itinerary: Itinerary; coordinates: Record<string, { lat: number; lng: number }>; rationale: Record<string, StopRationale>; tiles: MapBasemap | null; large?: boolean; dayModels?: readonly DayFocusModel[] }) {
+  const model = overviewMapModel(itinerary, coordinates, rationale);
+  if (model.markers.length === 0) {
+    return <p className="rule-top pt-4 type-small text-ink-muted">No stop on this trip has a confirmed position yet, so there is no honest map to draw.</p>;
+  }
+  // The Map view draws every day's own legs, in the style each leg earned, on top of the base moves — the whole trip as a route, not a scatter of dots.
+  const connectors = [...model.connectors, ...dayModels.flatMap((d) => d.connectors.map((c) => ({ ...c, id: `d${d.dayNumber}-${c.id}` })))];
+  return <TripOverviewMap markers={model.markers} connectors={connectors} base={model.primaryBase} tiles={tiles} summary={model.summary} {...(large ? { width: 1120, height: 640 } : {})} />;
+}
+
+function overviewMapModel(itinerary: Itinerary, coordinates: Record<string, { lat: number; lng: number }>, rationale: Record<string, StopRationale>) {
+  const markers: (MapMarker & { dayNumber: number })[] = [];
+  const seen = new Set<string>();
+  for (const day of itinerary.days) {
+    for (const item of day.items) {
+      if (item.kind !== 'activity' || !item.placeId) continue;
+      const point = coordinates[item.placeId];
+      if (!point || seen.has(item.placeId)) continue;
+      seen.add(item.placeId);
+      markers.push({ id: item.placeId, name: rationale[item.placeId]?.name ?? item.title, coordinates: point, kind: 'place', chosen: true, dayNumber: day.dayNumber });
+    }
+  }
+  const baseIds = [...new Set(itinerary.days.map((day) => day.baseId))];
+  const bases = baseIds.map((id) => ({ id, name: itinerary.days.find((day) => day.baseId === id)?.baseName ?? 'base', point: coordinates[id] ?? null }));
+  for (const base of bases) {
+    if (base.point && !seen.has(base.id)) {
+      seen.add(base.id);
+      markers.push({ id: base.id, name: base.name, coordinates: base.point, kind: 'base', dayNumber: itinerary.days.find((day) => day.baseId === base.id)?.dayNumber ?? 1 });
+    }
+  }
+  const connectors: MapConnector[] = [];
+  for (let i = 1; i < bases.length; i += 1) {
+    const from = bases[i - 1]!.point;
+    const to = bases[i]!.point;
+    if (!from || !to) continue;
+    const transfer = itinerary.days
+      .filter((day) => day.baseId === bases[i]!.id)
+      .flatMap((day) => day.items)
+      .find((item) => item.kind === 'travel' && item.travel?.role === 'transfer' && (item.travel.provenance === 'measured' || item.travel.provenance === 'estimated'))?.travel;
+    const path = transfer?.provenance === 'measured' && transfer.geometry ? decodeShape(transfer.geometry) : undefined;
+    const style: MapConnector['style'] = !transfer ? 'unmeasured' : transfer.provenance === 'estimated' ? 'estimated' : transfer.mode === 'walk' ? 'measured_walk' : transfer.mode === 'rail' || transfer.mode === 'public_bus' || transfer.mode === 'ferry' ? 'measured_transit' : 'measured_drive';
+    connectors.push({ id: `move-${i}`, from, to, style, ...(path ? { path } : {}) });
+  }
+  const primaryBase = bases[0]?.point ? { name: bases[0].name, coordinates: bases[0].point } : null;
+  const summary = `${markers.filter((m) => m.kind === 'place').length} placed stops across ${itinerary.days.length} days${bases.length > 1 ? `, moving between ${bases.length} bases` : ''}.`;
+  return { markers, connectors, primaryBase, summary };
+}
+
+function WhereToStayLegacy({ areas }: { areas: readonly { name: string; rationale: string; tradeoffs: readonly string[] }[] }) {
+  return (
+    <section className="mt-14 rule-top pt-8">
+      <h2 className="display-md text-ink">Where to stay</h2>
+      <p className="mt-1 type-small text-ink-muted">Areas, not hotels. Which part of the map puts you closest to the days above.</p>
+      <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+        {areas.map((area) => (
+          <li key={area.name} className="rule-top pt-3 text-sm">
+            <span className="font-medium text-ink">{area.name}</span>
+            <span className="mt-0.5 block text-ink-muted">{area.rationale}</span>
+            {area.tradeoffs.length > 0 ? <span className="mt-1.5 block text-ink-muted">{area.tradeoffs.join(' · ')}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -762,30 +830,17 @@ export function ItineraryView({
  * furniture.
  */
 function DayRail({ days }: { days: readonly ItineraryDay[] }) {
-  // One day is not a journey through a document.
-  if (days.length < 2) return null;
-
   return (
-    <nav
-      aria-label="Jump to a day"
-      data-testid="day-rail"
-      className="sticky top-[var(--chrome-height)] z-20 -mx-5 mt-10 mb-6 border-y border-rule bg-paper px-5 py-2 print:hidden sm:-mx-8 sm:px-8"
-    >
-      <ol className="flex gap-2 overflow-x-auto">
+    <nav aria-label="Jump to a day" className="sticky top-[calc(var(--chrome-height)+3.25rem)] z-10 -mx-5 mb-6 border-b border-rule bg-paper/92 px-5 py-2 backdrop-blur-sm print:hidden sm:-mx-8 sm:px-8 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0" data-testid="day-rail">
+      <ol className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-wrap">
         {days.map((day) => (
           <li key={day.dayNumber} className="shrink-0">
-            <a
-              href={`#day-${day.dayNumber}`}
-              className="flex min-h-11 w-40 flex-col justify-center rounded-lg border border-rule px-3 py-1.5 transition-colors hover:border-ink-faint hover:bg-paper-sunk"
-            >
-              <span className="flex items-baseline gap-1.5">
-                <span className="font-display text-sm text-ink">Day {day.dayNumber}</span>
-                <time dateTime={day.date} className="text-[11px] text-ink-muted">
-                  {humanDate(day.date)}
-                </time>
-              </span>
-              <span className="truncate text-[11px] text-ink-muted">{day.theme}</span>
-            </a>
+            <DayFocusLink dayNumber={day.dayNumber} className="inline-flex min-h-10 flex-col items-center justify-center rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 py-1 text-xs leading-tight text-ink-muted transition-colors duration-[var(--motion-fast)] hover:border-ink-faint hover:text-ink">
+              <span className="font-medium">Day {day.dayNumber}</span>
+              <time dateTime={day.date} className="numeral text-[10px] opacity-80">
+                {humanDate(day.date).replace(/^\w+\s/, '')}
+              </time>
+            </DayFocusLink>
           </li>
         ))}
       </ol>
@@ -1367,86 +1422,62 @@ const WEATHER_BADGE: Record<string, string> = {
  */
 function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number }) {
   const { weather } = day;
-  // `renderedAt` rather than `Date.now()`: this is a stored plan being read
-  // back, so "how old is the forecast" has to be answered once, on the server,
-  // against the same instant for every day — otherwise two days on one page can
-  // disagree about whether the same forecast is stale.
   const stale =
     weather.evidence === 'forecast' && weather.fetchedAt
       ? renderedAt - Date.parse(weather.fetchedAt) > (weather.staleAfterMinutes ?? 360) * 60_000
       : false;
-
+  if (weather.evidence === 'unavailable' && weather.backups.length === 0 && !weather.noBackupReason) return null;
+  /*
+   * PRODUCTION UI V1 — ONE COMPACT LINE PER DAY.
+   * "≈ 14–16 °C historical · rain-prone · light until 21:20", with the trip's
+   * seasonal paragraph said once under Prepare, not under every day. The
+   * details (decisions, backups, attribution) stay behind a disclosure.
+   */
+  const temp = weather.temperatureMaxC !== undefined && weather.temperatureMinC !== undefined ? `${weather.evidence === 'forecast' ? '' : '≈ '}${Math.round(weather.temperatureMinC)}–${Math.round(weather.temperatureMaxC)} °C${weather.evidence === 'forecast' ? '' : ' historical'}` : null;
+  const wet = weather.evidence === 'forecast' && weather.precipitationProbabilityPercent !== null && weather.precipitationProbabilityPercent !== undefined ? `${weather.precipitationProbabilityPercent}% rain` : weather.evidence === 'historical_pattern' && /(\d+)% of days in this period wet/.exec(weather.summary) ? (Number(/(\d+)% of days in this period wet/.exec(weather.summary)![1]) >= 35 ? 'rain-prone' : Number(/(\d+)% of days in this period wet/.exec(weather.summary)![1]) >= 15 ? 'some rain' : 'mostly dry') : null;
+  // A sunset at or past 23:30 is polar light or a fixture; saying "light until 23:59" tells a traveller nothing.
+  const light = weather.sunsetMinute !== undefined && weather.sunsetMinute < 23 * 60 + 30 ? `light until ${clock(weather.sunsetMinute, 'earlier')}` : null;
+  const line = [temp, wet, light].filter(Boolean).join(' · ');
+  const hasDetail = weather.decisions.length > 0 || weather.backups.length > 0 || Boolean(weather.noBackupReason);
   return (
-    <section
-      className="mt-3 border-t border-rule pt-3"
-      aria-label={`Weather on day ${day.dayNumber}`}
-    >
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <Badge tone={weather.evidence === 'forecast' ? 'blue' : 'neutral'}>
-          {weather.evidence === 'forecast'
-            ? 'Forecast'
-            : weather.evidence === 'historical_pattern'
-              ? 'Historical pattern'
-              : 'No weather data'}
-        </Badge>
-        {/*
-          Only a label that names somewhere. "Forecast point 3" is a build
-          index — it told a live traveller nothing and read as engineering on
-          every day badge, so a machine-minted label renders as silence.
-        */}
-        {weather.locationLabel && !isMachineWeatherLabel(weather.locationLabel) ? (
-          <span className="text-xs text-ink-faint">{weather.locationLabel}</span>
-        ) : null}
+    <section className="mt-3 rule-top pt-3" aria-label={`Weather on day ${day.dayNumber}`}>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-ink-muted">
+        <Badge tone={weather.evidence === 'forecast' ? 'blue' : 'neutral'}>{weather.evidence === 'forecast' ? 'Forecast' : weather.evidence === 'historical_pattern' ? 'Typical' : 'No weather data'}</Badge>
+        {line ? <span className="numeral">{line}</span> : <span>{weather.summary}</span>}
+        {weather.locationLabel && !isMachineWeatherLabel(weather.locationLabel) ? <span className="text-xs text-ink-faint">{weather.locationLabel}</span> : null}
         {stale ? <Badge tone="amber">Read a while ago</Badge> : null}
       </div>
-
-      <p className="mt-2 text-sm leading-relaxed text-ink-muted">{weather.summary}</p>
-
-      {weather.sunriseMinute !== undefined && weather.sunsetMinute !== undefined ? (
-        <p className="mt-1 text-xs text-ink-faint">
-          Light from {clock(weather.sunriseMinute, 'later')} to{' '}
-          {clock(weather.sunsetMinute, 'earlier')}.
-        </p>
+      {hasDetail ? (
+        <details className="mt-1.5" data-print="open">
+          <summary className="min-h-9 cursor-pointer text-xs text-ink-faint hover:text-ink">What the weather changes on this day</summary>
+          {weather.decisions.length > 0 ? (
+            <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
+              {weather.decisions.map((decision) => (
+                <li key={decision}>{decision}</li>
+              ))}
+            </ul>
+          ) : null}
+          {weather.backups.length > 0 ? (
+            <div className="mt-2 rounded-md border border-slate-blue/40 p-2.5">
+              <p className="text-xs font-medium text-slate-blue">{weather.backups.length === 1 ? 'If it turns' : 'If it turns, either of these'}</p>
+              <ul className="mt-1 space-y-1.5 text-xs leading-relaxed text-ink-muted">
+                {weather.backups.map((backup) => (
+                  <li key={backup.placeId}>
+                    <span className="font-medium text-ink">{backup.name}</span> — {backup.why} {backup.openingSummary} {backup.accessSummary}
+                    {backup.caution ? <span className="text-ink-faint"> {backup.caution}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {weather.noBackupReason ? (
+            <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+              <span className="font-medium text-ink">No strong fallback for this one.</span> {weather.noBackupReason}
+            </p>
+          ) : null}
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">{travellerVoice(weather.attribution)}</p>
+        </details>
       ) : null}
-
-      {weather.decisions.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-ink-muted">
-          {weather.decisions.map((decision) => (
-            <li key={decision}>{decision}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {weather.backups.length > 0 ? (
-        <div className="mt-2 rounded-md border border-slate-blue/40 p-2.5">
-          <p className="text-xs font-medium text-slate-blue">
-            {weather.backups.length === 1 ? 'If it turns' : 'If it turns, either of these'}
-          </p>
-          <ul className="mt-1 space-y-1.5 text-xs leading-relaxed text-ink-muted">
-            {weather.backups.map((backup) => (
-              <li key={backup.placeId}>
-                <span className="font-medium text-ink">{backup.name}</span> — {backup.why}{' '}
-                {backup.openingSummary} {backup.accessSummary}
-                {backup.caution ? <span className="text-ink-faint"> {backup.caution}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {weather.noBackupReason ? (
-        <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-          <span className="font-medium text-ink">No strong fallback for this one.</span>{' '}
-          {weather.noBackupReason}
-        </p>
-      ) : null}
-
-      <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-        {travellerVoice(weather.attribution)}
-        {weather.evidence === 'historical_pattern'
-          ? ' These are patterns from past years, not a forecast for your dates.'
-          : ''}
-      </p>
     </section>
   );
 }
@@ -1465,11 +1496,14 @@ function DayCard({
   tiles = null,
   dayCount = 1,
   anchorRoles = {},
+  anchorKinds = {},
 }: {
   day: ItineraryDay;
   renderedAt: number;
   coordinates: Record<string, { lat: number; lng: number }>;
   tiles?: MapBasemap | null;
+  /** PRODUCTION UI V1 — what kind of thing each stop is; only a named place carries a verification chip. */
+  anchorKinds?: Record<string, AnchorKind>;
   /** LIVE WORLD V1 — how many days the plan has, for "move to day". */
   dayCount?: number;
   /** LIVE WORLD V1 — package roles by item/place id, for must-keep/optional. */
@@ -1552,6 +1586,32 @@ function DayCard({
     mapNumbers[stop.id] = index + 1;
   });
   const mapModel = dayMapModel({ day, coordinates, nameOf: (placeId, fallback) => rationale[placeId]?.name ?? fallback });
+  /*
+   * PRODUCTION UI V1 — TIME PRECISION FOLLOWS THE LEGS.
+   *
+   * A stop after a measured leg reads 10:15; after an estimated leg ≈10:15;
+   * after a leg nobody could time or estimate, "Late morning". The precision
+   * only ever loosens through the day, because a later clock time is only as
+   * certain as the least certain leg before it. A booked item stays fixed.
+   */
+  const precisionByItem: Record<string, TimePrecisionWord> = {};
+  {
+    let state: TimePrecisionWord = 'measured';
+    const rank: Record<TimePrecisionWord, number> = { fixed: 0, measured: 0, estimated: 1, band: 2 };
+    for (const item of [...day.items].sort((a, b) => a.startMinute - b.startMinute || (a.kind === 'travel' ? -1 : 1))) {
+      if (item.kind === 'travel') {
+        const own = item.timing?.precision ?? (item.travel?.provenance === 'measured' ? 'measured' : item.travel?.provenance === 'estimated' ? 'estimated' : item.travel && item.travel.fromId !== item.travel.toId ? 'band' : 'measured');
+        if (rank[own] > rank[state]) state = own;
+        precisionByItem[item.id] = own;
+        continue;
+      }
+      precisionByItem[item.id] = item.timing?.precision === 'fixed' ? 'fixed' : state;
+    }
+  }
+  const drivingMinutes = day.totals.driveMinutes + (day.transport.primaryMode === 'drive' || day.transport.modes.includes('drive') ? day.totals.estimatedMinutes : 0);
+  const travelApprox = day.totals.estimatedMinutes > 0 || day.totals.allowanceMinutes > 0;
+  const meaningfulStops = day.items.filter((item) => item.kind === 'activity').length;
+  const weatherSensitive = day.items.some((item) => item.kind === 'activity' && item.weatherSensitive);
 
   return (
     <Panel className="overflow-hidden">
@@ -1656,11 +1716,17 @@ function DayCard({
           else is still here, one line down, in text — legible, ordered, and no
           longer competing.
         */}
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity} day</Badge>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid={`day-facts-${day.dayNumber}`}>
+          <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity}</Badge>
+          {meaningfulStops > 0 ? <Badge tone="neutral">{meaningfulStops} {meaningfulStops === 1 ? 'stop' : 'stops'}</Badge> : null}
           {day.totals.travelMinutes > 0 ? (
-            <Badge tone="blue">{travelSpan(day.totals.travelMinutes)} travelling</Badge>
+            <Badge tone="blue" title={travelApprox ? 'Estimated from map distance or held as an allowance, not measured' : 'Measured by a routing provider'}>
+              {travelApprox ? '≈' : ''}
+              {travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} {drivingMinutes > 0 ? 'drive' : 'travelling'}
+            </Badge>
           ) : null}
+          {weatherSensitive ? <Badge tone="amber">weather-sensitive</Badge> : null}
+          {day.timing?.precision === 'band' ? <Badge tone="neutral" title="A leg on this day could not be timed or estimated, so times read as parts of the day">times approximate</Badge> : null}
           {/*
             The one chip that differs between two days of the same shape: how
             much of this one is on your feet. Eight days badged only "moderate
@@ -1668,16 +1734,14 @@ function DayCard({
             walking is the fact somebody with a knee, a pushchair or a long
             flight behind them is actually scanning for.
           */}
-          {day.totals.walkMinutes >= WALKING_DAY_MINUTES ? (
-            <Badge tone="neutral">{travelSpan(day.totals.walkMinutes)} on foot</Badge>
-          ) : null}
         </div>
 
         {day.totals.activityMinutes > 0 || day.totals.freeMinutes > 0 ? (
-          <p className="mt-2 text-xs text-ink-muted">
+          <p className="mt-2 type-meta">
             {[
               day.totals.activityMinutes > 0 ? `${span(day.totals.activityMinutes)} at stops` : null,
               day.totals.freeMinutes > 0 ? `${span(day.totals.freeMinutes)} free` : null,
+              day.totals.walkMinutes >= WALKING_DAY_MINUTES ? `${travelSpan(day.totals.walkMinutes)} on foot` : null,
             ]
               .filter(Boolean)
               .join(' · ')}
@@ -1737,6 +1801,7 @@ function DayCard({
                 omitted={mapModel.omitted}
                 dayNumber={day.dayNumber}
                 tiles={tiles}
+                className="lg:hidden print:hidden"
               />
             ) : null}
           </div>
@@ -1765,9 +1830,12 @@ function DayCard({
         <ol className="divide-y divide-rule">
           {day.items.map((item) => (
             <li key={item.id}>
+              <StopFocusHandle placeId={item.kind === 'activity' ? item.placeId : undefined}>
               <TimelineRow
                 item={item}
                 window={day.window}
+                precision={precisionByItem[item.id] ?? 'measured'}
+                {...(anchorKinds[item.id] ? { anchorKind: anchorKinds[item.id]! } : {})}
                 {...(verification[item.id] ? { verification: verification[item.id]! } : {})}
                 stopNumber={item.placeId ? (mapNumbers[item.placeId] ?? null) : null}
                 dayNumber={day.dayNumber}
@@ -1792,6 +1860,7 @@ function DayCard({
                 }
               />
               <RowHandoff item={item} coordinates={coordinates} verification={verification[item.id]} baseId={day.baseId} {...(tripId ? { tripId } : {})} dayNumber={day.dayNumber} dayCount={dayCount} role={anchorRoles[item.placeId ?? ''] ?? anchorRoles[item.id]} />
+              </StopFocusHandle>
             </li>
           ))}
         </ol>
@@ -2103,7 +2172,8 @@ function DayFood({ day }: { day: ItineraryDay }) {
  * whole region publish prices, so a trip food cost would be a guess with a
  * currency symbol on it — and the one number everybody would then plan around.
  */
-function FoodPlanPanel({ plan, strategy = [] }: { plan: FoodPlan; strategy?: readonly string[] }) {
+function FoodPlanPanel({ plan, strategy = [], intel = null }: { plan: FoodPlan; strategy?: readonly string[]; intel?: TravelIntelligence | null }) {
+  const food = intel?.food;
   const facts: { label: string; value: string }[] = [];
   if (plan.specialMealBudget > 0) {
     facts.push({
@@ -2129,6 +2199,46 @@ function FoodPlanPanel({ plan, strategy = [] }: { plan: FoodPlan; strategy?: rea
       <h2 className="font-display text-xl text-ink" id="food-plan">
         Eating
       </h2>
+      {food && food.foodPriority === 'high' ? (
+        <div className="mt-4 rounded-[var(--radius-card)] bg-accent-soft/60 p-4" data-testid="food-highlights">
+          <p className="label text-accent-strong">Food is a priority on this trip</p>
+          <ul className="mt-2 space-y-1 type-small text-ink">
+            {food.strategy.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          {food.highlights ? (
+            <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              {food.highlights.markets.length > 0 ? (
+                <div>
+                  <dt className="type-meta">Markets</dt>
+                  <dd className="text-ink">{food.highlights.markets.map((m) => `${m.name} (day ${m.dayNumber})`).join(', ')}</dd>
+                </div>
+              ) : null}
+              {food.highlights.foodTowns.length > 0 ? (
+                <div>
+                  <dt className="type-meta">Food towns</dt>
+                  <dd className="text-ink">{food.highlights.foodTowns.map((t) => t.name).join(', ')}</dd>
+                </div>
+              ) : null}
+              {food.highlights.specialDinner ? (
+                <div>
+                  <dt className="type-meta">The one to book</dt>
+                  <dd className="text-ink">
+                    Day {food.highlights.specialDinner.dayNumber}, {food.highlights.specialDinner.baseName}: {food.highlights.specialDinner.intent}
+                  </dd>
+                </div>
+              ) : null}
+              {food.highlights.specialties.length > 0 ? (
+                <div>
+                  <dt className="type-meta">Specialities named</dt>
+                  <dd className="text-ink">{food.highlights.specialties.join(', ')}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+        </div>
+      ) : null}
       <p className="mt-1 text-sm leading-relaxed text-ink-muted">{plan.headline}</p>
       <p className="mt-1 text-sm leading-relaxed text-ink-muted">{plan.style}</p>
       {strategy.length > 1 ? (
@@ -2192,11 +2302,27 @@ function FoodPlanPanel({ plan, strategy = [] }: { plan: FoodPlan; strategy?: rea
   );
 }
 
-const VERIFICATION_CHIP: Record<VerificationState, { label: string; tone: BadgeTone }> = {
-  verified: { label: 'Verified', tone: 'pine' },
-  partially_verified: { label: 'Details unconfirmed', tone: 'neutral' },
-  unverified: { label: 'Not yet verified', tone: 'amber' },
+const VERIFICATION_TITLE: Record<VerificationState, string> = {
+  verified: 'Checked: a real place at a known position, with evidence for its hours or access.',
+  partially_verified: 'Likely: a real place at this name was confirmed; hours and access have not been.',
+  unverified: 'Confirm later: this could not be matched to a specific place yet. Nothing here says it is wrong.',
 };
+const ANCHOR_KIND_WORD: Record<AnchorKind, string> = { named_place: '', area_experience: 'Area', route_experience: 'Route', generic_experience: 'Experience', meal: 'Meal', flex: 'Flexible' };
+type TimePrecisionWord = 'fixed' | 'measured' | 'estimated' | 'band';
+
+/** The one-line travel row: the rounded duration, then the leg's own title ("Walk to Quarter Market"), then what kind of figure it is. */
+function travelLine(item: ItineraryItem): string {
+  const travel = item.travel!;
+  if (travel.unverifiedScheduled && travel.minutes !== null) return `${travelSpan(travel.minutes)} ${item.title} · Journey not verified`;
+  if (travel.provenance === 'measured' && travel.minutes !== null) {
+    return `${travelSpan(travel.minutes)} ${item.title}${travel.km !== null && travel.km > 0 ? ` · ${Math.round(travel.km)} km` : ''}${travel.basis === 'traffic_aware' ? ' · with traffic' : travel.basis === 'scheduled' ? ' · timetable' : ''}${travel.viaBases ? ' · base to base' : ''}`;
+  }
+  if (travel.minutes !== null && travel.provenance !== 'unmeasured') {
+    return `${travel.provenance === 'estimated' ? '≈' : ''}${travelSpan(travel.minutes)} ${item.title} · ${travel.provenance === 'estimated' ? `estimate${travel.estimate?.approxKm ? ` (~${travel.estimate.approxKm} km)` : ''}` : travelProvenanceLabel(travel)}`;
+  }
+  if (travel.unmeasuredReason === 'mode_not_routed') return `${item.title} · timing from the operator`;
+  return `${item.title} · timing not independently measured`;
+}
 
 function TimelineRow({
   item,
@@ -2206,9 +2332,15 @@ function TimelineRow({
   rationale,
   verification,
   dayNumber,
+  precision = 'measured',
+  anchorKind,
 }: {
   item: ItineraryItem;
   window: DailyWindow;
+  /** PRODUCTION UI V1 — how the clock may be read for this row. */
+  precision?: TimePrecisionWord;
+  /** What kind of thing this stop is; only a named place carries a verification chip. */
+  anchorKind?: AnchorKind;
   /** So the day map can find this row when its stop is pressed. */
   dayNumber?: number;
   /** What Sidequest could establish about this stop. Absent on legacy plans and on non-stop rows. */
@@ -2237,16 +2369,25 @@ function TimelineRow({
   return (
     <div
       className="flex gap-3 p-4 sm:gap-4 sm:p-5 target:bg-pine-soft focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-[-2px]"
+      data-row-kind={item.kind}
       {...(item.placeId ? { 'data-timeline-place': item.placeId, tabIndex: -1 } : {})}
       {...(dayNumber !== undefined ? { 'data-day': dayNumber } : {})}
     >
       <div className="w-14 shrink-0 pt-0.5 text-right sm:w-16">
-        <time className="numeral block text-sm text-ink">
-          {clock(item.startMinute, 'later')}
-        </time>
-        <span className="mt-0.5 block text-[11px] tabular-nums text-ink-faint">
-          {item.kind === 'travel' ? travelSpan(item.durationMinutes) : span(item.durationMinutes)}
-        </span>
+        {precision === 'band' && item.kind !== 'travel' ? (
+          <span className="block text-[11px] leading-tight text-ink-muted" title="A leg before this stop could not be timed, so the clock is a part of the day">
+            {dayPartFor(item.startMinute)}
+          </span>
+        ) : item.kind === 'travel' ? (
+          <span aria-hidden="true" className="block text-sm text-ink-faint">
+            ↳
+          </span>
+        ) : (
+          <time className={cx('numeral block text-sm text-ink', precision === 'estimated' && 'approx')} title={precision === 'estimated' ? 'Estimated: the leg before this stop was estimated from map distance' : precision === 'fixed' ? 'Fixed by a booking or timetable' : undefined}>
+            {clock(item.startMinute, 'later')}
+          </time>
+        )}
+        {item.kind !== 'travel' ? <span className="mt-0.5 block text-[11px] tabular-nums text-ink-faint">{span(item.durationMinutes)}</span> : null}
       </div>
 
       {/*
@@ -2269,34 +2410,24 @@ function TimelineRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h3
-            className={cx(
-              'text-ink',
-              item.kind === 'activity' ? 'font-display text-xl' : 'text-sm font-medium',
-            )}
-          >
-            {/* See `StopRationale.name`: the plan stores a string, so the name
-                is re-resolved at render for place rows and left alone for the
-                composed titles of travel and food blocks. */}
-            {rationale?.name ?? item.title}
-          </h3>
           {item.travel ? (
-            <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
-              {/*
-                THE CHIP THAT CONTRADICTED THE TITLE BESIDE IT.
-
-                The row already reads "Travel to X" rather than "Walk to X",
-                because the mode on a proxy leg is a stand-in for a scheduled
-                journey nobody could price. This chip read the raw mode and put
-                WALK a centimetre to its right — the reviewer read it off the
-                screen. A leg with no known mode gets the product's existing
-                phrase for that state instead of a mode it does not have.
-              */}
-              {item.travel.unverifiedScheduled
-                ? 'Journey not verified'
-                : TRANSPORT_MODE_LABELS[item.travel.mode]}
-            </span>
-          ) : item.food ? (
+            /*
+             * PRODUCTION UI V1 — THE TRAVEL ROW IS ONE LINE.
+             *   ↳ 1h 42m drive · 126 km            (measured)
+             *   ↳ ≈1h 45m drive · estimate         (estimated from map distance)
+             *   ↳ Drive to Kilkenny · timing not independently measured
+             * The paragraph that used to explain unknown semantics under every
+             * leg is gone; the legend on the map says it once.
+             */
+            <h3 className="text-sm text-ink-muted" title={item.reason}>
+              {travelLine(item)}
+            </h3>
+          ) : (
+            <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-xl' : 'text-sm font-medium')}>
+              {rationale?.name ?? item.title}
+            </h3>
+          )}
+          {item.travel ? null : item.food ? (
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">
               {[MEAL_SLOT_LABELS[item.food.slot], FOOD_STOP_LABEL[item.food.stopKind]]
                 .filter(Boolean)
@@ -2332,10 +2463,12 @@ function TimelineRow({
           {item.booking ? (
             <Badge tone="amber">{BOOKING_KIND_LABELS[item.booking.kind]}</Badge>
           ) : null}
-          {verification ? (
-            <Badge tone={VERIFICATION_CHIP[verification].tone} title="What Sidequest could confirm about this stop">
-              {VERIFICATION_CHIP[verification].label}
+          {verification && (anchorKind === undefined || anchorKind === 'named_place') ? (
+            <Badge tone={VERIFICATION_CHIP_WORD[verification].tone} title={VERIFICATION_TITLE[verification]}>
+              {VERIFICATION_CHIP_WORD[verification].label}
             </Badge>
+          ) : anchorKind && anchorKind !== 'named_place' && anchorKind !== 'flex' ? (
+            <span className="text-[11px] uppercase tracking-[0.12em] text-ink-faint">{ANCHOR_KIND_WORD[anchorKind]}</span>
           ) : null}
         </div>
 
@@ -2375,14 +2508,11 @@ function TimelineRow({
             {rationale.why}
           </p>
         ) : null}
-        <p
-          className={cx(
-            'mt-1 leading-relaxed',
-            rationale?.why ? 'text-xs text-ink-faint' : 'text-sm text-ink-muted',
-          )}
-        >
-          {item.reason}
-        </p>
+        {item.kind !== 'travel' ? (
+          <p className={cx('mt-1 leading-relaxed', rationale?.why ? 'text-xs text-ink-faint' : 'text-sm text-ink-muted')}>{item.reason}</p>
+        ) : item.travel?.unverifiedScheduled || item.travel?.provenance === 'modelled' ? (
+          <p className="mt-1 text-xs leading-relaxed text-ink-faint">{item.reason} {travelProvenanceLabel(item.travel)}</p>
+        ) : null}
         {/*
           The facts that differ between two stops that fit for the same reason:
           how far out it is, whether it is a quiet find, whether it holds up in
@@ -2396,17 +2526,11 @@ function TimelineRow({
 
         {item.food ? <FoodDetail food={item.food} /> : null}
 
-        {item.travel ? (
-          <p className="mt-1 text-xs text-ink-faint">
-            {item.travel.fromName} → {item.travel.toName}
-            {item.travel.km !== null && item.travel.km > 0
-              ? ` · ${Math.round(item.travel.km)} km`
-              : ''}{' '}
-            · {travelProvenanceLabel(item.travel)}
-          </p>
+        {item.travel && item.travel.modeCorrectedFrom ? (
+          <p className="mt-0.5 text-[11px] text-ink-faint">The plan said {TRANSPORT_MODE_LABELS[item.travel.modeCorrectedFrom].toLowerCase()}; the distance says otherwise.</p>
         ) : null}
 
-        {item.accessWarning ? (
+        {item.accessWarning && !/could not be independently confirmed/i.test(item.accessWarning) ? (
           <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
             {item.accessWarning}
           </p>
@@ -2717,7 +2841,7 @@ function ConsideredPanel({ pkg }: { pkg: TripPackage }) {
   return (
     <>
       {pkg.omissions.length > 0 || leftOut.length > 0 || moved.length > 0 || pkg.tradeoffs.length > 0 || pkg.unresolved.length > 0 || pkg.preservation ? (
-        <section className="mt-14 border-t border-rule pt-8" data-testid="considered-and-left-out">
+        <section className="mt-14 border-t border-rule pt-8" data-testid="considered-and-left-out" data-print="appendix">
           <h2 className="display-md text-ink">Considered, and decided</h2>
           <p className="mt-1 text-sm text-ink-muted">
             What was weighed and left out on purpose, what Sidequest changed on evidence, and what is still open.
@@ -2843,50 +2967,18 @@ function TripSnapshot({
 }) {
   const pkg = itinerary.package;
   const hero = itinerary.days.map((day) => dayIdentity(day, images, rationale).hero).find((entry) => entry !== null) ?? null;
-  const markers: (MapMarker & { dayNumber: number })[] = [];
-  const seen = new Set<string>();
-  for (const day of itinerary.days) {
-    for (const item of day.items) {
-      if (item.kind !== 'activity' || !item.placeId) continue;
-      const point = coordinates[item.placeId];
-      if (!point || seen.has(item.placeId)) continue;
-      seen.add(item.placeId);
-      markers.push({ id: item.placeId, name: rationale[item.placeId]?.name ?? item.title, coordinates: point, kind: 'place', chosen: true, dayNumber: day.dayNumber });
-    }
-  }
-  const baseIds = [...new Set(itinerary.days.map((day) => day.baseId))];
-  const bases = baseIds.map((id) => ({ id, name: itinerary.days.find((day) => day.baseId === id)?.baseName ?? 'base', point: coordinates[id] ?? null }));
-  for (const base of bases) {
-    if (base.point && !seen.has(base.id)) {
-      seen.add(base.id);
-      markers.push({ id: base.id, name: base.name, coordinates: base.point, kind: 'base', dayNumber: itinerary.days.find((day) => day.baseId === base.id)?.dayNumber ?? 1 });
-    }
-  }
-  const connectors: MapConnector[] = [];
-  for (let i = 1; i < bases.length; i += 1) {
-    const from = bases[i - 1]!.point;
-    const to = bases[i]!.point;
-    if (!from || !to) continue;
-    // LIVE WORLD V1 — the relocation day's transfer leg is the measurement of this move; its persisted shape draws the road.
-    const transfer = itinerary.days
-      .filter((day) => day.baseId === bases[i]!.id)
-      .flatMap((day) => day.items)
-      .find((item) => item.kind === 'travel' && item.travel?.role === 'transfer' && item.travel.provenance === 'measured')?.travel;
-    const path = transfer?.geometry ? decodeShape(transfer.geometry) : undefined;
-    connectors.push({ id: `move-${i}`, from, to, style: transfer ? (transfer.mode === 'walk' ? 'measured_walk' : transfer.mode === 'rail' || transfer.mode === 'public_bus' || transfer.mode === 'ferry' ? 'measured_transit' : 'measured_drive') : 'unmeasured', ...(path ? { path } : {}) });
-  }
-  const primaryBase = bases[0]?.point ? { name: bases[0].name, coordinates: bases[0].point } : null;
+  const { markers, connectors, primaryBase, summary } = overviewMapModel(itinerary, coordinates, rationale);
+  const bases = pkg?.bases ?? [];
   const kinds = [...new Set(itinerary.days.map((day) => day.weather.evidence))];
   const weatherLabel = kinds.includes('forecast') ? 'Forecast on record' : kinds.includes('historical_pattern') ? 'Historical pattern' : 'No weather data';
   const stops = itinerary.days.reduce((sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length, 0);
-  const summary = `${markers.filter((m) => m.kind === 'place').length} placed stops across ${itinerary.days.length} days${bases.length > 1 ? `, moving between ${bases.length} bases` : ''}.`;
 
   return (
     <section className="mt-8" aria-labelledby="trip-snapshot" data-testid="trip-snapshot">
       <h2 id="trip-snapshot" className="sr-only">
         Trip at a glance
       </h2>
-      <div className={cx('grid gap-4', hero ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]' : '')}>
+      <div className={cx('grid gap-6', hero ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]' : '')} data-bases={bases.length}>
         {hero ? (
           <div className="min-w-0">
             <DestinationImage
@@ -2930,17 +3022,17 @@ function TripSnapshot({
           </dl>
           {pkg ? (
             <p className="mt-4 flex flex-wrap gap-1.5" data-testid="trip-verification">
-              {pkg.verification.verified > 0 ? <Badge tone="pine">{pkg.verification.verified} verified</Badge> : null}
-              {pkg.verification.partiallyVerified > 0 ? <Badge tone="blue">{pkg.verification.partiallyVerified} confirmed as places</Badge> : null}
-              {pkg.verification.unverified > 0 ? <Badge tone="amber">{pkg.verification.unverified} not yet verified</Badge> : null}
-              {pkg.verification.legsUnmeasured > 0 ? <Badge>{pkg.verification.legsUnmeasured} {pkg.verification.legsUnmeasured === 1 ? 'leg' : 'legs'} unmeasured</Badge> : null}
+              {pkg.verification.verified > 0 ? <Badge tone="pine">{pkg.verification.verified} checked</Badge> : null}
+              {pkg.verification.partiallyVerified > 0 ? <Badge tone="blue">{pkg.verification.partiallyVerified} likely</Badge> : null}
+              {pkg.anchors.filter((a) => a.verification === 'unverified' && (a.anchorKind ?? 'named_place') === 'named_place').length > 0 ? <Badge>{pkg.anchors.filter((a) => a.verification === 'unverified' && (a.anchorKind ?? 'named_place') === 'named_place').length} to confirm later</Badge> : null}
+              {pkg.verification.legsMeasured > 0 ? <Badge>{pkg.verification.legsMeasured} {pkg.verification.legsMeasured === 1 ? 'leg' : 'legs'} measured</Badge> : (pkg.verification.legsEstimated ?? 0) > 0 ? <Badge>travel times estimated</Badge> : null}
             </p>
           ) : null}
         </div>
       </div>
       {markers.length > 0 ? (
-        <div className="mt-4">
-          <TripOverviewMap markers={markers} connectors={connectors} base={primaryBase} tiles={tiles} summary={summary} />
+        <div className="mt-6">
+          <TripOverviewMap markers={markers} connectors={connectors} base={primaryBase} tiles={tiles} summary={summary} width={1120} height={420} />
         </div>
       ) : null}
     </section>
@@ -2958,11 +3050,14 @@ const DOCUMENT_WORDS = /\b(visa|passport|entry requirement|entry requirements|in
 function PreparationHub({
   itinerary,
   preparation,
+  hasIntelligence = false,
   verifiedAreas,
 }: {
   itinerary: Itinerary;
   preparation: readonly PreparationItem[];
   verifiedAreas: readonly { name: string; rationale: string; tradeoffs: readonly string[] }[];
+  /** PRODUCTION UI V1 — when the intelligence layer renders stays, food, packing and backups, this hub keeps only the plan's own notes. */
+  hasIntelligence?: boolean;
 }) {
   const pkg = itinerary.package;
   const fromPlan = pkg?.beforeYouGo ?? [];
@@ -2972,11 +3067,11 @@ function PreparationHub({
   const hasAnything = preparation.length > 0 || fromPlan.length > 0 || pkg;
   if (!hasAnything) return null;
   return (
-    <section className="mt-14 border-t border-rule pt-8" aria-labelledby="prepare" data-testid="prepare">
-      <h2 id="prepare" className="font-display text-xl text-ink">
-        Prepare
+    <section className="mt-14 rule-top pt-8" aria-labelledby="prepare-notes" data-testid="prepare" {...(hasIntelligence ? { 'data-print': 'appendix' } : {})}>
+      <h2 id="prepare-notes" className="font-display text-xl text-ink">
+        {hasIntelligence ? 'Notes from the plan' : 'Prepare'}
       </h2>
-      <p className="mt-1 text-sm text-ink-muted">What to arrange, carry and check before you leave. Nothing here has been booked for you.</p>
+      <p className="mt-1 text-sm text-ink-muted">{hasIntelligence ? 'What the composed plan itself said to arrange and check, kept in its own words.' : 'What to arrange, carry and check before you leave. Nothing here has been booked for you.'}</p>
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div className="contents" data-testid="before-you-go">
           <BeforeYouGo items={preparation} fromPlan={bookFirst} />
@@ -2991,18 +3086,18 @@ function PreparationHub({
             <PlainList items={pkg.transport.notes} />
           </PrepCard>
         ) : null}
-        {pkg ? <WhereToStay pkg={pkg} verifiedAreas={verifiedAreas} /> : null}
-        {pkg && pkg.foodStrategy.length > 0 ? (
+        {pkg && !hasIntelligence ? <WhereToStay pkg={pkg} verifiedAreas={verifiedAreas} /> : null}
+        {pkg && pkg.foodStrategy.length > 0 && !hasIntelligence ? (
           <PrepCard title="Food" blurb="The plan's own eating strategy; venues are named on the days where the data exists." testId="prepare-food">
             <PlainList items={pkg.foodStrategy} />
           </PrepCard>
         ) : null}
-        {pkg && pkg.packing.length > 0 ? (
+        {pkg && pkg.packing.length > 0 && !hasIntelligence ? (
           <PrepCard title="Packing" blurb="For this destination, this season and these days. Ticks stay in this tab only." testId="packing-list">
             <PackingChecklist items={pkg.packing} />
           </PrepCard>
         ) : null}
-        {pkg && pkg.backups.length > 0 ? (
+        {pkg && pkg.backups.length > 0 && !hasIntelligence ? (
           <PrepCard title="If the weather turns" blurb="Backups the plan itself suggests. Check they are open before you swap." testId="backups">
             <ul className="mt-3 space-y-2">
               {pkg.backups.map((backup) => (

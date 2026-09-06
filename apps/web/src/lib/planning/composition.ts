@@ -74,7 +74,7 @@ export interface CompositionContext {
   bookedFacts?: readonly string[];
 }
 
-export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-05.4';
+export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-06.1';
 
 /**
  * Output ceiling. A rich 14-day draft — every day with anchors, meals and
@@ -117,7 +117,8 @@ Optimise the draft for all of the following, in this order when they conflict:
 9. Transfer days are real days. A relocation acknowledges checkout, the transfer and check-in, and holds only what realistically fits before and after — often one stop en route, chosen because it is on the way.
 10. Variety without randomness. Balance icons, personal discoveries, rest, food, neighbourhoods, outdoors and culture according to the brief; avoid repetitive days unless repetition is a stated priority.
 11. Food is part of the geography. Meals name a kind of place and where it sits in the day (near the morning stop, at base, a packed lunch on a remote day) — never a restaurant list bolted on afterwards.
-12. Lodging follows the itinerary. Choose bases and the part of town or kind of lodging that serves the days, and say why; never promise a named hotel.
+12. Lodging follows the itinerary. Choose bases and the part of town or kind of lodging that serves the days, and say why; never promise a named hotel. Avoid one-night stays unless the move materially improves the trip or the stop is itself worth an overnight; on a road trip prefer two or more nights per base and make a nearby town a day trip rather than a new bed. A stay is the town, village or lodge where the traveller sleeps — never a landmark, university or distillery.
+16. A meal is a meal, not an activity. Put "pub dinner", "seafood lunch", "market breakfast" in the breakfast / lunch / dinner fields of the day, never in the activities list; an activity is a place or experience with a name.
 13. Tradeoffs are explicit. Say what the plan deliberately does not do, the major tradeoffs it makes, and the alternatives.
 14. Hidden gems earn their place. Use them where they genuinely fit; never replace an objectively excellent destination-defining experience with something obscure only because the traveller likes hidden gems.
 15. Remote logistics are honest. Safari regions, rainforests, mountain countries and remote islands move by flight, boat, guide transfer, private driver, lodge transfer or 4x4; say so with the transport field rather than pretending a road route exists.

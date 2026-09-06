@@ -111,7 +111,8 @@ describe('canonical flow — recorded Google operational evidence reaches the pl
     expect(stop.operational?.attribution).toBe('Place data © Google');
     expect(stop.operational?.recheck).toBe(stop.operational?.outcome !== 'open_at_time');
     expect(stop.startMinute).toBeGreaterThanOrEqual(600);
-    expect(stop.startMinute).toBeLessThan(1020);
+    // PRODUCT RECOVERY V1 — the legs before it now carry honest estimates, so the visit lands in the late afternoon; it still starts before the recorded 18:00 close.
+    expect(stop.startMinute).toBeLessThan(1080);
     // Terms: no Google hours values, no Google name, no website persisted.
     const json = JSON.stringify(stored);
     expect(json).not.toContain('Rua do Moinho');

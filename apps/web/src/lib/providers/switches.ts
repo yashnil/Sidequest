@@ -45,6 +45,17 @@ export function isRoutesProviderEnabled(): boolean {
 }
 
 /**
+ * PRODUCT RECOVERY V1 — the optional global road router behind the local one
+ * (`routing.global`). `SIDEQUEST_ROUTES_GLOBAL_PROVIDER=openrouteservice` plus a
+ * key (`OPENROUTESERVICE_API_KEY`) or a recorded fixture file
+ * (`SIDEQUEST_ROUTES_FIXTURE`). Never mandatory; never inferred.
+ */
+export function isGlobalRoutesProviderEnabled(): boolean {
+  const chosen = process.env.SIDEQUEST_ROUTES_GLOBAL_PROVIDER?.trim().toLowerCase() === 'openrouteservice';
+  return chosen && ((process.env.OPENROUTESERVICE_API_KEY?.length ?? 0) > 0 || (process.env.SIDEQUEST_ROUTES_FIXTURE?.length ?? 0) > 0);
+}
+
+/**
  * Whether a research-model credential exists.
  *
  * Length only. The value is never read, logged, compared or returned — a

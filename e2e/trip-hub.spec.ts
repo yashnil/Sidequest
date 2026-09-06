@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
+import { openHubView } from './support/hub';
 
 /**
  * THE TRIP HUB, END TO END, ON FIXTURES.
@@ -27,12 +28,15 @@ async function buildWithDefaults(page: Page, destination = 'Mammoth Lakes'): Pro
 
 test('the hub has every section, calm by default, with urgent items only where they are real', async ({ page }) => {
   await buildWithDefaults(page);
-  const nav = page.getByTestId('trip-hub-nav');
+  // PRODUCTION UI V1 — five views under one nav; each section lives in exactly one of them.
+  const nav = page.viewportSize()!.width < 640 ? page.getByTestId('trip-hub-bottom-nav') : page.getByTestId('trip-hub-nav');
   await expect(nav).toBeVisible();
-  for (const id of ['overview', 'itinerary', 'stays', 'getting-around', 'food', 'book-first', 'before-you-go', 'pack', 'budget', 'backups', 'verify']) {
-    await expect(page.getByTestId(`hub-link-${id}`)).toBeVisible();
+  for (const id of ['overview', 'days', 'map', 'plan', 'prepare']) {
+    await expect(page.viewportSize()!.width < 640 ? page.getByTestId(`hub-bottom-${id}`) : page.getByTestId(`hub-link-${id}`)).toBeVisible();
   }
   await expect(page.getByTestId('hub-overview')).toBeVisible();
+  await expect(page.getByTestId('trip-confidence').first()).toBeVisible();
+  await openHubView(page, 'plan');
   await expect(page.getByTestId('hub-stays')).toBeVisible();
   await expect(page.getByTestId('hub-base').first()).toBeVisible();
   await expect(page.getByTestId('hub-transport')).toBeVisible();
@@ -40,8 +44,14 @@ test('the hub has every section, calm by default, with urgent items only where t
   await expect(page.getByTestId('hub-terminal-leaving')).toBeVisible();
   await expect(page.getByTestId('hub-food')).toBeVisible();
   await expect(page.getByTestId('hub-food-day').first()).toBeVisible();
+  await expect(page.getByTestId('hub-budget')).toBeVisible();
+  await expect(page.getByTestId('hub-budget')).toContainText(/Ranges, not quotes/);
+  await expect(page.getByTestId('hub-bookings')).toBeVisible();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('hub-book-first')).toBeVisible();
-  await expect(page.locator('[data-testid="hub-booking"][data-kind="accommodation"]').first()).toBeVisible();
+  // Stays are one grouped dependency, never one blocking row per base.
+  await expect(page.locator('#hub-view-prepare [data-testid="hub-booking"][data-kind="accommodation"]').first()).toBeVisible();
+  await expect(page.locator('#hub-view-prepare [data-testid="hub-stays-group"]').first()).toBeVisible();
   await expect(page.getByTestId('hub-before-you-go')).toBeVisible();
   await expect(page.getByTestId('hub-readiness-entry_documents')).toBeVisible();
   // Nobody said their citizenship, so the visa layer needs input — never a guess.
@@ -49,18 +59,19 @@ test('the hub has every section, calm by default, with urgent items only where t
   await expect(page.getByTestId('hub-checklist')).toBeVisible();
   await expect(page.getByTestId('hub-pack')).toBeVisible();
   await expect(page.getByTestId('hub-packing-list')).toBeVisible();
-  await expect(page.getByTestId('hub-budget')).toBeVisible();
-  await expect(page.getByTestId('hub-budget')).toContainText(/Ranges, not quotes/);
   await expect(page.getByTestId('hub-backups')).toBeVisible();
   await expect(page.getByTestId('hub-backup-day').first()).toBeVisible();
   await expect(page.getByTestId('hub-verify')).toBeVisible();
   await expect(page.getByTestId('hub-sources')).toBeVisible();
+  // Progressive disclosure: the full provenance list is closed by default, never a wall of rows.
+  await expect(page.getByTestId('hub-sources')).not.toHaveAttribute('open', '');
   // Calm: no warning counts thrown at the traveller.
   await expect(page.getByText(/\d+ verification warnings/)).toHaveCount(0);
 });
 
 test('a booked hotel and a booked flight become facts the plan is rebuilt around, and survive a reload', async ({ page }) => {
   const id = await buildWithDefaults(page);
+  await openHubView(page, 'plan');
   await page.getByTestId('booked-add').first().click();
   await page.getByTestId('booked-title').fill('Hotel B by the creek');
   await page.getByTestId('booked-date').fill(AUGUST.start);
@@ -71,9 +82,11 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
   await expect(page.getByTestId('hub-booked-honored')).toContainText(/Hotel B by the creek/);
   await expect(page.getByTestId('hub-base-booked').first()).toContainText(/Hotel B/);
   // The day headers now name the booked base.
+  await openHubView(page, 'days');
   await expect(page.getByText(/based in Creekside/).first()).toBeVisible();
 
   // A booked departure flight tightens the last day.
+  await openHubView(page, 'plan');
   await page.getByTestId('booked-add').first().click();
   await page.getByTestId('booked-type').selectOption('flight');
   await page.getByTestId('booked-title').fill('Flight home');
@@ -85,7 +98,9 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
   await expect(page.getByTestId('hub-booked-honored')).toContainText(/Departure flight at 13:00/);
 
   await page.reload();
+  await openHubView(page, 'plan');
   await expect(page.getByTestId('booked-item')).toHaveCount(2);
+  await openHubView(page, 'days');
   await expect(page.getByText(/based in Creekside/).first()).toBeVisible();
 
   // The calendar carries the bookings first.
@@ -99,6 +114,7 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
 
 test('the readiness profile changes the packet without ever confirming a legal fact, and a tick survives reload', async ({ page }) => {
   await buildWithDefaults(page);
+  await openHubView(page, 'prepare');
   await page.getByTestId('readiness-open').click();
   await page.getByTestId('readiness-citizenship').fill('GB');
   await page.getByTestId('readiness-passport').fill('2028-06');
@@ -114,6 +130,7 @@ test('the readiness profile changes the packet without ever confirming a legal f
   await first.check();
   await expect(first).toBeChecked();
   await page.reload();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('hub-packing-list').getByRole('checkbox').first()).toBeChecked();
 });
 
@@ -124,7 +141,9 @@ test('the shared copy carries the hub read-only: no forms, every section', async
   await expect(link).toBeVisible({ timeout: 20_000 });
   const href = await link.inputValue();
   await page.goto(href);
+  await openHubView(page, 'plan');
   await expect(page.getByTestId('hub-stays')).toBeVisible();
+  await openHubView(page, 'prepare');
   await expect(page.getByTestId('hub-before-you-go')).toBeVisible();
   await expect(page.getByTestId('booked-add')).toHaveCount(0);
   await expect(page.getByTestId('readiness-open')).toHaveCount(0);
@@ -155,6 +174,8 @@ test('optimise my existing plan: the traveller’s places are checked and the pl
   await expect(places).toContainText('Convict Lake');
   await expect(places.locator('[data-outcome="not_found"]')).toContainText('Nowhere Special');
   // The plan itself is still a plan: days, bases, the hub.
+  await openHubView(page, 'days');
   await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
+  await openHubView(page, 'plan');
   await expect(page.getByTestId('hub-stays')).toBeVisible();
 });

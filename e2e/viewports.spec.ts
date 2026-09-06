@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import {
   VIEWPORTS,
   expectNoHorizontalOverflow,
@@ -165,6 +166,8 @@ for (const phone of PHONES) {
 
     await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
     await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+    await expectNoHorizontalOverflow(page, `itinerary overview at ${where}`);
+    await openHubView(page, 'days');
     await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
     await expectNoHorizontalOverflow(page, `itinerary at ${where}`);
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openHubView } from './support/hub';
 import { completeQuestionnaire } from './support/trip';
 
 /**
@@ -34,6 +35,7 @@ async function buildPlan(page: Page): Promise<string> {
 
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
+  await openHubView(page, 'days');
   await expect(page.getByRole('heading', { name: /^Day 1/ })).toBeVisible();
   return id!;
 }
@@ -206,7 +208,8 @@ test('the plan downloads as a calendar a calendar application can open', async (
   expect(body).toContain('BEGIN:VEVENT');
   expect(body).toMatch(/DTSTART:\d{8}T\d{6}(?!Z)/);
   expect(body).not.toMatch(/DTSTART:\d{8}T\d{6}Z/);
-  expect(body).toContain('OpenStreetMap');
+  // RFC 5545 folds long lines at 75 octets, so the attribution is read unfolded.
+  expect(body.replace(/\r\n[ \t]/g, '')).toContain('OpenStreetMap');
 });
 
 test('a trip with no plan is refused a calendar rather than given an empty one', async ({

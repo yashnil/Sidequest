@@ -63,6 +63,16 @@ export const bookingItemSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   kind: bookingItemKindSchema,
+  /**
+   * PRODUCT RECOVERY V1 — stays are one planning dependency, not seven blocking
+   * rows. Each per-base item carries `group: 'stays'`; one summary item
+   * (`id: booking:stays`, `memberIds` = the base items) carries the Book-first
+   * priority and answers "what could break this trip if I don't arrange it".
+   */
+  group: z.enum(['stays']).optional(),
+  memberIds: z.array(z.string().min(1)).optional(),
+  /** Set when the requirement itself is unconfirmed ("if timed tickets apply"): a thing to verify, not yet a thing to book. */
+  verifyRequirement: z.boolean().optional(),
   necessity: bookingNecessitySchema,
   priority: bookingPrioritySchema,
   reason: z.string().min(1),

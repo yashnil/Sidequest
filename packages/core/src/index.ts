@@ -103,6 +103,9 @@ export * from './weather/snapshot';
 export * from './weather/solar';
 
 export * from './travel/reach';
+export * from './travel/estimate';
+export * from './intelligence/anchor-kind';
+export * from './reference/countries';
 export * from './travel/scheduled-stops';
 
 export * from './region/season';

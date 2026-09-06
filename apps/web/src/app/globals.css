@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 /*
  * Sidequest looks like a printed field guide, not a SaaS dashboard: warm paper,
@@ -78,9 +78,38 @@
   --color-conflicted: #9a3f36;
   --color-conflicted-soft: #f6e3e0;
 
-  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  /*
+   * PRODUCTION UI V1 — Modern Cartographic Editorial. Instrument Serif carries
+   * headlines and place names; Instrument Sans carries every row a traveller
+   * scans. Loaded by next/font in `layout.tsx` (self-hosted, variable, no
+   * runtime fetch); the system stacks remain as fallbacks.
+   */
+  --font-display:
+    var(--font-instrument-serif), "Iowan Old Style", "Palatino Linotype",
+    Palatino, Georgia, serif;
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    var(--font-instrument-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /*
+   * The product token layer the redesign reads, in the vocabulary the spec
+   * uses (canvas / surface / ink / border / accent / success / warning / danger
+   * / map). Each is a six-digit hex so the contrast guard can measure it; the
+   * legacy paper/pine/amber/clay names above remain the same colours and stay
+   * valid throughout the codebase.
+   */
+  --color-canvas: #f8f4ec;
+  --color-surface: #fffdf9;
+  --color-surface-elevated: #ffffff;
+  --color-border: #e0d8ca;
+  --color-success: #2f5d50;
+  --color-warning: #96521c;
+  --color-danger: #9a3f36;
+  /* Map colour is functional, not brand: a cartographic teal for the measured route, a muted umber for estimated legs and secondary geography. */
+  --color-map-route: #1f6f8b;
+  --color-map-route-soft: #dbe9ee;
+  --color-map-secondary: #8c6f4e;
+  --color-map-base: #1b1a17;
 
   /*
    * The height of the sticky product header, as a token rather than a magic
@@ -125,7 +154,8 @@
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 
   /* One elevation step, used sparingly: raised surfaces, never floating ones. */
-  --shadow-panel: 0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px -16px rgb(28 25 23 / 0.18);
+  --shadow-panel:
+    0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px -16px rgb(28 25 23 / 0.18);
 }
 
 /*
@@ -157,6 +187,17 @@
     --color-clay-soft: #38231f;
     --color-pine-strong: #a8d4c2;
 
+    --color-canvas: #14130f;
+    --color-surface: #1e1c18;
+    --color-surface-elevated: #26231d;
+    --color-border: #35312a;
+    --color-success: #8cc0ad;
+    --color-warning: #e0a066;
+    --color-danger: #e29a90;
+    --color-map-route: #7fbfd6;
+    --color-map-route-soft: #1d2f36;
+    --color-map-secondary: #c0a27f;
+    --color-map-base: #f3efe7;
     --color-provisional: #c4b394;
     --color-provisional-soft: #2b2519;
     --color-verifying: #9bbcd8;
@@ -166,7 +207,8 @@
     --color-conflicted: #e29a90;
     --color-conflicted-soft: #38231f;
 
-    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -16px rgb(0 0 0 / 0.6);
+    --shadow-panel:
+      0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -16px rgb(0 0 0 / 0.6);
   }
 }
 
@@ -265,9 +307,59 @@
     text-transform: uppercase;
     font-weight: 500;
   }
+  /*
+   * PRODUCTION UI V1 — the disciplined scale. Serif only where a headline or a
+   * place name earns it; the dense rows (times, legs, chips) stay in the sans.
+   */
+  .type-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+  }
+  .type-section {
+    font-family: var(--font-display);
+    font-size: 1.375rem;
+    line-height: 1.2;
+  }
+  .type-body {
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+  .type-small {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  .type-meta {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--color-ink-faint);
+  }
+  /* A hairline rule as grouping: the redesign's replacement for a bordered card around ordinary content. */
+  .rule-top {
+    border-top: 1px solid var(--color-rule);
+  }
+  .rule-strong {
+    border-top: 2px solid var(--color-ink);
+  }
+  /*
+   * PRODUCTION UI V1 — the hub's five views. A class rather than the `hidden`
+   * attribute on purpose: Tailwind's preflight hides `[hidden]` with a layered
+   * `!important`, which beats any unlayered print override, and the traveller
+   * packet needs every view to print. On screen only the active view shows.
+   */
+  .hub-view[data-active="false"] {
+    display: none;
+  }
+  /* Approximate time: the ≈ that says "estimated" without a paragraph. */
+  .approx::before {
+    content: "≈";
+    margin-right: 0.15em;
+    color: var(--color-ink-faint);
+  }
   .numeral {
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum' 1;
+    font-feature-settings: "tnum" 1;
   }
 
   /*
@@ -276,22 +368,25 @@
    * a canyon plate differ, and faint enough to sit behind type.
    */
   .plate {
-    background-color: color-mix(in srgb, hsl(var(--plate-hue, 38) 30% 45%) 10%, var(--color-paper-sunk));
-    background-image:
-      repeating-radial-gradient(
-        circle at var(--plate-x, 72%) var(--plate-y, 38%),
-        color-mix(in srgb, hsl(var(--plate-hue, 38) 30% 30%) 14%, transparent) 0 1px,
-        transparent 1px 22px
-      );
+    background-color: color-mix(
+      in srgb,
+      hsl(var(--plate-hue, 38) 30% 45%) 10%,
+      var(--color-paper-sunk)
+    );
+    background-image: repeating-radial-gradient(
+      circle at var(--plate-x, 72%) var(--plate-y, 38%),
+      color-mix(in srgb, hsl(var(--plate-hue, 38) 30% 30%) 14%, transparent) 0
+        1px,
+      transparent 1px 22px
+    );
   }
   .plate-ink {
     background-color: hsl(var(--plate-hue, 38) 24% 22%);
-    background-image:
-      repeating-radial-gradient(
-        circle at var(--plate-x, 72%) var(--plate-y, 38%),
-        rgb(255 255 255 / 0.09) 0 1px,
-        transparent 1px 24px
-      );
+    background-image: repeating-radial-gradient(
+      circle at var(--plate-x, 72%) var(--plate-y, 38%),
+      rgb(255 255 255 / 0.09) 0 1px,
+      transparent 1px 24px
+    );
     color: #f8f4ec;
   }
 
@@ -303,25 +398,46 @@
     animation: sq-enter var(--motion-figure) var(--ease-out) both;
   }
   @keyframes sq-enter {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
   .pop {
     animation: sq-pop var(--motion-base) var(--ease-out) both;
   }
   @keyframes sq-pop {
-    from { transform: scale(0.97); opacity: 0.6; }
-    to { transform: scale(1); opacity: 1; }
+    from {
+      transform: scale(0.97);
+      opacity: 0.6;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
   .ring-live {
-    transition: r var(--motion-figure) var(--ease-out), opacity var(--motion-base) var(--ease-out), stroke-dashoffset var(--motion-figure) var(--ease-out);
+    transition:
+      r var(--motion-figure) var(--ease-out),
+      opacity var(--motion-base) var(--ease-out),
+      stroke-dashoffset var(--motion-figure) var(--ease-out);
   }
   .slide-down {
     animation: sq-slide-down var(--motion-base) var(--ease-out) both;
   }
   @keyframes sq-slide-down {
-    from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   /*
@@ -347,8 +463,13 @@
   }
 
   @keyframes sq-breathe {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.55; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
   }
 
   /*
@@ -410,156 +531,210 @@
 */
 @media print {
   /*
-   * THE PAGE ITSELF.
+   * PRODUCTION UI V1 — THE TRAVELLER PACKET.
    *
-   * A4 with a 16mm margin, because the printed itinerary is a document somebody
-   * folds into a glovebox and not a screenshot of a web page. Without this the
-   * browser used its own default margin against a body whose type was sized for
-   * a 1440px viewport, and the result was a plan that ran to twice the pages it
-   * needed and still broke a day in half.
-   *
-   * Point sizes, not pixels: `pt` is the unit paged media is actually measured
-   * in, and 10.5pt at 1.45 is a comfortable reading size for continuous prose at
-   * arm's length.
+   * The founder's Ireland print ran to 43 pages because every disclosure opened
+   * and every subsystem printed. The packet prints what a traveller carries:
+   * cover and snapshot, route map, the days, stays, getting around, Book first,
+   * Before you go, packing and the day backups. Verification provenance,
+   * "considered and decided", critique, edit controls and navigation stay on
+   * screen. `data-print-appendix` on the hub root (from `?appendix=1`) adds the
+   * evidence appendix for whoever asks for it.
    */
   @page {
     size: A4;
-    margin: 16mm;
+    margin: 12mm 12mm 14mm;
   }
-
   html {
-    font-size: 10.5pt;
-    line-height: 1.45;
+    font-size: 9.5pt;
+    line-height: 1.4;
   }
-
-  /*
-   * A heading never ends a page, and no paragraph leaves one line behind.
-   *
-   * `break-after: avoid` on the headings is what stops "Day 3" printing as the
-   * last line of a sheet with its day overleaf — the single thing that makes a
-   * printed itinerary feel accidental.
-   */
   h1,
   h2,
   h3,
   h4 {
     break-after: avoid;
   }
-
   p,
   li {
     orphans: 3;
     widows: 3;
   }
-
-  /*
-   * Furniture. The attribution paragraph is deliberately not in this list.
-   *
-   * These were `body > div > header` and `body > div > footer`, which matched
-   * nothing: `ProductChrome` returns a fragment, so the header and footer are
-   * direct children of `body`. The rule the comment above calls the first and
-   * most important one was a silent no-op, and a printed itinerary carried the
-   * navigation bar across the top of the page.
-   */
   body > header,
   body > footer,
-  .print\:hidden {
-    display: none !important;
-  }
-
-  /*
-   * NO INTERACTIVE CHROME ON PAPER.
-   *
-   * Anything that only exists to be pressed is furniture in a printed document:
-   * a disabled-looking grey rectangle where a button was, a nav rail of links to
-   * anchors that mean nothing on a sheet of paper. The day rail already carries
-   * `print:hidden`; this is the catch-all for controls that do not, and it is
-   * deliberately narrow — `button` and the two navigations, never `a`, because a
-   * link on this page is usually a source citation and the URL rule below is
-   * what makes those *more* useful on paper rather than less.
-   */
+  .print\:hidden,
   button,
-  nav[aria-label='Jump to a day'],
-  [role='group'] {
+  nav,
+  [role="group"],
+  [data-print="never"] {
     display: none !important;
   }
-
-  /* Colour that survives a monochrome printer, and no wasted ink on grounds. */
+  /* Appendix-only material prints only when asked for. */
+  [data-print="appendix"] {
+    display: none !important;
+  }
+  [data-print-appendix="true"] [data-print="appendix"] {
+    display: block !important;
+    break-before: page;
+  }
+  /* Every hub view prints, in order, whatever tab was open on screen. */
+  [data-hub-view] .hub-view {
+    display: block !important;
+  }
+  /* The appendix disclosure prints open when asked for. */
+  [data-print-appendix="true"] details[data-print="appendix"] > *:not(summary) {
+    display: block !important;
+  }
+  [data-print-appendix="true"] details[data-print="appendix"]::details-content {
+    content-visibility: visible !important;
+    display: block !important;
+  }
+  [data-view="map"] {
+    display: none !important;
+  }
+  [data-view="days"] {
+    break-before: page;
+  }
+  /*
+   * Packet density, measured on the Ireland replay (10 days, 7 bases): the map
+   * view has its own page on screen and none on paper; rows lose their screen
+   * padding and facet lines; free time is the paper's white space, not a row;
+   * the readiness checklist, meal grid, backups and regrets set three columns.
+   * The entering-view animation must not leave the active view transparent.
+   */
+  [data-hub-view] .hub-view {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  [data-hub-view] .hub-view[data-view="map"] {
+    display: none !important;
+  }
+  [data-view="days"] [data-row-kind="free_time"] {
+    display: none !important;
+  }
+  [data-view="days"] [data-row-kind] {
+    padding: 0.3rem 0.75rem !important;
+    gap: 0.6rem !important;
+  }
+  [data-view="days"] [data-row-kind="travel"] {
+    padding-top: 0.15rem !important;
+    padding-bottom: 0.15rem !important;
+  }
+  [data-view="days"] [data-row-kind] h3 {
+    font-size: 0.95rem !important;
+    line-height: 1.25 !important;
+  }
+  [data-view="days"] [data-row-kind] p,
+  [data-view="days"] [data-row-kind] span {
+    line-height: 1.3 !important;
+  }
+  [data-view="days"] [data-row-kind] [data-testid="stop-facets"],
+  [data-view="days"] [data-row-kind] [data-testid="stop-operational"] {
+    display: none !important;
+  }
+  [data-view="days"] ol > li > article,
+  [data-view="days"] ol > li > article > div {
+    break-inside: auto !important;
+  }
+  [data-view="days"] ol.divide-y > li {
+    break-inside: avoid;
+  }
+  [data-view="days"] [id^="day-"] > div {
+    padding: 0.6rem 0.75rem 0.4rem !important;
+  }
+  [data-view="days"] [id^="day-"] > div + div {
+    padding: 0.2rem 0.75rem 0.5rem !important;
+  }
+  [data-view="days"] [data-testid^="day-warnings-"] {
+    padding: 0.4rem 0.75rem !important;
+  }
+  [data-view="plan"] section,
+  [data-view="prepare"] section {
+    margin-top: 1.25rem !important;
+  }
+  [data-testid="hub-checklist"] {
+    font-size: 0.85em;
+    gap: 0.75rem !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  [data-testid="hub-checklist"] > div {
+    padding: 0.6rem !important;
+  }
+  [data-testid="hub-regret"],
+  [data-testid="hub-food"] ol,
+  [data-testid="hub-backups"] ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  [data-testid="hub-backups"] ol,
+  [data-testid="hub-regret"] {
+    font-size: 0.9em;
+  }
+  [data-testid="hub-readiness-primary"] {
+    gap: 0 1.5rem !important;
+  }
+  [data-testid="hub-verify"] {
+    break-inside: avoid;
+  }
+  /*
+   * A day flows across pages: forcing each day whole onto one sheet made ten
+   * days take twenty pages. Rows and the day header stay whole; the day does not.
+   */
+  [data-view="days"] ol > li.break-inside-avoid {
+    break-inside: auto;
+  }
+  [data-view="days"] ol > li + li {
+    margin-top: 1.25rem !important;
+  }
+  [data-view="days"] ol > li > article > div:first-child {
+    break-inside: avoid;
+    break-after: avoid;
+  }
   :root {
     --color-paper: #ffffff;
     --color-paper-raised: #ffffff;
     --color-paper-sunk: #ffffff;
+    --color-canvas: #ffffff;
+    --color-surface: #ffffff;
   }
-
   body {
     background: #ffffff !important;
     color: #000000;
   }
-
-  /* Evidence prints open. A collapsed disclosure is a missing fact on paper. */
-  details {
+  .paper-grain,
+  .plate {
+    background-image: none !important;
+  }
+  /* Disclosures print closed unless marked as packet content. */
+  details[data-print="open"] {
     display: block !important;
   }
-
-  details > summary {
-    /* The twisty is a control; the label it carries is a heading worth keeping. */
+  details[data-print="open"] > summary {
     list-style: none;
     font-weight: 600;
   }
-
-  details > *:not(summary) {
+  details[data-print="open"] > *:not(summary) {
     display: block !important;
   }
-
-  /*
-   * And the part `display` cannot reach.
-   *
-   * Chrome, Safari and Firefox now implement `::details-content`, a shadow
-   * wrapper carrying `content-visibility: hidden` when the element is closed.
-   * A light-DOM `display: block` on the children does not override it, so on
-   * every current browser the rule above opened nothing — the hours evidence and
-   * the source lines printed blank, which is precisely the material that makes a
-   * printed plan worth carrying.
-   */
-  details::details-content {
+  details[data-print="open"]::details-content {
     content-visibility: visible !important;
   }
-
-  /*
-   * Keep a day card whole, and nothing larger.
-   *
-   * This applied to every `li` and every `section`, including ones taller than a
-   * page — which an engine either ignores or honours by ejecting the block to a
-   * fresh sheet, leaving half a page blank. Narrowed to the day cards (which
-   * carry the class) and to timeline rows, which are always short.
-   */
   .break-inside-avoid,
   li > article,
   dl,
   tr {
     break-inside: avoid;
   }
-
-  /* Paged media and sticky do not agree. Take it out entirely. */
-  [class*='sticky'] {
+  [class*="sticky"] {
     position: static !important;
   }
-
-  /* A link's destination is invisible on paper, so print it once, small. */
-  a[href^='http']::after {
-    content: ' (' attr(href) ')';
-    font-size: 9px;
-    word-break: break-all;
+  a[href^="http"]:not([data-print="no-url"])::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
   }
-
-  /*
-    Except where the text already is the destination, or where the URL is a
-    machine address nobody will type — a maps deep link is 200 characters of
-    coordinates and reads as damage on a printed page.
-  */
-  a[data-testid^='day-route']::after,
-  a[href^='https://maps.apple.com']::after,
-  a[href^='https://www.google.com/maps']::after {
-    content: '';
+  a[href^="https://www.google.com/maps"]::after,
+  a[href^="https://maps.apple.com"]::after {
+    content: "";
   }
 }

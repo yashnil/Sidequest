@@ -24,6 +24,7 @@ import {
   type TravelReadinessProfile,
 } from '@sidequest/core';
 import { Badge, Panel, cx, type BadgeTone } from '../ui';
+import { TripConfidence } from './TripConfidence';
 import { Glyph } from '../interview/glyphs';
 import { BookedItemForm, BookedItemRow, CheckBox, ReadinessProfileForm } from './HubForms';
 import { DiscoverButton } from '@/app/(product)/trips/[id]/itinerary/live-controls';
@@ -134,7 +135,16 @@ export function StaysSection({ intel, tripId, itinerary, coordinates = {} }: { i
   return (
     <section className="mt-14" aria-labelledby="stays" data-testid="hub-stays">
       <SectionHeader id="stays" title="Where to stay" blurb={lodging.hotelChangeNote} />
-      <ol className="mt-5 grid gap-4 sm:grid-cols-2">
+      {lodging.churn ? (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted" data-testid="hub-stays-churn" data-level={lodging.churn.level}>
+          <Badge tone={lodging.churn.level === 'aggressive' ? 'amber' : 'neutral'}>{lodging.churn.level === 'settled' ? 'One base' : lodging.churn.level === 'aggressive' ? 'Fast-moving route' : 'Steady route'}</Badge>
+          <span className="numeral">
+            {lodging.churn.baseCount} bases · {lodging.churn.nights} nights · {lodging.churn.hotelChanges} hotel changes · {lodging.churn.averageNightsPerBase} nights per base
+          </span>
+          {lodging.churn.simplerRoute[0] ? <span className="basis-full text-ink">Simpler: {lodging.churn.simplerRoute[0]}.</span> : null}
+        </p>
+      ) : null}
+      <ol className="mt-5 grid gap-4 sm:grid-cols-2" data-testid="where-to-stay">
         {lodging.bases.map((base, index) => (
           <li key={base.baseId} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="hub-base">
             <div className="flex items-baseline justify-between gap-3">
@@ -294,75 +304,176 @@ export function FoodSection({ intel, tripId, itinerary, coordinates = {} }: { in
   );
 }
 
-export function BookFirstSection({ intel, tripId, booked, itinerary, honored, conflicts }: { intel: TravelIntelligence; tripId?: string; booked: readonly BookedPlanItem[]; itinerary: Itinerary; honored: readonly string[]; conflicts: readonly string[] }) {
-  const open = intel.bookings.items.filter((b) => b.status === 'open');
-  const done = intel.bookings.items.filter((b) => b.status !== 'open');
+/**
+ * PRODUCTION UI V1 — ONE BOOKING DATASET, TWO VIEWS.
+ *
+ * `view="book-first"` (Prepare) answers "what could break this trip if I do
+ * not arrange it": stays as ONE grouped dependency, then the rental car,
+ * scarce transport, timed entry, permits, guided days and the one dinner the
+ * traveller values. `view="bookings"` (Plan) is the same items grouped by
+ * kind with the traveller's own bookings and their statuses. Neither is a
+ * second system. "If timed tickets apply" items are things to verify, not
+ * yet things to book.
+ */
+const BOOKING_GROUP_OF: Record<string, 'Transport' | 'Stays' | 'Experiences' | 'Meals'> = {
+  flight: 'Transport',
+  train: 'Transport',
+  ferry: 'Transport',
+  rental_vehicle: 'Transport',
+  shuttle: 'Transport',
+  internal_transfer: 'Transport',
+  accommodation: 'Stays',
+  park_entry: 'Experiences',
+  timed_entry: 'Experiences',
+  permit: 'Experiences',
+  tour_guide: 'Experiences',
+  event: 'Experiences',
+  restaurant: 'Meals',
+};
+
+function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['bookings']['items'][number]; members?: readonly TravelIntelligence['bookings']['items'][number][]; elevated?: boolean }) {
+  return (
+    <li className={cx('py-3 text-sm', elevated && 'pl-3 border-l-2 border-accent')} data-testid="hub-booking" data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <span className={cx('text-ink', members && 'font-display text-lg')}>{b.title}</span>
+        <span className="text-xs text-ink-faint">
+          {b.status === 'booked' ? 'Booked' : b.status === 'soft_hold' ? 'Tentative' : b.status === 'not_needed' ? 'Not needed' : 'Need to book'}
+          {b.date ? ` · ${b.date}` : ''}
+          {b.timeLabel ? ` · ${b.timeLabel}` : ''}
+        </span>
+      </div>
+      <p className="text-xs leading-snug text-ink-muted">{b.reason}</p>
+      {members && members.length > 0 ? (
+        <details className="mt-1.5" data-testid="hub-stays-group">
+          <summary className="min-h-9 cursor-pointer py-1 text-xs text-accent underline underline-offset-4">View bases</summary>
+          <ul className="mt-1 divide-y divide-rule">
+            {members.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-xs" data-testid="hub-booking" data-kind={m.kind} data-status={m.status}>
+                <span className="text-ink">{m.title}</span>
+                <span className="text-ink-faint">
+                  {m.status === 'booked' ? 'Booked' : m.status === 'soft_hold' ? 'Tentative' : 'Need to book'}
+                  {m.date ? ` · ${m.date}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {b.officialSourceUrl ? (
+        <a href={b.officialSourceUrl} target="_blank" rel="noreferrer noopener" className="text-xs text-accent underline underline-offset-4">
+          {b.officialSourceName ?? 'Official page'}
+        </a>
+      ) : null}
+    </li>
+  );
+}
+
+export function BookFirstSection({ intel, tripId, booked, itinerary, honored, conflicts, view = 'book-first' }: { intel: TravelIntelligence; tripId?: string; booked: readonly BookedPlanItem[]; itinerary: Itinerary; honored: readonly string[]; conflicts: readonly string[]; view?: 'book-first' | 'bookings' }) {
+  const items = intel.bookings.items;
+  const group = items.find((b) => b.memberIds);
+  const members = group ? items.filter((b) => group.memberIds!.includes(b.id)) : [];
+  const standalone = items.filter((b) => !b.memberIds && !(b.group === 'stays' && group));
+  const open = [...(group && group.status === 'open' ? [group] : []), ...standalone.filter((b) => b.status === 'open')];
+  const done = items.filter((b) => b.status !== 'open' && !b.memberIds && !(b.group === 'stays' && group));
+  const verifyRequirement = (intel as { bookingPriorities?: string[] }).bookingPriorities ?? itinerary.package?.bookingPriorities.filter((line) => /\bif\b/i.test(line)) ?? [];
+
+  if (view === 'bookings') {
+    const groups = ['Transport', 'Stays', 'Experiences', 'Meals'] as const;
+    return (
+      <section className="mt-14" aria-labelledby="bookings" data-testid="hub-bookings">
+        <SectionHeader id="bookings" title="Bookings" blurb="Everything this trip needs arranged, by kind, with what you have already booked. The same list as Book first, in a different order." />
+        <div className="mt-5 grid gap-6 lg:grid-cols-2">
+          {groups.map((name) => {
+            const inGroup = [...(name === 'Stays' && group ? [group] : []), ...standalone.filter((b) => BOOKING_GROUP_OF[b.kind] === name)];
+            if (inGroup.length === 0) return null;
+            return (
+              <div key={name} data-testid={`hub-bookings-group-${name.toLowerCase()}`}>
+                <h3 className="font-display text-lg text-ink">{name}</h3>
+                <ul className="mt-1 divide-y divide-rule">
+                  {inGroup.map((b) => (
+                    <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-8 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="hub-booked">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h3 className="font-display text-lg text-ink">What you have booked</h3>
+            {tripId ? <BookedItemForm tripId={tripId} startDate={itinerary.startDate} endDate={itinerary.endDate} /> : null}
+          </div>
+          <p className="mt-1 text-xs text-ink-muted">A booked fact is stronger than anything the plan proposed. Sidequest schedules around it and never moves it.</p>
+          {booked.length === 0 ? (
+            <p className="mt-3 text-sm text-ink-faint">Nothing yet.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-rule">
+              {booked.map((item) => (tripId ? <BookedItemRow key={item.id} tripId={tripId} item={item} /> : <li key={item.id} className="py-2 text-sm text-ink">{item.title}</li>))}
+            </ul>
+          )}
+          {honored.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-xs text-pine" data-testid="hub-booked-honored">
+              {honored.map((h) => (
+                <li key={h}>✓ {h}</li>
+              ))}
+            </ul>
+          ) : null}
+          {conflicts.length > 0 ? (
+            <ul className="mt-3 space-y-1 rounded-[var(--radius-card)] bg-clay-soft p-3 text-xs text-ink" data-testid="hub-booked-conflicts">
+              {conflicts.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="mt-14" aria-labelledby="book-first" data-testid="hub-book-first">
-      <SectionHeader id="book-first" title="Book first" blurb="What this trip depends on somebody arranging, in the order it matters. Priorities come from dependency, fixed times and lead times, not invented scarcity." />
+      <SectionHeader id="book-first" title="Book first" blurb="What could break this trip if it is not arranged. Priorities come from dependency, fixed times and lead times, not invented scarcity." />
       {BOOKING_PRIORITIES.map((priority) => {
-        const items = open.filter((b) => b.priority === priority);
-        if (items.length === 0) return null;
+        const rows = open.filter((b) => b.priority === priority);
+        if (rows.length === 0) return null;
         return (
           <div key={priority} className="mt-5" data-testid={`hub-bookings-${priority}`}>
-            <h3 className="font-display text-lg text-ink">
-              {BOOKING_PRIORITY_COPY[priority].title} <span className="numeral text-sm text-accent">{items.length}</span>
-            </h3>
-            <p className="text-xs text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
+            {priority === 'book_first' ? (
+              <p className="text-xs text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
+            ) : (
+              <>
+                <h3 className="font-display text-lg text-ink">
+                  {BOOKING_PRIORITY_COPY[priority].title} <span className="numeral text-sm text-accent">{rows.length}</span>
+                </h3>
+                <p className="text-xs text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
+              </>
+            )}
             <ul className="mt-2 divide-y divide-rule">
-              {items.map((b) => (
-                <li key={b.id} className="py-2.5 text-sm" data-testid="hub-booking" data-kind={b.kind}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <span className="text-ink">{b.title}</span>
-                    <span className="text-xs text-ink-faint">
-                      {b.date ?? ''}
-                      {b.timeLabel ? ` · ${b.timeLabel}` : ''}
-                      {b.necessity === 'required' ? ' · required' : b.necessity === 'strongly_recommended' ? ' · recommended' : ''}
-                    </span>
-                  </div>
-                  <p className="text-xs leading-snug text-ink-muted">{b.reason}</p>
-                  {b.officialSourceUrl ? (
-                    <a href={b.officialSourceUrl} target="_blank" rel="noreferrer noopener" className="text-xs text-accent underline underline-offset-4">
-                      {b.officialSourceName ?? 'Official page'}
-                    </a>
-                  ) : null}
-                </li>
+              {rows.map((b) => (
+                <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} elevated={priority === 'book_first'} />
               ))}
             </ul>
           </div>
         );
       })}
       {open.length === 0 ? <p className="mt-4 text-sm text-ink-muted">Nothing left to arrange from what Sidequest can see.</p> : null}
-
-      <div className="mt-8 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="hub-booked">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h3 className="font-display text-lg text-ink">What you have booked</h3>
-          {tripId ? <BookedItemForm tripId={tripId} startDate={itinerary.startDate} endDate={itinerary.endDate} /> : null}
+      {verifyRequirement.length > 0 ? (
+        <div className="mt-6" data-testid="hub-verify-requirement">
+          <h3 className="font-display text-lg text-ink">Verify booking requirement</h3>
+          <p className="text-xs text-ink-muted">The plan is not sure these need booking at all. Check, then book only if they do.</p>
+          <ul className="mt-2 divide-y divide-rule text-sm">
+            {verifyRequirement.map((line) => (
+              <li key={line} className="py-2 text-ink-muted">
+                {line}
+              </li>
+            ))}
+          </ul>
         </div>
-        <p className="mt-1 text-xs text-ink-muted">A booked fact is stronger than anything the plan proposed. Sidequest schedules around it and never moves it.</p>
-        {booked.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-faint">Nothing yet.</p>
-        ) : (
-          <ul className="mt-2 divide-y divide-rule">
-            {booked.map((item) => (tripId ? <BookedItemRow key={item.id} tripId={tripId} item={item} /> : <li key={item.id} className="py-2 text-sm text-ink">{item.title}</li>))}
-          </ul>
-        )}
-        {honored.length > 0 ? (
-          <ul className="mt-3 space-y-1 text-xs text-pine" data-testid="hub-booked-honored">
-            {honored.map((h) => (
-              <li key={h}>✓ {h}</li>
-            ))}
-          </ul>
-        ) : null}
-        {conflicts.length > 0 ? (
-          <ul className="mt-3 space-y-1 rounded-[var(--radius-card)] bg-clay-soft p-3 text-xs text-ink" data-testid="hub-booked-conflicts">
-            {conflicts.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        ) : null}
-        {done.length > 0 ? <p className="mt-3 text-xs text-ink-faint">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
-      </div>
+      ) : null}
+      {done.length > 0 ? <p className="mt-4 text-xs text-ink-faint">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
+      <p className="mt-3 text-xs text-ink-faint">
+        Add what you have booked under <a href="#bookings" className="text-accent underline underline-offset-4">Plan → Bookings</a>; the plan reshapes around it.
+      </p>
     </section>
   );
 }
@@ -378,38 +489,59 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
           <ReadinessProfileForm tripId={tripId} current={readinessProfile} drives={intel.destinationContext.drives} />
         </div>
       ) : null}
-      <div className="mt-5 grid gap-6 lg:grid-cols-2">
-        {READINESS_SECTIONS.map((section) => {
-          const entries = r.entries.filter((e) => READINESS_SECTION_OF[e.kind] === section);
-          if (entries.length === 0) return null;
-          return (
-            <div key={section} data-testid={`hub-readiness-${section}`}>
-              <h3 className="font-display text-lg text-ink">{READINESS_SECTION_LABELS[section]}</h3>
-              <ul className="mt-2 divide-y divide-rule">
-                {entries.map((e) => (
-                  <li key={e.kind} className="py-2.5" data-testid="hub-readiness-entry" data-kind={e.kind} data-state={e.state}>
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="text-sm font-medium text-ink">{e.title}</span>
-                      <Badge tone={STATE_TONE[e.state]}>{STATE_WORD[e.state]}</Badge>
-                    </div>
-                    <p className="mt-0.5 text-xs leading-snug text-ink-muted">{e.summary}</p>
-                    {e.links.length > 0 ? (
-                      <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
-                        {e.links.map((l) => (
-                          <a key={l.url} href={l.url} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">
-                            {l.name}
-                          </a>
-                        ))}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+      {/*
+        PRODUCTION UI V1 — THE PRIMARY LIST IS 3–7 THINGS FOR THIS TRIP.
+        Tiered by the readiness layer: what this traveller on this trip needs
+        (documents, driving, money where the currency differs, the emergency
+        number, insurance abroad, weather) leads; the generic international
+        checklist stays complete behind "More travel checks".
+      */}
+      {(() => {
+        const primary = r.entries.filter((e) => e.state !== 'not_applicable' && (e.tier ?? 'primary') === 'primary');
+        const more = r.entries.filter((e) => !primary.includes(e));
+        const Entry = ({ e }: { e: ReadinessEntry }) => (
+          <li className="rule-top py-3" data-testid="hub-readiness-entry" data-kind={e.kind} data-state={e.state} data-tier={e.tier ?? 'primary'}>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-sm font-medium text-ink">{e.title}</span>
+              <Badge tone={STATE_TONE[e.state]}>{STATE_WORD[e.state]}</Badge>
             </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-xs leading-relaxed text-ink-faint">{r.coverageNote}</p>
+            <p className="mt-0.5 text-xs leading-snug text-ink-muted">{e.action ? <span className="text-ink">{e.action} </span> : null}{e.summary}</p>
+            {e.links.length > 0 ? (
+              <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                {e.links.map((l) => (
+                  <a key={l.url} href={l.url} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">
+                    {l.name}
+                  </a>
+                ))}
+              </p>
+            ) : null}
+          </li>
+        );
+        return (
+          <>
+            <ul className="mt-5 grid gap-x-10 sm:grid-cols-2" data-testid="hub-readiness-primary">
+              {primary.map((e) => (
+                <Entry key={e.kind} e={e} />
+              ))}
+            </ul>
+            {/* The section anchors the browser tests know, kept as invisible groupings of every entry. */}
+            {READINESS_SECTIONS.map((section) => (r.entries.some((e) => READINESS_SECTION_OF[e.kind] === section) ? <span key={section} className="sr-only" data-testid={`hub-readiness-${section}`}>{READINESS_SECTION_LABELS[section]}</span> : null))}
+            {more.length > 0 ? (
+              <details className="mt-4" data-testid="hub-readiness-more">
+                <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted hover:text-ink">More travel checks ({more.length})</summary>
+                <ul className="mt-1 grid gap-x-10 sm:grid-cols-2">
+                  {more.map((e) => (
+                    <Entry key={e.kind} e={e} />
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs leading-relaxed text-ink-faint">{r.coverageNote}</p>
+              </details>
+            ) : (
+              <p className="mt-3 text-xs leading-relaxed text-ink-faint">{r.coverageNote}</p>
+            )}
+          </>
+        );
+      })()}
 
       <h3 className="mt-8 font-display text-lg text-ink">In order</h3>
       <div className="mt-2 grid gap-5 md:grid-cols-2" data-testid="hub-checklist">
@@ -467,6 +599,7 @@ export function PackSection({ intel, tripId, checks }: { intel: TravelIntelligen
   return (
     <section className="mt-14" aria-labelledby="pack" data-testid="hub-pack">
       <SectionHeader id="pack" title="Pack" blurb={p.basisNote} />
+      <div data-testid="packing-list">
       <div className="mt-5 columns-1 gap-6 sm:columns-2 lg:columns-3" data-testid="hub-packing-list">
         {PACKING_CATEGORIES.map((category) => {
           const items = p.items.filter((i) => i.category === category);
@@ -486,6 +619,7 @@ export function PackSection({ intel, tripId, checks }: { intel: TravelIntelligen
         })}
       </div>
       {p.modelSuggestions.length > 0 ? <p className="mt-2 text-xs text-ink-faint">Also suggested for this trip: {p.modelSuggestions.join(', ')}.</p> : null}
+      </div>
     </section>
   );
 }
@@ -598,7 +732,10 @@ export function VerifySection({ intel, manifest }: { intel: TravelIntelligence; 
   const access = intel.access.filter((a) => a.verifyBeforeTravel);
   return (
     <section className="mt-14" aria-labelledby="verify" data-testid="hub-verify">
-      <SectionHeader id="verify" title="Verify" blurb={intel.freshness.note} />
+      <SectionHeader id="verify" title="Trip confidence" blurb="What Sidequest could check, what to look at again nearer the date, and what is still uncertain. The full provenance is behind the last disclosure." />
+      <div className="mt-4">
+        <TripConfidence pkg={intel.verification ? undefined : undefined} intel={intel} compact />
+      </div>
       {manifest && manifest.items.length > 0 ? (
         <>
           <h3 className="mt-5 font-display text-lg text-ink">When to look again</h3>
@@ -648,8 +785,9 @@ export function VerifySection({ intel, manifest }: { intel: TravelIntelligence; 
           </ul>
         </>
       ) : null}
-      <details className="mt-6" data-testid="hub-sources">
+      <details className="mt-6" data-testid="hub-sources" data-print="appendix">
         <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted hover:text-ink">Every fact behind this plan, with its source and how fresh it is ({intel.sourceRegistry.length})</summary>
+        <p className="mt-1 text-xs text-ink-faint">{intel.freshness.note}</p>
         <ul className="mt-2 divide-y divide-rule text-xs">
           {[...material, ...intel.sourceRegistry.filter((c) => !material.includes(c) && c.state !== 'not_applicable')].slice(0, 120).map((c) => (
             <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5" data-testid="hub-claim" data-kind={c.kind} data-authority={c.authority} data-state={c.state}>

@@ -119,6 +119,8 @@ export const UNMEASURED_TRAVEL_REASONS = [
   'operator_unpublished',
   /** LIVE WORLD V1 — the traveller moved, reordered or added a stop; the leg beside it was measured for a different pair and is not re-measured on render. */
   'not_remeasured_after_edit',
+  /** PRODUCT RECOVERY V1 — no configured router covered this pair (or none was configured, or the deadline had passed), and one end had no coordinate to estimate from. Nobody said "no route"; nobody was asked. */
+  'provider_unavailable',
 ] as const;
 export const unmeasuredTravelReasonSchema = z.enum(UNMEASURED_TRAVEL_REASONS);
 export type UnmeasuredTravelReason = z.infer<typeof unmeasuredTravelReasonSchema>;
@@ -194,6 +196,17 @@ export const travelSegmentSchema = z
     viaBases: z.literal(true).optional(),
     /** A traveller-readable transit shape, e.g. "24 min by metro + walk". */
     transitSummary: z.string().min(1).optional(),
+    /**
+     * PRODUCT RECOVERY V1 — what kind of estimate an `estimated` leg is.
+     * `geo` is Sidequest's own figure from resolved coordinates (great-circle
+     * distance × detour factor at a banded speed); `model` is the composing
+     * model's figure. Present only when `provenance` is `estimated`.
+     */
+    estimateKind: z.enum(['geo', 'model']).optional(),
+    /** The honest inputs behind a geo estimate. `approxKm` is a detour-adjusted figure, never a road measurement, and is never copied into `km`. */
+    estimate: z.object({ straightLineKm: z.number().min(0), approxKm: z.number().min(0), kmh: z.number().min(0) }).optional(),
+    /** Set when the model's transport hint was overridden because the geometry made it implausible (a 90 km "walk"). Carries the hinted mode. */
+    modeCorrectedFrom: transportModeSchema.optional(),
   })
   .refine((leg) => (leg.provenance === 'unmeasured') === (leg.minutes === null), {
     message: 'A leg has a duration when and only when somebody measured or published one',
@@ -396,6 +409,16 @@ export const itineraryItemSchema = z
      * is nothing volatile on record, not that conditions were confirmed.
      */
     verifyBeforeTravel: z.string().min(1).optional(),
+    /**
+     * PRODUCT RECOVERY V1 — how precisely this item's clock time may be read.
+     * `fixed` (booked or timetabled), `measured` (a router timed the legs
+     * before it), `estimated` (Sidequest's own estimate sits before it — shown
+     * with ≈), `band` (a leg before it could not be timed or estimated; shown
+     * as a day part such as "Late morning"). On a travel item whose segment is
+     * `unmeasured`, `allowanceMinutes` is the conservative allowance the
+     * schedule holds — the item's duration — and is never a measurement.
+     */
+    timing: z.object({ precision: z.enum(['fixed', 'measured', 'estimated', 'band']), allowanceMinutes: z.number().int().min(0).optional() }).optional(),
   })
   .refine((item) => item.endMinute >= item.startMinute, {
     message: 'An item cannot end before it starts',
@@ -430,8 +453,17 @@ export const dayTotalsSchema = z
     activityMinutes: z.number().int().min(0),
     /** Every minute spent getting somewhere: driving, riding, walking, waiting. */
     travelMinutes: z.number().int().min(0),
-    /** At the wheel. The only part a driving limit applies to. */
+    /** At the wheel. The only part a driving limit applies to. Measured minutes only. */
     driveMinutes: z.number().int().min(0),
+    /**
+     * PRODUCT RECOVERY V1 — minutes the schedule holds for legs Sidequest
+     * estimated from map distance (`provenance: estimated`). Real time the day
+     * spends, kept out of the measured buckets so a driving cap is never
+     * enforced on an estimate and a "measured" total never quietly grows.
+     */
+    estimatedMinutes: z.number().int().min(0).default(0),
+    /** PRODUCT RECOVERY V1 — allowance minutes held for legs nobody could time or estimate; the day shows bands, not clocks, wherever these sit. */
+    allowanceMinutes: z.number().int().min(0).default(0),
     transitMinutes: z.number().int().min(0),
     /** On foot to reach something, not on foot as the activity itself. */
     walkMinutes: z.number().int().min(0),
@@ -478,7 +510,9 @@ export const dayTotalsSchema = z
         totals.transitMinutes +
         totals.walkMinutes +
         totals.waitMinutes +
-        totals.unverifiedMinutes,
+        totals.unverifiedMinutes +
+        totals.estimatedMinutes +
+        totals.allowanceMinutes,
     {
       message: 'Total transport time must be the sum of its parts',
       path: ['travelMinutes'],
@@ -646,6 +680,8 @@ export const itineraryDaySchema = z.object({
   food: dayFoodSummarySchema,
   intensity: z.enum(['light', 'moderate', 'intense']),
   warnings: z.array(z.string().min(1)).default([]),
+  /** PRODUCT RECOVERY V1 — the day is only as precise as its least precise leg; `band` days are rendered in day parts. */
+  timing: z.object({ precision: z.enum(['measured', 'estimated', 'band']), estimatedLegs: z.number().int().min(0), unknownLegs: z.number().int().min(0) }).optional(),
 });
 export type ItineraryDay = z.infer<typeof itineraryDaySchema>;
 
@@ -1117,6 +1153,8 @@ export const ANCHOR_DISPOSITIONS = [
   'rejected_contradiction',
   'rejected_hard_constraint',
   'unscheduled_capacity',
+  /** PRODUCT RECOVERY V1 — a meal the model wrote as an anchor ("Killarney town pub dinner") became the day's meal intent instead of an attraction. Kept content, never a loss. */
+  'folded_into_meal',
 ] as const;
 export const anchorDispositionSchema = z.enum(ANCHOR_DISPOSITIONS);
 export type AnchorDispositionCode = z.infer<typeof anchorDispositionSchema>;
@@ -1136,7 +1174,20 @@ export const packageBaseSchema = z.object({
   placeId: z.string().min(1).optional(),
   /** Set when Sidequest inserted this base itself (a corridor waypoint), never by the draft. */
   insertedBySidequest: z.boolean().optional(),
+  /**
+   * PRODUCT RECOVERY V1 — an overnight base is a place to sleep, named for the
+   * traveller. `name` above is the display name (the town, or the lodge the
+   * draft meant); `canonicalName` is what the geocoder or provider called the
+   * matched record; `baseKind` says what kind of place the traveller sleeps
+   * in; `coordinates` let the map and the weather stand without a provider.
+   */
+  displayName: z.string().min(1).optional(),
+  canonicalName: z.string().min(1).optional(),
+  locality: z.string().min(1).optional(),
+  baseKind: z.enum(['locality', 'neighbourhood', 'lodging_property', 'lodge', 'camp', 'remote_base', 'other']).optional(),
+  coordinates: z.object({ lat: z.number(), lng: z.number() }).optional(),
 });
+export type BaseKind = NonNullable<z.infer<typeof packageBaseSchema>['baseKind']>;
 
 export const packageAnchorSchema = z.object({
   id: z.string().min(1),
@@ -1148,6 +1199,15 @@ export const packageAnchorSchema = z.object({
   category: z.string().min(1),
   disposition: anchorDispositionSchema,
   verification: verificationStateSchema,
+  /**
+   * PRODUCT RECOVERY V1 — what kind of thing the model wrote. Only a
+   * `named_place` needs identity verification; an `area_experience` or
+   * `route_experience` is geocoded for the map at low priority; a
+   * `generic_experience` ("a traditional pub with live music") is never looked
+   * up and is never presented as "not verified"; a `meal` is folded into the
+   * day's meal intent.
+   */
+  anchorKind: z.enum(['named_place', 'area_experience', 'route_experience', 'generic_experience', 'meal', 'flex']).optional(),
   placeId: z.string().min(1).optional(),
   note: z.string().min(1).optional(),
   /**
@@ -1185,7 +1245,17 @@ export const tripPackageSchema = z.object({
   transport: z.object({ summary: z.string().min(1), notes: z.array(z.string().min(1)).default([]) }),
   beforeYouGo: z.array(z.string().min(1)).default([]),
   packing: z.array(z.string().min(1)).default([]),
-  backups: z.array(z.object({ trigger: z.string().min(1), alternative: z.string().min(1) })).default([]),
+  backups: z
+    .array(
+      z.object({
+        trigger: z.string().min(1),
+        alternative: z.string().min(1),
+        /** PRODUCT RECOVERY V1 — the days this backup belongs to, and how Sidequest decided that: the model named the day, or deterministic name matching against the day's own places, base and theme. A backup with no match is attached to no day. */
+        dayNumbers: z.array(z.number().int().min(1)).optional(),
+        match: z.enum(['authored', 'geographic', 'none']).optional(),
+      }),
+    )
+    .default([]),
   omissions: z.array(z.object({ name: z.string().min(1), reason: z.string().min(1) })).default([]),
   unresolved: z.array(z.string().min(1)).default([]),
   anchors: z.array(packageAnchorSchema),
@@ -1198,6 +1268,8 @@ export const tripPackageSchema = z.object({
     rejected: z.number().int().min(0),
     legsMeasured: z.number().int().min(0),
     legsUnmeasured: z.number().int().min(0),
+    /** PRODUCT RECOVERY V1 — of the unmeasured legs, how many carry a Sidequest map-distance estimate (the rest are allowances shown as bands). */
+    legsEstimated: z.number().int().min(0).optional(),
     /** True when the bounded verification deadline fired and later lookups were skipped. */
     deadlineReached: z.boolean(),
     providerNotes: z.array(z.string().min(1)).default([]),

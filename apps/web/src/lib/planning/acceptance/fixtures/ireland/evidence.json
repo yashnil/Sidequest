@@ -1,0 +1,95 @@
+{
+  "note": "Hand-recorded geocoder shapes for the real Ireland founder trip (77b3aa4f, 2026-09-05). Coordinates are real-world positions rounded to 4 dp; entityType follows classifyNominatim(). The doubled-locality queries (\"Dublin, Dublin\", \"Dingle, Dingle\") return the landmark Nominatim actually surfaced live, which is how Trinity College Dublin and Dingle Distillery became overnight bases. No routing evidence is recorded: local Valhalla holds Iceland only, so every Irish leg was unmeasured.",
+  "centre": [52.8652, -7.9795],
+  "geocodes": {
+    "dublin, dublin": [
+      { "sourceId": "way/311466843", "name": "Trinity College Dublin", "lat": 53.3438, "lng": -6.2546, "countryCode": "ie", "entityType": "unknown", "importance": 0.62 }
+    ],
+    "dublin": [
+      { "sourceId": "relation/1109531", "name": "Dublin", "lat": 53.3498, "lng": -6.2603, "countryCode": "ie", "entityType": "city", "importance": 0.87 },
+      { "sourceId": "way/311466843", "name": "Trinity College Dublin", "lat": 53.3438, "lng": -6.2546, "countryCode": "ie", "entityType": "unknown", "importance": 0.62 }
+    ],
+    "kilkenny, kilkenny": [
+      { "sourceId": "relation/5361973", "name": "Kilkenny", "lat": 52.6541, "lng": -7.2448, "countryCode": "ie", "entityType": "city", "importance": 0.71 }
+    ],
+    "kilkenny": [
+      { "sourceId": "relation/5361973", "name": "Kilkenny", "lat": 52.6541, "lng": -7.2448, "countryCode": "ie", "entityType": "city", "importance": 0.71 }
+    ],
+    "kinsale, kinsale": [
+      { "sourceId": "relation/6921888", "name": "Kinsale Urban", "lat": 51.7058, "lng": -8.5222, "countryCode": "ie", "entityType": "city", "importance": 0.55 }
+    ],
+    "kinsale": [
+      { "sourceId": "relation/6921888", "name": "Kinsale Urban", "lat": 51.7058, "lng": -8.5222, "countryCode": "ie", "entityType": "city", "importance": 0.55 },
+      { "sourceId": "node/26915183", "name": "Kinsale", "lat": 51.7064, "lng": -8.5231, "countryCode": "ie", "entityType": "city", "importance": 0.61 }
+    ],
+    "killarney, killarney": [
+      { "sourceId": "relation/14579951", "name": "Killarney", "lat": 52.0599, "lng": -9.5044, "countryCode": "ie", "entityType": "city", "importance": 0.66 }
+    ],
+    "killarney": [
+      { "sourceId": "relation/14579951", "name": "Killarney", "lat": 52.0599, "lng": -9.5044, "countryCode": "ie", "entityType": "city", "importance": 0.66 }
+    ],
+    "dingle, dingle": [
+      { "sourceId": "way/275276711", "name": "Dingle Distillery", "lat": 52.1385, "lng": -10.2837, "countryCode": "ie", "entityType": "unknown", "importance": 0.41 }
+    ],
+    "dingle": [
+      { "sourceId": "node/26845702", "name": "Dingle", "lat": 52.1409, "lng": -10.2640, "countryCode": "ie", "entityType": "city", "importance": 0.58 },
+      { "sourceId": "way/275276711", "name": "Dingle Distillery", "lat": 52.1385, "lng": -10.2837, "countryCode": "ie", "entityType": "unknown", "importance": 0.41 }
+    ],
+    "galway, galway": [
+      { "sourceId": "relation/1390623", "name": "Galway", "lat": 53.2707, "lng": -9.0568, "countryCode": "ie", "entityType": "city", "importance": 0.79 }
+    ],
+    "galway": [
+      { "sourceId": "relation/1390623", "name": "Galway", "lat": 53.2707, "lng": -9.0568, "countryCode": "ie", "entityType": "city", "importance": 0.79 }
+    ],
+    "trinity college and the book of kells": [
+      { "sourceId": "way/311466843", "name": "Trinity College Dublin", "lat": 53.3438, "lng": -6.2546, "countryCode": "ie", "entityType": "unknown", "importance": 0.62 }
+    ],
+    "kilkenny castle": [
+      { "sourceId": "way/27784372", "name": "Kilkenny Castle", "lat": 52.6502, "lng": -7.2494, "countryCode": "ie", "entityType": "unknown", "importance": 0.52 }
+    ],
+    "rock of cashel": [
+      { "sourceId": "way/40583612", "name": "Rock of Cashel", "lat": 52.5200, "lng": -7.8906, "countryCode": "ie", "entityType": "unknown", "importance": 0.55 }
+    ],
+    "english market": [
+      { "sourceId": "way/56042319", "name": "The English Market", "lat": 51.8979, "lng": -8.4748, "countryCode": "ie", "entityType": "unknown", "importance": 0.44 }
+    ],
+    "charles fort and harbour walk": [
+      { "sourceId": "way/46351220", "name": "Charles Fort", "lat": 51.6975, "lng": -8.4998, "countryCode": "ie", "entityType": "unknown", "importance": 0.46 }
+    ],
+    "killarney national park and muckross house": [
+      { "sourceId": "way/30871144", "name": "Muckross House", "lat": 52.0184, "lng": -9.4977, "countryCode": "ie", "entityType": "unknown", "importance": 0.47 }
+    ],
+    "ladies view and moll's gap": [
+      { "sourceId": "node/1508183211", "name": "Ladies View", "lat": 51.9556, "lng": -9.6103, "countryCode": "ie", "entityType": "unknown", "importance": 0.35 }
+    ],
+    "skellig ring and portmagee": [
+      { "sourceId": "node/26845931", "name": "Portmagee", "lat": 51.8858, "lng": -10.3626, "countryCode": "ie", "entityType": "neighbourhood", "importance": 0.38 }
+    ],
+    "kerry cliffs": [
+      { "sourceId": "node/2915522104", "name": "Kerry Cliffs", "lat": 51.8600, "lng": -10.3660, "countryCode": "ie", "entityType": "unknown", "importance": 0.33 }
+    ],
+    "slea head drive": [
+      { "sourceId": "node/4189811907", "name": "Slea Head", "lat": 52.0975, "lng": -10.4472, "countryCode": "ie", "entityType": "unknown", "importance": 0.36 }
+    ],
+    "dunquin pier and blasket islands view": [
+      { "sourceId": "way/159082611", "name": "Dunquin Pier", "lat": 52.1230, "lng": -10.4590, "countryCode": "ie", "entityType": "unknown", "importance": 0.31 }
+    ],
+    "cliffs of moher": [
+      { "sourceId": "relation/2128101", "name": "Cliffs of Moher", "lat": 52.9715, "lng": -9.4309, "countryCode": "ie", "entityType": "protected_area", "importance": 0.64 }
+    ],
+    "the burren": [
+      { "sourceId": "relation/7009291", "name": "The Burren", "lat": 53.0300, "lng": -9.1000, "countryCode": "ie", "entityType": "protected_area", "importance": 0.49 }
+    ],
+    "kylemore abbey": [
+      { "sourceId": "way/93412411", "name": "Kylemore Abbey", "lat": 53.5614, "lng": -9.8894, "countryCode": "ie", "entityType": "unknown", "importance": 0.51 }
+    ],
+    "sky road, clifden": [
+      { "sourceId": "way/23847109", "name": "Sky Road", "lat": 53.4930, "lng": -10.0600, "countryCode": "ie", "entityType": "unknown", "importance": 0.30 }
+    ],
+    "clonmacnoise monastic site": [
+      { "sourceId": "way/141298450", "name": "Clonmacnoise", "lat": 53.3260, "lng": -7.9861, "countryCode": "ie", "entityType": "unknown", "importance": 0.48 }
+    ]
+  },
+  "confirmations": [],
+  "nearbyLocalities": []
+}

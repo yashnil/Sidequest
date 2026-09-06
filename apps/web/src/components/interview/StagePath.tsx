@@ -24,7 +24,7 @@ const RHYTHM_IDS = new Set(['day_shape', 'day_start', 'effort', 'iconic_crowds',
 export function stageOf(questionId: string | null): Stage {
   if (questionId === null) return 'basics';
   if (questionId === 'review') return 'ready';
-  if (questionId === 'priorities' || questionId.startsWith('priority_role:')) return 'love';
+  if (questionId === 'priorities' || questionId === 'priority_roles' || questionId.startsWith('priority_role:')) return 'love';
   if (RHYTHM_IDS.has(questionId)) return 'rhythm';
   return 'logistics';
 }

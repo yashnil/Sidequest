@@ -44,7 +44,7 @@ import type { TripDraft } from './trip-draft';
 import { defaultProfileFor } from './default-profile';
 import { listBookedItems } from '@/lib/db/intelligence-repository';
 import { compactBookedFacts } from '@/lib/intelligence/booked-facts';
-import { applyBookedFacts } from '@/lib/intelligence/booked-reconcile';
+import { applyBookedFacts, bookedLeaveByMinute } from '@/lib/intelligence/booked-reconcile';
 import { policyConfirmRoute } from './route-selection';
 import { operationalEvidenceSeam, persistedIdentitiesFor, placesIdentitySeam } from './place-identity';
 import { ProviderBudget, ceilingsFor } from '../providers/cost-budget';
@@ -358,10 +358,35 @@ export async function generateSidequestPlanForTrip(
     ...(identitySeams.operationalEvidence ? { operationalEvidence: timed('operationalMs', identitySeams.operationalEvidence) } : {}),
   };
   const timedGeocoder = geocoder ? timed('placeResolutionMs', geocoder) : undefined;
+  // PRODUCT RECOVERY V1 — the corridor settlement search used to be untimed; the live Ireland build spent most of a minute in it invisibly.
+  const timedNearby = nearby ? timed('placeResolutionMs', nearby) : undefined;
+  /*
+   * PRODUCT RECOVERY V1 — route-aware weather: once the bases have positions,
+   * one climate/forecast point per base (bounded) replaces the destination
+   * centroid for the days at that base. Bounded by the deadline and by the
+   * weather provider's own cache; a failure leaves the centroid dataset.
+   */
+  const weatherForBases: ReconcileContext['weatherForBases'] = async (locations) => {
+    if (deadlineReached() || locations.length === 0) return null;
+    const regionId = region?.region.id ?? `draft-region:${trip.id}`;
+    const centre = envelope.center ?? { lat: 0, lng: 0 };
+    const bounded = locations.slice(0, 8).map((l) => ({ id: `${regionId}:base:${l.id}`, label: l.label, coordinates: l.coordinates, elevationMetres: 0, timeZone: envelope.timeZone ?? 'UTC', placeIds: [l.id], limitation: 'One point for this base and the days around it.' }));
+    const all: WeatherLocation[] = [...bounded, { ...regionlessWeatherLocation(regionId, { ...envelope, center: centre }) }];
+    const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
+    const scopeKey = weatherScopeKey({ regionId, dates, locations: all });
+    try {
+      await ensureWeatherForPlanning({ tripId, regionId, locations: all, dates, scopeKey }, now);
+      const availability = weatherAvailability(getWeatherSnapshot(tripId, scopeKey), now);
+      return availability.kind === 'present' ? availability.snapshot.dataset : null;
+    } catch {
+      return null;
+    }
+  };
   const routeMatrixFor = (m: 'car' | 'foot' | 'transit') => (routing ? timed('routingMs', (points: Parameters<typeof productionRouteMatrix>[2]) => productionRouteMatrix(routing, m, points)) : undefined);
   const confirmRouteFor = (m: 'car' | 'foot' | 'transit') =>
     routing ? timed('routingMs', (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => policyConfirmRoute({ routing, mode: m, from, to, departAt: new Date(`${trip.basics.startDate}T09:00:00Z`), now })) : undefined;
 
+  const leaveBy = bookedLeaveByMinute(booked, trip.basics.endDate);
   const reconcileContext: ReconcileContext = region
     ? {
         tripId,
@@ -383,14 +408,22 @@ export async function generateSidequestPlanForTrip(
         ...(timedGeocoder ? { geocodeLocality: timedGeocoder } : {}),
         ...(routing ? { routeMatrix: routeMatrixFor(region.matrix.mode)! } : {}),
         ...(routing ? { confirmRoute: confirmRouteFor(region.matrix.mode)! } : {}),
-        ...(nearby ? { findNearbyLocalities: nearby } : {}),
+        ...(timedNearby ? { findNearbyLocalities: timedNearby } : {}),
+        weatherForBases,
         destinationScope: productionDestinationScope(region.compiled),
         subregionGeometries: productionSubregionGeometries(region.compiled),
         deadlineReached,
         mustIncludeNames,
         ...timedSeams,
+        ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
       }
-    : { ...contextWithoutRegion({ trip, profile, candidate, envelope, now, deadlineReached, mustIncludeNames, geocoder: timedGeocoder, nearby, routing, weather: (await regionlessWeather) ?? undefined }), ...timedSeams };
+    : {
+        ...contextWithoutRegion({ trip, profile, candidate, envelope, now, deadlineReached, mustIncludeNames, geocoder: timedGeocoder, nearby: timedNearby, routing, weather: (await regionlessWeather) ?? undefined }),
+        ...(routing ? { routeMatrix: routeMatrixFor(profile.transport.willDrive ? 'car' : 'foot')!, confirmRoute: confirmRouteFor(profile.transport.willDrive ? 'car' : 'foot')! } : {}),
+        weatherForBases,
+        ...timedSeams,
+        ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
+      };
 
   const reconciledRaw = await reconcileTripDraft({ draft, context: reconcileContext });
   /*
