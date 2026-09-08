@@ -158,16 +158,7 @@ test('the shared copy carries the hub read-only: no forms, every section', async
 });
 
 test('optimise my existing plan: the traveller’s places are checked and the plan is critiqued, not replaced', async ({ page }) => {
-  await page.goto('/trips/new?have=plan');
-  const field = page.getByLabel('Destination');
-  await waitUntilInteractive(field);
-  await field.fill('Mammoth Lakes');
-  await page.getByLabel('Which places does your plan already have?').fill('Convict Lake\nMinaret Vista\nNowhere Special');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
-  const id = /\/trips\/([^/]+)\//.exec(page.url())![1]!;
+  const id = await createTrip(page, 'Mammoth Lakes', AUGUST, { havePlan: true, mustDo: 'Convict Lake\nMinaret Vista\nNowhere Special' });
   if (/\/plan/.test(page.url())) await waitForLookup(page);
   await page.goto(`/trips/${id}/questionnaire`);
   const defaults = page.getByTestId('interview-smart-defaults');

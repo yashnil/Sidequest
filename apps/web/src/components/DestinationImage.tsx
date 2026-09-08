@@ -187,10 +187,24 @@ export function DestinationImage({
   showLabel = false,
   category,
   credit = 'below',
-}: DestinationImageProps) {
+  livePhoto = null,
+}: DestinationImageProps & {
+  /**
+   * MVP V3 — a request-time photograph, used only when there is no durable one.
+   *
+   * `href` points at this origin (`/api/place-photo`), which resolves and
+   * streams the picture server-side; nothing about it is stored, and the
+   * credential never reaches the browser. See that route for the terms this
+   * shape exists to satisfy. A failure is a missing picture and the designed
+   * graphic underneath is what the frame shows.
+   */
+  livePhoto?: { href: string; credit: string } | null;
+}) {
   /** The one file this frame has already watched fail. See the note at the top. */
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [liveFailed, setLiveFailed] = useState(false);
   const loadable = image !== null && image.thumbnailUrl !== failedUrl;
+  const live = !image && livePhoto && !liveFailed ? livePhoto : null;
 
   return (
     <figure className={cx('m-0', className)}>
@@ -213,10 +227,27 @@ export function DestinationImage({
         */}
         <FallbackGraphic
           fallback={fallback}
-          showLabel={showLabel && !image}
-          decorative={image !== null}
+          showLabel={showLabel && !image && !live}
+          decorative={image !== null || live !== null}
           {...(category ? { category } : {})}
         />
+        {live ? (
+          /*
+            A plain `img`, deliberately. The bytes are streamed by this app's own
+            route at request time and there is no durable URL for an image
+            optimizer to work from — and putting one in front of it would be the
+            caching the terms forbid.
+          */
+          <img
+            src={live.href}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setLiveFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover"
+            data-testid="live-place-photo"
+          />
+        ) : null}
         {image && loadable ? (
           <img
             src={image.thumbnailUrl}

@@ -42,10 +42,25 @@ describe('fixture placeholder language stays out of production composition', () 
     expect(source).toMatch(/const fixture = isFixtureComposer\(\)/);
   });
 
-  it('the fixture badge is gated on a non-production build and the fixture switch, on both pages', () => {
+  /*
+   * MVP V3 — the badge follows the SWITCH, not the build.
+   *
+   * It used to be gated on `NODE_ENV !== 'production'` as well, and that hid it
+   * in the one place it was most needed: a production build running the fixture
+   * composer, which is exactly how the screenshot walks and the browser suite
+   * run. A screenshot walk against such a build then drove the real Build button
+   * and bought an Anthropic completion nobody had authorised, with no sign
+   * anywhere on the page that fixtures were in play.
+   *
+   * A production *deployment* with `SIDEQUEST_COMPOSER_PROVIDER=fixture` is a
+   * misconfiguration, and a badge saying so is the correct response to it — far
+   * better than serving fixture itineraries silently.
+   */
+  it('the fixture badge follows the fixture switch alone, on both pages', () => {
     for (const page of ['../../app/(product)/trips/[id]/questionnaire/page.tsx', '../../app/(product)/trips/[id]/itinerary/page.tsx']) {
       const source = readFileSync(new URL(page, import.meta.url), 'utf8');
-      expect(source, page).toMatch(/process\.env\.NODE_ENV !== 'production' && isFixtureComposer\(\)/);
+      expect(source, page).toMatch(/fixtureMode=\{isFixtureComposer\(\)\}|isFixtureComposer\(\)/);
+      expect(source, `${page} must not hide the fixture badge on a production build`).not.toMatch(/NODE_ENV !== 'production' && isFixtureComposer/);
     }
   });
 });

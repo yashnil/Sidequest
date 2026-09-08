@@ -216,6 +216,13 @@ export const ACTION_RATE_RULES = {
   destination_resolve: { capacity: 6, refillPerMinute: 3 },
   /** One climate call plus local reads; recomputed on trip-length changes. */
   preflight: { capacity: 8, refillPerMinute: 4 },
+  /**
+   * "Tell me when this place is at its best": at most one climate lookup, and
+   * usually none — normals are cached for a month, so a traveller comparing
+   * windows pays for the first press and nothing after it. Sized for somebody
+   * changing their mind about months, not for a loop.
+   */
+  timing_recommendation: { capacity: 10, refillPerMinute: 5 },
   /** One billed model call that reads the traveller's own free text. */
   interpret_text: { capacity: 4, refillPerMinute: 2 },
   /**

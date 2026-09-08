@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { bookedPlanItemInputSchema, travelReadinessProfileSchema, type Itinerary } from '@sidequest/core';
+import { bookedPlanItemInputSchema, formatCount, rankVenues, travelReadinessProfileSchema, type Itinerary, type VenueFit } from '@sidequest/core';
 import { addBookedItem, clearReadinessProfile, removeBookedItem, saveReadinessProfile, setCheck, updateBookedItem } from '@/lib/db/intelligence-repository';
 import {
   easeDay,
@@ -21,6 +21,7 @@ import {
   clearItineraryLock,
   ensureShareToken,
   getItinerary,
+  getProfile,
   getTrip,
   saveItinerary,
   setItineraryLock,
@@ -418,17 +419,58 @@ export interface DiscoveryActionResult {
   provider?: string | null;
   attribution?: string;
   reason?: string;
-  items?: { name: string; distanceKm: number; priceLevel?: string; rating?: number; ratingCount?: number; mapsUri?: string; website?: string; address?: string }[];
+  items?: { name: string; distanceKm: number; priceLevel?: string; rating?: number; ratingCount?: number; reviewCountLabel?: string; mapsUri?: string; website?: string; address?: string; why?: string; caution?: string }[];
 }
 
-function forDisplay(result: Awaited<ReturnType<typeof discoverStaysNear>>): DiscoveryActionResult {
+/**
+ * MVP V3, Stages 34 and 35 — the traveller's own fit decides the order.
+ *
+ * A places provider hands back what it thinks is most relevant, which in
+ * practice is most-reviewed, which in practice is the place every visitor
+ * already goes to. `rankVenues` reorders on proximity, price fit, character and
+ * the rating *as one signal*, and returns the clause that explains each
+ * position. A strict dietary need never reorders anything — it attaches a
+ * caution, because no ranking makes a kitchen safe.
+ */
+function forDisplay(result: Awaited<ReturnType<typeof discoverStaysNear>>, fit: VenueFit): DiscoveryActionResult {
+  const ranked = rankVenues(result.items, fit);
   return {
     ok: true,
     available: result.available,
     provider: result.provider,
     ...(result.attribution ? { attribution: result.attribution } : {}),
     ...(result.reason ? { reason: result.reason } : {}),
-    items: result.items.map((p) => ({ name: p.name, distanceKm: p.distanceKm, ...(p.priceLevel ? { priceLevel: p.priceLevel } : {}), ...(p.rating !== undefined ? { rating: p.rating } : {}), ...(p.ratingCount !== undefined ? { ratingCount: p.ratingCount } : {}), ...(p.mapsUri ? { mapsUri: p.mapsUri } : {}), ...(p.website ? { website: p.website } : {}), ...(p.address ? { address: p.address } : {}) })),
+    items: ranked.map(({ venue: p, why, caution }) => ({
+      name: p.name,
+      distanceKm: p.distanceKm,
+      ...(p.priceLevel ? { priceLevel: p.priceLevel } : {}),
+      ...(p.rating !== undefined ? { rating: p.rating } : {}),
+      ...(p.ratingCount !== undefined ? { ratingCount: p.ratingCount, reviewCountLabel: formatCount(p.ratingCount) } : {}),
+      ...(p.mapsUri ? { mapsUri: p.mapsUri } : {}),
+      ...(p.website ? { website: p.website } : {}),
+      ...(p.address ? { address: p.address } : {}),
+      why,
+      ...(caution ? { caution } : {}),
+    })),
+  };
+}
+
+/**
+ * What the traveller said, turned into the fit the ranker reads.
+ *
+ * Read from the stored profile when there is one; a trip without a profile gets
+ * neutral middle values rather than an invented preference.
+ */
+function venueFitFor(tripId: string): VenueFit {
+  const profile = getProfile(tripId);
+  if (!profile) return { priceBand: 'moderate', reachKm: 1.5, foodStyle: 'balanced' };
+  const walkMinutes = profile.transport.maxAccessWalkMinutes ?? 25;
+  return {
+    priceBand: profile.food.everydayPriceBand,
+    // 5 km/h on foot, and never less than a few streets.
+    reachKm: Math.max(0.5, Math.round((walkMinutes / 60) * 5 * 10) / 10),
+    foodStyle: profile.food.style,
+    ...(profile.food.dietaryStrict && (profile.food.dietaryNeeds.length > 0 || profile.food.dietaryNotes) ? { strictDietary: true } : {}),
   };
 }
 
@@ -437,12 +479,12 @@ export async function discoverStaysAction(tripId: string, near: { lat: number; l
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
   if (!Number.isFinite(near?.lat) || !Number.isFinite(near?.lng)) return { ok: false, error: 'That base has no verified position to search around.' };
-  return forDisplay(await discoverStaysNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }));
+  return forDisplay(await discoverStaysNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }), venueFitFor(tripId));
 }
 
 export async function discoverFoodAction(tripId: string, near: { lat: number; lng: number }, query?: string): Promise<DiscoveryActionResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
   if (!Number.isFinite(near?.lat) || !Number.isFinite(near?.lng)) return { ok: false, error: 'That stop has no verified position to search around.' };
-  return forDisplay(await discoverFoodNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }));
+  return forDisplay(await discoverFoodNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }), venueFitFor(tripId));
 }

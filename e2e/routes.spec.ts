@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire } from './support/trip';
+import { completeQuestionnaire, createTrip } from './support/trip';
 
 /**
  * WHAT EACH ROUTE CALLS ITSELF, AND WHAT THE FRONT DOOR SAYS ABOUT YOUR TRIPS.
@@ -26,11 +26,7 @@ const DESTINATION = 'Mammoth Lakes';
 
 /** A trip at the questionnaire, which is as far as most of these need. */
 async function startTrip(page: Page): Promise<string> {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill(DESTINATION);
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, DESTINATION, { start: AUGUST.start, end: AUGUST.end });
   await expect(page.getByTestId('interview')).toBeVisible();
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();

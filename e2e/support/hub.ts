@@ -22,3 +22,35 @@ export async function openHubView(page: Page, view: HubView): Promise<void> {
   await tab.click();
   await expect(page.locator(`#hub-view-${view}`)).toBeVisible({ timeout: 10_000 });
 }
+
+/**
+ * Follow one of the trip band's actions, opening the overflow menu when the
+ * viewport is too narrow to show it.
+ *
+ * The band shows its actions inline from the `sm` breakpoint and folds them
+ * into "More" below it, so a phone-width test that clicks the action directly
+ * waits sixty seconds for a control that is deliberately not there.
+ */
+export async function bandAction(page: Page, name: string | RegExp) {
+  const direct = page.getByRole('link', { name }).or(page.getByRole('button', { name })).first();
+  /*
+   * Give the control a moment to appear before deciding it is hidden.
+   *
+   * A bare `isVisible()` samples once, so calling this straight after a
+   * navigation asks whether a control is visible on a page that has not
+   * painted yet — the answer is "no", and the fallback then hunts for an
+   * overflow menu on a screen that has none.
+   */
+  await direct.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
+  if (await direct.isVisible().catch(() => false)) return direct;
+  /*
+   * "More" is a <summary>, which carries no button role — matching it by role
+   * waits for a control that does not exist. Its text is unique in the band.
+   */
+  await page.getByText('More', { exact: true }).first().click();
+  return direct;
+}
+
+export async function useBandAction(page: Page, name: string | RegExp): Promise<void> {
+  await (await bandAction(page, name)).click();
+}

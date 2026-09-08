@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "vendor:maplibre": "node scripts/vendor-maplibre.mjs",
+    "predev": "npm run vendor:maplibre",
     "dev": "next dev",
+    "prebuild": "npm run vendor:maplibre",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"

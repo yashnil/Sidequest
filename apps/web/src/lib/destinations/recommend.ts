@@ -302,7 +302,7 @@ export async function recommendDestinations(input: RecommendInput): Promise<Dest
     }),
   );
   if (!isClimateEnabled()) {
-    blindSpots.push('Climate records are switched off in this build, so nothing below is scored on the weather.');
+    blindSpots.push('Sidequest has no climate records to compare, so nothing below is scored on the weather.');
   }
 
   // ---- Stage 1: free, local ------------------------------------------------

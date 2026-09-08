@@ -190,3 +190,17 @@ export function missingProviderSwitches(): string[] {
 export function isFixtureComposer(): boolean {
   return process.env.SIDEQUEST_COMPOSER_PROVIDER?.trim().toLowerCase() === 'fixture';
 }
+
+/**
+ * MVP V3 — request-time photographs from Google Places.
+ *
+ * Off unless somebody turned it on, because every photograph a traveller sees
+ * costs two Places requests and the plan reads perfectly well without one. The
+ * durable, open-licensed imagery (Wikimedia) is unaffected and always on.
+ *
+ * Needs both the switch and a credential: a switch with no key is a
+ * misconfiguration that would otherwise present as "the photos never load".
+ */
+export function arePlacePhotosEnabled(): boolean {
+  return process.env.SIDEQUEST_PLACE_PHOTOS?.trim().toLowerCase() === 'google' && Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim());
+}

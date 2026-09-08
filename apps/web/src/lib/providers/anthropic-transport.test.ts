@@ -393,7 +393,17 @@ describe('what the streamed answer is still held to', () => {
     expect(model.callLog[0]?.requestId).toBe('req_test');
   });
 
-  it('leaves schemaValidationIssues null for a truncated answer — it never reached safeParse', async () => {
+  /*
+   * MVP V3 — a truncated answer is salvaged, then judged.
+   *
+   * This used to assert that truncation never reached `safeParse`, because the
+   * extractor refused it outright. It now reaches validation: the salvage pass
+   * (`json-repair.ts`) discards the tail the model never finished and hands over
+   * what it did write, so the failure is reported as the *field that is missing*
+   * rather than as "nothing usable". That is a strictly better diagnosis, and it
+   * is what recovers a long draft whose last day was cut off.
+   */
+  it('salvages a truncated answer and reports the field the answer never reached', async () => {
     finalMessage.mockResolvedValue(streamed('{"note":"trunca', 'max_tokens'));
 
     const model = new ResearchModel({ maxCalls: 5, maxRetries: 0 });
@@ -401,7 +411,10 @@ describe('what the streamed answer is still held to', () => {
       .structured({ promptVersion: 'test/1', instruction: 'test', task: 'test', schema, maxTokens: 64_000 })
       .catch(() => undefined);
 
-    expect(model.callLog[0]?.schemaValidationIssues).toBeNull();
+    const issues = model.callLog[0]?.schemaValidationIssues;
+    expect(issues).not.toBeNull();
+    expect(issues![0]).toMatchObject({ path: 'note' });
+    expect(model.callLog[0]?.normalizedFields).toContain('json (unterminated_string)');
   });
 
   it('leaves schemaValidationIssues null for a clean completion', async () => {
@@ -536,6 +549,86 @@ describe('the application-owned deadline', () => {
       timeoutMs,
     });
   }
+
+  /**
+   * A stream that writes some of its answer, then never finishes.
+   *
+   * The live shape this exists for: two Kyrgyzstan runs on 2026-09-08 reached
+   * the hundred-second deadline with 1,285 and 8,534 bytes of good JSON
+   * already written, and both were discarded for a failure screen.
+   */
+  function partialStream(chunks: readonly string[]) {
+    let capturedSignal: AbortSignal | undefined;
+    let rejectFinal!: (error: unknown) => void;
+    const finalPromise = new Promise<never>((_, reject) => {
+      rejectFinal = reject;
+    });
+    /*
+     * The salvage path resolves rather than rethrows, so nothing downstream
+     * consumes this rejection. Attached here so a passing test does not also
+     * report an unhandled rejection; the model has already seen it by then.
+     */
+    finalPromise.catch(() => undefined);
+    stream.mockImplementationOnce((_params, options) => {
+      capturedSignal = options?.signal;
+      capturedSignal?.addEventListener('abort', () => rejectFinal(new FakeAPIUserAbortError('Request was aborted.')));
+      return {
+        on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+          if (event === 'text') for (const chunk of chunks) listener(chunk);
+        }),
+        finalMessage: () => finalPromise,
+      };
+    });
+    return { signal: () => capturedSignal };
+  }
+
+  function salvageCall(timeoutMs: number, salvage: boolean) {
+    return new ResearchModel({ maxCalls: 5, maxRetries: 0 }).structured({
+      promptVersion: 'test/1',
+      instruction: 'test',
+      task: 'test',
+      schema,
+      maxTokens: 64_000,
+      timeoutMs,
+      salvagePartialOnDeadline: salvage,
+    });
+  }
+
+  it('records where the bytes were on the clock, so a slow answer needs no second call', async () => {
+    partialStream(['{"note":"', 'a plan that arrived"}']);
+    const model = new ResearchModel({ maxCalls: 5, maxRetries: 0 });
+    const promise = model.structured({ promptVersion: 'test/1', instruction: 'test', task: 'test', schema, maxTokens: 64_000, timeoutMs: 5_000, salvagePartialOnDeadline: true });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await promise;
+    const stream = model.callLog[0]!.stream;
+    // The whole call is five seconds, so the thirty-second mark was never reached.
+    expect(stream.visibleBytesAt30s).toBeNull();
+    // The rate is measured over the writing window and is a real number.
+    expect(stream.visibleBytesPerSecond === null || stream.visibleBytesPerSecond >= 0).toBe(true);
+  });
+
+  it('a caller that opted in gets the answer that had already arrived', async () => {
+    partialStream(['{"note":"a plan', ' that arrived"}']);
+    const promise = salvageCall(5_000, true);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(promise).resolves.toEqual({ note: 'a plan that arrived' });
+  });
+
+  it('a partial the schema still refuses is a timeout, not a half-answer', async () => {
+    partialStream(['{"unrelated":']);
+    // The assertion is attached before the clock moves, as everywhere else in
+    // this block: a rejection with no handler yet is an unhandled rejection.
+    const outcome = expect(salvageCall(5_000, true)).rejects.toMatchObject({ code: 'timeout' });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await outcome;
+  });
+
+  it('a caller that did not opt in is unaffected', async () => {
+    partialStream(['{"note":"a plan that arrived"}']);
+    const outcome = expect(salvageCall(5_000, false)).rejects.toMatchObject({ code: 'timeout' });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await outcome;
+  });
 
   beforeEach(() => {
     vi.useFakeTimers();

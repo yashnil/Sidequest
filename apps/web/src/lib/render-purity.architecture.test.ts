@@ -209,6 +209,24 @@ function importsOf(file: string): string[] {
 const IS_SERVER_ACTION = /\/actions\.tsx?$/;
 
 /**
+ * What actually makes a file a server action: the directive, not the filename.
+ *
+ * The pattern above matched `actions.ts` and nothing else, so a second action
+ * module beside it — `timing-actions.ts`, which answers "when is this place at
+ * its best" — was walked into as though it were render code, and the climate
+ * client it reaches on a button press was reported as a render impurity. That is
+ * a false positive about a real rule, which is the worst kind: it invites
+ * somebody to widen the exemption list rather than fix a defect.
+ *
+ * `'use server'` at the top of a module is the language's own statement that
+ * nothing in it runs during a render, so that is what is checked.
+ */
+function isServerAction(file: string): boolean {
+  if (IS_SERVER_ACTION.test(file)) return true;
+  return /^\s*(['"])use server\1/.test(readFileSync(file, 'utf8'));
+}
+
+/**
  * Every local module reachable from one render module, minus server actions.
  *
  * Traversal stops *at* a banned module rather than through it, so what comes
@@ -226,7 +244,7 @@ function closureOf(entry: string): Map<string, string[]> {
     if (PROVIDER_MODULES.includes(file)) continue;
     for (const spec of importsOf(file)) {
       const target = resolveImport(spec, file);
-      if (!target || IS_SERVER_ACTION.test(target) || paths.has(target)) continue;
+      if (!target || isServerAction(target) || paths.has(target)) continue;
       paths.set(target, [...path, target]);
       stack.push(target);
     }
@@ -501,9 +519,22 @@ describe('the product render surface', () => {
 
         const raw = readFileSync(file, 'utf8');
         const isClientModule = /^\s*['"]use client['"]/m.test(raw);
+        /*
+         * A route handler is a request, not a render.
+         *
+         * `app/**\/route.ts` has its own entry point and runs because a browser
+         * asked it for something — the same category as a server action, and
+         * exempt for the same reason. `api/place-photo` is the case that
+         * introduced this: it streams a place's own photograph at request time
+         * precisely so that nothing is stored and no credential reaches the
+         * browser, which is a fetch that *must* happen on this side.
+         *
+         * The SDK ban below still applies to it, as it does to everything.
+         */
+        const isRouteHandler = /\/app\/.*\/route\.tsx?$/.test(file);
         const source = code(file);
 
-        if (!isClientModule && /\bfetch\s*\(/.test(source)) {
+        if (!isClientModule && !isRouteHandler && /\bfetch\s*\(/.test(source)) {
           violations.push(`${relative(file)} calls fetch during render`);
         }
         if (/@anthropic-ai/.test(source) || /\bnew\s+Anthropic\b/.test(source)) {

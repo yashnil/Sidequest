@@ -91,7 +91,9 @@ describe('a road matrix cannot be rendered under another heading', () => {
       transitMeasured: 0,
       transitRequested: 0,
     }).find((row) => row.dimension === 'transit_routing')!;
-    expect(neverAsked.detail).toMatch(/Nothing in this build/);
+    // The sentence says what the traveller lacks, not what the deployment lacks.
+    expect(neverAsked.detail).toMatch(/cannot check timetables/);
+    expect(neverAsked.detail).not.toMatch(/build/);
   });
 
   it('leaves a row the artifact can support exactly as it was stored', () => {

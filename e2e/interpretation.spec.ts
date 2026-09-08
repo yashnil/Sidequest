@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { DEFAULT_DATES } from './support/trip';
+import { createTrip, DEFAULT_DATES } from './support/trip';
 
 /**
  * THE FREE-TEXT BOXES, FINALLY DOING SOMETHING.
@@ -25,14 +25,7 @@ import { DEFAULT_DATES } from './support/trip';
 const APPLY_BUTTON = /^(Use these \d+|Use this one)$/;
 
 async function composeWith(page: Page, mustDo: string, avoid: string): Promise<void> {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-  await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByLabel(/Anything booked, fixed, or that you would regret missing/).fill(mustDo);
-  await page.getByLabel('Anything you would rather not do?').fill(avoid);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
+  await createTrip(page, 'Mammoth Lakes', DEFAULT_DATES, { mustDo, avoid });
 }
 
 test('shows what it made of the text, and applies none of it yet', async ({ page }) => {
@@ -230,7 +223,7 @@ test('an injected instruction is treated as text and changes nothing', async ({ 
 
 /** Every sentence the reader is allowed to say about its own attempt. */
 const OUTCOME_SENTENCES = [
-  'The reader is switched off in this build',
+  'Sidequest cannot read free text on this trip',
   'There was nothing left over to read',
   'There was too much left over to read in one go',
   'This trip has used its one reading',

@@ -197,14 +197,48 @@ export type FoodReservation = z.infer<typeof foodReservationSchema>;
 // Dietary evidence — the part that must never overstate
 // ---------------------------------------------------------------------------
 
+/**
+ * WHAT SOMEBODY DOES NOT EAT — A DIET, AN EXCLUSION, OR AN ALLERGY.
+ *
+ * MVP V3, Stage 16. Seven values could not express what most travellers
+ * actually say. "Hindu non-veg: no beef or pork" had no representation at all;
+ * neither did "vegetarian, but I eat eggs", "Jain", "pescatarian", or "no
+ * alcohol". Forcing those into the nearest preset is not a rounding error — it
+ * is the product telling somebody it understood them and then planning a trip
+ * that did not.
+ *
+ * So the list is composable: a *diet* can be combined with any number of
+ * *exclusions*, and the free-text note (`dietaryNotes`) survives verbatim
+ * alongside both, into the brief the model reads.
+ *
+ * ## The rule that is not negotiable
+ *
+ * **A religion is never inferred from an exclusion, and an exclusion is never
+ * inferred from a religion.** `no_beef` means no beef. It does not mean Hindu,
+ * it does not imply `no_pork`, and nothing anywhere may widen it. `halal` and
+ * `kosher` remain available because a traveller may choose them for themselves —
+ * that is a statement they made, not one Sidequest derived. `dietary.test.ts`
+ * asserts that no code path maps between the two groups.
+ */
 export const DIETARY_NEEDS = [
+  // Diets: a whole pattern of eating.
   'vegetarian',
   'vegan',
-  'gluten_free',
-  'dairy_free',
-  'nut_allergy',
+  'pescatarian',
+  'jain',
   'halal',
   'kosher',
+  'gluten_free',
+  'dairy_free',
+  // Exclusions: one ingredient, and nothing implied beyond it.
+  'no_beef',
+  'no_pork',
+  'no_shellfish',
+  'no_egg',
+  'no_alcohol',
+  'no_onion_garlic',
+  // Allergies: an exclusion that a kitchen has to be asked about.
+  'nut_allergy',
 ] as const;
 export const dietaryNeedSchema = z.enum(DIETARY_NEEDS);
 export type DietaryNeed = z.infer<typeof dietaryNeedSchema>;
@@ -212,12 +246,52 @@ export type DietaryNeed = z.infer<typeof dietaryNeedSchema>;
 export const DIETARY_NEED_LABELS: Record<DietaryNeed, string> = {
   vegetarian: 'Vegetarian',
   vegan: 'Vegan',
-  gluten_free: 'Gluten-free',
-  dairy_free: 'Dairy-free',
-  nut_allergy: 'Nut allergy',
+  pescatarian: 'Pescatarian',
+  jain: 'Jain',
   halal: 'Halal',
   kosher: 'Kosher',
+  gluten_free: 'Gluten-free',
+  dairy_free: 'Dairy-free',
+  no_beef: 'No beef',
+  no_pork: 'No pork',
+  no_shellfish: 'No shellfish',
+  no_egg: 'No egg',
+  no_alcohol: 'No alcohol',
+  no_onion_garlic: 'No onion or garlic',
+  nut_allergy: 'Nut allergy',
 };
+
+export const DIETARY_NEED_KINDS = ['diet', 'exclusion', 'allergy'] as const;
+export type DietaryNeedKind = (typeof DIETARY_NEED_KINDS)[number];
+
+/** Which group a need belongs to, for grouping the question — never for deriving one from another. */
+export const DIETARY_NEED_KIND: Record<DietaryNeed, DietaryNeedKind> = {
+  vegetarian: 'diet',
+  vegan: 'diet',
+  pescatarian: 'diet',
+  jain: 'diet',
+  halal: 'diet',
+  kosher: 'diet',
+  gluten_free: 'diet',
+  dairy_free: 'diet',
+  no_beef: 'exclusion',
+  no_pork: 'exclusion',
+  no_shellfish: 'exclusion',
+  no_egg: 'exclusion',
+  no_alcohol: 'exclusion',
+  no_onion_garlic: 'exclusion',
+  nut_allergy: 'allergy',
+};
+
+export const DIETARY_NEED_KIND_LABELS: Record<DietaryNeedKind, string> = {
+  diet: 'How you eat',
+  exclusion: 'Things you do not eat',
+  allergy: 'Allergies',
+};
+
+export function dietaryNeedsOfKind(kind: DietaryNeedKind): DietaryNeed[] {
+  return DIETARY_NEEDS.filter((need) => DIETARY_NEED_KIND[need] === kind);
+}
 
 /**
  * What we actually know about a venue and a dietary need.
@@ -322,6 +396,15 @@ export const foodPreferencesSchema = z.object({
   willPackLunch: z.boolean(),
   dietaryNeeds: z.array(dietaryNeedSchema),
   dietaryStrict: z.boolean(),
+  /**
+   * The traveller's own words, kept verbatim beside the structured needs.
+   *
+   * "Vegetarian, but I eat eggs" and "severe peanut allergy — cross-contamination
+   * matters" carry meaning no enum holds, and both reach the composition brief
+   * and the food resolver unchanged. Never parsed into the list above: an
+   * inferred restriction is a restriction nobody chose.
+   */
+  dietaryNotes: z.string().max(300).optional(),
   /** How many meals across this whole trip may be an event. Scales with length. */
   specialMealBudget: z.number().int().min(0).max(10),
   /** The band an ordinary meal should stay at or below. */

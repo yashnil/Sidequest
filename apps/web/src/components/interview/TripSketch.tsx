@@ -244,7 +244,17 @@ function profileRows(sketch: Sketch): { key: string; label: string; value: strin
   rows.push({ key: 'transport', label: 'Getting around', value: sketch.transport.label, assumed: sketch.transport.assumed, open: sketch.transport.open, testId: 'sketch-transport' });
   rows.push({ key: 'shape', label: 'Shape', value: sketch.shapeLabel, assumed: sketch.shapeAssumed, open: sketch.shapeOpen, testId: 'sketch-shape' });
   rows.push({ key: 'range', label: 'Reach', value: sketch.rangeLabel, assumed: sketch.rangeAssumed, open: sketch.rangeOpen, testId: 'sketch-range' });
-  for (const line of sketch.lines.slice(1, 4)) rows.push({ key: line.text, label: '', value: line.text, assumed: line.assumed, open: false });
+  /*
+   * The loose traits under one label rather than under none.
+   *
+   * These rows carried `label: ''`, so after four labelled rows the panel
+   * ended with an unlabelled line that read as a missing field. Only the first
+   * takes the heading; the rest continue under it, which is what a list of
+   * further facts about one subject looks like.
+   */
+  sketch.lines.slice(1, 4).forEach((line, index) => {
+    rows.push({ key: line.text, label: index === 0 ? 'Also' : '', value: line.text, assumed: line.assumed, open: false });
+  });
   return rows;
 }
 

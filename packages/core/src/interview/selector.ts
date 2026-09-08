@@ -28,6 +28,25 @@ import { interviewCatalog, type InterviewContext, type InterviewModule, type Int
  * shown on "Personalize it more". A criticality-3 question is never demoted.
  */
 
+/**
+ * MVP V3, Stage 17 — WHAT ENDS THE INTERVIEW IS SUFFICIENCY, AND THE BUDGET IS
+ * ONLY ITS CEILING.
+ *
+ * A question earns a place in the walked interview by being worth asking *this*
+ * traveller about *this* destination, and a question below the floor is moved
+ * to fine-tune however much room the budget had left. Before this, a marginal
+ * question was asked purely because the count had not been reached yet, which
+ * is the "eight questions because eight is the number" shape the founder
+ * objected to.
+ *
+ * The floor is expressed in the same units as `questionScore`, whose terms are
+ * impact (0–2), relevance (0–1.5), criticality (0.75–2.25) and a burden
+ * penalty. 2.6 is the value of a question with moderate relevance and average
+ * impact — below it sits the genuinely marginal: low relevance, one impact,
+ * criticality 1. A criticality-3 question is never demoted by either rule.
+ */
+export const WORTH_ASKING_SCORE = 2.6;
+
 /** Core questions between the priorities anchor and the hard-limit closer. */
 export const CORE_BUDGET = 7;
 /** Role questions asked in the core tier; the rest wait in fine-tune. */
@@ -132,12 +151,18 @@ export function planInterview(input: { ctx: InterviewContext; answers: Questionn
   // Roles past the budget wait in fine-tune, unless already answered.
   roles.filter((q) => q.status === 'open' && q.id !== 'priority_roles').slice(CORE_ROLE_BUDGET).forEach((q) => demoted.add(q.id));
   const middleVisible = middle.filter((q) => !q.hidden);
-  if (middleVisible.length > CORE_BUDGET) {
+  // Sufficiency first: anything that would barely move the plan waits in
+  // fine-tune whether or not the budget had room for it.
+  for (const q of middleVisible) {
+    if (q.status === 'open' && q.definition.criticality < 3 && q.score < WORTH_ASKING_SCORE) demoted.add(q.id);
+  }
+  if (middleVisible.filter((q) => !demoted.has(q.id)).length > CORE_BUDGET) {
     const demotable = middleVisible
       .filter((q) => q.status === 'open' && q.definition.criticality < 3)
       .sort((a, b) => a.definition.criticality - b.definition.criticality || a.score - b.score || a.id.localeCompare(b.id));
-    let kept = middleVisible.length;
+    let kept = middleVisible.filter((q) => !demoted.has(q.id)).length;
     for (const q of demotable) {
+      if (demoted.has(q.id)) continue;
       if (kept <= CORE_BUDGET) break;
       demoted.add(q.id);
       kept -= 1;
@@ -148,12 +173,16 @@ export function planInterview(input: { ctx: InterviewContext; answers: Questionn
   // --- destination: by value, capped, critical ones never demoted -----------------
   const destination = candidates.filter((q) => q.tier === 'destination').sort(byScore);
   const destinationVisible = destination.filter((q) => !q.hidden);
-  if (destinationVisible.length > DESTINATION_BUDGET) {
+  for (const q of destinationVisible) {
+    if (q.status === 'open' && q.definition.criticality < 3 && q.score < WORTH_ASKING_SCORE) demoted.add(q.id);
+  }
+  if (destinationVisible.filter((q) => !demoted.has(q.id)).length > DESTINATION_BUDGET) {
     const demotable = destinationVisible
       .filter((q) => q.status === 'open' && q.definition.criticality < 3)
       .sort((a, b) => a.definition.criticality - b.definition.criticality || a.score - b.score || a.id.localeCompare(b.id));
-    let kept = destinationVisible.length;
+    let kept = destinationVisible.filter((q) => !demoted.has(q.id)).length;
     for (const q of demotable) {
+      if (demoted.has(q.id)) continue;
       if (kept <= DESTINATION_BUDGET) break;
       demoted.add(q.id);
       kept -= 1;

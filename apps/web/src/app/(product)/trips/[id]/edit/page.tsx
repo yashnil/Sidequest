@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { TripComposer } from '@/components/TripComposer';
+import { SetupFlow } from '@/components/setup/SetupFlow';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { buttonClass } from '@/components/ui';
@@ -66,7 +66,7 @@ export default async function EditTripPage({ params }: { params: Promise<{ id: s
 
       <div className="mt-10">
         {answers ? (
-          <TripComposer
+          <SetupFlow
             defaults={{ startDate: trip.basics.startDate, endDate: trip.basics.endDate }}
             editing={{ tripId: id, answers }}
           />

@@ -3,83 +3,119 @@
 import { useEffect, useState } from 'react';
 import { DestinationMap, type DestinationGeometry } from './DestinationMap';
 import type { MapBasemap } from '../map-adapter';
+import { generationProgressAction, type GenerationProgressView } from '@/app/(product)/trips/[id]/questionnaire/progress-actions';
 
 /**
- * PRODUCTION UI V1 — THE ONE-TO-TWO-MINUTE WAIT IS A PRODUCT MOMENT.
+ * THE ONE-TO-TWO-MINUTE WAIT IS A PRODUCT MOMENT — AND IT TELLS THE TRUTH.
  *
- * Four traveller-facing stages, advanced on elapsed time rather than on any
- * internal signal (the build is one server action; nothing here knows the
- * reconciler exists), an animated route sketch, and no percentage — a
- * percentage would be a promise about a model's speed nobody can keep. Words
- * a traveller uses: designing, checking, preparing. Nothing about providers,
- * schemas or verification deadlines.
+ * MVP V3, Stage 24. What this replaces: four stages advanced by a `setInterval`,
+ * so at 45 seconds the screen said "Checking the places" whether or not a place
+ * had been checked, and at 100 seconds it said "Preparing the trip" whether or
+ * not the model had answered. A progress display that cannot be wrong because it
+ * is not about anything.
+ *
+ * Now every stage is a boundary the server actually crossed
+ * (`generation_progress`), polled a couple of times a second; a finished stage
+ * locks in with a mark and stays; the current one breathes. Elapsed time is
+ * shown because it is a fact. There is no percentage, and there will not be one:
+ * a percentage is a claim about how long a model will take.
+ *
+ * The dark cartographic ground stays — the destination's own map behind the
+ * stages, a route sketched once across the frame.
  */
-const STAGES = [
-  { at: 0, label: 'Designing your route', detail: 'Choosing where you sleep, what each day is for, and what to leave out.' },
-  { at: 45, label: 'Checking the places', detail: 'Matching each stop to a real place on the map.' },
-  { at: 75, label: 'Checking travel', detail: 'Timing the legs between stops where a router can, estimating honestly where it cannot.' },
-  { at: 100, label: 'Preparing the trip', detail: 'Bookings to arrange, what to pack, and a fallback for each day.' },
-];
 
-export function GenerationOverlay({ destination, geometry = null, tiles = null }: { destination: string; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
+/** Fast enough to feel live, slow enough to be nothing: one small read of one row. */
+const POLL_MS = 1_200;
+
+export function GenerationOverlay({ tripId, destination, geometry = null, tiles = null }: { tripId?: string; destination: string; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
   const [elapsed, setElapsed] = useState(0);
+  const [progress, setProgress] = useState<GenerationProgressView | null>(null);
+
   useEffect(() => {
     const started = Date.now();
     const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  const stageIndex = STAGES.reduce((index, stage, i) => (elapsed >= stage.at ? i : index), 0);
-  const stage = STAGES[stageIndex]!;
+
+  useEffect(() => {
+    if (!tripId) return;
+    let stopped = false;
+    let timer = 0;
+    const poll = async () => {
+      const view = await generationProgressAction(tripId).catch(() => null);
+      if (stopped) return;
+      if (view) setProgress(view);
+      if (!view?.finished) timer = window.setTimeout(() => void poll(), POLL_MS);
+    };
+    timer = window.setTimeout(() => void poll(), 400);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [tripId]);
+
+  const stages = progress?.all ?? FALLBACK_STAGES;
+  const reached = progress?.reached ?? [];
+  const currentIndex = progress ? Math.max(0, stages.findIndex((stage) => stage.id === progress.stage)) : 0;
+  const label = progress?.label ?? 'Reading your trip';
+  const detail = progress?.detail ?? 'Your answers, your dates and anything already booked.';
+  const seconds = progress?.elapsedSeconds ?? elapsed;
+
   return (
-    <div className="atlas fixed inset-0 z-40 overflow-y-auto p-5 sm:p-8" role="status" aria-live="polite" data-testid="generation-overlay">
-      {/*
-        EXPERIENCE V2 — the wait is a place. The destination's own map on the
-        atlas ground, the four stages beside it, a route sketched once across
-        the frame. Stages advance on elapsed time only; nothing here pretends
-        to know what the model is doing, and nothing shows a percentage.
-      */}
+    <div className="atlas fixed inset-0 z-40 overflow-y-auto p-5 sm:p-8" role="status" aria-live="polite" data-testid="generation-overlay" data-stage={progress?.stage ?? 'understanding'}>
       <div className="mx-auto grid min-h-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="min-w-0">
           <p className="type-small atlas-muted">Building {destination}</p>
-          <h2 className="display-xl mt-2 text-[var(--color-atlas-ink)]">{stage.label}</h2>
-          <p className="mt-3 max-w-[48ch] type-body atlas-muted">{stage.detail}</p>
+          <h2 className="display-xl mt-2 text-[var(--color-atlas-ink)]">{label}</h2>
+          <p className="mt-3 max-w-[48ch] type-body atlas-muted">{detail}</p>
           <ol className="mt-8 space-y-3" aria-label="Stages">
-            {STAGES.map((s, i) => (
-              <li key={s.label} className={`flex items-center gap-3 text-sm ${i <= stageIndex ? 'text-[var(--color-atlas-ink)]' : 'atlas-muted'}`} aria-current={i === stageIndex ? 'step' : undefined}>
-                <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${i < stageIndex ? 'bg-[var(--color-route-bright)]' : i === stageIndex ? 'bg-[var(--color-route-bright)] breathing' : 'border border-[var(--color-atlas-muted)]'}`} />
-                {s.label}
-              </li>
-            ))}
+            {stages.map((stage, index) => {
+              const done = reached.includes(stage.id) && index < currentIndex;
+              const now = index === currentIndex;
+              return (
+                <li key={stage.id} className={`flex items-center gap-3 text-sm ${done || now ? 'text-[var(--color-atlas-ink)]' : 'atlas-muted'}`} aria-current={now ? 'step' : undefined} data-done={done ? 'true' : 'false'}>
+                  <span aria-hidden="true" className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${done ? 'bg-[var(--color-route-bright)] text-[var(--color-atlas)]' : now ? 'border border-[var(--color-route-bright)]' : 'border border-[var(--color-atlas-muted)]'}`}>
+                    {done ? '\u2713' : null}
+                  </span>
+                  <span className={now ? 'font-medium' : undefined}>{stage.label}</span>
+                  {now ? <span aria-hidden="true" className="breathing inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-route-bright)]" /> : null}
+                </li>
+              );
+            })}
           </ol>
-          <p className="mt-8 type-small atlas-muted">Usually one to two minutes. Your answers are saved either way.</p>
+          <p className="numeral mt-8 type-small atlas-muted">
+            {seconds}s elapsed · usually under two minutes. Your answers are saved either way.
+          </p>
         </div>
         <div className="relative min-w-0 rounded-[var(--radius-plate)] border border-white/10 bg-[var(--color-atlas-raised)] p-3">
+          {/*
+            The destination's own map, and nothing drawn on top of it.
+            An invented route with invented pins used to sweep across this frame.
+            Over a graticule that was decoration; over a real basemap it is a
+            claim — three marks on actual Hong Kong at places nobody chose —
+            which is precisely what the rest of this product refuses to do.
+          */}
           {geometry ? (
             <div className="gen-map">
-              <DestinationMap geometry={geometry} tiles={tiles} shape="stay_put" />
+              <DestinationMap geometry={geometry} tiles={tiles} shape="stay_put" chromeless />
             </div>
           ) : null}
-          <svg viewBox="0 0 480 200" className="pointer-events-none absolute inset-3 h-[calc(100%-1.5rem)] w-[calc(100%-1.5rem)]" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M40 150 C 110 60, 170 40, 220 90 S 320 170, 440 60" fill="none" stroke="var(--color-route-bright)" strokeWidth="2.5" strokeLinecap="round" vectorEffect="non-scaling-stroke" className="route-reveal" />
-            {[
-              [40, 150],
-              [220, 90],
-              [440, 60],
-            ].map(([x, y], i) => (
-              <g key={i} className="gen-pin" style={{ animationDelay: `${i * 1.1 + 0.2}s` }}>
-                <rect x={x! - 6} y={y! - 6} width="12" height="12" rx="2" fill="var(--color-atlas-ink)" stroke="var(--color-atlas)" strokeWidth="2" />
-              </g>
-            ))}
-          </svg>
         </div>
       </div>
       <style>{`
-        .gen-pin { opacity: 0; animation: gen-pop var(--motion-figure) var(--ease-out) forwards; transform-box: fill-box; transform-origin: center; }
-        .gen-map { opacity: 0.55; filter: saturate(0.6) contrast(1.05); }
-        .gen-map :where(figcaption, p, button, .type-meta) { color: var(--color-atlas-muted); }
-        @keyframes gen-pop { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
-        @media (prefers-reduced-motion: reduce) { .gen-pin { opacity: 1; animation: none; } }
+        .gen-map { opacity: 0.6; filter: saturate(0.55) contrast(1.05); }
+        .gen-map :where(p, .type-meta) { color: var(--color-atlas-muted); }
       `}</style>
     </div>
   );
 }
+
+/** Shown for the fraction of a second before the first poll answers. Same words, same order. */
+const FALLBACK_STAGES = [
+  { id: 'understanding' as const, label: 'Reading your trip' },
+  { id: 'composing' as const, label: 'Designing the route' },
+  { id: 'route' as const, label: 'Laying out the days' },
+  { id: 'places' as const, label: 'Checking the places' },
+  { id: 'travel' as const, label: 'Timing the travel' },
+  { id: 'preparing' as const, label: 'Preparing the trip' },
+];

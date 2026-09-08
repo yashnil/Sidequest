@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView, openPrepareNotes } from './support/hub';
-import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope, waitUntilInteractive } from './support/trip';
+import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope, waitUntilInteractive, openReviewLedger } from './support/trip';
 
 /**
  * THE ADAPTIVE INTERVIEW, ACROSS DESTINATION SHAPES, IN A REAL BROWSER.
@@ -108,6 +108,9 @@ for (const shape of SHAPES) {
     expect(seen[seen.length - 1]).toBe('hard_constraints');
 
     await shot(page, `${shape.name}-03-review`, testInfo.project.name);
+    // The ledger is a disclosure on the review, so it has to be opened before
+    // its two columns exist to be asserted on.
+    await openReviewLedger(page);
     await expect(page.getByTestId('review-told')).toBeVisible();
     await expect(page.getByTestId('review-assumed')).toBeVisible();
     await expect(page.getByTestId('review-hard')).toBeVisible();
@@ -158,8 +161,17 @@ test('Plan with smart defaults composes a trip straight from the understanding s
   await openPrepareNotes(page);
   await expect(page.getByTestId('prepare')).toBeVisible();
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
-  // The DEV-only fixture badge is deliberately absent here: this suite drives a production build.
-  await expect(page.getByTestId('fixture-planning-badge')).toHaveCount(0);
+  /*
+   * The badge is PRESENT, and that is the point.
+   *
+   * It used to follow `NODE_ENV`, so a production build composing from the
+   * saved fixture said nothing at all — which is how a screenshot walk against
+   * a fixture server was mistaken for a live one. It now follows
+   * `isFixtureComposer()`, and this suite is a production build running the
+   * fixture composer, so it must say so. That the badge never appears when the
+   * composer is real is held by `planning/fixture-leak.test.ts`.
+   */
+  await expect(page.getByTestId('fixture-planning-badge')).toBeVisible();
   await shot(page, 'smart-defaults-itinerary', testInfo.project.name);
 });
 
@@ -172,8 +184,14 @@ test('the itinerary carries the overview map, day maps with honest legs, compact
   // focus map beside the days on desktop, one map per day card below lg).
   const overviewMap = page.locator('#hub-view-overview').getByTestId('trip-overview-map');
   await expect(overviewMap).toBeVisible();
-  // No straight line is ever labelled a route.
-  await expect(overviewMap).toContainText(/not routes/);
+  /*
+   * No straight line is ever labelled a route — and no legend claims a line
+   * that is not drawn. This trip has one base, so the overview has markers and
+   * no connectors at all; the connector legend must therefore be absent. Where
+   * a trip moves between bases, the same caption appears (`day-focus-map`
+   * below, and `e2e/itinerary.spec.ts` for a multi-base plan).
+   */
+  await expect(overviewMap).not.toContainText(/not routes/);
   await openHubView(page, 'days');
   const desktop = (page.viewportSize()?.width ?? 1440) >= 1024;
   const dayMaps = desktop ? page.getByTestId('day-focus-map') : page.getByTestId('day-map');

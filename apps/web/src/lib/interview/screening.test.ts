@@ -28,6 +28,7 @@ function intentWith(overrides: Partial<TripIntentRecord>): TripIntentRecord {
     scope: null,
     scopeRevision: 1,
     selectedCompiledRegionId: null,
+    destinationIntent: null,
     discoveryPreferences: null,
     composer: null,
     selectedDestination: null,

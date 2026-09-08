@@ -102,3 +102,28 @@ describe('the composition call is told the traveller and the trip, never the POI
     expect(wire).not.toContain('10.12345');
   });
 });
+
+/**
+ * MVP V3, Stage 3 — the traveller's own phrase is not thrown away by the resolver.
+ *
+ * "the steppes" resolving to a town is a lead, not a correction, and the layer
+ * best placed to honour the phrase is the one composing the trip. The negative
+ * half matters as much: repeating the phrase when it already matches the
+ * resolved name is noise in a prompt that pays for every token.
+ */
+describe('the destination the traveller typed', () => {
+  it('reaches the composition task when the resolver landed somewhere else', () => {
+    const { task } = compositionPreview({
+      request: buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-08-01T00:00:00Z') }),
+      envelope: { name: 'Fairbanks', qualifiedName: 'Fairbanks, Alaska', travellerPhrase: 'inland Alaska', center: { lat: 64.8, lng: -147.7 } },
+      mode: 'full',
+    });
+    expect(task).toContain('inland Alaska');
+    expect(task).toMatch(/Plan the trip they described/);
+  });
+
+  it('is not repeated when it is the same place', () => {
+    const { task } = compositionPreview({ request: buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-08-01T00:00:00Z') }), envelope: { name: 'Hong Kong', center: { lat: 22.3, lng: 114.2 } }, mode: 'full' });
+    expect(task).not.toMatch(/The traveller wrote/);
+  });
+});

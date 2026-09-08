@@ -138,7 +138,7 @@ export function providerReadiness(): ProviderReadiness {
     ready: false,
     choice,
     message:
-      'Compiling new destinations is switched off in this build, so only regions we already hold can be planned.',
+      'Sidequest cannot research a new destination right now, so only places it already holds can be explored this way.',
     nextActions: blockedActions(),
     missing: ['SIDEQUEST_COMPILER_PROVIDER'],
   };

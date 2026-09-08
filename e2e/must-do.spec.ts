@@ -4,6 +4,7 @@ import {
   compileRegion,
   completeQuestionnaire,
   waitUntilInteractive,
+  createTrip,
 } from './support/trip';
 
 /**
@@ -28,15 +29,7 @@ import {
  * the journey exercised is the one a traveller actually takes.
  */
 async function createTripNaming(page: Page, destination: string, mustDo: string): Promise<void> {
-  await page.goto('/trips/new');
-  const field = page.getByLabel('Destination');
-  await waitUntilInteractive(field);
-  await field.fill(destination);
-  await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-  await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByLabel(/Anything booked, fixed, or that you would regret missing/).fill(mustDo);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
+  await createTrip(page, destination, DEFAULT_DATES, { mustDo });
 }
 
 /** The statuses on screen, in order. Empty when the panel is absent. */
@@ -129,14 +122,7 @@ test('the traveller can take a request off, and it stays off across a refresh', 
 });
 
 test('a trip that names nothing shows no panel at all', async ({ page }) => {
-  await page.goto('/trips/new');
-  const field = page.getByLabel('Destination');
-  await waitUntilInteractive(field);
-  await field.fill('Harbour City');
-  await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-  await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
+  await createTrip(page, 'Harbour City', DEFAULT_DATES);
   await compileRegion(page);
 
   await expect(page.getByTestId('must-do-panel')).toHaveCount(0);

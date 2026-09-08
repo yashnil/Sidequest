@@ -56,14 +56,8 @@ describe('extractJsonObject refuses precisely', () => {
   it('no JSON at all', () => {
     expect(extractJsonObject('I cannot plan this trip without more information.')).toMatchObject({ ok: false, reason: 'no_object' });
   });
-  it('a truncated object (max_tokens)', () => {
-    expect(extractJsonObject(TEXT.slice(0, TEXT.length - 12), { wrapperTag: TAG })).toMatchObject({ ok: false, reason: 'truncated' });
-  });
-  it('a truncated object inside the wrapper', () => {
-    expect(extractJsonObject(`<${TAG}>\n${TEXT.slice(0, 40)}`, { wrapperTag: TAG })).toMatchObject({ ok: false, reason: 'truncated' });
-  });
-  it('balanced but invalid JSON (trailing comma, single quotes)', () => {
-    expect(extractJsonObject("{ 'archetype': 'road_trip', }")).toMatchObject({ ok: false, reason: 'invalid_json' });
+  it('balanced but invalid JSON (single quotes)', () => {
+    expect(extractJsonObject("{ 'archetype': 'road_trip', }").ok).toBe(false);
   });
   it('a JSON array is not the draft', () => {
     expect(extractJsonObject('[1, 2, 3]')).toMatchObject({ ok: false, reason: 'no_object' });
@@ -72,5 +66,35 @@ describe('extractJsonObject refuses precisely', () => {
     const out = extractJsonObject('nothing here');
     expect(out.ok).toBe(false);
     expect('json' in out).toBe(false);
+  });
+});
+
+/**
+ * MVP V3 — SALVAGE IS THE SECOND PASS, NEVER THE FIRST.
+ *
+ * A truncated answer used to be refused outright; the repairs in
+ * `json-repair.ts` mean it now arrives short and honest instead, with the tail
+ * the model never finished discarded rather than guessed at. What must not
+ * change is that a strictly valid answer is passed through untouched, and that
+ * a salvage which cannot be made honestly is still a refusal.
+ */
+describe('salvage', () => {
+  it('leaves a valid answer completely alone', () => {
+    const out = extractJsonObject(TEXT, { wrapperTag: TAG });
+    expect(out).toMatchObject({ ok: true, repairs: [] });
+  });
+  it('recovers a truncated object by discarding the unfinished tail', () => {
+    const out = extractJsonObject(TEXT.slice(0, TEXT.length - 12), { wrapperTag: TAG });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.repairs).toContain('truncated_tail');
+  });
+  it('recovers a key that swallowed its delimiter', () => {
+    const out = extractJsonObject('{"days":[{"day":1,"stay":"A"},{"day2,"stay":"B"}]}');
+    expect(out).toMatchObject({ ok: true, repairs: ['key_delimiter'] });
+    expect((out as { json: { days: { day: number }[] } }).json.days[1]!.day).toBe(2);
+  });
+  it('still refuses text with no object in it at all', () => {
+    expect(extractJsonObject('I cannot plan this trip.')).toMatchObject({ ok: false });
   });
 });

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { createTrip, reachScope, REGION_READY_HEADING, requestExploration, waitForLookup } from './support/trip';
 
 /**
@@ -40,21 +40,27 @@ test('the landing page sells a worldwide product, not one valley', async ({ page
   await expect(page.getByRole('heading', { level: 1 })).not.toContainText(/mammoth/i);
 });
 
-test('the composer discloses progressively rather than showing thirty fields', async ({ page }) => {
+test('setup is one question at a time, not a form', async ({ page }) => {
+  /*
+   * MVP V3, Stage 4 — this used to assert *progressive disclosure*: one field
+   * that revealed three more sections below it. Sections are gone. Each question
+   * is its own screen, its own history entry, and nothing else is on it.
+   */
   await page.goto('/trips/new');
-
-  // Before a destination there is one question, not a form.
-  await expect(page.getByLabel('Destination')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'When?' })).toHaveCount(0);
+  await expect(page.getByTestId('destination-input')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Where are you thinking/);
+  await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'Who is going?' })).toHaveCount(0);
+  await expect(page.getByTestId('timing-best')).toHaveCount(0);
 
-  await page.getByLabel('Destination').fill('Harbour City');
-  await expect(page.getByRole('heading', { name: 'When?' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Who is going?' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Anything already fixed?' })).toBeVisible();
-  /* QUALITY V1 — preferences are the interview's questions, never a second form here. */
+  await page.getByTestId('destination-input').fill('Harbour City');
+  await page.getByTestId('setup-continue').locator('visible=true').first().click();
+
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/When can you travel/);
+  await expect(page.getByTestId('destination-input')).toHaveCount(0);
+  await expect(page.locator('h1')).toHaveCount(1);
+  /* Preferences belong to the interview, never to a second form here. */
   await expect(page.getByRole('heading', { name: 'What kind of trip?' })).toHaveCount(0);
-  await expect(page.getByRole('radio', { name: 'Drive' })).toHaveCount(0);
 });
 
 test('no disabled mode card dominates the first screen', async ({ page }) => {
@@ -63,38 +69,55 @@ test('no disabled mode card dominates the first screen', async ({ page }) => {
   await expect(page.getByRole('radio', { name: /Check the plan I already have/i })).toHaveCount(0);
 });
 
-test('dates can be a month or a season, and arrival can be a band', async ({ page }) => {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Harbour City');
-
-  await page.getByRole('radio', { name: 'Some time in a month' }).check();
-  await expect(page.getByLabel('Which month?')).toBeVisible();
-
-  await page.getByRole('radio', { name: 'Some time in a season' }).check();
-  await expect(page.getByRole('radio', { name: 'Summer' })).toBeVisible();
-
-  await page.getByRole('radio', { name: 'These exact dates' }).check();
-
+test('timing can be a month, a season, a free window, or nothing at all', async ({ page }) => {
   /*
-   * Nobody is forced to invent a flight time. This is the field that used to be
-   * an `<input type="time">` pre-filled with 15:00, whose fabricated value then
-   * decided how much of day one existed.
+   * MVP V3, Stage 5 — the two that matter most are the ones that need no date:
+   * "tell me when it is best" and "I have not decided". Neither may leave a
+   * hidden date field underneath refusing to let the traveller move on.
    */
-  const arrival = page.getByLabel('When do you get in?');
-  await expect(arrival).toBeVisible();
-  await arrival.selectOption({ label: 'Not booked yet' });
+  await page.goto('/trips/new');
+  await page.getByTestId('destination-input').fill('Harbour City');
+  const advance = page.getByTestId('setup-continue').locator('visible=true').first();
+  await advance.click();
+
+  await page.getByTestId('timing-roughly').click();
+  await page.getByTestId('timing-kind-month').click();
+  await expect(page.getByRole('button', { name: 'Jun' })).toBeVisible();
+  await page.getByTestId('timing-kind-season').click();
+  await expect(page.getByRole('button', { name: 'summer' })).toBeVisible();
+  await page.getByTestId('timing-kind-window').click();
+  await expect(page.getByTestId('timing-earliest')).toBeVisible();
+
+  await page.getByTestId('timing-undecided').click();
+  await expect(page.getByTestId('timing-start')).toHaveCount(0);
+  await expect(advance).toBeEnabled();
 });
 
-test('the summary line reflects what has been answered so far', async ({ page }) => {
-  // EXPERIENCE V2 — the stub card is gone; one line above the action carries the facts so far.
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Harbour City');
-  const summary = page.getByTestId('composer-summary');
-  await expect(summary).toBeVisible();
-  await expect(summary).toContainText('Harbour City');
+test('nobody is asked to invent a flight time', async ({ page }) => {
+  /*
+   * MVP V3, Stage 9 — arrival used to be a select on the way past, pre-filled
+   * with a band nobody chose. It is asked only by somebody who says they know.
+   */
+  await createTripToStep(page, 'fixed');
+  await expect(page.getByLabel('Landing')).toHaveCount(0);
+  await page.getByTestId('setup-flight-times').click();
+  await expect(page.getByLabel('Landing')).toBeVisible();
+});
 
-  await page.getByRole('button', { name: 'One more adult' }).click();
-  await expect(summary).toContainText('3 adults');
+test('the running summary shows only what has actually been answered', async ({ page }) => {
+  /*
+   * MVP V3 — the property with teeth is the negative one. The first version of
+   * this panel showed "6 nights · 7 days" and a date range on the blank first
+   * screen, because those were the values the controls happened to start with.
+   */
+  await page.goto('/trips/new');
+  const summary = page.getByTestId('setup-summary');
+  await expect(summary).toHaveCount(0);
+
+  await page.getByTestId('destination-input').fill('Harbour City');
+  await expect(summary).toContainText('Harbour City');
+  await expect(summary).not.toContainText(/night/);
+  await expect(summary).not.toContainText(/20\d\d-/);
 });
 
 test('the composer survives a refresh by starting clean rather than half-filled', async ({
@@ -105,11 +128,32 @@ test('the composer survives a refresh by starting clean rather than half-filled'
    * A half-restored form that had lost one answer would be worse than an empty
    * one, because the traveller cannot tell which answer went missing.
    */
+  /*
+   * MVP V3 — a refresh now *keeps* what was typed, because the draft is in
+   * session storage. Losing a destination somebody typed is not a safety
+   * property; it is a lost answer.
+   */
   await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Harbour City');
+  await page.getByTestId('destination-input').fill('Harbour City');
   await page.reload();
-  await expect(page.getByLabel('Destination')).toHaveValue('');
+  await expect(page.getByTestId('destination-input')).toHaveValue('Harbour City');
 });
+
+/** Walk the setup as far as a named step, leaving the rest untouched. */
+async function createTripToStep(page: Page, step: 'when' | 'nights' | 'who' | 'fixed'): Promise<void> {
+  const advance = () => page.getByTestId('setup-continue').locator('visible=true').first().click();
+  await page.goto('/trips/new');
+  await page.getByTestId('destination-input').fill('Harbour City');
+  await advance();
+  if (step === 'when') return;
+  await page.getByTestId('timing-exact').click();
+  await page.getByTestId('timing-start').fill('2026-08-12');
+  await page.getByTestId('timing-end').fill('2026-08-16');
+  await advance();
+  if (step === 'nights' || step === 'who') return;
+  await page.getByTestId('party-couple').click();
+  await advance();
+}
 
 test('trip context is shown by the page, not claimed by the shell', async ({ page }) => {
   await createTrip(page, 'Harbour City');
@@ -177,14 +221,21 @@ test('the compilation progress groups stages and hides the technical list', asyn
 test('the whole journey is reachable by keyboard', async ({ page }) => {
   await page.goto('/trips/new');
 
-  // Tab to the destination field and type into it without touching the mouse.
-  await page.keyboard.press('Tab'); // skip link
-  for (let step = 0; step < 8; step += 1) {
-    const focused = await page.evaluate(() => document.activeElement?.getAttribute('role'));
-    if (focused === 'combobox') break;
+  /*
+   * The field is no longer a combobox — a destination is free text, and the
+   * suggestions underneath it are optional help rather than the answer. So the
+   * keyboard path is: reach the input, type a place nobody's gazetteer has, and
+   * press Enter to move on.
+   */
+  const field = page.getByTestId('destination-input');
+  await expect(field).toBeVisible();
+  const focused = () => field.evaluate((element) => element === document.activeElement);
+  for (let step = 0; step < 8 && !(await focused()); step += 1) {
     await page.keyboard.press('Tab');
   }
-  await expect(page.locator('input[role=combobox]')).toBeFocused();
+  await expect(field).toBeFocused();
+
   await page.keyboard.type('Harbour City');
-  await expect(page.getByRole('heading', { name: 'When?' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'When can you travel?' })).toBeVisible();
 });

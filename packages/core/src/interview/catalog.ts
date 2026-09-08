@@ -8,7 +8,7 @@ import {
   type InterestLevel,
   type RegionalExpansion,
 } from '../schemas/common';
-import { DIETARY_NEED_LABELS, DIETARY_NEEDS } from '../schemas/food';
+import { DIETARY_NEED_KIND, DIETARY_NEED_LABELS, DIETARY_NEEDS } from '../schemas/food';
 import {
   HARD_CONSTRAINT_LABELS,
   type HardConstraint,
@@ -146,6 +146,50 @@ export interface QuestionDefinition {
   smartDefault: (ctx: InterviewContext, answers: QuestionnaireAnswers) => SmartDefault;
   /** Presentational or consent-only questions may carry no impact. None today. */
   presentational?: boolean;
+  /**
+   * MVP V3, Stage 14 — whether this question offers "Something else".
+   *
+   * True for every preference whose options are a *simplification* of what a
+   * person would actually say. "How hard do you want to work for it?" has three
+   * options and a thousand real answers, and "I'm very fit but don't want two
+   * huge hiking days back to back" is one of them. False for questions whose
+   * options are exhaustive by construction (a month, a head count, a hard
+   * constraint that is already free text).
+   */
+  elaborates?: boolean;
+}
+
+/**
+ * Questions where an option is a simplification, so the traveller is offered a
+ * line of their own beside it. Listed once, here, rather than sprinkled through
+ * the definitions, so "which questions accept nuance" is answerable by reading
+ * one thing. `interview.test.ts` checks every id names a real question.
+ */
+export const ELABORATING_QUESTIONS: readonly string[] = [
+  'priorities',
+  'priority_roles',
+  'transport_mode',
+  'day_shape',
+  'effort',
+  'iconic_crowds',
+  'famous_vs_hidden',
+  'food_tradeoff',
+  'budget',
+  'convenience_spend',
+  'base_moves',
+  'coverage_strategy',
+  'lodging_style',
+  'hike_appetite',
+  'walking_tolerance',
+  'day_trips',
+  'remote_comfort',
+  'guide_willingness',
+  'scenic_reach',
+  'daily_driving',
+];
+
+export function questionElaborates(id: string): boolean {
+  return ELABORATING_QUESTIONS.includes(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -720,21 +764,33 @@ const DIETARY: QuestionDefinition = {
   tier: 'core',
   kind: 'dietary',
   prompt: () => 'Anything you do not eat?',
-  why: () => 'We only ever say a place can handle one of these when the place itself has published that it can. Mark them as requirements and we stop treating “nobody has confirmed it” as good enough.',
-  options: () => DIETARY_NEEDS.map((need) => ({ value: need, label: DIETARY_NEED_LABELS[need] })),
+  why: () => 'Pick a way of eating, add anything you avoid, and write the rest. We only say a place can handle one of these when the place itself has published that it can.',
+  options: () => DIETARY_NEEDS.map((need) => ({ value: need, label: DIETARY_NEED_LABELS[need], detail: DIETARY_NEED_KIND[need] })),
   impacts: ['food_strategy', 'hard_constraints'],
   hardCapable: true,
   burden: 1,
   criticality: 2,
   optional: true,
   relevance: () => 1,
-  read: (answers) => ({ needs: answers.dietaryNeeds, strict: answers.dietaryStrict }),
+  read: (answers) => ({ needs: answers.dietaryNeeds, strict: answers.dietaryStrict, notes: answers.dietaryNotes ?? '' }),
+  /*
+   * MVP V3, Stage 16 — a diet, any number of exclusions, and the traveller's
+   * own words, all kept separately. Nothing here derives one from another: a
+   * religion is never inferred from an ingredient, and an ingredient is never
+   * inferred from a religion (`dietary.test.ts`).
+   */
   apply: (value) => {
-    const raw = (value ?? {}) as { needs?: unknown; strict?: unknown };
+    const raw = (value ?? {}) as { needs?: unknown; strict?: unknown; notes?: unknown };
     const needs = (Array.isArray(raw.needs) ? raw.needs : []).filter((n): n is QuestionnaireAnswers['dietaryNeeds'][number] => (DIETARY_NEEDS as readonly string[]).includes(String(n)));
-    return { dietaryNeeds: [...new Set(needs)].sort(), dietaryStrict: needs.length > 0 && raw.strict === true };
+    const notes = typeof raw.notes === 'string' ? raw.notes.trim().slice(0, 300) : '';
+    return {
+      dietaryNeeds: [...new Set(needs)].sort(),
+      // Free text alone can be a requirement: "severe peanut allergy" is not a preference.
+      dietaryStrict: (needs.length > 0 || notes.length > 0) && raw.strict === true,
+      dietaryNotes: notes.length > 0 ? notes : undefined,
+    };
   },
-  smartDefault: () => ({ value: { needs: [], strict: false }, reason: "We'll assume no dietary restrictions.", source: 'smart_default' }),
+  smartDefault: () => ({ value: { needs: [], strict: false, notes: '' }, reason: "We'll assume no dietary restrictions.", source: 'smart_default' }),
 };
 
 /** The hard-constraint chips, only the ones that could bind in this destination. */

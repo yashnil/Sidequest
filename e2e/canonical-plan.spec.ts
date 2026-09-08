@@ -18,11 +18,7 @@ import { openHubView, openPrepareNotes } from './support/hub';
 const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 async function reachMammothBoard(page: Page) {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', AUGUST);
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);

@@ -343,6 +343,17 @@ function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['b
         </span>
       </div>
       <p className="text-xs leading-snug text-ink-muted">{b.reason}</p>
+      {/*
+        MVP V3, Stage 48 — the fourth question. What, why and when were all
+        answered above; this is what happens if it is gone by the time the
+        traveller gets there. Rendered only when the plan actually holds a
+        fallback: silence here means Sidequest has none, not that none exists.
+      */}
+      {b.ifUnavailable ? (
+        <p className="mt-1 text-xs leading-snug text-ink-muted" data-testid="hub-booking-fallback">
+          <span className="text-clay">If it is gone:</span> {b.ifUnavailable}
+        </p>
+      ) : null}
       {members && members.length > 0 ? (
         <details className="mt-1.5" data-testid="hub-stays-group">
           <summary className="min-h-9 cursor-pointer py-1 text-xs text-accent underline underline-offset-4">View bases</summary>
@@ -439,7 +450,13 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
         return (
           <div key={priority} className="mt-5" data-testid={`hub-bookings-${priority}`}>
             {priority === 'book_first' ? (
-              <p className="text-xs text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
+              /*
+                No blurb: the section header two lines above already says what
+                Book first means, and the two sentences said it twice under one
+                heading. The other priorities are headed only by their own
+                title, so they keep theirs.
+              */
+              null
             ) : (
               <>
                 <h3 className="font-display text-lg text-ink">

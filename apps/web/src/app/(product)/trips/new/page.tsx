@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import { TripComposer } from '@/components/TripComposer';
+import { SetupFlow } from '@/components/setup/SetupFlow';
 import { resolveMapBasemap } from '@/components/map-adapter';
+import { SETUP_STEPS, type SetupStepId } from '@/components/setup/setup-draft';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,42 +16,30 @@ function isoDate(daysFromNow: number): string {
 }
 
 /**
- * TWO WAYS IN, ONE COMPOSER.
+ * THE FIRST SCREEN OF ONE CONTINUOUS INTERVIEW.
  *
- * The third intent on the homepage — "I already have a plan" — arrives here with
- * `?have=plan`. It is the same form, framed for somebody who is not starting
- * from nothing, with the list of places they already have promoted from the last
- * question to the second one.
+ * Not a form any more (MVP V3, Stage 4). `SetupFlow` asks where, when, how many
+ * nights, who and what is already fixed — one question per screen, each a real
+ * history entry so the browser's own Back works, and each carrying the same
+ * progress path the adaptive interview uses. What follows it is the next
+ * question, not a different product.
  *
- * ## Why this is the honest shape of Mode 3 in this build
- *
- * Sidequest cannot critique an itinerary. There is no engine that reads a plan
- * and argues with it, and pretending otherwise would be the worst thing on the
- * homepage. What it *can* do, today, is take the places somebody names, resolve
- * them against real map data, build the region around them, and report which of
- * them it could not find, could not reach, or could not fit — which is most of
- * what a person wants when they ask "is this plan any good?".
- *
- * So the copy promises exactly that and no more. The previous state of this
- * intent was a grey line at the bottom of this page reading "Coming later:
- * paste an itinerary you already have and we will stress-test it" — a promise
- * made where nobody who wanted it would look, for a thing that does not exist.
+ * The third homepage intent — "I already have a plan" — still arrives here with
+ * `?have=plan`, and still means one thing: the places somebody already has are
+ * asked for early, because the must-do pipeline is what genuinely acts on them.
  */
-export default async function NewTripPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function NewTripPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
   const improving = params.have === 'plan';
+  const rawStep = typeof params.step === 'string' ? params.step : undefined;
+  const initialStep = rawStep && (SETUP_STEPS as readonly string[]).includes(rawStep) ? (rawStep as SetupStepId) : undefined;
 
   return (
-    <div className="mx-auto max-w-[1600px] px-5 pt-4 pb-10 sm:px-6 sm:pt-5">
-      <TripComposer
-        defaults={{ startDate: isoDate(30), endDate: isoDate(36) }}
-        intent={improving ? 'has_plan' : 'new'}
-        tiles={resolveMapBasemap(process.env)}
-      />
-    </div>
+    <SetupFlow
+      defaults={{ startDate: isoDate(30), endDate: isoDate(36) }}
+      intent={improving ? 'has_plan' : 'new'}
+      tiles={resolveMapBasemap(process.env)}
+      {...(initialStep ? { initialStep } : {})}
+    />
   );
 }

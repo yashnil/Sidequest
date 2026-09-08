@@ -4,7 +4,7 @@ import {
   expectNoRuntimeProblems,
   watchForRuntimeProblems,
 } from './support/viewports';
-import { answerEveryQuestion, requestExploration, waitUntilInteractive } from './support/trip';
+import { answerEveryQuestion, createTrip, requestExploration } from './support/trip';
 
 /**
  * THE REGION FIGURE, IN A REAL BROWSER, AGAINST REAL PORTFOLIO DATA.
@@ -35,20 +35,7 @@ async function reachRegionFigure(page: Page): Promise<void> {
   await page.goto('/decide');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
-  await page.goto('/trips/new');
-  const destination = page.getByLabel('Destination');
-  await waitUntilInteractive(destination);
-  await destination.fill('Ambervale');
-
-  const suggestion = page.getByRole('option').first();
-  await expect(suggestion, 'the index should offer the seeded country').toBeVisible({
-    timeout: 15_000,
-  });
-  await suggestion.click();
-
-  await page.getByLabel('Arrive').fill(DATES.start);
-  await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Ambervale', DATES, { pickSuggestion: true });
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
   // The research steps are an explicit request from the interview now.
   await requestExploration(page);

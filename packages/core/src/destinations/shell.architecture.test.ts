@@ -73,7 +73,11 @@ const SHELL_FILES = [
   'apps/web/src/components/TripContextBar.tsx',
   'apps/web/src/components/ui.tsx',
   'apps/web/src/components/DestinationCombobox.tsx',
-  'apps/web/src/components/TripComposer.tsx',
+  // MVP V3 — the composer form became a one-question-at-a-time interview.
+  'apps/web/src/components/setup/SetupFlow.tsx',
+  'apps/web/src/components/setup/DestinationField.tsx',
+  'apps/web/src/components/setup/TimingStep.tsx',
+  'apps/web/src/components/setup/setup-draft.ts',
   'apps/web/src/components/CompilationProgress.tsx',
   'apps/web/src/components/ScopePreview.tsx',
   'apps/web/src/components/PlanFlow.tsx',

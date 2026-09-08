@@ -25,11 +25,7 @@ const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 /** The authored fixture, which reaches a board with no provider switched on. */
 async function reachAuthoredBoard(page: Page): Promise<void> {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', AUGUST);
   await expect(page.getByTestId('interview')).toBeVisible();
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
@@ -188,8 +184,22 @@ async function reachProvisionalBoard(page: Page): Promise<string> {
   const tripId = await createTrip(page, 'Faraway Reaches');
   await reachScope(page);
   await page.getByRole('button', { name: 'Start exploring' }).click();
-  await page.waitForTimeout(2_000);
-  await page.goto(`/trips/${tripId}/provisional`);
+  /*
+   * A few widely spaced looks, not one guess and not a poll.
+   *
+   * One fixed two-second wait asks the provisional cut to have happened by a
+   * wall-clock deadline, and on a busy machine it has not. A tight poll of
+   * /provisional is worse: until the cut lands that route redirects to /plan,
+   * so polling means dozens of navigations onto the progress screen of the
+   * build being waited for, and it measurably lost more tests than it saved.
+   * Three looks, a few seconds apart, covers the cut and costs the build
+   * almost nothing.
+   */
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.waitForTimeout(attempt === 0 ? 2_000 : 4_000);
+    await page.goto(`/trips/${tripId}/provisional`);
+    if (await page.getByTestId('provisional-card').first().isVisible().catch(() => false)) break;
+  }
   await expect(page.getByTestId('provisional-card').first()).toBeVisible();
   return tripId;
 }

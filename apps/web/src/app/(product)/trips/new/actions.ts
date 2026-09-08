@@ -12,6 +12,7 @@ import {
   TRIP_COMPOSER_VERSION,
   TRIP_SHAPES,
   TRIP_THEMES,
+  buildDestinationIntent,
   qualifiedNameFor,
   seasonMonths,
   tripBasicsSchema,
@@ -27,6 +28,7 @@ import {
   getIntent,
   invalidateDependentStages,
   saveComposerAnswers,
+  saveDestinationIntent,
   saveDestinationQuery,
   saveSelectedDestination,
 } from '@/lib/db/compiler-repository';
@@ -69,6 +71,22 @@ const inputSchema = z.object({
   endDate: z.string(),
   flexDays: z.number().int().min(0).max(14),
   month: z.number().int().min(1).max(12),
+  /* MVP V3 — the timing modes that need no date from the traveller. */
+  months: z.array(z.number().int().min(1).max(12)).max(12).optional(),
+  earliest: z.string().nullable().optional(),
+  latest: z.string().nullable().optional(),
+  recommendation: z
+    .object({
+      startDate: z.string(),
+      endDate: z.string(),
+      label: z.string().max(80),
+      month: z.number().int().min(1).max(12),
+      year: z.number().int().min(2000).max(2100),
+      reasons: z.array(z.string().max(200)).max(6),
+      tradeoffs: z.array(z.string().max(200)).max(6),
+    })
+    .nullable()
+    .optional(),
   season: z.enum(['spring', 'summer', 'autumn', 'winter']),
   wantsDateRecommendation: z.boolean(),
   wantsLengthRecommendation: z.boolean(),
@@ -195,7 +213,27 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
         : { startDate, endDate }),
       ...(input.dateMode === 'flexible' ? { flexDays: input.flexDays } : {}),
       ...(input.dateMode === 'month' ? { month: input.month } : {}),
+      ...(input.dateMode === 'months' && input.months?.length ? { months: input.months } : {}),
+      ...(input.dateMode === 'window' && input.earliest ? { earliest: input.earliest } : {}),
+      ...(input.dateMode === 'window' && input.latest ? { latest: input.latest } : {}),
       ...(input.dateMode === 'season' ? { season: input.season } : {}),
+      /*
+       * MVP V3 — a window Sidequest chose is recorded with the evidence behind
+       * it, so every later screen can say the dates were proposed rather than
+       * decided. `accepted` is true here because this payload is only written
+       * once the traveller has pressed "Use this timing".
+       */
+      ...(input.recommendation
+        ? {
+            recommendation: {
+              ...input.recommendation,
+              unknowns: [],
+              basis: 'climate_normals' as const,
+              generatedAt: now.toISOString(),
+              accepted: true,
+            },
+          }
+        : {}),
       year: Number(startDate.slice(0, 4)),
       wantsRecommendation: input.wantsDateRecommendation,
     },
@@ -328,6 +366,16 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
     if (!region) {
       saveDestinationQuery(tripId, 'known_destination', input.destinationText);
       saveSelectedDestination(tripId, destination);
+      /*
+       * MVP V3 — what they meant, recorded once and for the life of the trip.
+       * Built from the text alone when that is all there is, which is the
+       * ordinary case now that a suggestion is optional. Nothing downstream
+       * waits on a resolver to have run.
+       */
+      saveDestinationIntent(
+        tripId,
+        buildDestinationIntent({ rawText: input.destinationText, selected: destination, now: new Date() }),
+      );
     }
   } catch (error) {
     console.error('Failed to create trip', error);
@@ -447,6 +495,16 @@ export async function updateTripFromComposer(
     if (!region) {
       saveDestinationQuery(tripId, 'known_destination', input.destinationText);
       saveSelectedDestination(tripId, destination);
+      /*
+       * MVP V3 — what they meant, recorded once and for the life of the trip.
+       * Built from the text alone when that is all there is, which is the
+       * ordinary case now that a suggestion is optional. Nothing downstream
+       * waits on a resolver to have run.
+       */
+      saveDestinationIntent(
+        tripId,
+        buildDestinationIntent({ rawText: input.destinationText, selected: destination, now: new Date() }),
+      );
     }
     invalidateDependentStages(tripId, {
       destinationChanged,
@@ -488,6 +546,11 @@ export async function updateTripFromComposer(
 
 function resolveNights(input: z.infer<typeof inputSchema>): number {
   if (input.nights !== null) return input.nights;
+  if (input.recommendation) {
+    const from = Date.parse(`${input.recommendation.startDate}T00:00:00Z`);
+    const to = Date.parse(`${input.recommendation.endDate}T00:00:00Z`);
+    if (!Number.isNaN(from) && !Number.isNaN(to) && to > from) return Math.round((to - from) / 86_400_000);
+  }
   if (input.dateMode === 'exact' || input.dateMode === 'flexible') {
     const from = Date.parse(`${input.startDate}T00:00:00Z`);
     const to = Date.parse(`${input.endDate}T00:00:00Z`);
@@ -525,14 +588,25 @@ function materialiseDates(
   if ((input.dateMode === 'exact' || input.dateMode === 'flexible') && input.startDate && input.endDate) {
     return { startDate: input.startDate, endDate: input.endDate };
   }
+  /*
+   * A window the traveller accepted is not a materialised placeholder — it is
+   * the answer to the question they asked. It wins over every rule below.
+   */
+  if (input.recommendation) {
+    return { startDate: input.recommendation.startDate, endDate: input.recommendation.endDate };
+  }
 
   const year = now.getUTCFullYear();
   const month =
     input.dateMode === 'month'
       ? input.month
-      : input.dateMode === 'season'
-        ? seasonMidpoint(input.season, latitude)
-        : now.getUTCMonth() + 2;
+      : input.dateMode === 'months' && input.months?.length
+        ? input.months[0]!
+        : input.dateMode === 'window' && input.earliest
+          ? Number(input.earliest.slice(5, 7))
+          : input.dateMode === 'season'
+            ? seasonMidpoint(input.season, latitude)
+            : now.getUTCMonth() + 2;
 
   // Next year when the month has already gone: a trip cannot start in the past.
   const targetYear = month <= now.getUTCMonth() + 1 ? year + 1 : year;

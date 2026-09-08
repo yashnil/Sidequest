@@ -151,9 +151,17 @@ export function DayFocusMap({ days, tiles = null }: { days: readonly DayFocusMod
             caption={day.omitted > 0 ? <span>{day.omitted} {day.omitted === 1 ? 'stop is' : 'stops are'} not drawn: nobody publishes where {day.omitted === 1 ? 'it is' : 'they are'}.</span> : null}
           />
         ) : (
-          <div className="flex aspect-[560/520] items-center justify-center rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk p-6 text-center type-small text-ink-muted">
+          /*
+            A sentence, not an empty frame.
+            This used to reserve the map's full 560×520 aspect and centre one
+            line in it, so a plan with no resolved coordinates gave up nearly
+            half the screen to a box with nothing in it. The reason to keep the
+            aspect would be to avoid layout shift, and there is no shift here:
+            nothing is loading, and nothing will arrive.
+          */
+          <p className="rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk px-4 py-3 type-small text-ink-muted">
             Nothing on this day has a confirmed position yet, so there is nothing honest to draw.
-          </div>
+          </p>
         )}
       </div>
     </aside>

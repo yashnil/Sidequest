@@ -116,6 +116,18 @@ export const DRAFT_TRANSPORTS = [
   'private_transfer',
   'four_wheel_drive',
   'guide_or_lodge_transfer',
+  /*
+   * A horse is transport in the places this product plans for.
+   *
+   * Added by the latency closure's Kyrgyzstan work, and not for Kyrgyzstan: a
+   * summer pasture reached on horseback, a Patagonian estancia ride and a
+   * Mongolian steppe crossing are all movement between two points that no road
+   * router will ever answer, and the vocabulary's only honest alternative was
+   * to call them a guided transfer. Everything downstream treats it as what it
+   * is — a real leg nobody can measure — so it lowers confidence instead of
+   * inventing a duration.
+   */
+  'horse',
   'unknown',
 ] as const;
 export type DraftTransport = (typeof DRAFT_TRANSPORTS)[number];
@@ -216,6 +228,17 @@ export const tripDraftSchema = z.object({
   archetype: z.enum(TRIP_ARCHETYPES),
   purpose: prose(DRAFT_SOFT_PROSE_CAPS.purpose),
   routeRationale: prose(DRAFT_SOFT_PROSE_CAPS.routeRationale),
+  /**
+   * MVP V3, Stage 30 — WHEN, answered.
+   *
+   * What this season means for this trip: what it opens, what it closes, what it
+   * makes worth doing at a particular hour. Load-bearing now that Sidequest can
+   * *choose* the dates ("tell me when it is best"): a traveller handed a window
+   * is owed the reason it is the window, in the plan rather than only on the
+   * screen that proposed it. Optional so a draft written before this field still
+   * parses.
+   */
+  timingRationale: prose(DRAFT_SOFT_PROSE_CAPS.routeRationale).optional(),
   assumptions: z.array(prose(DRAFT_SOFT_PROSE_CAPS.assumption)).max(5),
   tradeoffs: z.array(prose(DRAFT_SOFT_PROSE_CAPS.tradeoff)).max(5),
   /*

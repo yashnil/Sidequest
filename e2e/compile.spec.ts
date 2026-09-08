@@ -9,6 +9,7 @@ import {
   waitUntilInteractive,
   CULTURAL_INTERVIEW,
   completeQuestionnaire,
+  createTrip as makeTrip,
 } from './support/trip';
 
 /**
@@ -25,23 +26,11 @@ import {
 
 const DATES = { start: '2026-08-12', end: '2026-08-16' };
 
+/** The five setup screens, then the trip id from the URL the flow landed on. */
 async function createTrip(page: Page, destination: string): Promise<string> {
-  await page.goto('/trips/new');
-  /*
-   * The composer's second section exists only once the client has the
-   * destination, so typing before the page is interactive loses the keystroke
-   * and the rest of the form never appears. See `waitUntilInteractive`.
-   */
-  const field = page.getByLabel('Destination');
-  await waitUntilInteractive(field);
-  await field.fill(destination);
-  await page.getByLabel('Arrive').fill(DATES.start);
-  await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/plan/);
-  const id = /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1];
+  const id = await makeTrip(page, destination, DATES);
   expect(id, 'a trip id should be in the URL').toBeTruthy();
-  return id!;
+  return id;
 }
 
 /**

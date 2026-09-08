@@ -7,6 +7,7 @@ import type { CheckList } from '@/lib/db/intelligence-repository';
 import type { BookedPlanItem, TravelIntelligence, TravelReadinessProfile } from '@sidequest/core';
 import type { StopRationale } from '@/components/ItineraryView';
 import { acceptedImagesFor } from '@/lib/db/imagery-repository';
+import { arePlacePhotosEnabled } from '@/lib/providers/switches';
 import { formatMinutes } from '@/lib/format';
 import { getProfile } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
@@ -63,6 +64,13 @@ export interface ItineraryViewModel {
   worthSkipping: { name: string; reason: string }[];
   lodgingAreas: { name: string; rationale: string; tradeoffs: readonly string[] }[];
   images: Record<string, DestinationImageRecord>;
+  /**
+   * MVP V3 — where a request-time photograph can be fetched for a stop, by place
+   * id. Empty unless `SIDEQUEST_PLACE_PHOTOS=google` is configured. The value is
+   * a URL on this origin: the credential stays on the server and nothing is
+   * stored. See `app/api/place-photo/route.ts`.
+   */
+  livePhotos: Record<string, string>;
   rationale: Record<string, StopRationale>;
   /** The trip in one sentence, from the traveller's profile; null without one. */
   personality: string | null;
@@ -171,6 +179,19 @@ export async function itineraryViewModel(
    * per stop, per day, per refresh, for every visitor.
    */
   let images: Record<string, DestinationImageRecord> = {};
+  /*
+   * Only stops the plan actually resolved to a Google place, and only when the
+   * switch is on. A stop resolved by the geocoder or from compiled evidence has
+   * no Places id and gets no live photograph — which is correct: there is
+   * nothing to ask for.
+   */
+  const livePhotos: Record<string, string> = {};
+  if (arePlacePhotosEnabled()) {
+    for (const anchor of itinerary.package?.anchors ?? []) {
+      if (!anchor.placeId || anchor.identity?.provider !== 'google-places' || !anchor.identity.providerRef) continue;
+      livePhotos[anchor.placeId] = `/api/place-photo?trip=${encodeURIComponent(trip.id)}&anchor=${encodeURIComponent(anchor.id)}`;
+    }
+  }
   let personality: string | null = null;
   try {
     const profile = getProfile(trip.id);
@@ -365,6 +386,7 @@ export async function itineraryViewModel(
     worthSkipping,
     lodgingAreas,
     images,
+    livePhotos,
     rationale,
     personality,
   };

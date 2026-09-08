@@ -1,6 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { USER_AGENT } from './nominatim';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * VALHALLA — ROUTING AND ROUTE MATRICES.
@@ -340,7 +341,7 @@ async function fetchBlock(
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: requestSignal(REQUEST_TIMEOUT_MS),
       });
     } catch {
       lastError = new RoutingError('request_failed', 'The routing service did not answer.');
@@ -559,7 +560,7 @@ export async function computeRoute(
         costing,
         units: 'kilometers',
       }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
     });
   } catch {
     return { found: false, minutes: null, km: null, reason: 'provider_error' };

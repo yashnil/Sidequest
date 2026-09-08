@@ -350,3 +350,130 @@ export function datesInWindow(
     endDate: end.toISOString().slice(0, 10),
   };
 }
+
+// ---------------------------------------------------------------------------
+// From a month-grained window to dates a traveller can book
+// ---------------------------------------------------------------------------
+
+/**
+ * WHY A MONTH IS NOT AN ANSWER, AND WHAT TURNS IT INTO ONE.
+ *
+ * MVP V3, Stage 46. "Tell me when this place is at its best" has to come back
+ * with something a person can act on — "late May to mid-June", with the reasons
+ * — not with the word "June". The evidence is month-grained, so the only honest
+ * way to place a window inside a month is to let the *neighbouring* months move
+ * it: when the month after scores higher, the window sits late; when the month
+ * before scores higher, it sits early; when they are level, it sits in the
+ * middle. Every one of those is derived from the same climate normals that
+ * produced the ranking, so the window never claims precision the evidence lacks.
+ *
+ * Deliberately not modelled: weekends, flight prices, school holidays, festivals
+ * and crowds. None of them is sourced, and a window nudged by an unsourced guess
+ * would be indistinguishable on screen from one nudged by twenty years of data.
+ */
+export interface ConcreteWindow {
+  startDate: string;
+  endDate: string;
+  /** "Late May to mid-June". Reads as a period, because that is what it is. */
+  label: string;
+  month: number;
+  year: number;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function iso(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** early / mid / late, and the month it belongs to. The vocabulary a person uses for a date they have not fixed. */
+export function describeDayPart(year: number, month: number, day: number): string {
+  const total = daysInMonth(year, month);
+  const part = day <= Math.round(total / 3) ? 'early' : day <= Math.round((total * 2) / 3) ? 'mid' : 'late';
+  return `${part} ${monthName(month)}`;
+}
+
+/** "Late May to mid-June", collapsing to one phrase when both ends sit in the same part of the same month. */
+export function describeWindow(startDate: string, endDate: string): string {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  const from = describeDayPart(start.getUTCFullYear(), start.getUTCMonth() + 1, start.getUTCDate());
+  const to = describeDayPart(end.getUTCFullYear(), end.getUTCMonth() + 1, end.getUTCDate());
+  const phrase = from === to ? from : `${from} to ${to}`;
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+}
+
+export interface ConcreteWindowInput {
+  /** The ranked windows `recommendDateWindows` returned, best first. */
+  windows: readonly DateWindow[];
+  /** Which of them to place. Defaults to the best. */
+  choose?: number;
+  nights: number;
+  /** Outer bounds the traveller is free between, when they gave any. */
+  earliest?: string | null;
+  latest?: string | null;
+}
+
+/**
+ * Places one ranked window on the calendar.
+ *
+ * Returns null when there is nothing to place — which is the honest answer for a
+ * destination with no climate records, and the caller must say so rather than
+ * fall back to a date.
+ */
+export function concreteWindow(input: ConcreteWindowInput): ConcreteWindow | null {
+  const chosen = input.windows[input.choose ?? 0];
+  if (!chosen) return null;
+  const nights = Math.max(1, Math.min(30, Math.round(input.nights)));
+  const scoreOf = (month: number) => input.windows.find((w) => w.month === month)?.score ?? null;
+  const before = scoreOf(chosen.month === 1 ? 12 : chosen.month - 1);
+  const after = scoreOf(chosen.month === 12 ? 1 : chosen.month + 1);
+  /*
+   * A week of bias, which is as fine a distinction as month-grained evidence
+   * can honestly support. Anything smaller would be arithmetic theatre.
+   */
+  const bias = before !== null && after !== null && Math.abs(after - before) > 0.02 ? (after > before ? 7 : -7) : 0;
+  const total = daysInMonth(chosen.year, chosen.month);
+  const centred = Math.round((total - nights) / 2) + 1;
+  const startDay = Math.max(1, Math.min(total, centred + bias));
+  let start = new Date(Date.UTC(chosen.year, chosen.month - 1, startDay));
+  let end = new Date(start.getTime() + nights * 86_400_000);
+
+  // The traveller's own bounds always win over the evidence's preferred placement.
+  const floor = input.earliest ? new Date(`${input.earliest}T00:00:00Z`) : null;
+  const ceiling = input.latest ? new Date(`${input.latest}T00:00:00Z`) : null;
+  if (floor && start < floor) {
+    start = floor;
+    end = new Date(start.getTime() + nights * 86_400_000);
+  }
+  if (ceiling && end > ceiling) {
+    end = ceiling;
+    start = new Date(end.getTime() - nights * 86_400_000);
+    if (floor && start < floor) start = floor;
+  }
+
+  return {
+    startDate: iso(start),
+    endDate: iso(end),
+    label: describeWindow(iso(start), iso(end)),
+    month: chosen.month,
+    year: chosen.year,
+  };
+}
+
+/** The months a traveller's free window spans, for restricting the ranking to them. */
+export function monthsBetween(earliest: string, latest: string): number[] {
+  const from = new Date(`${earliest}T00:00:00Z`);
+  const to = new Date(`${latest}T00:00:00Z`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return [];
+  const months: number[] = [];
+  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  while (cursor <= to && months.length < 24) {
+    const month = cursor.getUTCMonth() + 1;
+    if (!months.includes(month)) months.push(month);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}

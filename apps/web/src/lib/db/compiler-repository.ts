@@ -1,6 +1,9 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import {
+  buildDestinationIntent,
+  destinationIntentSchema,
+  type DestinationIntent,
   clarificationSetSchema,
   compilationWorkPlanSchema,
   type CompilationWorkPlan,
@@ -78,6 +81,15 @@ export interface TripIntentRecord {
    */
   selectedDestination: SelectedDestination | null;
   preflight: TripPreflight | null;
+  /**
+   * MVP V3 — what the traveller meant, as one record.
+   *
+   * Null for a trip created before the intent existed. Nothing synthesises one
+   * from `destinationQuery` on read: a record carries a timestamp and a
+   * confidence, and manufacturing those would date an interpretation nobody
+   * made. Readers fall back to the query text, which is what they did before.
+   */
+  destinationIntent: DestinationIntent | null;
 }
 
 interface IntentRow {
@@ -94,6 +106,7 @@ interface IntentRow {
   composer_json: string | null;
   selected_destination_json: string | null;
   preflight_json: string | null;
+  destination_intent_json: string | null;
 }
 
 const EMPTY_CLARIFICATIONS: ClarificationSet = {
@@ -116,7 +129,8 @@ export function getIntent(tripId: string): TripIntentRecord | null {
     .prepare(
       `SELECT trip_id, mode, destination_query, resolution_json, selected_candidate_id,
               clarifications_json, scope_json, scope_revision, selected_compiled_region_id,
-              discovery_prefs_json, composer_json, selected_destination_json, preflight_json
+              discovery_prefs_json, composer_json, selected_destination_json, preflight_json,
+              destination_intent_json
          FROM trip_intents WHERE trip_id = ?`,
     )
     .get(tripId) as IntentRow | undefined;
@@ -151,6 +165,12 @@ export function getIntent(tripId: string): TripIntentRecord | null {
       composer: parseLenient(row.composer_json, tripComposerAnswersSchema),
       selectedDestination: parseLenient(row.selected_destination_json, selectedDestinationSchema),
       preflight: parseLenient(row.preflight_json, tripPreflightSchema),
+      /*
+       * Lenient for the same reason as its neighbours, and one of its own: the
+       * raw text also lives on the composer answers, so a record that will not
+       * parse costs an interpretation rather than the traveller's words.
+       */
+      destinationIntent: parseLenient(row.destination_intent_json, destinationIntentSchema),
     };
   } catch (error) {
     console.error('Stored trip intent will not parse; starting that trip over', error);
@@ -176,6 +196,16 @@ function parseLenient<T>(raw: string | null, schema: { safeParse(value: unknown)
 
 export function saveComposerAnswers(tripId: string, answers: TripComposerAnswers): void {
   upsertIntent(tripId, { composer_json: JSON.stringify(answers) });
+}
+
+/**
+ * Record what the traveller meant. Validated on the way in as well as out, so a
+ * malformed intent can never be stored, let alone read back into a brief.
+ */
+export function saveDestinationIntent(tripId: string, intent: DestinationIntent): void {
+  upsertIntent(tripId, {
+    destination_intent_json: JSON.stringify(destinationIntentSchema.parse(intent)),
+  });
 }
 
 export function saveSelectedDestination(
@@ -223,6 +253,29 @@ export function saveResolution(tripId: string, resolution: DestinationResolution
   // the table it would later be read back out of.
   const parsed = destinationResolutionSchema.parse(resolution);
   upsertIntent(tripId, { resolution_json: JSON.stringify(parsed) });
+
+  /*
+   * MVP V3, Stage 11 — GEOCODING ENRICHES THE INTENT; IT NEVER REPLACES IT.
+   *
+   * A resolution arriving after the trip was created is new evidence about the
+   * same sentence, so the record is rebuilt from that sentence plus the new
+   * evidence — never from the resolution alone. Two consequences are the point
+   * of doing it here rather than at the call sites:
+   *
+   * - A traveller's own selection outranks anything a provider returns, so a
+   *   trip that has one is left exactly as it is.
+   * - `buildDestinationIntent` decides whether the resolution earned the label,
+   *   which means a phrase the resolver did not answer keeps the traveller's
+   *   words however confident the provider was.
+   */
+  const current = getIntent(tripId);
+  if (!current || current.selectedDestination) return;
+  const rawText = current.destinationIntent?.rawText || current.destinationQuery;
+  if (!rawText.trim()) return;
+  saveDestinationIntent(
+    tripId,
+    buildDestinationIntent({ rawText, resolution: parsed, now: new Date() }),
+  );
 }
 
 export function saveSelectedCandidate(tripId: string, candidateId: string): void {

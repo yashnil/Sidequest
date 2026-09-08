@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { tilesForViewport, type MapBasemap } from './map-adapter';
-import { VectorBasemapLayer } from './VectorBasemap';
+import { VectorBasemapLayer, type MapHealth } from './VectorBasemap';
 import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoint, type MapViewport } from './map-projection';
 import { cx } from './ui';
 
@@ -37,7 +37,22 @@ export interface MapMarker {
   travelMinutes?: number | null;
 }
 
-export type MapConnectorStyle = 'measured_drive' | 'measured_transit' | 'measured_walk' | 'estimated' | 'unmeasured' | 'sightline';
+export type MapConnectorStyle =
+  | 'measured_drive'
+  | 'measured_transit'
+  | 'measured_walk'
+  | 'estimated'
+  | 'unmeasured'
+  | 'sightline'
+  /**
+   * MVP V3 — a line that illustrates an idea rather than a journey.
+   *
+   * The interview's transit spokes used `measured_transit`, so the caption under
+   * a map with no plan on it read "Solid lines: measured legs" — a claim about
+   * evidence, on a drawing whose whole point is that nothing has been measured
+   * yet. A conceptual line has its own style and is captioned as one.
+   */
+  | 'conceptual';
 
 export interface MapConnector {
   id: string;
@@ -67,6 +82,16 @@ export interface InteractiveMapProps {
   pinLabel?: (marker: MapMarker) => string;
   /** PRODUCTION UI V1 — points the initial fit must include without drawing them (a destination's extent, a stated reach). */
   fitPoints?: readonly GeoPoint[];
+  /**
+   * MVP V3 — draw the map and nothing around it.
+   *
+   * For the generation screen, where the map is scenery: pan controls a
+   * traveller cannot use while they wait, a legend about line styles and a
+   * paragraph of caption were three kinds of clutter on a screen with one job.
+   * The attribution is NOT optional and is still rendered, because it is a
+   * licence obligation rather than chrome.
+   */
+  chromeless?: boolean;
 }
 
 const INSETS = { top: 18, right: 18, bottom: 18, left: 18 };
@@ -120,6 +145,7 @@ const CONNECTOR_STYLE: Record<MapConnectorStyle, { stroke: string; dash?: string
   estimated: { stroke: 'var(--color-map-secondary)', dash: '6 5', width: 2.25, opacity: 0.85 },
   unmeasured: { stroke: 'var(--color-ink-faint)', dash: '3 4', width: 1.5, opacity: 0.7 },
   sightline: { stroke: 'var(--color-pine)', dash: '3 4', width: 1.5, opacity: 0.55 },
+  conceptual: { stroke: 'var(--color-map-route)', dash: '7 6', width: 2, opacity: 0.65 },
 };
 
 export function InteractiveMap({
@@ -137,6 +163,7 @@ export function InteractiveMap({
   className,
   pinLabel,
   fitPoints = [],
+  chromeless = false,
 }: InteractiveMapProps) {
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -238,9 +265,18 @@ export function InteractiveMap({
   }, [base, view.cx, view.cy, view.scale, width, height]);
 
   const vector = tiles && tiles.kind === 'vector' ? tiles : null;
+  /*
+   * MVP V3 — the figure never waits on the basemap and never pretends to have
+   * one. Until the tiles are actually on screen the graticule stays, so a frame
+   * is never empty; a basemap that fails says so in the caption rather than
+   * leaving an attribution line crediting a map nobody can see.
+   */
+  const [basemapHealth, setBasemapHealth] = useState<MapHealth>(vector ? 'loading' : 'failed');
+  const basemapDrawn = vector !== null && (basemapHealth === 'ready' || basemapHealth === 'degraded');
   const placedTiles = tiles && tiles.kind !== 'vector' ? tilesForViewport({ viewport, source: tiles, maxTiles: 48 }) : [];
   const centreGeo = viewport.unproject({ x: width / 2, y: height / 2 });
   const hasMeasured = connectors.some((c) => c.style.startsWith('measured'));
+  const hasConceptual = connectors.some((c) => c.style === 'conceptual');
   const hasRouteShape = connectors.some((c) => c.path && c.path.length > 1);
   const hasStraightMeasured = connectors.some((c) => c.style.startsWith('measured') && !(c.path && c.path.length > 1));
   const hasEstimated = connectors.some((c) => c.style === 'estimated');
@@ -268,7 +304,7 @@ export function InteractiveMap({
     <div className={cx('min-w-0', className)}>
       <figure className="m-0" data-testid={testId}>
         <div className="relative overflow-hidden rounded-[var(--radius-card)] border border-rule bg-paper-sunk">
-          {vector ? <VectorBasemapLayer source={vector} centre={centreGeo} scale={view.scale} width={width} height={height} /> : null}
+          {vector ? <VectorBasemapLayer source={vector} centre={centreGeo} scale={view.scale} width={width} height={height} onHealth={setBasemapHealth} /> : null}
           <svg
             ref={svgRef}
             viewBox={`0 0 ${width} ${height}`}
@@ -324,7 +360,7 @@ export function InteractiveMap({
               </>
             ) : null}
 
-            {!tiles ? (
+            {!basemapDrawn && placedTiles.length === 0 ? (
               /* PRODUCTION UI V1 — with no basemap, a faint graticule says "this is a map" and gives the eye a scale; nothing here claims a coastline or a road. */
               <g pointerEvents="none" opacity={0.35}>
                 {Array.from({ length: Math.ceil(width / 64) + 1 }, (_, i) => (
@@ -410,11 +446,42 @@ export function InteractiveMap({
                       {marker.order}
                     </text>
                   ) : null}
-                  {labelAll && marker.name && !isFocused ? (
-                    <text x={x + (stop ? 12 : 8)} y={y + 3.5} fontSize={10} fill="var(--color-ink-muted)" stroke="var(--color-paper-sunk)" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none">
-                      {marker.name.length > 28 ? `${marker.name.slice(0, 27)}…` : marker.name}
-                    </text>
-                  ) : null}
+                  {labelAll && marker.name && !isFocused
+                    ? (() => {
+                        /*
+                         * MVP V3 — A LABEL THAT RUNS OFF THE MAP IS NOT A LABEL.
+                         *
+                         * Seen on the live Kyrgyzstan review: a mark near the
+                         * right edge read "Second base (to be" and stopped at
+                         * the frame. Labels sit to the right of their mark by
+                         * default; one that would not fit flips to the left of
+                         * it instead. The width is estimated from the character
+                         * count at this font size — measuring text in SVG means
+                         * a layout read per marker per frame, and a label that
+                         * flips a few pixels early is invisible where a clipped
+                         * one is not.
+                         */
+                        const text = marker.name.length > 28 ? `${marker.name.slice(0, 27)}…` : marker.name;
+                        const estimated = text.length * 5.4;
+                        const offset = stop ? 12 : 8;
+                        const flip = x + offset + estimated > width - 4;
+                        return (
+                          <text
+                            x={flip ? x - offset : x + offset}
+                            y={y + 3.5}
+                            textAnchor={flip ? 'end' : 'start'}
+                            fontSize={10}
+                            fill="var(--color-ink-muted)"
+                            stroke="var(--color-paper-sunk)"
+                            strokeWidth={2.5}
+                            paintOrder="stroke"
+                            pointerEvents="none"
+                          >
+                            {text}
+                          </text>
+                        );
+                      })()
+                    : null}
                 </g>
               );
             })}
@@ -443,7 +510,30 @@ export function InteractiveMap({
             ) : null}
           </svg>
         </div>
-        <figcaption className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-snug text-ink-faint">
+        {/*
+          MVP V3, Stage 60 — THE MAP AS A LIST.
+
+          The picture is a picture: `role="img"` with a one-sentence summary is
+          the whole of what a screen reader gets from an SVG, and a summary
+          cannot say what the fourth stop is. So every marker is also a list
+          item, in the order the day runs, hidden from sight and available to
+          anybody reading the page any other way. It is generated from the same
+          array the map draws, so the two can never disagree.
+        */}
+        {markers.some((marker) => marker.name) || base ? (
+          <ol className="sr-only" data-testid="map-list-equivalent">
+            {base ? <li>Base: {base.name}</li> : null}
+            {markers.filter((marker) => marker.name).map((marker) => (
+              <li key={`list-${marker.id}`}>
+                {marker.kind === 'stop' && marker.order !== undefined ? `Stop ${marker.order}: ` : ''}
+                {marker.name}
+                {marker.category ? `. ${marker.category}` : ''}
+                {typeof marker.travelMinutes === 'number' ? `. ${marker.travelMinutes} minutes from the previous stop` : ''}
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        <figcaption className={cx('mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-snug text-ink-faint', chromeless && 'sr-only')}>
           {base ? (
             <span className="flex items-center gap-1.5">
               <span aria-hidden="true" className="inline-block h-2 w-2 rounded-[2px] bg-ink" />
@@ -460,12 +550,27 @@ export function InteractiveMap({
           {hasMeasured ? <span>Solid lines: measured legs{hasStraightMeasured ? ' (straight where no road shape was recorded)' : ''}; dotted: on foot.</span> : null}
           {hasRouteShape && !hasMeasured ? <span>Curved lines follow the measured road.</span> : null}
           {hasEstimated ? <span>Umber dashes: estimated from map distance.</span> : null}
-          {hasUnmeasured || markers.some((m) => m.kind === 'place') ? <span>Short dashes: straight connectors, not routes.</span> : null}
+          {hasConceptual ? <span>Dashed lines are conceptual — nothing is placed until the plan is built.</span> : null}
+          {/*
+            Only when a short dash is actually on the map.
+            It used to appear for any `place` marker, so a screen with one mark
+            and no lines carried a legend for lines nobody had drawn — a caption
+            asserting something the picture does not show, which is the one
+            thing every other rule in this file exists to prevent.
+          */}
+          {hasUnmeasured ? <span>Short dashes: straight connectors, not routes.</span> : null}
           {caption}
-          {tiles ? <span>Basemap: {tiles.attribution}.</span> : <span>Positions come from the source records; no basemap is configured.</span>}
+          {basemapDrawn || placedTiles.length > 0 ? (
+            <span>{tiles!.attribution}</span>
+          ) : vector && basemapHealth === 'loading' ? null : (
+            /* Said only once it is true: a basemap still arriving is not an absent one. */
+            <span>No basemap here — the marks and lines are what is known.</span>
+          )}
         </figcaption>
       </figure>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Map controls">
+      {/* The attribution stays visible even chromeless: it is a licence obligation, not chrome. */}
+      {chromeless ? <p className="mt-1.5 text-[10px] leading-snug text-ink-faint">{basemapDrawn || placedTiles.length > 0 ? tiles!.attribution : null}</p> : null}
+      <div className={cx('mt-2 flex-wrap items-center gap-1.5', chromeless ? 'hidden' : 'flex')} aria-label="Map controls">
         <MapButton label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
           +
         </MapButton>

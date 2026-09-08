@@ -16,6 +16,7 @@ import {
   type ImageSubject,
   type SelectedDestination,
   type TripComposerAnswers,
+  DATE_MODES,
 } from '@sidequest/core';
 import {
   createDecisionSession,
@@ -55,7 +56,13 @@ import { resolveImageryForSubjects } from '@/lib/providers/wikimedia';
  */
 
 const answersSchema = z.object({
-  dateMode: z.enum(['exact', 'flexible', 'month', 'season', 'undecided']),
+  /*
+   * The full timing vocabulary (`DATE_MODES`), even though the decide composer
+   * only offers four of them. One enum across the product means a session saved
+   * from one surface can always be read by another; a narrower copy here is how
+   * a shared type quietly becomes two.
+   */
+  dateMode: z.enum(DATE_MODES),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   month: z.number().int().min(1).max(12).optional(),

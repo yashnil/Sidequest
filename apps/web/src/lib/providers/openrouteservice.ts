@@ -2,6 +2,7 @@ import 'server-only';
 import { z } from 'zod';
 import type { RoutingProvider, RouteConfirmationResult, RoutingMatrixResult, ProviderGapReason } from '@sidequest/compiler';
 import { USER_AGENT } from './nominatim';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * OPENROUTESERVICE — THE OPTIONAL GLOBAL ROAD ROUTER.
@@ -88,7 +89,7 @@ export async function computeOrsRoute(input: { from: { lat: number; lng: number 
       method: 'POST',
       headers: { authorization: apiKey, 'content-type': 'application/json', accept: 'application/geo+json, application/json', 'user-agent': USER_AGENT },
       body: JSON.stringify({ coordinates: [[input.from.lng, input.from.lat], [input.to.lng, input.to.lat]], instructions: false, geometry_simplify: true }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
     });
   } catch {
     if (http.counter) http.counter.failures += 1;

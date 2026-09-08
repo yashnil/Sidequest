@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire, openBoardBackstage, waitUntilInteractive } from './support/trip';
+import { completeQuestionnaire, createTrip as makeTrip, openBoardBackstage, waitUntilInteractive, openReviewLedger } from './support/trip';
 
 /**
  * The journey this slice promises: a traveller enters a Mammoth Lakes trip,
@@ -11,11 +11,7 @@ const AUGUST_TRIP = { start: '2026-08-12', end: '2026-08-15' };
 const JANUARY_TRIP = { start: '2027-01-12', end: '2027-01-15' };
 
 async function createTrip(page: Page, dates: { start: string; end: string }) {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(dates.start);
-  await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await makeTrip(page, 'Mammoth Lakes', dates);
   await expect(page.getByTestId('interview')).toBeVisible();
 }
 
@@ -28,7 +24,13 @@ test('a traveller goes from a blank trip to a personalised Eastern Sierra board'
   // The profile is reflected back before anything is generated: the review
   // opens with the trip in one sentence and the sketch's shape / range facts.
   await expect(page.getByTestId('interview-sentence')).toContainText(/over \d+ days/);
-  await expect(page.getByText('Reach', { exact: true })).toBeVisible();
+  /*
+   * MVP V3 — the review leads with the glance rather than a profile list, so the
+   * facts to check for are the group titles a traveller reads, not the sketch's
+   * own vocabulary ("Reach", "Shape").
+   */
+  await expect(page.getByTestId('review-glance')).toBeVisible();
+  await expect(page.getByTestId('glance-shape')).toBeVisible();
 
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
 
@@ -358,6 +360,7 @@ test('the questionnaire adapts and refuses to continue on an empty profile', asy
   expect(seen).not.toContain('daily_driving');
   expect(seen).not.toContain('road_comfort');
   await expect(page.getByTestId('review-change-daily_driving')).toHaveCount(0);
+  await openReviewLedger(page);
   await expect(page.getByTestId('review-told')).toContainText(/No car|public transport|Without a car/);
 });
 

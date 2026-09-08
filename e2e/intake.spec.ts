@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test } from '@playwright/test';
-import { completeQuestionnaire, createTrip, reachScope, waitUntilInteractive, DEFAULT_DATES } from './support/trip';
+import { expect, test, type Page } from '@playwright/test';
+import { completeQuestionnaire, createTrip, openReviewLedger, reachScope, waitUntilInteractive, DEFAULT_DATES } from './support/trip';
 
 /**
  * THE FOUNDER-TEST REGRESSIONS, DRIVEN THROUGH THE ORDINARY PRODUCT.
@@ -24,99 +24,87 @@ test.describe('correcting an answer without starting again', () => {
     const tripId = await createTrip(page, 'Harbour City');
 
     await page.goto(`/trips/${tripId}/edit`);
-    const field = page.getByLabel('Destination');
+    const field = page.getByTestId('destination-input');
     await waitUntilInteractive(field);
 
     /* Their own answers, not a blank form. */
     await expect(field).toHaveValue('Harbour City');
-    await expect(page.getByLabel('Arrive')).toHaveValue(DEFAULT_DATES.start);
-    await expect(page.getByLabel('Leave')).toHaveValue(DEFAULT_DATES.end);
+    await page.getByTestId('setup-continue').locator('visible=true').first().click();
+    await expect(page.getByTestId('timing-start')).toHaveValue(DEFAULT_DATES.start);
+    await expect(page.getByTestId('timing-end')).toHaveValue(DEFAULT_DATES.end);
   });
 
   test('an edit changes the trip rather than creating a second one', async ({ page }) => {
     const tripId = await createTrip(page, 'Harbour City');
 
+    const advance = () => page.getByTestId('setup-continue').locator('visible=true').first().click();
     await page.goto(`/trips/${tripId}/edit`);
-    const field = page.getByLabel('Destination');
-    await waitUntilInteractive(field);
-    await page.getByLabel('Leave').fill('2026-08-18');
-    await page.getByRole('button', { name: /^Continue$/ }).click();
+    await waitUntilInteractive(page.getByTestId('destination-input'));
+    await advance();
+    await page.getByTestId('timing-end').fill('2026-08-18');
+    await advance();
+    await advance();
+    await advance();
 
     await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
     /* The same trip. A new id here would mean the original was orphaned. */
     expect(page.url()).toContain(tripId);
 
     await page.goto(`/trips/${tripId}/edit`);
-    await waitUntilInteractive(page.getByLabel('Destination'));
-    await expect(page.getByLabel('Leave')).toHaveValue('2026-08-18');
+    await waitUntilInteractive(page.getByTestId('destination-input'));
+    await advance();
+    await expect(page.getByTestId('timing-end')).toHaveValue('2026-08-18');
   });
 });
 
+/**
+ * MVP V3 — the party is its own screen, and the counts are steppers with a
+ * live-region readout rather than free-text number inputs. The defect the old
+ * tests guarded (a controlled number input settling at a leading zero) cannot
+ * occur in a control with no text field; what is still worth asserting is the
+ * bounds and that the readout follows the presses.
+ */
+async function reachWhoStep(page: Page): Promise<void> {
+  const advance = () => page.getByTestId('setup-continue').locator('visible=true').first().click();
+  await page.goto('/trips/new');
+  const destination = page.getByTestId('destination-input');
+  await waitUntilInteractive(destination);
+  await destination.fill('Harbour City');
+  await advance();
+  await page.getByTestId('timing-exact').click();
+  await page.getByTestId('timing-start').fill(DEFAULT_DATES.start);
+  await page.getByTestId('timing-end').fill(DEFAULT_DATES.end);
+  await advance();
+  await page.getByTestId('party-couple').click();
+}
+
 test.describe('traveller counts behave like numbers', () => {
-  test('clearing the field and typing does not produce a leading zero', async ({ page }) => {
-    await page.goto('/trips/new');
-    const destination = page.getByLabel('Destination');
-    await waitUntilInteractive(destination);
-    await destination.fill('Harbour City');
-    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
+  test('the counts start where the party shape says and move by one', async ({ page }) => {
+    await reachWhoStep(page);
+    /* "Two of us" starts at two adults and no children; the readout says so before anything is pressed. */
+    await expect(page.getByTestId('count-adults')).toHaveText('2');
+    await expect(page.getByTestId('count-children')).toHaveText('0');
 
-    const children = page.getByLabel('Children');
-    await waitUntilInteractive(children);
-    await expect(children).toHaveValue('0');
-
-    /*
-     * The exact reported sequence. A controlled number input bound to `0` and
-     * updated through `Number(value)` never re-renders on the way through the
-     * empty string, so the DOM keeps it and the next keystroke reads `01`.
-     */
-    await children.click();
-    /*
-     * `fill('')` rather than select-all-and-delete. On macOS Chromium `Control+A`
-     * is the emacs binding for start-of-line, not select-all, so the sequence
-     * that reads like "clear it" leaves the field intact and types *in front of*
-     * the zero — which produced a `10` and would have made this specification
-     * pass or fail on the platform rather than on the product.
-     */
-    await children.fill('');
-    await expect(children).toHaveValue('');
-    await children.type('1');
-    await children.blur();
-    await expect(children).toHaveValue('1');
+    await page.getByRole('button', { name: 'One more child' }).click();
+    await expect(page.getByTestId('count-children')).toHaveText('1');
+    await page.getByRole('button', { name: 'One more adult' }).click();
+    await expect(page.getByTestId('count-adults')).toHaveText('3');
   });
 
-  test('an emptied count settles at its minimum rather than at zero', async ({ page }) => {
-    await page.goto('/trips/new');
-    const destination = page.getByLabel('Destination');
-    await waitUntilInteractive(destination);
-    await destination.fill('Harbour City');
-    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-
-    const adults = page.getByLabel('Adults');
-    await waitUntilInteractive(adults);
-    await adults.click();
-    await adults.fill('');
-    await adults.blur();
+  test('a count never goes below its minimum', async ({ page }) => {
+    await reachWhoStep(page);
     /* One adult, never zero — the bound the markup has always advertised. */
-    await expect(adults).toHaveValue('1');
+    await page.getByRole('button', { name: 'One fewer adult' }).click();
+    await expect(page.getByTestId('count-adults')).toHaveText('1');
+    await expect(page.getByRole('button', { name: 'One fewer adult' })).toBeDisabled();
   });
 
   test('the steppers respect their bounds', async ({ page }) => {
-    await page.goto('/trips/new');
-    const destination = page.getByLabel('Destination');
-    await waitUntilInteractive(destination);
-    await destination.fill('Harbour City');
-    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-
+    await reachWhoStep(page);
     const fewer = page.getByRole('button', { name: 'One fewer child' });
-    await waitUntilInteractive(fewer);
     /* Already at zero, so the control that would go below it is unavailable. */
     await expect(fewer).toBeDisabled();
-
     await page.getByRole('button', { name: 'One more child' }).click();
-    await expect(page.getByLabel('Children')).toHaveValue('1');
     await expect(fewer).toBeEnabled();
   });
 });
@@ -176,9 +164,18 @@ test.describe('the questionnaire remembers where you were', () => {
      * The review separates what the traveller said from what Sidequest
      * assumed, and every row has a control that jumps back to its question.
      */
+    /*
+     * MVP V3, Stage 39 — the glance leads, and every question's own row waits
+     * behind one disclosure. Both are asserted: a review with no glance is the
+     * database listing this redesign removed, and a review with no ledger is a
+     * plan the traveller cannot check.
+     */
+    await expect(page.getByTestId('review-glance')).toBeVisible();
+    await expect(page.getByTestId('glance-feel')).toBeVisible();
+    await expect(page.getByTestId('glance-edit-feel')).toBeVisible();
+    await openReviewLedger(page);
     const told = page.getByTestId('review-told');
     await expect(told).toBeVisible();
-    await expect(told.getByText('Two or three meaningful stops', { exact: false }).first()).toBeVisible();
     await expect(told.getByRole('button', { name: /^Change/ }).first()).toBeVisible();
     await expect(page.getByTestId('review-assumed')).toBeVisible();
     await expect(page.getByTestId('review-hard')).toBeVisible();
@@ -194,20 +191,18 @@ test.describe('one intake, not two', () => {
      * preference is the interview's, asked once.
      */
     await page.goto('/trips/new');
-    const destination = page.getByLabel('Destination');
+    const destination = page.getByTestId('destination-input');
     await waitUntilInteractive(destination);
     await destination.fill('Mammoth Lakes');
-    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-    await expect(page.getByRole('button', { name: /A few more that change the plan/i })).toHaveCount(0);
+    /* No preference question anywhere in setup. */
     await expect(page.getByRole('radio', { name: /Mid-range|Keep it cheap/i })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Anything already fixed?' })).toBeVisible();
 
-    await page.getByRole('button', { name: /^Continue$/ }).click();
+    await createTrip(page, 'Mammoth Lakes', DEFAULT_DATES);
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
 
     const seen = await completeQuestionnaire(page);
     expect(seen).toContain('budget');
+    await openReviewLedger(page);
     await expect(page.getByTestId('review-told')).toBeVisible();
     await expect(page.getByTestId('review-change-budget')).toBeVisible();
   });

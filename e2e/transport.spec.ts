@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView, openPrepareNotes } from './support/hub';
+import { openHubView, openPrepareNotes, useBandAction } from './support/hub';
 import { mkdirSync } from 'node:fs';
-import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } from './support/trip';
+import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire, createTrip, openReviewLedger } from './support/trip';
 
 /**
  * The journey this slice promises: a traveller's transport answers change which
@@ -13,11 +13,7 @@ import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } fr
 const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 async function startTrip(page: Page, dates = AUGUST) {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(dates.start);
-  await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });
   await expect(page.getByTestId('interview')).toBeVisible();
 }
 
@@ -51,12 +47,15 @@ async function build(page: Page) {
 test('the transport question asks what the planner actually needs, and adapts to the answer', async ({ page }) => {
   await startTrip(page);
   await reachReview(page);
+  // Every "Change" link lives inside the review's ledger disclosure.
+  await openReviewLedger(page);
   await page.getByTestId('review-change-transport_mode').click();
   const screen = page.getByTestId('interview-question-transport_mode');
   await expect(screen).toBeVisible();
 
   // The region reads as a road trip, so the choice is a car or no car — never a metro.
-  await expect(screen.getByText('Rent a car')).toBeVisible();
+  // Exact: MVP V3 added a recommendation line that also names the option.
+  await expect(screen.getByText('Rent a car', { exact: true })).toBeVisible();
   await expect(screen.getByText('No car', { exact: true })).toBeVisible();
   await expect(screen.getByText(/public transport/)).toBeVisible();
 
@@ -186,8 +185,9 @@ test('dropping the car rebuilds into a different, still-workable plan', async ({
   expect(drivingStops.length).toBeGreaterThan(0);
 
   // Back through the questionnaire to change the one answer that matters.
-  await page.getByRole('link', { name: 'Back to the board' }).click();
-  await page.getByRole('link', { name: 'Change my answers' }).click();
+  // Both live in the band, which folds into "More" at phone width.
+  await useBandAction(page, 'Back to the board');
+  await useBandAction(page, 'Change my answers');
   await expect(page).toHaveURL(/\/questionnaire$/);
   await chooseTransport(page, 'no_car');
   await finishToBoard(page);

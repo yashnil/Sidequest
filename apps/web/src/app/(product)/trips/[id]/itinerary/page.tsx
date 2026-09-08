@@ -140,7 +140,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * founder evaluates, so fixture output is never mistaken for the live model.
    * Never rendered in a production build.
    */
-  const fixtureMode = process.env.NODE_ENV !== 'production' && isFixtureComposer();
+  const fixtureMode = isFixtureComposer();
 
   return (
     <>

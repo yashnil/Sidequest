@@ -8,7 +8,7 @@ import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import { COMPOSITION_INSTRUCTION, buildCompositionTask, compositionWireDecision, generateTripDraft, type CompositionContext } from './composition';
 import { buildHybridTripRequest } from './hybrid-request';
 import { travelerBriefFor } from './production-plan';
-import { TRIP_DRAFT_JSON_TAG, normalizeTripDraftWire, tripDraftWireSchema } from './trip-draft-wire';
+import { TRIP_DRAFT_JSON_TAG, compactTripDraftWireSchema, normalizeTripDraftWire, tripDraftWireSchema } from './trip-draft-wire';
 import { tripDraftSchema } from './trip-draft';
 
 /**
@@ -26,6 +26,7 @@ function wireDraft(days = 3) {
     archetype: 'single_base_urban',
     purpose: 'A compact city break.',
     routeRationale: 'One base, everything on foot.',
+    timingRationale: 'Shoulder season: everything open, nobody in the way.',
     assumptions: [],
     tradeoffs: [],
     stays: [{ name: 'Old Town', locality: null, nights: days - 1, why: 'Central', lodgingArea: null, lodgingStyle: null }],
@@ -194,15 +195,22 @@ function fakeModel(answer: unknown, seen: { inputs: Record<string, unknown>[] })
 }
 
 describe('generateTripDraft', () => {
-  it('chooses the mode before the request, forbids the paid fallback, asks for the wrapper, validates loosely, and hands the raw text over first', async () => {
+  it('chooses the mode before the request, allows only the pre-generation fallback, asks for the wrapper, validates loosely, and hands the raw text over first', async () => {
     const seen = { inputs: [] as Record<string, unknown>[] };
     const raws: string[] = [];
     const out = await generateTripDraft({ model: fakeModel(wireDraft(3), seen), context: contextFor(), onRawResponse: (raw) => raws.push(raw.text) });
     expect(out.ok).toBe(true);
     expect(seen.inputs).toHaveLength(1);
     const input = seen.inputs[0]!;
-    expect(input.schema).toBe(tripDraftWireSchema);
-    expect(input.allowEnforcementFallback).toBe(false);
+    expect(input.schema).toBe(compactTripDraftWireSchema);
+    /*
+     * MVP V3 — true, and it is still one completion per build. A grammar refusal
+     * is a 400 on the *request*: the provider declines to compile the schema
+     * before a token is generated, so nothing was produced and nothing billed.
+     * The transport's own classifier (`isStructuredOutputSchemaRefusal`) narrows
+     * it to that case and bounds it to a single retry.
+     */
+    expect(input.allowEnforcementFallback).toBe(true);
     expect(input.jsonWrapperTag).toBe(TRIP_DRAFT_JSON_TAG);
     expect(input.schemaEnforcement).toBe(compositionWireDecision().enforcement);
     expect((input.validationSchema as z.ZodType).safeParse({ anything: true }).success).toBe(true);
@@ -223,7 +231,57 @@ describe('generateTripDraft', () => {
   it('the prompt names the wire fields, not the canonical ones', () => {
     const task = buildCompositionTask(contextFor());
     expect(task).toMatch(/day 1 to day 3/);
-    expect(COMPOSITION_INSTRUCTION).toMatch(/stays \(name = the town/);
+    // The compact wire's own names, and never the canonical ones.
+    expect(COMPOSITION_INSTRUCTION).toMatch(/stays: name — the town/);
+    expect(COMPOSITION_INSTRUCTION).toMatch(/acts, in the order they happen/);
     expect(COMPOSITION_INSTRUCTION).not.toMatch(/baseId|dayNumber|estimatedDurationMinutes/);
+    // And nothing the model no longer writes.
+    expect(COMPOSITION_INSTRUCTION).not.toMatch(/bookingPriorities|foodStrategy|beforeYouGo|transportNotes/);
+  });
+});
+
+/**
+ * MVP V3 — a draft the model abandoned halfway is not a shorter draft.
+ *
+ * The live run of 2026-09-08 is the case: two excellent days, then a day with a
+ * bare stay and nothing else, then every package field empty and a literal
+ * `{"name":"placeholder","reason":"placeholder"}` omission — at `end_turn`, with
+ * 1,722 of 16,000 tokens used. The day count caught that one. A model that pads
+ * to the right *length* with stubs would have passed everything.
+ */
+describe('an abandoned draft is refused, and a deliberate one is not', () => {
+  const dayWith = (day: number, activities: number) => ({
+    day,
+    stay: 'Old Town',
+    theme: `Day ${day}`,
+    intensity: 'moderate',
+    relocation: false,
+    activities: Array.from({ length: activities }, (_, i) => ({ name: `Stop ${day}.${i + 1}`, locality: null, category: 'landmark', role: 'core', minutes: 90, transport: 'walk', why: 'Worth it' })),
+    breakfast: null,
+    lunch: null,
+    dinner: null,
+    note: null,
+    whyItFits: null,
+  });
+
+  it('refuses a hollow day in the middle of the trip', () => {
+    const draft = { ...wireDraft(4), days: [dayWith(1, 1), dayWith(2, 1), dayWith(3, 0), dayWith(4, 1)] };
+    const out = normalizeTripDraftWire(draft, { days: 4 });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.issues.some((issue) => issue.code === 'abandoned')).toBe(true);
+  });
+
+  it('allows an empty last day, which is what a morning departure looks like', () => {
+    const draft = { ...wireDraft(4), days: [dayWith(1, 1), dayWith(2, 2), dayWith(3, 2), dayWith(4, 0)] };
+    expect(normalizeTripDraftWire(draft, { days: 4 }).ok).toBe(true);
+  });
+
+  it('refuses literal placeholder text wherever it appears', () => {
+    const withPlaceholder = { ...wireDraft(3), omissions: [{ name: 'placeholder', reason: 'placeholder' }] };
+    const out = normalizeTripDraftWire(withPlaceholder, { days: 3 });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.issues.some((issue) => issue.code === 'placeholder')).toBe(true);
   });
 });

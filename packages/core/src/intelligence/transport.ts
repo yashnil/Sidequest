@@ -113,7 +113,7 @@ export const transportLegSchema = z.object({
 export type TransportLeg = z.infer<typeof transportLegSchema>;
 
 /** The draft's transport hints, as the model writes them. Kept in sync with `DRAFT_TRANSPORTS`. */
-export type DraftTransportHint = 'walk' | 'metro' | 'rail' | 'bus' | 'car' | 'ferry' | 'boat' | 'flight' | 'private_transfer' | 'four_wheel_drive' | 'guide_or_lodge_transfer' | 'unknown';
+export type DraftTransportHint = 'walk' | 'metro' | 'rail' | 'bus' | 'car' | 'ferry' | 'boat' | 'flight' | 'private_transfer' | 'four_wheel_drive' | 'guide_or_lodge_transfer' | 'horse' | 'unknown';
 
 export function legModeFromHint(hint: DraftTransportHint | undefined): LegMode | null {
   switch (hint) {
@@ -138,6 +138,7 @@ export function legModeFromHint(hint: DraftTransportHint | undefined): LegMode |
     case 'four_wheel_drive':
       return 'four_wheel_drive';
     case 'guide_or_lodge_transfer':
+    case 'horse':
       return 'guide_transfer';
     default:
       return null;

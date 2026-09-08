@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { decodePolyline, reasonFromStatus, type LatLng } from '@sidequest/core';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * GOOGLE ROUTES — `computeRoutes`, USED ONLY WHEN THE POLICY SELECTS IT.
@@ -106,7 +107,7 @@ export async function computeGoogleRoute(
   if (http.counter) http.counter.calls += 1;
   let response: Response;
   try {
-    response = await doFetch(ROUTES_BASE, { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey, 'x-goog-fieldmask': ROUTES_FIELD_MASK } });
+    response = await doFetch(ROUTES_BASE, { method: 'POST', body: JSON.stringify(body), signal: requestSignal(REQUEST_TIMEOUT_MS), headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey, 'x-goog-fieldmask': ROUTES_FIELD_MASK } });
   } catch (error) {
     if (http.counter) http.counter.failures += 1;
     return { found: false, minutes: null, staticMinutes: null, km: null, basis: 'static', reason: error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'provider_error', provider: 'google-routes' };

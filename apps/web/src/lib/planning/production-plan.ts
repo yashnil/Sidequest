@@ -29,7 +29,7 @@ import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-reposit
 import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
 import { composerModel } from '../benchmark/baseline/generate';
 import { buildHybridTripRequest } from './hybrid-request';
-import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
+import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { describeEdge } from '../benchmark/baseline/generate';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -51,6 +51,8 @@ import { ProviderBudget, ceilingsFor } from '../providers/cost-budget';
 import { buildPreservationReport, describePreservation, type DraftPreservationReport } from './preservation';
 import { auditItinerary, type QualityAudit } from './quality-audit';
 import { capability } from '../providers/registry';
+import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
+import { beginGeneration, finishGeneration, markGenerationStage } from '../db/generation-progress-repository';
 import { fetchReferenceRate } from '../providers/fx';
 import { saveFxRate } from '@/lib/db/intelligence-repository';
 
@@ -126,13 +128,27 @@ export interface ProductionPlanTimingsMs {
   persistenceMs: number;
   totalMs: number;
   deadlineReached: boolean;
+  /**
+   * DELIBERATION CLOSURE — what the composition was configured to do and what
+   * the budget looked like when it finished.
+   *
+   * Four live builds were diagnosed by hand from three numbers on a log line.
+   * These are the ones that were missing: the effort the call actually used,
+   * and how much of the product budget the draft left behind — which is what
+   * decides whether the traveller gets verification or just gets their trip.
+   */
+  compositionEffort?: 'low' | 'medium' | 'high';
+  thinkingMode?: 'adaptive';
+  remainingBudgetAfterCompositionMs?: number;
+  /** Absent when verification ran normally; set when it was skipped or cut short, with the reason. */
+  verificationDegradedReason?: string;
 }
 
 export const VERIFICATION_DEADLINE_ENV = 'SIDEQUEST_VERIFICATION_DEADLINE_MS';
 export const PRODUCT_BUDGET_ENV = 'SIDEQUEST_GENERATION_BUDGET_MS';
 /** The whole generation, model included, should return inside this. */
 export const DEFAULT_PRODUCT_BUDGET_MS = 120_000;
-/** Whatever the model leaves, verification always gets at least this much. */
+/** The grant verification gets when the budget can afford it. Never a claim on time that is not there. */
 const MIN_VERIFICATION_MS = 15_000;
 const DEFAULT_VERIFICATION_DEADLINE_MS = 90_000;
 const QUICK_VERIFICATION_DEADLINE_MS = 45_000;
@@ -147,12 +163,78 @@ export function productBudgetMs(): number {
  * remainder of the product budget after preparation and composition,
  * capped by the mode's own ceiling and floored so a slow model cannot leave
  * verification nothing.
+ *
+ * MVP V3, Stage 25 — the remainder now reserves one provider timeout.
+ *
+ * Every deadline check in the reconciler happens *before* a lookup, never
+ * during one, so a request begun one millisecond inside the budget still ran to
+ * its own timeout: the measured overshoot. Two answers, both applied. This is
+ * the arithmetic half — the last request that may legally start still finishes
+ * inside the budget. The other half is `withGenerationDeadline`, which lets an
+ * in-flight socket actually be closed when the budget fires.
  */
 export function verificationDeadlineMs(mode: GenerationMode, elapsedMs = 0): number {
   const raw = Number(process.env[VERIFICATION_DEADLINE_ENV]);
   if (Number.isFinite(raw) && raw > 0) return raw;
   const ceiling = mode === 'quick' ? QUICK_VERIFICATION_DEADLINE_MS : DEFAULT_VERIFICATION_DEADLINE_MS;
-  return Math.max(MIN_VERIFICATION_MS, Math.min(ceiling, productBudgetMs() - elapsedMs));
+  const remaining = productBudgetMs() - elapsedMs - MAX_PROVIDER_REQUEST_MS;
+  /*
+   * The floor is a floor on the *grant*, never on the budget.
+   *
+   * This used to return fifteen seconds even when four remained, which is how
+   * a finished draft could still lose its trip: verification was handed time
+   * the product did not have, ran past the ceiling, and the traveller got a
+   * failure page instead of the plan the model had already written. Clamped to
+   * what is actually left; `draftFirstBudget` decides whether that is enough to
+   * be worth starting at all.
+   */
+  return Math.max(0, Math.min(ceiling, Math.max(remaining >= MIN_VERIFICATION_MS ? MIN_VERIFICATION_MS : 0, remaining)));
+}
+
+/**
+ * THE TRAVELLER GETS THE TRIP. VERIFICATION IS WHAT GIVES WAY.
+ *
+ * Once the model has answered, the draft is parsed, normalised, audited and
+ * persisted — all of it deterministic and measured in milliseconds. Everything
+ * after that is optional: identity lookups, routing, opening hours. Each is
+ * worth having and none of them is worth the plan.
+ *
+ * So this is the last decision before any provider is touched. If what remains
+ * of the product budget cannot hold a single provider round trip plus the
+ * reconciliation around it, no provider is asked at all and the plan is built
+ * from the draft alone — the same path a total provider outage takes, which
+ * `acceptance/shapes.test.ts` shape 10 already holds to producing an itinerary
+ * with zero content lost. The trip says honestly what it could not check.
+ *
+ * The shape this exists to make impossible: a complete draft, then ten seconds
+ * of provider work that cannot finish, then the product ceiling, then a failure
+ * page for a trip that was already written.
+ */
+export interface DraftFirstBudget {
+  /** False means: skip every provider and return the plan built from the draft. */
+  verify: boolean;
+  /** How long verification may run when it runs at all. */
+  deadlineMs: number;
+  /** Said plainly, for the call log and the plan's own record. */
+  reason: string;
+  remainingMs: number;
+}
+
+/** One provider round trip plus room to reconcile around it. Below this, verification is not started. */
+export const SAFE_VERIFICATION_MINIMUM_MS = MAX_PROVIDER_REQUEST_MS + 3_000;
+
+export function draftFirstBudget(mode: GenerationMode, elapsedMs: number): DraftFirstBudget {
+  const remainingMs = Math.max(0, productBudgetMs() - elapsedMs);
+  const deadlineMs = verificationDeadlineMs(mode, elapsedMs);
+  if (remainingMs < SAFE_VERIFICATION_MINIMUM_MS || deadlineMs <= 0) {
+    return {
+      verify: false,
+      deadlineMs: 0,
+      remainingMs,
+      reason: `the draft arrived with ${Math.round(remainingMs / 1000)}s of the budget left, less than one provider round trip, so the trip was built from the draft alone`,
+    };
+  }
+  return { verify: true, deadlineMs, remainingMs, reason: 'verification ran inside the remaining budget' };
 }
 
 export async function generateSidequestPlanForTrip(
@@ -179,6 +261,23 @@ export async function generateSidequestPlanForTrip(
 
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  /*
+   * MVP V3, Stage 24 — the generation screen reads this, so every write below
+   * is at a boundary the server actually crossed. Best-effort: a progress row
+   * is never worth failing a build for.
+   */
+  const progress = (stage: Parameters<typeof markGenerationStage>[1]) => {
+    try {
+      markGenerationStage(tripId, stage, new Date());
+    } catch {
+      /* the build is what matters */
+    }
+  };
+  try {
+    beginGeneration(tripId, now);
+  } catch {
+    /* the build is what matters */
+  }
   const intent = getIntent(tripId);
   const composer = intent?.composer ?? null;
   const profile = getProfile(tripId) ?? defaultProfileFor(trip, composer);
@@ -208,8 +307,21 @@ export async function generateSidequestPlanForTrip(
   const identityResolutionMs = since(identityStartedMs);
   const board = region ? boardFor(trip, profile, region) : null;
 
+  /*
+   * MVP V3, Stages 10–12 — THE DURABLE INTENT DECIDES WHAT THIS TRIP IS CALLED.
+   *
+   * The traveller's own phrase, and whether anything has earned the right to
+   * replace it. "inland Alaska" resolving to a town is a *lead*, not a
+   * correction, so `interpretedLabel` is still their words and the town travels
+   * as a centre. Where no intent was ever recorded — a trip made before this
+   * existed — the old derivation stands unchanged.
+   */
+  const storedIntent = intent?.destinationIntent ?? null;
+  const resolvedName = candidate?.displayName ?? region?.region.name ?? trip.basics.destinationInput;
+  const rawDestinationPhrase = (storedIntent?.rawText || intent?.destinationQuery || composer?.destinationQuery || trip.basics.destinationInput || '').trim();
+  const destinationName = storedIntent?.interpretedLabel || resolvedName;
   const envelope: DestinationEnvelope = {
-    name: candidate?.displayName ?? region?.region.name ?? trip.basics.destinationInput,
+    name: destinationName,
     ...(candidate?.qualifiedName ? { qualifiedName: candidate.qualifiedName } : {}),
     ...(candidate?.countryCode ? { countryCode: candidate.countryCode } : {}),
     ...(candidate?.countryName ? { countryName: candidate.countryName } : {}),
@@ -217,6 +329,16 @@ export async function generateSidequestPlanForTrip(
     center: candidate?.center ?? region?.region.baseCoordinates ?? { lat: 0, lng: 0 },
     ...(candidate?.timeZones?.[0] ? { timeZone: candidate.timeZones[0] } : {}),
     ...(region ? { knownAreas: region.compiled.subregions.map((s) => s.name).slice(0, 8) } : {}),
+    ...(storedIntent && storedIntent.interpretationType !== 'unresolved' ? { interpretation: storedIntent.interpretationType } : {}),
+    /*
+     * The resolved place, when it did not earn the destination's name. It is a
+     * centre to plan around and it is labelled as one; the model is told which
+     * of the two is the traveller's own word.
+     */
+    ...(storedIntent?.anchor && normalizePhrase(storedIntent.anchor.label) !== normalizePhrase(destinationName)
+      ? { anchorName: storedIntent.anchor.label }
+      : {}),
+    ...(rawDestinationPhrase && normalizePhrase(rawDestinationPhrase) !== normalizePhrase(destinationName) ? { travellerPhrase: rawDestinationPhrase } : {}),
   };
 
   const request = buildHybridTripRequest({ trip, composer, profile, now });
@@ -272,6 +394,7 @@ export async function generateSidequestPlanForTrip(
   const attemptNumber = listCompositionAttempts(tripId).length + 1;
   const wire = compositionWireDecision();
   const compositionStartedMs = performance.now();
+  progress('composing');
   const outcome = await generateTripDraft({
     model,
     context,
@@ -287,7 +410,7 @@ export async function generateSidequestPlanForTrip(
   });
   const compositionMs = since(compositionStartedMs);
   const modelCalls = model instanceof ResearchModel ? [...model.callLog] : [];
-  const emptyTimings = (): ProductionPlanTimingsMs => ({ preparationMs, identityResolutionMs, compositionMs, placeResolutionMs: 0, routingMs: 0, operationalMs: 0, reconciliationMs: 0, verificationMs: 0, intelligenceMs: 0, persistenceMs: 0, totalMs: since(startedMs), deadlineReached: false });
+  const emptyTimings = (): ProductionPlanTimingsMs => ({ preparationMs, identityResolutionMs, compositionMs, placeResolutionMs: 0, routingMs: 0, operationalMs: 0, reconciliationMs: 0, verificationMs: 0, intelligenceMs: 0, persistenceMs: 0, totalMs: since(startedMs), deadlineReached: false, compositionEffort: compositionEffort(), thinkingMode: 'adaptive' });
   if (!outcome.ok) {
     /*
      * The precise reason goes to the attempt row and the server log (paths,
@@ -302,6 +425,11 @@ export async function generateSidequestPlanForTrip(
         /* the log line below still carries it */
       }
     }
+    try {
+      finishGeneration(tripId, 'failed', new Date());
+    } catch {
+      /* the failure is already reported */
+    }
     console.error(`Composition failed: ${outcome.failureKind}${outcome.issueKind ? `/${outcome.issueKind}` : ''} — ${outcome.detail.slice(0, 300)}${outcome.issues?.length ? ` | issues: ${JSON.stringify(outcome.issues.slice(0, 10))}` : ''} | calls: ${JSON.stringify(modelCalls.map((call) => ({ ...(call as unknown as Record<string, unknown>), schemaValidationIssues: undefined })))}`);
     return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, timings: emptyTimings(), modelCalls, diagnostics };
   }
@@ -314,12 +442,22 @@ export async function generateSidequestPlanForTrip(
     }
   }
   if (!options.reuseStoredDraft) saveTripDraft({ tripId, draft, modelCall: modelCalls[0] ?? null, now });
+  progress('route');
   options.onDraftGenerated?.(draft);
 
   // --- Verification + reconciliation, bounded by what is left of the budget ---
   const verificationStartedMs = performance.now();
-  const deadlineMs = verificationDeadlineMs(mode, since(startedMs));
-  const deadlineReached = () => performance.now() - verificationStartedMs > deadlineMs;
+  /*
+   * DRAFT FIRST. The draft is already persisted above; this decides whether
+   * there is enough of the budget left to ask a provider anything at all.
+   * `deadlineReached` is the gate the reconciler consults before every lookup,
+   * so a budget with no room makes it true from the outset and every optional
+   * request is skipped rather than started and abandoned.
+   */
+  const budgetPolicy = draftFirstBudget(mode, since(startedMs));
+  const deadlineMs = budgetPolicy.deadlineMs;
+  const deadlineReached = () => !budgetPolicy.verify || performance.now() - verificationStartedMs > deadlineMs;
+  if (!budgetPolicy.verify) console.warn('Verification skipped to deliver the trip', { tripId, reason: budgetPolicy.reason });
   const verification = verificationProviders(candidate?.id);
   const geocoder = isGeocoderEnabled() ? productionGeocodeLocality : undefined;
   const nearby = isGeocoderEnabled() || isPoiProviderEnabled() ? productionFindNearbyLocalities : undefined;
@@ -344,8 +482,11 @@ export async function generateSidequestPlanForTrip(
    * traveller's "what took the time" line, not for billing.
    */
   const stage = { placeResolutionMs: 0, routingMs: 0, operationalMs: 0 };
+  const STAGE_MARK: Record<keyof typeof stage, Parameters<typeof markGenerationStage>[1]> = { placeResolutionMs: 'places', routingMs: 'travel', operationalMs: 'places' };
   const timed = <A extends unknown[], R>(key: keyof typeof stage, fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
     const from = performance.now();
+    // The first time a seam is reached is the moment that stage genuinely began.
+    progress(STAGE_MARK[key]);
     try {
       return await fn(...args);
     } finally {
@@ -425,7 +566,23 @@ export async function generateSidequestPlanForTrip(
         ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
       };
 
-  const reconciledRaw = await reconcileTripDraft({ draft, context: reconcileContext });
+  /*
+   * MVP V3, Stage 25 — the budget is enforced, not merely consulted.
+   *
+   * One controller for this build, published on the async context so every
+   * provider fetch merges it with its own timeout (`net/generation-deadline.ts`).
+   * When the product budget fires, open sockets close and the reconciler
+   * finishes with what it has: DEGRADED COMPLETE, inside 120 seconds, rather
+   * than a complete answer at 132.
+   */
+  const budgetController = new AbortController();
+  const budgetTimer = setTimeout(() => budgetController.abort(new Error('Sidequest reached its generation budget.')), Math.max(1_000, productBudgetMs() - since(startedMs)));
+  let reconciledRaw: ReconcileResult;
+  try {
+    reconciledRaw = await withGenerationDeadline(budgetController.signal, () => reconcileTripDraft({ draft, context: reconcileContext }));
+  } finally {
+    clearTimeout(budgetTimer);
+  }
   /*
    * Booked reality, verified deterministically: the base is renamed to the
    * booked lodging, a booked ticket is pinned, a booked departure tightens
@@ -438,6 +595,7 @@ export async function generateSidequestPlanForTrip(
   const degraded = deadlineReached();
 
   // --- Intelligence: preservation report + structural audit (deterministic) ---
+  progress('preparing');
   const intelligenceStartedMs = performance.now();
   const preservation = buildPreservationReport(draft, applied.itinerary);
   const quality = auditItinerary({ draft, itinerary: applied.itinerary, profile, trip, bookedConflicts: applied.conflicts, preservation });
@@ -474,6 +632,10 @@ export async function generateSidequestPlanForTrip(
     persistenceMs: 0,
     totalMs: since(startedMs),
     deadlineReached: degraded,
+    compositionEffort: compositionEffort(),
+    thinkingMode: 'adaptive',
+    remainingBudgetAfterCompositionMs: budgetPolicy.remainingMs,
+    ...(budgetPolicy.verify ? (degraded ? { verificationDegradedReason: 'verification stopped at its deadline; the trip was returned with what had verified' } : {}) : { verificationDegradedReason: budgetPolicy.reason }),
   };
   const itinerary = applied.itinerary.package
     ? {
@@ -493,7 +655,18 @@ export async function generateSidequestPlanForTrip(
             summary: describePreservation(preservation),
           },
           quality: { version: 1 as const, passed: quality.passed, errors: quality.errors, warnings: quality.warnings, checks: quality.checks.map((c) => ({ ...c })) },
-          timings: Object.fromEntries(Object.entries(timingsSoFar).map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 1 : 0) : value])),
+          /*
+           * The persisted record is numbers only (`tripPackageSchema.timings`),
+           * so a boolean becomes 0/1 and the two prose diagnostics — the effort
+           * the call used and why verification gave way — stay on the returned
+           * result and the log rather than being forced into a number-shaped
+           * column they do not belong in.
+           */
+          timings: Object.fromEntries(
+            Object.entries(timingsSoFar)
+              .map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 1 : 0) : value] as const)
+              .filter((entry): entry is readonly [string, number] => typeof entry[1] === 'number'),
+          ),
         },
       }
     : applied.itinerary;
@@ -503,6 +676,11 @@ export async function generateSidequestPlanForTrip(
   const persistenceMs = since(persistenceStartedMs);
 
   const timings: ProductionPlanTimingsMs = { ...timingsSoFar, persistenceMs, totalMs: since(startedMs) };
+  try {
+    finishGeneration(tripId, 'ok', new Date());
+  } catch {
+    /* the itinerary is saved either way */
+  }
   if (quality.errors > 0) {
     console.warn('Quality audit found structural errors', { tripId, errors: quality.checks.filter((c) => !c.ok && c.severity === 'error').map((c) => `${c.id}: ${c.detail}`) });
   }
@@ -522,6 +700,11 @@ export async function generateSidequestPlanForTrip(
 /* ------------------------------------------------------------------ *
  * Helpers
  * ------------------------------------------------------------------ */
+
+/** Case- and punctuation-insensitive, so "Hong Kong" and "hong kong" are one phrase. */
+function normalizePhrase(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
 /**
  * QUALITY V1 — one compact traveller brief instead of forty settings. Built

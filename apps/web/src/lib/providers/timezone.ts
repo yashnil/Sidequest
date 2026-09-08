@@ -1,6 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { isCivilTimeZone } from '@sidequest/core';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * THE CIVIL TIME ZONE OF A POINT ON THE MAP.
@@ -201,7 +202,7 @@ async function lookupOne(
 
   let response: Response;
   try {
-    response = await doFetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    response = await doFetch(url, { signal: requestSignal(REQUEST_TIMEOUT_MS) });
   } catch {
     return { timeZone: null, detail: 'The time-zone service did not answer.' };
   }

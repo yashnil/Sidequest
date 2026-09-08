@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView } from './support/hub';
-import { completeQuestionnaire } from './support/trip';
+import { completeQuestionnaire, createTrip } from './support/trip';
 import { openBoardBackstage } from './support/trip';
 
 /**
@@ -101,11 +101,7 @@ function farTrip(): { start: string; end: string } {
 const FAR = farTrip();
 
 async function reachBoard(page: Page, dates = AUGUST) {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(dates.start);
-  await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });
 
   await completeQuestionnaire(page, { priorities: ['Scenic viewpoints', 'Hiking'] });
 

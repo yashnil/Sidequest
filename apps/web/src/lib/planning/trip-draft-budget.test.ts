@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { COMPOSITION_MAX_TOKENS, buildCompositionTask, compositionEffort, compositionUntrustedPayload, type CompositionContext } from './composition';
+import { COMPOSITION_MAX_TOKENS, COMPOSITION_TIMEOUT_MS, buildCompositionTask, compositionEffort, compositionUntrustedPayload, type CompositionContext } from './composition';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type TripDraft } from './trip-draft';
 import { buildHybridTripRequest } from './hybrid-request';
-import { defaultProfileFor } from './production-plan';
+import { DEFAULT_PRODUCT_BUDGET_MS, defaultProfileFor, draftFirstBudget, verificationDeadlineMs } from './production-plan';
+import { composerModel } from '../benchmark/baseline/generate';
 import type { Trip } from '@sidequest/core';
 
 /**
@@ -102,14 +104,70 @@ describe('composition budget', () => {
     expect(maximalTokens).toBeLessThanOrEqual(COMPOSITION_MAX_TOKENS);
   });
 
-  it('effort defaults to low and honours the environment override', () => {
+  /**
+   * THE PRODUCTION COMPOSITION CONFIGURATION, ASSERTED.
+   *
+   * Deliberation closure. Four live Kyrgyzstan builds established that writing
+   * throughput is stable (231–252 B/s) and deliberation is not (45–92 s), and
+   * that deliberation decided three of the four. Anthropic's guidance for
+   * Claude Sonnet 5 names `low` for exactly this shape of work — "high-volume or
+   * latency-sensitive workloads… non-coding use cases where faster turnaround is
+   * prioritized" — and states that effort is a behavioural signal, so the model
+   * still thinks where a problem genuinely needs it.
+   *
+   * These are the settings the traveller's build actually sends.
+   */
+  it('composes at low effort on adaptive thinking, one call, no retry, with the measured deadlines', () => {
     const before = process.env.SIDEQUEST_COMPOSITION_EFFORT;
     delete process.env.SIDEQUEST_COMPOSITION_EFFORT;
     expect(compositionEffort()).toBe('low');
+    // An operator can still raise it without a deploy.
     process.env.SIDEQUEST_COMPOSITION_EFFORT = 'medium';
     expect(compositionEffort()).toBe('medium');
     if (before === undefined) delete process.env.SIDEQUEST_COMPOSITION_EFFORT;
     else process.env.SIDEQUEST_COMPOSITION_EFFORT = before;
+
+    // The model is the one irreplaceable stage, and gets 110 s of the 120 s ceiling.
+    expect(COMPOSITION_TIMEOUT_MS).toBe(110_000);
+    expect(DEFAULT_PRODUCT_BUDGET_MS).toBe(120_000);
+    expect(COMPOSITION_TIMEOUT_MS).toBeLessThan(DEFAULT_PRODUCT_BUDGET_MS);
+
+    // Sonnet 5 uses adaptive thinking; nothing here may send a manual budget.
+    const source = readFileSync(new URL('./composition.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/budget_tokens|thinking:\s*\{\s*type:\s*'enabled'/);
+    // And the model is not swapped for a weaker one.
+    expect(composerModel()).toBe('claude-sonnet-5');
+  });
+
+  /**
+   * A DRAFT THAT LANDS LATE IS STILL DELIVERED.
+   *
+   * The shape this forbids: a complete draft at 108 s, then optional provider
+   * work that cannot finish inside the 120 s ceiling, then a failure page for a
+   * trip the model had already written.
+   */
+  it('a draft arriving at 108–110 s skips verification rather than losing the trip', () => {
+    for (const elapsed of [108_000, 110_000, 118_000]) {
+      const policy = draftFirstBudget('full', elapsed);
+      expect(policy.verify, `at ${elapsed} ms there is no room for a provider round trip`).toBe(false);
+      expect(policy.deadlineMs).toBe(0);
+      expect(policy.reason).toMatch(/built from the draft alone/);
+    }
+  });
+
+  it('a draft arriving early still gets a real verification window', () => {
+    const policy = draftFirstBudget('full', 40_000);
+    expect(policy.verify).toBe(true);
+    expect(policy.deadlineMs).toBeGreaterThan(0);
+    // And never more than what is actually left of the budget.
+    expect(policy.deadlineMs).toBeLessThanOrEqual(policy.remainingMs);
+  });
+
+  it('the verification grant never exceeds the budget that remains', () => {
+    for (const elapsed of [0, 30_000, 60_000, 90_000, 100_000, 115_000]) {
+      const grant = verificationDeadlineMs('full', elapsed);
+      expect(grant).toBeLessThanOrEqual(Math.max(0, DEFAULT_PRODUCT_BUDGET_MS - elapsed));
+    }
   });
 
   it('the task is compact: a full brief for a two-week trip stays under ~2,500 tokens of input', () => {

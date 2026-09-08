@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView } from './support/hub';
-import { completeQuestionnaire } from './support/trip';
+import { openHubView, bandAction } from './support/hub';
+import { completeQuestionnaire, createTrip } from './support/trip';
 
 /**
  * EDITING A PLAN, AND TAKING IT WITH YOU.
@@ -21,11 +21,7 @@ import { completeQuestionnaire } from './support/trip';
 const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 async function buildPlan(page: Page): Promise<string> {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', { start: AUGUST.start, end: AUGUST.end });
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);
@@ -181,7 +177,8 @@ test('the plan downloads as a calendar a calendar application can open', async (
   const id = await buildPlan(page);
 
   // The link a traveller presses, on the page where they finished.
-  await expect(page.getByRole('link', { name: 'Calendar file (.ics)' })).toHaveAttribute(
+  // In the band on a desktop, under "More" on a phone.
+  await expect(await bandAction(page, 'Calendar file (.ics)')).toHaveAttribute(
     'href',
     `/trips/${id}/itinerary/calendar`,
   );
@@ -220,11 +217,7 @@ test('a trip with no plan is refused a calendar rather than given an empty one',
    * it is worse than one that refuses, because the traveller finds out at the
    * airport. A trip that has never been planned has no calendar to give.
    */
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', { start: AUGUST.start, end: AUGUST.end });
   await expect(page.getByTestId('interview')).toBeVisible();
 
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];

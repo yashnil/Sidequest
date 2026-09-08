@@ -1,0 +1,50 @@
+[
+  {
+    "file": "hong-kong-attempt-1.txt",
+    "destination": "Hong Kong",
+    "days": 7,
+    "stopReason": "end_turn",
+    "expect": "draft",
+    "note": "A complete six-night Hong Kong trip lost to one key that swallowed its \":\" delimiter at day 2. The founder saw only \"Sidequest couldn't finish this draft\"."
+  },
+  {
+    "file": "hong-kong-attempt-2.txt",
+    "destination": "Hong Kong",
+    "days": 7,
+    "stopReason": "end_turn",
+    "expect": "semantic",
+    "note": "The retry. The same delimiter slip at day 5, and the model had already given up: day 5 is a literal placeholder with empty package lists. Salvage recovers the JSON; the semantic audit refuses it for the day count, which is the honest outcome."
+  },
+  {
+    "file": "ireland-attempt-1.txt",
+    "destination": "Ireland",
+    "days": 10,
+    "stopReason": "end_turn",
+    "expect": "draft",
+    "note": "The founder trip that first proved the wire/canonical split (trip 77b3aa4f). Must keep parsing."
+  },
+  {
+    "file": "ireland-attempt-2.txt",
+    "destination": "Ireland",
+    "days": 10,
+    "stopReason": "end_turn",
+    "expect": "draft",
+    "note": "The earlier Ireland run (trip 5dc858ad), a different draft of the same shape. Guards against a normalizer change that only suits one answer."
+  },
+  {
+    "file": "hong-kong-attempt-3.txt",
+    "destination": "Hong Kong",
+    "days": 8,
+    "stopReason": "end_turn",
+    "expect": "semantic",
+    "note": "The live MVP V3 run (2026-09-08). Three things at once: the provider refused the grammar at 3,726 bytes (so the size guard was recalibrated and prompt mode is primary again); the same delimiter-swallowed key appeared a THIRD time and salvage recovered it; and the model gave up after two good days, emitting {\"day3,...} with a bare stay and then filling every package field with empties and a literal \"placeholder\" omission. Output was 1,722 tokens of a 16,000 budget at end_turn, so nothing was truncated — it chose to stop. This is what raised composition effort from low to medium and added the placeholder check."
+  },
+  {
+    "file": "kyrgyzstan-compact-1.txt",
+    "destination": "Kyrgyzstan",
+    "days": 10,
+    "stopReason": "end_turn",
+    "expect": "draft",
+    "note": "The latency closure's single live acceptance call (2026-09-08, prompt sidequest-trip-draft/2026-09-09.1, the compact wire). The model FINISHED: 81.3 s against a 100 s deadline, end_turn, 8,026 bytes, 10 complete days, 23 activities. Sidequest then refused it — timingRationale was 256 characters against a 240 display cap, and the normaliser enforced a soft cap by rejecting the whole trip instead of trimming the sentence. That defect is fixed (sanitizeProse takes a cap; every capped field is trimmed and the trim recorded), and this fixture is the proof: it must replay into a full ten-day draft."
+  }
+]

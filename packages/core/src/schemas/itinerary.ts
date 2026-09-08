@@ -1238,6 +1238,14 @@ export const tripPackageSchema = z.object({
   archetype: z.enum(['single_base_urban', 'hub_and_spoke', 'road_trip', 'rail_route', 'island_hopping', 'fly_drive', 'multi_region', 'wilderness_gateway', 'guided_remote', 'lodge_circuit', 'mixed', 'single_base', 'moving_route', 'loop']),
   purpose: z.string().min(1),
   routeRationale: z.string().min(1),
+  /**
+   * MVP V3, Stage 30 — WHEN, answered on the plan itself.
+   *
+   * What this season opens and closes for this trip. Optional because a plan
+   * stored before the field existed has nothing to say here, and silence is the
+   * honest rendering of that.
+   */
+  timingRationale: z.string().min(1).optional(),
   assumptions: z.array(z.string().min(1)).default([]),
   tradeoffs: z.array(z.string().min(1)).default([]),
   bases: z.array(packageBaseSchema),

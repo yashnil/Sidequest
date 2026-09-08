@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProviderFailure, placeClassFor, reasonFromStatus, type PlaceClass } from '@sidequest/core';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * GOOGLE PLACES (NEW), IN FOUR LOOKUP LEVELS.
@@ -70,7 +71,7 @@ async function call<T>(http: PlacesHttp, url: string, init: RequestInit & { fiel
   if (http.counter) http.counter.calls += 1;
   let response: Response;
   try {
-    response = await doFetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'content-type': 'application/json', 'x-goog-api-key': key(http), 'x-goog-fieldmask': init.fieldMask } });
+    response = await doFetch(url, { ...init, signal: requestSignal(REQUEST_TIMEOUT_MS), headers: { 'content-type': 'application/json', 'x-goog-api-key': key(http), 'x-goog-fieldmask': init.fieldMask } });
   } catch (error) {
     if (http.counter) http.counter.failures += 1;
     throw new ProviderFailure(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'provider_error', 'google-places');

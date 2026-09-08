@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { completeQuestionnaire } from './support/trip';
+import { completeQuestionnaire, createTrip } from './support/trip';
 
 /**
  * THE TWO BOARD SURFACES THIS PHASE ADDED AND NOTHING DROVE.
@@ -19,11 +19,7 @@ import { completeQuestionnaire } from './support/trip';
 const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 async function reachBoard(page: Page): Promise<void> {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', AUGUST);
   await completeQuestionnaire(page);
   await page.getByRole('button', { name: 'Open the Discovery Board' }).click();
   await expect(page).toHaveURL(/\/discover$/);

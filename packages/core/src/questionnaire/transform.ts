@@ -356,6 +356,7 @@ export function deriveFoodPreferences(
     willPackLunch: answers.willPackLunch,
     dietaryNeeds: [...answers.dietaryNeeds],
     dietaryStrict: answers.dietaryStrict,
+    ...(answers.dietaryNotes ? { dietaryNotes: answers.dietaryNotes } : {}),
     specialMealBudget: specialMealBudget(answers.specialMealAppetite, context.tripDays),
     everydayPriceBand: EVERYDAY_BAND[answers.foodStyle],
     // `depends` deliberately reads as yes. Somebody who said "it depends on the
@@ -575,6 +576,7 @@ export function buildTravelerProfile(
     interview: interviewBlockFrom(answers),
     hard: [...answers.hardConstraints],
     provenance: { ...answers.provenance },
+    ...(answers.preferenceNotes && Object.keys(answers.preferenceNotes).length > 0 ? { preferenceNotes: { ...answers.preferenceNotes } } : {}),
     derived: deriveProfileValues(answers, context),
   };
 

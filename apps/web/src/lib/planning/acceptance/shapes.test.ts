@@ -364,3 +364,63 @@ describe('shape 10 — near-total provider outage', () => {
     expect(scheduled(result)).toHaveLength(anchorCount(draft));
   });
 });
+
+describe('shape 11 — a natural region the traveller described and no catalogue publishes', () => {
+  /**
+   * MVP V3, Stages 10–13 and 61 — the globality case the founder named.
+   *
+   * "Inland Alaska", "the steppes", "the delta": a real area with no
+   * administrative row, no boundary and, for most of its interior, no
+   * gazetteer entry either. The destination intent keeps the traveller's words
+   * (`intent.test.ts`); this is the other half — what the plan does when the
+   * *contents* of that area are equally unpublished. Nothing may be dropped for
+   * being unfindable, and the trip must still be a trip: bases with nights,
+   * days with activity, legs that are honestly unmeasured rather than zero.
+   */
+  it('keeps every unpublished camp, channel and crossing, and builds a coherent trip with no evidence at all', async () => {
+    const places: FictionalPlace[] = [
+      { name: 'Delta Gateway Airstrip', lat: -19.44, lng: 23.4, known: true, entityType: 'city' },
+      { name: 'Reed Channel Camp', lat: -19.28, lng: 23.12, known: false },
+      { name: 'Papyrus Lagoon Mokoro Crossing', lat: -19.31, lng: 23.05, known: false },
+      { name: 'Heron Island Walk', lat: -19.22, lng: 23.18, known: false },
+      { name: 'Floodplain Night Drive', lat: -19.35, lng: 23.2, known: false },
+      { name: 'Sandveld Fly Camp', lat: -19.05, lng: 23.44, known: false },
+      { name: 'Dawn Channel Paddle', lat: -19.08, lng: 23.4, known: false },
+    ];
+    const world = fictionalWorld({
+      name: 'the inland delta',
+      center: { lat: -19.25, lng: 23.25 },
+      places,
+      basics: { startDate: '2026-06-10', endDate: '2026-06-16' },
+      profile: { maxDailyDriveMinutes: 240, maxDailyTransportMinutes: 420 },
+      roadKmh: 30,
+    });
+    const draft = draftOf({
+      bases: [
+        { id: 'reed', name: 'Reed Channel Camp', nights: 4, style: 'tented camp' },
+        { id: 'sandveld', name: 'Sandveld Fly Camp', nights: 2, style: 'fly camp' },
+      ],
+      days: [
+        { base: 'reed', anchors: [{ name: 'Delta Gateway Airstrip', category: 'town', role: 'secondary' }] },
+        { base: 'reed', anchors: [{ name: 'Papyrus Lagoon Mokoro Crossing', category: 'activity', transport: 'boat', minutes: 180 }] },
+        { base: 'reed', anchors: [{ name: 'Heron Island Walk', category: 'hike', transport: 'boat', minutes: 240 }] },
+        { base: 'reed', anchors: [{ name: 'Floodplain Night Drive', category: 'activity', transport: 'guide_or_lodge_transfer', minutes: 180 }] },
+        { base: 'sandveld', relocation: true, anchors: [{ name: 'Sandveld Fly Camp', category: 'nature', transport: 'guide_or_lodge_transfer' }] },
+        { base: 'sandveld', anchors: [{ name: 'Dawn Channel Paddle', category: 'activity', transport: 'boat', minutes: 150 }] },
+        { base: 'sandveld', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    invariants(draft, result);
+
+    // Nothing is dropped for being unfindable: silent loss is zero by the
+    // invariant above, and every anchor is still on the plan.
+    expect(scheduled(result)).toHaveLength(anchorCount(draft));
+    // Both camps are places to sleep under their own names, not the airstrip.
+    expect(result.itinerary.package?.bases.map((base) => base.name)).toEqual(['Reed Channel Camp', 'Sandveld Fly Camp']);
+    // Water and guide transfers are movement, and honestly unmeasured movement.
+    expect(result.itinerary.package?.verification.legsUnmeasured).toBeGreaterThan(0);
+    // And it is a trip: six days with something on them, nights that add up.
+    expect(daysWithActivity(result)).toBe(6);
+  });
+});

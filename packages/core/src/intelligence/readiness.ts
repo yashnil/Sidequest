@@ -417,7 +417,13 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
       blocking: false,
       phase: 'keep_offline',
       tier: 'primary',
-      ...(number ? { facts: [`Emergency number ${number} (reference data).`] } : {}),
+      /*
+       * MVP V3, Stage 46 — the dialling code sits here rather than on its own
+       * card, because the moment somebody needs it is the moment they are
+       * saving these numbers, and a card of its own would be a fact looking
+       * for an occasion.
+       */
+      ...(facts ? { facts: [`Emergency number ${number} (reference data).`, `Country calling code ${facts.callingCode} (reference data).`] } : {}),
     });
   }
 
@@ -448,7 +454,23 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
       tier: international === 'no' || sameCurrency === true ? 'more' : 'primary',
       ...(facts ? { facts: [`Currency ${facts.currency} (reference data).`] } : {}),
     });
-    entries.push({ kind: 'connectivity', title: 'Staying connected', state: 'unverified', summary: input.remote ? 'Parts of this plan are remote. Download offline maps and the plan itself; do not rely on a signal.' : international === 'no' ? 'Download offline maps for the areas you will be in.' : 'Decide between roaming, a local SIM or an eSIM before you land, and download offline maps.', links: [], blocking: false, phase: 'one_week_out', tier: input.remote ? 'primary' : 'more' });
+    entries.push({
+      kind: 'connectivity',
+      title: 'Staying connected',
+      state: 'unverified',
+      summary: input.remote ? 'Parts of this plan are remote. Download offline maps and the plan itself; do not rely on a signal.' : international === 'no' ? 'Download offline maps for the areas you will be in.' : 'Decide between roaming, a local SIM or an eSIM before you land, and download offline maps.',
+      links: [],
+      blocking: false,
+      phase: 'one_week_out',
+      tier: input.remote ? 'primary' : 'more',
+      /*
+       * The country's own zone, as bundled reference data. A country spanning
+       * several zones publishes one here and the plan's own times are the
+       * authority; this is what a phone should be set to on arrival, not a
+       * claim about every corner of the map.
+       */
+      ...(facts ? { facts: [`Time zone ${facts.timeZone} (reference data).`] } : {}),
+    });
     if (international !== 'no') {
       const plugDiffers = facts && home ? !facts.plugs.some((p) => home.plugs.includes(p)) || Math.abs(facts.voltage - home.voltage) > 30 : null;
       entries.push({

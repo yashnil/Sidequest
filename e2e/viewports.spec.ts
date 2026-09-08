@@ -54,16 +54,18 @@ for (const viewport of VIEWPORTS) {
      * gates the rest of the form, so an unfilled composer is a third of the
      * layout and the third least likely to overflow.
      */
+    /*
+     * MVP V3 — the first screen of the setup interview, at each width. One
+     * question, a display-scale field and the map beside it: the widest thing on
+     * the page and the one most likely to push the document sideways.
+     */
     await page.goto('/trips/new');
-    const destination = page.getByLabel('Destination');
+    const destination = page.getByTestId('destination-input');
     await waitUntilInteractive(destination);
     await destination.fill('Mammoth Lakes');
-    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-    await expectNoHorizontalOverflow(page, `composer at ${viewport.name}`);
+    await expectNoHorizontalOverflow(page, `setup at ${viewport.name}`);
 
-    await page.getByRole('button', { name: /^Continue$/ }).click();
-    await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
+    await createTrip(page, 'Mammoth Lakes', DEFAULT_DATES);
 
     /*
      * The interests step is the densest grid the product renders: nine question
@@ -121,13 +123,8 @@ for (const phone of PHONES) {
     await page.setViewportSize({ width: phone.width, height: phone.height });
     const where = `${phone.width}x${phone.height}`;
 
-    await page.goto('/trips/new');
-    const destination = page.getByLabel('Destination');
-    await waitUntilInteractive(destination);
-    await destination.fill('Mammoth Lakes');
-    await page.getByLabel('Arrive').fill(DEFAULT_DATES.start);
-    await page.getByLabel('Leave').fill(DEFAULT_DATES.end);
-    await page.getByRole('button', { name: /^Continue$/ }).click();
+    // MVP V3 — setup is five screens now, not one form. `createTrip` walks them.
+    await createTrip(page, 'Mammoth Lakes', DEFAULT_DATES);
     await page.waitForURL(/\/trips\/[^/]+\/questionnaire/);
     await completeQuestionnaire(page);
 

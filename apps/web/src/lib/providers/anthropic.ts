@@ -297,6 +297,26 @@ export interface ModelCallDiagnostic {
     lastEventAtMs: number | null;
     eventCount: number;
     longestModelIdleMs: number;
+    /**
+     * HOW FAST THE ANSWER WAS ACTUALLY ARRIVING.
+     *
+     * Latency closure. Diagnosing the two cancelled Kyrgyzstan builds meant
+     * deriving the write rate by hand from three numbers that happened to be
+     * on the log — 8,534 bytes, a 99.8-second last event and a 61.6-second
+     * idle — and the answer (252 visible bytes a second) was the number that
+     * decided the whole design. It should not have to be reconstructed.
+     *
+     * Visible bytes at fixed points on the wall clock, so the shape of a slow
+     * answer is on the record without a second call: a model that thinks for a
+     * minute and then writes fast looks nothing like one that writes slowly
+     * throughout, and the fix for each is different. `null` where the call
+     * ended before that mark.
+     */
+    visibleBytesAt30s: number | null;
+    visibleBytesAt60s: number | null;
+    visibleBytesAt80s: number | null;
+    /** Visible bytes per second across the time the model was actually writing. */
+    visibleBytesPerSecond: number | null;
   } & TransportLivenessSnapshot;
   /**
    * Present only for a hard failure at this method's own strict-validation
@@ -558,6 +578,19 @@ export class ResearchModel {
      */
     timeoutMs?: number;
     /**
+     * MVP V3, Stage 26 — TRY WHAT ARRIVED WHEN THE DEADLINE FIRES.
+     *
+     * Off by default and opted into by one caller: the composition, whose
+     * answer is a single large JSON object built front to back, so a prefix
+     * of it is a shorter version of the same trip rather than a fragment of
+     * something else. A caller whose answer is not shaped that way must leave
+     * this unset — for those, half an answer is not a small answer.
+     *
+     * Turning it on never changes what is accepted: the salvaged text goes
+     * through the same extraction, the same repair and the same schema.
+     */
+    salvagePartialOnDeadline?: boolean;
+    /**
      * `'generation' | 'structural_reask' | 'repair'` for the Phase 17
      * composer, which is the one caller that needs to tell those apart in
      * `callLog`. Every other call site has no such vocabulary; leave it unset
@@ -629,7 +662,12 @@ export class ResearchModel {
      * so a completed, paid answer is on record even when the shape is refused.
      * Never receives thinking content.
      */
-    onResponse?: (info: { text: string; stopReason: string | null; requestId: string | null; inputTokens: number; outputTokens: number; elapsedMs: number; enforcement: 'grammar' | 'prompt' }) => void;
+    /**
+     * `inputTokens`/`outputTokens` are `null` when the call ended before
+     * usage metadata arrived — which is exactly the deadline-salvage case,
+     * where there is an answer to record and no accounting for it yet.
+     */
+    onResponse?: (info: { text: string; stopReason: string | null; requestId: string | null; inputTokens: number | null; outputTokens: number | null; elapsedMs: number; enforcement: 'grammar' | 'prompt' }) => void;
     /**
      * A DETERMINISTIC PASS BETWEEN "VALID JSON" AND "VALID *THIS* SCHEMA" —
      * OPT-IN, AND OPT-IN FOR A REASON.
@@ -895,6 +933,16 @@ export class ResearchModel {
     let requestIdFromError: string | null = null;
     const modelEvents = newIdleTracker();
     let partialResponseBytes = 0;
+    /** The answer as far as it got. Empty unless `salvagePartialOnDeadline`. */
+    let partialText = '';
+    /** Visible bytes written by 30, 60 and 80 seconds. Sampled on the deltas themselves. */
+    const marks: { at: number; bytes: number | null }[] = [
+      { at: 30_000, bytes: null },
+      { at: 60_000, bytes: null },
+      { at: 80_000, bytes: null },
+    ];
+    /** When the first visible byte arrived, which is where the writing window starts. */
+    let firstTextAtMs: number | null = null;
     /** See `ModelCallDiagnostic.schemaValidationIssues`. */
     let schemaValidationIssues: readonly { path: string; code: string; message: string }[] | null = null;
 
@@ -945,6 +993,25 @@ export class ResearchModel {
         });
         stream.on('text', (delta) => {
           partialResponseBytes += delta.length;
+          const at = Math.round(performance.now() - calledAt);
+          if (firstTextAtMs === null) firstTextAtMs = at;
+          for (const mark of marks) if (mark.bytes === null && at >= mark.at) mark.bytes = partialResponseBytes;
+          /*
+           * MVP V3, Stage 26 — KEPT SO A CANCELLED ANSWER IS NOT A LOST ONE.
+           *
+           * Measured on two live Kyrgyzstan runs (2026-09-08): a ten-day
+           * broad-country draft reached the hundred-second deadline with
+           * 1,285 and then 8,534 bytes of perfectly good JSON already
+           * written, and both were thrown away for a failure screen.
+           *
+           * This is the *answer* accumulating, not a diagnostic about
+           * hidden reasoning: `'thinking'` is still not listened to, and
+           * nothing here is logged, stored or measured. It exists only so
+           * the deadline branch below can put the same salvage the
+           * truncated-answer path already has to work on what did arrive.
+           * Held for the life of one call and dropped with it.
+           */
+          if (input.salvagePartialOnDeadline) partialText += delta;
         });
         message = await stream.finalMessage();
         this.record(message);
@@ -963,7 +1030,11 @@ export class ResearchModel {
             console.error('Raw response hook failed', { message: hookError instanceof Error ? hookError.message : 'unknown' });
           }
         }
-        const parsed = this.parseStreamedOutput(message, input.validationSchema ?? input.schema, input.normalize, input.jsonWrapperTag);
+        const parsed = this.parseStreamedOutput(message, input.validationSchema ?? input.schema, input.normalize, input.jsonWrapperTag, (fields) => {
+          // Recorded the moment the answer is read, so a structural repair is on
+          // the call log even when validation then refuses what was salvaged.
+          normalizedFields = fields;
+        });
         normalizedFields = parsed.normalizedFields;
         outcome = 'completed';
         return parsed.data;
@@ -1042,6 +1113,52 @@ export class ResearchModel {
           );
         }
         outcome = 'aborted_deadline';
+        /*
+         * What arrived before the clock ran out is still an answer.
+         *
+         * The same extraction, repair and validation every other response
+         * goes through — including the truncated-tail repair, which exists
+         * for exactly this shape — and the same refusal if what arrived is
+         * not a usable whole. A partial that normalises into a complete,
+         * non-hollow draft is a trip; one that does not is still a timeout,
+         * with the deadline named as the cause. Nothing is retried and
+         * nothing is asked for a second time.
+         */
+        if (input.salvagePartialOnDeadline && partialText.trim().length > 0) {
+          /*
+           * Recorded before it is parsed, exactly as a completed answer is.
+           * A cancelled answer is the one most worth having on the attempt
+           * log — it is the case that replays offline into "would this have
+           * been a trip?" — and the salvage must not be the one path that
+           * writes nothing. `stopReason` names the deadline rather than
+           * borrowing one of the provider's.
+           */
+          if (input.onResponse) {
+            try {
+              input.onResponse({
+                text: partialText,
+                stopReason: 'sidequest_deadline',
+                requestId: (error as ProviderApiError).requestID ?? null,
+                inputTokens: null,
+                outputTokens: null,
+                elapsedMs: Math.round(performance.now() - calledAt),
+                enforcement,
+              });
+            } catch (hookError) {
+              console.error('Raw response hook failed', { message: hookError instanceof Error ? hookError.message : 'unknown' });
+            }
+          }
+          try {
+            const salvaged = this.parseModelText(partialText, (error as ProviderApiError).requestID ?? undefined, 'deadline', input.validationSchema ?? input.schema, input.normalize, input.jsonWrapperTag, (fields) => {
+              normalizedFields = fields;
+            });
+            normalizedFields = ['deadline_salvage', ...salvaged.normalizedFields];
+            outcome = 'completed';
+            return salvaged.data;
+          } catch {
+            // Nothing usable arrived in time. Fall through to the timeout.
+          }
+        }
         throw new ResearchModelError(
           'timeout',
           `Sidequest’s own ${deadlineMs}ms deadline was reached before the model finished answering.`,
@@ -1183,6 +1300,19 @@ export class ResearchModel {
           lastEventAtMs: modelEvents.lastAtMs,
           eventCount: modelEvents.count,
           longestModelIdleMs: modelEvents.longestIdleMs,
+          visibleBytesAt30s: marks[0]!.bytes,
+          visibleBytesAt60s: marks[1]!.bytes,
+          visibleBytesAt80s: marks[2]!.bytes,
+          /*
+           * Measured over the writing window, not the whole call: a minute of
+           * silence before the first token says something about deliberation
+           * and nothing about throughput, and averaging the two together hides
+           * both.
+           */
+          visibleBytesPerSecond:
+            firstTextAtMs !== null && modelEvents.lastAtMs !== null && modelEvents.lastAtMs > firstTextAtMs && partialResponseBytes > 0
+              ? Math.round((partialResponseBytes / (modelEvents.lastAtMs - firstTextAtMs)) * 1000)
+              : null,
           ...transportSnapshot,
         },
       });
@@ -1296,17 +1426,38 @@ export class ResearchModel {
     schema: z.ZodType<T>,
     normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] },
     wrapperTag?: string,
+    noteFields?: (fields: readonly string[]) => void,
   ): { data: T; normalizedFields: readonly string[] } {
-    const requestId = message._request_id ?? undefined;
     const text = message.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('');
+    return this.parseModelText(text, message._request_id ?? undefined, message.stop_reason ?? 'no stop reason', schema, normalize, wrapperTag, noteFields);
+  }
 
+  /**
+   * The answer's text, from wherever it came, turned into a validated value.
+   *
+   * Split out of `parseStreamedOutput` so that a *cancelled* call can be given
+   * the same treatment as a completed one: the deadline branch in `structured`
+   * hands it what arrived before the clock stopped. Every rule above still
+   * applies — the extraction is the same, the repair is the same, and the
+   * caller's own schema is still what decides — because a partial answer that
+   * would not be trusted whole must not become trusted merely by being late.
+   */
+  private parseModelText<T>(
+    text: string,
+    requestId: string | undefined,
+    stopReason: string,
+    schema: z.ZodType<T>,
+    normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] },
+    wrapperTag?: string,
+    noteFields?: (fields: readonly string[]) => void,
+  ): { data: T; normalizedFields: readonly string[] } {
     if (!text.trim()) {
       throw new ResearchModelError(
         'malformed_output',
-        `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}).`,
+        `The model returned nothing usable (${stopReason}).`,
         requestId,
       );
     }
@@ -1321,11 +1472,18 @@ export class ResearchModel {
     if (!extracted.ok) {
       throw new ResearchModelError(
         'malformed_output',
-        `The model returned nothing usable (${message.stop_reason ?? 'no stop reason'}; ${extracted.reason}: ${extracted.detail}).`,
+        `The model returned nothing usable (${stopReason}; ${extracted.reason}: ${extracted.detail}).`,
         requestId,
       );
     }
     const json: unknown = extracted.json;
+    /*
+     * MVP V3 — a structural repair is a fact about the answer, recorded like any
+     * other normalization. `json-repair.ts` never changes content, so this says
+     * "the shape was mended here", never "the meaning was adjusted".
+     */
+    const repairFields = extracted.repairs.map((repair) => `json (${repair})`);
+    if (repairFields.length > 0) noteFields?.(repairFields);
 
     /*
      * Cosmetic normalization, if this caller supplied one — deterministic,
@@ -1338,14 +1496,14 @@ export class ResearchModel {
      * required fields, shape, enums, references, numeric bounds, the
      * safe-prose pattern — completely unweakened.
      */
-    const normalizedFields: readonly string[] = [];
     let candidate = json;
-    let fieldsTouched = normalizedFields;
+    let fieldsTouched: readonly string[] = repairFields;
     if (normalize) {
       const result = normalize(json);
       candidate = result.value;
-      fieldsTouched = result.normalizedFields;
+      fieldsTouched = [...repairFields, ...result.normalizedFields];
     }
+    if (fieldsTouched.length > 0) noteFields?.(fieldsTouched);
 
     const validated = schema.safeParse(candidate);
     if (!validated.success) {
@@ -1369,7 +1527,7 @@ export class ResearchModel {
       }));
       throw new ResearchModelError(
         'malformed_output',
-        `The model answered in a shape the schema refused (${message.stop_reason ?? 'no stop reason'}).`,
+        `The model answered in a shape the schema refused (${stopReason}).`,
         requestId,
         schemaValidationIssues,
       );

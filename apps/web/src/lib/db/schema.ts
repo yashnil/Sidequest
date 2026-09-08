@@ -158,6 +158,29 @@ CREATE TABLE IF NOT EXISTS composition_attempts (
   created_at       TEXT NOT NULL
 );
 
+-- MVP V3 — WHAT A RUNNING BUILD HAS ACTUALLY FINISHED.
+--
+-- The generation overlay used to advance its four stages on a timer: at 45
+-- seconds it said "Checking the places" whether or not a place had been
+-- checked, and at 100 seconds it said "Preparing the trip" whether or not the
+-- model had answered. That is a progress bar that cannot be wrong because it is
+-- not about anything.
+--
+-- One row per trip, rewritten as the build passes each real boundary, so the
+-- screen reports what the server did. The finished flag distinguishes "the build
+-- ended" from "the last stage is still running"; a row whose updated_at has gone cold
+-- is a build whose process went away, and the screen says so rather than
+-- breathing at somebody for ever.
+CREATE TABLE IF NOT EXISTS generation_progress (
+  trip_id     TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  stage       TEXT NOT NULL,
+  reached     TEXT NOT NULL,
+  started_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL,
+  finished    INTEGER NOT NULL DEFAULT 0,
+  outcome     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS hybrid_plans (
   trip_id     TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
   plan_json   TEXT NOT NULL,
@@ -234,6 +257,11 @@ CREATE TABLE IF NOT EXISTS trip_intents (
   -- the supply verdict. Persisted so a refusal survives the refresh that used to
   -- throw it away, exactly as planner readiness now does.
   preflight_json             TEXT,
+  -- MVP V3 — what the traveller meant by the words they typed, as one durable
+  -- record rather than three competing values. Written the moment a trip is
+  -- created, from the text alone if that is all there is; enriched later by a
+  -- selection or a resolution, never emptied or gated by either.
+  destination_intent_json    TEXT,
   created_at                 TEXT NOT NULL,
   updated_at                 TEXT NOT NULL
 );
@@ -1647,6 +1675,16 @@ export const COLUMN_MIGRATIONS: readonly {
   { table: 'trip_intents', column: 'composer_json', definition: 'TEXT' },
   { table: 'trip_intents', column: 'selected_destination_json', definition: 'TEXT' },
   { table: 'trip_intents', column: 'preflight_json', definition: 'TEXT' },
+  /**
+   * Added by MVP V3's destination intent.
+   *
+   * Nullable for the reason its neighbours are: a trip created before the
+   * intent existed has a `destination_query` and nothing that reads on it, and
+   * synthesising a record from that string would date-stamp an interpretation
+   * nobody made. Absent means "never recorded", and every reader treats it as
+   * such by falling back to the query text.
+   */
+  { table: 'trip_intents', column: 'destination_intent_json', definition: 'TEXT' },
   /**
    * Added by the provisional board.
    *

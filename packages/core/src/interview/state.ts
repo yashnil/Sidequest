@@ -74,16 +74,30 @@ export function answerQuestion(input: {
   ctx: InterviewContext;
   question: QuestionDefinition;
   value: unknown;
+  /**
+   * MVP V3 — the traveller's own words beside the option they picked.
+   *
+   * Stored under the question's id and rendered verbatim in the brief. Never
+   * parsed into a setting: an inferred preference is one nobody chose, and the
+   * whole reason this field exists is that the enum could not hold what they
+   * said.
+   */
+  note?: string;
   now: Date;
   region?: QuestionnaireContext['region'];
 }): QuestionnaireAnswers {
   const { answers, ctx, question, value, now } = input;
   const patch = question.apply(value, answers, ctx);
+  const note = input.note?.trim().slice(0, 300) ?? '';
+  const notes = { ...(answers.preferenceNotes ?? {}) };
+  if (note) notes[question.id] = note;
+  else delete notes[question.id];
   const hard = question.hardCapable && isHardValue(value);
   const log = logOf(answers);
   const next: QuestionnaireAnswers = {
     ...answers,
     ...patch,
+    preferenceNotes: notes,
     interview: {
       ...log,
       asked: log.asked.includes(question.id) ? log.asked : [...log.asked, question.id],
@@ -93,7 +107,7 @@ export function answerQuestion(input: {
     },
   };
   return normalizeAnswers(
-    stamp(next, question.id, { source: 'explicit', strength: hard ? 'hard' : 'strong', confidence: 1, at: now.toISOString() }),
+    stamp(next, question.id, { source: 'explicit', strength: hard || note.length > 0 ? (hard ? 'hard' : 'strong') : 'strong', confidence: 1, at: now.toISOString() }),
     questionnaireContextOf(ctx, input.region),
   );
 }

@@ -135,7 +135,7 @@ export function reviewLedger(ctx: InterviewContext, answers: QuestionnaireAnswer
   }
   const hard: { label: string; detail?: string }[] = answers.hardConstraints.map((constraint) => ({ label: describeHard(constraint) }));
   if (answers.dietaryStrict && answers.dietaryNeeds.length > 0) {
-    hard.push({ label: `Dietary needs are absolute: ${answers.dietaryNeeds.map((n) => DIETARY_NEED_LABELS[n]).join(', ')}` });
+    hard.push({ label: `Dietary needs are absolute: ${answers.dietaryNeeds.map((n) => DIETARY_NEED_LABELS[n]).join(', ')}`, ...(answers.dietaryNotes ? { detail: answers.dietaryNotes } : {}) });
   }
   if (answers.hardNotes) hard.push({ label: `“${answers.hardNotes}”`, detail: 'In your words, marked as a hard requirement' });
   return { told, assumed, hard, unasked };
@@ -185,4 +185,94 @@ export function personalitySentence(ctx: InterviewContext, profile: TravelerProf
   const mix = profile.discoveryMix === 'mostly_classics' ? 'headline-first' : profile.discoveryMix === 'balanced' ? 'a mix of famous and quiet' : 'hidden-gem leaning';
   const bases = profile.interview.baseMoveTolerance === 'stay_put' ? 'from one base' : profile.interview.baseMoveTolerance === 'move_freely' ? 'moving with the route' : profile.interview.baseMoveTolerance === 'move_once' ? 'with one hotel change if it earns it' : 'moving only when it saves real time';
   return `A ${lead}-led, ${mix} trip to ${ctx.destination.proseName}: ${pace} pace over ${ctx.destination.tripDays} ${ctx.destination.tripDays === 1 ? 'day' : 'days'}, ${movement}, ${bases}.`;
+}
+
+// ---------------------------------------------------------------------------
+// The review, in one glance
+// ---------------------------------------------------------------------------
+
+/**
+ * WHAT THE TRAVELLER SEES BEFORE THEY PRESS BUILD.
+ *
+ * MVP V3, Stage 39. What this replaces: two columns of every question in the
+ * plan, each a label, a value and a "Change" link — a database listing of
+ * fifteen rows, presented as the moment somebody confirms their holiday. It was
+ * correct and unreadable, and the founder's word for it was "administrative".
+ *
+ * A glance is six or seven groups, each one a *statement about the trip* rather
+ * than a question and its answer, each with one place to go and change it. The
+ * per-question ledger is not deleted — it is the thing that makes the product
+ * checkable — it moves behind one disclosure.
+ *
+ * Grouping lives here rather than in the component for the same reason the
+ * ledger does: it is a claim about what matters, and a claim is testable.
+ */
+export interface ReviewGlanceGroup {
+  id: string;
+  title: string;
+  /** Short statements, in the traveller's register. Never "question: answer". */
+  lines: { text: string; assumed: boolean }[];
+  /** The question this group opens when the traveller presses Edit. */
+  editQuestionId: string;
+}
+
+const GLANCE_GROUPS: { id: string; title: string; questions: string[] }[] = [
+  { id: 'shape', title: 'The trip', questions: ['coverage_strategy', 'base_moves', 'transport_mode', 'day_trips'] },
+  { id: 'priorities', title: 'You care most about', questions: ['priorities', 'priority_roles'] },
+  { id: 'feel', title: 'How it should feel', questions: ['day_shape', 'day_start', 'effort', 'walking_tolerance', 'free_time', 'late_nights'] },
+  { id: 'choices', title: 'What wins a tie', questions: ['iconic_crowds', 'famous_vs_hidden', 'convenience_spend', 'budget'] },
+  { id: 'food', title: 'Food', questions: ['food_tradeoff', 'dietary', 'breakfast', 'special_meals'] },
+  { id: 'stay', title: 'Where you sleep', questions: ['lodging_style', 'rustic_lodging'] },
+];
+
+/**
+ * The glance, built from the same ledger the disclosure shows.
+ *
+ * A group appears only when something in it has been settled; a group whose
+ * every line is Sidequest's own read still appears, marked, because "we assumed
+ * all of this" is exactly what a traveller needs to see before they build.
+ */
+/** "Nothing stated", "None", "Nothing off-limits" — an absence, not a statement about the trip. */
+const SAYS_NOTHING = /^(nothing|none)\b/i;
+
+/** Two answers that say the same thing in different words still say it once. */
+function overlapping(a: string, b: string): boolean {
+  const key = (value: string) => value.toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter((word) => word.length > 3);
+  const first = new Set(key(a));
+  const second = key(b);
+  if (first.size === 0 || second.length === 0) return false;
+  const shared = second.filter((word) => first.has(word)).length;
+  return shared / second.length > 0.6;
+}
+
+export function reviewGlance(ledger: ReviewLedger): ReviewGlanceGroup[] {
+  const byId = new Map<string, ReviewEntry>();
+  for (const entry of [...ledger.told, ...ledger.assumed]) byId.set(entry.questionId, entry);
+  const groups: ReviewGlanceGroup[] = [];
+  for (const group of GLANCE_GROUPS) {
+    const lines: ReviewGlanceGroup['lines'] = [];
+    let anchor: string | null = null;
+    for (const questionId of group.questions) {
+      const entry = byId.get(questionId);
+      if (!entry) continue;
+      anchor ??= questionId;
+      /*
+       * An absence is not a statement. "Nothing stated" under Food reads on a
+       * glance as though the traveller decided something, and the glance is the
+       * screen where every line is supposed to be a decision.
+       */
+      if (SAYS_NOTHING.test(entry.value.trim())) continue;
+      /*
+       * `priorities` and `priority_roles` are the same three interests written
+       * twice — once as "a few times" in brackets, once as "a few times" after a
+       * colon. Two renderings of one answer is what made the first version of
+       * this screen read like a database.
+       */
+      if (lines.some((line) => overlapping(line.text, entry.value))) continue;
+      lines.push({ text: entry.value, assumed: entry.source !== 'explicit' });
+    }
+    if (lines.length === 0 || !anchor) continue;
+    groups.push({ id: group.id, title: group.title, lines: lines.slice(0, 2), editQuestionId: anchor });
+  }
+  return groups;
 }

@@ -93,6 +93,18 @@ export const bookingItemSchema = z.object({
   status: z.enum(['open', 'booked', 'soft_hold', 'not_needed']).default('open'),
   bookedItemId: z.string().min(1).optional(),
   travelerAction: z.string().min(1),
+  /**
+   * MVP V3, Stage 48 — WHAT HAPPENS IF THIS IS GONE.
+   *
+   * The fourth question a booking list has to answer, after what, why and
+   * when. It is derived from what the plan already holds — a backup for that
+   * day, an alternative venue the food section carries, a leg the router could
+   * not measure — and is absent when the plan holds nothing. Absent means
+   * "Sidequest has no fallback for this", never "there isn't one": inventing a
+   * plausible-sounding alternative for a sold-out permit is exactly the kind of
+   * confident guess the rest of this product refuses.
+   */
+  ifUnavailable: z.string().min(1).optional(),
   authority: z.enum(['official_current', 'authoritative_structured', 'open_structured', 'trusted_reference', 'model_proposal']),
 });
 export type BookingItem = z.infer<typeof bookingItemSchema>;

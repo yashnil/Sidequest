@@ -1,6 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import { USER_AGENT } from './nominatim';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * OVERPASS — POI AND GEOGRAPHIC DISCOVERY.
@@ -577,7 +578,7 @@ async function fetchGroup(
           accept: 'application/json',
         },
         body: new URLSearchParams({ data: query }).toString(),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: requestSignal(REQUEST_TIMEOUT_MS),
       });
 
       /**

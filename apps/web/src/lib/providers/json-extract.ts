@@ -11,10 +11,12 @@
  * there is none, when the object is truncated, or when what balances is not
  * valid JSON. No regex grabs arbitrary braces; no second model call.
  */
+import { repairJsonObject, type JsonRepair } from './json-repair';
+
 export type JsonSource = 'bare' | 'fenced' | 'wrapped' | 'embedded';
 
 export type JsonExtraction =
-  | { ok: true; json: unknown; source: JsonSource; start: number; end: number }
+  | { ok: true; json: unknown; source: JsonSource; start: number; end: number; repairs: readonly JsonRepair[] }
   | { ok: false; reason: 'empty' | 'no_object' | 'truncated' | 'invalid_json'; detail: string };
 
 /** Index just past the `}` that balances the `{` at `start`, or -1 when the text ends first. */
@@ -73,7 +75,7 @@ export function extractJsonObject(input: string, options: { wrapperTag?: string 
       try {
         const json = JSON.parse(slice) as unknown;
         if (json !== null && typeof json === 'object' && !Array.isArray(json)) {
-          return { ok: true, json, source: candidate.source, start: candidate.offset + from, end: candidate.offset + end };
+          return { ok: true, json, source: candidate.source, start: candidate.offset + from, end: candidate.offset + end, repairs: [] };
         }
       } catch (error) {
         sawInvalid = error instanceof Error ? error.message.slice(0, 160) : 'invalid JSON';
@@ -81,6 +83,33 @@ export function extractJsonObject(input: string, options: { wrapperTag?: string 
       from = candidate.body.indexOf('{', from + 1);
     }
   }
+  /*
+   * MVP V3 — SALVAGE, ONLY AFTER THE STRICT PASS HAS FAILED.
+   *
+   * A completed, paid answer must not be discarded over a character-level
+   * structural slip; `json-repair.ts` names the closed set it can fix. This runs
+   * second and never first — an answer that parses strictly is never touched —
+   * and a salvage whose result is not itself a JSON object is still a failure,
+   * reported with the reason the strict pass found.
+   */
+  for (const candidate of candidates) {
+    let from = candidate.body.indexOf('{');
+    while (from >= 0) {
+      const repaired = repairJsonObject(candidate.body, from);
+      if (repaired && repaired.repairs.length > 0) {
+        try {
+          const json = JSON.parse(repaired.text) as unknown;
+          if (json !== null && typeof json === 'object' && !Array.isArray(json)) {
+            return { ok: true, json, source: candidate.source, start: candidate.offset + from, end: candidate.offset + repaired.end, repairs: repaired.repairs };
+          }
+        } catch {
+          /* the repaired text still does not parse: fall through to the honest failure */
+        }
+      }
+      from = candidate.body.indexOf('{', from + 1);
+    }
+  }
+
   if (sawTruncated) return { ok: false, reason: 'truncated', detail: 'an object opened but the text ended before it closed' };
   if (sawInvalid) return { ok: false, reason: 'invalid_json', detail: sawInvalid };
   return { ok: false, reason: 'no_object', detail: 'no JSON object in the visible text' };

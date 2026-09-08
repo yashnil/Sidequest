@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultAnswers, buildTravelerProfile } from '../questionnaire/transform';
 import { interestOfferFromEntityType } from '../interests/offer';
 import { questionnaireAnswersSchema, type QuestionnaireAnswers } from '../schemas/profile';
-import { INTERVIEW_QUESTIONS, interviewCatalog, questionById, type InterviewContext } from './catalog';
+import { ELABORATING_QUESTIONS, INTERVIEW_QUESTIONS, interviewCatalog, questionById, type InterviewContext } from './catalog';
 import { isPlanningImpactKey, PLANNING_IMPACT_CONSUMERS, PLANNING_IMPACT_KEYS } from './impact';
 import { interviewAnalytics } from './analytics';
 import { reviewLedger, personalityBars, personalitySentence } from './review';
@@ -406,5 +406,36 @@ describe('review, analytics and the composition summary', () => {
     const summary = compositionPreferenceSummary(buildTravelerProfile(answers, { travelerNeeds: [], tripDays: 5 }));
     expect(summary.assumed.some((line) => /\(assumed/.test(line))).toBe(true);
     expect(summary.explicit.filter((line) => /\(assumed/.test(line))).toEqual([]);
+  });
+});
+
+/**
+ * MVP V3, Stage 56 — the question protocol, enforced.
+ *
+ * `.claude-private/SIDEQUEST-QUESTION-PROTOCOL.md` states the rules; these are
+ * the two that a reviewer cannot check by eye.
+ */
+describe('the question protocol', () => {
+  const ctx = contextFor({ name: 'Somewhere', tripDays: 7 });
+
+  it('every question that offers "Something else" is a real question', () => {
+    const ids = new Set(interviewCatalog(ctx, defaultAnswers({ travelerNeeds: [], tripDays: 7, offeredInterests: [] })).map((question) => question.id));
+    for (const id of ELABORATING_QUESTIONS) {
+      expect(ids.has(id), `ELABORATING_QUESTIONS names "${id}", which is not in the catalog`).toBe(true);
+    }
+  });
+
+  it('no question asks about age, and nothing reads a demographic as a taste', () => {
+    /*
+     * The founder's rule: do not assume an eighteen-year-old wants nightlife or
+     * that an older traveller wants a light day. Both are *asked*. The check is
+     * structural — a question whose prompt or options mention an age is the
+     * shape that failure takes.
+     */
+    const answers = defaultAnswers({ travelerNeeds: [], tripDays: 7, offeredInterests: [] });
+    for (const question of interviewCatalog(ctx, answers)) {
+      const text = [question.prompt(ctx, answers), question.why(ctx), ...(question.options?.(ctx, answers) ?? []).flatMap((option) => [option.label, option.detail ?? ''])].join(' ');
+      expect(/\b(age|aged|years old|18|elderly|young people)\b/i.test(text), `${question.id} asks about age`).toBe(false);
+    }
   });
 });

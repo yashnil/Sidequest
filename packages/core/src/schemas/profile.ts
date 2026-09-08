@@ -157,6 +157,18 @@ export const questionnaireAnswersSchema = z.object({
    * reason to look elsewhere, and makes a packed lunch the safer answer.
    */
   dietaryStrict: z.boolean().default(false),
+  /** MVP V3 — the traveller's own words about food, kept verbatim. Never parsed into `dietaryNeeds`. */
+  dietaryNotes: z.string().max(300).optional(),
+  /**
+   * MVP V3, Stage 14 — "Something else" on any preference question.
+   *
+   * Keyed by question id, the traveller's own sentence beside the option they
+   * chose: "I'm very fit but don't want two huge hiking days back to back" is a
+   * real preference that no enum in this file can hold, and forcing it into the
+   * nearest one is the product deciding it knows better. Rendered verbatim into
+   * the composition brief; never parsed back into a setting.
+   */
+  preferenceNotes: z.record(z.string().max(60), z.string().max(300)).optional(),
   /**
    * Steps the traveller explicitly handed to us, as opposed to steps they
    * accepted the defaults on.
@@ -377,6 +389,12 @@ export const travelerProfileSchema = z.object({
   hard: z.array(hardConstraintSchema).default([]),
   /** Provenance by interview question id — explicit vs assumed, and why. */
   provenance: z.record(z.string(), preferenceProvenanceSchema).default({}),
+  /**
+   * MVP V3 — "Something else": what the traveller wrote beside a chosen option,
+   * keyed by question id and carried verbatim into the composition brief.
+   * Optional so every profile stored before this field parses unchanged.
+   */
+  preferenceNotes: z.record(z.string().max(60), z.string().max(300)).optional(),
   derived: derivedProfileSchema,
 });
 export type TravelerProfile = z.infer<typeof travelerProfileSchema>;

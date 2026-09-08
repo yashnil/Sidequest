@@ -435,7 +435,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
           <p className="mt-5 border-t border-rule pt-4 text-xs leading-relaxed text-ink-faint">
             No model chooses, orders or removes a destination. The ranking is arithmetic over
             sourced data, and you can open every number behind it.
-            {props.climateEnabled ? '' : ' Climate records are switched off in this build.'}
+            {props.climateEnabled ? '' : ' Sidequest has no climate record to compare months with here.'}
           </p>
         </Panel>
       </aside>

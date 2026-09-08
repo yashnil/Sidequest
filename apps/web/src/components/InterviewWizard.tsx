@@ -14,7 +14,9 @@ import {
   markAsked,
   markCarried,
   planInterview,
+  questionElaborates,
   questionnaireContextOf,
+  reviewGlance,
   reviewLedger,
   skipQuestion,
   withMode,
@@ -32,6 +34,7 @@ import {
   type QuestionnaireAnswers,
   type QuestionnaireContext,
   type ReviewEntry,
+  type ReviewGlanceGroup,
   type SmartDefault,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FOCUS_RING, buttonClass, cx } from './ui';
@@ -54,7 +57,7 @@ import {
   TransportChoice,
   WritingSpace,
 } from './interview/patterns';
-import { mapLayersFor, SketchFigure, TripProfileList, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
+import { mapLayersFor, SketchFigure, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
 import { DestinationMap, type DestinationGeometry } from './interview/DestinationMap';
 import { GenerationOverlay } from './interview/GenerationOverlay';
 import type { MapBasemap } from './map-adapter';
@@ -124,6 +127,11 @@ export function InterviewWizard({
 
   const mode: InterviewMode = answers.interview?.mode ?? 'normal';
   const plan = useMemo(() => planInterview({ ctx: context, answers, mode }), [context, answers, mode]);
+  /*
+   * MVP V3, Stage 17 — recomputed with the plan, after every answer, because
+   * one answer can resolve a critical dimension and make the rest optional.
+   */
+  const enoughToBuild = useMemo(() => assessSufficiency(plan).kind === 'sufficient', [plan]);
   const shown = plan.shown;
   const current: PlannedQuestion | null =
     position === UNDERSTANDING_POSITION || position === REVIEW_POSITION ? null : (plan.questions.find((q) => q.id === position) ?? null);
@@ -167,9 +175,9 @@ export function InterviewWizard({
     go(nextAfter(null, first), first);
   }
 
-  function answer(value: unknown) {
+  function answer(value: unknown, note?: string) {
     if (!current) return;
-    const next = answerQuestion({ answers, ctx: context, question: current.definition, value, now: new Date(), ...(region ? { region } : {}) });
+    const next = answerQuestion({ answers, ctx: context, question: current.definition, value, now: new Date(), ...(note ? { note } : {}), ...(region ? { region } : {}) });
     setCall(null);
     go(nextAfter(current.id, next), next);
   }
@@ -199,6 +207,19 @@ export function InterviewWizard({
     const next = target.tier === 'fine_tune' && mode !== 'deep' ? withMode(answers, 'deep') : answers;
     setCall(null);
     go(id, markAsked(next, id));
+  }
+
+  /**
+   * MVP V3, Stage 40 — back to a finished stage.
+   *
+   * The first question of that stage in the *current* plan, so a traveller who
+   * changed an answer that unlocked new questions lands somewhere that exists
+   * rather than on a remembered id.
+   */
+  function jumpToStage(target: ReturnType<typeof stageOf>) {
+    const first = shown.find((id) => stageOf(id) === target);
+    if (first) jumpTo(first);
+    else if (target === 'trip') go(UNDERSTANDING_POSITION);
   }
 
   function personalizeMore() {
@@ -305,10 +326,13 @@ export function InterviewWizard({
                 pending={pending}
                 call={call}
                 onCallChange={(id) => jumpTo(id)}
+                onJumpStage={jumpToStage}
                 onAnswer={answer}
                 onDecide={decide}
                 onSkip={skip}
                 onBack={back}
+                enough={enoughToBuild}
+                onEnough={planWithDefaults}
               />
             ) : null}
             {position === REVIEW_POSITION ? (
@@ -349,10 +373,20 @@ export function InterviewWizard({
         </div>
       ) : null}
 
-      {building && !buildFailure ? <GenerationOverlay destination={context.destination.name} geometry={geometry} tiles={tiles} /> : null}
+      {building && !buildFailure ? <GenerationOverlay tripId={tripId} destination={context.destination.name} geometry={geometry} tiles={tiles} /> : null}
       {buildFailure ? (
         <section className="mt-8 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-6" data-testid="build-failure" role="alert" aria-live="polite">
           <h2 className="font-display text-xl text-ink">Sidequest couldn&rsquo;t finish this draft.</h2>
+          {/*
+            MVP V3, Stage 25 — SAY WHAT ACTUALLY HAPPENED.
+            The reason the server gave was captured here and then thrown away in
+            favour of one fixed sentence, which is how a traveller ends up
+            reading "couldn't finish this draft" for a rate limit, a timeout and
+            a malformed answer alike. It is rendered now, above the recovery,
+            and the recovery sentence stays because it is the part that tells
+            them nothing was lost.
+          */}
+          <p className="mt-2 text-sm leading-relaxed text-ink" data-testid="build-failure-reason">{buildFailure.message}</p>
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">Your answers are saved. Retrying starts one fresh draft from them.</p>
           <div className="mt-5 flex flex-wrap gap-3">
             <button type="button" className={buttonClass('primary')} onClick={() => build(buildFailure.answers)} disabled={pending} data-testid="retry-draft">
@@ -412,7 +446,7 @@ function UnderstandingScreen({
     <section className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-center" data-testid="interview-understanding">
       <div className="enter min-w-0">
         <p className="label text-accent">{[d.scaleLabel ?? 'Your destination', `${d.nights} ${d.nights === 1 ? 'night' : 'nights'}`].join(' · ')}</p>
-        <h1 ref={headingRef} tabIndex={-1} className="display-hero mt-3 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
+        <h1 ref={headingRef} tabIndex={-1} className="display-hero mt-3 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
           {d.name}
         </h1>
         {stamps.length > 0 ? (
@@ -425,7 +459,18 @@ function UnderstandingScreen({
           </ul>
         ) : null}
         <p className="mt-7 max-w-xl font-display text-xl leading-snug text-ink sm:text-2xl" data-testid="interview-assumption">
-          {d.assumption ? d.assumption.sentence : `We have not researched ${d.name} yet, so we will ask the questions that matter most for any trip and check the rest once the research runs.`}
+          {/*
+            QUALITY V1 — RESEARCH IS OPTIONAL, SO IT IS NEVER AN EXCUSE.
+
+            This fallback used to read "We have not researched X yet … once the
+            research runs", which named a machine a traveller has not been told
+            about, on the one path where that machine never runs at all. What is
+            actually true when no destination reading exists is simpler and
+            better: nothing has been assumed, so the questions decide the trip.
+          */}
+          {d.assumption
+            ? d.assumption.sentence
+            : `Sidequest has assumed nothing about ${d.name} yet — your answers are what will shape this trip.`}
         </p>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted">
           {questionCount} short {questionCount === 1 ? 'question' : 'questions'}, about a minute. Every one redraws the sketch; hand any of them to us.
@@ -484,10 +529,13 @@ function QuestionScreen({
   pending,
   call,
   onCallChange,
+  onJumpStage,
   onAnswer,
   onDecide,
   onSkip,
   onBack,
+  enough,
+  onEnough,
 }: {
   question: PlannedQuestion;
   index: number;
@@ -499,23 +547,53 @@ function QuestionScreen({
   pending: boolean;
   call: { id: string; label: string; value: string; decision: SmartDefault } | null;
   onCallChange: (id: string) => void;
-  onAnswer: (value: unknown) => void;
+  /** MVP V3 — a finished stage on the path is a way back to its first question. */
+  onJumpStage: (stage: ReturnType<typeof stageOf>) => void;
+  onAnswer: (value: unknown, note?: string) => void;
   onDecide: () => void;
   onSkip: () => void;
   onBack: () => void;
+  /**
+   * MVP V3, Stages 17 and 22 — WHETHER ANYTHING STILL OPEN DECIDES THIS TRIP.
+   *
+   * True once no critical dimension is unresolved. The interview stops being a
+   * queue to walk to the end of at that moment, which is the whole difference
+   * between an interview that ends on *sufficiency* and one that ends on a
+   * question count.
+   */
+  enough: boolean;
+  /** Answer everything still open the way Sidequest would, and go to the review. */
+  onEnough: () => void;
 }) {
   const def = question.definition;
   const resolved = question.status !== 'open';
   const seededInterests = def.kind === 'interests' ? (def.read(answers) as Interest[]) : [];
   const [draft, setDraft] = useState<unknown>(() => (resolved || def.kind === 'interest_roles' ? def.read(answers) : def.kind === 'interests' && seededInterests.length > 0 ? seededInterests : initialDraft(def)));
   const [touched, setTouched] = useState(resolved || seededInterests.length > 0 || EMPTY_IS_AN_ANSWER.has(def.kind));
+  /* MVP V3 — "Something else": the traveller's own line beside the option they chose. */
+  const [note, setNote] = useState<string>(() => answers.preferenceNotes?.[def.id] ?? '');
+  const [noteOpen, setNoteOpen] = useState(() => Boolean(answers.preferenceNotes?.[def.id]));
   const options = def.options?.(context, answers) ?? [];
   const canContinue = touched && draftIsUsable(def, draft);
   const decidedReason = question.status === 'decided' ? answers.provenance[def.id]?.reason : undefined;
+  /*
+   * "Sidequest recommends" — shown only when the destination itself is the
+   * reason. A `smart_default` is Sidequest's fallback for everybody and gets no
+   * badge; a `destination_prior` is a read of this place, and saying so is the
+   * difference between a recommendation and a pre-ticked box.
+   */
+  const recommendation = useMemo(() => {
+    try {
+      const suggested = def.smartDefault(context, answers);
+      return suggested.source === 'destination_prior' && typeof suggested.value === 'string' ? { value: suggested.value, reason: suggested.reason } : null;
+    } catch {
+      return null;
+    }
+  }, [def, context, answers]);
 
   return (
     <div className="enter" data-testid={`interview-question-${def.id}`} data-module={def.module} data-tier={question.tier}>
-      <StagePath current={stage} note={`Question ${Math.min(index + 1, Math.max(1, total))}`} />
+      <StagePath current={stage} note={`Question ${Math.min(index + 1, Math.max(1, total))}`} onJump={onJumpStage} />
 
       {call && call.id !== def.id ? (
         <div className="slide-down mt-5 flex flex-wrap items-start gap-3 rounded-[var(--radius-card)] border border-accent/40 bg-accent-soft p-4" data-testid="interview-call">
@@ -539,7 +617,7 @@ function QuestionScreen({
         {question.tier === 'destination' ? 'Because of where you are going' : INTERVIEW_MODULE_LABELS[def.module]}
       </p>
       {/* The question is the page's one level-one heading: every state of the interview has exactly one. EXPERIENCE V2 — a title, not a poster. */}
-      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[28ch] text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
+      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[28ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         {def.prompt(context, answers)}
       </h1>
       <p className="mt-2 max-w-[62ch] type-body text-ink-muted">{def.why(context)}</p>
@@ -558,6 +636,15 @@ function QuestionScreen({
         </div>
       ) : null}
 
+      {recommendation ? (
+        <p className="mt-4 inline-flex items-start gap-2 rounded-[var(--radius-card)] border border-pine/40 bg-pine-soft px-3.5 py-2 text-sm text-pine-strong" data-testid="interview-recommendation">
+          <Glyph id="compass" className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <span className="font-medium">Sidequest recommends {labelForValue(options, recommendation.value)}.</span> {recommendation.reason}
+          </span>
+        </p>
+      ) : null}
+
       <div className="mt-6">
         <QuestionControl
           question={def}
@@ -569,8 +656,36 @@ function QuestionScreen({
             setTouched(true);
             setDraft(value);
           }}
+          recommended={recommendation?.value ?? null}
         />
       </div>
+
+      {questionElaborates(def.id) ? (
+        <div className="mt-5">
+          {noteOpen ? (
+            <div className="slide-down">
+              <label htmlFor={`note-${def.id}`} className="label block text-ink-faint">
+                In your own words
+              </label>
+              <textarea
+                id={`note-${def.id}`}
+                rows={2}
+                maxLength={300}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Anything the options above do not quite say"
+                className="mt-2 w-full max-w-2xl resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
+                data-testid="interview-note"
+              />
+              <p className="mt-1.5 type-small text-ink-faint">Kept exactly as you write it and read alongside your answer. Nothing is guessed from it.</p>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setNoteOpen(true)} className={cx('inline-flex min-h-11 items-center gap-2 text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-note-open">
+              Something else? Tell us in your words
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <div className="sticky bottom-0 z-10 -mx-5 mt-8 border-t border-rule bg-paper/95 px-5 py-4 backdrop-blur-sm sm:static sm:mx-0 sm:mt-10 sm:border-t sm:bg-transparent sm:px-0 sm:pt-6 sm:backdrop-blur-none">
         {/*
@@ -589,13 +704,26 @@ function QuestionScreen({
                 No preference
               </button>
             ) : null}
+            {/*
+              Reachable from here rather than only from the first screen. Once
+              nothing critical is open, carrying on is a choice about how much
+              of themselves the traveller wants to spend, not a requirement —
+              and a product that only offers the shortcut before anybody has
+              answered anything is offering it at the one moment it is least
+              informed.
+            */}
+            {enough ? (
+              <button type="button" onClick={onEnough} disabled={pending} className={buttonClass('ghost')} data-testid="interview-enough">
+                Sidequest has enough — plan it
+              </button>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onDecide} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-decide" title="Sidequest chooses, tells you what it chose, and you can change it">
               <Glyph id="compass" className="h-4 w-4" />
               Decide for me
             </button>
-            <button type="button" onClick={() => onAnswer(draft)} disabled={pending || !canContinue} className={cx(buttonClass('primary'), 'flex-1 sm:flex-none')} data-testid="interview-continue">
+            <button type="button" onClick={() => onAnswer(draft, note)} disabled={pending || !canContinue} className={cx(buttonClass('primary'), 'flex-1 sm:flex-none')} data-testid="interview-continue">
               {pending ? 'Saving…' : 'Continue →'}
             </button>
           </div>
@@ -605,13 +733,18 @@ function QuestionScreen({
   );
 }
 
+/** The label of an option value, for the recommendation sentence. */
+function labelForValue(options: readonly InterviewOption[], value: string): string {
+  return (options.find((option) => option.value === value)?.label ?? value.replace(/_/g, ' ')).toLowerCase();
+}
+
 function initialDraft(def: QuestionDefinition): unknown {
   switch (def.kind) {
     case 'interests':
     case 'multi':
       return [];
     case 'dietary':
-      return { needs: [], strict: false };
+      return { needs: [], strict: false, notes: '' };
     case 'hard_constraints':
       return { constraints: [], notes: '', notesAreHard: false };
     case 'budget':
@@ -653,6 +786,7 @@ function QuestionControl({
   answers,
   value,
   onChange,
+  recommended = null,
 }: {
   question: QuestionDefinition;
   options: InterviewOption[];
@@ -660,23 +794,25 @@ function QuestionControl({
   answers: QuestionnaireAnswers;
   value: unknown;
   onChange: (value: unknown) => void;
+  /** The option Sidequest recommends because of where the trip is going, if any. */
+  recommended?: string | null;
 }) {
   const id = question.id;
   if (question.kind === 'interests') return <InterestGrid context={context} offered={options} value={(value as Interest[]) ?? []} onChange={onChange} />;
   if (question.kind === 'interest_roles') return <RoleMatrix name={id} options={options} value={(value as Record<string, string>) ?? {}} onChange={onChange} interests={Object.keys((question.read(answers) ?? {}) as Record<string, string>) as Interest[]} />;
   if (id.startsWith('priority_role:')) return <RoleMeter name={id} options={options} value={value as string | undefined} onChange={onChange} interest={id.slice('priority_role:'.length) as Interest} />;
-  if (id === 'transport_mode') return <TransportChoice name={id} options={options} value={value as string | undefined} onChange={onChange} />;
+  if (id === 'transport_mode') return <TransportChoice name={id} options={options} value={value as string | undefined} onChange={onChange} recommended={recommended} />;
   if (id === 'day_shape') return <RhythmChoice name={id} options={options} value={value as string | undefined} onChange={onChange} />;
   if (SPECTRUM.has(id)) return <SpectrumChoice name={id} options={options} value={value as string | undefined} onChange={onChange} />;
   if (RANGE.has(id)) return <RangeMapChoice name={id} options={options} value={value as string | undefined} onChange={onChange} baseName={context.destination.name} />;
   switch (question.kind) {
     case 'single':
     case 'scenario':
-      return <OptionCards name={id} options={options} value={value as string | undefined} onChange={onChange} glyphs={OPTION_GLYPHS[id]} lettered={question.kind === 'scenario' || SCENARIO_LETTERED.has(id)} columns={options.length >= 4 ? 2 : options.length === 3 ? 3 : 2} />;
+      return <OptionCards name={id} options={options} value={value as string | undefined} onChange={onChange} glyphs={OPTION_GLYPHS[id]} lettered={question.kind === 'scenario' || SCENARIO_LETTERED.has(id)} columns={options.length >= 4 ? 2 : options.length === 3 ? 3 : 2} recommended={recommended} />;
     case 'multi':
       return <ChipGroup name={id} options={options} value={(value as string[]) ?? []} onChange={onChange} />;
     case 'dietary':
-      return <DietaryControl options={options} value={(value as { needs: string[]; strict: boolean }) ?? { needs: [], strict: false }} onChange={onChange} />;
+      return <DietaryControl options={options} value={(value as { needs: string[]; strict: boolean; notes?: string }) ?? { needs: [], strict: false, notes: '' }} onChange={onChange} />;
     case 'hard_constraints':
       return <HardLimitsControl context={context} answers={answers} value={(value as { constraints: HardConstraint[]; notes: string; notesAreHard: boolean }) ?? { constraints: [], notes: '', notesAreHard: false }} onChange={onChange} />;
     case 'budget':
@@ -735,6 +871,7 @@ function ReviewScreen({
 }) {
   const [rangeKept, setRangeKept] = useState(false);
   const ledger = useMemo(() => reviewLedger(context, answers, plan), [context, answers, plan]);
+  const glance: ReviewGlanceGroup[] = useMemo(() => reviewGlance(ledger), [ledger]);
   const sketch = useMemo(() => sketchFor(context, answers), [context, answers]);
   const profile = useMemo(() => {
     try {
@@ -747,14 +884,13 @@ function ReviewScreen({
   const reconcile = answers.provenance.daily_driving?.source === 'explicit' || answers.provenance.scenic_reach?.source === 'explicit' ? mobilityReconciliation(answers) : null;
   const remainingFineTune = plan.questions.filter((q) => q.tier === 'fine_tune' && !q.hidden && q.status === 'open').length;
   const sufficiency = useMemo(() => assessSufficiency(plan), [plan]);
-  const synthesis = synthesisLines(answers, sketch);
 
   return (
     <div className="enter" data-testid="interview-review">
       <StagePath current="ready" note={`${analytics.answered} answered · ${analytics.decided} decided by Sidequest`} />
       {/* EXPERIENCE V2 — the review is a reveal: the place, one sentence, a handful of statements, the map. */}
       <p className="mt-6 text-xs text-ink-faint">Sidequest understands</p>
-      <h1 ref={headingRef} tabIndex={-1} className="display-xl mt-1.5 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-4 focus:outline-dashed">
+      <h1 ref={headingRef} tabIndex={-1} className="display-xl mt-1.5 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         {context.destination.name}, your way
       </h1>
       {profile ? (
@@ -763,23 +899,41 @@ function ReviewScreen({
         </p>
       ) : null}
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-        <ul className="divide-y divide-rule border-y border-rule" aria-label="How you travel, in short" data-testid="review-synthesis">
-          {synthesis.map((line, i) => (
-            <li key={line.text} className="rise flex items-baseline gap-3 py-3" style={{ transitionDelay: `${i * 40}ms` }}>
-              <span aria-hidden="true" className={cx('mt-2 h-2 w-2 shrink-0 self-start rounded-full', line.assumed ? 'border border-ink-faint bg-paper' : 'bg-accent')} />
-              <span className="font-display text-2xl leading-snug text-ink">
-                {line.text}
-                {line.assumed ? <span className="sr-only"> (Sidequest’s read)</span> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <div>
-          {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} {...mapLayersFor(sketch, answers)} /> : <SketchFigure sketch={sketch} />}
-          <div className="mt-3">
-            <TripProfileList sketch={sketch} />
+      {/*
+        MVP V3, Stage 39 — ONE rendering of each fact.
+        This screen used to say everything three times: a synthesis list, then a
+        trip-profile list under the map, then the glance. Each was defensible on
+        its own; together they were why the founder called it flat and
+        administrative. The glance is the review now, the map is the picture, and
+        the per-question ledger waits behind one disclosure.
+      */}
+      <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+        <section className="min-w-0" data-testid="review-glance">
+          <h2 className="type-meta uppercase tracking-[0.14em] text-ink-faint">Your trip, in one glance</h2>
+          <div className="mt-5 grid gap-x-10 gap-y-7 sm:grid-cols-2">
+            {glance.map((group) => (
+              <div key={group.id} className="min-w-0 rule-top pt-3.5" data-testid={`glance-${group.id}`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="label text-ink-faint">{group.title}</h3>
+                  <button type="button" onClick={() => onJump(group.editQuestionId)} className={cx('shrink-0 text-xs text-accent underline underline-offset-4', FOCUS_RING)} data-testid={`glance-edit-${group.id}`}>
+                    Edit
+                    <span className="sr-only"> {group.title.toLowerCase()}</span>
+                  </button>
+                </div>
+                <ul className="mt-2 space-y-1.5">
+                  {group.lines.map((line) => (
+                    <li key={line.text} className={cx('font-display text-lg leading-snug', line.assumed ? 'text-ink-muted' : 'text-ink')}>
+                      {line.text}
+                      {line.assumed ? <span className="sr-only"> (Sidequest&rsquo;s read)</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
+        </section>
+        <div className="min-w-0">
+          {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} {...mapLayersFor(sketch, answers)} /> : <SketchFigure sketch={sketch} />}
         </div>
       </div>
 
@@ -840,10 +994,15 @@ function ReviewScreen({
         </div>
       </section>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <LedgerColumn title="You told us" blurb="Your own answers. These bind the plan." entries={ledger.told} testId="review-told" onJump={onJump} empty="Nothing answered yet — everything is Sidequest's read." />
-        <LedgerColumn title="Sidequest's read" blurb="Defaults we chose, with the reason. Change any of them." entries={ledger.assumed} testId="review-assumed" onJump={onJump} empty="Nothing assumed — you answered everything." assumed />
-      </div>
+      <details className="mt-8 rule-top pt-4" data-testid="review-ledger">
+        <summary className={cx('inline-flex min-h-11 cursor-pointer items-center text-sm text-ink-muted underline underline-offset-4', FOCUS_RING)}>
+          Every answer, and where it came from ({ledger.told.length} yours · {ledger.assumed.length} ours)
+        </summary>
+        <div className="mt-5 grid gap-8 lg:grid-cols-2">
+          <LedgerColumn title="You told us" blurb="Your own answers. These bind the plan." entries={ledger.told} testId="review-told" onJump={onJump} empty="Nothing answered yet — everything is Sidequest's read." />
+          <LedgerColumn title="Sidequest's read" blurb="Defaults we chose, with the reason. Change any of them." entries={ledger.assumed} testId="review-assumed" onJump={onJump} empty="Nothing assumed — you answered everything." assumed />
+        </div>
+      </details>
 
       {unresolved.length > 0 ? (
         <section className="mt-10 rounded-[var(--radius-card)] border border-dashed border-rule p-5">
@@ -930,22 +1089,6 @@ function LedgerColumn({ title, blurb, entries, testId, onJump, empty, assumed = 
   );
 }
 
-/** The trip in a handful of qualitative lines, in the order a traveller would say them. */
-function synthesisLines(answers: QuestionnaireAnswers, sketch: ReturnType<typeof sketchFor>): { text: string; assumed: boolean }[] {
-  const lines = [...sketch.lines];
-  const has = (prefix: string) => lines.some((line) => line.text.startsWith(prefix));
-  if (!has('Crowds') && !has('Quiet') && !has('Famous')) {
-    lines.push({ text: answers.iconicCrowdStrategy === 'see_it_anyway' ? 'Crowds are fine' : answers.iconicCrowdStrategy === 'quieter_alternative' ? 'Quiet over famous' : 'Famous places at quiet hours', assumed: answers.provenance.iconic_crowds?.source !== 'explicit' });
-  }
-  // Only what is settled is synthesised; an open question is not a line about the trip.
-  const movement = [!sketch.transport.open ? sketch.transport.label : null, !sketch.rangeOpen ? sketch.rangeLabel.toLowerCase() : null].filter(Boolean);
-  if (movement.length > 0) lines.push({ text: movement.join(', '), assumed: sketch.transport.assumed && (sketch.rangeOpen || sketch.rangeAssumed) });
-  if (!sketch.shapeOpen) lines.push({ text: sketch.shapeLabel, assumed: sketch.shapeAssumed });
-  if (answers.provenance.budget?.source === 'explicit') {
-    lines.push({ text: answers.budgetStyle === 'budget' ? 'Keeping it cheap' : answers.budgetStyle === 'luxury' ? 'Cost is not a filter' : answers.budgetStyle === 'premium' ? 'Paid experiences welcome' : 'Spend where it matters', assumed: false });
-  }
-  return lines.slice(0, 7);
-}
 
 function sentenceFor(context: InterviewContext, answers: QuestionnaireAnswers, sketch: ReturnType<typeof sketchFor>): string {
   const lead = sketch.lines[0]?.text.toLowerCase() ?? 'an open-ended trip';

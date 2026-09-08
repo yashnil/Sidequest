@@ -13,6 +13,14 @@ export default tseslint.config(
       '**/next-env.d.ts',
       'playwright-report/**',
       'test-results/**',
+      /*
+       * The map renderer, copied verbatim out of node_modules by
+       * `apps/web/scripts/vendor-maplibre.mjs` so its worker resolves at
+       * runtime. It is a build output that happens to live under `public/`, and
+       * linting somebody else's minified bundle produces thousands of findings
+       * about code nobody here can change.
+       */
+      'apps/web/public/vendor/**',
     ],
   },
   js.configs.recommended,

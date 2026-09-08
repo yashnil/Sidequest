@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView } from './support/hub';
-import { completeQuestionnaire } from './support/trip';
+import { openHubView, useBandAction } from './support/hub';
+import { completeQuestionnaire, createTrip } from './support/trip';
 
 /**
  * The slice this proves: a traveller sees, before building anything, when each
@@ -27,11 +27,7 @@ const MIDWEEK = { start: '2026-08-11', end: '2026-08-13' };
 const REGION_WIDE = 'best_regional';
 
 async function reachBoard(page: Page, dates = AUGUST) {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(dates.start);
-  await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });
 
   // Manzanar is ninety-five minutes down the 395: the default driving budget and
   // radius keep it off the board before hours ever get a say, and the point of
@@ -273,7 +269,7 @@ test('changing the dates recalculates availability rather than reusing it', asyn
   expect(firstPlan).toBeTruthy();
 
   // Move onto a midweek span it never opens on, and rebuild from the same board.
-  await page.getByRole('link', { name: 'Back to the board' }).click();
+  await useBandAction(page, 'Back to the board');
   await expect(page).toHaveURL(/\/discover$/);
   await page.goto('/trips/new');
   await reachBoard(page, MIDWEEK);

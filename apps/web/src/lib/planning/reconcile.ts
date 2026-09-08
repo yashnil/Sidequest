@@ -297,8 +297,10 @@ function transportModeFor(hint: DraftTransport | undefined, matrixMode: TravelTi
     case 'ferry':
     case 'boat':
       return 'ferry';
+    /* A ride is arranged movement the road router cannot answer, like the two above it. */
     case 'private_transfer':
     case 'guide_or_lodge_transfer':
+    case 'horse':
       return 'private_transfer';
     case 'flight':
       return 'unsupported';
@@ -1179,6 +1181,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     archetype: draft.archetype,
     purpose: draft.purpose,
     routeRationale: draft.routeRationale,
+    ...(draft.timingRationale ? { timingRationale: draft.timingRationale } : {}),
     assumptions: [...draft.assumptions],
     tradeoffs: [...draft.tradeoffs],
     bases: bases.map((base) => {

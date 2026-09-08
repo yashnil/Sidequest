@@ -161,7 +161,17 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       durationAdvice={durationAdvice}
       boardAvailable={resolved.ok}
       researchAvailable={trip.basics.regionId === DYNAMIC_REGION_ID && intent?.selectedDestination !== null && providerReadiness().ready}
-      fixtureMode={process.env.NODE_ENV !== 'production' && isFixtureComposer()}
+      /*
+       * Whenever fixtures are in use, wherever that is.
+       *
+       * This used to be gated on NODE_ENV as well, so a *production build* run
+       * with the fixture composer — which is exactly how the screenshot walks
+       * and the browser suite run — showed no badge at all. The one thing that
+       * badge exists to prevent is somebody mistaking fixture output for the
+       * model's, and a production build is where that mistake is most likely,
+       * not least. The switch is the fact; the environment is not.
+       */
+      fixtureMode={isFixtureComposer()}
       geometry={geometry}
       tiles={tiles}
       {...(interpretation

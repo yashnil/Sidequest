@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { TransitJourney, TransitLeg, TransitLegMode } from '@sidequest/compiler';
 import { nextRoutingSlot, routingEndpoint } from './valhalla';
 import { USER_AGENT } from './nominatim';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * PUBLIC TRANSPORT, MEASURED — AND THE ONE CHECK THAT MAKES IT HONEST.
@@ -242,7 +243,7 @@ export async function transitTilesAvailable(options: {
     url.searchParams.set('json', JSON.stringify({ verbose: true }));
     const response = await doFetch(url, {
       headers: { 'user-agent': USER_AGENT },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) return false;
     const parsed = statusSchema.safeParse(await response.json());
@@ -396,7 +397,7 @@ async function measureOne(
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
     });
   } catch {
     return {

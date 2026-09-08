@@ -101,7 +101,7 @@ function routingOverride(
       detail:
         truth.transitRequested > 0
           ? 'We asked about public transport and no timetable came back, so those journeys are unverified.'
-          : 'Nothing in this build can check timetables, so public transport times here are unverified.',
+          : 'Sidequest cannot check timetables here, so public transport times are unverified.',
     };
   }
 

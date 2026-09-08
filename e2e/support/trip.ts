@@ -57,26 +57,80 @@ export async function waitUntilInteractive(locator: Locator): Promise<void> {
 }
 
 /**
- * Fill the composer and submit it.
+ * The one Continue on screen.
  *
- * Types the destination rather than picking a suggestion, because the end-to-end
- * environment deliberately has no destination index: these tests exercise the
- * *fallback* path — typed text, one explicit resolution — which is the one that
- * has to keep working for everything the index does not hold.
+ * MVP V3 — the setup flow renders a desktop action bar and a phone action bar,
+ * and exactly one of them is visible at a viewport. Both carry the same test id
+ * because they are the same action; the visibility filter is what picks the one
+ * a person could press.
  */
+function continueButton(page: Page): Locator {
+  return page.getByTestId('setup-continue').locator('visible=true').first();
+}
+
+/**
+ * Walk the one-question setup and land on the interview.
+ *
+ * MVP V3 — this used to fill a single form: a destination field, two dates, and
+ * Continue. Setup is five screens now (where · when · nights · who · anything
+ * fixed), each a real history entry, so the helper walks them.
+ *
+ * It types the destination rather than picking a suggestion, because the
+ * end-to-end environment deliberately has no destination index: these tests
+ * exercise the *free-text* path, which is the one that has to keep working for
+ * everything the index does not hold — and which is now the canonical one.
+ */
+export interface CreateTripOptions {
+  /** Free text for "Booked, fixed, or would regret missing". */
+  mustDo?: string;
+  /** Free text for "Anything you would rather not do". */
+  avoid?: string;
+  /** Pick the first suggestion under the field rather than keeping the typed text. */
+  pickSuggestion?: boolean | RegExp;
+  /** `?have=plan` — the homepage's third door. */
+  havePlan?: boolean;
+}
+
 export async function createTrip(
   page: Page,
   destination: string,
   dates: { start: string; end: string } = DEFAULT_DATES,
+  options: CreateTripOptions = {},
 ): Promise<string> {
-  await page.goto('/trips/new');
-  const field = page.getByLabel('Destination');
+  await page.goto(options.havePlan ? '/trips/new?have=plan' : '/trips/new');
+  const field = page.getByTestId('destination-input');
   await waitUntilInteractive(field);
   await field.fill(destination);
-  await page.getByLabel('Arrive').fill(dates.start);
-  await page.getByLabel('Leave').fill(dates.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
+  if (options.pickSuggestion) {
+    const suggestion =
+      options.pickSuggestion instanceof RegExp
+        ? page.getByTestId(/destination-suggestion-\d+/).filter({ hasText: options.pickSuggestion }).first()
+        : page.getByTestId('destination-suggestion-0');
+    await expect(suggestion, 'the index should offer a suggestion for this destination').toBeVisible({ timeout: 15_000 });
+    await suggestion.click();
+    await expect(page.getByTestId('destination-chosen')).toBeVisible();
+  }
+  await continueButton(page).click();
+
+  // When: exact dates, which is the shape every existing spec assumes.
+  await expect(page.getByTestId('timing-exact')).toBeVisible();
+  await page.getByTestId('timing-exact').click();
+  await page.getByTestId('timing-start').fill(dates.start);
+  await page.getByTestId('timing-end').fill(dates.end);
+  await continueButton(page).click();
+
+  // Two exact dates answer "how many nights", so that screen is skipped.
+  await expect(page.getByTestId('party-couple')).toBeVisible();
+  await page.getByTestId('party-couple').click();
+  await continueButton(page).click();
+
+  // Anything already fixed: nothing, unless this spec is about something that is.
+  await expect(page.getByTestId('setup-flow')).toHaveAttribute('data-step', 'fixed');
+  if (options.mustDo) await page.getByLabel(/Booked, fixed, or would regret missing/).fill(options.mustDo);
+  if (options.avoid) await page.getByLabel(/Anything you would rather not do/).fill(options.avoid);
+  await continueButton(page).click();
+
+  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 30_000 });
   const id = /\/trips\/([^/]+)\//.exec(page.url())?.[1];
   expect(id, 'a trip id should be in the URL').toBeTruthy();
   return id!;
@@ -397,8 +451,24 @@ async function advanceInterview(page: Page, id: string): Promise<void> {
  * for `questionId`, picks `value`, and walks the rest of the way back to the
  * review through whatever follows.
  */
+/**
+ * Open the review's per-question ledger.
+ *
+ * MVP V3 — the review leads with a glance of six statements, and every
+ * question's own row moved behind one disclosure. A spec that wants a specific
+ * question's Change link opens the appendix first, exactly as a traveller does.
+ */
+export async function openReviewLedger(page: Page): Promise<void> {
+  const ledger = page.getByTestId('review-ledger');
+  await expect(ledger).toBeVisible({ timeout: 20_000 });
+  if (await ledger.evaluate((element) => (element as HTMLDetailsElement).open)) return;
+  await ledger.locator('summary').click();
+  await expect(ledger).toHaveJSProperty('open', true);
+}
+
 export async function changeInterviewAnswer(page: Page, questionId: string, value: string, choices: InterviewChoices = {}): Promise<void> {
   await expect(page.getByTestId('interview-review')).toBeVisible({ timeout: 20_000 });
+  await openReviewLedger(page);
   const change = page.getByTestId(`review-change-${questionId}`);
   await expect(change).toBeVisible();
   await change.click();

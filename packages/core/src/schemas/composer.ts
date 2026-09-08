@@ -32,6 +32,20 @@ import { mustDoDecisionSchema } from './must-do';
 // Dates
 // ---------------------------------------------------------------------------
 
+/**
+ * HOW SETTLED THE TIMING IS — EIGHT REAL ANSWERS, NOT TWO DATES.
+ *
+ * MVP V3, Stage 5. The five modes here before this could not express the two
+ * things travellers say most often: "I'm free between these two dates, pick the
+ * best stretch", and "tell me when this place is at its best". Both were forced
+ * through a date picker that demanded a decision the traveller had come here to
+ * get help with.
+ *
+ * `best_time` and `window` are the load-bearing additions. Neither requires a
+ * date from the traveller; both produce one from evidence (`dates/windows.ts`),
+ * recorded on `recommendation` with the reasons and the tradeoffs, so no screen
+ * can present Sidequest's arithmetic as the traveller's decision.
+ */
 export const DATE_MODES = [
   /** Two dates, decided. */
   'exact',
@@ -39,8 +53,14 @@ export const DATE_MODES = [
   'flexible',
   /** A month, no dates. */
   'month',
+  /** Any of a few named months. */
+  'months',
+  /** Free between two dates; the best stretch inside them is chosen. */
+  'window',
   /** A season, no month. */
   'season',
+  /** No constraint at all: Sidequest picks the strongest time to go. */
+  'best_time',
   /** Nothing decided yet. */
   'undecided',
 ] as const;
@@ -51,9 +71,22 @@ export const DATE_MODE_LABELS: Record<DateMode, string> = {
   exact: 'These exact dates',
   flexible: 'Around these dates',
   month: 'Some time in a month',
+  months: 'One of a few months',
+  window: 'Free between two dates',
   season: 'Some time in a season',
+  best_time: 'Tell me when it is best',
   undecided: 'Not decided yet',
 };
+
+/** Whether a mode expects the traveller to have supplied two calendar dates. */
+export function dateModeNeedsDates(mode: DateMode): boolean {
+  return mode === 'exact' || mode === 'flexible';
+}
+
+/** Whether Sidequest is expected to choose the timing for this mode. */
+export function dateModeAsksSidequest(mode: DateMode): boolean {
+  return mode === 'best_time' || mode === 'window' || mode === 'months';
+}
 
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 export const seasonSchema = z.enum(SEASONS);
@@ -62,6 +95,37 @@ export type Season = z.infer<typeof seasonSchema>;
 /** How far either date may move, in days. Only meaningful when mode is `flexible`. */
 export const FLEX_DAYS = [1, 3, 7] as const;
 
+/**
+ * The timing Sidequest chose, and everything a traveller needs to argue with it.
+ *
+ * Stored rather than recomputed so a plan built on a recommended window can
+ * always say where those dates came from, and so the review screen and the
+ * itinerary agree. `reasons` and `tradeoffs` are the recommender's own sentences,
+ * each derived from a climate number; `basis` names the evidence class. Nothing
+ * here may be presented as something the traveller decided.
+ */
+export const dateRecommendationSchema = z.object({
+  startDate: isoDateSchema,
+  endDate: isoDateSchema,
+  /** "Late May to mid-June" — the part of the month the window sits in. */
+  label: z.string().max(80),
+  month: z.number().int().min(1).max(12),
+  year: z.number().int().min(2000).max(2100),
+  reasons: z.array(z.string().max(200)).max(6).default([]),
+  tradeoffs: z.array(z.string().max(200)).max(6).default([]),
+  unknowns: z.array(z.string().max(200)).max(6).default([]),
+  /** The runner-up, so "show me another window" is an answer rather than a reshuffle. */
+  alternative: z
+    .object({ startDate: isoDateSchema, endDate: isoDateSchema, label: z.string().max(80), month: z.number().int().min(1).max(12), year: z.number().int().min(2000).max(2100), note: z.string().max(200).optional() })
+    .optional(),
+  basis: z.enum(['climate_normals', 'traveller_window']).default('climate_normals'),
+  attribution: z.string().max(200).optional(),
+  generatedAt: z.string().min(1),
+  /** True once the traveller pressed "Use this timing". Until then it is a proposal. */
+  accepted: z.boolean().default(false),
+});
+export type DateRecommendationRecord = z.infer<typeof dateRecommendationSchema>;
+
 export const dateIntentSchema = z.object({
   mode: dateModeSchema,
   startDate: isoDateSchema.optional(),
@@ -69,9 +133,16 @@ export const dateIntentSchema = z.object({
   flexDays: z.number().int().min(0).max(14).optional(),
   /** 1–12. Set for `month`. */
   month: z.number().int().min(1).max(12).optional(),
+  /** 1–12, a handful. Set for `months`. */
+  months: z.array(z.number().int().min(1).max(12)).max(12).optional(),
+  /** The outer bounds a `window` traveller is free between. */
+  earliest: isoDateSchema.optional(),
+  latest: isoDateSchema.optional(),
   season: seasonSchema.optional(),
   /** The calendar year the month or season refers to. */
   year: z.number().int().min(2000).max(2100).optional(),
+  /** What Sidequest proposed, when it was asked to choose. */
+  recommendation: dateRecommendationSchema.optional(),
   /**
    * Whether the traveller has asked us to propose dates.
    *

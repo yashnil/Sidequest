@@ -47,6 +47,7 @@ export function DestinationMap({
   movement = null,
   dayTrips = null,
   className,
+  chromeless = false,
 }: {
   geometry: DestinationGeometry;
   tiles?: MapBasemap | null;
@@ -58,18 +59,49 @@ export function DestinationMap({
   movement?: ConceptualMovement;
   dayTrips?: 'stay_in_city' | 'one_day_trip' | 'several' | null;
   className?: string;
+  /** Draw the map and its attribution, nothing else. For screens where it is scenery. */
+  chromeless?: boolean;
 }) {
   const [focused, setFocused] = useState<string | null>(null);
   const { markers, connectors, fitPoints } = useMemo(() => {
-    const markers: MapMarker[] = [{ id: 'centre', name: geometry.name, coordinates: geometry.center, kind: 'base' }];
+    /*
+     * MVP V3 — THE BASEMAP ALREADY SAYS WHERE THIS IS.
+     *
+     * Seen on the live Kyrgyzstan generation screen: "Kyrgyzstan" drawn by
+     * Sidequest directly over "Kyrgyzstan / Кыргызстан" drawn by the basemap,
+     * the two overlapping into one smear. Over a real basemap the centre mark
+     * is a position rather than a caption, and the screen's own heading names
+     * the place; the name is kept when there is no basemap, where it is the
+     * only thing saying what the reader is looking at.
+     */
+    const markers: MapMarker[] = [{ id: 'centre', name: tiles ? '' : geometry.name, coordinates: geometry.center, kind: 'base' }];
     const connectors: MapConnector[] = [];
     const fitPoints: { lat: number; lng: number }[] = [];
     const b = geometry.bounds;
     const urban = URBAN_FEATURES.has(geometry.featureType ?? '');
+    /*
+     * A CONCEPTUAL MARK STAYS INSIDE THE DESTINATION.
+     *
+     * These positions are schematic — nobody has chosen a second base yet — but
+     * over a real basemap a position is read as a place. Seen on the live
+     * Kyrgyzstan run: "Third base (to be chosen)" drawn beyond the published
+     * extent, over China. Clamped to the bounds with a small inset, so a
+     * schematic mark is at least somewhere the trip could go. Without bounds
+     * there is nothing to clamp to and the offset stands.
+     */
+    const clamp = (point: { lat: number; lng: number }) => {
+      if (!b) return point;
+      const insetLat = (b.northEast.lat - b.southWest.lat) * 0.08;
+      const insetLng = (b.northEast.lng - b.southWest.lng) * 0.08;
+      return {
+        lat: Math.min(b.northEast.lat - insetLat, Math.max(b.southWest.lat + insetLat, point.lat)),
+        lng: Math.min(b.northEast.lng - insetLng, Math.max(b.southWest.lng + insetLng, point.lng)),
+      };
+    };
     const offset = (km: number, bearingDeg: number) => {
       const dLat = (km / 111) * Math.cos((bearingDeg * Math.PI) / 180);
       const dLng = ((km / 111) * Math.sin((bearingDeg * Math.PI) / 180)) / Math.max(0.2, Math.cos((geometry.center.lat * Math.PI) / 180));
-      return { lat: geometry.center.lat + dLat, lng: geometry.center.lng + dLng };
+      return clamp({ lat: geometry.center.lat + dLat, lng: geometry.center.lng + dLng });
     };
     const scaleKm = rangeKm ?? (b ? Math.max(8, kmBetween(b.southWest, b.northEast) / 3) : urban ? 10 : 35);
     // Conceptual bases for a moving route: schematic positions, hollow marks, a dashed line.
@@ -97,7 +129,8 @@ export function DestinationMap({
     }
     // Transit and walking: short spokes from the centre — the city covered from one base by its network.
     if (movement === 'transit_walk' && bases === 1) {
-      for (let i = 0; i < 6; i += 1) connectors.push({ id: `concept-spoke-${i}`, from: geometry.center, to: offset(scaleKm * 0.45, i * 60 + 15), style: 'measured_transit' });
+      // Conceptual, and captioned as such: nothing on this drawing has been measured.
+      for (let i = 0; i < 6; i += 1) connectors.push({ id: `concept-spoke-${i}`, from: geometry.center, to: offset(scaleKm * 0.45, i * 60 + 15), style: 'conceptual' });
     }
     if (b) {
       const sw = b.southWest;
@@ -114,7 +147,7 @@ export function DestinationMap({
       fitPoints.push({ lat: geometry.center.lat + dLat, lng: geometry.center.lng + dLng }, { lat: geometry.center.lat - dLat, lng: geometry.center.lng - dLng });
     }
     return { markers, connectors, fitPoints };
-  }, [geometry, rangeKm, bases, movement, dayTrips]);
+  }, [geometry, rangeKm, bases, movement, dayTrips, tiles]);
   const extent = geometry.bounds ? `about ${Math.round(kmBetween(geometry.bounds.southWest, geometry.bounds.northEast))} km corner to corner` : null;
   const conceptual = bases >= 2 || dayTrips === 'one_day_trip' || dayTrips === 'several' || movement === 'transit_walk';
   const movementWord = movement === 'car' ? 'by car' : movement === 'transit_walk' ? 'on foot and by transit' : movement === 'guided' ? 'with guides and transfers' : movement === 'boat' ? 'by boat' : movement === 'mixed' ? 'by car where it helps' : null;
@@ -131,12 +164,21 @@ export function DestinationMap({
         tiles={tiles}
         width={420}
         height={300}
+        chromeless={chromeless}
         summary={`${geometry.name}${extent ? `, ${extent}` : ''}. ${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it.' : 'One base with days out from it.') : 'A moving route between bases.'}`}
         caption={
           <span>
             {geometry.bounds ? 'The thin frame is the destination’s published extent. ' : ''}
             {shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it' : 'One base, days out from it') : `A moving route with ${bases} bases`}
-            {movementWord ? `, ${movementWord}` : ''}. {conceptual ? 'Hollow marks and dashed lines are conceptual: nothing is placed until the plan is built.' : rangeKm === null ? 'No range is drawn until you decide how far the trip should reach.' : 'The ring is the reach you chose.'}
+            {movementWord ? `, ${movementWord}` : ''}.{' '}
+            {/*
+              The conceptual sentence is the map's own legend, not this caption:
+              `InteractiveMap` already prints it whenever a dashed connector is
+              drawn, and saying it twice under one picture reads as two claims.
+              This caption keeps what only it knows — the reach, or that no
+              reach has been chosen.
+            */}
+            {conceptual ? '' : rangeKm === null ? 'No range is drawn until you decide how far the trip should reach.' : 'The ring is the reach you chose.'}
           </span>
         }
       />

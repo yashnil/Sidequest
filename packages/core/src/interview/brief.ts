@@ -76,6 +76,15 @@ export interface TravelerBrief {
   scope: string[];
   signals: TravelerBriefSignals & { smartDefaults: number };
   assumptions: string[];
+  /**
+   * MVP V3 — the sentences the traveller wrote beside an option they chose.
+   *
+   * "I'm very fit but don't want two huge hiking days back to back" says
+   * something no enum in the profile holds, and it is the difference between a
+   * trip that fits and one that technically satisfies every setting. Rendered
+   * verbatim, in the traveller's own words, alongside the setting it qualifies.
+   */
+  inTheirWords: { about: string; note: string }[];
   ownWords: TravelerBriefOwnWords;
 }
 
@@ -122,7 +131,7 @@ export function buildTravelerBrief(input: {
   const hard: string[] = [];
   for (const constraint of profile.hard) hard.push(describeHard(constraint));
   if (profile.food.dietaryStrict && profile.food.dietaryNeeds.length > 0) {
-    hard.push(`Dietary needs are absolute: ${profile.food.dietaryNeeds.map((n) => DIETARY_NEED_LABELS[n]).join(', ')}`);
+    hard.push(`Dietary needs are absolute: ${profile.food.dietaryNeeds.map((n) => DIETARY_NEED_LABELS[n]).join(', ')}${profile.food.dietaryNotes ? ` — in their words: "${profile.food.dietaryNotes}"` : ''}`);
   }
   if (profile.accessibility.mobilityLimited) hard.push('Somebody in the group has limited mobility: low-effort, step-free stops only');
   if (!profile.transport.willDrive && provenance.transport_mode?.strength === 'hard') hard.push('Nobody will be driving');
@@ -213,6 +222,12 @@ export function buildTravelerBrief(input: {
   const food: string[] = [];
   food.push(line('food_tradeoff', profile.food.style === 'destination' ? `Food matters: happy to cross town for an exceptional meal (${profile.food.specialMealBudget} special meal${profile.food.specialMealBudget === 1 ? '' : 's'} across the trip)` : profile.food.style === 'budget' ? 'Food is fuel: quick, cheap, on the route' : `Good local meals near the route, no detours (${profile.food.specialMealBudget} special meal${profile.food.specialMealBudget === 1 ? '' : 's'} across the trip)`));
   if (profile.food.dietaryNeeds.length > 0 && !profile.food.dietaryStrict) food.push(line('dietary', `Dietary preferences: ${profile.food.dietaryNeeds.map((n) => DIETARY_NEED_LABELS[n]).join(', ')}`));
+  /*
+   * The traveller's own words about food, verbatim and unparsed, whether the
+   * needs are strict or not. "Vegetarian, but I eat eggs" is a sentence the
+   * enum cannot hold and the model can act on.
+   */
+  if (profile.food.dietaryNotes) food.push(line('dietary', `In their words: "${profile.food.dietaryNotes}"`));
   food.push(line('breakfast', profile.food.breakfastStyle === 'coffee_light' ? 'Breakfast: coffee and something light, near base' : profile.food.breakfastStyle === 'skip' ? 'Breakfast: skips it' : `Breakfast: ${profile.food.breakfastStyle.replace(/_/g, ' ')}`));
   food.push(line('pack_lunch', profile.food.willPackLunch ? 'Happy to pack lunch on outdoor days' : 'Wants a sit-down lunch even on outdoor days'));
 
@@ -233,6 +248,14 @@ export function buildTravelerBrief(input: {
   if (profile.transport.willDrive) scope.push(line('scenic_reach', `Range from base: ${profile.regionalExpansion.replace(/_/g, ' ')}, detours up to ${profile.derived.effectiveDetourMinutes} minutes one way`));
 
   // --- own words ----------------------------------------------------------------------
+  /*
+   * Every "Something else" the traveller wrote, paired with the question it
+   * qualifies. Nothing is parsed out of these; they travel as written.
+   */
+  const inTheirWords = Object.entries(profile.preferenceNotes ?? {})
+    .flatMap(([questionId, note]) => (typeof note === 'string' && note.trim().length > 0 ? [{ about: questionId.replace(/[_:]/g, ' '), note: note.trim() }] : []))
+    .slice(0, 12);
+
   const ownWords: TravelerBriefOwnWords = {
     mustDo: [...(input.ownWords?.mustDo ?? [])],
     dislikes: [...(input.ownWords?.dislikes ?? [])],
@@ -262,6 +285,7 @@ export function buildTravelerBrief(input: {
       smartDefaults,
     },
     assumptions,
+    inTheirWords,
     ownWords,
   };
 }
@@ -316,6 +340,10 @@ export function renderTravelerBriefXml(brief: TravelerBrief): string {
       ...(brief.signals.boardRejects.length > 0 ? [`Discovery Board — not interested: ${brief.signals.boardRejects.join('; ')}`] : []),
       `${brief.signals.smartDefaults} setting${brief.signals.smartDefaults === 1 ? '' : 's'} above marked [assumed] were chosen by Sidequest, not the traveller`,
     ]),
+    ...section(
+      'in_their_words',
+      brief.inTheirWords.map((entry) => `On ${entry.about}: "${entry.note}"`),
+    ),
     ...section('assumptions', brief.assumptions, 'none — the traveller answered everything'),
     '</traveler_brief>',
   ];

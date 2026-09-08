@@ -11,6 +11,7 @@ import {
   type SubjectMatchBasis,
 } from '@sidequest/core';
 import { providerUserAgent } from '../net/user-agent';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * WIKIMEDIA COMMONS, AS THE ONLY PLACE A PHOTOGRAPH MAY COME FROM.
@@ -858,7 +859,7 @@ async function requestJson<T>(
 
   const response = await doFetch(url, {
     headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: requestSignal(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) return null;
   const parsed = schema.safeParse(await response.json());

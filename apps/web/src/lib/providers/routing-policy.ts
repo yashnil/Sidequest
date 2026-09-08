@@ -43,6 +43,9 @@ export function draftHintToRequestedMode(hint: string | undefined, fallback: Req
       return 'private_transfer';
     case 'guide_or_lodge_transfer':
       return 'guide_transfer';
+    /* Nobody routes a horse. It is a guided transfer for policy, and unmeasured for timing. */
+    case 'horse':
+      return 'guide_transfer';
     default:
       return fallback;
   }

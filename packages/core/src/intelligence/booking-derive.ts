@@ -51,6 +51,36 @@ function matchBooked(booked: readonly BookedPlanItem[], kind: BookingItemKind, o
   );
 }
 
+/**
+ * MVP V3, Stage 48 — the fallback the plan already holds for this thing.
+ *
+ * Three sources, in order of how specific they are, and nothing else:
+ *
+ * 1. A package backup whose `dayNumbers` include this booking's day — the
+ *    model wrote it for that day and the deterministic matcher agreed.
+ * 2. A weather backup on the day that explicitly replaces this stop.
+ * 3. Another place in the day's own backups, named plainly.
+ *
+ * Returns undefined when the plan holds nothing, which is the honest answer
+ * far more often than a sentence would be. Nothing here composes a new
+ * alternative, and nothing here consults a provider.
+ */
+function fallbackFor(input: { itinerary: Itinerary; pkg: TripPackage | null | undefined; dayNumber?: number; placeId?: string }): string | undefined {
+  const { dayNumber, placeId } = input;
+  if (dayNumber === undefined) return undefined;
+  const day = input.itinerary.days.find((entry) => entry.dayNumber === dayNumber);
+
+  const replacement = placeId ? day?.weather?.backups.find((backup) => backup.replacesPlaceId === placeId) : undefined;
+  if (replacement) return `${replacement.name} stands in for it that day — ${replacement.why}`;
+
+  const authored = input.pkg?.backups.find((backup) => backup.dayNumbers?.includes(dayNumber));
+  if (authored) return `${authored.alternative} (the plan's backup for ${authored.trigger.toLowerCase()}).`;
+
+  const anyBackup = day?.weather?.backups[0];
+  if (anyBackup) return `${anyBackup.name} is the day's backup — ${anyBackup.why}`;
+  return undefined;
+}
+
 export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
   const { itinerary, pkg, profile } = input;
   const items: BookingItem[] = [];
@@ -191,6 +221,10 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
             status: booked ? 'booked' : 'open',
             ...(booked ? { bookedItemId: booked.id } : {}),
             travelerAction: `Arrange ${item.booking.kind === 'permit' ? 'the permit' : 'entry'} for ${item.title}`,
+            ...(() => {
+              const fallback = fallbackFor({ itinerary, pkg, dayNumber: day.dayNumber, ...(item.placeId ? { placeId: item.placeId } : {}) });
+              return fallback ? { ifUnavailable: fallback } : {};
+            })(),
             authority: item.booking.url ? 'official_current' : 'authoritative_structured',
           }),
         );
@@ -212,6 +246,9 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
             status: booked ? 'booked' : 'open',
             ...(booked ? { bookedItemId: booked.id } : {}),
             travelerAction: `Book a table at ${item.food.venueName}`,
+            ...(item.food.alternatives?.[0]
+              ? { ifUnavailable: `${item.food.alternatives[0].name} is the alternative already on the plan — ${item.food.alternatives[0].tradeoff}` }
+              : {}),
             authority: 'authoritative_structured',
           }),
         );

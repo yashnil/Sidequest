@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { coordinatesSchema } from './common';
+import { coordinatesSchema, type Coordinates } from './common';
+import { separationKm } from '../recommend/distance';
 import {
   confidenceAssessmentSchema,
   destinationEntityTypeSchema,
@@ -235,6 +236,17 @@ export function decideInterpretation(resolution: DestinationResolution): Interpr
     return { kind: 'single', candidate: leading, breadthReasons };
   }
 
+  /*
+   * MVP V3, Stage 13 — and only now, when the answer would change the trip.
+   *
+   * A catalogue publishing one metropolis under two rows a few kilometres
+   * apart is not a question; it is a duplicate. Asking anyway spends a screen
+   * to have somebody choose between two spellings of their own holiday.
+   */
+  if (!clarificationWarranted(resolution)) {
+    return { kind: 'single', candidate: leading, breadthReasons };
+  }
+
   return { kind: 'choose', candidates: [...resolution.candidates], reasons: identity };
 }
 
@@ -255,4 +267,40 @@ export function confidenceExplanation(candidate: DestinationCandidate): string {
     default:
       return 'Only one source found this, and it did not publish much about it.';
   }
+}
+
+/**
+ * HOW FAR APART TWO READINGS HAVE TO BE BEFORE ASKING IS WORTH A SCREEN.
+ *
+ * Two candidates twelve kilometres apart in one country are the same holiday.
+ * Two candidates in different countries are not. The threshold is a day's
+ * reach rather than a precision target, because the question this predicate
+ * answers is "would the traveller notice?" and not "did the gazetteer agree?".
+ */
+export const CLARIFY_SEPARATION_KM = 150;
+
+/**
+ * Ask only when the answer changes the trip.
+ *
+ * Stage 13. A clarifying question is a screen somebody has to read, and the
+ * product asked one every time the resolver was less than certain — including
+ * for a country, where the single card said the country's own name. The rule
+ * here is narrow on purpose: a *breadth* doubt is not a question about which
+ * place was meant (that has its own screen, later), and identity candidates
+ * that all sit in one country within a day's reach of each other describe one
+ * destination however many rows the catalogue published.
+ */
+export function clarificationWarranted(resolution: DestinationResolution | null | undefined): boolean {
+  if (!resolution) return false;
+  if (identityAmbiguityReasons(resolution).length === 0) return false;
+  const candidates = resolution.candidates;
+  if (candidates.length <= 1) {
+    // "Nothing matched" and "that is not a place" are answered by the composer,
+    // not by a disambiguation screen with nothing on it to choose between.
+    return false;
+  }
+  const countries = new Set(candidates.map((candidate) => candidate.countryCode ?? '?'));
+  if (countries.size > 1) return true;
+  const centres: Coordinates[] = candidates.map((candidate) => candidate.center);
+  return centres.some((a, index) => centres.slice(index + 1).some((b) => separationKm(a, b) > CLARIFY_SEPARATION_KM));
 }

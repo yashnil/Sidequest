@@ -1,0 +1,335 @@
+{
+  "archetype": "multi_region",
+  "purpose": "Ten days built around the two things this trip is for: high-country horseback and a real multi-day trek, with the culture and the lake fitted around them rather than the other way round.",
+  "routeRationale": "Bishkek first because the flight lands there and the acclimatisation walk is on its doorstep, then south-east to Song-Kul while the passes are open, down to the lake for the canyons, and east to Karakol as the base for the trek. Ending in Karakol keeps the last transfer short.",
+  "timingRationale": "Late July into early August is the window: the Song-Kul yurt camps are up, the 3,300 m Ala-Kul pass is clear of snow, daylight runs past nine, and the summer rains have not started. A month either side and one of those four is gone.",
+  "transportSummary": "A private driver for the long transfers and the mountain roads, a horse operator at Song-Kul, and a 4x4 for the Altyn-Arashan valley track. Self-driving is possible and not worth it here: the passes are unsurfaced, and the driver is also the arrangement that gets bags to the far side of the trek.",
+  "stays": [
+    {
+      "name": "Bishkek",
+      "nights": 1,
+      "why": "Land, sleep at altitude you can walk off, and meet the driver.",
+      "lodging": "guesthouse"
+    },
+    {
+      "name": "Ala-Archa",
+      "nights": 1,
+      "why": "A night at the gorge so the acclimatisation walk starts at the trailhead rather than after a drive.",
+      "lodging": "mountain hut"
+    },
+    {
+      "name": "Song-Kul",
+      "nights": 2,
+      "why": "The reason to come in summer: a lake at 3,000 m you reach on horseback and sleep beside.",
+      "lodging": "yurt camp"
+    },
+    {
+      "name": "Kochkor",
+      "nights": 1,
+      "why": "Breaks the long descent and is where the felt workshops actually are.",
+      "lodging": "family homestay"
+    },
+    {
+      "name": "Bokonbayevo",
+      "nights": 1,
+      "why": "The quiet south shore, and the eagle hunters live here rather than in the resort strip.",
+      "lodging": "lakeside guesthouse"
+    },
+    {
+      "name": "Karakol",
+      "nights": 3,
+      "why": "The base for both canyons and both ends of the Ala-Kul trek, with somewhere to leave a bag.",
+      "lodging": "guesthouse"
+    }
+  ],
+  "days": [
+    {
+      "stay": "Bishkek",
+      "theme": "Land, and start moving straight away",
+      "acts": [
+        {
+          "name": "Osh Bazaar",
+          "kind": "market",
+          "mins": 120,
+          "why": "The fastest way to understand what people here actually eat."
+        },
+        {
+          "name": "Ala-Too Square and the Soviet quarter",
+          "kind": "historic",
+          "mins": 90,
+          "how": "walk",
+          "why": "Twenty minutes of context that makes the rest of the trip legible."
+        }
+      ],
+      "meals": {
+        "l": "Lagman at the bazaar",
+        "d": "Dungan food in the centre"
+      },
+      "why": "A short first day on purpose: you have just flown, and tomorrow starts at altitude."
+    },
+    {
+      "stay": "Ala-Archa",
+      "theme": "Acclimatisation in the gorge",
+      "acts": [
+        {
+          "name": "Ak-Sai waterfall trail",
+          "near": "Ala-Archa National Park",
+          "kind": "hike",
+          "mins": 300,
+          "how": "private_transfer",
+          "why": "Eight hundred metres of gain at 2,000 m is exactly the day that makes the pass possible later."
+        }
+      ],
+      "meals": {
+        "b": "Early, at the guesthouse",
+        "l": "Carried",
+        "d": "At the hut"
+      },
+      "why": "Altitude is the constraint on this trip and this is the day that answers it."
+    },
+    {
+      "stay": "Song-Kul",
+      "theme": "Over the pass to the summer pastures",
+      "acts": [
+        {
+          "name": "Kalmak-Ashuu pass drive",
+          "kind": "scenic_drive",
+          "mins": 240,
+          "how": "private_transfer",
+          "why": "The road onto the jailoo is the arrival, not the transfer."
+        },
+        {
+          "name": "First ride out from the yurt camp",
+          "near": "Song-Kul",
+          "kind": "activity",
+          "mins": 120,
+          "how": "horse",
+          "why": "A short one to meet the horse before tomorrow's long day."
+        }
+      ],
+      "meals": {
+        "b": "At the hut",
+        "l": "Picnic on the pass",
+        "d": "With the herding family"
+      },
+      "why": "The day the trip turns from a city into the mountains."
+    },
+    {
+      "stay": "Song-Kul",
+      "theme": "A full day on horseback",
+      "acts": [
+        {
+          "name": "Ride the northern shore to the herders' camps",
+          "near": "Song-Kul",
+          "kind": "activity",
+          "mins": 360,
+          "how": "horse",
+          "why": "Six hours in the saddle across open pasture is the thing you came for."
+        },
+        {
+          "name": "Evening on the shore",
+          "near": "Song-Kul",
+          "kind": "viewpoint",
+          "mins": 60,
+          "why": "There is no light pollution for a hundred kilometres."
+        }
+      ],
+      "meals": {
+        "b": "In the yurt",
+        "l": "Carried",
+        "d": "Beshbarmak with the family"
+      },
+      "why": "The one day of the trip that does not move anywhere, and the best one."
+    },
+    {
+      "stay": "Kochkor",
+      "theme": "Down off the pasture, into the craft towns",
+      "acts": [
+        {
+          "name": "Shyrdak felt workshop",
+          "near": "Kochkor",
+          "kind": "historic",
+          "mins": 120,
+          "how": "private_transfer",
+          "why": "The felt carpets are made here by the women's co-operative, not in a shop in Bishkek."
+        },
+        {
+          "name": "Kok-Moinok canyons stop",
+          "kind": "viewpoint",
+          "mins": 45,
+          "how": "private_transfer",
+          "why": "Ten minutes off the road and almost nobody stops."
+        }
+      ],
+      "meals": {
+        "b": "In the yurt",
+        "l": "In Kochkor",
+        "d": "With the homestay family"
+      },
+      "why": "A soft day between two hard ones, and the only place to buy something worth carrying home."
+    },
+    {
+      "stay": "Bokonbayevo",
+      "theme": "The south shore, which is the quiet one",
+      "acts": [
+        {
+          "name": "Eagle hunter demonstration",
+          "near": "Bokonbayevo",
+          "kind": "historic",
+          "mins": 120,
+          "how": "private_transfer",
+          "why": "Berkutchi families still hunt here; the show in the north is a show."
+        },
+        {
+          "name": "Swim at Tosor beach",
+          "near": "Issyk-Kul",
+          "kind": "water",
+          "mins": 90,
+          "why": "The lake is warm enough in August and the south shore has no resorts on it."
+        }
+      ],
+      "meals": {
+        "b": "At the homestay",
+        "l": "Fish by the shore",
+        "d": "At the guesthouse"
+      },
+      "why": "Rest before the trek, without giving up a day to do nothing."
+    },
+    {
+      "stay": "Karakol",
+      "theme": "The two canyons on the way east",
+      "acts": [
+        {
+          "name": "Skazka canyon",
+          "near": "Tosor",
+          "kind": "nature",
+          "mins": 120,
+          "how": "private_transfer",
+          "why": "Red sandstone straight out of the steppe; an hour of walking gets you above it."
+        },
+        {
+          "name": "Jeti-Oguz red rocks",
+          "near": "Jeti-Oguz",
+          "kind": "nature",
+          "mins": 120,
+          "how": "private_transfer",
+          "why": "The other formation everyone photographs, and the valley walk behind it that nobody does."
+        },
+        {
+          "name": "Karakol Dungan mosque and wooden cathedral",
+          "near": "Karakol",
+          "kind": "historic",
+          "mins": 60,
+          "why": "Two buildings that explain who settled this end of the lake."
+        }
+      ],
+      "meals": {
+        "b": "At the guesthouse",
+        "l": "In Jeti-Oguz",
+        "d": "Ashlan-fu in Karakol"
+      },
+      "why": "Everything worth stopping for on this road, on the day you were driving it anyway."
+    },
+    {
+      "stay": "Karakol",
+      "theme": "Up to Ala-Kul lake",
+      "acts": [
+        {
+          "name": "Karakol valley to Sirota camp",
+          "near": "Karakol National Park",
+          "kind": "hike",
+          "mins": 420,
+          "how": "private_transfer",
+          "why": "Seven hours and 1,200 m through spruce forest to the camp below the pass."
+        }
+      ],
+      "meals": {
+        "b": "Early at the guesthouse",
+        "l": "Carried",
+        "d": "At camp"
+      },
+      "why": "Day one of the trek, and the reason the acclimatisation day existed."
+    },
+    {
+      "stay": "Karakol",
+      "theme": "The pass, the lake, and down to the hot springs",
+      "acts": [
+        {
+          "name": "Ala-Kul pass and lake",
+          "near": "Ala-Kul",
+          "kind": "hike",
+          "mins": 480,
+          "why": "3,900 m, a turquoise lake under snow, and the single best hour of the trip."
+        },
+        {
+          "name": "Altyn-Arashan hot springs",
+          "near": "Altyn-Arashan",
+          "kind": "geothermal",
+          "mins": 90,
+          "why": "You descend straight into them, which is the only reason the knees forgive the pass."
+        }
+      ],
+      "meals": {
+        "b": "At camp",
+        "l": "Carried",
+        "d": "At the valley guesthouse"
+      },
+      "why": "The hardest day, deliberately placed once you are properly acclimatised."
+    },
+    {
+      "stay": "Karakol",
+      "theme": "Out of the valley, and the last evening",
+      "acts": [
+        {
+          "name": "Altyn-Arashan valley track",
+          "near": "Altyn-Arashan",
+          "kind": "scenic_drive",
+          "mins": 120,
+          "how": "four_wheel_drive",
+          "why": "The track out is rough enough that riding it is part of the experience."
+        },
+        {
+          "name": "Karakol animal market",
+          "near": "Karakol",
+          "kind": "market",
+          "mins": 90,
+          "why": "Sunday mornings only, and it is the loudest, most local thing on this itinerary."
+        }
+      ],
+      "meals": {
+        "b": "In the valley",
+        "l": "In Karakol",
+        "d": "Last dinner in Karakol"
+      },
+      "why": "A last day that stays in the mountains rather than spending itself driving back."
+    }
+  ],
+  "omissions": [
+    {
+      "name": "Osh and the south",
+      "reason": "Two more days of driving each way; it belongs to a different trip."
+    },
+    {
+      "name": "Tash Rabat",
+      "reason": "A long detour off the Naryn road, and the trip already has its high-country night at Song-Kul."
+    },
+    {
+      "name": "Cholpon-Ata north shore",
+      "reason": "The resort strip; the south shore does the same job with none of the crowd."
+    }
+  ],
+  "tradeoffs": [
+    "Four nights in Karakol means unpacking once but two of them are spent away from the room on the trek.",
+    "The Ala-Kul route is committing: once over the pass the only way out is down to Altyn-Arashan."
+  ],
+  "backups": [
+    {
+      "trigger": "Snow or storm on the Ala-Kul pass",
+      "alternative": "Turn at the lake and return down the Karakol valley, then drive to Altyn-Arashan for the springs."
+    },
+    {
+      "trigger": "Song-Kul road closed by late snow",
+      "alternative": "Two nights at a Kyzart yurt camp with day rides onto the same pasture."
+    }
+  ]
+}

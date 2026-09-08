@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { waitUntilInteractive } from './support/trip';
+import { createTrip, waitUntilInteractive } from './support/trip';
 
 /**
  * DESTINATION-AWARE INTERVIEW GLOBALITY — THE DENSE CITY, END TO END.
@@ -20,17 +20,7 @@ async function pickSeededCity(page: Page): Promise<void> {
   // The synthetic index is seeded on this page's render.
   await page.goto('/decide');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await page.goto('/trips/new');
-  const destination = page.getByLabel('Destination');
-  await waitUntilInteractive(destination);
-  await destination.fill('Meridian');
-  const suggestion = page.getByRole('option', { name: /Meridian Harbour/ }).first();
-  await expect(suggestion, 'the index should offer the seeded city').toBeVisible({ timeout: 15_000 });
-  await suggestion.click();
-  await page.getByLabel('Arrive').fill(DATES.start);
-  await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/);
+  await createTrip(page, 'Meridian', DATES, { pickSuggestion: /Meridian Harbour/ });
   if (/\/plan/.test(page.url())) {
     await expect(page.getByRole('heading', { level: 1 })).not.toContainText('Looking up', { timeout: 20_000 });
   }

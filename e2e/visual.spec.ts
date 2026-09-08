@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { openHubView } from './support/hub';
-import { completeQuestionnaire } from './support/trip';
+import { completeQuestionnaire, createTrip } from './support/trip';
 import { mkdirSync } from 'node:fs';
 import {
   expectNoHorizontalOverflow,
@@ -30,7 +30,20 @@ test('captures the journey and stays free of console errors and overflow', async
 
   async function shot(name: string) {
     await expectNoHorizontalOverflow(page, name);
-    await page.screenshot({ path: `${SHOT_DIR}/${name}-${suffix}.png`, fullPage: true });
+    /*
+     * Chromium refuses a full-page capture past roughly sixteen thousand
+     * pixels, which an eight-day itinerary reaches at phone width — the
+     * screenshot is evidence, not the assertion, so a page too tall to
+     * photograph whole is photographed as far as the viewport rather than
+     * failing a test about console errors and overflow.
+     */
+    try {
+      await page.screenshot({ path: `${SHOT_DIR}/${name}-${suffix}.png`, fullPage: true });
+    } catch {
+      // Best effort to the end: this test asserts console errors and overflow,
+      // and a page the renderer will not photograph must not decide either.
+      await page.screenshot({ path: `${SHOT_DIR}/${name}-${suffix}.png` }).catch(() => undefined);
+    }
   }
 
   await page.goto('/');
@@ -42,12 +55,10 @@ test('captures the journey and stays free of console errors and overflow', async
    * is also what makes this walkthrough work for any destination.
    */
   await page.getByRole('link', { name: 'I know where I am going' }).click();
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill('2026-08-12');
-  await page.getByLabel('Leave').fill('2026-08-15');
-  await shot('02-composer');
+  await page.getByTestId('destination-input').fill('Mammoth Lakes');
+  await shot('02-setup-where');
 
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', { start: '2026-08-12', end: '2026-08-15' });
   await expect(page.getByTestId('interview-understanding')).toBeVisible();
   await shot('03-understanding');
   await completeQuestionnaire(page, { answers: { iconic_crowds: 'quieter_alternative' } });

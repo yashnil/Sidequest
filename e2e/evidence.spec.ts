@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView, openPrepareNotes } from './support/hub';
-import { compileRegion, CULTURAL_INTERVIEW, completeQuestionnaire } from './support/trip';
+import { compileRegion, createTrip as makeTrip, CULTURAL_INTERVIEW, completeQuestionnaire } from './support/trip';
 
 /**
  * WHAT A TRAVELLER SEES OF THE EVIDENCE.
@@ -17,11 +17,7 @@ import { compileRegion, CULTURAL_INTERVIEW, completeQuestionnaire } from './supp
 const DATES = { start: '2026-08-12', end: '2026-08-16' };
 
 async function createTrip(page: Page, destination: string): Promise<string> {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill(destination);
-  await page.getByLabel('Arrive').fill(DATES.start);
-  await page.getByLabel('Leave').fill(DATES.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await makeTrip(page, destination, DATES);
   await page.waitForURL(/\/trips\/[^/]+\/plan/);
   return /\/trips\/([^/]+)\/plan/.exec(page.url())?.[1] ?? '';
 }

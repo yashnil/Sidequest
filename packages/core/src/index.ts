@@ -94,6 +94,7 @@ export * from './food/availability';
 export * from './food/board';
 export * from './food/quality';
 export * from './food/provider';
+export * from './food/discovery-rank';
 
 export * from './weather/board';
 export * from './weather/board-backups';
@@ -132,6 +133,7 @@ export * from './naming/display-name';
 
 export * from './pricing/model-rates';
 
+export * from './destinations/intent';
 export * from './destinations/normalize';
 export * from './destinations/match';
 export * from './destinations/provider';

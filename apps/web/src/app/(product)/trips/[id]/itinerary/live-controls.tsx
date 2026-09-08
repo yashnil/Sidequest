@@ -285,27 +285,38 @@ export function DiscoverButton({ tripId, near, kind, label, query }: { tripId: s
           </p>
         ) : (
           <div className="mt-2 rounded-md border border-rule bg-paper-sunk/50 p-2 text-xs" data-testid={`discover-${kind}-results`}>
-            <ul className="space-y-1">
+            {/*
+              MVP V3, Stages 34 and 35 — ordered by fit, and each row says why it
+              is where it is. The rating is shown because it is real information
+              and withheld where there is none; it is never the thing that
+              decides the order.
+            */}
+            <ul className="space-y-2">
               {(result.items ?? []).map((p) => (
-                <li key={p.name} className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span className="text-ink">
-                    {p.website || p.mapsUri ? (
-                      <a href={p.website ?? p.mapsUri} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">
-                        {p.name}
-                      </a>
-                    ) : (
-                      p.name
-                    )}
-                    {p.priceLevel ? <span className="text-ink-faint"> · {p.priceLevel.replace(/_/g, ' ')}</span> : null}
+                <li key={p.name}>
+                  <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="text-ink">
+                      {p.website || p.mapsUri ? (
+                        <a href={p.website ?? p.mapsUri} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">
+                          {p.name}
+                        </a>
+                      ) : (
+                        p.name
+                      )}
+                      {p.priceLevel ? <span className="text-ink-faint"> · {p.priceLevel.replace(/_/g, ' ')}</span> : null}
+                    </span>
+                    <span className="numeral text-ink-faint">
+                      {p.distanceKm} km
+                      {p.rating !== undefined ? ` · ${p.rating.toFixed(1)}${p.reviewCountLabel ? ` · ${p.reviewCountLabel} reviews` : ''}` : ''}
+                    </span>
                   </span>
-                  <span className="numeral text-ink-faint">
-                    {p.distanceKm} km{p.rating !== undefined ? ` · ${p.rating.toFixed(1)}${p.ratingCount ? ` (${p.ratingCount})` : ''}` : ''}
-                  </span>
+                  {p.why ? <span className="mt-0.5 block text-ink-faint">Chosen for you: {p.why}.</span> : null}
+                  {p.caution ? <span className="mt-0.5 block text-clay">{p.caution}</span> : null}
                 </li>
               ))}
             </ul>
             <p className="mt-2 text-ink-faint">
-              {result.attribution}. Found, not quoted: Sidequest has no live room prices or availability, and shows none.
+              {result.attribution}. Ordered by how well each one fits your trip, not by rating. Found, not quoted: Sidequest has no live room prices or availability, and shows none.
             </p>
           </div>
         )

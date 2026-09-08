@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView } from './support/hub';
-import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire } from './support/trip';
+import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire, createTrip, openReviewLedger } from './support/trip';
 
 /** Same directory the rest of the suite writes to, created before use. */
 const SHOT_DIR = 'test-results/screens';
@@ -23,11 +23,7 @@ const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
 
 /** A Mammoth trip walked to the interview's review screen. */
 async function startQuestionnaire(page: Page) {
-  await page.goto('/trips/new');
-  await page.getByLabel('Destination').fill('Mammoth Lakes');
-  await page.getByLabel('Arrive').fill(AUGUST.start);
-  await page.getByLabel('Leave').fill(AUGUST.end);
-  await page.getByRole('button', { name: /^Continue$/ }).click();
+  await createTrip(page, 'Mammoth Lakes', AUGUST);
   await completeQuestionnaire(page, { priorities: ['Hiking', 'Lakes & rivers', 'Scenic viewpoints'] });
 }
 
@@ -46,6 +42,7 @@ async function buildTrip(page: Page) {
 test('the food questions ask about eating and nothing about restaurants', async ({ page }) => {
   await startQuestionnaire(page);
 
+  await openReviewLedger(page);
   await page.getByTestId('review-change-food_tradeoff').click();
   const food = page.getByTestId('interview-question-food_tradeoff');
   await expect(food).toBeVisible();
@@ -55,6 +52,7 @@ test('the food questions ask about eating and nothing about restaurants', async 
   await page.getByRole('button', { name: 'Back' }).click();
   await completeQuestionnaire(page);
 
+  await openReviewLedger(page);
   await page.getByTestId('review-change-dietary').click();
   await expect(page.getByText('Anything you do not eat?')).toBeVisible();
   // The strictness question is about a list, so it only exists once there is one.
@@ -99,6 +97,7 @@ test('a meal never claims a booking exists', async ({ page }) => {
 
 test('a strict dietary need is answered with honesty rather than reassurance', async ({ page }) => {
   await startQuestionnaire(page);
+  await openReviewLedger(page);
   await page.getByTestId('review-change-dietary').click();
   await page.getByRole('checkbox', { name: 'Nut allergy' }).check();
   await page.getByRole('checkbox', { name: 'These are requirements, not preferences' }).check();
@@ -214,6 +213,7 @@ test('the itinerary is readable with no console errors and no sideways scroll', 
   page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
 
   await startQuestionnaire(page);
+  await openReviewLedger(page);
   await page.getByTestId('review-change-dietary').click();
   await page.getByRole('checkbox', { name: 'Vegetarian' }).check();
   await page.getByTestId('interview-continue').click();

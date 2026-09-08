@@ -631,7 +631,8 @@ export type ModelFallbackOutcome = z.infer<typeof modelFallbackOutcomeSchema>;
 
 export const MODEL_FALLBACK_OUTCOME_COPY: Record<ModelFallbackOutcome, string> = {
   not_attempted: 'We have not asked the reader about the rest of this yet.',
-  not_configured: 'The reader is switched off in this build, so the rest stays exactly as you wrote it.',
+  // Says what the traveller gets, not what the deployment is missing.
+  not_configured: 'Sidequest cannot read free text on this trip, so the rest stays exactly as you wrote it.',
   nothing_unresolved: 'There was nothing left over to read.',
   oversized_input: 'There was too much left over to read in one go. It is saved exactly as you wrote it.',
   budget_exhausted: 'This trip has used its one reading. Your words are saved exactly as you wrote them.',

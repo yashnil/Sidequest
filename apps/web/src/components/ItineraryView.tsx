@@ -281,6 +281,7 @@ export function ItineraryView({
   worthSkipping = [],
   lodgingAreas = [],
   images = {},
+  livePhotos = {},
   rationale = {},
   tiles = null,
   personality = null,
@@ -418,6 +419,12 @@ export function ItineraryView({
    * no photograph rather than a stand-in.
    */
   images?: Record<string, ImageRecord>;
+  /**
+   * MVP V3 — where a request-time photograph can be fetched for a stop, by place
+   * id. Empty unless the build has `SIDEQUEST_PLACE_PHOTOS=google`; a URL on
+   * this origin, so the credential stays on the server and nothing is stored.
+   */
+  livePhotos?: Record<string, string>;
   /** What the fit model says about each scheduled stop. See `StopRationale`. */
   rationale?: Record<string, StopRationale>;
 }) {
@@ -499,6 +506,7 @@ export function ItineraryView({
                     tripId={tripId}
                     lockedPlaceIds={new Set(lockedPlaceIds)}
                     images={images}
+                    livePhotos={livePhotos}
                     rationale={rationale}
                     verification={verificationByItemId}
                     anchorKinds={anchorKinds}
@@ -564,6 +572,20 @@ export function ItineraryView({
           ) : (
             <p className="max-w-2xl font-display text-2xl leading-snug text-ink">{itinerary.summary}</p>
           )}
+          {/*
+            MVP V3, Stage 30 — WHEN, answered on the plan.
+            Load-bearing now that Sidequest can choose the dates: a traveller
+            handed a window is owed the reason it is that window, on the trip
+            itself rather than only on the screen that proposed it.
+          */}
+          {itinerary.package?.timingRationale ? (
+            <section className="mt-8" aria-labelledby="timing-overview" data-testid="timing-overview">
+              <h2 id="timing-overview" className="type-meta uppercase tracking-[0.14em]">
+                Why these dates
+              </h2>
+              <p className="mt-3 max-w-2xl type-body text-ink">{itinerary.package.timingRationale}</p>
+            </section>
+          ) : null}
           {itinerary.package ? (
             <section className="mt-8" aria-labelledby="route-overview" data-testid="route-overview">
               <h2 id="route-overview" className="type-meta uppercase tracking-[0.14em]">
@@ -614,7 +636,7 @@ export function ItineraryView({
             </div>
           ) : null}
           <div className={bookSoon.length > 0 ? 'mt-5' : ''}>
-            <TripSnapshot itinerary={itinerary} coordinates={coordinates} images={images} rationale={rationale} tiles={tiles} personality={null} dateLabel={dateLabel} />
+            <TripSnapshot itinerary={itinerary} coordinates={coordinates} images={images} livePhotos={livePhotos} rationale={rationale} tiles={tiles} personality={null} dateLabel={dateLabel} />
           </div>
         </div>
       </div>
@@ -1586,6 +1608,7 @@ function DayCard({
   tripId,
   lockedPlaceIds,
   images,
+  livePhotos = {},
   rationale,
   verification = {},
   isFirst,
@@ -1612,6 +1635,8 @@ function DayCard({
   lockedPlaceIds: ReadonlySet<string>;
   /** Licensed photographs by place id, read from a table by the page. */
   images: Record<string, ImageRecord>;
+  /** MVP V3 — request-time place photographs by place id; empty unless configured. */
+  livePhotos?: Record<string, string>;
   /** What the fit model said about each stop, by place id. See `StopRationale`. */
   rationale: Record<string, StopRationale>;
   /** Whether this is the arrival or the departure day, for the empty-day copy. */
@@ -1666,7 +1691,7 @@ function DayCard({
    * day above it. All of it derived from what is already scheduled — nothing is
    * fetched, nothing is invented, and a day with none of it renders none of it.
    */
-  const identity = dayIdentity(day, images, rationale);
+  const identity = dayIdentity(day, images, rationale, livePhotos);
   const placedStops = stops.map((stop) => ({
     id: stop.id,
     name: stop.name,
@@ -1889,10 +1914,11 @@ function DayCard({
                   })}
                   ratio="natural"
                   credit="none"
+                  {...(identity.hero.livePhotoHref ? { livePhoto: { href: identity.hero.livePhotoHref, credit: 'Photo © Google' } } : {})}
                   {...(identity.hero.category ? { category: identity.hero.category } : {})}
                 />
                 <p className="mt-1.5 text-[11px] leading-snug text-ink-faint">
-                  {identity.hero.name}, on this day. <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" />
+                  {identity.hero.name}, on this day. {identity.hero.image ? <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" /> : identity.hero.livePhotoHref ? <span>Photo &copy; Google</span> : null}
                 </p>
               </div>
             ) : null}
@@ -2046,9 +2072,16 @@ function dayIdentity(
   day: ItineraryDay,
   images: Record<string, ImageRecord>,
   rationale: Record<string, StopRationale>,
+  livePhotos: Record<string, string> = {},
 ): {
   hue: number | null;
-  hero: { placeId: string; name: string; image: ImageRecord; category?: PlaceCategory } | null;
+  /**
+   * MVP V3 — a hero is a durable open-licensed photograph, or, when there is
+   * none and the traveller's build has request-time photos configured, the
+   * place's own picture fetched when the frame is looked at. `image` is null in
+   * the second case and `livePhotoHref` carries it.
+   */
+  hero: { placeId: string; name: string; image: ImageRecord | null; livePhotoHref?: string; category?: PlaceCategory } | null;
 } {
   const stops = day.items.filter((item) => item.kind === 'activity' && item.placeId !== undefined);
 
@@ -2083,6 +2116,27 @@ function dayIdentity(
       ...(category ? { category } : {}),
     };
     break;
+  }
+  /*
+   * No open-licensed photograph of any stop on this day. If the place itself
+   * publishes one and the build is configured for it, that is a better frame
+   * than a generated graphic — and it is fetched when somebody looks, never
+   * stored. The durable image still wins whenever there is one.
+   */
+  if (!hero) {
+    for (const stop of stops) {
+      const href = livePhotos[stop.placeId!];
+      if (!href) continue;
+      const category = rationale[stop.placeId!]?.category;
+      hero = {
+        placeId: stop.placeId!,
+        name: rationale[stop.placeId!]?.name ?? stop.title,
+        image: null,
+        livePhotoHref: href,
+        ...(category ? { category } : {}),
+      };
+      break;
+    }
   }
 
   return { hue, hero };
@@ -3010,21 +3064,23 @@ function TripSnapshot({
   itinerary,
   coordinates,
   images,
+  livePhotos,
   rationale,
   tiles,
   personality,
-  dateLabel,
 }: {
   itinerary: Itinerary;
   coordinates: Record<string, { lat: number; lng: number }>;
   images: Record<string, ImageRecord>;
+  /** MVP V3 — request-time place photographs by place id; empty unless configured. */
+  livePhotos: Record<string, string>;
   rationale: Record<string, StopRationale>;
   tiles: MapBasemap | null;
   personality: string | null;
   dateLabel: string;
 }) {
   const pkg = itinerary.package;
-  const hero = itinerary.days.map((day) => dayIdentity(day, images, rationale).hero).find((entry) => entry !== null) ?? null;
+  const hero = itinerary.days.map((day) => dayIdentity(day, images, rationale, livePhotos).hero).find((entry) => entry !== null) ?? null;
   const { markers, connectors, primaryBase, summary } = overviewMapModel(itinerary, coordinates, rationale);
   const bases = pkg?.bases ?? [];
   const kinds = [...new Set(itinerary.days.map((day) => day.weather.evidence))];
@@ -3045,10 +3101,11 @@ function TripSnapshot({
               ratio="4 / 3"
               crop={false}
               credit="none"
+              {...(hero.livePhotoHref ? { livePhoto: { href: hero.livePhotoHref, credit: 'Photo © Google' } } : {})}
               {...(hero.category ? { category: hero.category } : {})}
             />
             <p className="mt-1.5 text-[11px] leading-snug text-ink-faint">
-              {hero.name}, on this trip. <ImageCredit image={hero.image} as="span" className="mt-0 inline" />
+              {hero.name}, on this trip. {hero.image ? <ImageCredit image={hero.image} as="span" className="mt-0 inline" /> : hero.livePhotoHref ? <span>Photo © Google</span> : null}
             </p>
           </div>
         ) : null}
@@ -3058,24 +3115,28 @@ function TripSnapshot({
               {personality}
             </p>
           ) : null}
+          {/*
+            MVP V3, Stage 42 — the facts the band does not already carry.
+            The atlas band above states the dates, the day count, the stop count
+            and the movement sentence; the route is drawn under "Where you sleep"
+            three centimetres below. Repeating all four here made one screen say
+            everything twice, which is what "one focal point per view" is a rule
+            against. What is left is what nothing else says.
+          */}
           <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="label text-ink-faint">When</dt>
-              <dd className="text-ink">
-                {dateLabel} · {itinerary.days.length} days · {stops} stops
-              </dd>
-            </div>
-            <div>
-              <dt className="label text-ink-faint">Route</dt>
-              <dd className="text-ink">{pkg ? `${pkg.bases.length} ${pkg.bases.length === 1 ? 'base' : 'bases'}: ${pkg.bases.map((base) => base.name).join(' → ')}` : `Based in ${itinerary.baseName}`}</dd>
-            </div>
-            <div>
-              <dt className="label text-ink-faint">Getting around</dt>
-              <dd className="text-ink">{itinerary.transportStrategy.headline}</dd>
-            </div>
+            {itinerary.package?.timingRationale ? (
+              <div className="sm:col-span-2">
+                <dt className="label text-ink-faint">Why these dates</dt>
+                <dd className="text-ink">{itinerary.package.timingRationale}</dd>
+              </div>
+            ) : null}
             <div>
               <dt className="label text-ink-faint">Weather</dt>
               <dd className="text-ink">{weatherLabel}</dd>
+            </div>
+            <div>
+              <dt className="label text-ink-faint">Stops</dt>
+              <dd className="numeral text-ink">{stops} across {itinerary.days.length} days</dd>
             </div>
           </dl>
           {seasonLineFor(itinerary) ? <p className="mt-3 type-small text-ink-muted">{seasonLineFor(itinerary)}</p> : null}

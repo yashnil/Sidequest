@@ -1,6 +1,7 @@
 import 'server-only';
 import { providerUserAgent } from '../net/user-agent';
 import { z } from 'zod';
+import { requestSignal } from '../net/generation-deadline';
 
 /**
  * NOMINATIM — DESTINATION RESOLUTION.
@@ -149,7 +150,7 @@ export async function geocode(query: string, options: GeocodeOptions = {}): Prom
   try {
     response = await doFetch(url, {
       headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
     });
   } catch {
     throw new GeocoderError('request_failed', 'The geocoder did not answer.');
@@ -241,7 +242,7 @@ export async function reverseGeocode(lat: number, lng: number, options: ReverseG
   try {
     response = await doFetch(url, {
       headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
     });
   } catch {
     throw new GeocoderError('request_failed', 'The geocoder did not answer.');

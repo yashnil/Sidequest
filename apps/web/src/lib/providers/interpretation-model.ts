@@ -118,6 +118,15 @@ export interface StructuredModel {
      */
     schemaEnforcement?: 'grammar' | 'prompt';
     /**
+     * Whether a cancelled call should try what arrived before the deadline.
+     *
+     * On the interface for the same reason `schemaEnforcement` is: one caller
+     * genuinely needs it (the composition, whose answer is one object written
+     * front to back), and a fake that ignored it would be a fake of a
+     * different function. See `ResearchModel.structured`.
+     */
+    salvagePartialOnDeadline?: boolean;
+    /**
      * `'generation' | 'structural_reask' | 'repair'` for the Phase 17
      * composer's `callLog` diagnostics. Optional and unused by this caller —
      * one call, one label nobody needs — but declared here so the fakes this

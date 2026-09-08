@@ -2,8 +2,11 @@
 
 import { useState, type ReactNode } from 'react';
 import {
+  DIETARY_NEED_KINDS,
+  DIETARY_NEED_KIND_LABELS,
   INTEREST_LABELS,
   hardConstraintOffer,
+  type DietaryNeedKind,
   type HardConstraint,
   type Interest,
   type InterviewContext,
@@ -87,6 +90,7 @@ export function OptionCards({
   glyphs,
   lettered = false,
   columns = 2,
+  recommended = null,
 }: {
   name: string;
   options: readonly InterviewOption[];
@@ -95,6 +99,8 @@ export function OptionCards({
   glyphs?: Record<string, GlyphId>;
   lettered?: boolean;
   columns?: 1 | 2 | 3;
+  /** MVP V3 — marked because of what this destination is, never as a pre-tick. */
+  recommended?: string | null;
 }) {
   return (
     <fieldset className="min-w-0">
@@ -117,6 +123,11 @@ export function OptionCards({
               <span className="min-w-0">
                 <span className={cx('block font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
                 {option.detail ? <span className="mt-1 block text-sm leading-relaxed text-ink-muted">{option.detail}</span> : null}
+                {recommended === option.value ? (
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-pine/40 bg-pine-soft px-2 py-0.5 text-[11px] font-medium text-pine-strong" data-testid="option-recommended">
+                    Recommended here
+                  </span>
+                ) : null}
               </span>
               <Check on={on} />
             </label>
@@ -301,7 +312,7 @@ const TRANSPORT_GLYPH: Record<string, GlyphId> = {
   mixed: 'compass',
 };
 
-export function TransportChoice({ name, options, value, onChange }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void }) {
+export function TransportChoice({ name, options, value, onChange, recommended = null }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; recommended?: string | null }) {
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">How you get around</legend>
@@ -316,6 +327,11 @@ export function TransportChoice({ name, options, value, onChange }: { name: stri
               </span>
               <span className={cx('mt-3 block font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
               {option.detail ? <span className="mt-1 block text-sm leading-relaxed text-ink-muted">{option.detail}</span> : null}
+              {recommended === option.value ? (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-pine/40 bg-pine-soft px-2 py-0.5 text-[11px] font-medium text-pine-strong" data-testid="option-recommended">
+                  Recommended here
+                </span>
+              ) : null}
               <Check on={on} />
             </label>
           );
@@ -600,12 +616,58 @@ export function ChipGroup({ name, options, value, onChange, tone = 'accent' }: {
   );
 }
 
-export function DietaryControl({ options, value, onChange }: { options: readonly InterviewOption[]; value: { needs: string[]; strict: boolean }; onChange: (value: { needs: string[]; strict: boolean }) => void }) {
+/**
+ * DIET: A WAY OF EATING, THINGS YOU AVOID, AND YOUR OWN WORDS.
+ *
+ * MVP V3, Stage 16. Grouped because the three are different kinds of statement
+ * and mixing them into one chip row is what made "Hindu non-veg: no beef or
+ * pork" unsayable. The free-text box is not an afterthought: it is where
+ * "vegetarian, but I eat eggs" lives, it survives verbatim into the brief the
+ * model reads, and nothing parses it into the chips above.
+ */
+export function DietaryControl({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly InterviewOption[];
+  value: { needs: string[]; strict: boolean; notes?: string };
+  onChange: (value: { needs: string[]; strict: boolean; notes: string }) => void;
+}) {
+  const notes = value.notes ?? '';
+  const set = (patch: Partial<{ needs: string[]; strict: boolean; notes: string }>) => onChange({ needs: value.needs, strict: value.strict, notes, ...patch });
+  const group = (kind: DietaryNeedKind) => options.filter((option) => option.detail === kind);
   return (
-    <div className="space-y-4">
-      <ChipGroup name="dietary" options={options} value={value.needs} onChange={(needs) => onChange({ ...value, needs })} />
-      {value.needs.length > 0 ? (
-        <SeriousToggle label="These are requirements, not preferences" detail="Say yes and we stop treating “nobody has confirmed it” as good enough." checked={value.strict} onChange={(strict) => onChange({ ...value, strict })} />
+    <div className="space-y-6">
+      {DIETARY_NEED_KINDS.map((kind) => {
+        const inGroup = group(kind);
+        if (inGroup.length === 0) return null;
+        return (
+          <fieldset key={kind}>
+            <legend className="label text-ink-faint">{DIETARY_NEED_KIND_LABELS[kind]}</legend>
+            <div className="mt-2">
+              <ChipGroup name={`dietary-${kind}`} options={inGroup.map((option) => ({ value: option.value, label: option.label }))} value={value.needs} onChange={(needs) => set({ needs: [...new Set([...value.needs.filter((entry) => !inGroup.some((option) => option.value === entry)), ...needs.filter((entry) => inGroup.some((option) => option.value === entry))])] })} tone={kind === 'allergy' ? 'clay' : 'accent'} />
+            </div>
+          </fieldset>
+        );
+      })}
+      <div>
+        <label htmlFor="dietary-notes" className="label block text-ink-faint">
+          Anything else, in your words
+        </label>
+        <textarea
+          id="dietary-notes"
+          rows={2}
+          maxLength={300}
+          value={notes}
+          onChange={(event) => set({ notes: event.target.value })}
+          placeholder="Vegetarian but I eat eggs · severe peanut allergy · no alcohol at dinner"
+          className="mt-2 w-full resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
+          data-testid="dietary-notes"
+        />
+      </div>
+      {value.needs.length > 0 || notes.trim().length > 0 ? (
+        <SeriousToggle label="These are requirements, not preferences" detail="Say yes and we stop treating “nobody has confirmed it” as good enough." checked={value.strict} onChange={(strict) => set({ strict })} />
       ) : null}
     </div>
   );
