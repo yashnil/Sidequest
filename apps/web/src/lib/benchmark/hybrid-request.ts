@@ -8,8 +8,17 @@ import {
 import { nightsFrom, type Trip, type TravelerProfile, type TripComposerAnswers } from '@sidequest/core';
 
 /**
- * PHASE 17 — TRIP + WHATEVER PREFERENCES EXIST, COMPRESSED INTO ONE COMPACT
- * REQUEST.
+ * BENCHMARK ONLY — TRIP + WHATEVER PREFERENCES EXIST, COMPRESSED INTO ONE
+ * COMPACT BENCHMARK REQUEST.
+ *
+ * PRODUCTION LOCK V5 §2 moved this file out of `planning/`. It was the only
+ * input assembler on the canonical build path, and a benchmark schema's
+ * vocabularies therefore bounded the whole product — including the diet
+ * vocabulary, whose narrowing crashed a real trip on Build. Production now
+ * builds `CanonicalTripBuildInput` (`planning/canonical-input.ts`) from real
+ * product state only, and `benchmark-isolation.test.ts` keeps it that way.
+ * This adapter remains for the benchmark harness, acceptance replays and
+ * regression fixtures.
  *
  * The composer answers are captured on trip creation, before anything paid
  * runs (see `packages/core/src/schemas/composer.ts`), and are already almost
@@ -250,8 +259,19 @@ export function buildHybridTripRequest(input: {
       seniorsInGroup: trip.basics.travelerNeeds.includes('seniors_in_group'),
       mobility,
       mobilityNotes: profile?.accessibility.notes ?? '',
-      dietary: (profile?.food.dietaryNeeds ?? []).filter(isBenchmarkDietary),
-      dietaryStrict: profile?.food.dietaryStrict ?? false,
+      /*
+       * PRODUCTION LOCK V5 §4 — strictness cannot outlive the requirement it
+       * belongs to. Core's dietary vocabulary is composable and much wider than
+       * the benchmark's; narrowing the list here while carrying `dietaryStrict`
+       * through unchanged left strictness with nothing to be strict about, which
+       * the request schema (correctly) refuses — and that Zod throw was the
+       * full-questionnaire Build crash. The production path no longer comes
+       * through this file at all, and this adapter no longer produces the orphan.
+       */
+      ...(() => {
+        const dietary = (profile?.food.dietaryNeeds ?? []).filter(isBenchmarkDietary);
+        return { dietary, dietaryStrict: dietary.length > 0 && (profile?.food.dietaryStrict ?? false) };
+      })(),
     },
     movement: {
       preference:

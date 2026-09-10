@@ -118,7 +118,18 @@ export const dateRecommendationSchema = z.object({
   alternative: z
     .object({ startDate: isoDateSchema, endDate: isoDateSchema, label: z.string().max(80), month: z.number().int().min(1).max(12), year: z.number().int().min(2000).max(2100), note: z.string().max(200).optional() })
     .optional(),
-  basis: z.enum(['climate_normals', 'traveller_window']).default('climate_normals'),
+  /**
+   * Where the window came from.
+   *
+   * `composed_with_trip` is PRODUCTION LOCK V5 §6: the composition call chose
+   * the dates in the same call that designed the route, because the strongest
+   * month depends on which trip this is — a high-country traverse and a
+   * food-and-neighbourhood trip in the same country do not share one. Recorded
+   * distinctly from `climate_normals`, which is the intake screen's own
+   * climate-only pick, so a traveller can always tell which question was
+   * answered and by what.
+   */
+  basis: z.enum(['climate_normals', 'traveller_window', 'composed_with_trip']).default('climate_normals'),
   attribution: z.string().max(200).optional(),
   generatedAt: z.string().min(1),
   /** True once the traveller pressed "Use this timing". Until then it is a proposal. */

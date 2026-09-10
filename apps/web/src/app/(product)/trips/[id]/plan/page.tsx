@@ -29,6 +29,7 @@ import { getProfile } from '@/lib/db/repository';
 import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
 import type { CompilationSnapshot } from './actions';
 import { compilationVerdict } from '@/lib/compiler/verdict';
+import { isStatable, timingIntentOf } from '@/lib/planning/canonical-input';
 
 export const dynamic = 'force-dynamic';
 
@@ -242,7 +243,6 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
    * is nothing to say rather than wrong.
    */
   const nights = countNights(trip.basics.startDate, trip.basics.endDate);
-  const dateMode = intent.composer?.dates.mode;
 
   return (
     <>
@@ -253,12 +253,33 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
             intent.selectedDestination?.qualifiedName ??
             selectedCandidate?.qualifiedName ??
             intent.destinationQuery,
-          when:
-            dateMode === 'month' || dateMode === 'season' || dateMode === 'undecided'
-              ? 'Dates not fixed'
-              : // `2026-10-12 → 2026-10-18` was the database's format on the
-                // strip that follows a traveller through the whole journey.
-                formatDayRange(trip.basics.startDate, trip.basics.endDate),
+          /*
+           * PRODUCTION LOCK V5 §5 — THE STRIP MAY NOT PRINT A PLACEHOLDER.
+           *
+           * This used to name three modes by hand — month, season, undecided —
+           * and every other mode fell through to the trip row's dates. Three of
+           * the modes it did not name (`best_time`, `window`, `months`) are
+           * exactly the ones where the traveller asked Sidequest to choose and
+           * the row holds a *materialised placeholder* until it has. A live
+           * Hong Kong walk showed the consequence in the chrome that follows a
+           * traveller through the entire journey: "Oct 13–18, 2026", stated as
+           * their dates, for somebody who had said "tell me when it is best"
+           * and been told nothing.
+           *
+           * `timingIntentOf` is the one place that knows whether a date is a
+           * fact, and `isStatable` is the one test for whether it may be
+           * printed — the same pair the composition brief uses. A hand-kept
+           * list of modes is what drifted; a predicate cannot.
+           */
+          when: (() => {
+            const timing = timingIntentOf({ composer: intent.composer ?? null, trip, at: new Date().toISOString() });
+            if (isStatable(timing.startDate) && isStatable(timing.endDate)) {
+              // `2026-10-12 → 2026-10-18` was the database's format on the
+              // strip that follows a traveller through the whole journey.
+              return formatDayRange(timing.startDate.value!, timing.endDate.value!);
+            }
+            return timing.sidequestChooses ? 'Sidequest picks the dates' : 'Dates not fixed';
+          })(),
           nights,
           stage:
             step === 'ready'

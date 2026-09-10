@@ -19,6 +19,9 @@ import {
 import { ownedTrip } from '@/lib/net/trip-access';
 import { compiledRegionFor, DYNAMIC_REGION_ID } from '@/lib/region';
 import { StaleItineraryView } from './StaleItineraryView';
+import { AskSidequestMount } from './ask-sidequest-mount';
+import { getTripDraft } from '@/lib/db/draft-repository';
+import { undoTarget } from '@/lib/refine/version-repository';
 import { itineraryViewModel } from './view-model';
 
 export const dynamic = 'force-dynamic';
@@ -169,6 +172,15 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
     <p className="mx-auto max-w-4xl px-5 pb-8 sm:px-8">
       <OfflineSnapshot path={`/trips/${id}/itinerary`} />
     </p>
+    {/*
+      * PRODUCTION LOCK V5 §43 — Ask Sidequest.
+      *
+      * Mounted here rather than inside `ItineraryView` because it is a sheet
+      * over the whole page, not a section of the trip: it must sit outside the
+      * hub's five views so it is reachable from all of them, and outside the
+      * print flow entirely.
+      */}
+    <AskSidequestMount tripId={id} ready={Boolean(getTripDraft(id))} canUndo={undoTarget(id) !== null} />
     </>
   );
 }

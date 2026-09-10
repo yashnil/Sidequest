@@ -1,3 +1,4 @@
+import { impliesSelfDriving, overnightIsExperiential, type DraftDrivingArrangement, type OvernightKind } from '@/lib/planning/trip-draft';
 import {
   type FxRate,
   accessStateFor,
@@ -39,8 +40,37 @@ import {
   countryFacts,
 } from '@sidequest/core';
 /** The only part of the draft the intelligence reads: anchor names and the model's transport hints. */
+/**
+ * THE VERSION OF THE RULES THAT PRODUCED A CACHED INTELLIGENCE.
+ *
+ * PRODUCTION LOCK V5. The cache key is a fingerprint of the *inputs* — the
+ * itinerary, the bookings, the profile — which is correct as far as it goes and
+ * has one hole: a change to the RULES is neither an input nor an itinerary, so
+ * a fixed rule does not reach a trip whose inputs have not moved.
+ *
+ * Observed while fixing two of them. "Sheung Wan / Central — a remote base with
+ * few beds" and "swimwear and a quick-dry towel" both survived their own fixes
+ * on a real trip, because the itinerary had not changed and the cache answered
+ * first. Shipping a fix that does not take effect is worse than not shipping it:
+ * it reads as fixed everywhere except in front of a traveller.
+ *
+ * **Bump this whenever a rule in `intelligence/` changes what a traveller
+ * reads.** It costs one rebuild per trip and nothing else.
+ */
+export const INTELLIGENCE_RULES_VERSION = 'v5.2' as const;
+
 export interface DraftHints {
   days: readonly { anchors: readonly { name: string; transport?: string }[] }[];
+  /**
+   * PRODUCTION LOCK V5 §26 — what kind of place each base is.
+   *
+   * The one signal that says whether a base is genuinely remote. Optional so a
+   * draft stored before `overnight` existed still passes through; an absent kind
+   * simply means the lodging style and the days decide, as they did before.
+   */
+  bases?: readonly { id: string; overnight?: string }[];
+  /** §18 — how the road travel is arranged, so "drives" can mean the traveller. */
+  driving?: string;
 }
 
 /**
@@ -140,7 +170,23 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
     if (mode) hintedModes.add(mode);
   }
   const legModes = new Set<LegMode>([...legs.map((l) => l.mode), ...hintedModes]);
-  const drives = itinerary.transportStrategy.primaryMode === 'drive' || legs.some((l) => l.mode === 'car' || l.mode === 'four_wheel_drive');
+  /*
+   * PRODUCTION LOCK V5 §18 — "DRIVES" MEANS THE TRAVELLER IS AT THE WHEEL.
+   *
+   * It used to mean "a car is involved", which is a different fact and the one
+   * the live Kyrgyzstan build got wrong: a private driver over the jailoo tracks
+   * produced a rental desk in the terminal logistics, eleven rental days in the
+   * budget, and an International Driving Permit in the readiness checks — for a
+   * car nobody on the trip will ever hire.
+   *
+   * The draft states the arrangement (`driving`). Where it does, it decides.
+   * Where it does not — a draft written before the field existed — the old
+   * inference from the modes stands, so nothing regresses.
+   */
+  const statedDriving = input.draft?.driving;
+  const drives = statedDriving !== undefined
+    ? impliesSelfDriving(statedDriving as DraftDrivingArrangement)
+    : itinerary.transportStrategy.primaryMode === 'drive' || legs.some((l) => l.mode === 'car' || l.mode === 'four_wheel_drive');
 
   // Country and calendar ----------------------------------------------------------------------------
   const home = new Set([input.readinessProfile?.citizenship, input.readinessProfile?.residence].filter(Boolean) as string[]);
@@ -154,7 +200,38 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   for (const leg of legs) if (leg.dayNumber && (leg.mode === 'boat' || leg.mode === 'guide_transfer' || leg.mode === 'lodge_transfer' || leg.mode === 'four_wheel_drive')) remoteDayHints.add(leg.dayNumber);
   for (const base of lodging.bases) if (base.style === 'lodge' || base.style === 'camp' || base.style === 'hut' || base.style === 'homestay') for (const d of base.dayNumbers) remoteDayHints.add(d);
   const food = buildFoodIntelligence({ itinerary, profile, categoryByPlace, categoryByItem, remoteDayHints });
-  const remoteBaseIds = new Set(lodging.bases.filter((b) => b.dayNumbers.some((d) => food.remoteDayNumbers.includes(d))).map((b) => b.baseId));
+  /*
+   * PRODUCTION LOCK V5 §26 — A BASE IS REMOTE, OR IT IS NOT. A DAY TRIP DOES NOT MAKE IT SO.
+   *
+   * This used to mark a base remote when ANY day spent there was remote, and a
+   * live Hong Kong build showed what that produces: one hiking day on Dragon's
+   * Back made day 5 "remote", the trip's only base inherited it, and the
+   * traveller was told to book early because
+   *
+   *   "Sheung Wan / Central, Hong Kong Island — a remote base with few beds"
+   *
+   * about one of the densest hotel markets on earth. That is the "Bishkek is a
+   * remote base" defect in another city, and it is a factual falsehood in a
+   * section whose whole job is telling somebody what is scarce.
+   *
+   * Remoteness of a BASE is a property of where you sleep: the kind of place it
+   * is (a camp, hut, yurt, lodge, boat or homestay — `overnightIsExperiential`
+   * and the lodging styles that mirror it), or a base every one of whose days is
+   * remote, which is what a wilderness stay actually looks like. A city you
+   * return to each evening is not remote because one day left it.
+   */
+  const experientialStyles = new Set(['lodge', 'camp', 'hut', 'homestay', 'yurt', 'refuge', 'boat', 'tent']);
+  const draftBaseById = new Map((input.draft?.bases ?? []).map((base) => [base.id, base] as const));
+  const remoteBaseIds = new Set(
+    lodging.bases
+      .filter((b) => {
+        if (experientialStyles.has(b.style ?? '')) return true;
+        const draftBase = draftBaseById.get(b.baseId);
+        if (draftBase && overnightIsExperiential(draftBase.overnight as OvernightKind | undefined)) return true;
+        return b.dayNumbers.length > 0 && b.dayNumbers.every((d) => food.remoteDayNumbers.includes(d));
+      })
+      .map((b) => b.baseId),
+  );
   const remote = food.remoteDayNumbers.length > 0 || legModes.has('lodge_transfer') || legModes.has('guide_transfer') || legModes.has('four_wheel_drive');
   const strenuous = itinerary.days.some((d) => d.totals.strenuousCount > 0 || d.intensity === 'intense') || categories.includes('hike');
   const water = categories.some((c) => c === 'water' || c === 'beach') || legModes.has('boat') || legModes.has('ferry');
@@ -232,7 +309,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds });
   const guideDays = new Set(bookings.filter((b) => b.kind === 'tour_guide').map((b) => b.dayNumber)).size;
   const permitCount = bookings.filter((b) => b.kind === 'permit' || b.kind === 'park_entry').length;
-  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, legs, booked: input.booked, permitCount, guideDays, international, ...(input.fx ? { fx: input.fx } : {}), ...(input.displayCurrency ? { displayCurrency: input.displayCurrency } : {}) });
+  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(input.fx ? { fx: input.fx } : {}), ...(input.displayCurrency ? { displayCurrency: input.displayCurrency } : {}) });
 
   // Weather, access, safety, packing ------------------------------------------------------------------------
   const weather = buildWeatherIntelligence({ itinerary, categoryOf, packageBackups: pkg?.backups ?? [] });

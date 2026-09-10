@@ -172,11 +172,11 @@ export function setCheck(tripId: string, list: CheckList, itemId: string, checke
  * the same import graph as the composing model; the render path may not
  * reach anything that can call a provider. Only names and hints are read.
  */
-export function getDraftHints(tripId: string): { days: { anchors: { name: string; transport?: string }[] }[] } | null {
+export function getDraftHints(tripId: string): { days: { anchors: { name: string; transport?: string }[] }[]; bases: { id: string; overnight?: string }[]; driving?: string } | null {
   const row = getDb().prepare('SELECT draft_json FROM trip_drafts WHERE trip_id = ?').get(tripId) as { draft_json: string } | undefined;
   if (!row) return null;
   try {
-    const raw = JSON.parse(row.draft_json) as { days?: { anchors?: { name?: unknown; transport?: unknown }[] }[] };
+    const raw = JSON.parse(row.draft_json) as { days?: { anchors?: { name?: unknown; transport?: unknown }[] }[]; bases?: { id?: unknown; overnight?: unknown }[]; driving?: unknown };
     if (!Array.isArray(raw.days)) return null;
     return {
       days: raw.days.map((day) => ({
@@ -184,6 +184,16 @@ export function getDraftHints(tripId: string): { days: { anchors: { name: string
           .filter((a) => typeof a.name === 'string' && a.name.length > 0)
           .map((a) => ({ name: a.name as string, ...(typeof a.transport === 'string' ? { transport: a.transport } : {}) })),
       })),
+      /*
+       * PRODUCTION LOCK V5 §26 — the kind of place each base is, so remoteness
+       * is read from where the traveller sleeps rather than inferred from a day
+       * trip they took from it.
+       */
+      bases: (Array.isArray(raw.bases) ? raw.bases : [])
+        .filter((b) => typeof b.id === 'string' && b.id.length > 0)
+        .map((b) => ({ id: b.id as string, ...(typeof b.overnight === 'string' ? { overnight: b.overnight } : {}) })),
+      /* §18 — who is at the wheel, so nothing downstream infers a rental from a car. */
+      ...(typeof raw.driving === 'string' ? { driving: raw.driving } : {}),
     };
   } catch {
     return null;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { boardSignalsFor, compositionPreview, defaultProfileFor } from './production-plan';
 import type { CompositionContext } from './composition';
-import { buildHybridTripRequest } from './hybrid-request';
+import { testCompositionContext } from './testing/context';
 import type { Trip } from '@sidequest/core';
 
 /**
@@ -82,13 +82,11 @@ describe('defaultProfileFor', () => {
 
 describe('the composition call is told the traveller and the trip, never the POI universe', () => {
   it('carries preferences and signals and contains no coordinates, ids, hours or provenance', () => {
-    const request = buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-08-01T00:00:00Z') });
-    const context: CompositionContext = {
-      request,
+    const context: CompositionContext = testCompositionContext({
+      trip: TRIP,
       envelope: { name: 'Somewhere', countryCode: 'XX', scale: 'city', center: { lat: 10.12345, lng: 20.54321 } },
       boardSignals: { mustInclude: ['Place A'], interested: [], avoid: ['Place C'] },
-      mode: 'full',
-    };
+    });
     const preview = compositionPreview(context);
     const wire = JSON.stringify(preview);
     expect(preview.task).toContain('WHAT TO RETURN');
@@ -113,17 +111,16 @@ describe('the composition call is told the traveller and the trip, never the POI
  */
 describe('the destination the traveller typed', () => {
   it('reaches the composition task when the resolver landed somewhere else', () => {
-    const { task } = compositionPreview({
-      request: buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-08-01T00:00:00Z') }),
+    const { task } = compositionPreview(testCompositionContext({
+      trip: TRIP,
       envelope: { name: 'Fairbanks', qualifiedName: 'Fairbanks, Alaska', travellerPhrase: 'inland Alaska', center: { lat: 64.8, lng: -147.7 } },
-      mode: 'full',
-    });
+    }));
     expect(task).toContain('inland Alaska');
     expect(task).toMatch(/Plan the trip they described/);
   });
 
   it('is not repeated when it is the same place', () => {
-    const { task } = compositionPreview({ request: buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-08-01T00:00:00Z') }), envelope: { name: 'Hong Kong', center: { lat: 22.3, lng: 114.2 } }, mode: 'full' });
+    const { task } = compositionPreview(testCompositionContext({ trip: TRIP, envelope: { name: 'Hong Kong', center: { lat: 22.3, lng: 114.2 } } }));
     expect(task).not.toMatch(/The traveller wrote/);
   });
 });

@@ -2,15 +2,21 @@ import { z } from 'zod';
 import {
   ANCHOR_CATEGORIES,
   ANCHOR_ROLES,
+  CURRENT_TRIP_ARCHETYPES,
+  DRAFT_DRIVING_ARRANGEMENTS,
   DRAFT_SOFT_PROSE_CAPS,
   DRAFT_TRANSPORTS,
   TRIP_ARCHETYPES,
+  WIRE_TIME_OF_DAY,
   draftStructureIssues,
   normalizeTripDraft,
   tripDraftSchema,
   type AnchorCategory,
   type AnchorRole,
+  type DraftDrivingArrangement,
+  type DraftTimeOfDay,
   type DraftTransport,
+  type OvernightKind,
   type TripArchetype,
   type TripDraft,
 } from './trip-draft';
@@ -117,6 +123,8 @@ export const compactActivitySchema = z.object({
   mins: z.number().optional(),
   /** How the traveller reaches this one — only when it is not the day's default. */
   how: z.enum(DRAFT_TRANSPORTS).optional(),
+  /** §13 — the part of the day this belongs to. Only where it genuinely matters. */
+  when: z.enum(WIRE_TIME_OF_DAY as [string, ...string[]]).optional(),
   why: str(),
 });
 
@@ -125,11 +133,31 @@ export const compactStaySchema = z.object({
   name: str(),
   nights: z.number(),
   why: str(),
+  /**
+   * §10/§11 — the character of the place, in the model's own words: "yurt camp
+   * above the lake", "mountain refuge", "sleeper train", "guesthouse in the old
+   * quarter".
+   *
+   * The typed `OvernightKind` the rest of the product reasons in is read from
+   * this line rather than asked for as a second field. Not a shortcut: the model
+   * writes the character line naturally and an enum beside it is 214 bytes of
+   * wire schema restating what the sentence already says — the same
+   * representational compression the rest of this schema is built on. The
+   * canonical draft still carries the typed value, and `overnightFromText` only
+   * ever matches an explicit word, so nothing is inferred from a destination,
+   * a budget or an archetype.
+   */
   lodging: str().optional(),
 });
 
 /** Meal intent where a meal is a decision, not three fields on every day. */
-export const compactMealsSchema = z.object({ b: str().optional(), l: str().optional(), d: str().optional() });
+export const compactMealsSchema = z.object({
+  b: str().optional(),
+  l: str().optional(),
+  d: str().optional(),
+  /** §22 — the neighbourhood, market or quarter the day's food sits in. */
+  area: str().optional(),
+});
 
 export const compactDaySchema = z.object({
   /** The stay's name, verbatim. The day number is this day's position. */
@@ -139,21 +167,46 @@ export const compactDaySchema = z.object({
   meals: compactMealsSchema.optional(),
   /** One sentence: why this day, for this traveller. */
   why: str().optional(),
+  /** §10 — the multi-day experience this day is one day of, by name. */
+  partOf: str().optional(),
 });
 
 export const compactTripDraftWireSchema = z.object({
-  archetype: z.enum(TRIP_ARCHETYPES),
+  archetype: z.enum(CURRENT_TRIP_ARCHETYPES as [string, ...string[]]),
   purpose: str(),
   routeRationale: str(),
+  /** §9 — the one to three experiences this trip is built around, by name. */
+  signatures: z.array(str()).optional(),
+  /** §5/§6 — the window the model chose, only when the traveller asked it to choose. */
+  window: z.object({ start: str(), end: str() }).optional(),
   /** What this season opens and closes for this trip. */
   timingRationale: str().optional(),
   /** The strategy, in a sentence: who drives, what is hired, what is guided. */
   transportSummary: str(),
+  /** §14 — how road travel is arranged. `none` when nothing on wheels is the traveller's responsibility. */
+  driving: z.enum(DRAFT_DRIVING_ARRANGEMENTS).optional(),
+  /**
+   * §17 — WHAT TO BOOK FIRST, IN THE ORDER THE ITINERARY DEPENDS ON IT.
+   *
+   * The compact wire dropped this on the grounds that `deriveBookings` builds
+   * the booking rows from the plan, which is true and not the same thing.
+   * Sidequest can see that the trip contains a trek, a hut and a hotel; it
+   * cannot see that the hut has four beds, that the guide is booked out three
+   * months ahead, and that the hotel could be booked the night before. That
+   * ordering is travel judgement — exactly the thing this call is for — and
+   * without it "Book first" led with the ordinary city hotel and buried the one
+   * booking the whole trip stands on.
+   *
+   * Short name, few entries, one line each: the field earns its bytes by
+   * ordering, not by prose.
+   */
+  bookFirst: z.array(str()).optional(),
   stays: z.array(compactStaySchema),
   days: z.array(compactDaySchema),
   omissions: z.array(z.object({ name: str(), reason: str() })),
   tradeoffs: z.array(str()),
-  backups: z.array(z.object({ trigger: str(), alternative: str() })),
+  /** §25 — each backup names the day it is for, so it can be checked for reachability. */
+  backups: z.array(z.object({ trigger: str(), alternative: str(), day: z.number().optional() })),
 });
 export type CompactTripDraftWire = z.infer<typeof compactTripDraftWireSchema>;
 
@@ -397,6 +450,56 @@ const CATEGORY_ALIASES: Record<string, AnchorCategory> = {
 const ROLE_ALIASES: Record<string, AnchorRole> = { core: 'core', main: 'core', must: 'core', must_do: 'core', must_see: 'core', essential: 'core', anchor: 'core', primary: 'core', key: 'core', secondary: 'secondary', side: 'secondary', supporting: 'secondary', optional: 'optional', maybe: 'optional', if_time: 'optional', nice_to_have: 'optional', flex: 'flex', flexible: 'flex', backup: 'flex', spare: 'flex', filler: 'flex' };
 const TRANSPORT_ALIASES: Record<string, DraftTransport> = { walk: 'walk', walking: 'walk', foot: 'walk', on_foot: 'walk', hike: 'walk', metro: 'metro', subway: 'metro', tube: 'metro', underground: 'metro', mtr: 'metro', tram: 'metro', rail: 'rail', train: 'rail', bus: 'bus', coach: 'bus', shuttle: 'bus', car: 'car', drive: 'car', driving: 'car', self_drive: 'car', rental_car: 'car', taxi: 'car', rideshare: 'car', uber: 'car', ferry: 'ferry', boat: 'boat', cruise: 'boat', kayak: 'boat', flight: 'flight', fly: 'flight', plane: 'flight', air: 'flight', private_transfer: 'private_transfer', transfer: 'private_transfer', driver: 'private_transfer', private_driver: 'private_transfer', four_wheel_drive: 'four_wheel_drive', '4x4': 'four_wheel_drive', '4wd': 'four_wheel_drive', jeep: 'four_wheel_drive', game_vehicle: 'four_wheel_drive', horse: 'horse', horseback: 'horse', riding: 'horse', pony: 'horse', horse_trek: 'horse', guide_or_lodge_transfer: 'guide_or_lodge_transfer', guide: 'guide_or_lodge_transfer', guided: 'guide_or_lodge_transfer', lodge_transfer: 'guide_or_lodge_transfer', lodge: 'guide_or_lodge_transfer', tour: 'guide_or_lodge_transfer', unknown: 'unknown' };
 const INTENSITY_ALIASES: Record<string, 'light' | 'moderate' | 'intense'> = { light: 'light', easy: 'light', low: 'light', relaxed: 'light', gentle: 'light', rest: 'light', moderate: 'moderate', medium: 'moderate', balanced: 'moderate', normal: 'moderate', intense: 'intense', hard: 'intense', high: 'intense', strenuous: 'intense', full: 'intense', big: 'intense' };
+const TIME_OF_DAY_ALIASES: Record<string, DraftTimeOfDay> = { sunrise: 'sunrise', dawn: 'sunrise', first_light: 'sunrise', early: 'sunrise', morning: 'morning', am: 'morning', midday: 'midday', noon: 'midday', lunchtime: 'midday', afternoon: 'afternoon', pm: 'afternoon', sunset: 'sunset', dusk: 'sunset', golden_hour: 'sunset', evening: 'evening', dinner: 'evening', night: 'night', late: 'night', after_dark: 'night', nighttime: 'night', any: 'any', anytime: 'any', flexible: 'any' };
+
+const DRIVING_ALIASES: Record<string, DraftDrivingArrangement> = {
+  rental_self_drive: 'rental_self_drive', rental: 'rental_self_drive', hire_car: 'rental_self_drive', self_drive: 'rental_self_drive', rental_car: 'rental_self_drive', drive_yourself: 'rental_self_drive',
+  owned_self_drive: 'owned_self_drive', own_car: 'owned_self_drive', own_vehicle: 'owned_self_drive',
+  private_driver: 'private_driver', driver: 'private_driver', chauffeur: 'private_driver', car_and_driver: 'private_driver', private_transfer: 'private_driver',
+  taxi_rideshare: 'taxi_rideshare', taxi: 'taxi_rideshare', rideshare: 'taxi_rideshare', uber: 'taxi_rideshare',
+  operator_transfer: 'operator_transfer', operator: 'operator_transfer', lodge_transfer: 'operator_transfer', guided_transfer: 'operator_transfer', guide: 'operator_transfer', tour_operator: 'operator_transfer',
+  none: 'none', no_car: 'none', public_transit: 'none', transit: 'none', walking: 'none',
+};
+
+const OVERNIGHT_ALIASES: Record<string, OvernightKind> = {
+  hotel: 'hotel', hostel: 'hostel', guesthouse: 'guesthouse', guest_house: 'guesthouse', pension: 'guesthouse', bnb: 'guesthouse', b_and_b: 'guesthouse',
+  homestay: 'homestay', family_stay: 'homestay', apartment: 'apartment', flat: 'apartment', self_catering: 'apartment',
+  camp: 'camp', campsite: 'camp', tented_camp: 'camp', tent: 'tent', camping: 'tent', wild_camp: 'tent',
+  hut: 'hut', mountain_hut: 'hut', bothy: 'hut', refuge: 'refuge', refugio: 'refuge', rifugio: 'refuge',
+  yurt: 'yurt', ger: 'yurt', lodge: 'lodge', safari_lodge: 'lodge', eco_lodge: 'lodge',
+  boat: 'boat', liveaboard: 'boat', houseboat: 'boat', dahabiya: 'boat', train: 'train', sleeper: 'train', sleeper_train: 'train',
+  overnight_transfer: 'overnight_transfer', night_bus: 'overnight_transfer', red_eye: 'overnight_transfer', overnight_ferry: 'overnight_transfer', other: 'other',
+};
+
+/**
+ * The overnight kind a lodging line already names, when the enum was left out.
+ *
+ * Word-boundary matched against the traveller-facing character line the model
+ * wrote anyway ("yurt camp above the lake", "mountain refuge"). Only an
+ * explicit word sets a kind — nothing is inferred from a destination, a budget
+ * or an archetype, because that is how a hotel becomes a tent.
+ */
+const OVERNIGHT_TEXT_HINTS: readonly (readonly [RegExp, OvernightKind])[] = [
+  [/\byurts?\b|\bgers?\b/i, 'yurt'],
+  [/\brefug(?:e|io)s?\b/i, 'refuge'],
+  [/\b(?:mountain )?huts?\b|\bbothy\b/i, 'hut'],
+  [/\btented camps?\b|\bcamps?\b/i, 'camp'],
+  [/\btents?\b|\bcamping\b/i, 'tent'],
+  [/\blodges?\b/i, 'lodge'],
+  [/\bhomestays?\b/i, 'homestay'],
+  [/\bsleeper (?:train|car)\b|\bnight train\b/i, 'train'],
+  [/\bliveaboard\b|\bhouseboats?\b|\bon board\b/i, 'boat'],
+  [/\bhostels?\b/i, 'hostel'],
+  [/\bguest ?houses?\b|\bpensions?\b/i, 'guesthouse'],
+  [/\bapartments?\b|\bself[- ]catering\b/i, 'apartment'],
+  [/\bhotels?\b/i, 'hotel'],
+];
+
+function overnightFromText(text: string): OvernightKind | undefined {
+  for (const [pattern, kind] of OVERNIGHT_TEXT_HINTS) if (pattern.test(text)) return kind;
+  return undefined;
+}
+
 const ARCHETYPE_ALIASES: Record<string, TripArchetype> = Object.fromEntries([
   ...TRIP_ARCHETYPES.map((a) => [a, a] as const),
   ['single_base', 'single_base'], ['one_base', 'single_base_urban'], ['city_break', 'single_base_urban'], ['urban', 'single_base_urban'], ['hub', 'hub_and_spoke'], ['hub_spoke', 'hub_and_spoke'], ['roadtrip', 'road_trip'], ['road', 'road_trip'], ['driving', 'road_trip'], ['self_drive', 'road_trip'], ['rail', 'rail_route'], ['train', 'rail_route'], ['islands', 'island_hopping'], ['island', 'island_hopping'], ['safari', 'lodge_circuit'], ['lodge', 'lodge_circuit'], ['circuit', 'lodge_circuit'], ['remote', 'guided_remote'], ['guided', 'guided_remote'], ['wilderness', 'wilderness_gateway'], ['multi_country', 'multi_region'], ['regions', 'multi_region'], ['loop', 'loop'], ['moving_route', 'moving_route'], ['mixed', 'mixed'],
@@ -596,7 +699,18 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     const lodgingArea = capped(stay.lodgingArea ?? stay.area, DRAFT_SOFT_PROSE_CAPS.lodgingArea, `stays[${index}].lodgingArea`, touched);
     const lodgingStyle = capped(stay.lodgingStyle ?? stay.style ?? stay.lodging, DRAFT_SOFT_PROSE_CAPS.lodgingStyle, `stays[${index}].lodgingStyle`, touched);
     /* The compact wire carries one `lodging` string; the long wire split area from style. */
-    bases.push({ id, name: name.slice(0, 100), nights: Math.round(nights), why, ...(locality ? { locality: locality.slice(0, 40) } : {}), ...(lodgingArea ? { lodgingArea } : {}), ...(lodgingStyle ? { lodgingStyle } : {}) });
+    const overnight = mapEnum(stay.overnight ?? stay.overnightKind ?? stay.stayKind, OVERNIGHT_ALIASES, null);
+    if (overnight.mapped) touched.push(`stays[${index}].overnight (${String(stay.overnight ?? '')} → ${overnight.value})`);
+    /*
+     * §10 — the kind of overnight, read from the `lodging` character line when
+     * the model did not name one. A "yurt camp" is a yurt whether or not the
+     * enum was filled in, and reading the words the model already wrote is
+     * cheaper than a second field on every row. Never a guess: only an explicit
+     * word in the traveller-facing text sets the kind.
+     */
+    const inferredOvernight = overnight.value ?? overnightFromText(lodgingStyle ?? lodgingArea ?? '');
+    if (!overnight.value && inferredOvernight) touched.push(`stays[${index}].overnight (absent → ${inferredOvernight} from the lodging text)`);
+    bases.push({ id, name: name.slice(0, 100), nights: Math.round(nights), why, ...(locality ? { locality: locality.slice(0, 40) } : {}), ...(lodgingArea ? { lodgingArea } : {}), ...(lodgingStyle ? { lodgingStyle } : {}), ...(inferredOvernight ? { overnight: inferredOvernight } : {}) });
   });
   if (bases.length === 0) issues.push({ path: 'stays', code: 'empty', message: 'the draft names no stay', expected: 'at least one stay', received: '0' });
 
@@ -693,6 +807,9 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
       const clamped = minutes === undefined ? undefined : Math.min(600, Math.max(10, Math.round(minutes)));
       if (minutes !== undefined && clamped !== Math.round(minutes)) touched.push(`days[${index}].activities[${activityIndex}].minutes (${minutes} clamped to ${clamped})`);
       const locality = sanitizeProse(activity.locality ?? activity.area ?? activity.near);
+      const whenRaw = activity.when ?? activity.timeOfDay ?? activity.time;
+      const when = whenRaw === null || whenRaw === undefined || whenRaw === '' ? { value: null, mapped: false } : mapEnum(whenRaw, TIME_OF_DAY_ALIASES, 'any');
+      if (when.mapped) touched.push(`days[${index}].activities[${activityIndex}].when (${String(whenRaw)} → ${when.value})`);
       anchors.push({
         name: name.slice(0, 60),
         ...(locality ? { locality: locality.slice(0, 40) } : {}),
@@ -700,6 +817,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
         role: role.value ?? 'secondary',
         ...(clamped !== undefined ? { estimatedDurationMinutes: clamped } : {}),
         ...(transport.value ? { transport: transport.value } : {}),
+        ...(when.value && when.value !== 'any' ? { timeOfDay: when.value } : {}),
         why: capped(activity.why ?? activity.rationale ?? activity.reason, DRAFT_SOFT_PROSE_CAPS.anchorWhy, `days[${index}].activities[${activityIndex}].why`, touched) ?? '',
       });
     });
@@ -712,6 +830,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     const breakfast = capped(day.breakfast ?? mealsObject?.breakfast ?? mealsObject?.b, DRAFT_SOFT_PROSE_CAPS.meal, `days[${index}].breakfast`, touched);
     const lunch = capped(day.lunch ?? mealsObject?.lunch ?? mealsObject?.l, DRAFT_SOFT_PROSE_CAPS.meal, `days[${index}].lunch`, touched);
     const dinner = capped(day.dinner ?? mealsObject?.dinner ?? mealsObject?.d, DRAFT_SOFT_PROSE_CAPS.meal, `days[${index}].dinner`, touched);
+    const mealArea = capped(mealsObject?.area ?? day.foodArea, DRAFT_SOFT_PROSE_CAPS.lodgingArea, `days[${index}].meals.area`, touched);
     /*
      * RELOCATION IS THE STAY CHANGING.
      *
@@ -731,6 +850,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     const note = capped(day.note ?? day.practicalNote ?? day.practical, DRAFT_SOFT_PROSE_CAPS.dayNote, `days[${index}].note`, touched);
     /* One rationale per day on the compact wire; `note` and `whyItFits` on the long one. */
     const whyItFits = capped(day.whyItFits ?? day.travelerFit ?? day.fit ?? day.why, DRAFT_SOFT_PROSE_CAPS.whyItFits, `days[${index}].why`, touched);
+    const partOf = capped(day.partOf ?? day.experience ?? day.multiDay, 60, `days[${index}].partOf`, touched);
     days.push({
       dayNumber: index + 1,
       baseId,
@@ -738,9 +858,10 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
       intensity: intensity.value ?? 'moderate',
       ...(relocation ? { relocation: true } : {}),
       anchors,
-      ...(breakfast || lunch || dinner ? { meals: { ...(breakfast ? { breakfast } : {}), ...(lunch ? { lunch } : {}), ...(dinner ? { dinner } : {}) } } : {}),
+      ...(breakfast || lunch || dinner || mealArea ? { meals: { ...(breakfast ? { breakfast } : {}), ...(lunch ? { lunch } : {}), ...(dinner ? { dinner } : {}), ...(mealArea ? { area: mealArea } : {}) } } : {}),
       ...(note ? { note } : {}),
       ...(whyItFits ? { whyItFits } : {}),
+      ...(partOf ? { partOf } : {}),
     });
   });
 
@@ -783,6 +904,31 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
       .slice(0, 8),
     unresolved: stringList(root.unresolved, 'unresolved', touched, DRAFT_SOFT_PROSE_CAPS.unresolvedItem).slice(0, 8),
     bookingPriorities: stringList(root.bookingPriorities ?? root.bookFirst, 'bookingPriorities', touched, DRAFT_SOFT_PROSE_CAPS.bookingPriority).slice(0, 8),
+    ...(() => {
+      const signatures = stringList(root.signatures ?? root.signatureExperiences, 'signatures', touched, 60).slice(0, 3);
+      return signatures.length > 0 ? { signatures } : {};
+    })(),
+    ...(() => {
+      const window = record(root.window ?? root.recommendedWindow);
+      const start = sanitizeProse(window?.start ?? window?.startDate);
+      const end = sanitizeProse(window?.end ?? window?.endDate);
+      const iso = /^\d{4}-\d{2}-\d{2}$/;
+      if (!start || !end) return {};
+      if (!iso.test(start) || !iso.test(end)) {
+        touched.push(`window (${start}..${end} is not two ISO dates, dropped)`);
+        return {};
+      }
+      if (end < start) {
+        touched.push(`window (${start}..${end} ends before it starts, dropped)`);
+        return {};
+      }
+      return { window: { startDate: start, endDate: end } };
+    })(),
+    ...(() => {
+      const driving = mapEnum(root.driving ?? root.drivingArrangement, DRIVING_ALIASES, null);
+      if (driving.mapped) touched.push(`driving (${String(root.driving ?? '')} → ${driving.value})`);
+      return driving.value ? { driving: driving.value } : {};
+    })(),
     package: {
       foodStrategy: stringList(root.foodStrategy ?? pkg?.foodStrategy, 'foodStrategy', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy).slice(0, 6),
       transport: {
@@ -796,9 +942,12 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
           const backup = record(entry);
           const trigger = capped(backup?.trigger ?? backup?.if, DRAFT_SOFT_PROSE_CAPS.backupTrigger, 'backups[].trigger', touched);
           const alternative = capped(backup?.alternative ?? backup?.then ?? backup?.plan, DRAFT_SOFT_PROSE_CAPS.backupAlternative, 'backups[].alternative', touched);
-          return trigger && alternative ? { trigger, alternative } : null;
+          const backupDay = toNumber(backup?.day ?? backup?.dayNumber);
+          const scoped = backupDay !== undefined && backupDay >= 1 && backupDay <= days.length ? Math.round(backupDay) : undefined;
+          if (backupDay !== undefined && scoped === undefined) touched.push(`backups[].day (${backupDay} is outside days 1..${days.length}, dropped)`);
+          return trigger && alternative ? { trigger, alternative, ...(scoped !== undefined ? { day: scoped } : {}) } : null;
         })
-        .filter((entry): entry is { trigger: string; alternative: string } => entry !== null)
+        .filter((entry): entry is { trigger: string; alternative: string; day?: number } => entry !== null)
         .slice(0, 6),
     },
   };

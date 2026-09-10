@@ -234,8 +234,18 @@ describe('a Phase 12 database upgraded to Phase 13', () => {
     const addedToTrips = Object.keys(tripAfter).filter(
       (column) => !(column in (tripBefore as Record<string, unknown>)),
     );
-    expect(addedToTrips).toEqual(['owner_token', 'share_token']);
+    expect(addedToTrips.sort()).toEqual(['arrival_precision', 'departure_precision', 'owner_token', 'share_token']);
     expect(tripAfter.owner_token).toBeNull();
+    /*
+     * PRODUCTION LOCK V5 §7 — the edge precisions arrive null, and that is the
+     * only honest default. A trip written before this column existed holds two
+     * clock times that may well have been invented (`15:00` and `11:00` were the
+     * product's own placeholders), and nothing recoverable says which. Null
+     * reads as "unknown", which makes those times unprintable rather than
+     * silently promoting a placeholder to a fact about somebody's flight.
+     */
+    expect(tripAfter.arrival_precision).toBeNull();
+    expect(tripAfter.departure_precision).toBeNull();
     /*
      * Null is `share_token`'s default too, and just as load-bearing: null means
      * "never shared", so a legacy trip acquires no public link until its owner

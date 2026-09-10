@@ -42,6 +42,7 @@ import { PackingChecklist } from './PackingChecklist';
 import type { MapConnector, MapMarker } from './InteractiveMap';
 import { dayMapModel } from './day-map-legs';
 import type { MapBasemap } from './map-adapter';
+import { plannedOffByDay } from '../lib/planning/planned-off';
 import { formatMinutes } from '@/lib/format';
 import { dayRouteLinks, mapModeFor } from '@/lib/maps';
 import { PrintButton } from './PrintButton';
@@ -450,6 +451,8 @@ export function ItineraryView({
     if (anchor.placeId) anchorRoles[anchor.placeId] = anchor.role;
   }
   for (const anchor of itinerary.package?.anchors ?? []) verificationByItemId[anchor.id] = anchor.verification;
+  /* What each day was for, when the day ended up empty (`planned-off.ts`). */
+  const plannedOffByDayNumber = plannedOffByDay(itinerary);
   /* PRODUCTION UI V1 — what kind of thing each stop is; only a named place is ever called "not verified". */
   const anchorKinds: Record<string, AnchorKind> = {};
   for (const anchor of itinerary.package?.anchors ?? []) if (anchor.anchorKind) anchorKinds[anchor.id] = anchor.anchorKind;
@@ -515,6 +518,7 @@ export function ItineraryView({
                     tiles={tiles}
                     dayCount={itinerary.days.length}
                     anchorRoles={anchorRoles}
+                    plannedOff={plannedOffByDayNumber[day.dayNumber] ?? []}
                   />
                 </DayFocusTarget>
               </li>
@@ -709,11 +713,23 @@ export function ItineraryView({
         <KeepFlexible itinerary={itinerary} />
       </section>
       {intelligence ? <CritiquePanel intel={intelligence} /> : null}
+      {/*
+        * PRODUCTION LOCK V5 §27 — CONFIDENCE IS RENDERED ONCE.
+        *
+        * A standalone `TripConfidence` used to sit directly above
+        * `VerifySection`, which renders its own. Both printed, fifteen lines
+        * apart, with different numbers — "0 / 13" here and "0 / 0" there,
+        * because the second was passed no package. Two counts of the same thing
+        * is worse than either count alone: a reader cannot tell which is real.
+        *
+        * `VerifySection` is the one place now, and it is given the package.
+        * Where there is no intelligence yet there is nothing to be confident
+        * about, so nothing renders — which is also why the bare
+        * `TripConfidence` had no reason to exist.
+        */}
       <section className="mt-14 rule-strong pt-5" aria-labelledby="verify" data-testid="hub-verify-section">
-        <div id="verify" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]">
-          <TripConfidence pkg={itinerary.package} intel={intelligence} compact />
-        </div>
-        {intelligence ? <VerifySection intel={intelligence} manifest={recheck} /> : null}
+        <div id="verify" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
+        {intelligence ? <VerifySection intel={intelligence} manifest={recheck} pkg={itinerary.package} /> : <TripConfidence pkg={itinerary.package} intel={null} compact />}
       </section>
       {/* EXPERIENCE V2 — everything evaluative or archival is one disclosure, never eight open sections. */}
       <details className="mt-10 rule-top pt-4" data-testid="prepare-notes-disclosure" data-print="open">
@@ -779,7 +795,21 @@ export function ItineraryView({
     </div>
   );
 
-  const titleNode = multiBase && destinationName ? destinationName : <PlaceName entity={baseEntity} />;
+  /*
+   * PRODUCTION LOCK V5 §31 — THE HERO NAMES THE DESTINATION, NOT THE BED.
+   *
+   * A live Hong Kong build titled the finished trip "Sheung Wan / Central, Hong
+   * Kong Island", because a single-base trip used its base as the headline. That
+   * is where the traveller sleeps; it is not where they are going, and it is not
+   * what they typed. Nobody tells a friend they are going to Sheung Wan.
+   *
+   * So the destination leads whenever there is one, single-base or not, and the
+   * base moves to the subline where it already lives ("Based in …"). The base is
+   * still the title for a trip with no destination name at all — a shared plan,
+   * or a row from before the destination was recorded — because a heading has to
+   * say something.
+   */
+  const titleNode = destinationName ? destinationName : <PlaceName entity={baseEntity} />;
   const eyebrow = (
     <>
       {tripId ? null : <>Shared with you · </>}
@@ -1617,6 +1647,7 @@ function DayCard({
   dayCount = 1,
   anchorRoles = {},
   anchorKinds = {},
+  plannedOff = [],
 }: {
   day: ItineraryDay;
   renderedAt: number;
@@ -1624,6 +1655,8 @@ function DayCard({
   tiles?: MapBasemap | null;
   /** PRODUCTION UI V1 — what kind of thing each stop is; only a named place carries a verification chip. */
   anchorKinds?: Record<string, AnchorKind>;
+  /** What the plan wanted on THIS day and could not schedule, with the reason. See `plannedOffByDay`. */
+  plannedOff?: readonly { name: string; reason: string }[];
   /** LIVE WORLD V1 — how many days the plan has, for "move to day". */
   dayCount?: number;
   /** LIVE WORLD V1 — package roles by item/place id, for must-keep/optional. */
@@ -1950,11 +1983,39 @@ function DayCard({
           different fact and deserves a different sentence, and the one thing it
           must not do is claim to be something it is not.
         */
-        <p className="p-5 text-sm text-ink-muted">
-          {isFirst || isLast
-            ? 'Nothing scheduled. On an arrival or departure day that is usually the honest answer.'
-            : 'Nothing scheduled, and this is not an arrival or departure day. Everything you picked fitted better on another day or could not be reached on this one — the hours are yours. What was left off, and why, is at the foot of this plan.'}
-        </p>
+        <div className="p-5 text-sm text-ink-muted">
+          <p>
+            {isFirst || isLast
+              ? 'Nothing scheduled. On an arrival or departure day that is usually the honest answer.'
+              : 'Nothing scheduled, and this is not an arrival or departure day. Everything you picked fitted better on another day or could not be reached on this one — the hours are yours. What was left off, and why, is at the foot of this plan.'}
+          </p>
+          {plannedOff.length > 0 ? (
+            /*
+              THE DAY'S OWN HEADING MUST NOT PROMISE WHAT THE DAY DOES NOT HOLD.
+
+              A day theme is the plan's own prose, so a day themed "Departure
+              drive" or "Scenic return via Burana Tower" that then reads "Nothing
+              scheduled" tells the traveller two different things and resolves
+              neither. The reasons were already recorded and already printed — at
+              the foot of the plan, pages away from the day they are about.
+
+              So the day says it here, on the card that raised the question. This
+              is disclosure, not a fix: the underlying gap is that a departure day
+              with no confirmed departure time cannot place a long transfer, and
+              that is recorded as its own defect.
+            */
+            <div className="mt-3">
+              <p className="text-ink">What this day was for, and why it is not here:</p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {plannedOff.map((entry) => (
+                  <li key={entry.name}>
+                    <span className="text-ink">{entry.name}</span> — {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <ol className="divide-y divide-rule">
           {day.items.map((item) => (

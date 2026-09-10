@@ -291,10 +291,23 @@ export function normalizeAnswers(
     next.decideForMe = QUESTIONNAIRE_STEPS.filter((step) => handed.has(step));
   }
   next.dietaryNeeds = [...new Set(next.dietaryNeeds)].sort();
-  // "These are strict" is a statement about a list. With nothing in the list it
-  // is a stray boolean that would make every meal carry a verification note
-  // about needs nobody has.
-  if (next.dietaryNeeds.length === 0) next.dietaryStrict = false;
+  /*
+   * "These are strict" is a statement about a REQUIREMENT — and a requirement is
+   * a ticked need *or* a sentence the traveller wrote.
+   *
+   * PRODUCTION LOCK V5 §4. This used to clear the flag whenever the tick-list
+   * was empty, which silently disagreed with the two places that own the
+   * question: the interview catalog sets strictness from `needs.length > 0 ||
+   * notes.length > 0` (`interview/catalog.ts`), and `interview/dietary.test.ts`
+   * asserts in as many words that free text alone may be a requirement. So
+   * somebody whose whole diet is "Severe peanut allergy — cross-contamination
+   * matters", with nothing tickable, had their "I cannot" quietly downgraded to
+   * "I would rather" one function after stating it.
+   *
+   * With neither a need nor a note it is still a stray boolean, and still
+   * cleared: that is the case the original comment was about.
+   */
+  if (next.dietaryNeeds.length === 0 && (next.dietaryNotes ?? '').trim().length === 0) next.dietaryStrict = false;
   if (!isQuestionVisible('specialMealAppetite', { answers: next, context })) {
     next.specialMealAppetite = 'none';
   }

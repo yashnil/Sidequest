@@ -51,10 +51,11 @@ function categoryFor(kind: string | undefined): AnchorCategory {
 }
 
 export function fixtureDraftFor(context: CompositionContext, hints: FixtureComposerHints): TripDraft {
-  const { request, envelope } = context;
-  const nights = request.dates.nights;
-  const dayCount = nights + 1;
-  const desiredBases = Math.max(1, Math.min(request.movement.desiredBaseCount, Math.max(1, hints.baseNames.length), Math.max(1, Math.floor(nights / 2)) || 1));
+  const { envelope, brief } = context;
+  const facts = context.planningFacts ?? { carAvailable: true, desiredBaseCount: 1, budgetBand: 'midrange' };
+  const nights = brief.tripFacts.nights;
+  const dayCount = brief.tripFacts.days;
+  const desiredBases = Math.max(1, Math.min(facts.desiredBaseCount, Math.max(1, hints.baseNames.length), Math.max(1, Math.floor(nights / 2)) || 1));
   const baseNames = hints.baseNames.length > 0 ? hints.baseNames.slice(0, desiredBases) : [envelope.name];
   const bases = baseNames.map((name, i) => {
     const share = Math.floor(nights / baseNames.length) + (i < nights % baseNames.length ? 1 : 0);
@@ -64,7 +65,7 @@ export function fixtureDraftFor(context: CompositionContext, hints: FixtureCompo
       nights: share,
       why: i === 0 ? `The natural gateway for ${envelope.name}, with the widest choice of lodging.` : `Puts the later days within easy reach instead of a long drive back.`,
       lodgingArea: i === 0 ? 'central, walkable to dinner' : 'near the main road out',
-      lodgingStyle: request.practicalities.budget === 'budget' ? 'guesthouse or hostel' : 'mid-range hotel or guesthouse',
+      lodgingStyle: facts.budgetBand === 'budget' ? 'guesthouse or hostel' : 'mid-range hotel or guesthouse',
     };
   });
 
@@ -103,7 +104,7 @@ export function fixtureDraftFor(context: CompositionContext, hints: FixtureCompo
           // the composition instruction asks the real model for the same.
           role: wanted.has(place.name.toLowerCase()) ? 'core' : i === 0 ? 'core' : i === 1 ? 'secondary' : 'optional',
           estimatedDurationMinutes: i === 0 ? 120 : 75,
-          transport: request.movement.carAvailable ? 'car' : 'walk',
+          transport: facts.carAvailable ? 'car' : 'walk',
           why: i === 0 ? `Anchors the day; a strong match for what you said you enjoy.` : `Close to the day's anchor, worth it if the timing works.`,
         });
       } else {
@@ -164,7 +165,7 @@ export function fixtureDraftFor(context: CompositionContext, hints: FixtureCompo
     package: {
       foodStrategy: ['Breakfast at your lodging, a quick lunch near the day’s stops, one relaxed dinner near base each evening.', 'Carry snacks and water on outdoor days.'],
       transport: {
-        summary: request.movement.carAvailable ? 'A hire car, picked up on arrival and returned on the last day.' : 'On foot and by local transport; no car needed.',
+        summary: facts.carAvailable ? 'A hire car, picked up on arrival and returned on the last day.' : 'On foot and by local transport; no car needed.',
         notes: ['Book transport for the first and last day in advance.', 'Allow extra time on relocation days.'],
       },
       beforeYouGo: ['Verify official entry requirements for your nationality.', 'Book your lodging at each base.', 'Check opening hours for any museum or timed attraction.'],

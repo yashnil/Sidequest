@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { COMPOSITION_MAX_TOKENS, COMPOSITION_TIMEOUT_MS, buildCompositionTask, compositionEffort, compositionUntrustedPayload, type CompositionContext } from './composition';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type TripDraft } from './trip-draft';
-import { buildHybridTripRequest } from './hybrid-request';
-import { DEFAULT_PRODUCT_BUDGET_MS, defaultProfileFor, draftFirstBudget, verificationDeadlineMs } from './production-plan';
+import { testCompositionContext } from './testing/context';
+import { DEFAULT_PRODUCT_BUDGET_MS, draftFirstBudget, verificationDeadlineMs } from './production-plan';
 import { composerModel } from '../benchmark/baseline/generate';
 import type { Trip } from '@sidequest/core';
 
@@ -171,8 +171,7 @@ describe('composition budget', () => {
   });
 
   it('the task is compact: a full brief for a two-week trip stays under ~2,500 tokens of input', () => {
-    const request = buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-06-01T00:00:00Z') });
-    const context: CompositionContext = { request, envelope: { name: 'Anywhere', center: { lat: 1, lng: 2 } }, mode: 'full' };
+    const context: CompositionContext = testCompositionContext({ trip: TRIP, envelope: { name: 'Anywhere', center: { lat: 1, lng: 2 } }, now: new Date('2026-06-01T00:00:00Z') });
     const input = buildCompositionTask(context) + JSON.stringify(compositionUntrustedPayload(context));
     expect(input.length * TOKENS_PER_BYTE).toBeLessThan(2_500);
   });

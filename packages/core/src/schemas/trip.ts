@@ -27,6 +27,53 @@ export const TRAVELER_NEED_LABELS: Record<TravelerNeed, string> = {
   altitude_sensitive: 'Someone sensitive to altitude',
 };
 
+/**
+ * HOW WELL AN ARRIVAL OR DEPARTURE IS KNOWN.
+ *
+ * The same six values the composer already models (`ARRIVAL_PRECISIONS`),
+ * declared here so the trip row can carry one without `schemas/trip.ts`
+ * depending on `schemas/composer.ts`. `edge-truth.test.ts` asserts the two
+ * lists never drift.
+ */
+export const EDGE_PRECISIONS = ['exact', 'morning', 'afternoon', 'evening', 'unknown', 'not_booked'] as const;
+export const edgePrecisionSchema = z.enum(EDGE_PRECISIONS);
+export type EdgePrecision = z.infer<typeof edgePrecisionSchema>;
+
+/**
+ * THE ONE TEST A SURFACE MAY USE BEFORE PRINTING A CLOCK TIME FOR AN EDGE.
+ *
+ * True only when the traveller gave an exact time. An absent precision is a
+ * trip stored before the field existed and reads as unknown, so an old row
+ * stops asserting a time it never had.
+ */
+export function edgeIsStatable(precision: EdgePrecision | undefined): boolean {
+  return precision === 'exact';
+}
+
+/**
+ * What a surface may say about an edge, at the precision that is actually known.
+ *
+ * Always safe to print. `time` is passed separately rather than read from the
+ * trip so that a caller cannot accidentally hand this the allowance and get it
+ * back as a fact: it is used only when `precision` is `exact`.
+ */
+export function describeEdgeTime(precision: EdgePrecision | undefined, time: string): string {
+  switch (precision) {
+    case 'exact':
+      return `at ${time}`;
+    case 'morning':
+      return 'in the morning';
+    case 'afternoon':
+      return 'in the afternoon';
+    case 'evening':
+      return 'in the evening or later';
+    case 'not_booked':
+      return 'not booked yet';
+    default:
+      return 'time not set yet';
+  }
+}
+
 export const MAX_TRIP_NIGHTS = 30;
 
 export const tripBasicsSchema = z
@@ -55,8 +102,33 @@ export const tripBasicsSchema = z
     regionId: z.string().min(1),
     startDate: isoDateSchema,
     endDate: isoDateSchema,
+    /**
+     * THE PLANNING ALLOWANCE, NOT A FACT ABOUT A FLIGHT.
+     *
+     * PRODUCTION LOCK V5 §7. These two fields are required, so a trip has
+     * always held two clock times — and when nobody knew the real ones, they
+     * held `15:00` and `11:00`, invented at trip creation. That would be
+     * defensible as an internal allowance and nothing more. It was not: three
+     * traveller-facing surfaces printed them as facts ("Arriving at 15:00, so
+     * the day starts after you have landed and settled", "Day 6 ends with your
+     * departure at 11:00", and the same figures in the quality audit).
+     *
+     * They keep their meaning — the minute planning may assume — and the
+     * precision beside them now says whether any surface may *print* one.
+     * `edgeIsStatable` is the only test any renderer should use.
+     */
     arrivalTime: isoTimeSchema,
     departureTime: isoTimeSchema,
+    /**
+     * How well the traveller actually knows each edge.
+     *
+     * Optional so every trip stored before this field parses; an absent value
+     * reads as `unknown`, which is the honest reading of a row written when the
+     * product had no way to record the difference — and which makes the times
+     * above unprintable rather than silently trusted.
+     */
+    arrivalPrecision: edgePrecisionSchema.optional(),
+    departurePrecision: edgePrecisionSchema.optional(),
     adults: z.number().int().min(1).max(12),
     children: z.number().int().min(0).max(12),
     travelerNeeds: z.array(travelerNeedSchema).default([]),

@@ -41,6 +41,9 @@ interface TripRow {
   end_date: string;
   arrival_time: string;
   departure_time: string;
+  /** §7 — null for a trip written before the product could record how well an edge was known. */
+  arrival_precision: string | null;
+  departure_precision: string | null;
   adults: number;
   children: number;
   traveler_needs: string;
@@ -79,6 +82,9 @@ function rowToTrip(row: TripRow): Trip {
       endDate: row.end_date,
       arrivalTime: row.arrival_time,
       departureTime: row.departure_time,
+      /* §7 — NULL reads as unknown, which makes the times above unprintable. */
+      ...(row.arrival_precision ? { arrivalPrecision: row.arrival_precision } : {}),
+      ...(row.departure_precision ? { departurePrecision: row.departure_precision } : {}),
       adults: row.adults,
       children: row.children,
       travelerNeeds: JSON.parse(row.traveler_needs),
@@ -94,10 +100,12 @@ export function createTrip(basics: TripBasics, ownerToken?: string | null): Trip
   getDb()
     .prepare(
       `INSERT INTO trips (id, mode, destination_input, region_id, start_date, end_date,
-         arrival_time, departure_time, adults, children, traveler_needs, status, created_at, updated_at,
+         arrival_time, departure_time, arrival_precision, departure_precision,
+         adults, children, traveler_needs, status, created_at, updated_at,
          owner_token)
        VALUES (@id, @mode, @destination_input, @region_id, @start_date, @end_date,
-         @arrival_time, @departure_time, @adults, @children, @traveler_needs, @status, @created_at, @updated_at,
+         @arrival_time, @departure_time, @arrival_precision, @departure_precision,
+         @adults, @children, @traveler_needs, @status, @created_at, @updated_at,
          @owner_token)`,
     )
     .run({
@@ -110,6 +118,8 @@ export function createTrip(basics: TripBasics, ownerToken?: string | null): Trip
       end_date: parsed.endDate,
       arrival_time: parsed.arrivalTime,
       departure_time: parsed.departureTime,
+      arrival_precision: parsed.arrivalPrecision ?? null,
+      departure_precision: parsed.departurePrecision ?? null,
       adults: parsed.adults,
       children: parsed.children,
       traveler_needs: JSON.stringify(parsed.travelerNeeds),
@@ -158,7 +168,8 @@ export function updateTripBasics(id: string, basics: TripBasics): void {
     .prepare(
       `UPDATE trips SET mode = @mode, destination_input = @destination_input, region_id = @region_id,
          start_date = @start_date, end_date = @end_date, arrival_time = @arrival_time,
-         departure_time = @departure_time, adults = @adults, children = @children,
+         departure_time = @departure_time, arrival_precision = @arrival_precision,
+         departure_precision = @departure_precision, adults = @adults, children = @children,
          traveler_needs = @traveler_needs, updated_at = @updated_at
        WHERE id = @id`,
     )
@@ -171,6 +182,8 @@ export function updateTripBasics(id: string, basics: TripBasics): void {
       end_date: parsed.endDate,
       arrival_time: parsed.arrivalTime,
       departure_time: parsed.departureTime,
+      arrival_precision: parsed.arrivalPrecision ?? null,
+      departure_precision: parsed.departurePrecision ?? null,
       adults: parsed.adults,
       children: parsed.children,
       traveler_needs: JSON.stringify(parsed.travelerNeeds),

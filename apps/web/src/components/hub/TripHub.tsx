@@ -22,6 +22,7 @@ import {
   type ReadinessEntry,
   type TravelIntelligence,
   type TravelReadinessProfile,
+  type TripPackage,
 } from '@sidequest/core';
 import { Badge, Panel, cx, type BadgeTone } from '../ui';
 import { TripConfidence } from './TripConfidence';
@@ -743,15 +744,28 @@ export function BackupsSection({ intel }: { intel: TravelIntelligence }) {
 
 const CLAIM_TONE: Record<string, BadgeTone> = { confirmed: 'pine', unverified: 'neutral', contradicted: 'clay', stale: 'amber', not_applicable: 'neutral', needs_input: 'amber' };
 
-export function VerifySection({ intel, manifest }: { intel: TravelIntelligence; manifest?: RecheckManifest | null }) {
+export function VerifySection({ intel, manifest, pkg }: { intel: TravelIntelligence; manifest?: RecheckManifest | null; pkg?: TripPackage | undefined }) {
   const recheck = new Set(intel.freshness.recheckBeforeDeparture);
   const material = intel.sourceRegistry.filter((c) => c.state !== 'not_applicable' && (c.state !== 'confirmed' || recheck.has(c.id)) && c.kind !== 'place_identity' && c.kind !== 'routing_duration');
   const access = intel.access.filter((a) => a.verifyBeforeTravel);
   return (
     <section className="mt-14" aria-labelledby="verify" data-testid="hub-verify">
       <SectionHeader id="verify" title="Trip confidence" blurb="What Sidequest could check, what to look at again nearer the date, and what is still uncertain. The full provenance is behind the last disclosure." />
+      {/*
+        * PRODUCTION LOCK V5 §27 — ONE CONFIDENCE, ONE SET OF NUMBERS.
+        *
+        * This used to read `pkg={intel.verification ? undefined : undefined}` —
+        * a ternary with the same value on both arms, so the package never
+        * reached the component and this block counted places it could not see.
+        * A live Hong Kong packet printed both blocks: "Places checked 0 / 13"
+        * from the itinerary's own render, and "Places checked 0 / 0" from this
+        * one, fifteen lines apart and contradicting each other.
+        *
+        * The package is now passed in from the same source the other render
+        * uses, so both derive from one thing and agree by construction.
+        */}
       <div className="mt-4">
-        <TripConfidence pkg={intel.verification ? undefined : undefined} intel={intel} compact />
+        <TripConfidence pkg={pkg} intel={intel} compact />
       </div>
       {manifest && manifest.items.length > 0 ? (
         <>

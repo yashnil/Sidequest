@@ -103,6 +103,12 @@ export interface BudgetInput {
   /** A reference rate from the FX provider, when one is configured and the traveller's currency differs. */
   fx?: FxRate | null;
   displayCurrency?: string;
+  /**
+   * §18 — whether the TRAVELLER is at the wheel of a car they are responsible
+   * for. Undefined for a draft that states no arrangement, where the old
+   * inference from the primary mode stands.
+   */
+  selfDrives?: boolean;
 }
 
 export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence {
@@ -135,7 +141,17 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
    * rental alone and says fuel is not included, rather than "fuel for 0 km".
    */
   const estimatedKm = itinerary.days.reduce((sum, day) => sum + day.items.reduce((s, item) => s + (item.kind === 'travel' && item.travel?.provenance === 'estimated' && item.travel.mode === 'drive' ? (item.travel.estimate?.approxKm ?? 0) : 0), 0), 0);
-  if (primary === 'drive' || driveKm > 0) {
+  /*
+   * PRODUCTION LOCK V5 §18 — A RENTAL LINE NEEDS A RENTAL.
+   *
+   * `primary === 'drive'` means a car moves the traveller; it does not mean
+   * they hired one. A live Kyrgyzstan build — private driver and 4x4 over the
+   * jailoo tracks — billed the traveller for "11 rental days plus fuel" and
+   * excluded "tolls, parking, one-way fees, full excess cover" on a car they
+   * will never rent. `selfDrives` is the arrangement the draft states; where it
+   * states none, the old inference stands.
+   */
+  if (input.selfDrives !== false && (primary === 'drive' || driveKm > 0)) {
     const fuelBasis = driveKm > 0 ? `fuel for about ${Math.round(driveKm)} km of measured driving` : estimatedKm > 0 ? `fuel for roughly ${Math.round(estimatedKm / 50) * 50} km, estimated from map distance` : 'fuel not included — no leg was measured or estimated';
     const fuelKm = driveKm > 0 ? driveKm : estimatedKm;
     const fuelBand: [number, number] = driveKm > 0 ? FUEL_PER_KM : [FUEL_PER_KM[0] * 0.8, FUEL_PER_KM[1] * 1.3];

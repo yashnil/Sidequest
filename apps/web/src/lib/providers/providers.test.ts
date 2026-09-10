@@ -576,7 +576,7 @@ describe('valhalla', () => {
     );
     const km = minutes.map((row) => row.map((value) => (Number.isFinite(value) ? 9 : Number.NaN)));
 
-    const dense = densify({ ids, minutes, km, failedPairs: [], reasonCounts: { not_found: 0, provider_error: 0, rate_limited: 0, budget_exhausted: 0, insufficient_evidence: 0 }, circuitOpened: false, calls: 1, pairs: 16, cacheHits: 0 });
+    const dense = densify({ ids, minutes, km, failedPairs: [], reasonCounts: { not_found: 0, provider_error: 0, rate_limited: 0, budget_exhausted: 0, insufficient_evidence: 0, out_of_coverage: 0 }, circuitOpened: false, calls: 1, pairs: 16, cacheHits: 0 });
     expect(dense.ids).toEqual(['a', 'b', 'c']);
     expect(dense.dropped).toEqual(['unreachable']);
     // And the surviving submatrix is complete, which is what the planner needs.
@@ -587,7 +587,7 @@ describe('valhalla', () => {
     const ids = ['a', 'b', 'c'];
     const minutes = ids.map((_, from) => ids.map((__, to) => (from === to ? 0 : Number.NaN)));
     const km = minutes.map((row) => row.map(() => Number.NaN));
-    const dense = densify({ ids, minutes, km, failedPairs: [], reasonCounts: { not_found: 0, provider_error: 0, rate_limited: 0, budget_exhausted: 0, insufficient_evidence: 0 }, circuitOpened: false, calls: 1, pairs: 9, cacheHits: 0 });
+    const dense = densify({ ids, minutes, km, failedPairs: [], reasonCounts: { not_found: 0, provider_error: 0, rate_limited: 0, budget_exhausted: 0, insufficient_evidence: 0, out_of_coverage: 0 }, circuitOpened: false, calls: 1, pairs: 9, cacheHits: 0 });
     expect(dense.ids).toEqual([]);
     expect(dense.dropped.sort()).toEqual(['a', 'b', 'c']);
   });

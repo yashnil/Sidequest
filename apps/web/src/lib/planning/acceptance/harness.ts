@@ -76,6 +76,17 @@ export function fictionalWorld(options: FictionalWorldOptions): FictionalWorld {
     endDate: '2026-08-05',
     arrivalTime: '10:00',
     departureTime: '17:00',
+    /*
+     * PRODUCTION LOCK V5 §7 — these fixture worlds mean their times.
+     *
+     * Every acceptance world here states an arrival and a departure on purpose,
+     * to exercise the day windows they imply, so the traveller they describe is
+     * one who has booked. Marking them `exact` is what says so: without it the
+     * precision reads as unknown and the times become unprintable, which is
+     * correct for a real trip nobody has booked and wrong for these.
+     */
+    arrivalPrecision: 'exact',
+    departurePrecision: 'exact',
     adults: 2,
     children: 0,
     travelerNeeds: [],
@@ -217,18 +228,23 @@ export function boardWorld(overrides: { basics?: Partial<TripBasics>; geocodeLoc
 export interface DayShape {
   base: string;
   theme?: string;
-  anchors: readonly { name: string; role?: 'core' | 'secondary' | 'optional' | 'flex'; category?: TripDraft['days'][number]['anchors'][number]['category']; transport?: TripDraft['days'][number]['anchors'][number]['transport']; minutes?: number; locality?: string }[];
+  anchors: readonly { name: string; role?: 'core' | 'secondary' | 'optional' | 'flex'; category?: TripDraft['days'][number]['anchors'][number]['category']; transport?: TripDraft['days'][number]['anchors'][number]['transport']; minutes?: number; locality?: string; timeOfDay?: TripDraft['days'][number]['anchors'][number]['timeOfDay'] }[];
   intensity?: 'light' | 'moderate' | 'intense';
   relocation?: boolean;
   meals?: TripDraft['days'][number]['meals'];
+  /** PRODUCTION LOCK V5 §10 — the multi-day experience this day is one day of. */
+  partOf?: string;
 }
 
 export function draftOf(input: {
   archetype?: TripDraft['archetype'];
-  bases: readonly { id: string; name: string; nights: number; area?: string; style?: string; locality?: string }[];
+  bases: readonly { id: string; name: string; nights: number; area?: string; style?: string; locality?: string; overnight?: TripDraft['bases'][number]['overnight'] }[];
   days: readonly DayShape[];
   omissions?: readonly { name: string; reason: string }[];
   package?: Partial<TripDraft['package']>;
+  /** PRODUCTION LOCK V5 — the fields the V5 audit reads. */
+  signatures?: readonly string[];
+  driving?: TripDraft['driving'];
 }): TripDraft {
   return {
     archetype: input.archetype ?? (input.bases.length > 1 ? 'moving_route' : 'single_base'),
@@ -236,7 +252,9 @@ export function draftOf(input: {
     routeRationale: 'Bases follow the direction of travel.',
     assumptions: ['Fixture assumption.'],
     tradeoffs: ['Fixture tradeoff.'],
-    bases: input.bases.map((b) => ({ id: b.id, name: b.name, nights: b.nights, why: `Why ${b.name}.`, ...(b.area ? { lodgingArea: b.area } : {}), ...(b.style ? { lodgingStyle: b.style } : {}), ...(b.locality ? { locality: b.locality } : {}) })),
+    ...(input.signatures ? { signatures: [...input.signatures] } : {}),
+    ...(input.driving ? { driving: input.driving } : {}),
+    bases: input.bases.map((b) => ({ id: b.id, name: b.name, nights: b.nights, why: `Why ${b.name}.`, ...(b.area ? { lodgingArea: b.area } : {}), ...(b.style ? { lodgingStyle: b.style } : {}), ...(b.locality ? { locality: b.locality } : {}), ...(b.overnight ? { overnight: b.overnight } : {}) })),
     days: input.days.map((d, i) => ({
       dayNumber: i + 1,
       baseId: d.base,
@@ -251,8 +269,10 @@ export function draftOf(input: {
         ...(a.minutes ? { estimatedDurationMinutes: a.minutes } : {}),
         ...(a.transport ? { transport: a.transport } : {}),
         ...(a.locality ? { locality: a.locality } : {}),
+        ...(a.timeOfDay ? { timeOfDay: a.timeOfDay } : {}),
       })),
       meals: d.meals ?? { lunch: 'somewhere near the first stop', dinner: 'near base' },
+      ...(d.partOf ? { partOf: d.partOf } : {}),
     })),
     omissions: input.omissions ? [...input.omissions] : [],
     unresolved: [],

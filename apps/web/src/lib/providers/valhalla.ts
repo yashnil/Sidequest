@@ -90,6 +90,16 @@ export const MAX_MATRIX_PAIRS_PER_REQUEST = 400;
 export class RoutingError extends Error {
   readonly code: 'not_configured' | 'rate_limited' | 'request_failed' | 'malformed_response';
   /**
+   * PRODUCTION LOCK V5 §18 — the service said the coordinates are outside the
+   * road network it holds (`error_code` 170/171), not that the request was bad.
+   *
+   * Carried on the error rather than inferred from the message, because it is
+   * the one rejection a caller should *act* on: a regional tile build will say
+   * the same thing about every leg of a trip outside its tiles, and the only
+   * useful response is to stop asking it and use a router that covers the place.
+   */
+  readonly outOfCoverage: boolean;
+  /**
    * True when the service *rejected this request* rather than failing to
    * answer — a 4xx other than 429. The distinction is load-bearing twice: a
    * deterministic rejection is a fact about the request (its size, its
@@ -103,11 +113,12 @@ export class RoutingError extends Error {
   constructor(
     code: RoutingError['code'],
     message: string,
-    options: { deterministic?: boolean } = {},
+    options: { deterministic?: boolean; outOfCoverage?: boolean } = {},
   ) {
     super(message);
     this.name = 'RoutingError';
     this.code = code;
+    this.outOfCoverage = options.outOfCoverage ?? false;
     this.deterministic = options.deterministic ?? false;
   }
 }
@@ -132,10 +143,28 @@ export type ValhallaFailureReason =
   | 'provider_error'
   | 'rate_limited'
   | 'budget_exhausted'
-  | 'insufficient_evidence';
+  | 'insufficient_evidence'
+  /**
+   * PRODUCTION LOCK V5 §18 — THIS ROUTER DOES NOT HOLD THIS PLACE.
+   *
+   * Valhalla's `error_code: 171` is "No suitable edges near location": there is
+   * no road network at that coordinate *in the tiles this instance was built
+   * with*. It is not "no route exists" and it is not a provider malfunction — it
+   * is a statement about coverage, and it is the single most informative thing a
+   * regional router can say.
+   *
+   * It used to be classified `provider_error`, which is why a live Hong Kong
+   * build measured 0 of N legs: the configured router holds Iceland tiles, every
+   * Hong Kong leg came back 171, nothing anywhere learned that the answer would
+   * be the same for leg 34 as for leg 1, and the whole verification budget went
+   * on requests that were refused before they were sent. `routing-composite.ts`
+   * now learns from this reason and falls through.
+   */
+  | 'out_of_coverage';
 
 function classifyRoutingFailure(error: unknown): ValhallaFailureReason {
   if (error instanceof RoutingError && error.code === 'rate_limited') return 'rate_limited';
+  if (error instanceof RoutingError && error.outOfCoverage) return 'out_of_coverage';
   return 'provider_error';
 }
 
@@ -360,8 +389,29 @@ async function fetchBlock(
        * fact about this request, not about the service's health.
        */
       const deterministic = response.status < 500;
-      lastError = new RoutingError('request_failed', 'The routing service did not answer.', {
+      /*
+       * §18 — read the body of a deterministic rejection far enough to tell
+       * "outside my tiles" from "bad request". Both are 400s and they call for
+       * opposite responses: a malformed request is worth subdividing, and a
+       * coverage refusal is worth abandoning this router for. Bounded by the
+       * same response ceiling as a success, and failures to read it fall back
+       * to the previous behaviour.
+       */
+      let outOfCoverage = false;
+      if (deterministic) {
+        try {
+          const body = await response.text();
+          if (body.length <= MAX_RESPONSE_BYTES) {
+            const shape = routeResponseSchema.safeParse(JSON.parse(body));
+            outOfCoverage = shape.success && shape.data.error_code !== undefined && OUT_OF_COVERAGE_ERROR_CODES.has(shape.data.error_code);
+          }
+        } catch {
+          /* An unreadable rejection stays an ordinary deterministic rejection. */
+        }
+      }
+      lastError = new RoutingError('request_failed', outOfCoverage ? 'The routing service does not cover these coordinates.' : 'The routing service did not answer.', {
         deterministic,
+        outOfCoverage,
       });
       if (deterministic) break;
       continue;
@@ -507,6 +557,16 @@ const routeResponseSchema = z.object({
 /** Valhalla's own documented error code for "no path could be found for input" — the one 4xx shape that is positive evidence, not merely a rejection. */
 const NO_PATH_ERROR_CODE = 442;
 
+/**
+ * "No suitable edges near location" — the coordinate is outside this instance's
+ * tiles. Positive evidence about the router's reach, not about the ground.
+ *
+ * 171 is the location-snapping failure; 170 ("Location is unreachable") is the
+ * neighbouring case where a point snapped to an island of network the costing
+ * cannot leave, which for a regional tile build means the same thing in practice.
+ */
+const OUT_OF_COVERAGE_ERROR_CODES = new Set([170, 171]);
+
 export interface RouteResult {
   found: boolean;
   minutes: number | null;
@@ -584,6 +644,9 @@ export async function computeRoute(
   if (!response.ok) {
     if (response.status === 400 && result.data.error_code === NO_PATH_ERROR_CODE) {
       return { found: false, minutes: null, km: null, reason: 'not_found' };
+    }
+    if (response.status === 400 && result.data.error_code !== undefined && OUT_OF_COVERAGE_ERROR_CODES.has(result.data.error_code)) {
+      return { found: false, minutes: null, km: null, reason: 'out_of_coverage' };
     }
     return { found: false, minutes: null, km: null, reason: 'provider_error' };
   }
@@ -1016,6 +1079,7 @@ export async function computeMatrix(
 
   const reasonCounts: Record<ValhallaFailureReason, number> = {
     not_found: 0,
+    out_of_coverage: 0,
     provider_error: 0,
     rate_limited: 0,
     budget_exhausted: 0,

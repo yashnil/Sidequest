@@ -13,8 +13,7 @@ import {
   type Trip,
 } from '@sidequest/core';
 import { buildCompositionTask, type CompositionContext } from './composition';
-import { buildHybridTripRequest } from './hybrid-request';
-import { travelerBriefFor } from './production-plan';
+import { testCompositionContext } from './testing/context';
 import { reconcileTripDraft } from './reconcile';
 import { draftOf, fictionalWorld } from './acceptance/harness';
 
@@ -148,8 +147,7 @@ function contextFor(): InterviewContext {
 
 function taskFor(answers: QuestionnaireAnswers): string {
   const profile = buildTravelerProfile(answers, { travelerNeeds: [], tripDays: 8 });
-  const request = buildHybridTripRequest({ trip: TRIP, composer: null, profile, now: NOW });
-  const context: CompositionContext = { request, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } }, brief: travelerBriefFor({ profile, trip: TRIP, request, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } } }), mode: 'full' };
+  const context: CompositionContext = testCompositionContext({ trip: TRIP, profile, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } }, now: NOW });
   return buildCompositionTask(context);
 }
 

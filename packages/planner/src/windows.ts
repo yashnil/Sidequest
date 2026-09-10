@@ -1,4 +1,4 @@
-import { parseMinuteOfDay, type DailyWindow, type TravelerProfile, type TripBasics } from '@sidequest/core';
+import { describeEdgeTime, edgeIsStatable, parseMinuteOfDay, type DailyWindow, type TravelerProfile, type TripBasics } from '@sidequest/core';
 import type { PlannerConfig } from './types';
 
 export interface PlannedDay {
@@ -43,6 +43,13 @@ export function eachDate(startDate: string, endDate: string): string[] {
  * an 11:00 departure leaves a slow breakfast and nothing else. Getting this wrong
  * is the classic way an itinerary looks fine and cannot be executed.
  */
+/** "15:00" from a minute count, for a sentence that is explicitly Sidequest's own allowance. */
+function formatAllowance(minute: number): string {
+  const hours = String(Math.floor(minute / 60) % 24).padStart(2, '0');
+  const rest = String(minute % 60).padStart(2, '0');
+  return `${hours}:${rest}`;
+}
+
 export function buildDailyWindows(
   basics: TripBasics,
   profile: TravelerProfile,
@@ -68,14 +75,31 @@ export function buildDailyWindows(
       const readyAt = arrivalMinute + config.arrivalSettleMinutes;
       if (readyAt > startMinute) {
         startMinute = readyAt;
-        notes.push(`Arriving at ${basics.arrivalTime}, so the day starts after you have landed and settled.`);
+        /*
+         * PRODUCTION LOCK V5 §7 — never print a time nobody stated.
+         *
+         * `basics.arrivalTime` is the minute planning assumes, and for an
+         * unknown arrival that minute was invented at trip creation. This note
+         * used to print it as a fact ("Arriving at 15:00"), which is a sentence
+         * about a flight the traveller has not booked. The window still narrows
+         * exactly as before; only the sentence changes.
+         */
+        notes.push(
+          edgeIsStatable(basics.arrivalPrecision)
+            ? `Arriving at ${basics.arrivalTime}, so the day starts after you have landed and settled.`
+            : `Arriving ${describeEdgeTime(basics.arrivalPrecision, basics.arrivalTime)}, so the day starts after you have landed and settled. Sidequest has planned around a ${formatAllowance(arrivalMinute)} arrival — tell us the real time and this day is rebuilt around it.`,
+        );
       }
     }
     if (isLast) {
       const mustLeaveBy = departureMinute - config.departureLeadMinutes;
       if (mustLeaveBy < endMinute) {
         endMinute = mustLeaveBy;
-        notes.push(`Leaving at ${basics.departureTime}, so this day wraps up early.`);
+        notes.push(
+          edgeIsStatable(basics.departurePrecision)
+            ? `Leaving at ${basics.departureTime}, so this day wraps up early.`
+            : `Leaving ${describeEdgeTime(basics.departurePrecision, basics.departureTime)}, so this day wraps up early. Sidequest has planned around a ${formatAllowance(departureMinute)} departure — tell us the real time and this day is rebuilt around it.`,
+        );
       }
     }
 

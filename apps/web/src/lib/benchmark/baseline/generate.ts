@@ -72,11 +72,8 @@ export const BASELINE_OUTPUT_SCHEMA_VERSION = 4 as const;
  * bypass to hide. Exported so the injection test can assert that every string in
  * this schema carries it, rather than checking the ones somebody remembered.
  */
-export const SAFE_PROSE_PATTERN =
-  /^(?![\s\S]*(?::\/\/|javascript:|data:|vbscript:|file:|mailto:|www\.))[^<>]*$/;
-
-/** Identifiers the model mints to tie a day to a base. Letters, digits, dashes. */
-export const SAFE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
+export { SAFE_PROSE_PATTERN, SAFE_SLUG_PATTERN } from '@/lib/planning/safe-text';
+import { SAFE_PROSE_PATTERN, SAFE_SLUG_PATTERN } from '@/lib/planning/safe-text';
 
 /** The two patterns any string in this schema is allowed to carry. */
 export const ALLOWED_STRING_PATTERNS = [SAFE_PROSE_PATTERN, SAFE_SLUG_PATTERN] as const;
@@ -538,29 +535,9 @@ export const GENERATION_TIMEOUT_MS = 240_000;
  * the composer to it would mean a change meant to test the composer alone
  * silently changed all of them too.
  */
-export const COMPOSER_MODEL_ENV = 'SIDEQUEST_COMPOSER_MODEL';
-export const COMPOSER_EFFORT_ENV = 'SIDEQUEST_COMPOSER_EFFORT';
-export const DEFAULT_COMPOSER_MODEL = 'claude-sonnet-5';
-const DEFAULT_COMPOSER_EFFORT: 'low' | 'medium' | 'high' = 'high';
+export { COMPOSER_MODEL_ENV, COMPOSER_EFFORT_ENV, DEFAULT_COMPOSER_MODEL, composerModel, composerEffort } from '@/lib/planning/composition-model';
+import { composerEffort } from '@/lib/planning/composition-model';
 
-/** The model the composer (generation and repair) should use for this process. */
-export function composerModel(): string {
-  return process.env[COMPOSER_MODEL_ENV]?.trim() || DEFAULT_COMPOSER_MODEL;
-}
-
-/**
- * The reasoning effort the composer's *first* attempt should use.
- *
- * A malformed/truncated re-ask always drops to `'medium'` regardless of
- * this setting — see the call site — because that ask is explicitly for a
- * shorter answer, not a more deeply reasoned one, and the two are different
- * requests for different reasons.
- */
-export function composerEffort(): 'low' | 'medium' | 'high' {
-  const raw = process.env[COMPOSER_EFFORT_ENV]?.trim();
-  if (raw === 'low' || raw === 'medium' || raw === 'high') return raw;
-  return DEFAULT_COMPOSER_EFFORT;
-}
 
 /**
  * How much room one plan gets, thinking included.

@@ -112,9 +112,95 @@ describe('composite routing', () => {
     expect(skipped.failedPairs.every((p) => p.reason === 'insufficient_evidence')).toBe(true);
     expect(log.filter((l) => l.startsWith('valhalla:matrix:c'))).toHaveLength(0);
   });
-  it('with no declared coverage and no global router the local router is returned as-is', () => {
-    const local = fake('valhalla', []);
-    expect(createCompositeRouting({ local, localCoverage: parseRoutingCoverage(undefined), global: null })).toBe(local);
+  it('nothing at all configured is still nothing', () => {
     expect(createCompositeRouting({ local: null, localCoverage: parseRoutingCoverage(undefined), global: null })).toBeNull();
+  });
+
+  /**
+   * PRODUCTION LOCK V5 §18 — the 0-of-N regression, as a test.
+   *
+   * The deployment that produced it: a live Valhalla holding Iceland tiles,
+   * `SIDEQUEST_ROUTES_COVERAGE` unset (so declared coverage waves everything
+   * through), and a Hong Kong trip. Every leg came back `error_code: 171` and
+   * every leg was asked anyway. These tests assert the two properties that make
+   * that impossible: the refusal is *learned*, and it is not confused with the
+   * router answering about the ground.
+   */
+  const outOfCoverageRouter = (name: string, log: string[]): RoutingProvider => ({
+    name,
+    supportedModes: () => ['car', 'foot'],
+    async matrix({ points }) {
+      log.push(`${name}:matrix:${points.map((p) => p.id).join(',')}`);
+      return {
+        ids: points.map((p) => p.id),
+        minutes: points.map(() => points.map(() => Number.NaN)),
+        km: points.map(() => points.map(() => Number.NaN)),
+        provenance: { kind: 'estimated', note: name },
+        failedPairs: points.flatMap((a) => points.filter((b) => b.id !== a.id).map((b) => ({ from: a.id, to: b.id, reason: 'out_of_coverage' as const }))),
+        calls: 1,
+        elements: points.length,
+      };
+    },
+    async route({ from }) {
+      log.push(`${name}:route:${from.lat}`);
+      return { found: false, minutes: null, km: null, reason: 'out_of_coverage' as const };
+    },
+  });
+
+  const HONG_KONG = { lat: 22.2819, lng: 114.1585 };
+  const KOWLOON = { lat: 22.2988, lng: 114.1722 };
+
+  it('learns from one "outside my tiles" refusal and stops asking the local router for the rest of the build', async () => {
+    const log: string[] = [];
+    const composite = createCompositeRouting({ local: outOfCoverageRouter('valhalla', log), localCoverage: parseRoutingCoverage(undefined), global: fake('ors', log) })!;
+    const first = await composite.matrix({ points: [{ id: 'a', ...HONG_KONG }, { id: 'b', ...KOWLOON }], mode: 'car', maxElements: 10 });
+    /* The refusal cost one request and was immediately answered by the global router. */
+    expect(log).toEqual(['valhalla:matrix:a,b', 'ors:matrix:a,b']);
+    expect(first.minutes[0]![1]).toBe(10);
+    /* Every later pair goes straight to the global router: the local one is not asked again. */
+    log.length = 0;
+    await composite.matrix({ points: [{ id: 'c', ...HONG_KONG }, { id: 'd', ...KOWLOON }], mode: 'car', maxElements: 10 });
+    await composite.route!({ from: HONG_KONG, to: KOWLOON, mode: 'car' });
+    expect(log).toEqual(['ors:matrix:c,d', `ors:route:${HONG_KONG.lat}`]);
+  });
+
+  it('with no global router, a coverage refusal reports no evidence rather than "no route"', async () => {
+    const log: string[] = [];
+    const composite = createCompositeRouting({ local: outOfCoverageRouter('valhalla', log), localCoverage: parseRoutingCoverage(undefined), global: null })!;
+    await composite.matrix({ points: [{ id: 'a', ...HONG_KONG }, { id: 'b', ...KOWLOON }], mode: 'car', maxElements: 10 });
+    const confirmation = await composite.route!({ from: HONG_KONG, to: KOWLOON, mode: 'car' });
+    expect(confirmation.found).toBe(false);
+    expect(confirmation.reason).toBe('insufficient_evidence');
+    const later = await composite.matrix({ points: [{ id: 'c', ...HONG_KONG }, { id: 'd', ...KOWLOON }], mode: 'car', maxElements: 10 });
+    expect(later.calls).toBe(0);
+    expect(later.provenance.kind).toBe('estimated');
+    expect(later.provenance.note).toMatch(/does not cover this trip/);
+    /* Exactly one local request was ever spent establishing this. */
+    expect(log.filter((line) => line.startsWith('valhalla'))).toHaveLength(1);
+  });
+
+  it('does not confuse "no road between these two points" with "outside my tiles"', async () => {
+    const log: string[] = [];
+    const noRoad: RoutingProvider = {
+      name: 'valhalla',
+      supportedModes: () => ['car'],
+      async matrix({ points }) {
+        log.push(`valhalla:matrix:${points.map((p) => p.id).join(',')}`);
+        return {
+          ids: points.map((p) => p.id),
+          minutes: points.map(() => points.map(() => Number.NaN)),
+          km: points.map(() => points.map(() => Number.NaN)),
+          provenance: { kind: 'measured', note: 'valhalla' },
+          failedPairs: [{ from: 'a', to: 'b', reason: 'not_found' as const }],
+          calls: 1,
+          elements: 2,
+        };
+      },
+    };
+    const composite = createCompositeRouting({ local: noRoad, localCoverage: parseRoutingCoverage(undefined), global: null })!;
+    await composite.matrix({ points: [{ id: 'a', ...REYKJAVIK }, { id: 'b', ...VIK }], mode: 'car', maxElements: 10 });
+    await composite.matrix({ points: [{ id: 'c', ...REYKJAVIK }, { id: 'd', ...VIK }], mode: 'car', maxElements: 10 });
+    /* An island pair with genuinely no road must not disable a working router. */
+    expect(log).toEqual(['valhalla:matrix:a,b', 'valhalla:matrix:c,d']);
   });
 });

@@ -90,6 +90,7 @@ export * from './hours/availability';
 export * from './hours/osm';
 export * from './hours/provider';
 
+export * from './food/requirements';
 export * from './food/availability';
 export * from './food/board';
 export * from './food/quality';

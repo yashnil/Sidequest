@@ -10,6 +10,7 @@ import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { arePlacePhotosEnabled } from '@/lib/providers/switches';
 import { formatMinutes } from '@/lib/format';
 import { getProfile } from '@/lib/db/repository';
+import { getTripDraft } from '@/lib/db/draft-repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
 import {
   REACH_MODE_PHRASE,
@@ -192,12 +193,36 @@ export async function itineraryViewModel(
       livePhotos[anchor.placeId] = `/api/place-photo?trip=${encodeURIComponent(trip.id)}&anchor=${encodeURIComponent(anchor.id)}`;
     }
   }
+  /*
+   * PRODUCTION LOCK V5 §28 — THE TRIP'S THESIS COMES FROM THE TRIP.
+   *
+   * `tripPersonality` derives a sentence from the *profile* alone, and a live
+   * Hong Kong build showed what that costs: the traveller had said food,
+   * markets and neighbourhoods are the heart of the trip and their days should
+   * be intense, the model wrote "A food, market and neighbourhood-led Hong Kong
+   * immersion … built around eating, wandering and a few iconic views", and the
+   * Overview said:
+   *
+   *   "Food & towns-led, a mix of famous and quiet, balanced pace over 6 days."
+   *
+   * Generic in its shape, and wrong about the pace. The draft's own `purpose` is
+   * a sentence about *this* trip, written by the thing that designed it, so it
+   * leads. The derived headline stays as the fallback for a trip whose draft
+   * predates the field or could not be read — never as the first choice.
+   */
   let personality: string | null = null;
   try {
-    const profile = getProfile(trip.id);
-    if (profile) personality = tripPersonality(profile, itinerary.days.length).headline;
+    personality = getTripDraft(trip.id)?.draft.purpose?.trim() || null;
   } catch {
-    personality = null;
+    /* An unreadable draft row falls through to the derived headline below. */
+  }
+  if (!personality) {
+    try {
+      const profile = getProfile(trip.id);
+      if (profile) personality = tripPersonality(profile, itinerary.days.length).headline;
+    } catch {
+      /* No profile, or an unreadable one: the trip simply has no thesis line. */
+    }
   }
   try {
     const resolved = await resolveTripRegion(trip);

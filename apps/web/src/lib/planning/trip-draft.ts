@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SAFE_PROSE_PATTERN, SAFE_SLUG_PATTERN } from '@/lib/benchmark/baseline/generate';
+import { SAFE_PROSE_PATTERN, SAFE_SLUG_PATTERN } from './safe-text';
 
 /**
  * THE TRIP DRAFT — THE CANONICAL TRAVELLER-FACING CONTENT SIDEQUEST VERIFIES.
@@ -53,6 +53,21 @@ export const TRIP_ARCHETYPES = [
   'loop',
 ] as const;
 export type TripArchetype = (typeof TRIP_ARCHETYPES)[number];
+
+/**
+ * The archetypes the model is asked to choose from — the same list without the
+ * three legacy names.
+ *
+ * `single_base`, `moving_route` and `loop` are accepted by the canonical schema
+ * so a draft stored under an earlier prompt keeps parsing, and by the wire
+ * normaliser's aliases so a model that says one is understood. Neither reason
+ * requires *offering* them: a prompt that lists fourteen names where eleven are
+ * meant costs bytes in the wire schema and invites the vaguest three to be
+ * chosen. `wire-vocabulary.test.ts` holds the two lists to each other.
+ */
+export const CURRENT_TRIP_ARCHETYPES = TRIP_ARCHETYPES.filter(
+  (archetype) => archetype !== 'single_base' && archetype !== 'moving_route' && archetype !== 'loop',
+) as readonly TripArchetype[];
 
 /** How the trip moves, in the three-way vocabulary the relocation machinery reasons in. */
 export function movementShapeOf(archetype: TripArchetype): 'single_base' | 'moving_route' | 'loop' {
@@ -157,6 +172,117 @@ export const DRAFT_SOFT_PROSE_CAPS = {
   backupAlternative: 140,
 } as const;
 
+/**
+ * WHEN IN THE DAY THIS EXPERIENCE BELONGS.
+ *
+ * PRODUCTION LOCK V5 §13. A night market, a sunrise viewpoint, a sunset ridge
+ * and an evening show are not interchangeable with a museum, and before this
+ * the draft had no way to say so: the scheduler placed activities by their
+ * order alone, and the quality audit had nothing to check a sunset viewpoint at
+ * eleven in the morning against. `any` is the honest default and the vast
+ * majority of activities keep it, which is why the field is optional — an
+ * absent value costs nothing on the wire and means "whenever the day suits".
+ */
+export const DRAFT_TIME_OF_DAY = ['sunrise', 'morning', 'midday', 'afternoon', 'sunset', 'evening', 'night', 'any'] as const;
+export type DraftTimeOfDay = (typeof DRAFT_TIME_OF_DAY)[number];
+
+/** True for a time intent that pins an experience to a part of the day the scheduler must respect. */
+export function timeOfDayIsBinding(value: DraftTimeOfDay | undefined): boolean {
+  return value !== undefined && value !== 'any';
+}
+
+/**
+ * The values the model is offered. `any` is absent from it deliberately: an
+ * omitted field already means "whenever the day suits", so offering a word for
+ * it buys nothing and invites it to be written on every activity. The canonical
+ * schema and the normaliser's aliases still accept `any` from a stored draft.
+ */
+export const WIRE_TIME_OF_DAY = DRAFT_TIME_OF_DAY.filter((value) => value !== 'any') as readonly DraftTimeOfDay[];
+
+/**
+ * HOW THE DRIVING IS ARRANGED — SEPARATE FROM WHETHER A CAR IS INVOLVED.
+ *
+ * PRODUCTION LOCK V5 §14 and §15. `car` in `DRAFT_TRANSPORTS` says a road
+ * vehicle moves the traveller. It does not say who is at the wheel, and
+ * everything downstream that reasons about rental desks, an International
+ * Driving Permit, parking, fuel and excess insurance was keying off `car`
+ * alone. A trip with a private driver therefore produced rental advice.
+ *
+ * One trip-level field rather than an arrangement on every leg, deliberately:
+ * the arrangement is a property of how the trip was *booked*, it is the same
+ * for almost every road leg in a trip, and repeating it two dozen times is
+ * exactly the wire waste the compact schema exists to remove. Where a single
+ * leg differs — a taxi to the airport on a self-drive trip — that is a
+ * transport note, not a new vocabulary.
+ */
+export const DRAFT_DRIVING_ARRANGEMENTS = [
+  /** The traveller hires a car and drives it themselves. The only value that implies a rental desk. */
+  'rental_self_drive',
+  /** The traveller drives a vehicle they already have. */
+  'owned_self_drive',
+  /** A hired driver, with or without a guide. No rental, no permit, no parking advice. */
+  'private_driver',
+  /** Taxis and rideshare, leg by leg. */
+  'taxi_rideshare',
+  /** Transfers arranged by an operator, lodge or guide as part of the trip. */
+  'operator_transfer',
+  /** No road vehicle the traveller is responsible for: transit, walking, rail, boat, flight. */
+  'none',
+] as const;
+export type DraftDrivingArrangement = (typeof DRAFT_DRIVING_ARRANGEMENTS)[number];
+
+/** True only when the itinerary genuinely implies hiring and driving a car. */
+export function impliesRentalCar(arrangement: DraftDrivingArrangement | undefined): boolean {
+  return arrangement === 'rental_self_drive';
+}
+
+/** True when the traveller is at the wheel at all — the test parking and permit advice should use. */
+export function impliesSelfDriving(arrangement: DraftDrivingArrangement | undefined): boolean {
+  return arrangement === 'rental_self_drive' || arrangement === 'owned_self_drive';
+}
+
+/**
+ * WHERE THE TRAVELLER SLEEPS, AS A KIND OF PLACE.
+ *
+ * PRODUCTION LOCK V5 §10 and §11. A hut-to-hut traverse, a yurt route, a
+ * safari camp, a river boat and an overnight train are all real overnights that
+ * the previous schema could only express as a hotel-shaped base with a free-text
+ * `lodgingStyle`. Everything downstream — check-in advice, packing, the "stays"
+ * section, the booking list — then treated a mountain refuge like a hotel.
+ *
+ * `overnight_transfer` is the one that carries the most information: the night
+ * IS the movement, so there is no bed to book at a place and no check-in time.
+ */
+export const OVERNIGHT_KINDS = [
+  'hotel',
+  'hostel',
+  'guesthouse',
+  'homestay',
+  'apartment',
+  'camp',
+  'tent',
+  'hut',
+  'refuge',
+  'yurt',
+  'lodge',
+  'boat',
+  'train',
+  /** A night spent moving: a sleeper bus, a red-eye, a ferry crossing. */
+  'overnight_transfer',
+  'other',
+] as const;
+export type OvernightKind = (typeof OVERNIGHT_KINDS)[number];
+
+/** True when this overnight is a place with a bed somebody checks into. */
+export function overnightHasCheckIn(kind: OvernightKind | undefined): boolean {
+  return kind !== 'overnight_transfer';
+}
+
+/** True when the overnight is itself part of the experience rather than accommodation near it. */
+export function overnightIsExperiential(kind: OvernightKind | undefined): boolean {
+  return kind === 'camp' || kind === 'tent' || kind === 'hut' || kind === 'refuge' || kind === 'yurt' || kind === 'lodge' || kind === 'boat' || kind === 'homestay';
+}
+
 export const draftAnchorSchema = z.object({
   /** The place's own real name. Identity is resolved by Sidequest afterwards. */
   name: prose(60),
@@ -167,6 +293,8 @@ export const draftAnchorSchema = z.object({
   /** The model's rough sense of time on site, minutes. Only used until Sidequest has a better figure; never presented as more than an estimate. */
   estimatedDurationMinutes: z.number().int().min(10).max(600).optional(),
   transport: z.enum(DRAFT_TRANSPORTS).optional(),
+  /** §13 — the part of the day this belongs to. Absent means "whenever the day suits". */
+  timeOfDay: z.enum(DRAFT_TIME_OF_DAY).optional(),
   why: prose(DRAFT_SOFT_PROSE_CAPS.anchorWhy),
 });
 export type DraftAnchor = z.infer<typeof draftAnchorSchema>;
@@ -181,6 +309,8 @@ export const draftBaseSchema = z.object({
   lodgingArea: prose(DRAFT_SOFT_PROSE_CAPS.lodgingArea).optional(),
   /** "guesthouse", "mid-range hotel near the harbour", "mountain lodge" — style, never a named hotel as a promise. */
   lodgingStyle: prose(DRAFT_SOFT_PROSE_CAPS.lodgingStyle).optional(),
+  /** §10 — the kind of place this is. Absent reads as `hotel` for a base written before this existed. */
+  overnight: z.enum(OVERNIGHT_KINDS).optional(),
 });
 export type DraftBase = z.infer<typeof draftBaseSchema>;
 
@@ -188,6 +318,15 @@ export const draftMealsSchema = z.object({
   breakfast: prose(DRAFT_SOFT_PROSE_CAPS.meal).optional(),
   lunch: prose(DRAFT_SOFT_PROSE_CAPS.meal).optional(),
   dinner: prose(DRAFT_SOFT_PROSE_CAPS.meal).optional(),
+  /**
+   * §22 — the neighbourhood, market or quarter the day's food sits in.
+   *
+   * One field per day rather than one per meal, because it is what downstream
+   * enrichment actually needs to resolve a venue: "dim sum in Sheung Wan" is a
+   * searchable intent and "lunch near base" is not. Optional, and only written
+   * where the food has a geography of its own.
+   */
+  area: prose(DRAFT_SOFT_PROSE_CAPS.lodgingArea).optional(),
 });
 
 export const draftDaySchema = z.object({
@@ -202,8 +341,32 @@ export const draftDaySchema = z.object({
   meals: draftMealsSchema.optional(),
   note: prose(DRAFT_SOFT_PROSE_CAPS.dayNote).optional(),
   whyItFits: prose(DRAFT_SOFT_PROSE_CAPS.whyItFits).optional(),
+  /**
+   * §10 — the multi-day experience this day is one day of, by name.
+   *
+   * A four-day trek, a safari circuit, a river descent and a hut-to-hut
+   * traverse are single experiences that occupy several consecutive days.
+   * Naming the experience on each of its days is what lets the rest of the
+   * product treat them as one thing: one booking dependency, one packing
+   * implication, one row in the stays section, and days that may not be
+   * reordered independently of each other.
+   */
+  partOf: prose(60).optional(),
 });
 export type DraftDay = z.infer<typeof draftDaySchema>;
+
+/** The consecutive day runs that belong to one named multi-day experience. */
+export function multiDayExperiences(days: readonly DraftDay[]): { name: string; dayNumbers: number[] }[] {
+  const runs: { name: string; dayNumbers: number[] }[] = [];
+  for (const day of days) {
+    const name = day.partOf?.trim();
+    if (!name) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.name === name && last.dayNumbers[last.dayNumbers.length - 1] === day.dayNumber - 1) last.dayNumbers.push(day.dayNumber);
+    else runs.push({ name, dayNumbers: [day.dayNumber] });
+  }
+  return runs;
+}
 
 export const draftPackageSchema = z.object({
   foodStrategy: z.array(prose(DRAFT_SOFT_PROSE_CAPS.foodStrategy)).max(6),
@@ -218,6 +381,18 @@ export const draftPackageSchema = z.object({
       z.object({
         trigger: prose(DRAFT_SOFT_PROSE_CAPS.backupTrigger),
         alternative: prose(DRAFT_SOFT_PROSE_CAPS.backupAlternative),
+        /**
+         * §25 — the day this backup is for.
+         *
+         * Before this, backups were a trip-level list and `reconcile.ts`
+         * guessed which days each one applied to by matching words. That is how
+         * a lake-closure fallback ended up attached to a day nowhere near the
+         * lake, and a fallback for an island day ended up on the departure
+         * morning. A backup that names its own day can be checked: the
+         * alternative has to be reachable from where the traveller sleeps that
+         * night, and the trigger has to be something that day is exposed to.
+         */
+        day: z.number().int().min(1).max(40).optional(),
       }),
     )
     .max(6),
@@ -254,6 +429,29 @@ export const tripDraftSchema = z.object({
   unresolved: z.array(prose(DRAFT_SOFT_PROSE_CAPS.unresolvedItem)).max(8),
   /** What to book first and why, in the order it matters — lodges, internal flights, timed tickets. Optional for older drafts. */
   bookingPriorities: z.array(prose(DRAFT_SOFT_PROSE_CAPS.bookingPriority)).max(8).optional(),
+  /**
+   * §5 and §6 — the window the model chose, when the traveller asked it to.
+   *
+   * Present only for a trip whose timing was still open at composition time.
+   * The dates are chosen together with the route and the experiences, because
+   * the strongest month depends on which trip this is: a high-country traverse
+   * and a food-and-neighbourhood trip in the same country do not share one.
+   * Absent for a trip with fixed dates, which is the common case.
+   */
+  window: z.object({ startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).optional(),
+  /**
+   * §9 — the one to three experiences that make this destination worth
+   * travelling to for THIS traveller, by name.
+   *
+   * Not decoration: this is the field that stops a trip becoming three
+   * attractions a day. The audit checks that every name here appears in the
+   * days, that the trip gives them the time they need — a single exceptional
+   * traverse may deserve three days — and that a trip with no signature at all
+   * is visible as the generic checklist it is.
+   */
+  signatures: z.array(prose(60)).max(3).optional(),
+  /** §14 — how the road travel is arranged. `none` for a trip with no vehicle the traveller is responsible for. */
+  driving: z.enum(DRAFT_DRIVING_ARRANGEMENTS).optional(),
   package: draftPackageSchema,
 });
 export type TripDraft = z.infer<typeof tripDraftSchema>;

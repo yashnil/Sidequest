@@ -77,7 +77,20 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   const windy = input.itinerary.days.some((d) => (d.weather.windGustMaxKph ?? 0) >= 50);
   const snowy = input.itinerary.days.some((d) => (d.weather.snowfallCm ?? 0) > 0);
   const hikes = cats.has('hike') || ((input.strenuous ?? false) && (cats.has('nature') || cats.has('viewpoint') || cats.has('water')) && input.profile.interview.hikeAppetite !== 'none');
-  const water = cats.has('water') || cats.has('beach') || cats.has('geothermal');
+  /*
+   * PRODUCTION LOCK V5 §22/§26 — SWIMWEAR NEEDS A SWIMMING SIGNAL.
+   *
+   * `water` is the category for a lake, a river, a harbour and a ferry
+   * crossing, and a live Hong Kong build packed "swimwear and a quick-dry
+   * towel" for a food-and-markets city trip whose only `water` stop was the
+   * Star Ferry. A harbour crossing is transport.
+   *
+   * A beach and a geothermal pool are places somebody gets into the water, so
+   * they still stand on their own. A plain `water` stop counts only when the
+   * traveller said swimming matters to them — which is the difference between
+   * "there is water on this trip" and "you will be in it".
+   */
+  const water = cats.has('beach') || cats.has('geothermal') || (cats.has('water') && interestOn(input.profile, 'beaches_and_swimming'));
   const wildlife = cats.has('wildlife');
   const legs = new Set(input.legModes);
 

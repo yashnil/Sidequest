@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FIXTURE_UNVERIFIABLE_ANCHOR, FixtureComposer, fixtureDraftFor } from './fixture-composer';
 import { generateTripDraft, type CompositionContext } from './composition';
-import { buildHybridTripRequest } from './hybrid-request';
-import { defaultProfileFor } from './production-plan';
+import { testCompositionContext } from './testing/context';
 import { tripDraftSchema } from './trip-draft';
 import type { Trip } from '@sidequest/core';
 
@@ -15,11 +14,7 @@ const TRIP: Trip = {
 };
 
 function context(): CompositionContext {
-  return {
-    request: buildHybridTripRequest({ trip: TRIP, composer: null, profile: defaultProfileFor(TRIP, null), now: new Date('2026-08-01T00:00:00Z') }),
-    envelope: { name: 'Harbour City', countryCode: 'XX', scale: 'city', center: { lat: 1, lng: 2 } },
-    mode: 'full',
-  };
+  return testCompositionContext({ trip: TRIP, envelope: { name: 'Harbour City', countryCode: 'XX', scale: 'city', center: { lat: 1, lng: 2 } } });
 }
 
 describe('the fixture composer', () => {

@@ -1,4 +1,4 @@
-import { tripDates, type Itinerary, type TravelerProfile, type Trip } from '@sidequest/core';
+import { describeEdgeTime, tripDates, type Itinerary, type TravelerProfile, type Trip } from '@sidequest/core';
 import type { TripDraft } from './trip-draft';
 import { buildPreservationReport, type DraftPreservationReport } from './preservation';
 
@@ -40,6 +40,28 @@ export const QUALITY_CHECK_IDS = [
   'meals_in_window',
   'stops_follow_transfers',
   'bases_are_places_to_sleep',
+  /*
+   * PRODUCTION LOCK V5 §53 — the checks the founder's own two trips would have
+   * failed. Every one is structural: it reads the draft and the itinerary and
+   * asks a question with a definite answer. None of them is a taste oracle, and
+   * none of them deletes anything.
+   */
+  /** §9 — the trip names what it is built around, and the days contain it. */
+  'signatures_present',
+  /** §13 — a sunset viewpoint is not scheduled at eleven in the morning. */
+  'time_intent_respected',
+  /** §10 — a multi-day experience occupies consecutive days and one continuous stay run. */
+  'multi_day_continuous',
+  /** §15 — a private driver produces no rental, permit or parking advice. */
+  'transport_arrangement_consistent',
+  /** §11 — lodging is not the same sentence on every night of a trip that moves. */
+  'lodging_has_character',
+  /** §22 — a food-led trip does not get five "meal near base" placeholders. */
+  'meals_are_decisions',
+  /** §25 — a backup belongs to a day it could actually be used on. */
+  'backups_are_local',
+  /** §7 — nothing states an arrival or departure time the traveller never gave. */
+  'edge_times_not_invented',
 ] as const;
 export type QualityCheckId = (typeof QUALITY_CHECK_IDS)[number];
 
@@ -114,7 +136,14 @@ export function auditItinerary(input: {
   const departure = minutes(trip.basics.departureTime);
   const beforeArrival = first?.items.filter((item) => item.kind !== 'travel' && item.startMinute < arrival) ?? [];
   const afterDeparture = last?.items.filter((item) => item.kind !== 'travel' && item.endMinute > departure) ?? [];
-  add('edges_respected', beforeArrival.length === 0 && afterDeparture.length === 0, 'error', beforeArrival.length === 0 && afterDeparture.length === 0 ? `nothing before arrival ${trip.basics.arrivalTime} or after departure ${trip.basics.departureTime}` : `${beforeArrival.length} item(s) before arrival, ${afterDeparture.length} after departure`);
+  /*
+   * §7 — the audit describes the edges at the precision they are known. It used
+   * to quote `15:00` / `11:00`, which for an unknown edge is Sidequest's own
+   * allowance and not a fact about a flight; an audit detail is read by an
+   * operator diagnosing a real trip, so it has to say which of the two it is.
+   */
+  const edgeOk = beforeArrival.length === 0 && afterDeparture.length === 0;
+  add('edges_respected', edgeOk, 'error', edgeOk ? `nothing before arrival (${describeEdgeTime(trip.basics.arrivalPrecision, trip.basics.arrivalTime)}, planned as ${trip.basics.arrivalTime}) or after departure (${describeEdgeTime(trip.basics.departurePrecision, trip.basics.departureTime)}, planned as ${trip.basics.departureTime})` : `${beforeArrival.length} item(s) before arrival, ${afterDeparture.length} after departure`);
 
   // --- window ------------------------------------------------------------------------
   const pastWindow = itinerary.days.flatMap((day) => day.items.filter((item) => item.kind !== 'travel' && item.endMinute > day.window.endMinute + 30).map((item) => `day ${day.dayNumber}: ${item.title}`));
@@ -223,9 +252,259 @@ export function auditItinerary(input: {
   const landmarkBases = (itinerary.package?.bases ?? []).filter((b) => /\b(college|university|distillery|brewery|museum|castle|cathedral|church|abbey|airport|station|shop|store|gallery)\b/i.test(b.name) && b.baseKind !== 'lodging_property' && b.baseKind !== 'lodge' && b.baseKind !== 'camp');
   add('bases_are_places_to_sleep', landmarkBases.length === 0, 'error', landmarkBases.length === 0 ? 'every base is a town, area or lodging' : `base(s) named for a landmark: ${landmarkBases.map((b) => b.name).join(', ')}`);
 
+  // --- PRODUCTION LOCK V5 -----------------------------------------------------------------
+  auditV5({ draft, itinerary, profile, trip, add });
+
   const errors = checks.filter((c) => !c.ok && c.severity === 'error').length;
   const warnings = checks.filter((c) => !c.ok && c.severity === 'warning').length;
   return { version: 1, passed: errors === 0, errors, warnings, checks };
+}
+
+/** Text a planner would recognise as "I did not decide anything here". */
+const GENERIC_MEAL = /^(?:a\s+)?(?:breakfast|lunch|dinner|brunch|meal|food|eat|dine|supper|snack)?\s*(?:near|at|by|around|in)?\s*(?:the\s+)?(?:base|hotel|accommodation|stay|lodging|town|somewhere|anywhere|local|locally|as you like|your own|tbd|flexible|optional)?[.\s]*$/i;
+
+/** The words that only make sense if the traveller is responsible for a car. */
+const SELF_DRIVE_ADVICE = /\b(?:rental|rent a car|hire car|car hire|rental desk|rental excess|excess insurance|international driving permit|IDP|parking|park the car|fuel|petrol|gasoline|toll)\b/gi;
+
+/**
+ * The V5 structural checks, kept in their own function so `auditItinerary` stays
+ * readable and so each check can say precisely what it looked at.
+ *
+ * Every one is a warning unless it describes something that cannot be executed
+ * or that states a falsehood to the traveller. The audit's job is to be loud,
+ * not to re-plan: `passed` gates persistence only on errors.
+ */
+function auditV5(input: {
+  draft: TripDraft;
+  itinerary: Itinerary;
+  profile: TravelerProfile;
+  trip: Trip;
+  add: (id: QualityCheckId, ok: boolean, severity: QualityCheck['severity'], detail: string) => void;
+}): void {
+  const { draft, itinerary, profile, trip, add } = input;
+  const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const dayText = draft.days.map((day) => norm([day.theme, day.note ?? '', day.whyItFits ?? '', day.partOf ?? '', ...day.anchors.map((a) => `${a.name} ${a.why}`)].join(' ')));
+
+  /* §9 — signatures. A trip that names none is not an error; a trip that names one and never delivers it is. */
+  const signatures = draft.signatures ?? [];
+  /**
+   * A signature is delivered when a day carries the substance of it.
+   *
+   * The first version required one string to contain the other, and a live Hong
+   * Kong build showed why that is the wrong test. The model named its signatures
+   * as *descriptions* — "Dim sum and wet market crawl through Sheung Wan and
+   * Central" — and delivered them as activities called "Dim sum crawl", "Graham
+   * Street Market" and "Sheung Wan dried seafood streets". Every one was
+   * present; no substring matched; the audit reported all three as absent. An
+   * error that fires on a trip which plainly did the thing is worse than no
+   * check, because it teaches a reader to skip the whole audit.
+   *
+   * So the test is **distinctive-word overlap**: at least half of a signature's
+   * meaningful words (ignoring the joining words every travel phrase contains)
+   * must appear somewhere in the days. Substring containment in either direction
+   * still counts, which is what catches the short-name case — a signature called
+   * "Ala-Kul" delivered by an "Ala-Kul Pass Descent".
+   */
+  const JOINING_WORDS = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'into', 'of', 'on', 'or', 'the', 'then', 'through', 'to', 'up', 'via', 'with', 'day', 'days', 'trip']);
+  const meaningfulWords = (value: string) => norm(value).split(' ').filter((word) => word.length > 2 && !JOINING_WORDS.has(word));
+  const allDayText = dayText.join(' ');
+  const undelivered = signatures.filter((name) => {
+    const wanted = norm(name);
+    if (wanted.length < 3) return false;
+    const partOfNames = draft.days.map((day) => norm(day.partOf ?? '')).filter((value) => value.length >= 3);
+    if (dayText.some((text) => text.includes(wanted))) return false;
+    if (partOfNames.some((partOf) => partOf.includes(wanted) || wanted.includes(partOf))) return false;
+    const words = meaningfulWords(name);
+    if (words.length === 0) return false;
+    const present = words.filter((word) => allDayText.includes(word)).length;
+    return present * 2 < words.length;
+  });
+  add(
+    'signatures_present',
+    undelivered.length === 0,
+    'error',
+    signatures.length === 0
+      ? 'the draft names no signature experience'
+      : undelivered.length === 0
+        ? `${signatures.length} signature experience(s), all present in the days: ${signatures.join('; ')}`
+        : `named as central but absent from every day: ${undelivered.join('; ')}`,
+  );
+
+  /*
+   * §13 — time intent. Checked against the scheduled minute, because that is the
+   * thing a traveller acts on. The windows are generous on purpose: this catches
+   * a sunset viewpoint at 11:00 and a night market in the afternoon, not a
+   * twenty-minute difference of opinion about when evening starts.
+   */
+  const WINDOW: Record<string, [number, number]> = {
+    sunrise: [4 * 60, 9 * 60],
+    morning: [5 * 60, 12 * 60],
+    midday: [10 * 60 + 30, 15 * 60],
+    afternoon: [11 * 60, 18 * 60 + 30],
+    sunset: [15 * 60, 22 * 60],
+    evening: [16 * 60, 24 * 60],
+    night: [17 * 60, 24 * 60 + 6 * 60],
+  };
+  const timeBreaches: string[] = [];
+  for (const day of draft.days) {
+    const scheduled = itinerary.days.find((d) => d.dayNumber === day.dayNumber);
+    if (!scheduled) continue;
+    /*
+     * An edge day's window is cut by the flight, not by the plan.
+     *
+     * A "morning" stop that lands at 13:45 because the traveller arrives at
+     * 10:00 is the arrival doing that, and flagging it would make this check
+     * fire on almost every trip's first and last day. The hour-critical
+     * intents are still checked everywhere: nothing about a 10:00 arrival
+     * excuses a night market in the early afternoon.
+     */
+    const edgeDay = day.dayNumber === 1 || day.dayNumber === draft.days.length;
+    const HARD_INTENTS = new Set(['sunrise', 'sunset', 'evening', 'night']);
+    for (const anchor of day.anchors) {
+      const intent = anchor.timeOfDay;
+      if (!intent || intent === 'any') continue;
+      if (edgeDay && !HARD_INTENTS.has(intent)) continue;
+      const window = WINDOW[intent];
+      if (!window) continue;
+      const item = scheduled.items.find((i) => i.kind === 'activity' && norm(i.title) === norm(anchor.name));
+      if (!item) continue;
+      if (item.startMinute < window[0] || item.startMinute > window[1]) {
+        timeBreaches.push(`day ${day.dayNumber}: ${anchor.name} wants ${intent} but sits at ${String(Math.floor(item.startMinute / 60)).padStart(2, '0')}:${String(item.startMinute % 60).padStart(2, '0')}`);
+      }
+    }
+  }
+  const withIntent = draft.days.reduce((n, d) => n + d.anchors.filter((a) => a.timeOfDay && a.timeOfDay !== 'any').length, 0);
+  add('time_intent_respected', timeBreaches.length === 0, 'error', timeBreaches.length === 0 ? `${withIntent} time-dependent experience(s) sit in their part of the day` : timeBreaches.slice(0, 4).join('; '));
+
+  /*
+   * §10 — a multi-day experience is one thing. Two properties: its days are
+   * consecutive (a trek cannot pause for a day in a city and resume), and it is
+   * not split across a stay it never returns to.
+   */
+  const runs = new Map<string, number[]>();
+  for (const day of draft.days) {
+    const name = day.partOf?.trim();
+    if (!name) continue;
+    const list = runs.get(name) ?? [];
+    list.push(day.dayNumber);
+    runs.set(name, list);
+  }
+  const broken = [...runs.entries()].filter(([, days]) => days.some((dayNumber, index) => index > 0 && dayNumber !== days[index - 1]! + 1));
+  add(
+    'multi_day_continuous',
+    broken.length === 0,
+    'error',
+    runs.size === 0 ? 'the draft holds no multi-day experience' : broken.length === 0 ? `${runs.size} multi-day experience(s) run on consecutive days` : `interrupted: ${broken.map(([name, days]) => `${name} on days ${days.join(', ')}`).join('; ')}`,
+  );
+
+  /*
+   * §15 — transport arrangement. The invariant with teeth: a trip whose driving
+   * is arranged for the traveller must not hand them advice about a car they will
+   * never touch. Checked against everything the traveller reads — the transport
+   * strategy, the notes, before-you-go and packing.
+   */
+  const driving = draft.driving;
+  const advisoryText = [draft.package.transport.summary, ...draft.package.transport.notes, ...draft.package.beforeYouGo, ...draft.package.packing].join(' \n ');
+  const selfDriveWords = [...advisoryText.matchAll(SELF_DRIVE_ADVICE)].map((match) => match[0]);
+  const drivenFor = driving === 'private_driver' || driving === 'operator_transfer' || driving === 'none';
+  add(
+    'transport_arrangement_consistent',
+    !drivenFor || selfDriveWords.length === 0,
+    'error',
+    driving === undefined
+      ? 'the draft states no driving arrangement, so no rental advice can be checked against one'
+      : !drivenFor
+        ? `driving is ${driving}, so self-drive advice is warranted`
+        : selfDriveWords.length === 0
+          ? `driving is ${driving} and nothing mentions rentals, permits or parking`
+          : `driving is ${driving} but the traveller is told about: ${[...new Set(selfDriveWords.map((w) => w.toLowerCase()))].join(', ')}`,
+  );
+
+  /*
+   * §11 — lodging character. Only meaningful for a trip that moves: one base for
+   * one week has one kind of lodging by definition. A warning, never an error —
+   * "every night is a guesthouse" can be exactly right for a city trip on a
+   * budget, and only a person can say.
+   */
+  const lodgingLines = draft.bases.map((base) => norm(`${base.lodgingStyle ?? ''} ${base.overnight ?? ''}`)).filter((line) => line.length > 0);
+  const distinctLodging = new Set(lodgingLines).size;
+  const movingTrip = draft.bases.length >= 3;
+  add(
+    'lodging_has_character',
+    !movingTrip || lodgingLines.length === 0 || distinctLodging > 1,
+    'warning',
+    lodgingLines.length === 0
+      ? 'no stay says what kind of place it is'
+      : !movingTrip
+        ? `${draft.bases.length} base(s): one kind of lodging is expected`
+        : distinctLodging > 1
+          ? `${distinctLodging} distinct kinds of lodging across ${draft.bases.length} bases`
+          : `all ${draft.bases.length} bases describe the same lodging: "${draft.bases[0]?.lodgingStyle ?? draft.bases[0]?.overnight ?? ''}"`,
+  );
+
+  /*
+   * §22 — meals are decisions. Scaled to how much the traveller said food
+   * matters: an error when food is the heart of the trip and the meals are
+   * placeholders, a warning otherwise. "Lunch near base" is the exact string
+   * that motivated this.
+   */
+  const writtenMeals = draft.days.flatMap((day) => [day.meals?.breakfast, day.meals?.lunch, day.meals?.dinner].filter((meal): meal is string => typeof meal === 'string' && meal.trim().length > 0));
+  const genericMeals = writtenMeals.filter((meal) => GENERIC_MEAL.test(meal.trim()));
+  const foodLevel = profile.interests.food_and_towns ?? 'low';
+  const foodLed = foodLevel === 'core' || foodLevel === 'frequent' || (profile.interests.markets_and_street_food ?? 'low') === 'core';
+  const mealsOk = writtenMeals.length === 0 || genericMeals.length * 2 <= writtenMeals.length;
+  add(
+    'meals_are_decisions',
+    mealsOk,
+    foodLed ? 'error' : 'warning',
+    writtenMeals.length === 0
+      ? 'the draft writes no meal intent'
+      : mealsOk
+        ? `${writtenMeals.length - genericMeals.length} of ${writtenMeals.length} meals name a real intent`
+        : `${genericMeals.length} of ${writtenMeals.length} meals say nothing a traveller could act on: ${[...new Set(genericMeals)].slice(0, 3).map((m) => `"${m}"`).join(', ')}`,
+  );
+
+  /*
+   * §25 — a backup belongs to a day. Two things are checked and they are
+   * different: a backup scoped to a day outside the trip is nonsense, and a
+   * backup scoped to the departure day is useless because there is nothing left
+   * to fall back from.
+   */
+  const lastDay = draft.days.length;
+  const misplaced = draft.package.backups
+    .map((backup, index) => ({ backup, index }))
+    .filter(({ backup }) => backup.day !== undefined && (backup.day < 1 || backup.day > lastDay || (backup.day === lastDay && lastDay > 1)));
+  const scoped = draft.package.backups.filter((backup) => backup.day !== undefined).length;
+  add(
+    'backups_are_local',
+    misplaced.length === 0,
+    'warning',
+    draft.package.backups.length === 0
+      ? 'the draft offers no backup'
+      : misplaced.length === 0
+        ? `${scoped} of ${draft.package.backups.length} backup(s) name the day they cover`
+        : `backup(s) on a day they cannot help: ${misplaced.map(({ backup }) => `day ${backup.day} — ${backup.trigger}`).join('; ')}`,
+  );
+
+  /*
+   * §7 — no invented edge time reaches a traveller. This reads the itinerary's
+   * own prose rather than the trip row, because the row's times are a legitimate
+   * planning allowance and the defect was always in what got *printed*.
+   */
+  const spoken = [
+    ...itinerary.days.flatMap((day) => [day.window.note ?? '', ...day.warnings]),
+    ...itinerary.unscheduled.map((entry) => entry.reason ?? ''),
+  ].join(' \n ');
+  const arrivalSpoken = trip.basics.arrivalPrecision !== 'exact' && spoken.includes(`at ${trip.basics.arrivalTime}`);
+  const departureSpoken = trip.basics.departurePrecision !== 'exact' && spoken.includes(`at ${trip.basics.departureTime}`);
+  add(
+    'edge_times_not_invented',
+    !arrivalSpoken && !departureSpoken,
+    'error',
+    !arrivalSpoken && !departureSpoken
+      ? `arrival ${describeEdgeTime(trip.basics.arrivalPrecision, trip.basics.arrivalTime)}, departure ${describeEdgeTime(trip.basics.departurePrecision, trip.basics.departureTime)} — nothing states a time the traveller did not give`
+      : `a planning allowance is stated as a fact: ${[arrivalSpoken ? `arrival ${trip.basics.arrivalTime}` : '', departureSpoken ? `departure ${trip.basics.departureTime}` : ''].filter(Boolean).join(', ')}`,
+  );
 }
 
 function isRelocation(draft: TripDraft, dayNumber: number): boolean {

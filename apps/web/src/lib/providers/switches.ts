@@ -204,3 +204,15 @@ export function isFixtureComposer(): boolean {
 export function arePlacePhotosEnabled(): boolean {
   return process.env.SIDEQUEST_PLACE_PHOTOS?.trim().toLowerCase() === 'google' && Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim());
 }
+
+/**
+ * WHETHER THIS PROCESS SHOULD SHOW PROVIDER DIAGNOSTICS TO WHOEVER IS LOOKING.
+ *
+ * PRODUCTION LOCK V5 §30. Off unless somebody turns it on, in every
+ * environment. `NODE_ENV !== 'production'` was the previous gate and it is the
+ * wrong question: it asks how the process was started, not whether the person
+ * in front of it is debugging providers. The founder plans real trips in dev.
+ */
+export function isDiagnosticsMode(): boolean {
+  return process.env.SIDEQUEST_DIAGNOSTICS?.trim().toLowerCase() === 'on';
+}

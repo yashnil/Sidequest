@@ -312,8 +312,20 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
     regionId: region?.id ?? DYNAMIC_REGION_ID,
     startDate,
     endDate,
+    /*
+     * §7 — THE ALLOWANCE AND THE PRECISION TRAVEL TOGETHER.
+     *
+     * These two times are the minute planning may assume, and for an unknown
+     * edge that is still `15:00` / `11:00` — a reasonable arrival to design a
+     * first day around. What changed is that the precision travels beside them,
+     * so no surface can print them as a fact the traveller stated. Removing the
+     * allowance instead would leave day one with no shape at all, which is a
+     * worse answer to the same problem.
+     */
     arrivalTime: planningTime(input.arrivalPrecision, ARRIVAL_PLANNING_MINUTES, '15:00'),
     departureTime: planningTime(input.departurePrecision, DEPARTURE_PLANNING_MINUTES, '11:00'),
+    arrivalPrecision: input.arrivalPrecision,
+    departurePrecision: input.departurePrecision,
     adults: input.adults,
     children: input.children,
     travelerNeeds: input.travelerNeeds,

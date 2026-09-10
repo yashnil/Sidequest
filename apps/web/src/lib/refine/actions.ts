@@ -1,0 +1,351 @@
+'use server';
+import { revalidatePath } from 'next/cache';
+import { getItinerary, getProfile } from '../db/repository';
+import { listBookedItems } from '../db/intelligence-repository';
+import { bookedItemBinds } from '@sidequest/core';
+import { getTripDraft } from '../db/draft-repository';
+import { FOREIGN_TRIP_REFUSAL, ownedTrip, tripAccessRefusal } from '../net/trip-access';
+import { ResearchModel } from '../providers/anthropic';
+import { isCompositionModelConfigured, isFixtureComposer } from '../providers/switches';
+import { reserveModelCalls } from '../compiler/daily-ceiling';
+import { generateSidequestPlanForTrip } from '../planning/production-plan';
+import { composerModel } from '../planning/composition-model';
+import type { TripDraft } from '../planning/trip-draft';
+import { SqliteRefinementCheckpointer } from './checkpointer';
+import { describeContract, describeRefusal } from './describe';
+import { buildRefinementGraph, resumeWith, type RefinementInterpreter } from './graph';
+import { modelRefinementInterpreter } from './interpreter';
+import { RefinementBusyError, activeRun, beginRun, listRuns, updateRun, type RefinementRun } from './run-repository';
+import { StaleTripVersionError, currentVersion, ensureBaselineVersion, recordVersion, undoTarget } from './version-repository';
+import { refinementRunThreadId, refinementThreadId } from './threads';
+import { MAX_REFINEMENT_MODEL_CALLS, type ClarifyingQuestion, type RefinementLock } from './state';
+
+/**
+ * ASK SIDEQUEST — THE SERVER SIDE.
+ *
+ * PRODUCTION LOCK V5 §43–§49. Every exported action here obeys the same three
+ * rules, in this order, and the order is the point:
+ *
+ * 1. **Ownership first, always** (§61). `tripAccessRefusal` runs before anything
+ *    else — before the trip is read, before a thread id is constructed, before a
+ *    run is created. A thread id is a lookup key and never a capability.
+ * 2. **The lease before the work** (§48). A second request while one is in flight
+ *    is refused with the reason, not queued behind a trip the traveller has not
+ *    seen and not raced against it.
+ * 3. **Nothing is committed until it is applied.** A failure at any point leaves
+ *    the canonical trip exactly as it was, and says so (§49).
+ */
+
+export interface RefinementResult {
+  ok: boolean;
+  /** A sentence for the traveller. Never a schema path, a provider name or a stack. */
+  error?: string;
+  /** Set when Sidequest needs one answer before it can proceed (§42). */
+  question?: ClarifyingQuestion;
+  /** The run this belongs to, so the client can resume or poll it. */
+  runId?: string;
+  /** What changed, what stayed, what is being rechecked (§44). */
+  summary?: { changed: readonly string[]; kept: readonly string[]; rechecking: readonly string[]; refused: readonly string[] };
+  /** A read-only answer. Present only for a question about the trip. */
+  answer?: string;
+  version?: number;
+}
+
+/** The sentence a traveller sees when refinement is not configured. No environment variable names. */
+/** How many "kept" lines a traveller reads before the list stops being reassurance. */
+const SUMMARY_LINE_LIMIT = 6;
+
+const NOT_CONFIGURED = 'Sidequest cannot make changes for you right now. Your trip is unchanged.';
+
+function interpreterFor(caller: string | null, now: Date): { interpreter: RefinementInterpreter; error?: undefined } | { interpreter?: undefined; error: string } {
+  if (isFixtureComposer()) {
+    /*
+     * The fixture composer exists so the whole path runs offline with no paid
+     * call. It cannot invent a change, so it answers every request as a question
+     * about the trip — honest, and enough to exercise ownership, the lease, the
+     * versioning and the UI without spending anything.
+     */
+    return {
+      interpreter: {
+        async interpret() {
+          return { intent: 'explain_decision' as const, explanation: 'Sidequest is running offline against saved fixtures, so it can explain this trip but not change it.' };
+        },
+      },
+    };
+  }
+  if (!isCompositionModelConfigured()) return { error: NOT_CONFIGURED };
+  const reservation = reserveModelCalls(1, { now, caller });
+  if (!reservation.allowed) return { error: reservation.message ?? 'Today’s allowance is used up. Try again tomorrow.' };
+  return { interpreter: modelRefinementInterpreter(new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() })) };
+}
+
+function locksFor(): RefinementLock[] {
+  /*
+   * Locks are not persisted yet — the UI to set one does not exist, so an empty
+   * list is the honest state rather than a table nobody writes to. The whole
+   * mechanism below already honours them, so adding the control is a UI change
+   * and not an architecture one. Tracked as P2 in the launch-readiness page.
+   */
+  return [];
+}
+
+async function draftFor(tripId: string): Promise<TripDraft | null> {
+  return getTripDraft(tripId)?.draft ?? null;
+}
+
+/**
+ * Ask Sidequest to change the trip, or to explain it.
+ *
+ * One model call. A question comes back as `question` and the run stays open
+ * holding the lease; `answerRefinementAction` resumes it.
+ */
+export async function refineTripAction(input: { tripId: string; request: string; idempotencyKey?: string }): Promise<RefinementResult> {
+  const refusal = await tripAccessRefusal(input.tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const trip = await ownedTrip(input.tripId);
+  if (!trip) return { ok: false, error: FOREIGN_TRIP_REFUSAL };
+
+  const request = input.request.trim();
+  if (request.length === 0) return { ok: false, error: 'Tell Sidequest what you would like changed.' };
+  if (request.length > 600) return { ok: false, error: 'That is longer than Sidequest can act on. Try one change at a time.' };
+
+  const draft = await draftFor(input.tripId);
+  if (!draft) return { ok: false, error: 'There is no plan to change yet. Build the trip first.' };
+
+  const now = new Date();
+  /*
+   * §46 — the trip as built becomes version 1 before anything edits it, so the
+   * FIRST refinement is undoable. Without this the live acceptance run finished a
+   * successful change at head version 1, and `undoTarget` (head - 1) had nothing
+   * to return: the traveller's first edit was the one edit they could not take
+   * back. Lazy and idempotent, so an unrefined trip pays nothing.
+   */
+  const built = getItinerary(input.tripId);
+  const baseVersion = built ? ensureBaselineVersion({ tripId: input.tripId, itinerary: built, draft, now }) : currentVersion(input.tripId);
+  const threadId = refinementThreadId(input.tripId);
+
+  let run: RefinementRun;
+  try {
+    const started = beginRun({ tripId: input.tripId, threadId, request, baseVersion, ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}), now });
+    if (started.reused) {
+      /* §59 — a double press is one press. Answer with whatever that run has already produced. */
+      return started.run.status === 'awaiting_answer' && started.run.question
+        ? { ok: true, runId: started.run.id, question: started.run.question }
+        : { ok: started.run.status !== 'failed', runId: started.run.id, ...(started.run.error ? { error: started.run.error } : {}) };
+    }
+    run = started.run;
+  } catch (error) {
+    if (error instanceof RefinementBusyError) return { ok: false, error: error.message, runId: error.activeRun.id, ...(error.activeRun.question ? { question: error.activeRun.question } : {}) };
+    throw error;
+  }
+
+  const seam = interpreterFor(null, now);
+  if (!seam.interpreter) {
+    updateRun({ id: run.id, status: 'failed', error: seam.error, now });
+    return { ok: false, error: seam.error, runId: run.id };
+  }
+
+  return runGraph({ tripId: input.tripId, run, draft, interpreter: seam.interpreter, request, baseVersion });
+}
+
+/** Resume a refinement that stopped to ask one question (§42). */
+export async function answerRefinementAction(input: { tripId: string; runId: string; answer: string }): Promise<RefinementResult> {
+  const refusal = await tripAccessRefusal(input.tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const run = activeRun(input.tripId);
+  if (!run || run.id !== input.runId) return { ok: false, error: 'That question is no longer open. Ask Sidequest again when you are ready.' };
+  const draft = await draftFor(input.tripId);
+  if (!draft) return { ok: false, error: 'There is no plan to change yet.' };
+  const now = new Date();
+  const seam = interpreterFor(null, now);
+  if (!seam.interpreter) {
+    updateRun({ id: run.id, status: 'failed', error: seam.error, now });
+    return { ok: false, error: seam.error, runId: run.id };
+  }
+  return runGraph({ tripId: input.tripId, run, draft, interpreter: seam.interpreter, request: run.request, baseVersion: run.baseVersion, answer: input.answer.slice(0, 400) });
+}
+
+/**
+ * Drive the graph and translate its outcome into a sentence.
+ *
+ * The commit is the only thing here that writes to the trip, and it does three
+ * things in one place so they cannot drift: persist and verify the patched draft
+ * through the one canonical pipeline, mint the version, and return the new
+ * version number for the optimistic-concurrency check.
+ */
+async function runGraph(input: {
+  tripId: string;
+  run: RefinementRun;
+  draft: TripDraft;
+  interpreter: RefinementInterpreter;
+  request: string;
+  baseVersion: number;
+  answer?: string;
+}): Promise<RefinementResult> {
+  const { tripId, run, draft, interpreter } = input;
+  const graph = buildRefinementGraph({
+    loadDraft: async () => draft,
+    /* §9 — a patch may not orphan a booked fact. Read at apply time, never cached in state. */
+    loadBookings: async () => listBookedItems(tripId).filter((item) => bookedItemBinds(item)).map((item) => ({ title: item.title, date: item.date, endDate: item.endDate, baseId: item.baseId })),
+    interpreter,
+    checkpointer: new SqliteRefinementCheckpointer(tripId),
+    async commit({ draft: patched, patch, baseVersion }) {
+      /*
+       * §51 — reverification runs the canonical pipeline over the patched draft.
+       * It is currently whole-trip rather than blast-radius-scoped; the recheck
+       * list is computed and persisted on the version, and `reconcile.ts` does
+       * not consume it yet. The cost is largely absorbed because persisted place
+       * identities from the previous build are reused before any provider is
+       * asked (`persistedIdentitiesFor`). Recorded as P1.
+       */
+      const verified = await generateSidequestPlanForTrip(tripId, { useDraft: patched, mode: 'full' });
+      if (!verified.ok || !verified.result) throw new Error(verified.error ?? 'The change could not be verified.');
+      const version = recordVersion({
+        tripId,
+        previousVersion: baseVersion,
+        request: input.request,
+        summary: { changed: patch.changed, kept: patch.kept, rechecking: [] },
+        itinerary: verified.result.itinerary,
+        draft: patched,
+      });
+      return version.version;
+    },
+  });
+
+  /*
+   * PRODUCTION LOCK V5 — ONE ACTION, ONE SLICE OF GRAPH STATE.
+   *
+   * `graph.invoke` on a thread RESUMES that thread's checkpoint. With the run's
+   * whole history in one namespace, a second refinement inherited the first
+   * one's channels: the live closure run reported `modelCalls: 2` for a single
+   * call, and carried the previous run's error alongside its own.
+   *
+   * The counter being wrong is the harmless half. The dangerous half is that
+   * `interpret` refuses once `modelCallsThisAction` reaches the ceiling — so
+   * after two failed refinements a trip would silently refuse every future one,
+   * without calling anything, forever.
+   *
+   * The thread is the run: a new action gets a fresh one, and a resume after a
+   * clarifying question passes the same run and lands back in its own state.
+   * The trip id stays the prefix, so ownership, `tripIdOfThread` and the
+   * `ON DELETE CASCADE` from `trips` behave exactly as before. `checkpoint_ns`
+   * was tried first and does not work — LangGraph reserves it for subgraphs.
+   */
+  const config = { configurable: { thread_id: refinementRunThreadId(tripId, run.id) } };
+  try {
+    const state = input.answer
+      ? await graph.invoke(resumeWith(input.answer), config)
+      : await graph.invoke({ tripId, canonicalTripVersion: input.baseVersion, userRequest: input.request, locks: locksFor(), status: 'classifying' as const }, config);
+
+    if (state.status === 'awaiting_answer' && state.pendingQuestion) {
+      updateRun({ id: run.id, status: 'awaiting_answer', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: state.pendingQuestion });
+      return { ok: true, runId: run.id, question: state.pendingQuestion };
+    }
+    if (state.status === 'failed' || state.status === 'rejected') {
+      const message = travellerSentenceFor(state.errors, state.refused);
+      /*
+       * The traveller gets one sentence; an operator needs the cause.
+       *
+       * The live acceptance run failed here and logged nothing, so the reason —
+       * the model truncated at `max_tokens` — was only recoverable by decoding
+       * the LangGraph checkpoint by hand. That the checkpoint HAD it is the
+       * durable saver doing its job; that it was the only copy was a gap.
+       */
+      console.warn('A refinement did not produce a change', { tripId, runId: run.id, status: state.status, intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, errors: state.errors, refused: state.refused.map((entry) => entry.reason) });
+      updateRun({ id: run.id, status: state.status, intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, error: message });
+      return { ok: false, error: message, runId: run.id };
+    }
+    if (state.explanation) {
+      updateRun({ id: run.id, status: 'done', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, result: { explanation: state.explanation } });
+      return { ok: true, runId: run.id, answer: state.explanation };
+    }
+    /*
+     * §11, §44 — the summary is written in the traveller's words.
+     *
+     * The contract addresses things by identity (`activity:d1-a0-ala-too-square`)
+     * because preservation has to be checkable. The first live refinement showed
+     * those addresses to the traveller under "Kept". `describe.ts` is now the one
+     * boundary where an address becomes a sentence, and nothing internal crosses
+     * it: not an id, not a fact key, not a refusal written for a log.
+     */
+    const described = describeContract({ contract: state.contract, draft });
+    const summary = {
+      changed: state.applied,
+      kept: described.kept.slice(0, SUMMARY_LINE_LIMIT),
+      rechecking: described.rechecking,
+      refused: state.refused.map((entry) => describeRefusal(entry.reason)),
+    };
+    updateRun({ id: run.id, status: 'done', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, result: summary });
+    revalidatePath(`/trips/${tripId}/itinerary`);
+    return { ok: true, runId: run.id, summary, version: state.canonicalTripVersion };
+  } catch (error) {
+    /*
+     * §49 — the trip is unchanged, and that is the first thing the traveller is
+     * told. A stale version is its own sentence because it has a different
+     * remedy: reload and ask again.
+     */
+    const message = error instanceof StaleTripVersionError ? 'Your trip changed while Sidequest was working on this. Reload and ask again.' : 'Sidequest could not apply that change. Your current trip is unchanged.';
+    console.error('A refinement failed', { tripId, runId: run.id, error: error instanceof Error ? error.message : 'unknown' });
+    updateRun({ id: run.id, status: 'failed', question: null, error: message });
+    return { ok: false, error: message, runId: run.id };
+  }
+}
+
+/** One sentence, from whatever the graph recorded. Never a schema path or a provider name. */
+function travellerSentenceFor(errors: readonly string[], refused: readonly { reason: string }[]): string {
+  if (refused.some((entry) => entry.reason.includes('locked'))) return 'That would have changed something you asked Sidequest to keep, so nothing was changed.';
+  if (errors.some((entry) => entry.includes('model calls'))) return `Sidequest allows ${MAX_REFINEMENT_MODEL_CALLS} attempts at one change. Try asking for something more specific.`;
+  return 'Sidequest could not make that change. Your current trip is unchanged.';
+}
+
+/**
+ * Restore the version before the current one (§46).
+ *
+ * A persisted-state restore, deliberately not a graph replay: replaying a node
+ * re-triggers whatever it called, so an undo would cost a model call and could
+ * return something that is not what was undone.
+ */
+export async function undoRefinementAction(input: { tripId: string }): Promise<RefinementResult> {
+  const refusal = await tripAccessRefusal(input.tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const target = undoTarget(input.tripId);
+  if (!target) return { ok: false, error: 'There is nothing to undo on this trip.' };
+  const head = currentVersion(input.tripId);
+  const { saveItinerary } = await import('../db/repository');
+  const { saveTripDraft } = await import('../db/draft-repository');
+  saveItinerary(target.itinerary);
+  if (target.draft) saveTripDraft({ tripId: input.tripId, draft: target.draft });
+  /*
+   * The restore is itself a version, so the history stays append-only and a
+   * traveller can undo an undo. Overwriting the head would make "restore" the
+   * one operation with no record of having happened.
+   */
+  recordVersion({
+    tripId: input.tripId,
+    previousVersion: head,
+    request: `Undo back to version ${target.version}`,
+    summary: { changed: [`Restored the trip as it was before your last change.`], kept: [], rechecking: [] },
+    itinerary: target.itinerary,
+    draft: target.draft,
+  });
+  revalidatePath(`/trips/${input.tripId}/itinerary`);
+  /*
+   * §11 — "Restored version 1" is the system's own bookkeeping read aloud. The
+   * traveller asked for their trip back; that is what the sentence says.
+   */
+  return { ok: true, version: head + 1, summary: { changed: ['Your trip is back as it was before your last change.'], kept: [], rechecking: [], refused: [] } };
+}
+
+/** The conversation so far, for the Ask Sidequest panel. Owner only. */
+export async function refinementHistoryAction(input: { tripId: string }): Promise<{ ok: boolean; runs?: RefinementRun[]; canUndo?: boolean; error?: string }> {
+  const refusal = await tripAccessRefusal(input.tripId);
+  if (refusal) return { ok: false, error: refusal };
+  return { ok: true, runs: listRuns(input.tripId, 10), canUndo: undoTarget(input.tripId) !== null };
+}
+
+/** Kept so the module's imports stay honest about what it reads. */
+export async function refinementReadyAction(input: { tripId: string }): Promise<{ ok: boolean; ready: boolean }> {
+  const refusal = await tripAccessRefusal(input.tripId);
+  if (refusal) return { ok: false, ready: false };
+  return { ok: true, ready: Boolean(getTripDraft(input.tripId) && getItinerary(input.tripId) && getProfile(input.tripId)) };
+}

@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   buildTravelerBrief,
+  countNights,
   currencyForCountry,
   type TravelerBrief,
   displayNameOf,
@@ -11,26 +12,25 @@ import {
   type Region,
   type TravelerProfile,
   type Trip,
+  type TripComposerAnswers,
 } from '@sidequest/core';
 import type { StructuredModel } from '../providers/interpretation-model';
 import type { RoutingProvider } from '@sidequest/compiler';
-import type { BenchmarkTripRequest } from '@sidequest/bench';
 import { ResearchModel } from '../providers/anthropic';
 import { isCompositionModelConfigured, isFixtureComposer, isGeocoderEnabled, isPoiProviderEnabled } from '../providers/switches';
 import { reserveModelCalls } from '../compiler/daily-ceiling';
 import { verificationProviders } from './verification-providers';
-import { getIntent } from '../db/compiler-repository';
+import { getIntent, saveComposerAnswers } from '../db/compiler-repository';
 import { getTripDraft, listCompositionAttempts, recordCompositionParse, saveCompositionAttempt, saveTripDraft } from '../db/draft-repository';
 import { randomUUID } from 'node:crypto';
-import { getProfile, getSelections, getTrip, saveItinerary, saveReadiness } from '../db/repository';
+import { getProfile, getSelections, getTrip, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-repository';
 import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
-import { composerModel } from '../benchmark/baseline/generate';
-import { buildHybridTripRequest } from './hybrid-request';
+import { composerModel } from './composition-model';
+import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
-import { describeEdge } from '../benchmark/baseline/generate';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
 import {
@@ -252,6 +252,21 @@ export async function generateSidequestPlanForTrip(
      * persistence) runs exactly as on a build. Refused when no draft exists.
      */
     reuseStoredDraft?: boolean;
+    /**
+     * PRODUCTION LOCK V5 — verify and persist THIS draft, with no model call.
+     *
+     * The refinement path (`refine/`) produces a patched draft deterministically
+     * and then needs everything after the draft: identity resolution, routing,
+     * hours, corrections, intelligence, persistence. That is this function's
+     * whole second half, and reproducing it would be a second, quietly different
+     * verification pipeline.
+     *
+     * Distinct from `reuseStoredDraft`, which re-verifies whatever is already in
+     * `trip_drafts`. This supplies the draft, saves it, and carries on. Like
+     * `reuseStoredDraft` it reserves nothing and calls no model — a refinement's
+     * one model call is spent by the interpreter before this is reached.
+     */
+    useDraft?: TripDraft;
   } = {},
 ): Promise<ProductionPlanResult> {
   const now = options.now ?? new Date();
@@ -259,8 +274,16 @@ export async function generateSidequestPlanForTrip(
   const startedMs = performance.now();
   const since = (from: number) => Math.round(performance.now() - from);
 
-  const trip = getTrip(tripId);
-  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  /*
+   * `tripRow` rather than `trip`, because §6 lets the composition choose the
+   * dates: `trip` below is rebound to the row as it stands AFTER any window the
+   * model picked has been adopted, so everything downstream — reconciliation,
+   * weather, the itinerary, the audit — reads one set of dates.
+   */
+  const tripRow = getTrip(tripId);
+  if (!tripRow) return { ok: false, error: 'We could not find that trip any more.' };
+  /* Rebound after composition when the model chose the window (§6). */
+  let trip = tripRow;
   /*
    * MVP V3, Stage 24 — the generation screen reads this, so every write below
    * is at a boundary the server actually crossed. Best-effort: a progress row
@@ -283,7 +306,18 @@ export async function generateSidequestPlanForTrip(
   const profile = getProfile(tripId) ?? defaultProfileFor(trip, composer);
 
   const fixture = isFixtureComposer();
-  if (!fixture && !isCompositionModelConfigured()) {
+  /*
+   * The credential is needed to COMPOSE, and only to compose.
+   *
+   * `reuseStoredDraft` and `useDraft` both supply the draft and reach the model
+   * seam not at all — the first re-verifies what is already persisted, the
+   * second applies a refinement patch. Refusing those for want of a credential
+   * they will never use made "verify this again" and "apply my edit" impossible
+   * on a machine that had simply unset the key, and made the zero-call paths
+   * indistinguishable from the paid one at the point it matters most.
+   */
+  const willCompose = !options.reuseStoredDraft && !options.useDraft;
+  if (willCompose && !fixture && !isCompositionModelConfigured()) {
     return { ok: false, error: 'No model credential is configured, so we cannot compose a first draft yet.' };
   }
 
@@ -341,7 +375,6 @@ export async function generateSidequestPlanForTrip(
     ...(rawDestinationPhrase && normalizePhrase(rawDestinationPhrase) !== normalizePhrase(destinationName) ? { travellerPhrase: rawDestinationPhrase } : {}),
   };
 
-  const request = buildHybridTripRequest({ trip, composer, profile, now });
   const boardSignals = mode === 'full' && board ? boardSignalsFor(board.candidates, getSelections(tripId)) : undefined;
   /*
    * LIVE WORLD V1 — booked facts enter before composition. The model builds
@@ -349,12 +382,34 @@ export async function generateSidequestPlanForTrip(
    */
   const booked = listBookedItems(tripId);
   const bookedFacts = compactBookedFacts(booked);
-  const brief = travelerBriefFor({ profile, trip, request, envelope, bookedFacts, ...(boardSignals ? { boardSignals } : {}) });
-  const context: CompositionContext = { request, envelope, ...(boardSignals ? { boardSignals } : {}), brief, mode, ...(bookedFacts.length > 0 ? { bookedFacts } : {}) };
+  /*
+   * PRODUCTION LOCK V5 §2 — ONE PRODUCTION BUILD INPUT, NO BENCHMARK SCHEMA.
+   *
+   * `buildHybridTripRequest` used to sit here and produce a
+   * `BenchmarkTripRequest`, whose narrow vocabularies bounded the whole
+   * production path and crashed a real trip whose diet the benchmark could not
+   * represent. `CanonicalTripBuildInput` holds only real product state and every
+   * planning-critical value carries its own lineage.
+   */
+  const input = buildCanonicalTripBuildInput({ trip, composer, profile, bookedFacts, destinationPhrase: rawDestinationPhrase, now });
+  const brief = travelerBriefFor({ input, envelope, ...(boardSignals ? { boardSignals } : {}) });
+  const timing = compositionTimingBriefOf(input.timing, now);
+  const context: CompositionContext = {
+    envelope,
+    ...(boardSignals ? { boardSignals } : {}),
+    brief,
+    mode,
+    ...(bookedFacts.length > 0 ? { bookedFacts } : {}),
+    timing,
+    planningFacts: { carAvailable: input.movement.carAvailable, desiredBaseCount: input.movement.desiredBaseCount.value ?? 1, budgetBand: profile.budgetStyle },
+  };
   const preparationMs = since(preparationStartedMs);
 
   let model: StructuredModel;
-  if (options.reuseStoredDraft) {
+  if (options.useDraft) {
+    const supplied = options.useDraft;
+    model = { callsRemaining: 1, structured: async () => supplied as never } as unknown as StructuredModel;
+  } else if (options.reuseStoredDraft) {
     const stored = getTripDraft(tripId);
     if (!stored) return { ok: false, error: 'There is no saved draft for this trip to verify again.' };
     model = { callsRemaining: 1, structured: async () => stored.draft as never } as unknown as StructuredModel;
@@ -398,7 +453,7 @@ export async function generateSidequestPlanForTrip(
   const outcome = await generateTripDraft({
     model,
     context,
-    onRawResponse: fixture || options.reuseStoredDraft
+    onRawResponse: fixture || options.reuseStoredDraft || options.useDraft
       ? undefined
       : (raw) => {
           try {
@@ -418,7 +473,7 @@ export async function generateSidequestPlanForTrip(
      * plain sentence and an explicit Retry. Nothing here retries.
      */
     const diagnostics = { failureKind: outcome.failureKind, issueKind: outcome.issueKind ?? null, detail: outcome.detail.slice(0, 500), issues: (outcome.issues ?? []).slice(0, 40), enforcement: outcome.enforcement };
-    if (!fixture && !options.reuseStoredDraft) {
+    if (!fixture && !options.reuseStoredDraft && !options.useDraft) {
       try {
         recordCompositionParse({ id: attemptId, parseStatus: outcome.failureKind === 'malformed_output' ? (outcome.issueKind ?? 'no_json') : 'model_failed', parse: diagnostics, draftLinked: false });
       } catch {
@@ -434,7 +489,45 @@ export async function generateSidequestPlanForTrip(
     return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, timings: emptyTimings(), modelCalls, diagnostics };
   }
   const draft = outcome.draft;
-  if (!fixture && !options.reuseStoredDraft) {
+  /*
+   * PRODUCTION LOCK V5 §5/§6 — THE WINDOW THE MODEL CHOSE BECOMES THE TRIP'S DATES.
+   *
+   * Without this the whole "tell me when it is best" feature is decoration: the
+   * model picks a window, the draft carries it, and the itinerary is still dated
+   * to the placeholder the trip row was created with — so every day's date, its
+   * weather and its daylight belong to a month nobody chose. A live Hong Kong
+   * walk showed the placeholder ("Oct 13–18") in the chrome before a single day
+   * had been composed.
+   *
+   * Applied only when the traveller actually asked Sidequest to choose, and only
+   * when the window is a real pair of dates spanning the nights they asked for.
+   * A malformed or wrong-length window is ignored rather than trusted: the
+   * placeholder is at least the right *length*, and silently changing a trip's
+   * duration because a date string was mistyped is a worse failure than keeping
+   * the month wrong.
+   */
+  if (input.timing.sidequestChooses && draft.window) {
+    const chosen = adoptChosenWindow({ tripId, trip, window: draft.window, nights: input.nights.value ?? countNights(trip.basics.startDate, trip.basics.endDate), composer, now });
+    if (chosen) {
+      trip = chosen.trip;
+      console.warn('The composition chose this trip’s dates', { tripId, from: `${tripRow.basics.startDate}..${tripRow.basics.endDate}`, to: `${chosen.trip.basics.startDate}..${chosen.trip.basics.endDate}` });
+    } else {
+      /*
+       * The window was refused (past, malformed, or the wrong length), so the
+       * trip keeps its placeholder dates — and the model's timing rationale is
+       * now about a month the trip is not in. A live Hong Kong build showed the
+       * contradiction on the Overview: dates "13 Oct – 18 Oct" above the words
+       * "Early November gives dry, comfortably warm weather…".
+       *
+       * Dropping the rationale is the honest repair. It is prose explaining a
+       * decision that did not take effect, and a trip with no explanation of its
+       * dates is strictly better than one whose explanation is about other dates.
+       */
+      console.warn('The composition returned a window Sidequest could not use; the placeholder dates stand and its timing rationale is dropped', { tripId, window: draft.window });
+      delete (draft as { timingRationale?: string }).timingRationale;
+    }
+  }
+  if (!fixture && !options.reuseStoredDraft && !options.useDraft) {
     try {
       recordCompositionParse({ id: attemptId, parseStatus: 'ok', parse: { enforcement: outcome.enforcement, normalizedFields: outcome.normalizedFields }, normalizedFields: outcome.normalizedFields, draftLinked: true });
     } catch {
@@ -463,7 +556,7 @@ export async function generateSidequestPlanForTrip(
   const nearby = isGeocoderEnabled() || isPoiProviderEnabled() ? productionFindNearbyLocalities : undefined;
   const routing = verification.routing && verification.routing.supportedModes().length > 0 ? verification.routing : null;
 
-  const mustIncludeNames = [...(boardSignals?.mustInclude ?? []), ...request.taste.mustDo];
+  const mustIncludeNames = [...(boardSignals?.mustInclude ?? []), ...input.ownWords.mustDo];
   /*
    * LIVE WORLD V1 — every paid lookup this build may make is counted against
    * one budget sized by the draft itself; refusal means "verify later",
@@ -701,6 +794,105 @@ export async function generateSidequestPlanForTrip(
  * Helpers
  * ------------------------------------------------------------------ */
 
+/**
+ * ADOPT THE WINDOW THE COMPOSITION CHOSE.
+ *
+ * PRODUCTION LOCK V5 §5/§6. When the traveller said "tell me when it is best",
+ * the trip row holds a materialised placeholder until something decides. The
+ * model decides, in the same call that designs the route — and this is where its
+ * decision becomes the trip's dates.
+ *
+ * Three things happen, and all three are needed:
+ *
+ * 1. **The trip row is updated**, so reconciliation, the day dates, the weather
+ *    lookup and the audit all read one set of dates.
+ * 2. **The composer's timing intent records an accepted recommendation** with
+ *    `basis: 'composed_with_trip'`, so a reload knows the question is answered
+ *    and by whom. Without this the chrome would say "Sidequest picks the dates"
+ *    forever on a trip whose dates it had already picked.
+ * 3. **Nothing is adopted unless it is usable.** Two ISO dates, in order,
+ *    spanning the nights the traveller asked for, and not in the past. A window
+ *    that fails any of those is refused and the placeholder stands: the
+ *    placeholder is at least the right *length*, and silently changing a trip's
+ *    duration because a date was mistyped is a worse failure than a wrong month.
+ */
+export function adoptChosenWindow(input: {
+  tripId: string;
+  trip: Trip;
+  window: { startDate: string; endDate: string };
+  nights: number;
+  composer: TripComposerAnswers | null;
+  now: Date;
+  /**
+   * The two writes, as a seam.
+   *
+   * Not for indirection's sake: the refusals below are the important half of
+   * this function and testing them against a real database would mean a
+   * temporary file per case to prove that *nothing was written*. The default is
+   * the real repository, so the production path is unchanged.
+   */
+  persist?: { updateTripDates: (id: string, start: string, end: string) => void; saveComposerAnswers: (id: string, answers: TripComposerAnswers) => void };
+}): { trip: Trip } | null {
+  const { startDate, endDate } = input.window;
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(startDate) || !iso.test(endDate)) return null;
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null;
+  const spanned = Math.round((end - start) / 86_400_000);
+  if (spanned !== input.nights) return null;
+  /* A window in the past is not a recommendation, it is a mistake. */
+  const today = Date.parse(`${input.now.toISOString().slice(0, 10)}T00:00:00Z`);
+  if (start < today) return null;
+
+  const persist = input.persist ?? { updateTripDates, saveComposerAnswers };
+  persist.updateTripDates(input.tripId, startDate, endDate);
+  if (input.composer) {
+    try {
+      persist.saveComposerAnswers(input.tripId, {
+        ...input.composer,
+        dates: {
+          ...input.composer.dates,
+          startDate,
+          endDate,
+          recommendation: {
+            startDate,
+            endDate,
+            label: monthLabelFor(startDate, endDate),
+            month: Number(startDate.slice(5, 7)),
+            year: Number(startDate.slice(0, 4)),
+            reasons: [],
+            tradeoffs: [],
+            unknowns: [],
+            basis: 'composed_with_trip',
+            generatedAt: input.now.toISOString(),
+            accepted: true,
+          },
+        },
+        updatedAt: input.now.toISOString(),
+      });
+    } catch (error) {
+      /*
+       * The trip row is already right, which is what the itinerary reads. A
+       * failure to record the provenance is worth a log line, not a lost trip.
+       */
+      console.error('Could not record where this trip’s dates came from', { tripId: input.tripId, message: error instanceof Error ? error.message : 'unknown' });
+    }
+  }
+  return { trip: { ...input.trip, basics: { ...input.trip.basics, startDate, endDate } } };
+}
+
+/** "Late March", "March to April" — the part of the calendar a window sits in. */
+function monthLabelFor(startDate: string, endDate: string): string {
+  const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const startMonth = names[Number(startDate.slice(5, 7)) - 1] ?? '';
+  const endMonth = names[Number(endDate.slice(5, 7)) - 1] ?? '';
+  if (startMonth !== endMonth) return `${startMonth} into ${endMonth}`;
+  const day = Number(startDate.slice(8, 10));
+  return `${day <= 10 ? 'Early' : day <= 20 ? 'Mid' : 'Late'} ${startMonth}`;
+}
+
+
 /** Case- and punctuation-insensitive, so "Hong Kong" and "hong kong" are one phrase. */
 function normalizePhrase(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -712,16 +904,20 @@ function normalizePhrase(value: string): string {
  * trip facts, bookings and board signals; rendered as XML in the task. Pure,
  * so tests can prove that changing one answer changes the brief.
  */
-export function travelerBriefFor(input: {
-  profile: TravelerProfile;
-  trip: Trip;
-  request: BenchmarkTripRequest;
-  envelope: DestinationEnvelope;
-  bookedFacts?: readonly string[];
-  boardSignals?: BoardSignals;
-}): TravelerBrief {
-  const { profile, trip, request, envelope, boardSignals } = input;
-  const bookedFacts = input.bookedFacts ?? [];
+export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelope: DestinationEnvelope; boardSignals?: BoardSignals }): TravelerBrief {
+  const { input: canonical, envelope } = input;
+  const { profile, timing } = canonical;
+  /*
+   * §5/§6/§7 — WHAT THE BRIEF MAY STATE AS A DATE OR A TIME.
+   *
+   * `startDate` and `endDate` are omitted entirely while Sidequest still owes
+   * the traveller a window, rather than carrying the trip row's placeholder:
+   * a brief that says "2027-10-03 to 2027-10-13" for somebody who asked "tell
+   * me when it is best" has already answered the question, wrongly, before the
+   * model saw it. The season line goes with them for the same reason.
+   */
+  const startDate = timing.startDate.value;
+  const endDate = timing.endDate.value;
   return buildTravelerBrief({
     profile,
     trip: {
@@ -729,21 +925,26 @@ export function travelerBriefFor(input: {
       ...(envelope.qualifiedName ? { qualifiedName: envelope.qualifiedName } : {}),
       ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
       ...(envelope.scale ? { scale: envelope.scale } : {}),
-      startDate: trip.basics.startDate,
-      endDate: trip.basics.endDate,
-      nights: request.dates.nights,
-      days: request.dates.nights + 1,
-      season: seasonOf(trip.basics.startDate, envelope.center?.lat),
-      adults: trip.basics.adults,
-      children: trip.basics.children,
-      seniors: request.party.seniorsInGroup,
-      arrival: describeEdge(request.arrival),
-      departure: describeEdge(request.departure),
-      ...(request.origin ? { origin: request.origin } : {}),
-      bookedFacts,
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {}),
+      nights: canonical.nights.value ?? 1,
+      days: (canonical.nights.value ?? 1) + 1,
+      ...(startDate ? { season: seasonOf(startDate, envelope.center?.lat) } : {}),
+      adults: canonical.party.adults,
+      children: canonical.party.children,
+      seniors: canonical.party.seniorsInGroup,
+      /* §7 — the phrase, never a clock time nobody stated. */
+      arrival: canonical.arrival.phrase,
+      departure: canonical.departure.phrase,
+      ...(canonical.origin ? { origin: canonical.origin } : {}),
+      bookedFacts: canonical.bookedFacts,
     },
-    signals: { mustInclude: [...(boardSignals?.mustInclude ?? []), ...request.taste.mustDo], boardLikes: boardSignals?.interested ?? [], boardRejects: boardSignals?.avoid ?? [] },
-    ownWords: { mustDo: request.taste.mustDo, dislikes: request.taste.dislikes, freeText: request.freeText, mobilityNotes: request.party.mobilityNotes },
+    signals: {
+      mustInclude: [...(input.boardSignals?.mustInclude ?? []), ...canonical.ownWords.mustDo],
+      boardLikes: input.boardSignals?.interested ?? [],
+      boardRejects: input.boardSignals?.avoid ?? [],
+    },
+    ownWords: { mustDo: canonical.ownWords.mustDo, dislikes: canonical.ownWords.dislikes, freeText: canonical.ownWords.freeText, mobilityNotes: canonical.party.mobilityNotes },
   });
 }
 

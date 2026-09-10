@@ -6,7 +6,7 @@ import { getIntent } from '@/lib/db/compiler-repository';
 import { getDraftHints, getFxRate, getReadinessProfile, getTravelIntelligence, listBookedItems, listChecks, saveTravelIntelligence, type CheckList } from '@/lib/db/intelligence-repository';
 import { defaultProfileFor } from '@/lib/planning/default-profile';
 import { applyBookedFacts } from './booked-reconcile';
-import { buildTravelIntelligence } from './build';
+import { buildTravelIntelligence, INTELLIGENCE_RULES_VERSION } from './build';
 
 /**
  * THE INTELLIGENCE FOR A TRIP, FROM WHAT IS ON DISK.
@@ -51,6 +51,12 @@ export function loadTripIntelligence(input: {
   const userPlaces = [...(composer?.mustDo ? composer.mustDo.split(/\n|,|;/).map((s) => s.trim()).filter((s) => s.length > 1) : []), ...profile.interview.mustInclude];
 
   const inputsHash = createHash('sha256')
+    /*
+     * The rules that will read these inputs are part of the key. A fix to a
+     * derivation is not an input and does not move the itinerary, so without
+     * this a corrected rule never reaches a trip that was already built.
+     */
+    .update(INTELLIGENCE_RULES_VERSION)
     .update(itineraryStructureFingerprint(applied.itinerary))
     .update(JSON.stringify(booked))
     .update(JSON.stringify(readinessProfile ?? null))

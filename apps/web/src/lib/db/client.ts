@@ -2,7 +2,7 @@ import 'server-only';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, SCHEMA_SQL } from './schema';
+import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, REFINEMENT_SCHEMA_SQL, SCHEMA_SQL } from './schema';
 
 /**
  * Local persistence driver.
@@ -46,6 +46,13 @@ export function getDb(): Database.Database {
    */
   db.pragma('busy_timeout = 5000');
   db.exec(SCHEMA_SQL);
+  /*
+   * PRODUCTION LOCK V5 §35/§60 — the refinement tables are created here, once,
+   * on the same path as every other table, rather than by a `setup()` the graph
+   * calls on each request. A bootstrap that runs per request is a write on the
+   * hot path and a migration nobody can point to.
+   */
+  db.exec(REFINEMENT_SCHEMA_SQL);
   applyColumnMigrations(db);
   applyIndexMigrations(db);
 

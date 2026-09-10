@@ -6,8 +6,7 @@ import { buildTravelerProfile, defaultAnswers, type Trip } from '@sidequest/core
 import { extractJsonObject } from '@/lib/providers/json-extract';
 import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import { COMPOSITION_INSTRUCTION, buildCompositionTask, compositionWireDecision, generateTripDraft, type CompositionContext } from './composition';
-import { buildHybridTripRequest } from './hybrid-request';
-import { travelerBriefFor } from './production-plan';
+import { testCompositionContext } from './testing/context';
 import { TRIP_DRAFT_JSON_TAG, compactTripDraftWireSchema, normalizeTripDraftWire, tripDraftWireSchema } from './trip-draft-wire';
 import { tripDraftSchema } from './trip-draft';
 
@@ -176,9 +175,7 @@ const TRIP: Trip = {
 };
 function contextFor(): CompositionContext {
   const profile = buildTravelerProfile(defaultAnswers({ travelerNeeds: [], tripDays: 3 }), { travelerNeeds: [], tripDays: 3 });
-  const request = buildHybridTripRequest({ trip: TRIP, composer: null, profile, now: NOW });
-  const envelope = { name: 'Green Isle', center: { lat: 53.4, lng: -8 } };
-  return { request, envelope, brief: travelerBriefFor({ profile, trip: TRIP, request, envelope }), mode: 'full' };
+  return testCompositionContext({ trip: TRIP, profile, envelope: { name: 'Green Isle', center: { lat: 53.4, lng: -8 } }, now: NOW });
 }
 
 function fakeModel(answer: unknown, seen: { inputs: Record<string, unknown>[] }): StructuredModel {
@@ -235,8 +232,16 @@ describe('generateTripDraft', () => {
     expect(COMPOSITION_INSTRUCTION).toMatch(/stays: name — the town/);
     expect(COMPOSITION_INSTRUCTION).toMatch(/acts, in the order they happen/);
     expect(COMPOSITION_INSTRUCTION).not.toMatch(/baseId|dayNumber|estimatedDurationMinutes/);
-    // And nothing the model no longer writes.
+    /*
+     * And nothing the model no longer writes. `bookFirst` came back in
+     * PRODUCTION LOCK V5 §17 under its compact name: Sidequest derives the
+     * booking *rows* from the plan and cannot derive their *order*, because
+     * "the hut has four beds and the guide is booked out three months ahead"
+     * is travel judgement rather than a property of the itinerary graph. The
+     * canonical field name is still absent from the prompt.
+     */
     expect(COMPOSITION_INSTRUCTION).not.toMatch(/bookingPriorities|foodStrategy|beforeYouGo|transportNotes/);
+    expect(COMPOSITION_INSTRUCTION).toMatch(/bookFirst \(what to book first/);
   });
 });
 

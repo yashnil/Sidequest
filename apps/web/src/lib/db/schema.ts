@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS trips (
   end_date          TEXT NOT NULL,
   arrival_time      TEXT NOT NULL,
   departure_time    TEXT NOT NULL,
+  -- PRODUCTION LOCK V5 §7: how well each edge is actually known. NULL means a
+  -- row written before this existed, which reads as "unknown" — so the times
+  -- above stop being printable as facts rather than silently staying trusted.
+  arrival_precision   TEXT,
+  departure_precision TEXT,
   adults            INTEGER NOT NULL,
   children          INTEGER NOT NULL,
   traveler_needs    TEXT NOT NULL DEFAULT '[]',
@@ -1613,6 +1618,143 @@ CREATE TABLE IF NOT EXISTS benchmark_session_clock (
  * Every added column carries a NOT NULL default, because a row written before
  * the column existed still has to parse afterwards.
  */
+
+/* ------------------------------------------------------------------ *
+ * PRODUCTION LOCK V5 — CONVERSATIONAL REFINEMENT
+ * ------------------------------------------------------------------ */
+
+/**
+ * LANGGRAPH DURABLE CHECKPOINTS, IN SIDEQUEST'S OWN DATABASE.
+ *
+ * PRODUCTION LOCK V5 §35 and §60. An in-memory saver cannot go to production: a
+ * refinement interrupted for a clarifying question has to survive the answer
+ * arriving in a different request, and a server restart in between.
+ *
+ * Why a hand-written saver instead of `@langchain/langgraph-checkpoint-sqlite`:
+ * that package depends on `better-sqlite3@^12` where this repository is on
+ * `^13`, so installing it puts a **second native SQLite build** in the process,
+ * opening the same WAL file through a different library. `BaseCheckpointSaver`
+ * is the officially supported extension point, five methods wide, and using it
+ * keeps one database, one native module, one connection, one set of pragmas and
+ * one migration story.
+ *
+ * Ownership: `thread_id` is NOT authorization (§61). Every row is scoped to a
+ * trip, the trip is scoped to an owner, and every endpoint checks the trip's
+ * owner before it ever constructs a thread id. `ON DELETE CASCADE` from `trips`
+ * is the cleanup policy: deleting a trip deletes its refinement history, so an
+ * account deletion cannot leave graph state behind (§60).
+ */
+export const REFINEMENT_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS refinement_checkpoints (
+  trip_id        TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  thread_id      TEXT NOT NULL,
+  checkpoint_ns  TEXT NOT NULL DEFAULT '',
+  checkpoint_id  TEXT NOT NULL,
+  parent_id      TEXT,
+  -- The serialised checkpoint and its metadata, exactly as the serde produced
+  -- them. Stored as BLOBs with their type tag so a serde change is detectable
+  -- rather than silently misread.
+  type           TEXT NOT NULL,
+  checkpoint     BLOB NOT NULL,
+  metadata       BLOB NOT NULL,
+  created_at     TEXT NOT NULL,
+  PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refinement_checkpoints_thread
+  ON refinement_checkpoints(thread_id, checkpoint_ns, checkpoint_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_refinement_checkpoints_trip
+  ON refinement_checkpoints(trip_id);
+
+CREATE TABLE IF NOT EXISTS refinement_writes (
+  trip_id        TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  thread_id      TEXT NOT NULL,
+  checkpoint_ns  TEXT NOT NULL DEFAULT '',
+  checkpoint_id  TEXT NOT NULL,
+  task_id        TEXT NOT NULL,
+  idx            INTEGER NOT NULL,
+  channel        TEXT NOT NULL,
+  type           TEXT NOT NULL,
+  value          BLOB NOT NULL,
+  created_at     TEXT NOT NULL,
+  PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refinement_writes_checkpoint
+  ON refinement_writes(thread_id, checkpoint_ns, checkpoint_id);
+
+CREATE INDEX IF NOT EXISTS idx_refinement_writes_trip
+  ON refinement_writes(trip_id);
+
+-- EVERY ACCEPTED CHANGE IS A VERSION, AND THE OLD ONE SURVIVES (§46).
+--
+-- Undo restores a persisted version directly. It deliberately does NOT replay
+-- graph nodes: replay re-triggers model and provider calls, which is both a cost
+-- and a way for "undo" to produce something that is not what was undone.
+CREATE TABLE IF NOT EXISTS refinement_versions (
+  id                TEXT PRIMARY KEY,
+  trip_id           TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  -- Monotonic per trip. The optimistic-concurrency token (§48): a patch states
+  -- the version it was computed against and is refused if that is no longer
+  -- current.
+  version           INTEGER NOT NULL,
+  -- Which version this one replaced, so Undo is a lookup rather than a replay.
+  previous_version  INTEGER,
+  -- 'canonical' for the trip's live version; 'branch' for "try an alternative"
+  -- (§47), which must not destroy the current trip.
+  lane              TEXT NOT NULL DEFAULT 'canonical',
+  -- What the traveller asked for, verbatim, and what Sidequest decided to do.
+  request           TEXT,
+  intent            TEXT,
+  summary_json      TEXT NOT NULL DEFAULT '{}',
+  -- The full itinerary and draft as they stood AFTER this change. Restoring is
+  -- writing these back.
+  itinerary_json    TEXT NOT NULL,
+  draft_json        TEXT,
+  created_at        TEXT NOT NULL,
+  UNIQUE (trip_id, lane, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refinement_versions_trip
+  ON refinement_versions(trip_id, lane, version DESC);
+
+-- ONE REFINEMENT AT A TIME PER TRIP (§48, §59).
+--
+-- "Make Day 4 easier" and, while that runs, "actually keep the hike but change
+-- the hotel" must not race two mutations against the same trip version. A row
+-- here is the lease; "idempotency_key" makes a double-submitted press one action
+-- rather than two.
+CREATE TABLE IF NOT EXISTS refinement_runs (
+  id               TEXT PRIMARY KEY,
+  trip_id          TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  thread_id        TEXT NOT NULL,
+  idempotency_key  TEXT,
+  status           TEXT NOT NULL,
+  base_version     INTEGER NOT NULL,
+  request          TEXT NOT NULL,
+  intent           TEXT,
+  model_calls      INTEGER NOT NULL DEFAULT 0,
+  question_json    TEXT,
+  result_json      TEXT,
+  error            TEXT,
+  started_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL,
+  finished_at      TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_refinement_runs_idempotency
+  ON refinement_runs(trip_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+
+-- At most one run in flight per trip. A partial unique index is the whole
+-- concurrency guard: the second press fails to insert rather than racing.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_refinement_runs_active
+  ON refinement_runs(trip_id) WHERE status IN ('running', 'awaiting_answer');
+
+CREATE INDEX IF NOT EXISTS idx_refinement_runs_trip
+  ON refinement_runs(trip_id, started_at DESC);
+`;
+
 export const COLUMN_MIGRATIONS: readonly {
   table: string;
   column: string;
@@ -1623,6 +1765,17 @@ export const COLUMN_MIGRATIONS: readonly {
     column: 'transport_strategy_json',
     definition: "TEXT NOT NULL DEFAULT '{}'",
   },
+  /**
+   * PRODUCTION LOCK V5 §7 — the precision of each trip edge.
+   *
+   * Nullable on purpose. A trip created before this column existed holds two
+   * clock times that may well have been invented (`15:00` / `11:00` were the
+   * defaults), and there is no way to recover which. NULL reads as `unknown`,
+   * which makes those times unprintable — the honest outcome, and a strictly
+   * safer one than assuming they were real.
+   */
+  { table: 'trips', column: 'arrival_precision', definition: 'TEXT' },
+  { table: 'trips', column: 'departure_precision', definition: 'TEXT' },
   /**
    * Who the day's live-compilation allowance was charged to when this job was
    * reserved.

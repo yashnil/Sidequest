@@ -64,6 +64,23 @@ export const PROVIDER_GAP_REASONS = [
    * the difference.
    */
   'blocked_by_robots',
+  /**
+   * THE PROVIDER DOES NOT HOLD THIS PLACE.
+   *
+   * PRODUCTION LOCK V5 §18. Its own reason rather than `provider_error` or
+   * `not_found`, because it is neither and the difference decides what a caller
+   * should do next. `not_found` means the provider answered about the ground —
+   * these two points have no route between them. `provider_error` means the
+   * provider malfunctioned and might answer next time. This means the provider
+   * *worked correctly* and told us the question is outside its reach: a regional
+   * Valhalla tile build asked about another continent, a places provider outside
+   * its licensed territory. The only useful response is to stop asking that
+   * provider and try one that covers the place.
+   *
+   * Read as an absence of evidence, never as evidence of absence: a leg nobody
+   * could route is still a leg that exists.
+   */
+  'out_of_coverage',
 ] as const;
 export type ProviderGapReason = (typeof PROVIDER_GAP_REASONS)[number];
 

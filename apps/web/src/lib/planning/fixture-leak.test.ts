@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildTravelerProfile, defaultAnswers, type Trip } from '@sidequest/core';
 import { COMPOSITION_INSTRUCTION, buildCompositionTask, compositionUntrustedPayload, type CompositionContext } from './composition';
 import { FIXTURE_UNVERIFIABLE_ANCHOR } from './fixture-composer';
-import { buildHybridTripRequest } from './hybrid-request';
-import { travelerBriefFor } from './production-plan';
+import { testCompositionContext } from './testing/context';
 
 /**
  * FIXTURE PLACEHOLDER LANGUAGE NEVER LEAKS INTO A PRODUCTION COMPOSITION.
@@ -27,8 +26,7 @@ const TRIP: Trip = {
 describe('fixture placeholder language stays out of production composition', () => {
   it('the instruction, task and untrusted payload for a real destination carry no fixture phrase', () => {
     const profile = buildTravelerProfile(defaultAnswers({ travelerNeeds: [], tripDays: 5 }), { travelerNeeds: [], tripDays: 5 });
-    const request = buildHybridTripRequest({ trip: TRIP, composer: null, profile, now: new Date('2026-09-04T00:00:00Z') });
-    const context: CompositionContext = { request, envelope: { name: 'Mammoth Lakes', center: { lat: 37.65, lng: -118.97 } }, brief: travelerBriefFor({ profile, trip: TRIP, request, envelope: { name: 'Mammoth Lakes', center: { lat: 37.65, lng: -118.97 } } }), mode: 'full' };
+    const context: CompositionContext = testCompositionContext({ trip: TRIP, profile, envelope: { name: 'Mammoth Lakes', center: { lat: 37.65, lng: -118.97 } }, now: new Date('2026-09-04T00:00:00Z') });
     const text = [COMPOSITION_INSTRUCTION, buildCompositionTask(context), JSON.stringify(compositionUntrustedPayload(context))].join('\n');
     for (const phrase of FIXTURE_PHRASES) expect(text, phrase).not.toContain(phrase);
   });

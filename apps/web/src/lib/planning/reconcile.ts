@@ -3,6 +3,7 @@ import { buildDailyWindows, buildPlannerReadiness, resolveConfig, PLANNER_VERSIO
 import type { TravelTimeMatrix } from '@sidequest/geo';
 import {
   DIETARY_NEED_LABELS,
+  describeEdgeTime,
   MEDICAL_OR_OBSERVANT_NEEDS,
   PRICE_BAND_ORDER,
   displayNameOf,
@@ -81,7 +82,7 @@ import {
   type UnresolvedRelocation,
 } from './skeleton-adapter';
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
-import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAnchor, type DraftTransport, type TripDraft, movementShapeOf } from './trip-draft';
+import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAnchor, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving } from './trip-draft';
 
 /**
  * THE RECONCILER — MODEL DRAFT + VERIFICATION OVERLAY + MINIMAL DETERMINISTIC
@@ -271,6 +272,33 @@ const LUNCH_EARLIEST = 11 * 60 + 30;
 const LUNCH_LATEST = 14 * 60 + 30;
 const DINNER_EARLIEST = 18 * 60;
 const DINNER_LATEST = 21 * 60;
+/**
+ * The earliest minute an experience with a stated time intent may begin.
+ *
+ * PRODUCTION LOCK V5 §13. Floors, not windows: the audit's own windows
+ * (`quality-audit.ts`) are what decide whether the result is acceptable, and
+ * they are deliberately wider than these. `morning`, `midday` and `any` have no
+ * floor — a day already starts in the morning, and pushing an unconstrained stop
+ * later would only empty the morning.
+ *
+ * `sunset` is 16:30 rather than an astronomical calculation on purpose. The real
+ * sunset moves by hours across a year and a latitude, Sidequest does not have it
+ * at this point in the pipeline, and a floor that is roughly late-afternoon
+ * everywhere is honest where a computed instant would be precise and wrong.
+ */
+const TIME_OF_DAY_FLOOR: Record<string, number> = {
+  midday: 11 * 60,
+  afternoon: 12 * 60,
+  sunset: 16 * 60 + 30,
+  evening: 17 * 60,
+  night: 18 * 60,
+};
+
+function timeOfDayFloor(intent: string | undefined): number | null {
+  if (!intent) return null;
+  return TIME_OF_DAY_FLOOR[intent] ?? null;
+}
+
 const MIN_FREE_BLOCK_MINUTES = 30;
 /**
  * How far past its usual end an ordinary day may run before something comes
@@ -573,7 +601,39 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const dates = tripDates(context.basics.startDate, context.basics.endDate);
   const config = resolveConfig();
   const backBy = context.profile.interview?.mustBeBackByMinute;
+  /*
+   * PRODUCTION LOCK V5 §13 — A DAY WITH AN EVENING IN IT RUNS INTO THE EVENING.
+   *
+   * The default day ends at 18:00–20:00 depending on pace. A live Hong Kong
+   * build put Temple Street NIGHT Market at 13:30 for exactly that reason: the
+   * scheduler's floor could not hold it back to 18:00 because 18:00 plus the
+   * visit ran past a 19:00 day, so the floor was skipped and the traveller was
+   * sent to a night market in the early afternoon.
+   *
+   * A traveller who accepted a night market has asked for a late evening on that
+   * day, and only that day. So the window is extended to hold it — never for a
+   * day that has no such experience, and never against somebody who said they do
+   * not want late nights or who has to be back at base by a stated time.
+   */
+  const lateIntent: Record<string, number> = { evening: 21 * 60, night: 22 * 60, sunset: 20 * 60 };
+  const refusesLateNights = context.profile.interview?.lateNights === 'no';
+  const latestFor = (dayNumber: number): number | null => {
+    if (refusesLateNights || backBy !== undefined) return null;
+    const day = draft.days.find((entry) => entry.dayNumber === dayNumber);
+    const wanted = (day?.anchors ?? []).map((anchor) => lateIntent[anchor.timeOfDay ?? ''] ?? 0);
+    const latest = Math.max(0, ...wanted);
+    return latest > 0 ? latest : null;
+  };
   const windows: PlannedDay[] = buildDailyWindows(context.basics, context.profile, config).map((day, index, all) => {
+    const isLastDay = index === all.length - 1;
+    const late = isLastDay ? null : latestFor(day.dayNumber);
+    if (late !== null && late > day.window.endMinute) {
+      day = {
+        ...day,
+        window: { ...day.window, endMinute: late, usableMinutes: late - day.window.startMinute, note: [day.window.note, 'This day runs into the evening for something that only happens then.'].filter(Boolean).join(' ') },
+        capacityMinutes: day.capacityMinutes + (late - day.window.endMinute),
+      };
+    }
     if (index === all.length - 1 && context.lastDayLeaveByMinute !== undefined && context.lastDayLeaveByMinute < day.window.endMinute) {
       const endMinute = Math.max(day.window.startMinute, context.lastDayLeaveByMinute);
       day = { ...day, window: { ...day.window, endMinute, usableMinutes: endMinute - day.window.startMinute, note: [day.window.note, `Leave base by ${formatClock(endMinute)} for your booked departure.`].filter(Boolean).join(' ') }, capacityMinutes: Math.min(day.capacityMinutes, endMinute - day.window.startMinute) };
@@ -1260,7 +1320,21 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       tradeoffs: [],
       convenience: 'moderate',
       stress: unresolvedRelocations.length > 0 ? 'high' : 'moderate',
-      parkingSummary: 'Parking has not been verified for this plan; check at each stop.',
+      /*
+       * PRODUCTION LOCK V5 §15 — NO PARKING ADVICE FOR A TRIP WITH NO CAR.
+       *
+       * This sentence was unconditional, so a live Hong Kong plan whose own
+       * transport strategy says "No car needed anywhere in this city plan" also
+       * carried "Parking has not been verified for this plan; check at each
+       * stop." The traveller is being asked to check something they will never
+       * do, on a trip the plan has just told them needs no car.
+       *
+       * The draft states the arrangement (`driving`), and a plan with none —
+       * or one nobody drives themselves — has nothing to park.
+       */
+      parkingSummary: impliesSelfDriving(draft.driving) || (draft.driving === undefined && primaryMode === 'drive')
+        ? 'Parking has not been verified for this plan; check at each stop.'
+        : 'No parking to arrange — nothing on this trip is yours to park.',
       transitSummary: context.transit ? 'Some public-transport journeys were measured for this region.' : 'Public-transport journeys were not measured for this plan.',
       seasonalWarnings: context.region.seasonalRoadSummary ? [context.region.seasonalRoadSummary] : [],
       verifyBeforeTravel: unresolvedRelocations.map((r) => r.detail),
@@ -1442,7 +1516,7 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
       reason: overDrive
         ? `Measured ${input.context.matrix.mode === 'car' ? 'driving' : 'travel'} on day ${input.dayNumber} came to ${measuredInMotion} minutes against your ${ceiling}-minute limit, so ${victim.draft.name} (${victim.draft.role}) was taken off to bring it under.`
         : input.isLast
-          ? `Day ${input.dayNumber} ends with your departure at ${input.context.basics.departureTime}; ${victim.draft.name} (${victim.draft.role}) would have run past it, so it was left off rather than scheduled after you leave.`
+          ? `Day ${input.dayNumber} ends with your departure ${describeEdgeTime(input.context.basics.departurePrecision, input.context.basics.departureTime)}; ${victim.draft.name} (${victim.draft.role}) would have run past it, so it was left off rather than scheduled after you leave.`
           : hardEnd
             ? `You asked to be back at base by ${formatClock(input.context.profile.interview!.mustBeBackByMinute!)}; ${victim.draft.name} (${victim.draft.role}) would have run past it, so it was left off.`
             : `Day ${input.dayNumber} ran ${Math.round(attempt.overflowMinutes)} minutes past its end, so ${victim.draft.name} (${victim.draft.role}) was left off for room.`,
@@ -1631,8 +1705,29 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
 
   if (draftDay?.meals?.breakfast) pushMeal('breakfast', draftDay.meals.breakfast);
 
+  /*
+   * PRODUCTION LOCK V5 §13 — A DAY RUNS IN THE ORDER ITS HOURS DO.
+   *
+   * Floors alone were not enough. A live Kyrgyzstan build put "Karakol animal
+   * bazaar" — a Sunday-morning livestock market, marked `morning` — second on
+   * its day, behind a stop with no stated hour, and it landed at 12:45. A floor
+   * can hold a stop back; it cannot bring one forward.
+   *
+   * So a day is stably sorted by the hour its stops asked for. Stops with no
+   * intent keep their authored order and sit between the morning ones and the
+   * midday-or-later ones, which is where filler belongs. Stable, so two stops
+   * with the same intent — or none — stay in the sequence the model chose them
+   * in, and the geography it sequenced them for survives.
+   */
+  const ORDER: Record<string, number> = { sunrise: 0, morning: 1, midday: 3, afternoon: 4, sunset: 5, evening: 6, night: 7 };
+  const rankOf = (anchor: (typeof anchors)[number]) => ORDER[anchor.draft.timeOfDay ?? ''] ?? 2;
+  const scheduledOrder = anchors
+    .map((anchor, index) => ({ anchor, index }))
+    .sort((a, b) => rankOf(a.anchor) - rankOf(b.anchor) || a.index - b.index)
+    .map((entry) => entry.anchor);
+
   let cursor = startPoint;
-  for (const anchor of anchors) {
+  for (const anchor of scheduledOrder) {
     // The plan keeps the name the model wrote; a geocoder's record name ("Trinity College Dublin" for "Trinity College and the Book of Kells") is matched against, never shown as the stop.
     const target: Point = { id: anchor.identity?.id ?? `draft:${anchor.id}`, name: anchor.draft.name, coordinates: anchor.identity?.coordinates ?? null, ...(anchor.draft.locality ? { locality: anchor.draft.locality } : {}) };
     pushLeg(cursor, target, anchor.draft.transport, 'approach');
@@ -1644,6 +1739,28 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     if (hours && start < hours.openMinute) {
       // Arrive when the gate opens; the gap becomes free time below.
       start = hours.openMinute;
+    }
+    /*
+     * PRODUCTION LOCK V5 §13 — AN EXPERIENCE THAT DEPENDS ON THE HOUR WAITS FOR IT.
+     *
+     * The draft says when a stop belongs (`timeOfDay`) and nothing here read it,
+     * so a live Hong Kong build scheduled Temple Street NIGHT Market at 13:30,
+     * Victoria Peak "at dusk" at 14:20 and a harbour crossing meant for the
+     * afternoon at 09:25. The plan was not merely imprecise; it sent somebody to
+     * a night market in the early afternoon, when it is not there.
+     *
+     * The mechanism is the one directly above: a floor on the start, with the
+     * gap becoming free time. Deliberately a floor and not a reorder — the model
+     * had already sequenced these days correctly, and reordering by clock would
+     * fight the geography it sequenced them for.
+     *
+     * Never applied when it would push the stop out of the day. A stop that
+     * cannot reach its hour stays where it is and keeps its place in the trip:
+     * unknown ≠ false, and a slightly early visit beats a deleted one.
+     */
+    const intentFloor = timeOfDayFloor(anchor.draft.timeOfDay);
+    if (intentFloor !== null && start < intentFloor && intentFloor + anchor.durationMinutes <= input.window.window.endMinute) {
+      start = intentFloor;
     }
     /*
      * LIVE WORLD V1 closure — a provider-identified stop's regular hours
