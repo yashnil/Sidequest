@@ -83,9 +83,4 @@ export async function exchangeGoogleCode(input: { code: string; codeVerifier: st
   return { subject: info.sub, email: info.email ?? null, emailVerified: info.email_verified === true, name: info.name ?? null, picture: info.picture ?? null };
 }
 
-/** Where to send the browser after sign-in: only a same-origin path, never a URL. */
-export function safeReturnTo(raw: string | null | undefined): string {
-  if (!raw) return '/trips';
-  if (!raw.startsWith('/') || raw.startsWith('//') || raw.includes('://') || raw.length > 400) return '/trips';
-  return raw;
-}
+export { safeReturnTo } from './redirects';
