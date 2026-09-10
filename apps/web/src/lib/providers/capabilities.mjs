@@ -48,6 +48,8 @@ export const CONSUMERS = {
   'readiness.advisory': 'core/intelligence/readiness.ts#OfficialTravelSourceRegistry → intelligence/build.ts',
   'readiness.health': 'core/intelligence/readiness.ts#OfficialTravelSourceRegistry → intelligence/build.ts',
   'maps.tiles': 'components/map-adapter.ts#resolveMapTileSource → InteractiveMap',
+  'destinations.resolution': 'trips/new/place-actions.ts#placeDestinationAction (index → bundled country reference → geocoder) → the setup canvas and the timing recommendation, then plan/actions.ts#resolveDestinationAction once the trip exists',
+  'destinations.suggestions': 'api/destinations/suggest → destinations/provider.ts#localSuggestionProvider (the local index only, never a network call while typing)',
 };
 
 export function capabilityRegistry(env = process.env) {
@@ -138,6 +140,50 @@ export function capabilityRegistry(env = process.env) {
   add('readiness.entry', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'Official entry-point links; nothing legal is confirmed by Sidequest.', limitations: ['No Timatic licence; the public IATA checker is the neutral entry point.'] });
   add('readiness.advisory', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'Traveller-country advisories for US, GB, CA, AU, NZ, IE, DE, FR.', limitations: ['Other passport countries get the generic official entry points and are told so.'] });
   add('readiness.health', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'CDC, NHS Fit for Travel, WHO links.', limitations: [] });
+
+  /*
+   * STAGING PARITY §2, §8 — THE CAPABILITY THAT FAILED WAS NOT IN THE REGISTRY.
+   *
+   * A traveller typed "Japan" on a fresh deployment and got the empty-world map
+   * captioned ANYWHERE, and neither the doctor nor the registry had a row that
+   * could have predicted it: destination resolution was not a capability here, so
+   * "configured" said nothing about whether a typed name could become a place.
+   *
+   * It is `configured: true` unconditionally and that is not a cheat: the bundled
+   * country reference ships with the app, needs no network and no database, and
+   * places every country the app holds facts for — including inside a phrase. What
+   * the geocoder adds is everything smaller than a country, which is why its
+   * absence is a limitation rather than an outage.
+   */
+  add('destinations.resolution', 'destinations', {
+    configured: true,
+    /*
+     * The provider named here is the *external* one, when there is one, because
+     * that is what `mode` is computed from. The bundled reference is Sidequest's
+     * own data — the same class as `lodging.area` — so with nothing configured
+     * this is `sidequest` and the deployment is not thereby "live".
+     */
+    provider: nominatim ? 'nominatim' : google ? 'google-places' : 'sidequest',
+    costClass: nominatim ? 'free' : google ? (placesRecorded ? 'free' : 'metered') : 'none',
+    fixture: !nominatim && placesRecorded,
+    freshness: 'stable',
+    coverage: nominatim || google
+      ? 'The bundled country reference answers first, offline, for any country the app holds facts for — including one named inside a phrase. The geocoder answers everything smaller: cities, regions, parks, deltas.'
+      : 'Bundled country reference only: a country places offline, anything smaller stays unplaced until the trip is created.',
+    limitations: nominatim || google
+      ? []
+      : ['No geocoder: a city, region or park typed as free text is not placed before the trip exists. Set SIDEQUEST_GEOCODER_PROVIDER=nominatim (keyless) to place them.'],
+  });
+  add('destinations.suggestions', 'destinations', {
+    configured: set(env, 'SIDEQUEST_DESTINATION_INDEX_SEED'),
+    provider: set(env, 'SIDEQUEST_DESTINATION_INDEX_SEED') ? 'sidequest' : null,
+    costClass: 'none',
+    freshness: 'stable',
+    coverage: 'As-you-type suggestions from the local destination index. Never a network call, by policy.',
+    limitations: set(env, 'SIDEQUEST_DESTINATION_INDEX_SEED')
+      ? []
+      : ['No index seed configured: the field takes free text, which every downstream step already supports. A database that already holds a release keeps using it.'],
+  });
 
   add('maps.tiles', 'maps', { configured: tiles, provider: openFreeMap ? 'openfreemap' : tiles ? 'tiles' : null, costClass: openFreeMap ? 'free' : tiles ? 'metered' : 'none', coverage: openFreeMap ? 'OpenFreeMap vector basemap (OpenMapTiles / OpenStreetMap), rendered in the browser.' : tiles ? 'Basemap tiles.' : 'Positions and geometry only, no basemap.', limitations: openFreeMap ? ['Public instance, no SLA; attribution rendered under every map.'] : tiles ? [] : ['Maps draw positions and routes without a basemap.'] });
 

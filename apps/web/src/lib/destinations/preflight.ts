@@ -13,6 +13,7 @@ import {
   recommendTripLength,
   scopeStrategiesFor,
   type ClimateProfile,
+  type ClimateUnavailableReason,
   type DestinationIndexEntry,
   type SelectedDestination,
   type SupplyFunnel,
@@ -73,14 +74,34 @@ export async function climateFor(
   center: { lat: number; lng: number },
   now: Date,
 ): Promise<ClimateProfile | null> {
-  const cached = readCachedClimate(center, now);
-  if (cached) return cached;
+  return (await climateWithReason(center, now)).profile;
+}
 
-  const result = await climateProvider().getProfile({ lat: center.lat, lng: center.lng, now });
-  if (result.kind !== 'profile') return null;
+/**
+ * The same lookup, with the reason it failed.
+ *
+ * STAGING PARITY §10. The reason was typed all along and thrown away here, so a
+ * traveller was told the window would be chosen later and nobody — operator or
+ * caller — could tell a busy archive from an absent one. `climateFor` keeps its
+ * shape for the dozen callers that only want the profile.
+ */
+export async function climateWithReason(
+  center: { lat: number; lng: number },
+  now: Date,
+): Promise<{ profile: ClimateProfile | null; reason: ClimateUnavailableReason | null }> {
+  const cached = readCachedClimate(center, now);
+  if (cached) return { profile: cached, reason: null };
+
+  const provider = climateProvider();
+  const result = await provider.getProfile({ lat: center.lat, lng: center.lng, now }).catch(() => ({ kind: 'unavailable' as const, reason: 'provider_unavailable' as const }));
+  if (result.kind !== 'profile') {
+    /* The reason class only: no coordinate, because where somebody is going is theirs. */
+    console.warn('A climate lookup did not answer', { provider: provider.name, reason: result.reason });
+    return { profile: null, reason: result.reason };
+  }
 
   writeCachedClimate(center, result.profile, now);
-  return result.profile;
+  return { profile: result.profile, reason: null };
 }
 
 /**

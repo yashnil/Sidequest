@@ -319,7 +319,21 @@ export function TimingStep({
               </details>
             </div>
           ) : result && !result.ok ? (
-            <ErrorNote>{result.note}</ErrorNote>
+            /*
+              §5 — "later" is not an error.
+              A deferred answer means the traveller's chosen planning mode stands
+              and Sidequest will pick the window with the plan. Rendering that in
+              the error tone told them something had gone wrong and, worse, the old
+              copy told them to go and pick dates instead — which is the one thing
+              they had just said they did not want to do.
+            */
+            result.deferred ? (
+              <p className="rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-4 type-body text-ink-muted" data-testid="timing-deferred">
+                {result.note}
+              </p>
+            ) : (
+              <ErrorNote>{result.note}</ErrorNote>
+            )
           ) : null}
         </section>
       ) : null}

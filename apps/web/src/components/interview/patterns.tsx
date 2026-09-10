@@ -382,7 +382,7 @@ export function RhythmChoice({ name, options, value, onChange }: { name: string;
                 {option.detail ? <span className="mt-0.5 block text-sm text-ink-muted">{option.detail}</span> : null}
                 <span className="mt-3 block max-w-xs">
                   <DayStrip value={option.value} on={on} />
-                  <span className="mt-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-ink-faint" aria-hidden="true">
+                  <span className="label mt-1 flex justify-between text-ink-faint" aria-hidden="true">
                     <span>morning</span>
                     <span>evening</span>
                   </span>

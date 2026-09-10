@@ -245,14 +245,24 @@ async function getJson(url: string): Promise<unknown> {
     });
     const body: unknown = await response.json();
     const asError = errorSchema.safeParse(body);
+    /*
+     * THE STATUS DECIDES THE CLASS, AND 429 IS READ FIRST.
+     *
+     * Open-Meteo answers a burst with `429` *and* a JSON error body ("Minutely
+     * API request limit exceeded. Please try again in one minute."), and the
+     * error-body branch used to run first — so "come back in a minute" was
+     * recorded and rendered as "this provider is unavailable". They are not the
+     * same fact: one resolves itself, the other needs an operator. Found by
+     * running ten destinations in a row against the real archive.
+     */
+    if (response.status === 429) {
+      throw new ClimateProviderError('provider_rate_limited', 'The climate service asked us to slow down.');
+    }
     if (asError.success) {
       throw new ClimateProviderError(
         response.status === 400 ? 'no_data_for_location' : 'provider_unavailable',
         asError.data.reason,
       );
-    }
-    if (response.status === 429) {
-      throw new ClimateProviderError('provider_rate_limited', 'The climate service asked us to slow down.');
     }
     if (!response.ok) {
       throw new ClimateProviderError('provider_unavailable', `Climate service returned ${response.status}.`);

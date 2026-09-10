@@ -276,7 +276,7 @@ export function TripProfileList({ sketch, compact = false }: { sketch: Sketch; c
           <li key={row.key} className="flex items-start gap-2.5 py-2">
             <ProfileMark assumed={row.assumed} open={row.open} />
             <span className="min-w-0 flex-1">
-              {row.label ? <span className="block text-[10px] uppercase tracking-[0.14em] text-ink-faint">{row.label}</span> : null}
+              {row.label ? <span className="label block text-ink-faint">{row.label}</span> : null}
               <span className={cx('block text-sm leading-snug', row.open ? 'text-ink-faint' : 'text-ink')} {...(row.testId ? { 'data-testid': row.testId } : {})}>
                 {row.value}
                 {row.assumed && !row.open ? <span className="sr-only"> (Sidequest’s read)</span> : null}

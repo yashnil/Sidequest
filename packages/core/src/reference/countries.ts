@@ -73,6 +73,7 @@ export const COUNTRY_FACTS: readonly CountryFacts[] = [
   C('BW', 'Botswana', 'BWP', ['en', 'tn'], 'left', '999', ['D', 'G', 'M'], 230, '+267', 'Africa/Gaborone'),
   C('RW', 'Rwanda', 'RWF', ['rw', 'en', 'fr'], 'right', '112', ['C', 'J'], 230, '+250', 'Africa/Kigali'),
   C('UG', 'Uganda', 'UGX', ['en', 'sw'], 'left', '999', ['G'], 240, '+256', 'Africa/Kampala', '112 from mobiles'),
+  C('KG', 'Kyrgyzstan', 'KGS', ['ky', 'ru'], 'right', '112', ['C', 'F'], 220, '+996', 'Asia/Bishkek', '103 ambulance'),
   C('JP', 'Japan', 'JPY', ['ja'], 'left', '110', ['A', 'B'], 100, '+81', 'Asia/Tokyo', '119 ambulance and fire'),
   C('KR', 'South Korea', 'KRW', ['ko'], 'right', '112', ['C', 'F'], 220, '+82', 'Asia/Seoul', '119 ambulance and fire'),
   C('CN', 'China', 'CNY', ['zh'], 'right', '110', ['A', 'C', 'I'], 220, '+86', 'Asia/Shanghai', '120 ambulance, 119 fire'),
@@ -114,8 +115,226 @@ export function countryFacts(code: string | undefined | null): CountryFacts | nu
   return BY_CODE.get(code.toUpperCase()) ?? null;
 }
 
+/**
+ * WHERE A COUNTRY IS, WELL ENOUGH TO PLACE IT ON A MAP AND READ ITS SEASONS.
+ *
+ * A separate table from the facts above, and separate on purpose: these are
+ * coordinates rather than reference facts, they are used by exactly one code path
+ * (placing a typed destination before any provider has been asked), and keeping
+ * them apart means the sixty-nine rows above did not have to be edited to add
+ * them.
+ *
+ * **What the point is.** The main populated area — the same basis as `timeZone`
+ * in the row above, and for the same reason: a country's geometric centroid is
+ * frequently in the sea or in a desert nobody visits, and a climate record read
+ * there would describe a place the traveller is not going. So the point is a real
+ * city, it is named, and the name travels with it so that anything derived from
+ * it can say where it was read.
+ *
+ * **What it is not.** It is not an extent. A country-scale frame drawn from one
+ * point is a display decision made where maps are drawn, not a boundary asserted
+ * here. And it is not a substitute for resolution: the moment a geocoder or the
+ * destination index answers, its published centre and bounds win, because those
+ * are measurements of the destination and this is a landmark inside it.
+ *
+ * Provenance: city coordinates from public reference tables, rounded to two
+ * decimal places (about a kilometre), as of 2026-09. Facts, not creative content.
+ */
+export interface CountryPoint {
+  lat: number;
+  lng: number;
+  /** The populated place the coordinate names, so a derived answer can say where it was read. */
+  place: string;
+}
+
+const P = (lat: number, lng: number, place: string): CountryPoint => ({ lat, lng, place });
+
+export const COUNTRY_POINTS: Readonly<Record<string, CountryPoint>> = {
+  IE: P(53.35, -6.26, 'Dublin'),
+  GB: P(51.51, -0.13, 'London'),
+  US: P(40.71, -74.01, 'New York'),
+  CA: P(43.65, -79.38, 'Toronto'),
+  MX: P(19.43, -99.13, 'Mexico City'),
+  FR: P(48.86, 2.35, 'Paris'),
+  DE: P(52.52, 13.4, 'Berlin'),
+  ES: P(40.42, -3.7, 'Madrid'),
+  PT: P(38.72, -9.14, 'Lisbon'),
+  IT: P(41.9, 12.5, 'Rome'),
+  NL: P(52.37, 4.9, 'Amsterdam'),
+  BE: P(50.85, 4.35, 'Brussels'),
+  AT: P(48.21, 16.37, 'Vienna'),
+  CH: P(47.38, 8.54, 'Zurich'),
+  GR: P(37.98, 23.73, 'Athens'),
+  HR: P(45.81, 15.98, 'Zagreb'),
+  SI: P(46.06, 14.51, 'Ljubljana'),
+  CZ: P(50.08, 14.44, 'Prague'),
+  PL: P(52.23, 21.01, 'Warsaw'),
+  HU: P(47.5, 19.04, 'Budapest'),
+  IS: P(64.15, -21.94, 'Reykjavík'),
+  NO: P(59.91, 10.75, 'Oslo'),
+  SE: P(59.33, 18.07, 'Stockholm'),
+  DK: P(55.68, 12.57, 'Copenhagen'),
+  FI: P(60.17, 24.94, 'Helsinki'),
+  EE: P(59.44, 24.75, 'Tallinn'),
+  TR: P(41.01, 28.98, 'Istanbul'),
+  MA: P(33.57, -7.59, 'Casablanca'),
+  EG: P(30.04, 31.24, 'Cairo'),
+  ZA: P(-26.2, 28.05, 'Johannesburg'),
+  KE: P(-1.29, 36.82, 'Nairobi'),
+  TZ: P(-6.79, 39.21, 'Dar es Salaam'),
+  NA: P(-22.56, 17.08, 'Windhoek'),
+  BW: P(-24.63, 25.92, 'Gaborone'),
+  RW: P(-1.94, 30.06, 'Kigali'),
+  UG: P(0.35, 32.58, 'Kampala'),
+  KG: P(42.87, 74.6, 'Bishkek'),
+  JP: P(35.68, 139.69, 'Tokyo'),
+  KR: P(37.57, 126.98, 'Seoul'),
+  CN: P(39.9, 116.41, 'Beijing'),
+  TW: P(25.03, 121.57, 'Taipei'),
+  HK: P(22.32, 114.17, 'Hong Kong'),
+  SG: P(1.35, 103.82, 'Singapore'),
+  MY: P(3.14, 101.69, 'Kuala Lumpur'),
+  TH: P(13.76, 100.5, 'Bangkok'),
+  VN: P(21.03, 105.85, 'Hanoi'),
+  KH: P(11.56, 104.92, 'Phnom Penh'),
+  ID: P(-6.21, 106.85, 'Jakarta'),
+  PH: P(14.6, 120.98, 'Manila'),
+  IN: P(28.61, 77.21, 'Delhi'),
+  LK: P(6.93, 79.86, 'Colombo'),
+  NP: P(27.72, 85.32, 'Kathmandu'),
+  AE: P(25.2, 55.27, 'Dubai'),
+  JO: P(31.95, 35.93, 'Amman'),
+  IL: P(32.09, 34.78, 'Tel Aviv'),
+  AU: P(-33.87, 151.21, 'Sydney'),
+  NZ: P(-36.85, 174.76, 'Auckland'),
+  FJ: P(-18.14, 178.44, 'Suva'),
+  BR: P(-23.55, -46.63, 'São Paulo'),
+  AR: P(-34.6, -58.38, 'Buenos Aires'),
+  CL: P(-33.45, -70.67, 'Santiago'),
+  PE: P(-12.05, -77.04, 'Lima'),
+  CO: P(4.71, -74.07, 'Bogotá'),
+  EC: P(-0.18, -78.47, 'Quito'),
+  CR: P(9.93, -84.08, 'San José'),
+  PA: P(8.98, -79.52, 'Panama City'),
+  CU: P(23.11, -82.37, 'Havana'),
+  DO: P(18.49, -69.93, 'Santo Domingo'),
+  JM: P(17.97, -76.79, 'Kingston'),
+};
+
+/**
+ * Everyday names for a country that are not the name in the table.
+ *
+ * Kept small and unambiguous on purpose. Every entry is a name a person would
+ * reasonably type for the *whole* country; a constituent nation or a region is
+ * not listed here, because placing "Bavaria" on Berlin would be answering a
+ * different question from the one asked.
+ */
+const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
+  usa: 'US',
+  us: 'US',
+  america: 'US',
+  'united states of america': 'US',
+  uk: 'GB',
+  britain: 'GB',
+  'great britain': 'GB',
+  'united kingdom of great britain and northern ireland': 'GB',
+  holland: 'NL',
+  'the netherlands': 'NL',
+  'czech republic': 'CZ',
+  turkey: 'TR',
+  korea: 'KR',
+  'republic of korea': 'KR',
+  uae: 'AE',
+  emirates: 'AE',
+  'united arab emirates': 'AE',
+  'kyrgyz republic': 'KG',
+  'hong kong sar': 'HK',
+  'the philippines': 'PH',
+  'the gambia': 'GM',
+  vietnam: 'VN',
+  'viet nam': 'VN',
+  'peoples republic of china': 'CN',
+  'mainland china': 'CN',
+  'costa rica': 'CR',
+  'south korea': 'KR',
+};
+
+function foldPlain(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[\u2018\u2019']/g, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .toLowerCase()
+    .trim();
+}
+
+const BY_FOLDED_NAME = new Map<string, string>();
+for (const country of COUNTRY_FACTS) BY_FOLDED_NAME.set(foldPlain(country.name), country.code);
+for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) BY_FOLDED_NAME.set(foldPlain(alias), code);
+
+/** How many words a phrase may hold before a country name inside it stops being what the phrase is about. */
+const MAX_PHRASE_WORDS = 6;
+
+export interface CountryMatch {
+  facts: CountryFacts;
+  point: CountryPoint;
+  /** `name` when the whole string is the country; `phrase` when it was one word inside a longer answer. */
+  how: 'name' | 'phrase';
+}
+
+/**
+ * A country, from whatever a person typed — or null, which is a real answer.
+ *
+ * Two passes, and the second is why "rural Japan" and "the steppes of
+ * Kyrgyzstan" place correctly without either being a case in the code:
+ *
+ * 1. **The whole string is a country**, by name or by an everyday alias.
+ * 2. **A country name appears inside a short phrase**, and exactly one does. Two
+ *    matches is an ambiguity, not a resolution, and returns null. A long phrase is
+ *    not about a country either — six words is where "the steppes of Kyrgyzstan"
+ *    fits and a sentence does not.
+ *
+ * Nothing here knows a destination. Both passes are the same table lookup, and a
+ * country that is not in the table returns null so that the caller falls through
+ * to a provider that might know it.
+ */
+export function countryFromText(text: string | null | undefined): CountryMatch | null {
+  if (!text) return null;
+  const folded = foldPlain(text);
+  if (!folded) return null;
+
+  const direct = BY_FOLDED_NAME.get(folded) ?? BY_FOLDED_NAME.get(folded.replace(/^the /, ''));
+  if (direct) {
+    const match = built(direct, 'name');
+    if (match) return match;
+  }
+
+  const words = folded.split(' ').filter(Boolean);
+  if (words.length < 2 || words.length > MAX_PHRASE_WORDS) return null;
+
+  /* Every window of the phrase, longest first, so "south korea" beats "korea". */
+  const hits = new Set<string>();
+  for (let size = Math.min(words.length, 4); size >= 1; size -= 1) {
+    for (let start = 0; start + size <= words.length; start += 1) {
+      const code = BY_FOLDED_NAME.get(words.slice(start, start + size).join(' '));
+      if (code) hits.add(code);
+    }
+    if (hits.size > 0) break;
+  }
+  if (hits.size !== 1) return null;
+  return built([...hits][0]!, 'phrase');
+}
+
+function built(code: string, how: 'name' | 'phrase'): CountryMatch | null {
+  const facts = BY_CODE.get(code);
+  const point = COUNTRY_POINTS[code];
+  if (!facts || !point) return null;
+  return { facts, point, how };
+}
+
 export const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English', ga: 'Irish', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ca: 'Catalan', gl: 'Galician', eu: 'Basque', rm: 'Romansh', el: 'Greek', hr: 'Croatian', sl: 'Slovene', cs: 'Czech', pl: 'Polish', hu: 'Hungarian', is: 'Icelandic', no: 'Norwegian', sv: 'Swedish', da: 'Danish', fi: 'Finnish', et: 'Estonian', tr: 'Turkish', ar: 'Arabic', zu: 'Zulu', xh: 'Xhosa', af: 'Afrikaans', sw: 'Swahili', tn: 'Setswana', rw: 'Kinyarwanda', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', ms: 'Malay', ta: 'Tamil', th: 'Thai', vi: 'Vietnamese', km: 'Khmer', id: 'Indonesian', fil: 'Filipino', hi: 'Hindi', si: 'Sinhala', ne: 'Nepali', he: 'Hebrew', mi: 'Māori', fj: 'Fijian', qu: 'Quechua',
+  en: 'English', ga: 'Irish', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', nl: 'Dutch', ca: 'Catalan', gl: 'Galician', eu: 'Basque', rm: 'Romansh', el: 'Greek', hr: 'Croatian', sl: 'Slovene', cs: 'Czech', pl: 'Polish', hu: 'Hungarian', is: 'Icelandic', no: 'Norwegian', sv: 'Swedish', da: 'Danish', fi: 'Finnish', et: 'Estonian', tr: 'Turkish', ar: 'Arabic', zu: 'Zulu', xh: 'Xhosa', af: 'Afrikaans', sw: 'Swahili', tn: 'Setswana', rw: 'Kinyarwanda', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', ms: 'Malay', ta: 'Tamil', th: 'Thai', vi: 'Vietnamese', km: 'Khmer', id: 'Indonesian', fil: 'Filipino', hi: 'Hindi', si: 'Sinhala', ky: 'Kyrgyz', ru: 'Russian', ne: 'Nepali', he: 'Hebrew', mi: 'Māori', fj: 'Fijian', qu: 'Quechua',
 };
 
 export function languageName(code: string): string {

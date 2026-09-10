@@ -205,6 +205,24 @@ say(`Compilation mode: ${choice}${inferred ? ' (inferred from the switches below
 say('');
 
 say('Adapters');
+/*
+ * STAGING PARITY §8 — THE FIRST LINE IS THE ONE THAT FAILED IN PRODUCTION.
+ *
+ * A traveller typed "Japan" on a fresh deployment and was shown the empty-world
+ * map, and this report had nothing to say about it: the geocoder line below
+ * describes an *adapter*, and what broke was the question "can a typed name
+ * become a place at all". That question has two independent answers — the bundled
+ * country reference, which is always there, and the geocoder, which is not — and
+ * neither was reported. It leads now, because it is the first thing that has to
+ * be true.
+ */
+mark(
+  true,
+  'Placing a typed destination',
+  geocoder
+    ? 'bundled country reference (offline, any country) then the geocoder for cities, regions and parks'
+    : 'bundled country reference only — a country places offline; a city, region or park typed as free text is not placed until the trip is created. SIDEQUEST_GEOCODER_PROVIDER=nominatim is keyless and fixes it',
+);
 mark(geocoder, 'Destination geocoder', geocoder ? 'nominatim' : 'SIDEQUEST_GEOCODER_PROVIDER not set');
 mark(backbone, 'Place backbone', backbone ? 'overture' : 'SIDEQUEST_PLACE_BACKBONE not set');
 mark(poi, 'Place fallback', poi ? 'overpass' : 'SIDEQUEST_POI_PROVIDER not set (optional)');

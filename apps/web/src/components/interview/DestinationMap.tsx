@@ -26,6 +26,23 @@ export interface DestinationGeometry {
 
 const URBAN_FEATURES = new Set(['city', 'town', 'district', 'neighbourhood', 'metro_area']);
 
+/**
+ * How far out to sit when nobody published an extent, by what kind of place it is.
+ *
+ * Not a claim about size: a country is not eight hundred kilometres across, and
+ * the caption never says it is. It is the distance at which a single mark reads
+ * as "somewhere in this country" instead of as a pinpoint in an empty field.
+ */
+const FRAME_KM: Record<string, number> = {
+  country: 800,
+  dependency: 300,
+  region: 200,
+  county: 90,
+  island: 90,
+  national_park: 60,
+  protected_area: 60,
+};
+
 export type ConceptualMovement = 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | null;
 
 /**
@@ -139,9 +156,18 @@ export function DestinationMap({
       for (let i = 0; i < 4; i += 1) connectors.push({ id: `bounds-${i}`, from: corners[i]!, to: corners[(i + 1) % 4]!, style: 'sightline' });
       fitPoints.push(...corners);
     } else {
-      // No published extent: frame the decided reach when there is one, else the place at its own scale — a
-      // city at a dozen kilometres, a region at forty. A radius nobody chose is never drawn.
-      const frameKm = rangeKm ?? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 12 : 40);
+      /*
+       * No published extent: frame the decided reach when there is one, else the
+       * place at its own scale. A radius nobody chose is never drawn — this sets
+       * how far out the camera sits, not how far the trip goes.
+       *
+       * The country rung was missing, and it showed: a country placed from the
+       * bundled reference has a real coordinate and no bounds, so it was framed at
+       * forty kilometres — one dot in an empty box, for a place two thousand
+       * kilometres long. Keyed on the published feature type, so it is the same
+       * rule for every country and no destination is named.
+       */
+      const frameKm = rangeKm ?? FRAME_KM[geometry.featureType ?? ''] ?? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 12 : 40);
       const dLat = frameKm / 111;
       const dLng = frameKm / (111 * Math.max(0.2, Math.cos((geometry.center.lat * Math.PI) / 180)));
       fitPoints.push({ lat: geometry.center.lat + dLat, lng: geometry.center.lng + dLng }, { lat: geometry.center.lat - dLat, lng: geometry.center.lng - dLng });

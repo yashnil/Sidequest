@@ -9,7 +9,7 @@ import {
   type ConcreteWindow,
   type DateWindow,
 } from '@sidequest/core';
-import { climateFor } from '@/lib/destinations/preflight';
+import { climateWithReason } from '@/lib/destinations/preflight';
 import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { isClimateEnabled } from '@/lib/providers/switches';
 import { guardAction } from '@/lib/net/caller';
@@ -67,7 +67,18 @@ export type TimingResult =
       attribution: string;
       sampleYears: string;
     }
-  | { ok: false; note: string };
+  /**
+   * NOT YET, RATHER THAN NOT AT ALL (§5).
+   *
+   * The traveller asked Sidequest to choose the window. Sidequest cannot compare
+   * months for a point it does not have yet — and the honest answer to that is
+   * "later", not "pick your own dates", which is what this used to say. Their
+   * requested planning mode is not rewritten by a piece of missing evidence: the
+   * intent is already carried to the server as `wantsDateRecommendation`, the
+   * composition reads it, and the window is chosen with the trip.
+   */
+  | { ok: false; deferred: true; note: string }
+  | { ok: false; deferred?: false; note: string };
 
 function view(window: DateWindow, placed: ConcreteWindow): TimingWindowView {
   return {
@@ -100,20 +111,39 @@ export async function recommendTimingAction(raw: TimingInput): Promise<TimingRes
      * Sidequest has no climate record to reason from, so it will not name a
      * month, and here is what to do instead.
      */
-    return { ok: false, note: 'Sidequest has no climate record for this destination, so it will not name a best month. Pick your dates, or a rough month, and it will plan around them.' };
+    return { ok: false, deferred: true, note: 'Sidequest will choose the best window once it understands the trip. You can also pick your own dates or a rough month.' };
   }
 
   const entry = input.entryId ? destinationEntryById(input.entryId) : null;
   const centre = entry?.center ?? (input.lat !== null && input.lng !== null ? { lat: input.lat, lng: input.lng } : null);
   if (!centre) {
-    return { ok: false, note: 'We could not place this destination on the map yet, so we cannot compare its seasons. Pick your own dates and we will plan around them.' };
+    /*
+     * No coordinate *yet*. `place-actions.ts` resolves typed text when the
+     * traveller leaves the destination step, so this is the window between the
+     * two — or a deployment with no geocoder and a destination the bundled
+     * country reference does not cover. Either way the answer is "later".
+     */
+    return { ok: false, deferred: true, note: "We'll choose the best window once we understand the trip." };
   }
 
   const now = new Date();
-  const profile = await climateFor(centre, now).catch(() => null);
-  if (!profile) {
-    return { ok: false, note: 'We have no climate records for this destination, so we will not guess at the best time to go.' };
+  const climate = await climateWithReason(centre, now);
+  if (!climate.profile) {
+    /*
+     * A climate archive that did not answer is not a place without seasons. The
+     * one distinction worth making to a traveller is whether waiting helps: a
+     * rate-limited archive answers a minute later, an unavailable one does not.
+     */
+    return {
+      ok: false,
+      deferred: true,
+      note:
+        climate.reason === 'provider_rate_limited'
+          ? 'The climate records are busy this minute. Try again shortly, or carry on and Sidequest will choose the window with the plan.'
+          : 'We could not read the climate records just now, so Sidequest will choose the window with the plan.',
+    };
   }
+  const profile = climate.profile;
 
   /*
    * What the traveller has already narrowed to. A free window is converted to

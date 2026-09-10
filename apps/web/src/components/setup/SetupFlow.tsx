@@ -18,6 +18,7 @@ import { StagePath } from '../interview/StagePath';
 import { Glyph } from '../interview/glyphs';
 import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
 import { createTripFromComposer, updateTripFromComposer, type ComposerResult } from '@/app/(product)/trips/new/actions';
+import { placeDestinationAction } from '@/app/(product)/trips/new/place-actions';
 import type { SetupDraft, SetupStepId } from './setup-draft';
 import { SETUP_STEPS, describeParty, initialDraft, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf } from './setup-draft';
 
@@ -165,6 +166,58 @@ export function SetupFlow({
     ? { name: draft.destinationText.trim() || 'Your destination', center: draft.destinationCenter, bounds: draft.destinationBounds ?? null, ...(draft.destinationFeatureType ? { featureType: draft.destinationFeatureType } : {}) }
     : null;
 
+  /*
+   * PLACING WHAT THEY TYPED — ONCE, WHEN THEY MOVE ON (§1, §4).
+   *
+   * Only a picked suggestion used to carry a coordinate, so on a deployment with
+   * no destination index nothing typed was ever placed: the canvas showed the
+   * empty world and the seasons screen said the destination could not be placed.
+   * Both were statements about a missing local table, made as if they were facts
+   * about the world.
+   *
+   * The lookup runs when the traveller leaves the "where" step and not before —
+   * never per keystroke, because the geocoder's policy forbids autocomplete and
+   * because a person changing their mind mid-word has not asked anything yet. It
+   * is fire-and-forget: the next screen is not waiting for it, and if the answer
+   * arrives late the map and the timing recommendation pick it up when it does
+   * (`TimingStep` keys its recommendation on the centre).
+   */
+  const [placing, setPlacing] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const placedFor = useRef<string | null>(null);
+
+  const place = useCallback((text: string) => {
+    const query = text.trim();
+    if (query.length < 2 || placedFor.current === query) return;
+    placedFor.current = query;
+    setPlacing(true);
+    void placeDestinationAction({ text: query })
+      .then((result) => {
+        if (placedFor.current !== query) return;
+        if (result.placed) {
+          const placed = result.placed;
+          setDraft((current) =>
+            current.destinationText.trim() !== query
+              ? current
+              : {
+                  ...current,
+                  destinationCenter: placed.center,
+                  destinationBounds: placed.bounds ?? null,
+                  destinationFeatureType: placed.featureType ?? null,
+                },
+          );
+        }
+      })
+      .catch(() => {
+        /* Not placed is not an error the traveller has to act on; the canvas says so quietly. */
+      })
+      .finally(() => {
+        if (placedFor.current !== query) return;
+        setPlacing(false);
+        setAttempted(true);
+      });
+  }, []);
+
   const summary = useMemo(() => summaryOf(draft), [draft]);
 
   function submit(source: SetupDraft = draft) {
@@ -188,6 +241,8 @@ export function SetupFlow({
   }
 
   function advance() {
+    /* Leaving "where" with typed text nobody has placed yet: ask, and keep going. */
+    if (step === 'where' && draft.destinationCenter === null) place(draft.destinationText);
     // Answering is what makes a step count, so the summary can never show a default.
     const answeredDraft = draft.answered.includes(step) ? draft : { ...draft, answered: [...draft.answered, step] };
     setDraft(answeredDraft);
@@ -252,7 +307,7 @@ export function SetupFlow({
         </div>
 
         <aside className="min-w-0">
-          <DestinationCanvas geometry={geometry} tiles={tiles} />
+          <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} />
           {summary.lines.length > 0 ? (
             <dl className="mt-4 divide-y divide-rule border-y border-rule" data-testid="setup-summary">
               {summary.lines.map((line) => (
