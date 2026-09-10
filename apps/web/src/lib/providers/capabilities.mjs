@@ -50,6 +50,7 @@ export const CONSUMERS = {
   'maps.tiles': 'components/map-adapter.ts#resolveMapTileSource → InteractiveMap',
   'destinations.resolution': 'trips/new/place-actions.ts#placeDestinationAction (index → bundled country reference → geocoder) → the setup canvas and the timing recommendation, then plan/actions.ts#resolveDestinationAction once the trip exists',
   'destinations.suggestions': 'api/destinations/suggest → destinations/provider.ts#localSuggestionProvider (the local index only, never a network call while typing)',
+  'auth.sign_in': 'api/auth/google/callback/route.ts + signin/actions.ts#fixtureSignInAction → lib/auth/session.ts#currentUser → lib/net/trip-access.ts#tripAccessRefusal (account first, browser cookie only while unclaimed)',
 };
 
 export function capabilityRegistry(env = process.env) {
@@ -136,6 +137,16 @@ export function capabilityRegistry(env = process.env) {
   add('weather.climate', 'weather', { configured: climate && weather !== 'off', provider: climate ? weather : null, costClass: 'free', fixture: weather === 'fixture', freshness: 'stable', coverage: climate ? 'Historical normals for dates beyond the forecast.' : '', limitations: climate ? [] : ['Climate is switched off; far-future days show no weather.'] });
 
   add('currency.fx', 'currency', { configured: fx !== 'off', provider: fx === 'off' ? null : fx, costClass: 'free', fixture: fx === 'fixture', freshness: 'date_bound', coverage: fx === 'frankfurter' ? 'ECB reference rates via Frankfurter, dated.' : fx === 'fixture' ? 'Fixture rates.' : '', limitations: fx === 'off' ? ['Budgets stay in the local currency; no conversion shown.'] : ['Reference rates, not what a card will charge.'] });
+
+  /*
+   * V6 §21 — accounts. Google is real sign-in; the fixture door is the browser
+   * suite's and is refused in production unless explicitly allowed.
+   */
+  const baseUrl = read(env, 'SIDEQUEST_BASE_URL').length > 0;
+  const googleAuth = set(env, 'GOOGLE_OAUTH_CLIENT_ID') && set(env, 'GOOGLE_OAUTH_CLIENT_SECRET') && baseUrl;
+  const fixtureAuthAsked = eq(env, 'SIDEQUEST_AUTH_PROVIDER', 'fixture');
+  const fixtureAuth = fixtureAuthAsked && (read(env, 'NODE_ENV') !== 'production' || read(env, 'SIDEQUEST_AUTH_FIXTURE') === 'allow' || eq(env, 'SIDEQUEST_ACTION_FENCES', 'off'));
+  add('auth.sign_in', 'accounts', { configured: googleAuth || fixtureAuth, provider: googleAuth ? 'google' : fixtureAuth ? 'fixture' : null, costClass: 'free', fixture: fixtureAuth && !googleAuth, freshness: 'stable', coverage: googleAuth ? 'Google sign-in (OpenID Connect with PKCE); trips claimed onto the account.' : fixtureAuth ? 'Fixture sign-in by email, for the browser suite.' : '', limitations: googleAuth || fixtureAuth ? [] : ['No sign-in door: trips belong to the browser that made them. Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET and SIDEQUEST_BASE_URL.'].concat(set(env, 'GOOGLE_OAUTH_CLIENT_ID') && !baseUrl ? ['SIDEQUEST_BASE_URL is unset, so the Google redirect cannot be formed.'] : []) });
 
   add('readiness.entry', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'Official entry-point links; nothing legal is confirmed by Sidequest.', limitations: ['No Timatic licence; the public IATA checker is the neutral entry point.'] });
   add('readiness.advisory', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'Traveller-country advisories for US, GB, CA, AU, NZ, IE, DE, FR.', limitations: ['Other passport countries get the generic official entry points and are told so.'] });

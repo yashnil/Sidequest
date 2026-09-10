@@ -156,6 +156,10 @@ export const bookedPlanItemSchema = z.object({
   cost: z.object({ amount: z.number().min(0), currency: z.string().min(1).max(8) }).optional(),
   status: bookedStatusSchema.default('booked'),
   locked: z.boolean().default(true),
+  /** V6 §26 — who it was arranged with ("ANA", "Booking.com", "the lodge directly"). */
+  provider: z.string().max(80).optional(),
+  /** V6 §26 — which party members it covers; empty means everyone. */
+  travelerIds: z.array(z.string().min(1)).max(12).optional(),
   createdAt: z.string().datetime(),
 });
 export type BookedPlanItem = z.infer<typeof bookedPlanItemSchema>;

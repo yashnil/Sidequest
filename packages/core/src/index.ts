@@ -77,7 +77,14 @@ export * from './interview/review';
 export * from './interview/analytics';
 export * from './interview/summary';
 export * from './interview/brief';
+export * from './contract/trip-contract';
+export * from './party/traveler';
+export * from './party/strain';
+export * from './feasibility/report';
+export * from './lifecycle/trip-lifecycle';
+export * from './quality/metrics';
 export * from './interview/sufficiency';
+export * from './interview/conflicts';
 export * from './intelligence';
 
 export * from './time/interval';
@@ -96,6 +103,9 @@ export * from './food/board';
 export * from './food/quality';
 export * from './food/provider';
 export * from './food/discovery-rank';
+export * from './food/party-fit';
+export * from './preference/evidence';
+export * from './preference/extract';
 
 export * from './weather/board';
 export * from './weather/board-backups';

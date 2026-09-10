@@ -115,6 +115,85 @@ export function anchorIndex(draft: TripDraft): Map<string, { dayNumber: number; 
 }
 
 /**
+ * V6 — WHAT A PATCH REACHES, BEFORE ANY LOCK IS CONSULTED.
+ *
+ * The days its operations address, the stays it edits, and — when a stay's
+ * nights change — every day that would sleep somewhere else as a result. The
+ * blast radius is bounded to this (`radiusForPatch`), so the traveller is
+ * told "change days 7 and 8, and where you sleep in Akan-ko and Obihiro"
+ * rather than a list of every day the request happened to mention. A live
+ * Hokkaido refinement named days 1 and 2 as *kept* and had them shown under
+ * "Change days 1, 2, 7, 8?", while the two stays it actually changed were
+ * outside the radius and refused.
+ */
+export function patchReach(patch: TripPatch, draft: TripDraft): { days: number[]; bases: string[] } {
+  const ids = anchorIndex(draft);
+  const days = new Set<number>();
+  const bases = new Set<string>();
+  const nights = new Map(draft.bases.map((base) => [base.id, base.nights]));
+  for (const operation of patch.operations) {
+    switch (operation.op) {
+      case 'add_activity':
+      case 'update_day':
+        days.add(operation.day);
+        break;
+      case 'replace_activity':
+      case 'remove_activity': {
+        const address = ids.get(operation.id);
+        if (address) days.add(address.dayNumber);
+        break;
+      }
+      case 'move_activity': {
+        const address = ids.get(operation.id);
+        if (address) days.add(address.dayNumber);
+        days.add(operation.toDay);
+        break;
+      }
+      case 'update_base':
+      case 'replace_base':
+        if (nights.has(operation.id)) {
+          bases.add(operation.id);
+          if (operation.nights !== undefined) nights.set(operation.id, operation.nights);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  const before = dayBaseMap(draft.bases, draft.days.length);
+  const after = dayBaseMap(draft.bases.map((base) => ({ id: base.id, nights: nights.get(base.id) ?? base.nights })), draft.days.length);
+  before.forEach((id, index) => {
+    if (after[index] !== id) days.add(index + 1);
+  });
+  return { days: [...days].filter((day) => day >= 1 && day <= draft.days.length).sort((a, b) => a - b), bases: [...bases] };
+}
+
+/**
+ * Day → stay, from the base sequence: day d sleeps at the stay covering night
+ * d, and the last day (a departure, no night) keeps the last stay. A stay with
+ * no nights covers nothing.
+ */
+export function dayBaseMap(bases: readonly { id: string; nights: number }[], dayCount: number): string[] {
+  const sequence = bases.filter((base) => base.nights > 0);
+  const out: string[] = [];
+  let cursor = 0;
+  let covered = 0;
+  for (let day = 1; day <= dayCount; day += 1) {
+    while (cursor < sequence.length - 1 && day > covered + sequence[cursor]!.nights) {
+      covered += sequence[cursor]!.nights;
+      cursor += 1;
+    }
+    out.push(sequence[cursor]?.id ?? bases[bases.length - 1]?.id ?? '');
+  }
+  return out;
+}
+
+function listOfDays(days: readonly number[]): string {
+  if (days.length <= 1) return String(days[0] ?? '');
+  return `${days.slice(0, -1).join(', ')} and ${days[days.length - 1]}`;
+}
+
+/**
  * Apply a patch to a draft, deterministically.
  *
  * ## The two properties that matter
@@ -130,9 +209,17 @@ export function anchorIndex(draft: TripDraft): Map<string, { dayNumber: number; 
  * makes the lock impossible — is resolved by an interrupt upstream, never by
  * quietly overriding it here.
  */
-export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; locked?: readonly string[]; booked?: readonly BookingDependency[]; today?: Date }): PatchApplication {
+export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; locked?: readonly string[]; travellerLocked?: readonly string[]; booked?: readonly BookingDependency[]; today?: Date }): PatchApplication {
   const draft: TripDraft = structuredClone(input.draft);
   const locked = new Set(input.locked ?? []);
+  /*
+   * V6 — a refusal says who is refusing. `locked` is the contract's whole
+   * preserve list (everything outside the radius, plus the traveller's own
+   * locks). A stay outside the scope is not "locked by the traveller", and the
+   * first live proposal told them it was.
+   */
+  const travellerLocked = input.travellerLocked ? new Set(input.travellerLocked) : null;
+  const because = (keys: readonly string[], what: string): string => (travellerLocked === null || keys.some((key) => travellerLocked.has(key)) ? `the traveller locked this ${what}` : `this ${what} is outside the scope of this change`);
   const applied: string[] = [];
   const refused: PatchApplication['refused'] = [];
   const dayOf = (dayNumber: number) => draft.days.find((day) => day.dayNumber === dayNumber);
@@ -165,7 +252,7 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
           break;
         }
         if (locked.has(`day:${operation.day}`)) {
-          refused.push({ op: operation.op, ref: `day ${operation.day}`, reason: 'the traveller locked this day' });
+          refused.push({ op: operation.op, ref: `day ${operation.day}`, reason: because([`day:${operation.day}`], 'day') });
           break;
         }
         if (day.anchors.length >= 5) {
@@ -184,7 +271,7 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
           break;
         }
         if (locked.has(`activity:${operation.id}`) || locked.has(`day:${found.day.dayNumber}`)) {
-          refused.push({ op: operation.op, ref: operation.id, reason: 'the traveller locked this' });
+          refused.push({ op: operation.op, ref: operation.id, reason: because([`activity:${operation.id}`, `day:${found.day.dayNumber}`], 'experience') });
           break;
         }
         const previous = found.day.anchors[found.index]!;
@@ -199,7 +286,7 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
           break;
         }
         if (locked.has(`activity:${operation.id}`) || locked.has(`day:${found.day.dayNumber}`)) {
-          refused.push({ op: operation.op, ref: operation.id, reason: 'the traveller locked this' });
+          refused.push({ op: operation.op, ref: operation.id, reason: because([`activity:${operation.id}`, `day:${found.day.dayNumber}`], 'experience') });
           break;
         }
         const [removed] = found.day.anchors.splice(found.index, 1);
@@ -214,7 +301,7 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
           break;
         }
         if (locked.has(`activity:${operation.id}`) || locked.has(`day:${found.day.dayNumber}`) || locked.has(`day:${operation.toDay}`)) {
-          refused.push({ op: operation.op, ref: operation.id, reason: 'the traveller locked this' });
+          refused.push({ op: operation.op, ref: operation.id, reason: because([`activity:${operation.id}`, `day:${found.day.dayNumber}`, `day:${operation.toDay}`], 'experience') });
           break;
         }
         if (target.anchors.length >= 5) {
@@ -234,7 +321,7 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
           break;
         }
         if (locked.has(`day:${operation.day}`)) {
-          refused.push({ op: operation.op, ref: `day ${operation.day}`, reason: 'the traveller locked this day' });
+          refused.push({ op: operation.op, ref: `day ${operation.day}`, reason: because([`day:${operation.day}`], 'day') });
           break;
         }
         if (operation.theme !== undefined) day.theme = operation.theme;
@@ -253,16 +340,20 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
           break;
         }
         if (locked.has(`base:${operation.id}`) || locked.has(`lodging:${operation.id}`)) {
-          refused.push({ op: operation.op, ref: operation.id, reason: 'the traveller locked this stay' });
+          refused.push({ op: operation.op, ref: operation.id, reason: because([`base:${operation.id}`, `lodging:${operation.id}`], 'stay') });
           break;
         }
+        const wasName = base.name;
+        const wasNights = base.nights;
         if (operation.op === 'replace_base') base.name = operation.name;
         if (operation.nights !== undefined) base.nights = operation.nights;
         if (operation.why !== undefined) base.why = operation.why;
         if (operation.lodgingArea !== undefined) base.lodgingArea = operation.lodgingArea;
         if (operation.lodgingStyle !== undefined) base.lodgingStyle = operation.lodgingStyle;
         if (operation.overnight !== undefined) base.overnight = operation.overnight;
-        applied.push(`${operation.op === 'replace_base' ? 'replaced' : 'updated'} stay ${base.name}`);
+        if (operation.op === 'replace_base') applied.push(`replaced the stay in ${wasName} with ${base.name} (${base.nights} night${base.nights === 1 ? '' : 's'})`);
+        else if (operation.nights !== undefined && operation.nights !== wasNights) applied.push(operation.nights === 0 ? `dropped the night${wasNights === 1 ? '' : 's'} in ${base.name}` : `${base.name}: ${wasNights} → ${operation.nights} night${operation.nights === 1 ? '' : 's'}`);
+        else applied.push(`updated the stay in ${base.name}`);
         break;
       }
       case 'update_transport': {
@@ -310,6 +401,36 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
   draft.days.forEach((day, position) => {
     day.dayNumber = position + 1;
   });
+  /*
+   * V6 — A NIGHT MOVED IS A BED MOVED.
+   *
+   * "A third night at Akan-ko instead of Obihiro" is two nights figures and,
+   * downstream of them, the days that now sleep somewhere else. The model
+   * writes the figures; the day-to-stay assignment is re-derived here from
+   * the sequence, and only for the days whose stay actually moves, so a day
+   * the nights do not reach keeps the assignment the composition gave it. A
+   * stay left with no nights leaves the draft.
+   */
+  const nightsChanged = draft.bases.some((base) => input.draft.bases.find((original) => original.id === base.id)?.nights !== base.nights);
+  if (nightsChanged) {
+    const before = dayBaseMap(input.draft.bases, input.draft.days.length);
+    const after = dayBaseMap(draft.bases, draft.days.length);
+    const surviving = new Set(draft.bases.filter((base) => base.nights > 0).map((base) => base.id));
+    const moved = new Map<string, number[]>();
+    draft.days.forEach((day, index) => {
+      const target = after[index];
+      if (!target || !surviving.has(target)) return;
+      if (before[index] === target && surviving.has(day.baseId)) return;
+      if (day.baseId === target) return;
+      day.baseId = target;
+      moved.set(target, [...(moved.get(target) ?? []), day.dayNumber]);
+    });
+    draft.bases = draft.bases.filter((base) => base.nights > 0);
+    for (const [baseId, days] of moved) {
+      const name = draft.bases.find((base) => base.id === baseId)?.name ?? baseId;
+      applied.push(`day${days.length === 1 ? '' : 's'} ${listOfDays(days)} now sleep${days.length === 1 ? 's' : ''} in ${name}`);
+    }
+  }
   const parsed = tripDraftSchema.safeParse(draft);
   if (!parsed.success) {
     return { ok: false, draft: input.draft, applied, refused: [...refused, { op: 'update_day', ref: 'draft', reason: `the change would leave the trip not valid: ${parsed.error.issues[0]?.message ?? 'unknown'}` }] };

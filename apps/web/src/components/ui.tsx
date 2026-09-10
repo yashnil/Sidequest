@@ -143,7 +143,17 @@ export function Badge({
     <span
       title={title}
       className={cx(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-tight',
+        /*
+         * 12px, not 11.
+         *
+         * A badge is the only thing on a dashboard card that says what stage a
+         * trip is at, and on a board card it is the fit. That is content a
+         * traveller reads, not a caption — and 11px was below the size the rest
+         * of this product treats as the floor for read-once text. The contrast
+         * guard in `globals.contrast.test.ts` already holds these pairs to the
+         * body-text ratio, so the larger size is a straight gain.
+         */
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium leading-tight',
         BADGE_TONES[tone],
       )}
     >

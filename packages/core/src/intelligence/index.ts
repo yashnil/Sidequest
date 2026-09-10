@@ -20,3 +20,4 @@ export * from './place-class';
 export * from './recheck';
 export * from './today';
 export * from './operational-evidence';
+export * from './booking-progress';

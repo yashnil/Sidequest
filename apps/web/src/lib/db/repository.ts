@@ -21,6 +21,7 @@ import {
   type Trip,
   type TripBasics,
   type TripStatus,
+  type TimingLock,
   plannerReadinessSchema,
   type PlannerReadiness,
 } from '@sidequest/core';
@@ -52,6 +53,12 @@ interface TripRow {
   updated_at: string;
   /** Null for a trip written before trips had an owner. See `listTrips`. */
   owner_token: string | null;
+  /** V6 — `traveler` | `sidequest` | null. Who decided the dates. */
+  timing_lock?: string | null;
+  user_id?: string | null;
+  title?: string | null;
+  lifecycle_override?: string | null;
+  archived_at?: string | null;
 }
 
 interface ProfileRow {
@@ -74,6 +81,10 @@ function rowToTrip(row: TripRow): Trip {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...(row.title ? { title: row.title } : {}),
+    ...(row.user_id ? { userId: row.user_id } : {}),
+    ...(row.lifecycle_override ? { lifecycleOverride: row.lifecycle_override } : {}),
+    ...(row.archived_at ? { archivedAt: row.archived_at } : {}),
     basics: {
       mode: row.mode,
       destinationInput: row.destination_input,
@@ -88,11 +99,12 @@ function rowToTrip(row: TripRow): Trip {
       adults: row.adults,
       children: row.children,
       travelerNeeds: JSON.parse(row.traveler_needs),
+      ...(row.timing_lock === 'traveler' || row.timing_lock === 'sidequest' ? { timingLock: row.timing_lock } : {}),
     },
   });
 }
 
-export function createTrip(basics: TripBasics, ownerToken?: string | null): Trip {
+export function createTrip(basics: TripBasics, ownerToken?: string | null, userId?: string | null): Trip {
   const parsed = tripBasicsSchema.parse(basics);
   const now = new Date().toISOString();
   const id = randomUUID();
@@ -102,15 +114,18 @@ export function createTrip(basics: TripBasics, ownerToken?: string | null): Trip
       `INSERT INTO trips (id, mode, destination_input, region_id, start_date, end_date,
          arrival_time, departure_time, arrival_precision, departure_precision,
          adults, children, traveler_needs, status, created_at, updated_at,
-         owner_token)
+         owner_token, timing_lock, user_id)
        VALUES (@id, @mode, @destination_input, @region_id, @start_date, @end_date,
          @arrival_time, @departure_time, @arrival_precision, @departure_precision,
          @adults, @children, @traveler_needs, @status, @created_at, @updated_at,
-         @owner_token)`,
+         @owner_token, @timing_lock, @user_id)`,
     )
     .run({
       id,
       owner_token: ownerToken ?? null,
+      /* V6 §50 — a trip made while signed in belongs to the account from its first row. */
+      user_id: userId ?? null,
+      timing_lock: parsed.timingLock ?? null,
       mode: parsed.mode,
       destination_input: parsed.destinationInput,
       region_id: parsed.regionId,
@@ -128,7 +143,7 @@ export function createTrip(basics: TripBasics, ownerToken?: string | null): Trip
       updated_at: now,
     });
 
-  return { id, basics: parsed, status: 'draft', createdAt: now, updatedAt: now };
+  return { id, basics: parsed, status: 'draft', createdAt: now, updatedAt: now, ...(userId ? { userId } : {}) };
 }
 
 /**
@@ -170,11 +185,12 @@ export function updateTripBasics(id: string, basics: TripBasics): void {
          start_date = @start_date, end_date = @end_date, arrival_time = @arrival_time,
          departure_time = @departure_time, arrival_precision = @arrival_precision,
          departure_precision = @departure_precision, adults = @adults, children = @children,
-         traveler_needs = @traveler_needs, updated_at = @updated_at
+         traveler_needs = @traveler_needs, timing_lock = @timing_lock, updated_at = @updated_at
        WHERE id = @id`,
     )
     .run({
       id,
+      timing_lock: parsed.timingLock ?? null,
       mode: parsed.mode,
       destination_input: parsed.destinationInput,
       region_id: parsed.regionId,
@@ -191,10 +207,26 @@ export function updateTripBasics(id: string, basics: TripBasics): void {
     });
 }
 
-export function updateTripDates(id: string, startDate: string, endDate: string): void {
+export function updateTripDates(id: string, startDate: string, endDate: string, lock?: TimingLock | null): void {
+  if (lock === undefined) {
+    getDb()
+      .prepare('UPDATE trips SET start_date = ?, end_date = ?, updated_at = ? WHERE id = ?')
+      .run(startDate, endDate, new Date().toISOString(), id);
+    return;
+  }
+  /*
+   * V6 — the dates and the lock move together. Writing the dates without
+   * saying who decided them is how an accepted window became a placeholder.
+   */
   getDb()
-    .prepare('UPDATE trips SET start_date = ?, end_date = ?, updated_at = ? WHERE id = ?')
-    .run(startDate, endDate, new Date().toISOString(), id);
+    .prepare('UPDATE trips SET start_date = ?, end_date = ?, timing_lock = ?, updated_at = ? WHERE id = ?')
+    .run(startDate, endDate, lock, new Date().toISOString(), id);
+}
+
+/** V6 — who decided the trip's dates, straight from the row. Null when nobody has. */
+export function tripTimingLock(id: string): TimingLock | null {
+  const row = getDb().prepare('SELECT timing_lock FROM trips WHERE id = ?').get(id) as { timing_lock: string | null } | undefined;
+  return row?.timing_lock === 'traveler' || row?.timing_lock === 'sidequest' ? row.timing_lock : null;
 }
 
 export function getTrip(id: string): Trip | null {
@@ -228,9 +260,87 @@ export function getTrip(id: string): Trip | null {
 export function listTrips(ownerToken: string | null): Trip[] {
   if (!ownerToken) return [];
   const rows = getDb()
-    .prepare('SELECT * FROM trips WHERE owner_token = ? ORDER BY created_at DESC')
+    .prepare('SELECT * FROM trips WHERE owner_token = ? AND user_id IS NULL ORDER BY created_at DESC')
     .all(ownerToken) as TripRow[];
   return rows.map(rowToTrip);
+}
+
+/**
+ * V6 §22/§25 — THE TRIPS THIS PERSON CAN SEE: THEIR ACCOUNT'S, PLUS THE
+ * UNCLAIMED ONES THIS BROWSER MADE.
+ *
+ * A signed-in traveller sees every trip on the account from any browser, and
+ * beside them the trips this browser made before signing in — those are what
+ * the "save your trips" offer moves across. A signed-out browser sees only
+ * its own unclaimed trips, exactly as before. A claimed trip is never listed
+ * to the cookie that made it once it belongs to somebody else's account.
+ */
+export function listTripsFor(owner: { userId: string | null; ownerToken: string | null }): Trip[] {
+  const db = getDb();
+  const rows: TripRow[] = [];
+  if (owner.userId) rows.push(...(db.prepare('SELECT * FROM trips WHERE user_id = ? ORDER BY updated_at DESC').all(owner.userId) as TripRow[]));
+  if (owner.ownerToken) rows.push(...(db.prepare('SELECT * FROM trips WHERE owner_token = ? AND user_id IS NULL ORDER BY updated_at DESC').all(owner.ownerToken) as TripRow[]));
+  const seen = new Set<string>();
+  return rows.filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true))).map(rowToTrip);
+}
+
+/** V6 §50 — both halves of ownership for one trip, so the access seam can decide in one read. */
+export function tripOwner(id: string): { ownerToken: string | null; userId: string | null } | null {
+  const row = getDb().prepare('SELECT owner_token, user_id FROM trips WHERE id = ?').get(id) as { owner_token: string | null; user_id: string | null } | undefined;
+  return row ? { ownerToken: row.owner_token, userId: row.user_id ?? null } : null;
+}
+
+export function renameTrip(id: string, title: string | null): void {
+  getDb().prepare('UPDATE trips SET title = ?, updated_at = ? WHERE id = ?').run(title, new Date().toISOString(), id);
+}
+
+export function setTripArchived(id: string, archived: boolean, now: Date = new Date()): void {
+  getDb().prepare('UPDATE trips SET archived_at = ?, updated_at = ? WHERE id = ?').run(archived ? now.toISOString() : null, now.toISOString(), id);
+}
+
+export function setLifecycleOverride(id: string, lifecycle: string | null, now: Date = new Date()): void {
+  getDb().prepare('UPDATE trips SET lifecycle_override = ?, lifecycle_changed_at = ?, updated_at = ? WHERE id = ?').run(lifecycle, now.toISOString(), now.toISOString(), id);
+}
+
+export function recordLifecycleChange(id: string, lifecycle: string, basis: 'traveller' | 'inferred' | 'archive', note: string | null, now: Date = new Date()): void {
+  getDb().prepare('INSERT INTO trip_status_history (trip_id, lifecycle, basis, note, changed_at) VALUES (?, ?, ?, ?, ?)').run(id, lifecycle, basis, note, now.toISOString());
+}
+
+export function listLifecycleHistory(id: string): { lifecycle: string; basis: string; note: string | null; changedAt: string }[] {
+  return (getDb().prepare('SELECT lifecycle, basis, note, changed_at FROM trip_status_history WHERE trip_id = ? ORDER BY id ASC').all(id) as { lifecycle: string; basis: string; note: string | null; changed_at: string }[]).map((r) => ({ lifecycle: r.lifecycle, basis: r.basis, note: r.note, changedAt: r.changed_at }));
+}
+
+/**
+ * V6 §25 — DUPLICATE: the same trip as a fresh plan.
+ *
+ * Copies the row (new id, same owner), the composer answers and the profile,
+ * so the copy is at "planning" with everything the traveller said and nothing
+ * that was built — no itinerary, no draft, no bookings, no versions. Dates and
+ * the timing lock are carried; the title gains "(copy)".
+ */
+export function duplicateTrip(id: string, owner: { ownerToken: string | null; userId: string | null }, now: Date = new Date()): Trip | null {
+  const source = getTrip(id);
+  if (!source) return null;
+  const copy = createTrip({ ...source.basics }, owner.ownerToken, owner.userId);
+  const db = getDb();
+  const at = now.toISOString();
+  db.prepare('UPDATE trips SET title = ?, status = ?, updated_at = ? WHERE id = ?').run(`${source.title ?? source.basics.destinationInput} (copy)`, source.status === 'planned' ? 'profiled' : source.status, at, copy.id);
+  const intent = db.prepare('SELECT * FROM trip_intents WHERE trip_id = ?').get(id) as Record<string, unknown> | undefined;
+  if (intent) {
+    const columns = Object.keys(intent).filter((c) => c !== 'trip_id');
+    db.prepare(`INSERT INTO trip_intents (trip_id, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})`).run(copy.id, ...columns.map((c) => intent[c]));
+  }
+  const profile = db.prepare('SELECT * FROM traveler_profiles WHERE trip_id = ?').get(id) as Record<string, unknown> | undefined;
+  if (profile) {
+    const columns = Object.keys(profile).filter((c) => c !== 'trip_id');
+    db.prepare(`INSERT INTO traveler_profiles (trip_id, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})`).run(copy.id, ...columns.map((c) => profile[c]));
+  }
+  const members = db.prepare('SELECT * FROM trip_party_members WHERE trip_id = ?').all(id) as Record<string, unknown>[];
+  for (const member of members) {
+    const columns = Object.keys(member).filter((c) => c !== 'trip_id');
+    db.prepare(`INSERT INTO trip_party_members (trip_id, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})`).run(copy.id, ...columns.map((c) => member[c]));
+  }
+  return getTrip(copy.id);
 }
 
 /**
@@ -942,16 +1052,9 @@ export interface StoredItineraryLock {
   dayNumber: number;
 }
 
+/* V6 — declared in `V6_SCHEMA_SQL` with its cascade; an old database is rebuilt on connection. */
 function ensureLockTable(): void {
-  getDb().exec(
-    `CREATE TABLE IF NOT EXISTS itinerary_locks (
-       trip_id TEXT NOT NULL,
-       place_id TEXT NOT NULL,
-       day_number INTEGER NOT NULL,
-       created_at TEXT NOT NULL,
-       PRIMARY KEY (trip_id, place_id)
-     )`,
-  );
+  getDb();
 }
 
 export function getItineraryLocks(tripId: string): StoredItineraryLock[] {

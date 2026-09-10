@@ -1,9 +1,7 @@
 {
   "archetype": "multi_region",
   "purpose": "Ten days built around the two things this trip is for: high-country horseback and a real multi-day trek, with the culture and the lake fitted around them rather than the other way round.",
-  "routeRationale": "Bishkek first because the flight lands there and the acclimatisation walk is on its doorstep, then south-east to Song-Kul while the passes are open, down to the lake for the canyons, and east to Karakol as the base for the trek. Ending in Karakol keeps the last transfer short.",
   "timingRationale": "Late July into early August is the window: the Song-Kul yurt camps are up, the 3,300 m Ala-Kul pass is clear of snow, daylight runs past nine, and the summer rains have not started. A month either side and one of those four is gone.",
-  "transportSummary": "A private driver for the long transfers and the mountain roads, a horse operator at Song-Kul, and a 4x4 for the Altyn-Arashan valley track. Self-driving is possible and not worth it here: the passes are unsurfaced, and the driver is also the arrangement that gets bags to the far side of the trek.",
   "stays": [
     {
       "name": "Bishkek",
@@ -307,15 +305,15 @@
   "omissions": [
     {
       "name": "Osh and the south",
-      "reason": "Two more days of driving each way; it belongs to a different trip."
+      "why": "Two more days of driving each way; it belongs to a different trip."
     },
     {
       "name": "Tash Rabat",
-      "reason": "A long detour off the Naryn road, and the trip already has its high-country night at Song-Kul."
+      "why": "A long detour off the Naryn road, and the trip already has its high-country night at Song-Kul."
     },
     {
       "name": "Cholpon-Ata north shore",
-      "reason": "The resort strip; the south shore does the same job with none of the crowd."
+      "why": "The resort strip; the south shore does the same job with none of the crowd."
     }
   ],
   "tradeoffs": [
@@ -325,11 +323,13 @@
   "backups": [
     {
       "trigger": "Snow or storm on the Ala-Kul pass",
-      "alternative": "Turn at the lake and return down the Karakol valley, then drive to Altyn-Arashan for the springs."
+      "then": "Turn at the lake and return down the Karakol valley, then drive to Altyn-Arashan for the springs."
     },
     {
       "trigger": "Song-Kul road closed by late snow",
-      "alternative": "Two nights at a Kyzart yurt camp with day rides onto the same pasture."
+      "then": "Two nights at a Kyzart yurt camp with day rides onto the same pasture."
     }
-  ]
+  ],
+  "route": "Bishkek first because the flight lands there and the acclimatisation walk is on its doorstep, then south-east to Song-Kul while the passes are open, down to the lake for the canyons, and east to Karakol as the base for the trek. Ending in Karakol keeps the last transfer short.",
+  "transport": "A private driver for the long transfers and the mountain roads, a horse operator at Song-Kul, and a 4x4 for the Altyn-Arashan valley track. Self-driving is possible and not worth it here: the passes are unsurfaced, and the driver is also the arrangement that gets bags to the far side of the trek."
 }

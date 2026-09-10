@@ -69,7 +69,7 @@ export const CANONICAL_BUILD_INPUT_VERSION = 'sidequest-canonical-build-input/1'
  *   only where the inputs were.
  * - `unknown` — nobody knows. **The value is null and no substitute exists.**
  */
-export const FACT_SOURCES = ['explicit', 'accepted_recommendation', 'smart_default', 'derived', 'unknown'] as const;
+export const FACT_SOURCES = ['explicit', 'accepted_recommendation', 'sidequest_chosen', 'smart_default', 'derived', 'unknown'] as const;
 export type FactSource = (typeof FACT_SOURCES)[number];
 
 export interface TravelerFact<T> {
@@ -88,7 +88,13 @@ export interface TravelerFact<T> {
 
 /** True when this fact may be spoken to a traveller as a fact about their own trip. */
 export function isStatable<T>(fact: TravelerFact<T>): boolean {
-  return fact.value !== null && (fact.source === 'explicit' || fact.source === 'accepted_recommendation');
+  /*
+   * V6 — `sidequest_chosen` is statable because it is attributed: the
+   * composition chose the window and every screen says so. What it may never
+   * be presented as is the traveller's own decision; `describeFactSource`
+   * carries the difference.
+   */
+  return fact.value !== null && (fact.source === 'explicit' || fact.source === 'accepted_recommendation' || fact.source === 'sidequest_chosen');
 }
 
 /* ------------------------------------------------------------------ *
@@ -110,6 +116,8 @@ export interface TimingIntent {
   mode: DateIntent['mode'];
   /** True when the traveller asked Sidequest to choose, and nobody has accepted a window yet. */
   sidequestChooses: boolean;
+  /** V6 — who closed the question, when it is closed. Absent while open, or for a legacy row nobody recorded. */
+  lock?: 'traveler' | 'sidequest';
   /** The dates, when they are real. `source: 'unknown'` while Sidequest still has to choose. */
   startDate: TravelerFact<string>;
   endDate: TravelerFact<string>;
@@ -165,6 +173,8 @@ export interface CanonicalParty {
 export interface CanonicalMovement {
   /** What the traveller said about getting around, in the product's own words. */
   preference: 'drive' | 'public_transport' | 'mixed' | 'guided_or_transfers' | 'no_preference';
+  /** V6 — true when the traveller answered the transport question themselves; a derived or default preference is never a prohibition. */
+  preferenceExplicit: boolean;
   carAvailable: boolean;
   comfortableMountainRoads: boolean;
   comfortableUnpavedRoads: boolean;
@@ -204,7 +214,7 @@ export interface CanonicalTripBuildInput {
  * ------------------------------------------------------------------ */
 
 function fact<T>(value: T | null, source: FactSource, at: string, reason?: string): TravelerFact<T> {
-  const confidence = value === null || source === 'unknown' ? 0 : source === 'explicit' ? 1 : source === 'accepted_recommendation' ? 0.9 : source === 'derived' ? 0.8 : 0.4;
+  const confidence = value === null || source === 'unknown' ? 0 : source === 'explicit' ? 1 : source === 'accepted_recommendation' ? 0.9 : source === 'sidequest_chosen' ? 0.85 : source === 'derived' ? 0.8 : 0.4;
   return { value, source, confidence, updatedAt: at, version: CANONICAL_BUILD_INPUT_VERSION, ...(reason ? { reason } : {}) };
 }
 
@@ -252,6 +262,37 @@ export function timingIntentOf(input: { composer: TripComposerAnswers | null; tr
   const recommendation = dates?.recommendation;
   const mode = dates?.mode ?? 'exact';
   /*
+   * V6 — THE ROW'S LOCK WINS.
+   *
+   * `trips.timing_lock` is written in the same statement as the dates it
+   * protects, by every door that closes the question: typed dates, "Use this
+   * timing", "Move my trip to June", and the composition's own choice. When it
+   * is set the question is closed whatever the composer blob says — including
+   * when the blob fails to parse and arrives here as null, which used to fall
+   * through to "Sidequest chooses" and hand the model date authority nobody
+   * had given it.
+   */
+  const rowLock = trip.basics.timingLock;
+  if (rowLock && trip.basics.startDate && trip.basics.endDate) {
+    const source: FactSource = rowLock === 'traveler' ? (recommendation?.accepted && recommendation.decidedBy !== 'sidequest' ? 'accepted_recommendation' : 'explicit') : 'sidequest_chosen';
+    const reason =
+      rowLock === 'traveler'
+        ? recommendation?.accepted && recommendation.decidedBy !== 'sidequest'
+          ? `Sidequest proposed ${recommendation.label} and the traveller accepted it.`
+          : undefined
+        : 'The composition chose this window with the plan, because the traveller asked Sidequest when the trip is best.';
+    return {
+      mode,
+      sidequestChooses: false,
+      lock: rowLock,
+      startDate: fact(trip.basics.startDate, source, recommendation?.generatedAt ?? at, reason),
+      endDate: fact(trip.basics.endDate, source, recommendation?.generatedAt ?? at, reason),
+      flexDays: dates?.flexDays ?? 0,
+      ...(dates?.months ? { months: dates.months } : {}),
+      ...(dates?.season ? { season: dates.season } : {}),
+    };
+  }
+  /*
    * Sidequest still chooses when the traveller asked it to and has not accepted
    * a window. An accepted recommendation is a decision and stops being open.
    */
@@ -260,11 +301,13 @@ export function timingIntentOf(input: { composer: TripComposerAnswers | null; tr
   const sidequestChooses = asksSidequest && !accepted;
 
   if (accepted && recommendation) {
+    const byModel = recommendation.decidedBy === 'sidequest' || recommendation.basis === 'composed_with_trip';
     return {
       mode,
       sidequestChooses: false,
-      startDate: fact(recommendation.startDate, 'accepted_recommendation', recommendation.generatedAt, `Sidequest proposed ${recommendation.label} and the traveller accepted it.`),
-      endDate: fact(recommendation.endDate, 'accepted_recommendation', recommendation.generatedAt, `Sidequest proposed ${recommendation.label} and the traveller accepted it.`),
+      lock: byModel ? 'sidequest' : 'traveler',
+      startDate: fact(recommendation.startDate, byModel ? 'sidequest_chosen' : 'accepted_recommendation', recommendation.generatedAt, byModel ? 'The composition chose this window with the plan.' : `Sidequest proposed ${recommendation.label} and the traveller accepted it.`),
+      endDate: fact(recommendation.endDate, byModel ? 'sidequest_chosen' : 'accepted_recommendation', recommendation.generatedAt, byModel ? 'The composition chose this window with the plan.' : `Sidequest proposed ${recommendation.label} and the traveller accepted it.`),
       flexDays: dates?.flexDays ?? 0,
       ...(dates?.months ? { months: dates.months } : {}),
       ...(dates?.season ? { season: dates.season } : {}),
@@ -274,9 +317,25 @@ export function timingIntentOf(input: { composer: TripComposerAnswers | null; tr
     return {
       mode,
       sidequestChooses: false,
+      lock: 'traveler',
       startDate: fact(dates.startDate, 'explicit', at),
       endDate: fact(dates.endDate, 'explicit', at),
       flexDays: dates.flexDays ?? 0,
+    };
+  }
+  /*
+   * V6 — no composer at all (a row written by an older door, or a blob that
+   * failed to parse) is not a request for Sidequest to choose. The row's dates
+   * are the only dates there are; they travel as `derived`, which no screen
+   * may print as the traveller's decision, and the question stays closed.
+   */
+  if (!composer && trip.basics.startDate && trip.basics.endDate) {
+    return {
+      mode,
+      sidequestChooses: false,
+      startDate: fact(trip.basics.startDate, 'derived', at, 'Read from the trip’s stored dates; nothing recorded who chose them.'),
+      endDate: fact(trip.basics.endDate, 'derived', at, 'Read from the trip’s stored dates; nothing recorded who chose them.'),
+      flexDays: 0,
     };
   }
   /*
@@ -293,7 +352,7 @@ export function timingIntentOf(input: { composer: TripComposerAnswers | null; tr
   const reason = mode === 'best_time' ? 'The traveller asked Sidequest to choose the timing; the trip has not been composed yet.' : 'Sidequest has been asked to choose inside the traveller’s window.';
   return {
     mode,
-    sidequestChooses: true,
+    sidequestChooses,
     startDate: unknownFact(at, reason),
     endDate: unknownFact(at, reason),
     flexDays: dates?.flexDays ?? 0,
@@ -388,6 +447,7 @@ export function buildCanonicalTripBuildInput(input: {
     },
     movement: {
       preference,
+      preferenceExplicit: explicitly(profile.provenance, 'transport_mode') || (composer?.transport !== undefined && composer.transport !== null),
       carAvailable,
       comfortableMountainRoads: profile.transport.comfortableMountainRoads,
       comfortableUnpavedRoads: profile.transport.comfortableGravelRoads,

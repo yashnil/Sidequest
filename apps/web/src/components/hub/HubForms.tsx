@@ -279,7 +279,7 @@ export function CheckBox({ tripId, list, itemId, checked, label, hint, testId }:
       />
       <span className="min-w-0">
         <span className={cx('block text-sm', local ? 'line-through' : 'text-ink')}>{label}</span>
-        {hint ? <span className="block text-xs leading-snug text-ink-muted">{hint}</span> : null}
+        {hint ? <span className="check-hint block text-xs leading-snug text-ink-muted">{hint}</span> : null}
       </span>
     </label>
   );

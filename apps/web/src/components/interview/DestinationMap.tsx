@@ -122,14 +122,29 @@ export function DestinationMap({
     };
     const scaleKm = rangeKm ?? (b ? Math.max(8, kmBetween(b.southWest, b.northEast) / 3) : urban ? 10 : 35);
     // Conceptual bases for a moving route: schematic positions, hollow marks, a dashed line.
+    /*
+     * NAMELESS ON PURPOSE (V6 §Map).
+     *
+     * These marks used to carry the strings "Second base (to be chosen)" and
+     * "Third base (to be chosen)", which `InteractiveMap` draws on the map and
+     * reads out in its marker list — so a traveller looking at their own
+     * destination was shown two labelled places whose names were an internal
+     * placeholder with an editorial apology inside a bracket. A conceptual mark
+     * is a shape, not a place: the *drawing* says a second base is coming, and
+     * the caption says it once, in a sentence a person would say out loud.
+     *
+     * An empty name is what removes the label: markers without one are skipped
+     * by the map's label pass and by its screen-reader list, and the caption
+     * carries the meaning for both.
+     */
     if (bases >= 2) {
       const second = offset(scaleKm * 0.8, 62);
-      markers.push({ id: 'concept-base-2', name: 'Second base (to be chosen)', coordinates: second, kind: 'place' });
+      markers.push({ id: 'concept-base-2', name: '', coordinates: second, kind: 'place' });
       connectors.push({ id: 'concept-move-1', from: geometry.center, to: second, style: 'sightline' });
       fitPoints.push(second);
       if (bases >= 3) {
         const third = offset(scaleKm * 0.9, 150);
-        markers.push({ id: 'concept-base-3', name: 'Third base (to be chosen)', coordinates: third, kind: 'place' });
+        markers.push({ id: 'concept-base-3', name: '', coordinates: third, kind: 'place' });
         connectors.push({ id: 'concept-move-2', from: second, to: third, style: 'sightline' });
         fitPoints.push(third);
       }
@@ -139,7 +154,8 @@ export function DestinationMap({
       const count = dayTrips === 'several' ? 3 : 1;
       for (let i = 0; i < count; i += 1) {
         const point = offset(scaleKm * 1.6, 300 + i * 70);
-        markers.push({ id: `concept-daytrip-${i}`, name: 'A day out (to be chosen)', coordinates: point, kind: 'place' });
+        // Nameless for the same reason the conceptual bases are; see the note above.
+        markers.push({ id: `concept-daytrip-${i}`, name: '', coordinates: point, kind: 'place' });
         connectors.push({ id: `concept-daytrip-${i}`, from: geometry.center, to: point, style: 'sightline' });
         fitPoints.push(point);
       }
@@ -198,13 +214,23 @@ export function DestinationMap({
             {shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it' : 'One base, days out from it') : `A moving route with ${bases} bases`}
             {movementWord ? `, ${movementWord}` : ''}.{' '}
             {/*
-              The conceptual sentence is the map's own legend, not this caption:
-              `InteractiveMap` already prints it whenever a dashed connector is
-              drawn, and saying it twice under one picture reads as two claims.
-              This caption keeps what only it knows — the reach, or that no
-              reach has been chosen.
+              ONE LINE FOR THE MARKS NOBODY HAS CHOSEN YET.
+
+              The conceptual marks lost their labels — see the note in the
+              layout above — so this is the only place that says what they are,
+              and it says it once. Bases before day trips because a moving trip
+              is the bigger claim of the two; never both, because two sentences
+              about the same unchosen thing read as two separate facts.
             */}
-            {conceptual ? '' : rangeKm === null ? 'No range is drawn until you decide how far the trip should reach.' : 'The ring is the reach you chose.'}
+            {bases >= 2
+              ? 'The hollow marks are bases still to be chosen.'
+              : dayTrips === 'one_day_trip' || dayTrips === 'several'
+                ? 'The outer marks are days out still to be chosen.'
+                : conceptual
+                  ? ''
+                  : rangeKm === null
+                    ? 'No range is drawn until you decide how far the trip should reach.'
+                    : 'The ring is the reach you chose.'}
           </span>
         }
       />

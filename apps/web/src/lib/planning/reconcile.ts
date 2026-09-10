@@ -53,6 +53,7 @@ import {
   unknownLegAllowanceMinutes,
   dayPrecisionOf,
   type AnchorKind,
+  gatewayIsUnresolved,
   type BaseKind,
 } from '@sidequest/core';
 import {
@@ -624,8 +625,31 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     const latest = Math.max(0, ...wanted);
     return latest > 0 ? latest : null;
   };
+  /*
+   * V6 — A DAY WITH A SUNRISE IN IT STARTS BEFORE DAWN.
+   *
+   * The mirror of the evening rule. A live Madhya Pradesh build put a dawn
+   * tiger safari at 10:30 because the day opened at the traveller's usual
+   * 09:00 and a floor can only push a stop later. A sunrise stop the model
+   * composed and the traveller will see is a request for one early morning,
+   * on that day only; the window opens at 05:30 for it and says so. Never
+   * the arrival day, whose start is the arrival itself.
+   */
+  const DAWN_START = 5 * 60 + 30;
+  const earliestFor = (dayNumber: number): number | null => {
+    const day = draft.days.find((entry) => entry.dayNumber === dayNumber);
+    return (day?.anchors ?? []).some((anchor) => anchor.timeOfDay === 'sunrise') ? DAWN_START : null;
+  };
   const windows: PlannedDay[] = buildDailyWindows(context.basics, context.profile, config).map((day, index, all) => {
     const isLastDay = index === all.length - 1;
+    const early = index === 0 ? null : earliestFor(day.dayNumber);
+    if (early !== null && early < day.window.startMinute) {
+      day = {
+        ...day,
+        window: { ...day.window, startMinute: early, usableMinutes: day.window.endMinute - early, note: [day.window.note, 'This day starts before dawn for something that only happens then.'].filter(Boolean).join(' ') },
+        capacityMinutes: day.capacityMinutes + (day.window.startMinute - early),
+      };
+    }
     const late = isLastDay ? null : latestFor(day.dayNumber);
     if (late !== null && late > day.window.endMinute) {
       day = {
@@ -1016,6 +1040,28 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       scheduledDayOf.set(anchor.id, anchor.dayNumber);
       continue;
     }
+    /*
+     * V6 §11 — TRANSPORT IS NOT A POI. A transfer written as a stop is the
+     * day's travel leg, which the layout builds anyway; a gateway written as
+     * a stop is the terminal plan. Both are kept content (never a loss) and
+     * never a scheduled attraction, a signature or a "Don't miss".
+     */
+    if (anchor.kind === 'transfer') {
+      dispositionOf.set(anchor.id, 'folded_into_transfer');
+      scheduledDayOf.set(anchor.id, anchor.dayNumber);
+      anchorNote.set(anchor.id, 'Written as a stop; it is the day’s transfer and is shown as the travel leg.');
+      continue;
+    }
+    if (anchor.kind === 'gateway') {
+      dispositionOf.set(anchor.id, 'folded_into_terminal');
+      scheduledDayOf.set(anchor.id, anchor.dayNumber);
+      const unresolved = gatewayIsUnresolved(anchor.draft.name);
+      anchorNote.set(anchor.id, unresolved ? 'Written as a stop; it names a choice of arrival or departure point that has not been made.' : 'Written as a stop; it is the arrival or departure point and belongs to the transfer plan.');
+      if (unresolved) {
+        issues.push({ code: 'gateway_unresolved', severity: 'warning', message: `Day ${anchor.dayNumber} depends on which of these you arrive through: ${anchor.draft.name}. The first day cannot be timed until one is chosen.`, dayNumber: anchor.dayNumber });
+      }
+      continue;
+    }
     dispositionOf.set(anchor.id, anchor.verification === 'verified' ? 'preserved_with_verified_facts' : anchor.verification === 'partially_verified' ? 'preserved' : 'retained_unverified');
     scheduledDayOf.set(anchor.id, anchor.dayNumber);
     if (!anchor.place && anchor.operationalEvidence && anchor.identity && anchor.operationalClass) {
@@ -1131,7 +1177,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     const previousBase = d > 0 ? (baseForDate[d - 1] ?? null) : null;
     const relocation = Boolean(previousBase && base && previousBase !== base);
     const dayAnchors = anchors
-      .filter((a) => a.kind !== 'meal' && scheduledDayOf.get(a.id) === dayNumber && !String(dispositionOf.get(a.id)).startsWith('rejected'))
+      .filter((a) => a.kind !== 'meal' && a.kind !== 'transfer' && a.kind !== 'gateway' && scheduledDayOf.get(a.id) === dayNumber && !String(dispositionOf.get(a.id)).startsWith('rejected'))
       .sort((a, b) => (a.dayNumber === b.dayNumber ? a.index - b.index : a.dayNumber - b.dayNumber));
 
     const laid = layoutDay({
@@ -1534,6 +1580,8 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
   let legsEstimated = 0;
   const modes: TransportMode[] = [];
   const totals = { driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, estimatedMinutes: 0, allowanceMinutes: 0, travelKm: 0, activityMinutes: 0, unmeasuredLegCount: 0 };
+  /* V6 §12 — set when the base-to-base transfer of a relocation day is an allowance rather than a measurement or an estimate. */
+  let unmeasuredMajorTransfer = false;
   let hadLunch = false;
 
   const pointFor = (b: ResolvedBase): Point => ({ id: b.identity?.id ?? `base:${b.skeletonBaseId}`, name: b.displayName ?? b.identity?.name ?? b.name, coordinates: b.identity?.coordinates ?? null, ...(b.locality ?? b.displayName ? { locality: (b.locality ?? b.displayName)! } : {}) });
@@ -1576,7 +1624,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       startMinute: clamp(clock),
       endMinute: clamp(clock + minutes),
       durationMinutes: clamp(clock + minutes) - clamp(clock),
-      reason: intent ? 'From your plan. No venue, price or opening time has been verified.' : 'Time held for a meal. Nothing here is booked or verified.',
+      reason: intent ? 'What to look for and where, from the plan. Nothing here is booked.' : `A ${slot} slot in the day; the plan did not say where.`,
       weatherSensitive: false,
     });
     clock += minutes;
@@ -1697,6 +1745,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
         legsEstimated += 1;
         totals.estimatedMinutes += duration;
       } else {
+        if (role === 'transfer') unmeasuredMajorTransfer = true;
         totals.allowanceMinutes += duration;
       }
     }
@@ -1861,7 +1910,8 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     theme: draftDay?.theme ?? (input.relocation ? `Moving on to ${endPoint.name}` : 'An open day'),
     window: window.window,
     items: allItems,
-    totals: { ...totals, travelMinutes, travelKm: Math.round(totals.travelKm * 10) / 10, freeMinutes, strenuousCount: anchors.filter((a) => a.candidate?.place.physicalIntensity === 'strenuous' || a.draft.category === 'hike').length },
+    ...(draftDay?.split ? { split: draftDay.split } : {}),
+    totals: { ...totals, travelMinutes, travelKm: Math.round(totals.travelKm * 10) / 10, freeMinutes, strenuousCount: anchors.filter((a) => a.candidate?.place.physicalIntensity === 'strenuous' || a.draft.category === 'hike').length, ...(unmeasuredMajorTransfer ? { unmeasuredMajorTransfer: true } : {}) },
     transport: {
       primaryMode,
       modes,

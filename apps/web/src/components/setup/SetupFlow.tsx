@@ -20,7 +20,7 @@ import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
 import { createTripFromComposer, updateTripFromComposer, type ComposerResult } from '@/app/(product)/trips/new/actions';
 import { placeDestinationAction } from '@/app/(product)/trips/new/place-actions';
 import type { SetupDraft, SetupStepId } from './setup-draft';
-import { SETUP_STEPS, describeParty, initialDraft, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf } from './setup-draft';
+import { SETUP_STEPS, describeParty, initialDraft, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf, advanceDraft } from './setup-draft';
 
 /**
  * ONE QUESTION AT A TIME, FROM THE FIRST SCREEN.
@@ -240,12 +240,33 @@ export function SetupFlow({
     });
   }
 
-  function advance() {
+  /*
+   * V6 — THE DRAFT THIS HANDLER ADVANCES IS THE ONE THAT INCLUDES THE PRESS.
+   *
+   * "Use this timing" used to call `onChange({ pick })` and then
+   * `onContinue()` in the same handler. `advance` read `draft` from its
+   * closure — the render before the pick — built `answeredDraft` from it and
+   * called `setDraft(answeredDraft)`, a whole-object replacement that landed
+   * after the functional pick update and overwrote it. The accepted window
+   * never reached the payload; the trip was created with a placeholder month;
+   * the composition was told nobody had chosen; and a traveller who pressed
+   * June got October. Two production trips, both real.
+   *
+   * So a step may hand its final answer to `advance` directly, and `advance`
+   * folds it in through the functional setter it should always have used.
+   * `draftRef` is the render-fresh draft for the same reason.
+   */
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  function advance(extra?: Partial<SetupDraft>) {
+    const current = { ...draftRef.current, ...(extra ?? {}) };
     /* Leaving "where" with typed text nobody has placed yet: ask, and keep going. */
-    if (step === 'where' && draft.destinationCenter === null) place(draft.destinationText);
+    if (step === 'where' && current.destinationCenter === null) place(current.destinationText);
     // Answering is what makes a step count, so the summary can never show a default.
-    const answeredDraft = draft.answered.includes(step) ? draft : { ...draft, answered: [...draft.answered, step] };
-    setDraft(answeredDraft);
+    const answeredDraft = advanceDraft(current, step);
+    setDraft((previous) => ({ ...previous, ...(extra ?? {}), answered: answeredDraft.answered }));
     const next = nextStep(step, answeredDraft);
     if (next === null) {
       submit(answeredDraft);
@@ -300,7 +321,7 @@ export function SetupFlow({
               ) : null}
               {step === 'fixed' ? <span className="type-small text-ink-faint">Optional — most trips have nothing here.</span> : null}
             </div>
-            <button type="button" onClick={advance} disabled={!canContinue || pending} className={buttonClass('primary', 'lg')} data-testid="setup-continue">
+            <button type="button" onClick={() => advance()} disabled={!canContinue || pending} className={buttonClass('primary', 'lg')} data-testid="setup-continue">
               {pending ? 'Saving…' : nextStep(step, draft) === null ? 'Start the interview →' : 'Continue →'}
             </button>
           </div>
@@ -330,7 +351,7 @@ export function SetupFlow({
             </button>
           ) : null}
           <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">{summary.short}</span>
-          <button type="button" onClick={advance} disabled={!canContinue || pending} className={cx(buttonClass('primary'), 'shrink-0')} data-testid="setup-continue">
+          <button type="button" onClick={() => advance()} disabled={!canContinue || pending} className={cx(buttonClass('primary'), 'shrink-0')} data-testid="setup-continue">
             {pending ? 'Saving…' : nextStep(step, draft) === null ? 'Start' : 'Continue'}
           </button>
         </div>
@@ -382,13 +403,15 @@ function WhereStep({
         />
         {error ? <ErrorNote>{error}</ErrorNote> : null}
       </div>
-      <ul className="mt-8 flex flex-wrap gap-2" aria-label="Examples of what you can type">
-        {['A city', 'A whole country', 'A region with no borders', "Somewhere I can't spell"].map((example) => (
-          <li key={example} className="rounded-full border border-dashed border-rule px-3 py-1 type-small text-ink-faint">
-            {example}
-          </li>
-        ))}
-      </ul>
+      {/*
+        Examples, not instructions. They exist to widen what somebody thinks they
+        are allowed to type — a country and a borderless region are both fine —
+        and they are set as one quiet line rather than four chips competing with
+        the field above them.
+      */}
+      <p className="mt-8 type-small text-ink-muted">
+        A city, a whole country, a region with no borders, somewhere you cannot spell.
+      </p>
     </div>
   );
 }
@@ -414,10 +437,9 @@ function NightsStep({
   return (
     <div className="enter">
       <p className="label text-ink-faint">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[24ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 max-w-[20ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         How many nights do you have?
       </h1>
-      <p className="mt-2 max-w-[60ch] type-body text-ink-muted">Nights are what a trip is really made of — how many beds, how many days on the ground.</p>
 
       <div className="mt-7 flex flex-wrap gap-2" role="group" aria-label="Nights">
         {NIGHT_CHIPS.map((value) => {
@@ -498,10 +520,9 @@ function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRe
   return (
     <div className="enter">
       <p className="label text-ink-faint">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[24ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 max-w-[20ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         Who is going?
       </h1>
-      <p className="mt-2 max-w-[60ch] type-body text-ink-muted">Group size changes how a day is paced and what a table needs booking for.</p>
 
       <div className="mt-7 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Who is going">
         {PARTY_SHAPES.map((option) => {
@@ -514,13 +535,18 @@ function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRe
               aria-checked={on}
               onClick={() => onChange({ partyShape: option.value, adults: option.adults, children: option.children })}
               className={cx(
-                'pressable flex min-h-14 items-center justify-between gap-3 rounded-[var(--radius-card)] border px-4 py-3 text-left transition-colors',
+                'pressable flex min-h-16 items-center justify-between gap-3 rounded-[var(--radius-card)] border px-4 py-3 text-left transition-[border-color,background-color,box-shadow]',
                 FOCUS_RING,
-                on ? 'border-accent bg-accent-soft' : 'border-rule bg-paper-raised hover:border-ink-faint',
+                on ? 'border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'border-rule bg-paper-raised hover:border-ink-faint',
               )}
               data-testid={`party-${option.value}`}
             >
-              <span className={cx('font-display text-lg', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
+              <span className={cx('font-display text-xl', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
+              {on ? (
+                <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[0.625rem] text-paper">
+                  ✓
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -587,10 +613,10 @@ function FixedStep({ draft, headingRef, onChange }: { draft: SetupDraft; heading
   return (
     <div className="enter">
       <p className="label text-ink-faint">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[26ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 max-w-[22ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         Anything already booked or fixed?
       </h1>
-      <p className="mt-2 max-w-[60ch] type-body text-ink-muted">Only things the plan has to work around. Everything about how you like to travel comes next.</p>
+      <p className="mt-3 max-w-[52ch] type-body text-ink-muted">Only what the plan has to work around. How you like to travel comes next.</p>
 
       <div className="mt-7 space-y-6 max-w-2xl">
         <div>

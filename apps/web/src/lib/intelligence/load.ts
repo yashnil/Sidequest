@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { itineraryStructureFingerprint, type BookedPlanItem, type Itinerary, type TravelIntelligence, type TravelReadinessProfile, type Trip } from '@sidequest/core';
 import { getProfile } from '@/lib/db/repository';
+import { profileWithPartyDiet } from '@/lib/db/party-repository';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { getDraftHints, getFxRate, getReadinessProfile, getTravelIntelligence, listBookedItems, listChecks, saveTravelIntelligence, type CheckList } from '@/lib/db/intelligence-repository';
 import { defaultProfileFor } from '@/lib/planning/default-profile';
@@ -44,7 +45,7 @@ export function loadTripIntelligence(input: {
   const applied = applyBookedFacts(input.itinerary, booked);
   const intent = getIntent(trip.id);
   const composer = intent?.composer ?? null;
-  const profile = getProfile(trip.id) ?? defaultProfileFor(trip, composer);
+  const profile = profileWithPartyDiet(getProfile(trip.id) ?? defaultProfileFor(trip, composer), trip.id);
   const readinessProfile = getReadinessProfile(trip.id);
   const draft = getDraftHints(trip.id);
   const candidate = intent?.resolution?.candidates.find((c) => c.id === (intent.selectedCandidateId ?? intent.resolution?.unambiguousCandidateId)) ?? intent?.resolution?.candidates[0] ?? null;

@@ -132,8 +132,15 @@ export const dateRecommendationSchema = z.object({
   basis: z.enum(['climate_normals', 'traveller_window', 'composed_with_trip']).default('climate_normals'),
   attribution: z.string().max(200).optional(),
   generatedAt: z.string().min(1),
-  /** True once the traveller pressed "Use this timing". Until then it is a proposal. */
+  /** True once the question is closed — the traveller pressed "Use this timing", or the composition chose the window. `decidedBy` says which. */
   accepted: z.boolean().default(false),
+  /**
+   * V6 — who closed the question. `traveller` is a press; `sidequest` is
+   * the composition's own choice (`basis: composed_with_trip`). Absent on a
+   * record written before V6, which reads as `traveller` when `accepted` is
+   * true because that was the only way the flag could be set then.
+   */
+  decidedBy: z.enum(['traveller', 'sidequest']).optional(),
 });
 export type DateRecommendationRecord = z.infer<typeof dateRecommendationSchema>;
 

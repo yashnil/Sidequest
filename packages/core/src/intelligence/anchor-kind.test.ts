@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anchorKindOf, lookupPriorityFor, mealSlotOf, verificationApplies } from './anchor-kind';
+import { anchorKindOf, gatewayIsUnresolved, isGatewayName, isTransferName, lookupPriorityFor, mealSlotOf, verificationApplies } from './anchor-kind';
 
 describe('anchor semantics', () => {
   it('named places resolve; areas, routes, generic experiences and meals do not pretend to', () => {
@@ -43,5 +43,42 @@ describe('anchor semantics', () => {
     expect(mealSlotOf('Dingle town food stop')).toBe('dinner');
     expect(mealSlotOf('Coffee and pastry near hotel')).toBe('breakfast');
     expect(mealSlotOf('Market lunch')).toBe('lunch');
+  });
+});
+
+/**
+ * V6 §11 — TRANSPORT IS NOT A POI.
+ *
+ * "Drive Bhopal to Bandhavgarh" was a core anchor, a signature and a "Don't
+ * miss" on a live trip; "New Chitose or Asahikawa Airport" was a stop. Both are
+ * logistics, and one of them is a decision nobody has made.
+ */
+describe('transfers and gateways', () => {
+  it('movement between two places is a transfer whatever category the model chose', () => {
+    expect(anchorKindOf({ name: 'Drive Bhopal to Bandhavgarh', category: 'scenic_drive', role: 'core' })).toBe('transfer');
+    expect(anchorKindOf({ name: 'Transfer to Khajuraho', category: 'other' })).toBe('transfer');
+    expect(anchorKindOf({ name: 'Flight Sapporo → Kushiro', category: 'other' })).toBe('transfer');
+    expect(anchorKindOf({ name: 'Train from Kyoto to Tokyo', category: 'landmark' })).toBe('transfer');
+    expect(anchorKindOf({ name: 'Bandhavgarh to Khajuraho drive', category: 'scenic_drive' })).toBe('transfer');
+    expect(isTransferName('Ferry to Rottnest Island')).toBe(true);
+  });
+  it('a scenic route with a name of its own is still a route experience, not a transfer', () => {
+    expect(anchorKindOf({ name: 'Slea Head Drive', category: 'scenic_drive' })).toBe('route_experience');
+    expect(anchorKindOf({ name: 'Ring of Kerry scenic drive', category: 'scenic_drive' })).toBe('route_experience');
+    expect(anchorKindOf({ name: 'Cape Kamui', category: 'viewpoint' })).toBe('named_place');
+    expect(isTransferName('Golden Circle loop')).toBe(false);
+  });
+  it('an airport or station is a gateway, and one that names a choice is unresolved', () => {
+    expect(anchorKindOf({ name: 'New Chitose or Asahikawa Airport', category: 'other' })).toBe('gateway');
+    expect(anchorKindOf({ name: 'Arrive Kushiro Airport', category: 'other' })).toBe('gateway');
+    expect(gatewayIsUnresolved('New Chitose or Asahikawa Airport')).toBe(true);
+    expect(gatewayIsUnresolved('New Chitose Airport')).toBe(false);
+    expect(isGatewayName('Station quarter market')).toBe(false);
+  });
+  it('neither is ever looked up or called "not verified"', () => {
+    expect(lookupPriorityFor('transfer', 'core')).toBeNull();
+    expect(lookupPriorityFor('gateway', 'core')).toBeNull();
+    expect(verificationApplies('transfer')).toBe(false);
+    expect(verificationApplies('gateway')).toBe(false);
   });
 });

@@ -1,3 +1,4 @@
+import { chromeAccount } from '@/lib/auth/chrome';
 import { ProductChrome } from '@/components/ProductChrome';
 
 /**
@@ -8,6 +9,6 @@ import { ProductChrome } from '@/components/ProductChrome';
  * a wordmark into its flight payload. A share link is the opposite case — it is
  * the one page a stranger meets the product on, and it should say whose it is.
  */
-export default function ShareLayout({ children }: { children: React.ReactNode }) {
-  return <ProductChrome>{children}</ProductChrome>;
+export default async function ShareLayout({ children }: { children: React.ReactNode }) {
+  return <ProductChrome account={await chromeAccount()}>{children}</ProductChrome>;
 }

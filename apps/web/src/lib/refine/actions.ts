@@ -1,8 +1,10 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { getItinerary, getProfile } from '../db/repository';
+import { randomUUID } from 'node:crypto';
+import { getItinerary, getProfile, tripOwner } from '../db/repository';
+import { recordPreferenceEvidence } from '../db/preference-evidence-repository';
 import { listBookedItems } from '../db/intelligence-repository';
-import { bookedItemBinds } from '@sidequest/core';
+import { bookedItemBinds, evidenceRowsFromRequest } from '@sidequest/core';
 import { getTripDraft } from '../db/draft-repository';
 import { FOREIGN_TRIP_REFUSAL, ownedTrip, tripAccessRefusal } from '../net/trip-access';
 import { ResearchModel } from '../providers/anthropic';
@@ -49,6 +51,10 @@ export interface RefinementResult {
   /** A read-only answer. Present only for a question about the trip. */
   answer?: string;
   version?: number;
+  /** V6 §30 — ANSWER_ONLY, PROPOSE_CHANGE or APPLY_CHANGE. */
+  mode?: 'answer' | 'proposal' | 'applied';
+  /** V6 §30 — the preview behind a proposal: its scope and the changes it would make, before anything lands. */
+  proposal?: { scope: string; changes: readonly string[]; days: readonly number[] };
 }
 
 /** The sentence a traveller sees when refinement is not configured. No environment variable names. */
@@ -79,14 +85,21 @@ function interpreterFor(caller: string | null, now: Date): { interpreter: Refine
   return { interpreter: modelRefinementInterpreter(new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() })) };
 }
 
-function locksFor(): RefinementLock[] {
-  /*
-   * Locks are not persisted yet — the UI to set one does not exist, so an empty
-   * list is the honest state rather than a table nobody writes to. The whole
-   * mechanism below already honours them, so adding the control is a UI change
-   * and not an architecture one. Tracked as P2 in the launch-readiness page.
-   */
-  return [];
+/**
+ * V6 §29 — LOAD THE TRIP CONTRACT'S LOCKS INTO THE REFINEMENT.
+ *
+ * The contract's locked facts become refinement locks before the graph runs,
+ * so "move the whole thing to October" against dates the traveller chose is
+ * asked as a question rather than applied. Booked facts are already bound by
+ * the apply node; activity pins from the UI are a P2 the mechanism already
+ * honours.
+ */
+function locksFor(trip: { basics: { timingLock?: 'traveler' | 'sidequest'; startDate: string; endDate: string } }): RefinementLock[] {
+  const locks: RefinementLock[] = [];
+  if (trip.basics.timingLock === 'traveler') {
+    locks.push({ kind: 'timing', ref: 'dates', label: `the dates you chose (${trip.basics.startDate} to ${trip.basics.endDate})`, lockedAt: new Date().toISOString() });
+  }
+  return locks;
 }
 
 async function draftFor(tripId: string): Promise<TripDraft | null> {
@@ -145,7 +158,7 @@ export async function refineTripAction(input: { tripId: string; request: string;
     return { ok: false, error: seam.error, runId: run.id };
   }
 
-  return runGraph({ tripId: input.tripId, run, draft, interpreter: seam.interpreter, request, baseVersion });
+  return runGraph({ tripId: input.tripId, run, draft, interpreter: seam.interpreter, request, baseVersion, locks: locksFor(trip) });
 }
 
 /** Resume a refinement that stopped to ask one question (§42). */
@@ -181,6 +194,7 @@ async function runGraph(input: {
   request: string;
   baseVersion: number;
   answer?: string;
+  locks?: RefinementLock[];
 }): Promise<RefinementResult> {
   const { tripId, run, draft, interpreter } = input;
   const graph = buildRefinementGraph({
@@ -189,7 +203,9 @@ async function runGraph(input: {
     loadBookings: async () => listBookedItems(tripId).filter((item) => bookedItemBinds(item)).map((item) => ({ title: item.title, date: item.date, endDate: item.endDate, baseId: item.baseId })),
     interpreter,
     checkpointer: new SqliteRefinementCheckpointer(tripId),
-    async commit({ draft: patched, patch, baseVersion }) {
+    /* V6 §30 — a change of three days or more, a base, the route or the dates is shown before it lands. */
+    confirmMaterialChanges: true,
+    async commit({ draft: patched, applied, baseVersion }) {
       /*
        * §51 — reverification runs the canonical pipeline over the patched draft.
        * It is currently whole-trip rather than blast-radius-scoped; the recheck
@@ -204,10 +220,24 @@ async function runGraph(input: {
         tripId,
         previousVersion: baseVersion,
         request: input.request,
-        summary: { changed: patch.changed, kept: patch.kept, rechecking: [] },
+        /* V6 — the version records what was applied, never what the model said it would do. */
+        summary: { changed: [...applied], kept: [], rechecking: [] },
         itinerary: verified.result.itinerary,
         draft: patched,
       });
+      /*
+       * V6 §31 — every applied refinement is preference evidence, trip-scoped:
+       * "fewer temples, more neighbourhoods" changes this trip now and leaves
+       * a low-confidence lean on the ledger. It becomes account-wide only when
+       * repeated or said outright. Never a hard constraint.
+       */
+      try {
+        const owner = tripOwner(tripId);
+        const rows = evidenceRowsFromRequest({ request: input.request, tripId, userId: owner?.userId ?? null, ownerToken: owner?.ownerToken ?? null, now: new Date(), idFor: () => randomUUID() });
+        if (rows.length > 0) recordPreferenceEvidence(rows);
+      } catch (error) {
+        console.warn('Could not record preference evidence for a refinement', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+      }
       return version.version;
     },
   });
@@ -235,10 +265,14 @@ async function runGraph(input: {
   try {
     const state = input.answer
       ? await graph.invoke(resumeWith(input.answer), config)
-      : await graph.invoke({ tripId, canonicalTripVersion: input.baseVersion, userRequest: input.request, locks: locksFor(), status: 'classifying' as const }, config);
+      : await graph.invoke({ tripId, canonicalTripVersion: input.baseVersion, userRequest: input.request, locks: input.locks ?? [], status: 'classifying' as const }, config);
 
     if (state.status === 'awaiting_answer' && state.pendingQuestion) {
       updateRun({ id: run.id, status: 'awaiting_answer', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: state.pendingQuestion });
+      /* V6 §30 — a proposal carries its preview: the scope, the days, and the changes it would make. */
+      if (state.confirm === 'pending' && state.proposedPatch && state.blastRadius) {
+        return { ok: true, runId: run.id, question: state.pendingQuestion, mode: 'proposal', proposal: { scope: state.blastRadius.reason, changes: state.proposedPatch.changed.slice(0, 10), days: state.blastRadius.days } };
+      }
       return { ok: true, runId: run.id, question: state.pendingQuestion };
     }
     if (state.status === 'failed' || state.status === 'rejected') {
@@ -257,7 +291,7 @@ async function runGraph(input: {
     }
     if (state.explanation) {
       updateRun({ id: run.id, status: 'done', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, result: { explanation: state.explanation } });
-      return { ok: true, runId: run.id, answer: state.explanation };
+      return { ok: true, runId: run.id, answer: state.explanation, mode: 'answer' };
     }
     /*
      * §11, §44 — the summary is written in the traveller's words.
@@ -277,7 +311,7 @@ async function runGraph(input: {
     };
     updateRun({ id: run.id, status: 'done', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, result: summary });
     revalidatePath(`/trips/${tripId}/itinerary`);
-    return { ok: true, runId: run.id, summary, version: state.canonicalTripVersion };
+    return { ok: true, runId: run.id, summary, version: state.canonicalTripVersion, mode: 'applied' };
   } catch (error) {
     /*
      * §49 — the trip is unchanged, and that is the first thing the traveller is

@@ -7,9 +7,11 @@ import {
   formatMinuteOfDay,
   ITINERARY_STATUS_COPY,
   MEAL_SLOT_LABELS,
+  PLACE_CATEGORY_LABELS,
   PRICE_BAND_LABELS,
   PRICE_BAND_WORDS,
   PRICE_EVIDENCE_COPY,
+  RECHECK_WINDOW_LABELS,
   RESERVATION_LABELS,
   TRANSPORT_MODE_LABELS,
   type DailyWindow,
@@ -21,13 +23,13 @@ import {
   type Itinerary,
   type ItineraryDay,
   type ItineraryItem,
-  type ScheduledFood,
   type TransportStrategy,
   type TravelSegment,
   type TripPackage,
   type VerificationState,
   PREPARATION_KIND_COPY,
   groupPreparation,
+  croppable,
   imageryFallbackFor,
   type DestinationImage as ImageRecord,
   type PlaceCategory,
@@ -48,14 +50,16 @@ import { dayRouteLinks, mapModeFor } from '@/lib/maps';
 import { PrintButton } from './PrintButton';
 import { HubShell, type HubViewId } from './hub/HubShell';
 import { DayFocusLink, DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, type DayFocusModel } from './hub/DayFocus';
-import { TripConfidence, VERIFICATION_WORD as VERIFICATION_CHIP_WORD } from './hub/TripConfidence';
-import { dayPartFor, type AnchorKind } from '@sidequest/core';
-import { AtlasBand, atlasButtonClass } from './hub/AtlasBand';
+import { TripConfidence, CONFIDENCE_WORD as VERIFICATION_CHIP_WORD } from './hub/TripConfidence';
+import { dayPartFor, FEASIBILITY_VERDICT_COPY, type AnchorKind } from '@sidequest/core';
+import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
 import { MapWorkspace } from './hub/MapWorkspace';
 import { PlanSubnav } from './hub/PlanSubnav';
 import { PrepareTop, type PrepareTopItem } from './hub/PrepareTop';
-import { BackupsSection, BeforeYouGoSection, BookFirstSection, BudgetSection, CritiquePanel, FoodSection, HubUrgent, OverviewSection, PackSection, StaysSection, TodaySection, TransportSection, VerifySection } from './hub/TripHub';
+import { PlaceSheetProvider, PlaceSheetTrigger, type PlaceSheetDetail, type PlaceSheetNote } from './hub/PlaceSheet';
+import { SignatureExperiences, type SignatureExperience } from './hub/SignatureExperiences';
+import { BackupsSection, BeforeYouGoSection, BookFirstSection, BookingProgressLine, BudgetSection, CritiquePanel, FoodSection, HubUrgent, PackSection, StaysSection, TodaySection, TransportSection, VerifySection } from './hub/TripHub';
 import { AddStopForm, FixDayButton, StopDayControls } from '@/app/(product)/trips/[id]/itinerary/live-controls';
 import { legDirectionsLinks, navModeFor, placeNavigationLinks } from '@/lib/navigation-links';
 import type { BookedPlanItem, TravelIntelligence, TravelReadinessProfile } from '@sidequest/core';
@@ -435,6 +439,8 @@ export function ItineraryView({
   };
   const multiBase = (itinerary.package?.bases.length ?? 0) > 1;
   const status = ITINERARY_STATUS_COPY[itinerary.status];
+  /* V6 §12 — the deterministic feasibility report, read by the band and by the packet's last page. */
+  const feasibility = itinerary.package?.feasibility;
   const conflicts = itinerary.unscheduled.filter((entry) => entry.wasManual);
   const dropped = itinerary.unscheduled.filter((entry) => !entry.wasManual);
   const openIssues = itinerary.issues.filter((issue) => issue.severity !== 'info');
@@ -469,16 +475,38 @@ export function ItineraryView({
     const first = itinerary.days.find((day) => day.baseId === base.id || day.baseName === base.name || (base.displayName !== undefined && day.baseName === base.displayName));
     return { id: base.id, name: base.name, nights: base.nights, firstDay: first?.dayNumber ?? null, ...(base.insertedBySidequest ? { insertedBySidequest: true } : {}) };
   });
-  /* The defining moments: the core anchors that made it onto the plan, with the reason they are there. */
+  /*
+   * V6 — THE SIGNATURE EXPERIENCES.
+   *
+   * The core anchors the reconciler kept, at most three, each with the reason
+   * it is on this trip and — where one of this trip's own places has a licensed
+   * photograph — a picture of it. `preserved*` and `retained_unverified` are
+   * the dispositions that mean "this is on the plan"; everything folded into a
+   * meal, a transfer or a terminal is movement or a table, not a signature.
+   */
   const itemsById = new Map<string, { item: ItineraryItem; dayNumber: number }>();
   for (const day of itinerary.days) for (const item of day.items) itemsById.set(item.id, { item, dayNumber: day.dayNumber });
-  const definingMoments = (itinerary.package?.anchors ?? [])
-    .filter((anchor) => anchor.role === 'core' && !anchor.disposition.startsWith('rejected') && !anchor.disposition.startsWith('unscheduled') && anchor.anchorKind !== 'meal')
-    .slice(0, 5)
+  const signatureExperiences: SignatureExperience[] = (itinerary.package?.anchors ?? [])
+    .filter(
+      (anchor) =>
+        anchor.role === 'core' &&
+        (anchor.disposition.startsWith('preserved') || anchor.disposition === 'retained_unverified' || anchor.disposition.startsWith('moved')) &&
+        anchor.anchorKind !== 'meal' &&
+        anchor.anchorKind !== 'transfer' &&
+        anchor.anchorKind !== 'gateway',
+    )
+    .slice(0, 3)
     .map((anchor) => {
       const hit = itemsById.get(anchor.id) ?? (anchor.placeId ? [...itemsById.values()].find((entry) => entry.item.placeId === anchor.placeId) : undefined);
       const why = (anchor.placeId ? rationale[anchor.placeId]?.why : undefined) ?? hit?.item.reason ?? anchor.note ?? '';
-      return { id: anchor.id, name: (anchor.placeId ? rationale[anchor.placeId]?.name : undefined) ?? anchor.name, dayNumber: hit?.dayNumber ?? anchor.scheduledDayNumber ?? anchor.dayNumber, why: firstSentence(why) };
+      const image = anchor.placeId ? placeFrame(anchor.placeId, (anchor.placeId ? rationale[anchor.placeId]?.name : undefined) ?? anchor.name, images, livePhotos, rationale, '4 / 3') : null;
+      return {
+        id: anchor.id,
+        name: (anchor.placeId ? rationale[anchor.placeId]?.name : undefined) ?? anchor.name,
+        dayNumber: hit?.dayNumber ?? anchor.scheduledDayNumber ?? anchor.dayNumber,
+        why: firstSentence(why),
+        ...(image ? { image } : {}),
+      };
     });
   const bookSoon = intelligence ? intelligence.bookings.items.filter((b) => b.priority === 'book_first' && b.status === 'open' && !b.memberIds) : [];
   /* The three things that matter on Prepare. */
@@ -493,8 +521,15 @@ export function ItineraryView({
   const prepareTopItems = prepareTop.slice(0, 3);
 
   const days = (
+    <PlaceSheetProvider>
     <DayFocusProvider initial={itinerary.days[0]?.dayNumber ?? 1}>
-      <div className="lg:grid lg:grid-cols-[minmax(0,58fr)_minmax(320px,42fr)] lg:items-start lg:gap-8">
+      {/*
+        V6 — `items-start` shrank the map column to its own content, so the
+        sticky map stopped following at the foot of day one and every day after
+        it faced two-fifths of empty paper. The column stretches now, so the
+        drawing stays beside the day being read for the whole scroll.
+      */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,58fr)_minmax(320px,42fr)] lg:items-stretch lg:gap-8">
         <div className="min-w-0">
           <div id="itinerary" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
           <DayRail days={itinerary.days} />
@@ -555,96 +590,103 @@ export function ItineraryView({
         <DayFocusMap days={dayFocusModels} tiles={tiles} />
       </div>
     </DayFocusProvider>
+    </PlaceSheetProvider>
   );
 
+  /*
+   * V6 — WHY THESE DATES, AND WHO DECIDED THEM.
+   *
+   * A window somebody chose and a window Sidequest chose are different facts
+   * and a traveller is owed which one they are holding. `timingDecidedBy` is
+   * the contract's own record of that; the rationale is the plan's reason.
+   */
+  const headline = personality ?? itinerary.package?.purpose ?? itinerary.summary;
+  const purpose = itinerary.package?.purpose;
+  const purposeParagraph = purpose && purpose !== headline && !headline.startsWith(purpose) && !purpose.startsWith(headline) ? purpose : null;
+  const timingDecidedBy = itinerary.package?.contract?.timingDecidedBy;
+  const timingOwner = timingDecidedBy === 'traveller' ? 'Dates you chose' : timingDecidedBy === 'sidequest' ? 'Sidequest chose the dates' : null;
+
   const overview = (
-    <div>
+    <div data-testid="hub-overview">
       {intelligence ? <HubUrgent intel={intelligence} /> : null}
       {today?.active ? <TodaySection today={today} minuteLabel={(minute) => formatMinuteOfDay(minute)} /> : null}
       <div id="overview" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
       {/*
-        EXPERIENCE V2 — the overview answers five questions in one screen: where,
-        what kind of trip, where you sleep, the defining moments, what to book
-        soon. Verification and critique wait in Prepare.
+        V6 — the overview is an argument, not a dashboard: what this trip is,
+        what it is built around, where you sleep, why these dates, and what to
+        do next. The four-card fact grid that used to close it repeated the
+        band, the base sequence, the budget page and — on a past trip — printed
+        "Trip in: Past", which is not a fact anybody needs on their own plan.
       */}
       <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-12">
         <div className="min-w-0">
-          {personality ? (
-            <p className="max-w-[34ch] font-display text-[clamp(1.5rem,1.25rem+0.9vw,2.125rem)] leading-[1.15] text-ink" data-testid="trip-personality-line">
-              {personality}
-            </p>
-          ) : (
-            <p className="max-w-2xl font-display text-2xl leading-snug text-ink">{itinerary.summary}</p>
-          )}
+          <p className="max-w-[34ch] font-display text-[clamp(1.5rem,1.25rem+0.9vw,2.125rem)] leading-[1.15] text-ink" data-testid="trip-personality-line">
+            {headline}
+          </p>
           {/*
-            MVP V3, Stage 30 — WHEN, answered on the plan.
-            Load-bearing now that Sidequest can choose the dates: a traveller
-            handed a window is owed the reason it is that window, on the trip
-            itself rather than only on the screen that proposed it.
+            The purpose only where it says something the headline has not. On a
+            trip whose profile sentence and whose draft purpose are the same
+            sentence, printing both put one paragraph twice under itself.
           */}
-          {itinerary.package?.timingRationale ? (
-            <section className="mt-8" aria-labelledby="timing-overview" data-testid="timing-overview">
-              <h2 id="timing-overview" className="type-meta uppercase tracking-[0.14em]">
-                Why these dates
-              </h2>
-              <p className="mt-3 max-w-2xl type-body text-ink">{itinerary.package.timingRationale}</p>
-            </section>
+          {purposeParagraph ? <p className="mt-4 max-w-2xl type-body text-ink-muted">{purposeParagraph}</p> : null}
+          {itinerary.package?.routeRationale ? <p className="mt-3 max-w-2xl type-body text-ink-muted" data-testid="route-rationale">{itinerary.package.routeRationale}</p> : null}
+
+          {signatureExperiences.length > 0 ? (
+            <div className="mt-10">
+              <SignatureExperiences experiences={signatureExperiences} />
+            </div>
           ) : null}
+
           {itinerary.package ? (
-            <section className="mt-8" aria-labelledby="route-overview" data-testid="route-overview">
+            <section className="mt-10" aria-labelledby="route-overview" data-testid="route-overview">
               <h2 id="route-overview" className="type-meta uppercase tracking-[0.14em]">
                 Where you sleep
               </h2>
               <div className="mt-3" data-testid="route-bases">
                 <BaseSequence bases={baseSequence} />
               </div>
-              <p className="mt-3 max-w-2xl type-small text-ink-muted">{itinerary.package.routeRationale}</p>
             </section>
           ) : null}
-          {definingMoments.length > 0 ? (
-            <section className="mt-8" aria-labelledby="defining-moments" data-testid="defining-moments">
-              <h2 id="defining-moments" className="type-meta uppercase tracking-[0.14em]">
-                The days are built around
+
+          {itinerary.package?.timingRationale || timingOwner ? (
+            <section className="mt-10" aria-labelledby="timing-overview" data-testid="timing-overview">
+              <h2 id="timing-overview" className="type-meta uppercase tracking-[0.14em]">
+                Why these dates
               </h2>
-              <ol className="mt-3 divide-y divide-rule border-y border-rule">
-                {definingMoments.map((moment) => (
-                  <li key={moment.id}>
-                    <a href={`#day-${moment.dayNumber}`} className="pressable group flex items-baseline gap-4 py-3 hover:bg-paper-sunk/60">
-                      <span className="numeral w-10 shrink-0 text-xs text-ink-faint">Day {moment.dayNumber}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block font-display text-xl leading-snug text-ink group-hover:underline group-hover:underline-offset-4">{moment.name}</span>
-                        {moment.why ? <span className="mt-0.5 block type-small text-ink-muted">{moment.why}</span> : null}
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ol>
+              {timingOwner ? (
+                <p className="mt-2 type-body text-ink" data-testid="timing-owner">
+                  {timingDecidedBy === 'traveller' ? `You chose ${dateLabel}.` : `Sidequest chose ${dateLabel}.`}
+                </p>
+              ) : null}
+              {itinerary.package?.timingRationale ? (
+                <p className="mt-2 max-w-2xl type-body text-ink" data-testid="timing-rationale">
+                  {itinerary.package.timingRationale}
+                </p>
+              ) : null}
             </section>
           ) : null}
         </div>
         <div className="min-w-0">
-          {bookSoon.length > 0 ? (
-            <div className="rounded-[var(--radius-card)] border border-accent/40 bg-accent-soft/60 p-4" data-testid="overview-book-first">
-              <p className="type-meta uppercase tracking-[0.14em] text-accent-strong">Book soon</p>
-              <ul className="mt-2 divide-y divide-accent/20">
-                {bookSoon.slice(0, 3).map((b) => (
-                  <li key={b.id} className="flex items-baseline justify-between gap-3 py-1.5 type-small">
-                    <span className="text-ink">{b.title}</span>
-                    {b.date ? <span className="numeral shrink-0 text-ink-faint">{b.date}</span> : null}
-                  </li>
-                ))}
-              </ul>
-              <a href="#prepare" className="mt-2 inline-block type-small text-accent-strong underline underline-offset-4">
-                Everything to arrange
-              </a>
+          {/*
+            One statement of what is left to arrange, not two. A "Book soon"
+            card listing the same three items sat directly above the booking
+            progress that already names the next one, on the same screen.
+          */}
+          {intelligence ? (
+            <div data-testid="overview-book-first">
+              <BookingProgressLine intel={intelligence} />
+              {bookSoon.length > 0 ? (
+                <a href="#prepare" className="mt-2 inline-block type-small text-accent-strong underline underline-offset-4">
+                  Everything to arrange
+                </a>
+              ) : null}
             </div>
           ) : null}
-          <div className={bookSoon.length > 0 ? 'mt-5' : ''}>
-            <TripSnapshot itinerary={itinerary} coordinates={coordinates} images={images} livePhotos={livePhotos} rationale={rationale} tiles={tiles} personality={null} dateLabel={dateLabel} />
+          <div className="mt-5">
+            <TripSnapshot itinerary={itinerary} coordinates={coordinates} images={images} livePhotos={livePhotos} rationale={rationale} tiles={tiles} dateLabel={dateLabel} />
           </div>
         </div>
       </div>
-      {intelligence ? <OverviewSection intel={intelligence} /> : null}
     </div>
   );
 
@@ -663,16 +705,22 @@ export function ItineraryView({
   );
 
   const plan = (
-    <div className="pt-2">
+    /*
+     * A measure, not a canvas. Stays with one base put a half-width card in a
+     * 1,400-pixel column and left the rest of the screen cream; the logistics
+     * sections are prose and lists, and prose wants a column.
+     */
+    <div className="mx-auto max-w-5xl pt-2">
       <PlanSubnav
         initial="stays"
         badges={{ ...(bookSoon.length > 0 ? { bookings: bookSoon.length } : {}) }}
         panels={{
           stays: (
-            <>
+            /* The first section in a panel does not need the separation a stacked one does. */
+            <div className="[&>section:first-child]:mt-8">
               {intelligence ? <StaysSection intel={intelligence} {...(tripId ? { tripId } : {})} itinerary={itinerary} coordinates={coordinates} /> : null}
               {!itinerary.package && lodgingAreas.length > 0 ? <WhereToStayLegacy areas={lodgingAreas} /> : null}
-            </>
+            </div>
           ),
           transport: (
             <section className="mt-6 scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="getting-around" data-testid="hub-getting-around">
@@ -694,7 +742,7 @@ export function ItineraryView({
   );
 
   const prepare = (
-    <div className="pt-6">
+    <div className="mx-auto max-w-5xl pt-6">
       <PrepareTop items={prepareTopItems} />
       {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} view="book-first" /> : null}
       {intelligence ? <BeforeYouGoSection intel={intelligence} {...(tripId ? { tripId } : {})} readinessProfile={readinessProfile} checks={checks.checklist} /> : null}
@@ -704,7 +752,9 @@ export function ItineraryView({
           <h2 className="display-md text-ink">Backups</h2>
           <p className="mt-1.5 max-w-2xl type-small text-ink-muted">Plan A is the day as written. Each day carries its own fallback, the stops that can move, and the moment to decide.</p>
         </div>
-        <WeatherPlan itinerary={itinerary} {...(timeZone ? { timeZone } : {})} />
+        <div data-print="appendix">
+          <WeatherPlan itinerary={itinerary} {...(timeZone ? { timeZone } : {})} />
+        </div>
         {intelligence ? (
           <div data-testid="backups">
             <BackupsSection intel={intelligence} />
@@ -712,7 +762,14 @@ export function ItineraryView({
         ) : null}
         <KeepFlexible itinerary={itinerary} />
       </section>
-      {intelligence ? <CritiquePanel intel={intelligence} /> : null}
+      {/*
+        V6 — THE LAST PAGE OF THE PACKET.
+        Everything the plan itself says has to be settled or looked at again,
+        in one place, on paper as well as on screen. The band carries the first
+        two; this carries all of them, with the dates worth a second look.
+      */}
+      <CriticalChecks feasibility={feasibility} manifest={recheck} />
+      <div data-print="appendix">{intelligence ? <CritiquePanel intel={intelligence} /> : null}</div>
       {/*
         * PRODUCTION LOCK V5 §27 — CONFIDENCE IS RENDERED ONCE.
         *
@@ -727,12 +784,12 @@ export function ItineraryView({
         * about, so nothing renders — which is also why the bare
         * `TripConfidence` had no reason to exist.
         */}
-      <section className="mt-14 rule-strong pt-5" aria-labelledby="verify" data-testid="hub-verify-section">
+      <section className="mt-14 rule-strong pt-5" aria-labelledby="verify" data-testid="hub-verify-section" data-print="appendix">
         <div id="verify" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
         {intelligence ? <VerifySection intel={intelligence} manifest={recheck} pkg={itinerary.package} /> : <TripConfidence pkg={itinerary.package} intel={null} compact />}
       </section>
       {/* EXPERIENCE V2 — everything evaluative or archival is one disclosure, never eight open sections. */}
-      <details className="mt-10 rule-top pt-4" data-testid="prepare-notes-disclosure" data-print="open">
+      <details className="mt-10 rule-top pt-4" data-testid="prepare-notes-disclosure" data-print="appendix">
         <summary className="min-h-11 cursor-pointer list-none type-body text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
           <span className="font-display text-xl text-ink">Notes, alternatives and what was left out</span>
           <span className="ml-3 type-small">the plan's own notes, places considered, and what did not fit</span>
@@ -817,7 +874,60 @@ export function ItineraryView({
       {multiBase ? <> · {itinerary.package!.bases.length} bases</> : null}
     </>
   );
-  const statusTone: 'ready' | 'caution' | 'blocked' | 'neutral' = itinerary.status === 'ready' ? 'ready' : itinerary.status === 'ready_with_cautions' ? 'caution' : itinerary.status === 'needs_decision' ? 'blocked' : 'neutral';
+  /*
+   * V6 §12 — THE BAND SAYS WHAT THE FEASIBILITY REPORT SAYS.
+   *
+   * "Ready" used to be a function of the stored itinerary status, which is a
+   * function of how much was verified. The deterministic report asks a
+   * different question of every day — can it be done — and its four words are
+   * the only ones the band may use when it has one. The first two items are the
+   * things worth reading before committing; the rest are on Prepare.
+   */
+  const verdict = feasibility ? FEASIBILITY_VERDICT_COPY[feasibility.verdict] : null;
+  const statusTone: 'ready' | 'caution' | 'blocked' | 'neutral' = feasibility
+    ? feasibility.verdict === 'feasible'
+      ? 'ready'
+      : feasibility.verdict === 'feasible_with_cautions'
+        ? 'caution'
+        : 'blocked'
+    : itinerary.status === 'ready'
+      ? 'ready'
+      : itinerary.status === 'ready_with_cautions'
+        ? 'caution'
+        : itinerary.status === 'needs_decision'
+          ? 'blocked'
+          : 'neutral';
+  const attentionItems = (feasibility?.items ?? [])
+    .slice(0, 2)
+    .map((entry) => (entry.dayNumber ? `Day ${entry.dayNumber} — ${entry.detail}` : entry.detail))
+    .map((line) => line.charAt(0).toUpperCase() + line.slice(1));
+
+  /*
+   * WHO IS GOING, from the one place on this page that counts the party. The
+   * readiness layer raises the minors question only when somebody under age is
+   * travelling, so it is the honest signal for "with children" without this
+   * component reaching into the trip record.
+   */
+  const travellerCount = intelligence?.budget.travellers ?? null;
+  const withChildren = intelligence?.readiness.entries.some((entry) => entry.kind === 'minor_documents') ?? false;
+  const heroFacts: AtlasFact[] = [];
+  if (travellerCount) heroFacts.push({ label: 'Who', value: `${travellerCount} ${travellerCount === 1 ? 'traveller' : 'travellers'}${withChildren ? ', with children' : ''}` });
+  /*
+   * The band states what kind of trip this is — unless the overview's headline
+   * is already that same sentence, which is what happens when a traveller's
+   * profile line and the draft's purpose coincide. One page must not print one
+   * sentence twice, and the overview owns the big statement.
+   */
+  if (purpose && firstSentence(purpose) !== firstSentence(headline)) heroFacts.push({ label: 'The trip', value: firstSentence(purpose) });
+
+  /* A photograph of somewhere on this trip, as the band's ground. Never a stock picture. */
+  const bandHero = itinerary.days.map((day) => dayIdentity(day, images, rationale, livePhotos).hero).find((entry) => entry !== null) ?? null;
+  const bandFigure = bandHero
+    ? placeFrame(bandHero.placeId, bandHero.name, images, livePhotos, rationale, '16 / 9', {
+        credit: false,
+        className: 'atlas-figure-fill h-full',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-[1600px] px-5 pt-4 pb-8 sm:px-6 sm:pt-5 sm:pb-10">
@@ -828,9 +938,12 @@ export function ItineraryView({
             {titleNode}
           </a>
         }
-        subline={multiBase ? undefined : <>Based in <PlaceName entity={baseEntity} showLocal={false} /> · {itinerary.transportStrategy.headline}</>}
+        subline={multiBase ? <>{itinerary.transportStrategy.headline}</> : <>Based in <PlaceName entity={baseEntity} showLocal={false} /> · {itinerary.transportStrategy.headline}</>}
         route={multiBase ? <BaseSequence bases={baseSequence} variant="atlas" testId="hero-route" /> : undefined}
-        status={{ label: status.label, tone: statusTone, blurb: status.blurb }}
+        facts={heroFacts}
+        {...(bandFigure ? { figure: bandFigure } : {})}
+        {...(attentionItems.length > 0 ? { attention: { heading: verdict?.blurb ?? 'Worth reading before you commit', items: attentionItems } } : {})}
+        status={{ label: verdict?.label ?? status.label, tone: statusTone }}
         actions={
           <>
             <PrintButton />
@@ -1426,6 +1539,13 @@ function DayTransport({ day }: { day: ItineraryDay }) {
         any given day, but present, because it is the part a traveller reads on
         the morning itself.
       */}
+      {/* V6 §5 — a split day: who does what instead, and where everyone is together again. */}
+      {day.split ? (
+        <p className="mt-2 rounded-md border border-rule bg-paper-raised p-2.5 text-sm leading-relaxed text-ink" data-testid={`day-split-${day.dayNumber}`}>
+          <span className="font-medium">{day.split.who}</span> {day.split.does}
+          {day.split.rejoin ? <span className="text-ink-muted"> · Back together: {day.split.rejoin}</span> : null}
+        </p>
+      ) : null}
       {transport.accessNotes.length > 0 ? (
         <details className="mt-2 text-xs">
           <summary className="cursor-pointer text-ink-faint hover:text-ink">
@@ -1597,7 +1717,7 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
         {stale ? <Badge tone="amber">Read a while ago</Badge> : null}
       </div>
       {hasDetail ? (
-        <details className="mt-1.5" data-print="open">
+        <details className="mt-1.5">
           <summary className="min-h-9 cursor-pointer text-xs text-ink-faint hover:text-ink">What the weather changes on this day</summary>
           {weather.decisions.length > 0 ? (
             <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
@@ -1768,6 +1888,54 @@ function DayCard({
   const meaningfulStops = day.items.filter((item) => item.kind === 'activity').length;
   const weatherSensitive = day.items.some((item) => item.kind === 'activity' && item.weatherSensitive);
 
+  /*
+   * V6 — WHAT COMES BEFORE AND AFTER, AND HOW YOU GET THERE.
+   *
+   * The place sheet answers "where does this sit in my day", which needs the
+   * two stops either side of it and the leg that reaches it. Both are read off
+   * the timeline that is already on screen; nothing is fetched.
+   */
+  const sheetStops = day.items.filter((item) => item.kind === 'activity' || item.kind === 'meal');
+  const nameOfItem = (item: ItineraryItem) => (item.placeId ? (rationale[item.placeId]?.name ?? item.title) : item.title);
+  const neighbours: Record<string, { previous?: string; next?: string }> = {};
+  sheetStops.forEach((item, index) => {
+    const previous = sheetStops[index - 1];
+    const next = sheetStops[index + 1];
+    neighbours[item.id] = { ...(previous ? { previous: nameOfItem(previous) } : {}), ...(next ? { next: nameOfItem(next) } : {}) };
+  });
+  const arrivalLeg: Record<string, string> = {};
+  {
+    let pending: ItineraryItem | undefined;
+    for (const item of day.items) {
+      if (item.kind === 'travel') {
+        pending = item;
+        continue;
+      }
+      if (pending?.travel) arrivalLeg[item.id] = travelLine(pending);
+      pending = undefined;
+    }
+  }
+
+  /*
+   * ONE CAVEAT PER DAY, SAID ONCE.
+   *
+   * The reconciler writes a sentence per uncertainty and the day used to print
+   * every one of them in an amber strip: "3 stops on this day have not been
+   * fully verified", "2 travel legs on this day are unmeasured", one under the
+   * other, on eight days running. A traveller who reads that eight times has
+   * learned to skip it. `compactWarnings` already separates the recurring
+   * counts from the warnings that change what somebody does; the counts become
+   * one line and the sentences keep their words.
+   */
+  const compacted = compactWarnings(day.warnings);
+  const hoursUnchecked = day.items.filter((item) => item.kind === 'activity' && item.placeId && !item.hours && !item.operational).length;
+  const caveat =
+    compacted.badges.length > 0
+      ? compacted.badges.map((badge) => badge.label).join(' · ')
+      : hoursUnchecked > 0
+        ? `Hours not checked for ${hoursUnchecked} ${hoursUnchecked === 1 ? 'stop' : 'stops'}`
+        : null;
+
   return (
     <Panel className="overflow-hidden">
       {/*
@@ -1871,8 +2039,18 @@ function DayCard({
         <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid={`day-facts-${day.dayNumber}`}>
           <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity}</Badge>
           {meaningfulStops > 0 ? <Badge tone="neutral">{meaningfulStops} {meaningfulStops === 1 ? 'stop' : 'stops'}</Badge> : null}
-          {day.totals.travelMinutes > 0 ? (
-            <Badge tone="blue" title={travelApprox ? 'Estimated from map distance or held as an allowance, not measured' : 'Measured by a routing provider'}>
+          {/*
+            V6 §12 — a relocation day whose main transfer nobody measured or
+            estimated does not get a small number. "≈10 min drive" beside a
+            five-hour move was the live defect; the honest chip says what is
+            missing, and the day reads in parts of the day.
+          */}
+          {day.totals.unmeasuredMajorTransfer ? (
+            <Badge tone="amber" title="This day moves base and the main transfer has not been measured, so the day cannot be timed yet">
+              major transfer not measured
+            </Badge>
+          ) : day.totals.travelMinutes > 0 ? (
+            <Badge tone="blue" title={travelApprox ? 'Estimated from map distance or held as an allowance, not measured' : 'Timed against the road, not estimated'}>
               {travelApprox ? '≈' : ''}
               {travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} {drivingMinutes > 0 ? 'drive' : 'travelling'}
             </Badge>
@@ -1934,8 +2112,14 @@ function DayCard({
           place on this day or there is no photograph, and the map draws only
           stops whose position a source published.
         */}
+        {/*
+          Two columns only when there are two things. A day with no licensed
+          photograph put its map in the left half of a two-column grid and left
+          the right half empty — measured on a tablet, where the sticky map is
+          not rendered and this is the only drawing of the day there is.
+        */}
         {identity.hero || placedStops.length > 0 ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className={cx('mt-4 grid gap-3', identity.hero && placedStops.length > 0 && 'sm:grid-cols-2')}>
             {identity.hero ? (
               <div>
                 <DestinationImage
@@ -2029,6 +2213,13 @@ function DayCard({
                 {...(verification[item.id] ? { verification: verification[item.id]! } : {})}
                 stopNumber={item.placeId ? (mapNumbers[item.placeId] ?? null) : null}
                 dayNumber={day.dayNumber}
+                dayLabel={`Day ${day.dayNumber} · ${humanDate(day.date)}`}
+                neighbours={neighbours[item.id] ?? {}}
+                {...(arrivalLeg[item.id] ? { arrival: arrivalLeg[item.id]! } : {})}
+                frame={item.placeId ? placeFrame(item.placeId, rationale[item.placeId]?.name ?? item.title, images, livePhotos, rationale, '16 / 9') : null}
+                {...(item.placeId && coordinates[item.placeId] && verification[item.id] && verification[item.id] !== 'unverified'
+                  ? { navigation: placeNavigationLinks({ ...coordinates[item.placeId]!, name: item.title }) }
+                  : {})}
                 {...(item.placeId && rationale[item.placeId]
                   ? { rationale: rationale[item.placeId]! }
                   : {})}
@@ -2066,20 +2257,12 @@ function DayCard({
         and still here — as compact chips — while the warnings that change what
         a traveller does (a hotel move, a day that runs long) keep their words.
       */}
-      {day.warnings.length > 0 ? (
-        <div className="border-t border-rule bg-amber-soft/40 p-4 text-xs leading-relaxed text-ink-muted" data-testid={`day-warnings-${day.dayNumber}`}>
-          {compactWarnings(day.warnings).badges.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {compactWarnings(day.warnings).badges.map((badge) => (
-                <Badge key={badge.label} tone="amber" title={badge.title}>
-                  {badge.label}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-          {compactWarnings(day.warnings).sentences.length > 0 ? (
-            <ul className={cx(compactWarnings(day.warnings).badges.length > 0 && 'mt-2')}>
-              {compactWarnings(day.warnings).sentences.map((warning) => (
+      {caveat || compacted.sentences.length > 0 ? (
+        <div className="border-t border-rule bg-amber-soft/40 px-5 py-3 text-xs leading-relaxed text-ink-muted" data-testid={`day-warnings-${day.dayNumber}`}>
+          {caveat ? <p data-testid={`day-caveat-${day.dayNumber}`}>{caveat}.</p> : null}
+          {compacted.sentences.length > 0 ? (
+            <ul className={cx(caveat && 'mt-1.5')}>
+              {compacted.sentences.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
             </ul>
@@ -2111,6 +2294,70 @@ function DayCard({
         </div>
       ) : null}
     </Panel>
+  );
+}
+
+/**
+ * V6 — A PICTURE OF ONE PLACE, OR NOTHING AT ALL.
+ *
+ * The same gate the board and the day hero apply, in one function so the band,
+ * the signature experiences and the place sheet cannot disagree about what
+ * counts as a photograph of somewhere: a stored open-licensed file whose
+ * subject match is better than `weak`, or — where the build is configured for
+ * it and there is no durable file — the place's own picture, fetched when the
+ * frame is looked at and never stored. A place with neither gets no frame; a
+ * generated stand-in for a specific place is a picture of nowhere.
+ */
+function placeFrame(
+  placeId: string,
+  name: string,
+  images: Record<string, ImageRecord>,
+  livePhotos: Record<string, string>,
+  rationale: Record<string, StopRationale>,
+  ratio: string,
+  options: { crop?: boolean; className?: string; credit?: boolean } = {},
+): React.ReactNode {
+  const stored = images[placeId];
+  const durable = stored && stored.subjectConfidence !== 'weak' ? stored : null;
+  const live = durable ? undefined : livePhotos[placeId];
+  if (!durable && !live) return null;
+  const category = rationale[placeId]?.category;
+  const { crop = true, className, credit = true } = options;
+  const fallback = imageryFallbackFor({ kind: 'candidate', id: placeId, name });
+  /*
+   * Cropping is a licence decision and the prop type enforces it: a share-alike
+   * file never becomes `CroppableImage`, so a frame that wanted to crop one
+   * shows the whole file rescaled instead. See `DestinationImage`.
+   */
+  const cropSafe = crop ? (durable ? croppable(durable) : null) : null;
+  return (
+    <div className={cx('min-w-0', className)}>
+      {crop && (cropSafe || !durable) ? (
+        <DestinationImage
+          image={cropSafe}
+          fallback={fallback}
+          ratio={ratio}
+          crop
+          credit="none"
+          {...(live ? { livePhoto: { href: live, credit: 'Photo © Google' } } : {})}
+          {...(category ? { category } : {})}
+        />
+      ) : (
+        <DestinationImage
+          image={durable}
+          fallback={fallback}
+          ratio={ratio}
+          credit="none"
+          {...(live ? { livePhoto: { href: live, credit: 'Photo © Google' } } : {})}
+          {...(category ? { category } : {})}
+        />
+      )}
+      {credit ? (
+        <p className="mt-1.5 text-[11px] leading-snug text-ink-faint">
+          {durable ? <ImageCredit image={durable} as="span" className="mt-0 inline" /> : <span>Photo &copy; Google</span>}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -2201,145 +2448,6 @@ function dayIdentity(
   }
 
   return { hue, hero };
-}
-
-/**
- * What is worth saying about a meal that the row above it has not said already.
- *
- * The rule the hours block already lives by: only what bears on this decision.
- * A venue's opening window is printed when the meal sits near an edge of it and
- * not when it does not; a dietary line appears only for something the traveller
- * actually told us about; and the alternatives are two names, not a menu.
- *
- * Nothing here claims a venue is safe, and nothing implies a booking exists.
- */
-function FoodDetail({ food }: { food: ScheduledFood }) {
-  const supported = food.dietary.filter((claim) => claim.evidence !== 'unknown');
-  // A twenty-minute shop is not a meal. Asking a supermarket to confirm how it
-  // handles an allergy — in the one place a traveller can read every label
-  // themselves — is the kind of caution that teaches people to skip cautions.
-  const isShop = food.stopKind === 'grocery';
-  return (
-    <>
-      {food.hours ? (
-        <p className="mt-1 text-xs tabular-nums text-ink-faint">
-          Open {clock(food.hours.openMinute, 'later')}–
-          {clock(food.hours.closeMinute, 'earlier')}
-          {food.hours.periodLabel ? ` · ${food.hours.periodLabel}` : ''}
-          {food.hours.confidence !== 'published' ? ' · closing time is ours, not theirs' : ''}
-        </p>
-      ) : null}
-
-      {/*
-        The line that stands where an opening window would, and says the one
-        thing there is to say instead. No clock on it, because there is no clock
-        to put there — the hour on the row is the meal's, not the venue's.
-      */}
-      {food.hoursUnknown ? (
-        <p className="mt-1 text-xs text-ink-faint">
-          Nobody publishes hours for this that we could read. Check before you go.
-        </p>
-      ) : null}
-
-      {food.cuisineLabel ? (
-        <p className="mt-1 text-xs text-ink-faint">{food.cuisineLabel}</p>
-      ) : null}
-
-      {supported.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-xs leading-relaxed text-ink-muted">
-          {supported.map((claim) => (
-            <li key={claim.need}>
-              <span className="font-medium text-ink">{DIETARY_NEED_LABELS[claim.need]}</span>{' '}
-              <span className="text-ink-faint">
-                — {DIETARY_EVIDENCE_COPY[claim.evidence]}.
-              </span>{' '}
-              {claim.note}
-              {claim.sourceUrl ? (
-                <>
-                  {' '}
-                  <a
-                    className="underline underline-offset-2"
-                    href={claim.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    their page
-                  </a>
-                </>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {food.dietaryUnverified.length > 0 && !isShop ? (
-        <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-          <span className="font-medium text-ink">Nobody has confirmed this either way.</span>{' '}
-          {food.venueName ?? 'This place'} has nothing on record about{' '}
-          {food.dietaryUnverified.map((need) => DIETARY_NEED_LABELS[need].toLowerCase()).join(', ')}.
-          Ring them before you count on it.
-        </p>
-      ) : null}
-
-      {food.reservation &&
-      (food.reservation.requirement === 'required' ||
-        food.reservation.requirement === 'recommended') ? (
-        <p className="mt-2 rounded-md border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
-          <span className="font-medium text-clay">You have to book this yourself.</span>{' '}
-          {food.reservation.note ?? 'We have not booked anything.'}
-          {food.reservation.bookingUrl ? (
-            <>
-              {' '}
-              <a
-                className="underline underline-offset-2"
-                href={food.reservation.bookingUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Their booking page
-              </a>
-              .
-            </>
-          ) : null}
-        </p>
-      ) : null}
-
-      {food.alternatives.length > 0 ? (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-ink-faint">
-            Other options here ({food.alternatives.length})
-          </summary>
-          <ul className="mt-1 space-y-1 text-xs leading-relaxed text-ink-muted">
-            {food.alternatives.map((option) => (
-              <li key={option.venueId}>
-                <span className="font-medium text-ink">{option.name}</span> — {option.tradeoff}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      {food.hours ? (
-        <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-          {food.hours.sourceKind === 'official' ? 'Hours from' : 'Hours written from'}{' '}
-          {food.hours.sourceUrl ? (
-            <a
-              className="underline underline-offset-2"
-              href={food.hours.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {food.hours.sourceName}
-            </a>
-          ) : (
-            food.hours.sourceName
-          )}
-          {food.hours.lastVerified ? `, read ${food.hours.lastVerified}` : ''}. We have not checked
-          today.
-        </p>
-      ) : null}
-    </>
-  );
 }
 
 /**
@@ -2520,12 +2628,13 @@ function FoodPlanPanel({ plan, strategy = [], intel = null }: { plan: FoodPlan; 
   );
 }
 
+/** The three traveller-facing states, said once in `TripConfidence` and titled from there. */
 const VERIFICATION_TITLE: Record<VerificationState, string> = {
-  verified: 'Checked: a real place at a known position, with evidence for its hours or access.',
-  partially_verified: 'Likely: a real place at this name was confirmed; hours and access have not been.',
-  unverified: 'Confirm later: this could not be matched to a specific place yet. Nothing here says it is wrong.',
+  verified: VERIFICATION_CHIP_WORD.verified.blurb,
+  partially_verified: VERIFICATION_CHIP_WORD.partially_verified.blurb,
+  unverified: VERIFICATION_CHIP_WORD.unverified.blurb,
 };
-const ANCHOR_KIND_WORD: Record<AnchorKind, string> = { named_place: '', area_experience: 'Area', route_experience: 'Route', generic_experience: 'Experience', meal: 'Meal', flex: 'Flexible' };
+const ANCHOR_KIND_WORD: Record<AnchorKind, string> = { named_place: '', area_experience: 'Area', route_experience: 'Route', generic_experience: 'Experience', meal: 'Meal', flex: 'Flexible', transfer: 'Transfer', gateway: 'Arrival or departure' };
 type TimePrecisionWord = 'fixed' | 'measured' | 'estimated' | 'band';
 
 /** The one-line travel row: the rounded duration, then the leg's own title ("Walk to Quarter Market"), then what kind of figure it is. */
@@ -2542,21 +2651,147 @@ function travelLine(item: ItineraryItem): string {
   return `${item.title} · timing to confirm`;
 }
 
-function stopHasDetails(item: ItineraryItem, rationale: StopRationale | undefined, hours: ItineraryItem['hours'] | undefined): boolean {
-  if (item.kind === 'travel') return Boolean(item.operational && item.operational.outcome !== 'not_applicable');
-  return Boolean(
-    (rationale?.why && rationale.why !== firstSentence(rationale.why)) ||
-      rationale?.why ||
-      (rationale?.facets && rationale.facets.length > 0) ||
-      (item.operational && item.operational.outcome !== 'not_applicable') ||
-      item.food ||
-      item.accessWarning ||
-      item.seasonalNote ||
-      item.booking ||
-      item.daylightOnly ||
-      item.verifyBeforeTravel ||
-      hours,
-  );
+/**
+ * WHAT A PRINTED DAY STILL HAS TO CARRY.
+ *
+ * A traveller holding the packet and nothing else needs the access caution, the
+ * booking still in their hands, the daylight limit and the fact worth checking
+ * on the morning. The reasoning, the alternatives and the sources belong to the
+ * sheet on screen and to the appendix on paper.
+ */
+function printableCautions(item: ItineraryItem): string[] {
+  const lines: string[] = [];
+  if (item.accessWarning && !/could not be independently confirmed/i.test(item.accessWarning)) lines.push(item.accessWarning);
+  if (item.seasonalNote && item.seasonalNote !== item.accessWarning) lines.push(item.seasonalNote);
+  if (item.booking) lines.push(`You arrange this yourself. ${item.booking.note ?? 'Nothing has been booked for you.'}`);
+  if (item.verifyBeforeTravel) lines.push(`Check its hours. ${item.verifyBeforeTravel}`);
+  if (item.daylightOnly) {
+    lines.push(
+      item.daylight
+        ? `Signed for daylight use only; placed inside ${clock(item.daylight.sunriseMinute, 'later')}–${clock(item.daylight.sunsetMinute, 'earlier')} for this date.`
+        : 'Signed for daylight use only, and sunrise and sunset could not be worked out for this one.',
+    );
+  }
+  return lines;
+}
+
+/**
+ * V6 — EVERYTHING THE PLACE SHEET SHOWS, ASSEMBLED FROM THE ROW.
+ *
+ * A pure function of the stored item, the fit model's card and the day around
+ * it. Nothing here is fetched and nothing is invented: a fact that is not on
+ * the plan is simply not in the sheet.
+ */
+function buildPlaceSheet({
+  item,
+  rationale,
+  verification,
+  anchorKind,
+  precision,
+  dayLabel,
+  neighbours,
+  arrival,
+  navigation,
+  hours,
+}: {
+  item: ItineraryItem;
+  rationale?: StopRationale;
+  verification?: VerificationState;
+  anchorKind?: AnchorKind;
+  precision: TimePrecisionWord;
+  dayLabel?: string;
+  neighbours: { previous?: string; next?: string };
+  arrival?: string;
+  navigation?: { google: string; apple: string };
+  hours?: ItineraryItem['hours'];
+}): PlaceSheetDetail {
+  const kindLabel = item.food
+    ? [MEAL_SLOT_LABELS[item.food.slot], FOOD_STOP_LABEL[item.food.stopKind]].filter(Boolean).join(' · ')
+    : anchorKind && anchorKind !== 'named_place' && anchorKind !== 'flex'
+      ? ANCHOR_KIND_WORD[anchorKind]
+      : rationale?.category
+        ? PLACE_CATEGORY_LABELS[rationale.category]
+        : undefined;
+
+  const facts: { label: string; value: string }[] = [];
+  if (dayLabel) facts.push({ label: 'When', value: `${dayLabel} · ${precision === 'band' ? dayPartFor(item.startMinute) : `${precision === 'estimated' ? '≈' : ''}${clock(item.startMinute, 'later')}`}` });
+  if (item.durationMinutes > 0) facts.push({ label: 'How long', value: span(item.durationMinutes) });
+  if (item.physicalIntensity && item.physicalIntensity !== 'none') facts.push({ label: 'Effort', value: item.physicalIntensity });
+  if (item.weather && item.weather.suitability !== 'workable' && WEATHER_BADGE[item.weather.suitability]) {
+    facts.push({ label: 'Weather', value: WEATHER_BADGE[item.weather.suitability]! });
+  } else if (item.weatherSensitive) {
+    facts.push({ label: 'Weather', value: 'Sensitive to the weather' });
+  }
+  if (hours) {
+    facts.push({
+      label: 'Hours',
+      value: `${clock(hours.openMinute, 'later')}–${clock(hours.closeMinute, 'earlier')}${hours.lastAdmissionMinute !== undefined ? ` · last entry ${clock(hours.lastAdmissionMinute, 'earlier')}` : ''}`,
+    });
+  }
+
+  const notes: PlaceSheetNote[] = [];
+  if (item.operational && item.operational.outcome !== 'not_applicable') notes.push({ body: `${item.operational.note} ${item.operational.attribution}` });
+  if (item.accessWarning && !/could not be independently confirmed/i.test(item.accessWarning)) notes.push({ body: item.accessWarning, tone: 'caution' });
+  if (item.seasonalNote && item.seasonalNote !== item.accessWarning) notes.push({ body: item.seasonalNote });
+  if (item.verifyBeforeTravel) notes.push({ title: 'Check its hours.', body: item.verifyBeforeTravel, tone: 'caution' });
+  if (item.booking) notes.push({ title: 'You arrange this yourself.', body: item.booking.note ?? 'Nothing has been booked for you.', tone: 'booking' });
+  if (item.daylightOnly) {
+    notes.push({
+      body: item.daylight
+        ? `Signed for daylight use only. Placed inside ${clock(item.daylight.sunriseMinute, 'later')}–${clock(item.daylight.sunsetMinute, 'earlier')} for this date.`
+        : 'Signed for daylight use only, and sunrise and sunset could not be worked out for this one. Check the light yourself.',
+    });
+  }
+  if (item.food?.hoursUnknown) notes.push({ body: 'Nobody publishes hours for this that we could read. Check before you go.' });
+  if (item.food) {
+    for (const claim of item.food.dietary.filter((entry) => entry.evidence !== 'unknown')) {
+      notes.push({ title: `${DIETARY_NEED_LABELS[claim.need]} —`, body: `${DIETARY_EVIDENCE_COPY[claim.evidence]}. ${claim.note}` });
+    }
+    /*
+     * A twenty-minute shop is not a meal. Asking a supermarket to confirm how
+     * it handles an allergy — in the one place a traveller can read every label
+     * themselves — is the kind of caution that teaches people to skip cautions.
+     */
+    if (item.food.dietaryUnverified.length > 0 && item.food.stopKind !== 'grocery') {
+      notes.push({
+        title: 'Nobody has confirmed this either way.',
+        body: `${item.food.venueName ?? 'This place'} has nothing on record about ${item.food.dietaryUnverified.map((need) => DIETARY_NEED_LABELS[need].toLowerCase()).join(', ')}. Ring them before you count on it.`,
+        tone: 'caution',
+      });
+    }
+    if (item.food.reservation && (item.food.reservation.requirement === 'required' || item.food.reservation.requirement === 'recommended')) {
+      notes.push({ title: 'You have to book this yourself.', body: item.food.reservation.note ?? 'Nothing has been booked for you.', tone: 'booking' });
+    }
+  }
+  if (item.food && item.food.alternatives.length > 0) {
+    notes.push({ title: 'Other options here:', body: item.food.alternatives.map((option) => `${option.name} — ${option.tradeoff}`).join(' · ') });
+  }
+  if (hours) {
+    notes.push({
+      body: `${hours.sourceKind === 'official' ? 'Hours from' : 'Hours written from'} ${hours.sourceName}${hours.lastVerified ? `, read ${hours.lastVerified}` : ''}. We have not checked today.`,
+    });
+  }
+
+  const links: { label: string; href: string }[] = [];
+  if (item.booking?.url) links.push({ label: 'Book with the operator', href: item.booking.url });
+  if (hours?.sourceUrl) links.push({ label: hours.sourceName, href: hours.sourceUrl });
+  if (item.food?.reservation?.bookingUrl) links.push({ label: 'Their booking page', href: item.food.reservation.bookingUrl });
+
+  const why = rationale?.why ?? item.reason;
+  return {
+    id: item.id,
+    name: rationale?.name ?? item.title,
+    ...(kindLabel ? { kindLabel } : {}),
+    ...(verification && (anchorKind === undefined || anchorKind === 'named_place') ? { confidenceLabel: VERIFICATION_CHIP_WORD[verification].label } : {}),
+    ...(why ? { why } : {}),
+    ...(rationale?.why && item.reason !== rationale.why ? { planReason: item.reason } : {}),
+    facts,
+    route: { ...neighbours, ...(arrival ? { arrive: arrival } : {}) },
+    ...(rationale?.facets && rationale.facets.length > 0 ? { facets: rationale.facets } : {}),
+    ...(notes.length > 0 ? { notes } : {}),
+    ...(links.length > 0 ? { links } : {}),
+    ...(navigation ? { navigation } : {}),
+  };
 }
 
 function TimelineRow({
@@ -2567,6 +2802,11 @@ function TimelineRow({
   rationale,
   verification,
   dayNumber,
+  dayLabel,
+  neighbours = {},
+  arrival,
+  frame = null,
+  navigation,
   precision = 'measured',
   anchorKind,
 }: {
@@ -2578,6 +2818,16 @@ function TimelineRow({
   anchorKind?: AnchorKind;
   /** So the day map can find this row when its stop is pressed. */
   dayNumber?: number;
+  /** "Day 2 · Thu 13 Aug", for the sheet. */
+  dayLabel?: string;
+  /** The stops either side of this one in the day's order, for the sheet's route section. */
+  neighbours?: { previous?: string; next?: string };
+  /** The leg that reaches this stop, already written as the timeline writes it. */
+  arrival?: string;
+  /** A picture of this place, or null. Rendered in the sheet, never in the row. */
+  frame?: React.ReactNode;
+  /** Navigation handoff, only where the position is established evidence. */
+  navigation?: { google: string; apple: string };
   /** What Sidequest could establish about this stop. Absent on legacy plans and on non-stop rows. */
   verification?: VerificationState;
   /** The quiet per-stop edit control, supplied only where editing applies. */
@@ -2600,6 +2850,8 @@ function TimelineRow({
       item.hours.lastAdmissionMinute !== undefined)
       ? item.hours
       : undefined;
+
+  const sheet = item.kind === 'travel' || item.kind === 'free_time' ? null : buildPlaceSheet({ item, rationale, verification, anchorKind, precision, dayLabel, neighbours, arrival, navigation, hours: item.hours });
 
   return (
     <div
@@ -2659,7 +2911,13 @@ function TimelineRow({
             </h3>
           ) : (
             <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-xl' : 'text-sm font-medium')}>
-              {rationale?.name ?? item.title}
+              {sheet ? (
+                <PlaceSheetTrigger detail={sheet} image={frame} actions={menu}>
+                  {rationale?.name ?? item.title}
+                </PlaceSheetTrigger>
+              ) : (
+                (rationale?.name ?? item.title)
+              )}
             </h3>
           )}
           {item.travel ? null : item.food ? (
@@ -2708,13 +2966,15 @@ function TimelineRow({
         </div>
 
         {/*
-          EXPERIENCE V2 — ONE LINE, THEN A DISCLOSURE.
+          V6 — ONE LINE, THEN A SHEET.
 
           The row carries the name, the clock, the chips and one short reason.
-          Everything else about the stop — the full fit sentence, the plan's own
-          reason, opening hours and their source, the booking note, weather and
-          daylight cautions, the food detail — waits behind "Why this, and the
-          details". The packet prints it open.
+          Everything else about the stop — the picture, the full fit sentence,
+          the plan's own reason, opening hours and their source, the booking
+          note, weather and daylight cautions, the food detail, where it sits in
+          the day — is in the place sheet, which the name opens. Nine grey
+          "Why this, and the details" accordions down one page was nine
+          accordions and no hierarchy.
         */}
         {hours ? (
           <p className="mt-1 text-xs tabular-nums text-ink-faint">
@@ -2736,75 +2996,90 @@ function TimelineRow({
         {item.booking ? (
           <p className="mt-1 text-xs text-clay">You arrange this yourself{item.booking.url ? ' · link below' : ''}.</p>
         ) : null}
-        {stopHasDetails(item, rationale, hours) ? (
-          <details className="mt-1.5 max-sm:-ml-[3.75rem]" data-print="open" data-testid="stop-details">
-            <summary className="inline-flex min-h-9 cursor-pointer items-center gap-1 text-xs text-ink-faint hover:text-ink [&::-webkit-details-marker]:hidden">
-              <span aria-hidden="true" className="text-[10px]">▸</span> Why this, and the details
-            </summary>
-            <div className="mt-1 space-y-2 rounded-md border-l-2 border-rule pl-3">
-              {rationale?.why && rationale.why !== firstSentence(rationale.why) ? <p className="text-sm leading-relaxed text-ink-muted">{rationale.why}</p> : null}
-              {item.kind !== 'travel' && rationale?.why ? <p className="text-xs leading-relaxed text-ink-faint">{item.reason}</p> : null}
-              {rationale?.facets && rationale.facets.length > 0 ? (
-                <p className="text-xs text-ink-faint" data-testid="stop-facets">
-                  {rationale.facets.slice(0, 3).join(' · ')}
-                </p>
-              ) : null}
-              {item.operational && item.operational.outcome !== 'not_applicable' ? (
-                <p className="text-xs text-ink-faint" data-testid="stop-operational" data-outcome={item.operational.outcome}>
-                  {item.operational.note} <span className="text-ink-faint/80">{item.operational.attribution}</span>
-                </p>
-              ) : null}
-              {item.food ? <FoodDetail food={item.food} /> : null}
-              {item.accessWarning && !/could not be independently confirmed/i.test(item.accessWarning) ? <p className="rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">{item.accessWarning}</p> : null}
-              {item.seasonalNote && item.seasonalNote !== item.accessWarning ? <p className="text-xs leading-relaxed text-ink-faint">{item.seasonalNote}</p> : null}
-              {item.booking ? (
-                <p className="rounded-md border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
-                  <span className="font-medium text-clay">You have to arrange this yourself.</span> {item.booking.note ?? 'We have not booked anything.'}
-                  {item.booking.url ? (
-                    <>
-                      {' '}
-                      <a className="underline underline-offset-2" href={item.booking.url} target="_blank" rel="noreferrer">
-                        Book with the operator
-                      </a>
-                      .
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
-              {item.daylightOnly ? (
-                <p className="text-xs leading-relaxed text-ink-faint">
-                  Signed for daylight use only.{' '}
-                  {item.daylight ? `Placed inside ${clock(item.daylight.sunriseMinute, 'later')}–${clock(item.daylight.sunsetMinute, 'earlier')} for this date.` : 'We could not work out sunrise and sunset for this one, so check the light yourself.'}
-                </p>
-              ) : null}
-              {item.verifyBeforeTravel ? (
-                <p className="rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-                  <span className="font-medium text-ink">Check its hours.</span> {item.verifyBeforeTravel}
-                </p>
-              ) : null}
-              {hours ? (
-                <p className="text-[11px] leading-relaxed text-ink-faint">
-                  {hours.sourceKind === 'official' ? 'Hours from' : 'Hours written from'}{' '}
-                  {hours.sourceUrl ? (
-                    <a className="underline underline-offset-2" href={hours.sourceUrl} target="_blank" rel="noreferrer">
-                      {hours.sourceName}
-                    </a>
-                  ) : (
-                    hours.sourceName
-                  )}
-                  {hours.lastVerified ? `, read ${hours.lastVerified}` : ', not checked against a source'}. We have not checked today.
-                </p>
-              ) : null}
-            </div>
-          </details>
+        {item.operational && item.operational.outcome !== 'not_applicable' ? (
+          <p className="mt-1 hidden text-xs text-ink-faint print:block" data-testid="stop-operational" data-outcome={item.operational.outcome}>
+            {item.operational.note} <span className="text-ink-faint/80">{item.operational.attribution}</span>
+          </p>
+        ) : null}
+        {/*
+          THE PACKET STILL CARRIES WHAT SOMEBODY HAS TO ACT ON.
+          A traveller with the printed plan and no phone still needs the access
+          caution, the booking they have to make and the daylight limit. The
+          reasoning, the sources and the alternatives are the sheet's and the
+          appendix's; these four are the day's.
+        */}
+        {printableCautions(item).length > 0 ? (
+          <ul className="mt-1 hidden text-xs leading-relaxed text-ink-muted print:block" data-testid="stop-print-cautions">
+            {printableCautions(item).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         ) : null}
       </div>
 
-      {menu ? <div className="shrink-0 self-start">{menu}</div> : null}
+      {menu ? <div className="shrink-0 self-start print:hidden">{menu}</div> : null}
     </div>
   );
 }
 
+
+/**
+ * V6 — THE CRITICAL CHECKS, AND WHEN TO MAKE THEM.
+ *
+ * The feasibility report's own items — every decision the plan depends on and
+ * every caution worth reading — and the dates the recheck manifest says are
+ * worth a second look. Deliberately the last section of the packet: it is what
+ * somebody reads before they commit money, and it is the one page that has to
+ * survive a print with no appendix.
+ *
+ * Never a count. A plan with nothing outstanding renders nothing, which is the
+ * honest empty state and not an achievement worth a badge.
+ */
+const SEVERITY_WORD: Record<'blocker' | 'dependency' | 'caution', { word: string; tone: BadgeTone }> = {
+  blocker: { word: 'Settle', tone: 'clay' },
+  dependency: { word: 'Decide', tone: 'amber' },
+  caution: { word: 'Read', tone: 'neutral' },
+};
+
+function CriticalChecks({ feasibility, manifest }: { feasibility: NonNullable<TripPackage['feasibility']> | undefined; manifest: RecheckManifest | null }) {
+  const items = feasibility?.items ?? [];
+  const rechecks = manifest?.items ?? [];
+  if (items.length === 0 && rechecks.length === 0) return null;
+  return (
+    <section className="mt-14 rule-strong pt-5" aria-labelledby="critical-checks" data-testid="critical-checks">
+      <h2 id="critical-checks" className="display-md text-ink">
+        Before you commit
+      </h2>
+      <p className="mt-1.5 max-w-2xl type-small text-ink-muted">{feasibility?.summary ?? 'What is worth a second look before you book, and when to look.'}</p>
+      {items.length > 0 ? (
+        <ul className="mt-5 divide-y divide-rule border-y border-rule">
+          {items.map((item, index) => (
+            <li key={`${item.area}-${index}`} className="flex items-start gap-3 py-3" data-testid="critical-check" data-severity={item.severity} data-area={item.area}>
+              <Badge tone={SEVERITY_WORD[item.severity].tone}>{SEVERITY_WORD[item.severity].word}</Badge>
+              <span className="min-w-0 flex-1 type-small text-ink">
+                {item.dayNumber ? <span className="text-ink-faint">Day {item.dayNumber} · </span> : null}
+                {item.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {rechecks.length > 0 ? (
+        <>
+          <h3 className="mt-6 type-section text-ink">Look again nearer the date</h3>
+          <ul className="mt-2 divide-y divide-rule" data-testid="critical-recheck">
+            {rechecks.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2 type-small">
+                <span className="text-ink">{item.title}</span>
+                <span className="text-ink-faint">{RECHECK_WINDOW_LABELS[item.window]}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </section>
+  );
+}
 
 /**
  * WHAT TO KEEP FLEXIBLE (§17), DERIVED FROM THE PLAN'S OWN EVIDENCE.
@@ -2838,7 +3113,7 @@ function KeepFlexible({ itinerary }: { itinerary: Itinerary }) {
   if (entries.length === 0) return null;
 
   return (
-    <section className="mt-14 border-t border-rule pt-8">
+    <section className="mt-14 border-t border-rule pt-8" data-print="appendix">
       <h2 className="display-md text-ink">Keep these flexible</h2>
       <p className="mt-1 text-sm text-ink-muted">
         Each of these carries something the plan cannot promise — weather, unverified details, or
@@ -3124,11 +3399,8 @@ function seasonLineFor(itinerary: Itinerary): string | null {
 function TripSnapshot({
   itinerary,
   coordinates,
-  images,
-  livePhotos,
   rationale,
   tiles,
-  personality,
 }: {
   itinerary: Itinerary;
   coordinates: Record<string, { lat: number; lng: number }>;
@@ -3137,77 +3409,31 @@ function TripSnapshot({
   livePhotos: Record<string, string>;
   rationale: Record<string, StopRationale>;
   tiles: MapBasemap | null;
-  personality: string | null;
   dateLabel: string;
 }) {
   const pkg = itinerary.package;
-  const hero = itinerary.days.map((day) => dayIdentity(day, images, rationale, livePhotos).hero).find((entry) => entry !== null) ?? null;
   const { markers, connectors, primaryBase, summary } = overviewMapModel(itinerary, coordinates, rationale);
   const bases = pkg?.bases ?? [];
-  const kinds = [...new Set(itinerary.days.map((day) => day.weather.evidence))];
-  const weatherLabel = kinds.includes('forecast') ? 'Forecast on record' : kinds.includes('historical_pattern') ? 'Historical pattern' : 'No weather data';
-  const stops = itinerary.days.reduce((sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length, 0);
 
+  /*
+   * V6 — THE MAP, AND WHAT THE BAND HAS NOT ALREADY SAID.
+   *
+   * This used to carry a photograph the band now carries, a personality line
+   * the overview's own headline now carries, a "why these dates" the overview
+   * answers under its own heading, and a stop count printed three centimetres
+   * under the identical figure in the band's eyebrow. What is left is the
+   * drawing of the whole trip and one sentence about the kind of weather
+   * knowledge behind it.
+   */
   return (
-    <section className="mt-8" aria-labelledby="trip-snapshot" data-testid="trip-snapshot">
+    <section aria-labelledby="trip-snapshot" data-testid="trip-snapshot">
       <h2 id="trip-snapshot" className="sr-only">
-        Trip at a glance
+        The whole trip on one map
       </h2>
-      <div className={cx('grid gap-6', hero ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]' : '')} data-bases={bases.length}>
-        {hero ? (
-          <div className="min-w-0">
-            <DestinationImage
-              image={hero.image}
-              fallback={imageryFallbackFor({ kind: 'candidate', id: hero.placeId, name: hero.name })}
-              ratio="4 / 3"
-              crop={false}
-              credit="none"
-              {...(hero.livePhotoHref ? { livePhoto: { href: hero.livePhotoHref, credit: 'Photo © Google' } } : {})}
-              {...(hero.category ? { category: hero.category } : {})}
-            />
-            <p className="mt-1.5 text-[11px] leading-snug text-ink-faint">
-              {hero.name}, on this trip. {hero.image ? <ImageCredit image={hero.image} as="span" className="mt-0 inline" /> : hero.livePhotoHref ? <span>Photo © Google</span> : null}
-            </p>
-          </div>
-        ) : null}
-        <div className="min-w-0">
-          {personality ? (
-            <p className="font-display text-2xl leading-snug text-ink sm:text-3xl" data-testid="trip-personality-line">
-              {personality}
-            </p>
-          ) : null}
-          {/*
-            MVP V3, Stage 42 — the facts the band does not already carry.
-            The atlas band above states the dates, the day count, the stop count
-            and the movement sentence; the route is drawn under "Where you sleep"
-            three centimetres below. Repeating all four here made one screen say
-            everything twice, which is what "one focal point per view" is a rule
-            against. What is left is what nothing else says.
-          */}
-          <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            {itinerary.package?.timingRationale ? (
-              <div className="sm:col-span-2">
-                <dt className="label text-ink-faint">Why these dates</dt>
-                <dd className="text-ink">{itinerary.package.timingRationale}</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt className="label text-ink-faint">Weather</dt>
-              <dd className="text-ink">{weatherLabel}</dd>
-            </div>
-            <div>
-              <dt className="label text-ink-faint">Stops</dt>
-              <dd className="numeral text-ink">{stops} across {itinerary.days.length} days</dd>
-            </div>
-          </dl>
-          {seasonLineFor(itinerary) ? <p className="mt-3 type-small text-ink-muted">{seasonLineFor(itinerary)}</p> : null}
-        </div>
+      <div data-bases={bases.length}>
+        {markers.length > 0 ? <TripOverviewMap markers={markers} connectors={connectors} base={primaryBase} tiles={tiles} summary={summary} width={1120} height={420} /> : null}
+        {seasonLineFor(itinerary) ? <p className="mt-3 type-small text-ink-muted">{seasonLineFor(itinerary)}</p> : null}
       </div>
-      {markers.length > 0 ? (
-        <div className="mt-6">
-          <TripOverviewMap markers={markers} connectors={connectors} base={primaryBase} tiles={tiles} summary={summary} width={1120} height={420} />
-        </div>
-      ) : null}
     </section>
   );
 }

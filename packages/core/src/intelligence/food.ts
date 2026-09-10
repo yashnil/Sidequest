@@ -301,10 +301,10 @@ export function buildFoodIntelligence(input: FoodInput): FoodIntelligence {
     ...(specialDay ? { specialOccasionDay: specialDay } : {}),
     venueDataNote:
       namedVenues === 0
-        ? 'No venue could be named from the region’s food data, so every meal keeps its role rather than a restaurant. Nothing in the days depends on this.'
+        ? 'Each meal says what kind of place to look for and where; no restaurant is named yet.'
         : unresolved > 0
-          ? `${namedVenues} meals name a venue from the region’s food data; ${unresolved} keep their role without one.`
-          : `${namedVenues} meals name a venue from the region’s food data.`,
+          ? `${namedVenues} meal${namedVenues === 1 ? '' : 's'} name a place; ${unresolved} say what to look for and where.`
+          : `${namedVenues} meal${namedVenues === 1 ? '' : 's'} name a place.`,
   });
 }
 

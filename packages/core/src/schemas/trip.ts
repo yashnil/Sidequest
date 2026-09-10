@@ -74,6 +74,10 @@ export function describeEdgeTime(precision: EdgePrecision | undefined, time: str
   }
 }
 
+export const TIMING_LOCKS = ['traveler', 'sidequest'] as const;
+export const timingLockSchema = z.enum(TIMING_LOCKS);
+export type TimingLock = z.infer<typeof timingLockSchema>;
+
 export const MAX_TRIP_NIGHTS = 30;
 
 export const tripBasicsSchema = z
@@ -132,6 +136,19 @@ export const tripBasicsSchema = z
     adults: z.number().int().min(1).max(12),
     children: z.number().int().min(0).max(12),
     travelerNeeds: z.array(travelerNeedSchema).default([]),
+    /**
+     * V6 — WHO DECIDED THE DATES, ON THE ROW ITSELF.
+     *
+     * `traveler`: the traveller typed the dates or pressed "Use this timing"
+     * on a proposed window. `sidequest`: the composition chose the window
+     * because the traveller asked it to, and the choice is now the trip's
+     * dates. Absent: nobody has decided yet (the two dates above are a
+     * placeholder) or the row predates the column. The composition path
+     * refuses to adopt a model window whenever this is set — it is the
+     * durable half of the timing lock, kept beside the dates it protects so a
+     * composer blob that fails to parse cannot reopen a closed question.
+     */
+    timingLock: timingLockSchema.optional(),
   })
   .refine((value) => value.endDate >= value.startDate, {
     message: 'The end date has to be on or after the start date',
@@ -147,10 +164,21 @@ export const TRIP_STATUSES = ['draft', 'profiled', 'discovering', 'planned'] as 
 export const tripStatusSchema = z.enum(TRIP_STATUSES);
 export type TripStatus = z.infer<typeof tripStatusSchema>;
 
+/** V6 §24 — the lifecycle a traveller can set by hand; the inferred one is computed at read (`lifecycle/trip-lifecycle.ts`). */
+export const TRIP_LIFECYCLES = ['idea', 'planning', 'ready', 'booked', 'traveling', 'past', 'archived'] as const;
+export const tripLifecycleSchema = z.enum(TRIP_LIFECYCLES);
+export type TripLifecycle = z.infer<typeof tripLifecycleSchema>;
+
 export const tripSchema = z.object({
   id: z.string().min(1),
   basics: tripBasicsSchema,
   status: tripStatusSchema,
+  /** V6 §25 — a name the traveller gave the trip. Absent reads as the destination. */
+  title: z.string().trim().min(1).max(80).optional(),
+  /** V6 §22 — the account that owns the trip; absent while it is an unclaimed browser trip. */
+  userId: z.string().min(1).optional(),
+  lifecycleOverride: tripLifecycleSchema.optional(),
+  archivedAt: z.string().min(1).optional(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
 });

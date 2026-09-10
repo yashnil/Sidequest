@@ -86,11 +86,30 @@ export default async function SharedTripPage({
   }
 
   const model = await itineraryViewModel(trip, itinerary);
+  /*
+   * V6 §50 — A SHARE IS READ-ONLY AND PUBLIC; IT CARRIES NO PRIVATE FACT.
+   *
+   * The owner's confirmation references, booking notes, costs and readiness
+   * documents used to travel into the component tree and were withheld only
+   * by the render branch. They are stripped here, at the door, so no future
+   * edit to a render branch can leak them.
+   */
+  const shared = {
+    ...model,
+    booked: model.booked.map(({ confirmationRef: _ref, notes: _notes, cost: _cost, url: _url, ...rest }) => {
+      void _ref;
+      void _notes;
+      void _cost;
+      void _url;
+      return rest;
+    }),
+    readinessProfile: null,
+  };
 
   return (
     <ItineraryView
       tiles={resolveMapBasemap(process.env)}
-      {...model}
+      {...shared}
       itinerary={model.appliedItinerary}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same

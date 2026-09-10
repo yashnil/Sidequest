@@ -1,3 +1,4 @@
+import { chromeAccount } from '@/lib/auth/chrome';
 import { ProductChrome } from '@/components/ProductChrome';
 
 /**
@@ -16,6 +17,6 @@ import { ProductChrome } from '@/components/ProductChrome';
  * want it and to nothing else. The cost is one more small file; the alternative
  * was an assertion with an exception carved out of it.
  */
-export default function TripsLayout({ children }: { children: React.ReactNode }) {
-  return <ProductChrome>{children}</ProductChrome>;
+export default async function TripsLayout({ children }: { children: React.ReactNode }) {
+  return <ProductChrome account={await chromeAccount()}>{children}</ProductChrome>;
 }

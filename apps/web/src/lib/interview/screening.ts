@@ -188,11 +188,12 @@ export function carriedFieldsFor(composer: TripComposerAnswers | null, carried: 
   return [...fields];
 }
 
-export function interviewContextFor(input: ScreeningInputs & { offeredInterests: readonly Interest[]; carried: readonly string[]; answers?: QuestionnaireAnswers }): InterviewContext {
+export function interviewContextFor(input: ScreeningInputs & { offeredInterests: readonly Interest[]; carried: readonly string[]; answers?: QuestionnaireAnswers; party?: InterviewContext['traveller']['party'] }): InterviewContext {
   const composer = input.intent?.composer ?? null;
   return {
     destination: destinationContextFor(input),
     traveller: {
+      ...(input.party ? { party: input.party } : {}),
       travelerNeeds: input.trip.basics.travelerNeeds,
       tripDays: countTripDays(input.trip.basics.startDate, input.trip.basics.endDate),
       adults: input.trip.basics.adults,

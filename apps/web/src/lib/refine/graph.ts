@@ -3,8 +3,9 @@ import { Annotation, Command, END, START, StateGraph, interrupt, type CommandIns
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
 import type { TripDraft } from '../planning/trip-draft';
 import type { BookingDependency } from './invariants';
-import { applyTripPatch, tripPatchSchema, type TripPatch } from './patch';
-import { blastRadiusFor, lockConflicts, preservationContractFor } from './blast-radius';
+import { applyTripPatch, patchReach, tripPatchSchema, type TripPatch } from './patch';
+import { blastRadiusFor, lockConflicts, preservationContractFor, radiusForPatch } from './blast-radius';
+import { describeRefusal } from './describe';
 import {
   MAX_REFINEMENT_MODEL_CALLS,
   intentIsReadOnly,
@@ -82,6 +83,14 @@ const RefinementAnnotation = Annotation.Root({
   verificationNeeded: Annotation<string[]>({ reducer: (_, next) => next, default: () => [] }),
   status: Annotation<RefinementStatus>({ reducer: (_, next) => next, default: () => 'classifying' }),
   modelCallsThisAction: Annotation<number>({ reducer: (_, next) => next, default: () => 0 }),
+  /**
+   * V6 §30 — PROPOSE_CHANGE before APPLY_CHANGE for a material change.
+   *
+   * `pending` while the traveller is looking at what would change; `applied`
+   * or `cancelled` afterwards. A resume with the answer routes straight to
+   * apply or to a quiet end — never back through the model.
+   */
+  confirm: Annotation<'pending' | 'applied' | 'cancelled' | undefined>({ reducer: (_, next) => next, default: () => undefined }),
   errors: Annotation<string[]>({ reducer: (previous, next) => [...previous, ...next], default: () => [] }),
 });
 
@@ -135,11 +144,40 @@ export interface RefinementGraphDeps {
   /** Persist the patched draft and mint a new version. Returns the new version number. */
   commit(input: { tripId: string; draft: TripDraft; patch: TripPatch; applied: readonly string[]; baseVersion: number }): Promise<number>;
   checkpointer: BaseCheckpointSaver;
+  /**
+   * V6 §30 — propose a material change before applying it. The product path
+   * sets this; the graph's own contract tests run without it, so a one-line
+   * patch and a whole-route change both land in one pass there.
+   */
+  confirmMaterialChanges?: boolean;
 }
 
 /* ------------------------------------------------------------------ *
  * The graph
  * ------------------------------------------------------------------ */
+
+/**
+ * V6 §30 — what counts as material: the whole trip, three or more days, a
+ * base or the route, the dates. A one-day swap lands and is undoable; a
+ * change of this size is shown first.
+ */
+export function changeIsMaterial(radius: BlastRadius, intent: RefinementIntent): boolean {
+  if (radius.wholeTrip) return true;
+  if (intent === 'major_replan' || intent === 'change_route' || intent === 'change_base' || intent === 'change_timing') return true;
+  if (radius.bases.length > 0) return true;
+  return radius.days.length >= 3;
+}
+
+/** "This would change days 4, 5 and 6 and where you sleep in Sounkyo." */
+export function describeScope(radius: BlastRadius, draft?: TripDraft): string {
+  const days = radius.days.length > 0 ? `day${radius.days.length === 1 ? '' : 's'} ${radius.days.slice(0, 6).join(', ').replace(/, ([^,]*)$/, ' and $1')}` : null;
+  const baseNames = radius.bases.map((id) => draft?.bases.find((base) => base.id === id)?.name ?? id);
+  const bases = baseNames.length > 0 ? `where you sleep in ${baseNames.slice(0, 3).join(' and ')}` : null;
+  const facts = radius.facts.length > 0 ? radius.facts.map((f) => f.replace(/_/g, ' ')).join(' and ') : null;
+  const parts = [days, bases, facts].filter(Boolean);
+  if (radius.wholeTrip) return 'This would change the whole trip.';
+  return `This would change ${parts.length > 0 ? parts.join(' and ') : 'part of the trip'}.`;
+}
 
 export function buildRefinementGraph(deps: RefinementGraphDeps) {
   const graph = new StateGraph(RefinementAnnotation)
@@ -186,7 +224,12 @@ export function buildRefinementGraph(deps: RefinementGraphDeps) {
         return { intent: intent.data, status: 'awaiting_answer' as const, modelCallsThisAction: spent, pendingQuestion: reading.needsClarification };
       }
 
-      const radius = blastRadiusFor({ draft, intent: intent.data, ...(reading.namedDays ? { namedDays: reading.namedDays } : {}), ...(reading.namedBases ? { namedBases: reading.namedBases } : {}) });
+      const namedRadius = blastRadiusFor({ draft, intent: intent.data, ...(reading.namedDays ? { namedDays: reading.namedDays } : {}), ...(reading.namedBases ? { namedBases: reading.namedBases } : {}) });
+      if (!reading.patch) return { intent: intent.data, status: 'failed' as const, modelCallsThisAction: spent, blastRadius: namedRadius, contract: preservationContractFor({ draft, radius: namedRadius, intent: intent.data, locks: state.locks }), errors: ['The refinement produced no change to apply.'] };
+      const patch = tripPatchSchema.safeParse(reading.patch);
+      if (!patch.success) return { intent: intent.data, status: 'failed' as const, modelCallsThisAction: spent, blastRadius: namedRadius, contract: preservationContractFor({ draft, radius: namedRadius, intent: intent.data, locks: state.locks }), errors: [`The proposed change was malformed: ${patch.error.issues[0]?.path.join('.')} ${patch.error.issues[0]?.message}`] };
+      /* V6 — the scope is what the patch reaches inside the envelope the request allows (`radiusForPatch`). */
+      const radius = radiusForPatch({ radius: namedRadius, reach: patchReach(patch.data, draft), intent: intent.data, draft });
       const contract = preservationContractFor({ draft, radius, intent: intent.data, locks: state.locks });
       const conflicts = lockConflicts({ radius, locks: state.locks, draft });
       if (conflicts.length > 0 && spent < MAX_REFINEMENT_MODEL_CALLS) {
@@ -208,11 +251,54 @@ export function buildRefinementGraph(deps: RefinementGraphDeps) {
           },
         };
       }
-      if (!reading.patch) return { intent: intent.data, status: 'failed' as const, modelCallsThisAction: spent, blastRadius: radius, contract, errors: ['The refinement produced no change to apply.'] };
-      const patch = tripPatchSchema.safeParse(reading.patch);
-      if (!patch.success) return { intent: intent.data, status: 'failed' as const, modelCallsThisAction: spent, blastRadius: radius, contract, errors: [`The proposed change was malformed: ${patch.error.issues[0]?.path.join('.')} ${patch.error.issues[0]?.message}`] };
-      return { intent: intent.data, status: 'applying' as const, modelCallsThisAction: spent, blastRadius: radius, contract, proposedPatch: patch.data };
+      /*
+       * V6 — THE PROPOSAL SAYS WHAT WILL ACTUALLY HAPPEN.
+       *
+       * The patch is applied to a clone here, under the contract, and the
+       * preview shown to the traveller is that application's own account —
+       * one line per operation that took, one per operation that did not and
+       * why. Never the model's `changed` prose: a live proposal promised "Akan-ko
+       * extended from 2 to 3 nights" while both stay operations were being
+       * refused, and the traveller pressed Apply on a change that did not exist.
+       * The apply node re-runs the same deterministic application on resume.
+       */
+      const booked = deps.loadBookings ? await deps.loadBookings(state.tripId) : undefined;
+      const preview = applyTripPatch({ draft, patch: patch.data, locked: contract.preserve, travellerLocked: state.locks.map((lock) => `${lock.kind}:${lock.ref}`), booked });
+      if (preview.applied.length === 0) {
+        return { intent: intent.data, status: 'rejected' as const, modelCallsThisAction: spent, blastRadius: radius, contract, refused: preview.refused.map((entry) => ({ ref: entry.ref, reason: entry.reason })), errors: ['Nothing in that change could be applied.'] };
+      }
+      const proposed: TripPatch = { ...patch.data, changed: [...preview.applied, ...preview.refused.map((entry) => `Not changed: ${describeRefusal(entry.reason)}`)].slice(0, 10) };
+      /*
+       * V6 §30 — a material change is proposed before it is applied. The
+       * traveller sees the scope and the changes and presses Apply or Cancel;
+       * the resume goes to `apply` with the patch already in state, so the
+       * confirmation costs no model call.
+       */
+      if (deps.confirmMaterialChanges && changeIsMaterial(radius, intent.data) && !state.confirm) {
+        return {
+          intent: intent.data,
+          status: 'awaiting_answer' as const,
+          modelCallsThisAction: spent,
+          blastRadius: radius,
+          contract,
+          proposedPatch: proposed,
+          confirm: 'pending' as const,
+          pendingQuestion: {
+            question: `${describeScope(radius, draft)} Apply it?`,
+            options: ['Apply', 'Cancel'],
+            because: 'A change this size is worth a look before it lands. Cancel leaves the trip exactly as it is.',
+          },
+        };
+      }
+      return { intent: intent.data, status: 'applying' as const, modelCallsThisAction: spent, blastRadius: radius, contract, proposedPatch: proposed };
     })
+
+    /** V6 §30 — the traveller pressed Cancel on a proposal: nothing changes, and the trip says so. */
+    .addNode('cancel', async () => ({
+      status: 'done' as const,
+      confirm: 'cancelled' as const,
+      explanation: 'Nothing was changed. Your trip is exactly as it was.',
+    }))
 
     /**
      * ASK — the human-in-the-loop interrupt (§42).
@@ -238,7 +324,7 @@ export function buildRefinementGraph(deps: RefinementGraphDeps) {
     .addNode('apply', async (state) => {
       const draft = await deps.loadDraft(state.tripId);
       const booked = deps.loadBookings ? await deps.loadBookings(state.tripId) : undefined;
-      const application = applyTripPatch({ draft, patch: state.proposedPatch!, locked: state.contract?.preserve ?? [], booked });
+      const application = applyTripPatch({ draft, patch: state.proposedPatch!, locked: state.contract?.preserve ?? [], travellerLocked: state.locks.map((lock) => `${lock.kind}:${lock.ref}`), booked });
       if (application.applied.length === 0) {
         return { status: 'rejected' as const, refused: application.refused.map((entry) => ({ ref: entry.ref, reason: entry.reason })), errors: ['Nothing in that change could be applied.'] };
       }
@@ -277,7 +363,16 @@ export function buildRefinementGraph(deps: RefinementGraphDeps) {
      * than by trust: `interpret` refuses at `MAX_REFINEMENT_MODEL_CALLS`, and the
      * answered path arrives having already spent one.
      */
-    .addEdge('ask', 'interpret')
+    .addConditionalEdges(
+      'ask',
+      (state) => {
+        /* A proposal answered goes straight to apply or to cancel — never back through the model. */
+        if (state.confirm === 'pending' && state.proposedPatch) return /^\s*apply/i.test(state.answer ?? '') ? 'apply' : 'cancel';
+        return 'interpret';
+      },
+      { interpret: 'interpret', apply: 'apply', cancel: 'cancel' },
+    )
+    .addEdge('cancel', END)
     .addConditionalEdges('apply', (state) => (state.status === 'verifying' ? 'verify' : END), { verify: 'verify', [END]: END })
     .addEdge('verify', END);
 

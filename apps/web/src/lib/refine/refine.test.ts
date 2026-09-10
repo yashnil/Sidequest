@@ -112,7 +112,7 @@ describe('§40 — a patch changes only what it names', () => {
     const result = applyTripPatch({ draft, patch, locked: [`activity:${peak}`] });
     expect(result.ok).toBe(false);
     expect(result.applied).toEqual([]);
-    expect(result.refused[0]).toMatchObject({ op: 'remove_activity', reason: 'the traveller locked this' });
+    expect(result.refused[0]).toMatchObject({ op: 'remove_activity', reason: 'the traveller locked this experience' });
     expect(result.draft.days[0]!.anchors.map((a) => a.name)).toContain('Victoria Peak');
   });
 
@@ -239,6 +239,7 @@ async function runGraph(input: {
   locks?: RefinementLock[];
   commit?: (input: { draft: TripDraft; baseVersion: number }) => Promise<number>;
   threadId?: string;
+  confirmMaterialChanges?: boolean;
 }) {
   const interpreter = interpreterReturning(...input.readings);
   const committed: TripDraft[] = [];
@@ -250,6 +251,7 @@ async function runGraph(input: {
       return input.commit ? input.commit({ draft, baseVersion }) : baseVersion + 1;
     },
     checkpointer: new MemorySaver(),
+    ...(input.confirmMaterialChanges ? { confirmMaterialChanges: true } : {}),
   });
   const config = { configurable: { thread_id: input.threadId ?? 'test-thread' } };
   const state = await graph.invoke({ tripId: 'trip-1', canonicalTripVersion: 1, userRequest: input.request, locks: input.locks ?? [], status: 'classifying' as const }, config);
@@ -947,5 +949,129 @@ describe('§9 — a patch may not leave the trip impossible', () => {
     /* The base id survives a rename, so this one is legal and must apply. */
     expect(result.ok).toBe(true);
     expect(result.draft.bases.find((base) => base.id === 'mountain')?.name).toBe('Lower Valley');
+  });
+});
+
+/**
+ * V6 §30 — PROPOSE_CHANGE BEFORE APPLY_CHANGE.
+ *
+ * A change of three days or more, a base, the route or the dates is shown
+ * before it lands. The traveller's Apply goes straight to the apply node —
+ * no second model call — and Cancel leaves the trip untouched with a
+ * sentence that says so.
+ */
+describe('V6 §30 — a material change is proposed before it is applied', () => {
+  const routeChange = () => ({
+    intent: 'change_route' as const,
+    patch: tripPatchSchema.parse({ changed: ['The route now ends on the coast.'], kept: ['The traverse'], operations: [{ op: 'update_day', day: 1, theme: 'Coast first', why: 'As asked.' }] }),
+  });
+  it('stops with a preview and applies on "Apply" without another model call', async () => {
+    const { state, interpreter, committed, graph, config } = await runGraph({ draft: trekDraft(), request: 'End on the coast instead.', readings: [routeChange()], confirmMaterialChanges: true });
+    expect(state.status).toBe('awaiting_answer');
+    expect(state.confirm).toBe('pending');
+    expect(state.pendingQuestion?.options).toEqual(['Apply', 'Cancel']);
+    expect(state.pendingQuestion?.question).toMatch(/would change/);
+    /* V6 — the preview is the application's own account, never the model's prose. */
+    expect(state.proposedPatch?.changed).toEqual(['updated day 1']);
+    expect(committed).toEqual([]);
+    const applied = await graph.invoke(resumeWith('Apply'), config);
+    expect(interpreter.calls).toBe(1);
+    expect(applied.status).toBe('done');
+    expect(applied.canonicalTripVersion).toBe(2);
+    expect(committed).toHaveLength(1);
+  });
+  it('leaves the trip untouched on "Cancel" and says so', async () => {
+    const { state, committed, graph, config } = await runGraph({ draft: trekDraft(), request: 'End on the coast instead.', readings: [routeChange()], confirmMaterialChanges: true });
+    expect(state.status).toBe('awaiting_answer');
+    const cancelled = await graph.invoke(resumeWith('Cancel'), config);
+    expect(cancelled.status).toBe('done');
+    expect(cancelled.confirm).toBe('cancelled');
+    expect(cancelled.explanation).toMatch(/exactly as it was/);
+    expect(committed).toEqual([]);
+    expect(cancelled.canonicalTripVersion).toBe(1);
+  });
+  it('a proposal that moves a night says so truthfully, moves the beds, and names the stays in the scope', async () => {
+    /*
+     * Live Hokkaido refinement (V6 acceptance call 3): "drop the Obihiro night,
+     * a third night at Akan-ko instead" produced a proposal that promised the
+     * nights had moved while both stay operations were refused as "locked",
+     * because the radius held no stays; days 1 and 2 — the ones asked to be
+     * KEPT — were listed as changing because the request mentioned them.
+     */
+    const draft = draftOf({
+      bases: [
+        { id: 'biei', name: 'Biei', nights: 2 },
+        { id: 'sounkyo', name: 'Sounkyo', nights: 2 },
+        { id: 'akan-ko', name: 'Akan-ko', nights: 2 },
+        { id: 'obihiro', name: 'Obihiro', nights: 1 },
+      ],
+      days: [
+        { base: 'biei', anchors: [{ name: 'Shikisai-no-Oka' }] },
+        { base: 'biei', anchors: [{ name: 'Farm Tomita' }] },
+        { base: 'sounkyo', anchors: [{ name: 'Shirahige Falls' }] },
+        { base: 'sounkyo', anchors: [{ name: 'Ginga Falls' }] },
+        { base: 'akan-ko', anchors: [{ name: 'Lake Mashu' }] },
+        { base: 'akan-ko', anchors: [{ name: 'Lake Akan cruise' }] },
+        { base: 'obihiro', anchors: [{ name: 'Ikeda wine country stop' }] },
+        { base: 'obihiro', anchors: [{ name: 'Rokujo Morning Market' }] },
+      ],
+    });
+    const reading: RefinementInterpretation = {
+      intent: 'preserve_x_change_y',
+      namedDays: [1, 2, 7, 8],
+      patch: tripPatchSchema.parse({
+        changed: ['Akan-ko extended from 2 to 3 nights', 'Obihiro night removed'],
+        kept: ['Both Biei days'],
+        operations: [
+          { op: 'update_base', id: 'akan-ko', nights: 3, why: 'A slower end.' },
+          { op: 'update_base', id: 'obihiro', nights: 0, why: 'Dropped.' },
+          { op: 'remove_activity', id: idOf(draft, 'Ikeda wine country stop'), reason: 'No relocation now.' },
+          { op: 'add_activity', day: 7, at: 0, activity: { name: 'Akan-ko lakeside walk', kind: 'nature', why: 'Gentle.' } },
+        ],
+      }),
+    };
+    const { state, committed, graph, config } = await runGraph({ draft, request: 'Keep both Biei days exactly. Drop the Obihiro night and give us a third night at Akan-ko.', readings: [reading], confirmMaterialChanges: true });
+    expect(state.status).toBe('awaiting_answer');
+    expect(state.blastRadius?.days).toEqual([7, 8]);
+    expect(state.blastRadius?.bases).toEqual(['akan-ko', 'obihiro']);
+    expect(state.pendingQuestion?.question).toMatch(/days 7 and 8 and where you sleep in Akan-ko and Obihiro/);
+    expect(state.proposedPatch?.changed).toEqual(['Akan-ko: 2 → 3 nights', 'dropped the night in Obihiro', 'removed Ikeda wine country stop from day 7: No relocation now.', 'added Akan-ko lakeside walk to day 7', 'days 7 and 8 now sleep in Akan-ko']);
+    expect(state.contract?.preserve).toContain('day:1');
+    expect(state.contract?.preserve).toContain('day:2');
+    expect(state.contract?.preserve).not.toContain('base:akan-ko');
+    const applied = await graph.invoke(resumeWith('Apply'), config);
+    expect(applied.status).toBe('done');
+    expect(applied.refused).toEqual([]);
+    const result = committed[0]!;
+    expect(result.bases.map((base) => `${base.id}:${base.nights}`)).toEqual(['biei:2', 'sounkyo:2', 'akan-ko:3']);
+    expect(result.days.map((day) => day.baseId)).toEqual(['biei', 'biei', 'sounkyo', 'sounkyo', 'akan-ko', 'akan-ko', 'akan-ko', 'akan-ko']);
+    expect(result.days[1]!.anchors[0]!.name).toBe('Farm Tomita');
+    expect(result.days[7]!.anchors.map((a) => a.name)).toEqual(['Rokujo Morning Market']);
+  });
+  it('a stay outside the scope is refused as out of scope, not as a traveller lock, and the preview says so', async () => {
+    const draft = trekDraft();
+    const reading: RefinementInterpretation = {
+      intent: 'change_day',
+      namedDays: [1],
+      patch: tripPatchSchema.parse({
+        changed: ['Two nights up the valley'],
+        kept: [],
+        operations: [
+          { op: 'update_day', day: 1, intensity: 'light', why: 'As asked.' },
+          { op: 'update_base', id: 'mountain', nights: 3, why: 'Longer.' },
+        ],
+      }),
+    };
+    const { state } = await runGraph({ draft, request: 'Lighter day 1 and a longer mountain stay.', readings: [reading], confirmMaterialChanges: true });
+    expect(state.status).toBe('done');
+    expect(state.applied).toEqual(['updated day 1']);
+    expect(state.refused?.[0]?.reason).toMatch(/outside the scope/);
+    expect(describeRefusal(state.refused![0]!.reason)).toMatch(/outside the scope of this change/);
+  });
+  it('a one-day change still lands in one pass', async () => {
+    const draft = trekDraft();
+    const { state } = await runGraph({ draft, request: 'Lighter day 1.', readings: [{ intent: 'change_day', namedDays: [1], patch: tripPatchSchema.parse({ changed: ['Day 1 is lighter.'], kept: [], operations: [{ op: 'update_day', day: 1, intensity: 'light', why: 'As asked.' }] }) }], confirmMaterialChanges: true });
+    expect(state.status).toBe('done');
+    expect(state.confirm).toBeUndefined();
   });
 });

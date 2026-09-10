@@ -502,6 +502,15 @@ export const dayTotalsSchema = z
      * beside it, and a validator refuses a budget verdict that depends on it.
      */
     unmeasuredLegCount: z.number().int().min(0),
+    /**
+     * V6 §12 — THE DAY'S MAJOR TRANSFER WAS NEITHER MEASURED NOR ESTIMATED.
+     *
+     * A relocation day whose base-to-base leg is an allowance used to show its
+     * one small estimated hop as the day's travel ("≈10 min drive") while the
+     * five-hour transfer sat in a band nobody read. When this is true every
+     * surface says "major transfer not measured" and prints no small total.
+     */
+    unmeasuredMajorTransfer: z.boolean().optional(),
   })
   .refine(
     (totals) =>
@@ -682,6 +691,8 @@ export const itineraryDaySchema = z.object({
   warnings: z.array(z.string().min(1)).default([]),
   /** PRODUCT RECOVERY V1 — the day is only as precise as its least precise leg; `band` days are rendered in day parts. */
   timing: z.object({ precision: z.enum(['measured', 'estimated', 'band']), estimatedLegs: z.number().int().min(0), unknownLegs: z.number().int().min(0) }).optional(),
+  /** V6 §5 — part of the party does something else today, and rejoins. Carried from the draft; never invented here. */
+  split: z.object({ who: z.string().min(1), does: z.string().min(1), rejoin: z.string().min(1).optional() }).optional(),
 });
 export type ItineraryDay = z.infer<typeof itineraryDaySchema>;
 
@@ -866,6 +877,8 @@ export const VALIDATION_ISSUE_CODES = [
   // does not work" deserves to know which of the two it was.
   /** Scheduled on a date it is not open at all. */
   'attraction_closed_on_date',
+  /** V6 §11 — the arrival or departure point names a choice nobody has made ("New Chitose or Asahikawa Airport"). */
+  'gateway_unresolved',
   /** Scheduled to begin before it opens. */
   'arrives_before_opening',
   /** Scheduled to begin after it stops admitting people. */
@@ -1155,6 +1168,10 @@ export const ANCHOR_DISPOSITIONS = [
   'unscheduled_capacity',
   /** PRODUCT RECOVERY V1 — a meal the model wrote as an anchor ("Killarney town pub dinner") became the day's meal intent instead of an attraction. Kept content, never a loss. */
   'folded_into_meal',
+  /** V6 §11 — movement the model wrote as a stop ("Drive Bhopal to Bandhavgarh") is the day's transfer leg, never an attraction or a signature. */
+  'folded_into_transfer',
+  /** V6 §11 — an arrival or departure point the model wrote as a stop ("New Chitose Airport") is the terminal plan, never an attraction. */
+  'folded_into_terminal',
 ] as const;
 export const anchorDispositionSchema = z.enum(ANCHOR_DISPOSITIONS);
 export type AnchorDispositionCode = z.infer<typeof anchorDispositionSchema>;
@@ -1207,7 +1224,7 @@ export const packageAnchorSchema = z.object({
    * up and is never presented as "not verified"; a `meal` is folded into the
    * day's meal intent.
    */
-  anchorKind: z.enum(['named_place', 'area_experience', 'route_experience', 'generic_experience', 'meal', 'flex']).optional(),
+  anchorKind: z.enum(['named_place', 'area_experience', 'route_experience', 'generic_experience', 'meal', 'flex', 'transfer', 'gateway']).optional(),
   placeId: z.string().min(1).optional(),
   note: z.string().min(1).optional(),
   /**
@@ -1316,6 +1333,55 @@ export const tripPackageSchema = z.object({
     .optional(),
   /** QUALITY V1 — stage timings of the build that produced this plan, milliseconds. */
   timings: z.record(z.string(), z.number()).optional(),
+  /**
+   * V6 §12 — the deterministic feasibility report. `verdict` decides whether
+   * a screen may say "Ready"; the items say what still needs deciding.
+   */
+  feasibility: z
+    .object({
+      version: z.literal(1),
+      verdict: z.enum(['feasible', 'feasible_with_cautions', 'unresolved_major_dependency', 'infeasible']),
+      items: z.array(
+        z.object({
+          area: z.enum(['dates', 'bases', 'transport', 'time', 'daylight', 'physical', 'season', 'booking', 'food', 'party']),
+          severity: z.enum(['blocker', 'dependency', 'caution']),
+          dayNumber: z.number().int().min(1).optional(),
+          detail: z.string().min(1),
+        }),
+      ),
+      summary: z.string().min(1),
+    })
+    .optional(),
+  /** V6 §55 — the structural metrics, one number per question, never collapsed. Keys are `StructuralMetrics`; stored as numbers (null for not applicable). */
+  metrics: z.record(z.string(), z.number().nullable()).optional(),
+  /**
+   * V6 — the contract enforcement record: which lock the dates were held at,
+   * who decided them, how many facts the model could not override, and every
+   * conflict between the composition and a locked fact, with its resolution.
+   * Persisted so a screen can say "the dates you chose held" with evidence.
+   */
+  contract: z
+    .object({
+      version: z.literal(1),
+      contractVersion: z.string().min(1),
+      timingLock: z.enum(['booked_lock', 'hard_lock', 'user_explicit', 'user_soft', 'sidequest_inferred', 'model_proposed']),
+      timingDecidedBy: z.enum(['traveller', 'sidequest', 'nobody']),
+      lockedFacts: z.number().int().min(0),
+      conflicts: z
+        .array(
+          z.object({
+            field: z.string().min(1),
+            lock: z.enum(['booked_lock', 'hard_lock', 'user_explicit', 'user_soft', 'sidequest_inferred', 'model_proposed']),
+            contractValue: z.string(),
+            proposedValue: z.string(),
+            resolution: z.enum(['contract_kept', 'normalised', 'field_rejected']),
+            detail: z.string().min(1),
+            at: z.string().min(1),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
 });
 export type TripPackage = z.infer<typeof tripPackageSchema>;
 

@@ -38,7 +38,6 @@ const WEB_SRC = new URL('../../', import.meta.url).pathname;
 const NOT_YET_FIXED = [
   'components/QuestionnaireWizard.tsx',
   'components/ui.tsx',
-  'components/ProductChrome.tsx',
   'app/(product)/trips/[id]/discover/error.tsx',
   'app/(product)/trips/[id]/plan/error.tsx',
   'app/(product)/trips/[id]/itinerary/error.tsx',

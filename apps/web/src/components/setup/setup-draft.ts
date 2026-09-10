@@ -218,6 +218,15 @@ function dateModeGivesDates(mode: DateMode): boolean {
   return mode === 'exact' || mode === 'flexible';
 }
 
+/**
+ * V6 — the draft after a step is answered: the step joins `answered`, and
+ * nothing else changes. Pure, so the stale-closure regression that lost an
+ * accepted window (`SetupFlow.tsx#advance`) has a unit test.
+ */
+export function advanceDraft(draft: SetupDraft, step: SetupStepId): SetupDraft {
+  return draft.answered.includes(step) ? draft : { ...draft, answered: [...draft.answered, step] };
+}
+
 export function nextStep(step: SetupStepId, draft: SetupDraft): SetupStepId | null {
   const index = SETUP_STEPS.indexOf(step);
   for (let i = index + 1; i < SETUP_STEPS.length; i += 1) {

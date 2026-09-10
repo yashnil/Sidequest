@@ -13,6 +13,7 @@ import {
   type TravelerProfile,
   type Trip,
   type TripComposerAnswers,
+  type TravelerBriefPartyMember,
 } from '@sidequest/core';
 import type { StructuredModel } from '../providers/interpretation-model';
 import type { RoutingProvider } from '@sidequest/compiler';
@@ -30,6 +31,8 @@ import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-reposit
 import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
+import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
+import { buildFeasibilityReport, buildStructuralMetrics, itineraryStatusForVerdict } from '@sidequest/core';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -43,6 +46,8 @@ import {
 import type { TripDraft } from './trip-draft';
 import { defaultProfileFor } from './default-profile';
 import { listBookedItems } from '@/lib/db/intelligence-repository';
+import { listPartyMembersForBrief, listPartyMembersForContract, profileWithPartyDiet } from '@/lib/db/party-repository';
+import { learnedForOwner } from '@/lib/db/preference-evidence-repository';
 import { compactBookedFacts } from '@/lib/intelligence/booked-facts';
 import { applyBookedFacts, bookedLeaveByMinute } from '@/lib/intelligence/booked-reconcile';
 import { policyConfirmRoute } from './route-selection';
@@ -304,6 +309,11 @@ export async function generateSidequestPlanForTrip(
   const intent = getIntent(tripId);
   const composer = intent?.composer ?? null;
   const profile = getProfile(tripId) ?? defaultProfileFor(trip, composer);
+  /*
+   * V6 — Sidequest's own checks read the party's kitchen rule; the brief does
+   * not (it reads the party person by person). See `mergePartyDiet`.
+   */
+  const verifyingProfile = profileWithPartyDiet(profile, tripId);
 
   const fixture = isFixtureComposer();
   /*
@@ -392,8 +402,20 @@ export async function generateSidequestPlanForTrip(
    * planning-critical value carries its own lineage.
    */
   const input = buildCanonicalTripBuildInput({ trip, composer, profile, bookedFacts, destinationPhrase: rawDestinationPhrase, now });
-  const brief = travelerBriefFor({ input, envelope, ...(boardSignals ? { boardSignals } : {}) });
+  const partyForBrief = listPartyMembersForBrief(tripId, profile.interests as Record<string, string>);
+  /* V6 §18 — leanings from earlier trips on the same account, medium confidence or better, phrased as leanings. */
+  const learned = trip.userId ? learnedForOwner({ userId: trip.userId, ownerToken: null }, now).hints : [];
+  const brief = travelerBriefFor({ input, envelope, ...(boardSignals ? { boardSignals } : {}), party: partyForBrief, learned });
   const timing = compositionTimingBriefOf(input.timing, now);
+  /*
+   * V6 §2 — THE TRIP CONTRACT, ASSEMBLED ONCE, BEFORE THE ONE CALL.
+   *
+   * What is decided, by whom, at what lock. The composition task renders it
+   * as MUST KEEP / MUST AVOID / MAY DECIDE / SIDEQUEST WILL VERIFY; the
+   * enforcement below refuses any model field that contradicts a lock and
+   * records the conflict on the package.
+   */
+  let contract = buildTripContract({ trip, input, bookedFacts, members: listPartyMembersForContract(tripId), now });
   const context: CompositionContext = {
     envelope,
     ...(boardSignals ? { boardSignals } : {}),
@@ -401,6 +423,7 @@ export async function generateSidequestPlanForTrip(
     mode,
     ...(bookedFacts.length > 0 ? { bookedFacts } : {}),
     timing,
+    contract,
     planningFacts: { carAvailable: input.movement.carAvailable, desiredBaseCount: input.movement.desiredBaseCount.value ?? 1, budgetBand: profile.budgetStyle },
   };
   const preparationMs = since(preparationStartedMs);
@@ -488,7 +511,20 @@ export async function generateSidequestPlanForTrip(
     console.error(`Composition failed: ${outcome.failureKind}${outcome.issueKind ? `/${outcome.issueKind}` : ''} — ${outcome.detail.slice(0, 300)}${outcome.issues?.length ? ` | issues: ${JSON.stringify(outcome.issues.slice(0, 10))}` : ''} | calls: ${JSON.stringify(modelCalls.map((call) => ({ ...(call as unknown as Record<string, unknown>), schemaValidationIssues: undefined })))}`);
     return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, timings: emptyTimings(), modelCalls, diagnostics };
   }
-  const draft = outcome.draft;
+  /*
+   * V6 §2 — ENFORCE THE CONTRACT BEFORE ANYTHING READS THE DRAFT.
+   *
+   * A window returned against locked dates is dropped here, with a recorded
+   * conflict, so the adoption below can never see it. This is the second
+   * half of "a traveller accepting June can never receive October": the first
+   * half is that the lock exists at all (`trips.timing_lock`).
+   */
+  const enforced = enforceContractOnDraft(contract, outcome.draft, now);
+  const draft = enforced.draft;
+  const contractConflicts = enforced.conflicts;
+  if (contractConflicts.length > 0) {
+    console.warn('The composition contradicted a locked fact; the contract was kept', { tripId, conflicts: contractConflicts.map((c) => `${c.field}: ${c.contractValue} vs ${c.proposedValue} → ${c.resolution}`) });
+  }
   /*
    * PRODUCTION LOCK V5 §5/§6 — THE WINDOW THE MODEL CHOSE BECOMES THE TRIP'S DATES.
    *
@@ -506,10 +542,18 @@ export async function generateSidequestPlanForTrip(
    * duration because a date string was mistyped is a worse failure than keeping
    * the month wrong.
    */
-  if (input.timing.sidequestChooses && draft.window) {
+  if (input.timing.sidequestChooses && !trip.basics.timingLock && contract.timing.open && draft.window) {
     const chosen = adoptChosenWindow({ tripId, trip, window: draft.window, nights: input.nights.value ?? countNights(trip.basics.startDate, trip.basics.endDate), composer, now });
     if (chosen) {
       trip = chosen.trip;
+      /*
+       * V6 — the persisted contract record must say who decided the dates.
+       * The contract was built while the window was open ("nobody"); once the
+       * composition's window is adopted the trip's dates are Sidequest's
+       * decision, and the Overview's "Sidequest chose <dates>" line reads
+       * this record. A live Hokkaido build printed the rationale with no owner.
+       */
+      contract = { ...contract, timing: { ...contract.timing, open: false, lock: 'sidequest_inferred', decidedBy: 'sidequest' } };
       console.warn('The composition chose this trip’s dates', { tripId, from: `${tripRow.basics.startDate}..${tripRow.basics.endDate}`, to: `${chosen.trip.basics.startDate}..${chosen.trip.basics.endDate}` });
     } else {
       /*
@@ -625,7 +669,7 @@ export async function generateSidequestPlanForTrip(
     ? {
         tripId,
         basics: trip.basics,
-        profile,
+        profile: verifyingProfile,
         region: region.region,
         candidates: board!.candidates,
         compiledPlaces: region.compiled.places,
@@ -652,7 +696,7 @@ export async function generateSidequestPlanForTrip(
         ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
       }
     : {
-        ...contextWithoutRegion({ trip, profile, candidate, envelope, now, deadlineReached, mustIncludeNames, geocoder: timedGeocoder, nearby: timedNearby, routing, weather: (await regionlessWeather) ?? undefined }),
+        ...contextWithoutRegion({ trip, profile: verifyingProfile, candidate, envelope, now, deadlineReached, mustIncludeNames, geocoder: timedGeocoder, nearby: timedNearby, routing, weather: (await regionlessWeather) ?? undefined }),
         ...(routing ? { routeMatrix: routeMatrixFor(profile.transport.willDrive ? 'car' : 'foot')!, confirmRoute: confirmRouteFor(profile.transport.willDrive ? 'car' : 'foot')! } : {}),
         weatherForBases,
         ...timedSeams,
@@ -691,7 +735,17 @@ export async function generateSidequestPlanForTrip(
   progress('preparing');
   const intelligenceStartedMs = performance.now();
   const preservation = buildPreservationReport(draft, applied.itinerary);
-  const quality = auditItinerary({ draft, itinerary: applied.itinerary, profile, trip, bookedConflicts: applied.conflicts, preservation });
+  const quality = auditItinerary({ draft, itinerary: applied.itinerary, profile: verifyingProfile, trip, bookedConflicts: applied.conflicts, preservation, contract, contractConflicts, partyNeeds: contract.party.needs });
+  /*
+   * V6 §12 — THE FEASIBILITY REPORT DECIDES "READY".
+   *
+   * Deterministic, from the plan as it stands plus the audit it just passed
+   * or failed. The itinerary's status is set from the verdict, so a
+   * relocation day with an unmeasured main transfer, or a first day that
+   * depends on an airport nobody has chosen, reads "Needs a decision" rather
+   * than "Ready, with cautions".
+   */
+  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value });
   const intelligenceMs = since(intelligenceStartedMs);
 
   /*
@@ -733,8 +787,10 @@ export async function generateSidequestPlanForTrip(
   const itinerary = applied.itinerary.package
     ? {
         ...applied.itinerary,
+        status: itineraryStatusForVerdict(feasibility.verdict),
         package: {
           ...applied.itinerary.package,
+          feasibility,
           preservation: {
             version: 1 as const,
             draftAnchors: preservation.draftAnchors,
@@ -748,6 +804,8 @@ export async function generateSidequestPlanForTrip(
             summary: describePreservation(preservation),
           },
           quality: { version: 1 as const, passed: quality.passed, errors: quality.errors, warnings: quality.warnings, checks: quality.checks.map((c) => ({ ...c })) },
+          contract: contractEnforcementRecord(contract, contractConflicts),
+          metrics: Object.fromEntries(Object.entries(buildStructuralMetrics({ itinerary: { ...applied.itinerary, package: { ...applied.itinerary.package, feasibility } }, contract, audit: quality, booked: { total: applied.honored.length + applied.conflicts.length, honoured: applied.honored.length }, silentAnchorLoss: preservation.silentLoss })).filter(([key]) => key !== 'version')) as Record<string, number | null>,
           /*
            * The persisted record is numbers only (`tripPackageSchema.timings`),
            * so a boolean becomes 0/1 and the two prose diagnostics — the effort
@@ -831,7 +889,7 @@ export function adoptChosenWindow(input: {
    * temporary file per case to prove that *nothing was written*. The default is
    * the real repository, so the production path is unchanged.
    */
-  persist?: { updateTripDates: (id: string, start: string, end: string) => void; saveComposerAnswers: (id: string, answers: TripComposerAnswers) => void };
+  persist?: { updateTripDates: (id: string, start: string, end: string, lock?: 'traveler' | 'sidequest' | null) => void; saveComposerAnswers: (id: string, answers: TripComposerAnswers) => void };
 }): { trip: Trip } | null {
   const { startDate, endDate } = input.window;
   const iso = /^\d{4}-\d{2}-\d{2}$/;
@@ -845,8 +903,16 @@ export function adoptChosenWindow(input: {
   const today = Date.parse(`${input.now.toISOString().slice(0, 10)}T00:00:00Z`);
   if (start < today) return null;
 
+  /*
+   * V6 — A LOCKED ROW IS NEVER OVERWRITTEN, WHATEVER THE CALLER BELIEVED.
+   *
+   * The composition path already skips this when the contract is closed. The
+   * refusal is repeated here, on the row's own column, so a second caller —
+   * a replay, a fixture, a future door — cannot reach the write either.
+   */
+  if (input.trip.basics.timingLock) return null;
   const persist = input.persist ?? { updateTripDates, saveComposerAnswers };
-  persist.updateTripDates(input.tripId, startDate, endDate);
+  persist.updateTripDates(input.tripId, startDate, endDate, 'sidequest');
   if (input.composer) {
     try {
       persist.saveComposerAnswers(input.tripId, {
@@ -866,7 +932,9 @@ export function adoptChosenWindow(input: {
             unknowns: [],
             basis: 'composed_with_trip',
             generatedAt: input.now.toISOString(),
+            /* Closed, and honestly attributed: Sidequest decided, the traveller did not press anything. */
             accepted: true,
+            decidedBy: 'sidequest',
           },
         },
         updatedAt: input.now.toISOString(),
@@ -879,7 +947,7 @@ export function adoptChosenWindow(input: {
       console.error('Could not record where this trip’s dates came from', { tripId: input.tripId, message: error instanceof Error ? error.message : 'unknown' });
     }
   }
-  return { trip: { ...input.trip, basics: { ...input.trip.basics, startDate, endDate } } };
+  return { trip: { ...input.trip, basics: { ...input.trip.basics, startDate, endDate, timingLock: 'sidequest' } } };
 }
 
 /** "Late March", "March to April" — the part of the calendar a window sits in. */
@@ -904,7 +972,7 @@ function normalizePhrase(value: string): string {
  * trip facts, bookings and board signals; rendered as XML in the task. Pure,
  * so tests can prove that changing one answer changes the brief.
  */
-export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelope: DestinationEnvelope; boardSignals?: BoardSignals }): TravelerBrief {
+export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelope: DestinationEnvelope; boardSignals?: BoardSignals; party?: readonly TravelerBriefPartyMember[]; learned?: readonly string[] }): TravelerBrief {
   const { input: canonical, envelope } = input;
   const { profile, timing } = canonical;
   /*
@@ -945,6 +1013,8 @@ export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelo
       boardRejects: input.boardSignals?.avoid ?? [],
     },
     ownWords: { mustDo: canonical.ownWords.mustDo, dislikes: canonical.ownWords.dislikes, freeText: canonical.ownWords.freeText, mobilityNotes: canonical.party.mobilityNotes },
+    ...(input.party && input.party.length > 0 ? { party: input.party } : {}),
+    ...(input.learned && input.learned.length > 0 ? { learned: input.learned } : {}),
   });
 }
 

@@ -10,6 +10,7 @@ import {
   stepIsRelevant,
   summaryOf,
   type SetupDraft,
+  advanceDraft,
 } from './setup-draft';
 
 /**
@@ -145,5 +146,32 @@ describe('what reaches the server', () => {
     const payload = payloadFor(draft({ destinationText: 'the Okavango Delta' }));
     expect(payload.destinationText).toBe('the Okavango Delta');
     expect(payload.destinationEntryId).toBeNull();
+  });
+});
+
+/**
+ * V6 — THE ACCEPTED WINDOW TRAVELS WITH THE ADVANCE.
+ *
+ * "Use this timing" used to patch the pick into state and then advance from
+ * a draft that did not have it. The two production trips that lost their
+ * dates went through exactly this press. `advanceDraft` is the pure half of
+ * the fix: the draft it returns is the one that was pressed on.
+ */
+describe('advanceDraft', () => {
+  it('keeps a pick handed to it and marks the step answered, so the payload carries the recommendation', () => {
+    const pick = { startDate: '2027-06-13', endDate: '2027-06-20', label: 'Mid June', month: 6, year: 2027, reasons: ['Alpine roads open'], tradeoffs: [] };
+    const before = draft({ destinationText: 'Hokkaido', dateMode: 'best_time', pick: null, nights: null });
+    const after = advanceDraft({ ...before, pick, nights: 7 }, 'when');
+    expect(after.answered).toContain('when');
+    expect(after.pick).toEqual(pick);
+    const payload = payloadFor(after);
+    expect(payload.recommendation?.startDate).toBe('2027-06-13');
+    expect(payload.recommendation?.endDate).toBe('2027-06-20');
+    expect(payload.startDate).toBe('2027-06-13');
+    expect(payload.nights).toBe(7);
+  });
+  it('is idempotent on an already-answered step', () => {
+    const once = advanceDraft(draft({ destinationText: 'Hokkaido' }), 'where');
+    expect(advanceDraft(once, 'where').answered).toEqual(once.answered);
   });
 });

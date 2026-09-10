@@ -55,7 +55,7 @@ export function TimingStep({
   draft: SetupDraft;
   headingRef: React.RefObject<HTMLHeadingElement | null>;
   onChange: (patch: Partial<SetupDraft>) => void;
-  onContinue: () => void;
+  onContinue: (extra?: Partial<SetupDraft>) => void;
 }) {
   const family = familyOf(draft.dateMode);
   /*
@@ -133,15 +133,23 @@ export function TimingStep({
               aria-checked={on}
               onClick={() => setFamily(card.value)}
               className={cx(
-                'pressable flex min-h-24 flex-col gap-2 rounded-[var(--radius-card)] border p-4 text-left transition-colors',
+                'pressable relative flex min-h-28 flex-col gap-2 rounded-[var(--radius-card)] border p-4 pr-9 text-left transition-[border-color,background-color,box-shadow]',
                 FOCUS_RING,
-                on ? 'border-accent bg-accent-soft' : 'border-rule bg-paper-raised hover:border-ink-faint',
+                on
+                  ? 'border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent)]'
+                  : 'border-rule bg-paper-raised hover:border-ink-faint',
               )}
               data-testid={`timing-${card.value}`}
             >
-              <Glyph id={card.glyph} className={cx('h-6 w-6', on ? 'text-accent' : 'text-ink-muted')} />
-              <span className={cx('font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{card.title}</span>
-              <span className="type-small leading-relaxed text-ink-muted">{card.implication}</span>
+              <Glyph id={card.glyph} className={cx('h-7 w-7', on ? 'text-accent' : 'text-ink-faint')} />
+              <span className={cx('font-display text-xl leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{card.title}</span>
+              <span className={cx('type-small leading-relaxed', on ? 'text-accent-strong/85' : 'text-ink-muted')}>{card.implication}</span>
+              {/* The chosen card says so three ways: ground, doubled edge, and a mark. */}
+              {on ? (
+                <span aria-hidden="true" className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[0.625rem] text-paper">
+                  ✓
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -161,8 +169,10 @@ export function TimingStep({
           </div>
           {nightsBetween(draft.startDate, draft.endDate) !== null ? (
             <p className="numeral mt-3 text-sm text-ink-muted">{nightsBetween(draft.startDate, draft.endDate)} nights · {(nightsBetween(draft.startDate, draft.endDate) ?? 0) + 1} days</p>
-          ) : (
+          ) : draft.startDate && draft.endDate ? (
             <p className="mt-3 type-small text-clay">The second date needs to be after the first.</p>
+          ) : (
+            <p className="mt-3 type-small text-ink-faint">Pick the day you arrive and the day you leave.</p>
           )}
           <button
             type="button"
@@ -265,36 +275,62 @@ export function TimingStep({
           {pending && !result ? (
             <p className="breathing type-body text-ink-muted">Comparing the months on climate records…</p>
           ) : result?.ok && current ? (
-            <div className="rounded-[var(--radius-panel)] border border-accent/40 bg-accent-soft p-5">
-              <p className="label text-accent-strong">{shown === 0 ? "Sidequest's pick" : 'Another window'}</p>
-              <p className="mt-1 font-display text-3xl leading-tight text-ink">{current.label}</p>
-              <p className="numeral mt-1 text-sm text-ink-muted">
-                {current.startDate} → {current.endDate}
-              </p>
-              {current.reasons.length > 0 ? (
-                <ul className="mt-4 space-y-1.5 text-sm text-ink">
-                  {current.reasons.map((reason) => (
-                    <li key={reason} className="flex gap-2">
-                      <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                      {reason}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {current.tradeoffs.length > 0 ? (
-                <ul className="mt-3 space-y-1 type-small text-ink-muted">
-                  {current.tradeoffs.map((tradeoff) => (
-                    <li key={tradeoff}>Trade-off: {tradeoff}</li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="mt-5 flex flex-wrap items-center gap-3">
+            <div className="overflow-hidden rounded-[var(--radius-panel)] border border-accent/40 bg-accent-soft">
+              <div className="p-5 sm:p-6">
+                <p className="label text-accent-strong">{shown === 0 ? 'Sidequest’s pick' : 'Another window'}</p>
+                <p className="mt-1.5 font-display text-4xl leading-none text-ink">{current.label}</p>
+                {/*
+                  The exact days, kept as ISO. Small, tabular, and never removed:
+                  `timing-lock.spec.ts` reads the window straight out of this
+                  block to prove the accepted dates reach the trip.
+                */}
+                <p className="numeral mt-2 text-sm text-ink-muted">
+                  {current.startDate} → {current.endDate}
+                </p>
+
+                {/*
+                  THE YEAR, WITH THE WINDOW ON IT.
+
+                  A month range is a fact about a calendar, so it is drawn on
+                  one: twelve blocks, the chosen months filled. It is derived
+                  from the two dates above and asserts nothing they do not —
+                  which is the whole rule for a picture in this product.
+                */}
+                <YearStrip startDate={current.startDate} endDate={current.endDate} />
+
+                {current.reasons.length > 0 ? (
+                  <ul className="mt-5 space-y-2 text-sm leading-relaxed text-ink">
+                    {current.reasons.map((reason) => (
+                      <li key={reason} className="flex gap-2.5">
+                        <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                        <span className="min-w-0">{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {/*
+                  Trade-offs are part of the offer, not a warning about it. Same
+                  list, same type size as the reasons, with a hollow mark instead
+                  of a filled one — the difference between "and" and "but",
+                  drawn rather than boxed in amber.
+                */}
+                {current.tradeoffs.length > 0 ? (
+                  <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-muted">
+                    {current.tradeoffs.map((tradeoff) => (
+                      <li key={tradeoff} className="flex gap-2.5">
+                        <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full border border-accent" />
+                        <span className="min-w-0">{tradeoff}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   className={buttonClass('primary')}
                   onClick={() => {
-                    onChange({ pick: { ...current }, nights: nightsBetween(current.startDate, current.endDate) ?? draft.nights });
-                    onContinue();
+                    /* V6 — the pick travels WITH the advance; see `SetupFlow#advance`. */
+                    onContinue({ pick: { ...current }, nights: nightsBetween(current.startDate, current.endDate) ?? draft.nights });
                   }}
                   data-testid="timing-accept"
                 >
@@ -306,9 +342,12 @@ export function TimingStep({
                   </button>
                 ) : null}
               </div>
-              <details className="mt-4">
-                <summary className={cx('cursor-pointer type-small text-ink-faint underline underline-offset-4', FOCUS_RING)}>What this does not tell you</summary>
-                <ul className="mt-2 space-y-1 type-small text-ink-muted">
+              </div>
+              <details className="border-t border-accent/30 px-5 py-3 sm:px-6">
+                <summary className={cx('inline-flex min-h-11 cursor-pointer items-center type-small text-ink-muted underline underline-offset-4', FOCUS_RING)}>
+                  What this does not tell you
+                </summary>
+                <ul className="mt-2 space-y-1 pb-1 type-small text-ink-muted">
                   {result.unknowns.map((unknown) => (
                     <li key={unknown}>{unknown}</li>
                   ))}
@@ -328,8 +367,9 @@ export function TimingStep({
               they had just said they did not want to do.
             */
             result.deferred ? (
-              <p className="rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-4 type-body text-ink-muted" data-testid="timing-deferred">
-                {result.note}
+              <p className="flex gap-3 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4 type-body text-ink-muted" data-testid="timing-deferred">
+                <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-faint" />
+                <span className="min-w-0">{result.note}</span>
               </p>
             ) : (
               <ErrorNote>{result.note}</ErrorNote>
@@ -337,6 +377,46 @@ export function TimingStep({
           ) : null}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * TWELVE MONTHS, WITH THE CHOSEN WINDOW FILLED IN.
+ *
+ * A calendar year drawn as twelve blocks, the months the window touches in the
+ * accent, the rest as rule. The only inputs are the two ISO dates already on
+ * screen, so the picture cannot say anything the text does not — and a window
+ * that wraps the new year (December into January) fills both ends, which is what
+ * a year drawn as a row honestly looks like.
+ *
+ * `role="img"` with a full label, because the shape is the information for a
+ * sighted reader and the label is the same information for everybody else.
+ */
+const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+
+function YearStrip({ startDate, endDate }: { startDate: string; endDate: string }) {
+  const first = Number(startDate.slice(5, 7)) - 1;
+  const last = Number(endDate.slice(5, 7)) - 1;
+  if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last < 0 || first > 11 || last > 11) return null;
+  const inWindow = (index: number) => (first <= last ? index >= first && index <= last : index >= first || index <= last);
+  const label = first === last ? `${MONTHS[first]}` : `${MONTHS[first]} to ${MONTHS[last]}`;
+  return (
+    <div className="mt-4 flex gap-1" role="img" aria-label={`The window covers ${label}.`}>
+      {MONTH_INITIALS.map((initial, index) => {
+        const on = inWindow(index);
+        return (
+          <span
+            key={`${initial}-${index}`}
+            className={cx(
+              'numeral flex h-7 flex-1 items-center justify-center rounded-[0.25rem] text-[0.6875rem] font-medium',
+              on ? 'bg-accent text-paper' : 'bg-paper-raised text-ink-faint',
+            )}
+          >
+            {initial}
+          </span>
+        );
+      })}
     </div>
   );
 }

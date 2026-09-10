@@ -149,6 +149,7 @@ export function describeRechecking(input: { recheck: readonly string[]; draft: T
  */
 export function describeRefusal(reason: string): string {
   const text = reason.toLowerCase();
+  if (text.includes('outside the scope')) return 'That was outside the scope of this change, so it stayed as it was.';
   if (text.includes('locked')) return 'You asked Sidequest to keep that, so it stayed as it was.';
   if (text.includes('five experiences')) return 'That day is already as full as Sidequest will make it.';
   if (text.includes('no such')) return 'Sidequest could not find that in your trip.';

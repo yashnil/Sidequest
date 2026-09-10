@@ -27,39 +27,15 @@ import { getDb } from './client';
  * Confirmation references are stored because the traveller typed them and
  * wants them back; they are never logged and never exported.
  */
+/**
+ * V6 — these five tables are declared in `V6_SCHEMA_SQL` with the cascade
+ * they always needed, and an existing database is rebuilt on first
+ * connection (`client.ts#applyTableRebuilds`). `getDb()` is what guarantees
+ * they exist; this keeps the call sites unchanged and does no DDL on the hot
+ * path.
+ */
 function ensureTables(): void {
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS booked_plan_items (
-      id TEXT PRIMARY KEY,
-      trip_id TEXT NOT NULL,
-      payload_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS booked_plan_items_trip ON booked_plan_items(trip_id);
-    CREATE TABLE IF NOT EXISTS readiness_profiles (
-      trip_id TEXT PRIMARY KEY,
-      payload_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS trip_checks (
-      trip_id TEXT NOT NULL,
-      list TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      checked_at TEXT NOT NULL,
-      PRIMARY KEY (trip_id, list, item_id)
-    );
-    CREATE TABLE IF NOT EXISTS trip_intelligence (
-      trip_id TEXT PRIMARY KEY,
-      fingerprint TEXT NOT NULL,
-      payload_json TEXT NOT NULL,
-      built_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS trip_fx_rates (
-      trip_id TEXT PRIMARY KEY,
-      payload_json TEXT NOT NULL,
-      fetched_at TEXT NOT NULL
-    );
-  `);
+  getDb();
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ import {
 import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { createTrip } from '@/lib/db/repository';
 import { guardAction, sessionToken } from '@/lib/net/caller';
+import { currentUserId } from '@/lib/auth/session';
 import { decisionAccessRefusal } from '@/lib/net/decision-access';
 import { saveComposerAnswers, saveDestinationQuery, saveSelectedDestination } from '@/lib/db/compiler-repository';
 import { recommendDestinations } from '@/lib/destinations/recommend';
@@ -441,7 +442,7 @@ export async function adoptDestinationAction(id: string, entryId: string): Promi
   try {
     // The owner, exactly as the composer door records it — the two entrances
     // must produce the same row or one of them makes an unownable trip.
-    tripId = createTrip(basics.data, await sessionToken({ mint: true })).id;
+    tripId = createTrip(basics.data, await sessionToken({ mint: true }), await currentUserId()).id;
     saveComposerAnswers(tripId, answers);
     saveDestinationQuery(tripId, 'known_destination', entry.displayName);
     saveSelectedDestination(tripId, destination);

@@ -167,9 +167,60 @@ const WEIGHTS: Record<keyof WindowFeatures, number> = {
   heat: 0.1,
 };
 
-export function scoreWindow(features: WindowFeatures): number {
+/**
+ * V6 §9 — EXPERIENCE-AWARE WEIGHTS.
+ *
+ * The month that is best for a trip depends on what the trip is for. A hiking
+ * trip is decided by dry trails and daylight far more than by a pleasant
+ * temperature; a snow trip by snow; a beach trip by warmth and the absence
+ * of heat; a city and food trip by comfort and heat. The base weights stand
+ * where nothing is known about the trip. Every reweighting is stated in the
+ * reasons so the traveller can see what decided it.
+ */
+export function experienceWeights(answers?: TripComposerAnswers): { weights: Record<keyof WindowFeatures, number>; basis: string } {
+  const themes = new Set<string>(answers?.themes ?? []);
+  const strenuous = answers?.outdoorIntensity === 'strenuous';
+  const w = { ...WEIGHTS };
+  let basis = 'general comfort';
+  const outdoors = themes.has('outdoors') || themes.has('mountains');
+  if (outdoors) {
+    w.dryness += 0.12;
+    w.daylight += 0.1;
+    w.temperature -= 0.12;
+    w.heat -= 0.05;
+    basis = 'trail conditions and daylight';
+  }
+  /* A strenuous mountain trip in the composer's vocabulary is the closest thing to "snow matters". */
+  if (themes.has('mountains') && strenuous) {
+    w.snow += 0.15;
+    basis = 'snow and trail conditions';
+  }
+  if (themes.has('water')) {
+    w.temperature += 0.1;
+    w.heat += 0.05;
+    w.dryness += 0.05;
+    w.daylight -= 0.1;
+    basis = outdoors ? basis : 'warm, dry weather for the water';
+  }
+  if (themes.has('food') || themes.has('cities') || themes.has('culture')) {
+    w.heat += 0.1;
+    w.dryness += 0.05;
+    w.daylight -= 0.1;
+    basis = outdoors ? basis : 'comfortable city weather';
+  }
+  if (themes.has('wildlife')) {
+    w.dryness += 0.1;
+    basis = outdoors ? basis : 'dry-season wildlife viewing';
+  }
+  const total = Object.values(w).reduce((a, b) => a + Math.max(0, b), 0);
+  const normalised = Object.fromEntries(Object.entries(w).map(([k, v]) => [k, Math.max(0, v) / total])) as Record<keyof WindowFeatures, number>;
+  return { weights: normalised, basis };
+}
+
+export function scoreWindow(features: WindowFeatures, answers?: TripComposerAnswers): number {
+  const { weights } = experienceWeights(answers);
   let total = 0;
-  for (const [key, weight] of Object.entries(WEIGHTS) as [keyof WindowFeatures, number][]) {
+  for (const [key, weight] of Object.entries(weights) as [keyof WindowFeatures, number][]) {
     total += features[key] * weight;
   }
   return clamp01(total);
@@ -289,7 +340,7 @@ export function recommendDateWindows(input: RecommendDatesInput): DateGuidance {
   for (const normal of input.profile.months) {
     if (!allowed.has(normal.month)) continue;
     const features = windowFeatures(normal, input.answers);
-    const score = scoreWindow(features);
+    const score = scoreWindow(features, input.answers);
     const { reasons, tradeoffs } = narrate(normal, features);
     const year = input.year > currentYear || normal.month >= currentMonth ? input.year : input.year + 1;
 

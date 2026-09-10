@@ -19,6 +19,15 @@ import { deleteTripAction } from './actions';
  * server, from persisted facts. This component owns only how it is presented and
  * the two interactions a list needs: showing the rest, and removing one.
  *
+ * ## V6 — this is the landing page's short list, not the dashboard
+ *
+ * `/trips` is where a traveller's trips live now: pictures, lifecycle sections,
+ * search, the lot. What the landing page owes a returning visitor is smaller and
+ * faster — the two or three trips they are most likely to have come back for,
+ * as one press each. So the rows are set as a *route*: a hairline rail down the
+ * left with a mark per trip, the destination at reading size, and everything
+ * else as one quiet line under it. No table, no columns, no id.
+ *
  * ## Removal is two presses, and deliberately not a dialog
  *
  * A `window.confirm` is unstyled, unannounced to some assistive technology, and
@@ -41,7 +50,7 @@ export interface TripListRow {
 }
 
 /** How many rows stand on their own before the rest are folded away. */
-const VISIBLE = 6;
+const VISIBLE = 4;
 
 export function TripList({ rows }: { rows: TripListRow[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -67,18 +76,21 @@ export function TripList({ rows }: { rows: TripListRow[] }) {
     <div>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <ul className="divide-y divide-rule border-t border-rule">
+      <ul className="grid gap-3 sm:grid-cols-2">
         {shown.map((row) => (
-          <li key={row.id}>
+          <li
+            key={row.id}
+            className="group relative min-w-0 rounded-[var(--radius-card)] border border-rule bg-paper-raised transition-colors hover:border-ink-faint"
+          >
             {confirming === row.id ? (
-              <div className="flex flex-wrap items-center gap-3 py-4">
-                <p className="min-w-0 flex-1 text-sm text-ink">
+              <div className="flex min-w-0 flex-col p-4">
+                <p className="text-sm leading-relaxed text-ink">
                   Remove <span className="font-medium">{row.destination}</span>? This deletes the
                   answers and any research done for it, and cannot be undone.
                 </p>
                 {/* Same rule as the action cluster below: no island in a row
                     that cannot narrow. See the note there for the measurement. */}
-                <div className="flex min-w-0 flex-wrap gap-2">
+                <div className="mt-3 flex min-w-0 flex-wrap gap-2">
                   <button
                     type="button"
                     className={buttonClass('secondary', 'sm')}
@@ -105,54 +117,42 @@ export function TripList({ rows }: { rows: TripListRow[] }) {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+              /* A flex column, so the two clusters inside it are flex *items* and
+                 `min-w-0` on them means what it says: see `trip-list.test.ts`. */
+              <div className="flex min-w-0 flex-col p-4">
+                {/*
+                  The whole card is the link, drawn as an overlay rather than as
+                  a wrapper, so the Remove button inside it is still its own
+                  target rather than a nested interactive element.
+                */}
                 <Link
                   href={row.href}
-                  className={cx(
-                    'group flex min-h-11 min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1',
-                    'focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2',
-                  )}
+                  className="absolute inset-0 rounded-[inherit] focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
                 >
-                  <span className="font-medium text-ink group-hover:text-pine">
-                    {row.destination}
-                  </span>
-                  <span className="text-sm text-ink-muted">
-                    {row.dates} · {row.nights} night{row.nights === 1 ? '' : 's'}
+                  <span className="sr-only">
+                    {row.destination} — {row.action}
                   </span>
                 </Link>
-                {/*
-                  THE ONE NODE IN THE PRODUCT THAT SCROLLS SIDEWAYS.
-
-                  `shrink-0` on this cluster gave it a hard 363px floor. With
-                  20px of page padding that puts its right edge at 383px, so the
-                  homepage overflowed horizontally on every phone narrower than
-                  that — measured 8px at 375 (iPhone SE/8), 23px at 360 (most
-                  Androids), 63px at 320, in both colour schemes. Every other
-                  route is clean from 320 up. The suite could not see it: its
-                  only mobile width is 390, seven pixels above the threshold.
-
-                  The row above already wraps, but a cluster that refuses to
-                  shrink *and* refuses to wrap cannot participate in that. So it
-                  wraps on its own account, and `min-w-0` lets it actually get
-                  narrower than its content — without it a flex item's automatic
-                  minimum size is its content, which is the same floor by a
-                  different name.
-
-                  `justify-end` keeps the cluster against the right edge when it
-                  has a line to itself, which is where it sits today.
-                */}
-                <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                  <p className="min-w-0 font-display text-xl leading-tight text-ink group-hover:text-pine">
+                    {row.destination}
+                  </p>
                   <Badge tone={row.tone}>{row.label}</Badge>
-                  <Link
-                    href={row.href}
-                    className="inline-flex min-h-11 items-center text-sm text-ink-muted underline underline-offset-4 hover:text-pine"
-                  >
+                </div>
+                <p className="mt-1.5 text-sm text-ink-muted">
+                  {row.dates} · {row.nights} night{row.nights === 1 ? '' : 's'}
+                </p>
+                <div className="relative mt-3 flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <span className="text-sm font-medium text-ink group-hover:text-pine">
                     {row.action}
-                  </Link>
+                    <span aria-hidden="true" className="ml-1 inline-block transition-transform group-hover:translate-x-0.5">
+                      →
+                    </span>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setConfirming(row.id)}
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-sm text-ink-faint hover:text-clay focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg px-1 text-sm text-ink-faint hover:text-clay focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
                     aria-label={`Remove the ${row.destination} trip`}
                   >
                     Remove

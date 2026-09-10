@@ -18,7 +18,13 @@ vi.mock('next/headers', () => ({
     },
   }),
 }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined }) }));
+/*
+ * `usePathname` as well as `useRouter`: the product shell now renders a phone
+ * bottom bar that decides, from the route, whether it belongs on this screen.
+ * Rendering the real page to a string therefore calls it, and a mock that omits
+ * an export throws rather than returning undefined.
+ */
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined }), usePathname: () => '/' }));
 vi.mock('../../app/(product)/actions', () => ({ deleteTripAction: async () => ({ ok: true }) }));
 
 /**

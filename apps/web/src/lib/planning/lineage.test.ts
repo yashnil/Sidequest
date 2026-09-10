@@ -240,10 +240,12 @@ describe('§6 — adopting the window the composition chose', () => {
     expect(stored.dates.recommendation?.accepted).toBe(true);
     expect(stored.dates.recommendation?.basis).toBe('composed_with_trip');
     expect(stored.dates.recommendation?.label).toBe('Early March');
-    /* The lineage now reads as a decision rather than an open question. */
+    /* The lineage now reads as a decision rather than an open question — and, V6, as Sidequest's decision, not the traveller's. */
     const closed = timingIntentOf({ composer: stored, trip: adopted!.trip, at: NOW.toISOString() });
     expect(closed.sidequestChooses).toBe(false);
-    expect(closed.startDate.source).toBe('accepted_recommendation');
+    expect(closed.lock).toBe('sidequest');
+    expect(closed.startDate.source).toBe('sidequest_chosen');
+    expect(stored.dates.recommendation?.decidedBy).toBe('sidequest');
     expect(isStatable(closed.startDate)).toBe(true);
   });
 

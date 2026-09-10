@@ -410,7 +410,23 @@ say(
         : `SIDEQUEST_ROUTES_URL set to a production endpoint`
   }`,
 );
-say('  · Not contacted. This is a configuration report, not a reachability check.');
+if (process.argv.includes('--probe') && routesState !== 'off') {
+  /*
+   * V6 §11 — the one failure the configuration report cannot see: a routes
+   * URL that points at nothing on this host. Opt-in, one request, four
+   * seconds, and the answer is a fact about reachability, never about the
+   * road network.
+   */
+  const target = `${(routesUrl || ROUTES_DEMO_ENDPOINT).replace(/\/+$/, '')}/status`;
+  try {
+    const response = await fetch(target, { signal: AbortSignal.timeout(4_000) });
+    say(`  · Probe — ${target} answered ${response.status}${response.ok ? '' : ' (not OK: every leg would be attempted and fail; set SIDEQUEST_ROUTES_GLOBAL_PROVIDER=openrouteservice or fix the URL)'}`);
+  } catch (error) {
+    say(`  · Probe — ${target} could not be reached (${error instanceof Error ? error.name : 'error'}). The composite router now falls through on the first unreachable answer, but nothing will be measured locally.`);
+  }
+} else {
+  say('  · Not contacted. This is a configuration report, not a reachability check. Pass --probe to try the routes endpoint once.');
+}
 say('');
 
 say('Runtime');

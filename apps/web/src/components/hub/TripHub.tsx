@@ -23,6 +23,7 @@ import {
   type TravelIntelligence,
   type TravelReadinessProfile,
   type TripPackage,
+  buildBookingProgress,
 } from '@sidequest/core';
 import { Badge, Panel, cx, type BadgeTone } from '../ui';
 import { TripConfidence } from './TripConfidence';
@@ -100,23 +101,42 @@ export function HubUrgent({ intel }: { intel: TravelIntelligence }) {
   );
 }
 
-export function OverviewSection({ intel }: { intel: TravelIntelligence }) {
-  const ctx = intel.destinationContext;
+/** V6 §27 — "6 of 8 critical items arranged", with the groups and the next thing to do. */
+export function BookingProgressLine({ intel }: { intel: TravelIntelligence }) {
+  const progress = buildBookingProgress(intel.bookings.items);
+  if (progress.critical === 0) return null;
   return (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="hub-overview">
-      <Fact label="Route" value={intel.lodging.bases.map((b) => b.name).join(' → ') || ctx.name} />
-      <Fact label="Getting around" value={intel.transport.modeNote.split('.')[0]!.replace(/^This plan moves by /, '') || intel.transport.primaryMode} />
-      <Fact label="Budget" value={`${intel.budget.currency} ${intel.budget.total.low.toLocaleString()}–${intel.budget.total.high.toLocaleString()} for the party`} />
-      <Fact label="Trip in" value={ctx.daysUntilTrip > 0 ? `${ctx.daysUntilTrip} days` : ctx.daysUntilTrip === 0 ? 'Today' : 'Past'} />
-    </div>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4">
-      <p className="label text-ink-faint">{label}</p>
-      <p className="mt-1 text-sm text-ink">{value}</p>
+    <div className="mt-5 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="booking-progress">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="font-display text-xl text-ink">
+          {progress.arranged} of {progress.critical} arranged
+        </p>
+        {progress.nextAction ? (
+          <p className="text-sm text-ink-muted">
+            Next: <span className="text-ink">{progress.nextAction.travelerAction}</span>
+          </p>
+        ) : (
+          <p className="text-sm text-pine">Everything this trip depends on is arranged.</p>
+        )}
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {progress.groups.map((group) => (
+          <div key={group.id} data-testid={`booking-progress-${group.id}`}>
+            <p className="label text-ink-faint">
+              {group.title} · {group.done}/{group.total}
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {group.items.map((item) => (
+                <li key={item.id} className={cx('flex items-center gap-2 text-sm', item.done ? 'text-ink-muted' : 'text-ink')}>
+                  <span aria-hidden="true" className={cx('inline-block h-2 w-2 rounded-full', item.done ? 'bg-pine' : 'border border-ink-faint')} />
+                  <span className={item.done ? 'line-through' : ''}>{item.title}</span>
+                  <span className="sr-only">{item.done ? 'arranged' : 'not yet arranged'}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -145,7 +165,8 @@ export function StaysSection({ intel, tripId, itinerary, coordinates = {} }: { i
           {lodging.churn.simplerRoute[0] ? <span className="basis-full text-ink">Simpler: {lodging.churn.simplerRoute[0]}.</span> : null}
         </p>
       ) : null}
-      <ol className="mt-5 grid gap-4 sm:grid-cols-2" data-testid="where-to-stay">
+      {/* A single base is one card, not one card and an equal column of nothing beside it. */}
+      <ol className={cx('mt-5 grid gap-4', lodging.bases.length > 1 && 'sm:grid-cols-2')} data-testid="where-to-stay">
         {lodging.bases.map((base, index) => (
           <li key={base.baseId} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="hub-base">
             <div className="flex items-baseline justify-between gap-3">
@@ -394,6 +415,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
     return (
       <section className="mt-14" aria-labelledby="bookings" data-testid="hub-bookings">
         <SectionHeader id="bookings" title="Bookings" blurb="Everything this trip needs arranged, by kind, with what you have already booked. The same list as Book first, in a different order." />
+        <BookingProgressLine intel={intel} />
         <div className="mt-5 grid gap-6 lg:grid-cols-2">
           {groups.map((name) => {
             const inGroup = [...(name === 'Stays' && group ? [group] : []), ...standalone.filter((b) => BOOKING_GROUP_OF[b.kind] === name)];
@@ -445,6 +467,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
   return (
     <section className="mt-14" aria-labelledby="book-first" data-testid="hub-book-first">
       <SectionHeader id="book-first" title="Book first" blurb="What could break this trip if it is not arranged. Priorities come from dependency, fixed times and lead times, not invented scarcity." />
+      <BookingProgressLine intel={intel} />
       {BOOKING_PRIORITIES.map((priority) => {
         const rows = open.filter((b) => b.priority === priority);
         if (rows.length === 0) return null;
@@ -561,8 +584,14 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
         );
       })()}
 
-      <h3 className="mt-8 font-display text-lg text-ink">In order</h3>
-      <div className="mt-2 grid gap-5 md:grid-cols-2" data-testid="hub-checklist">
+      {/*
+        V6 — this is Book first re-grouped with tick boxes, and the packet
+        prints Book first. Kept in full on screen, where ticking things off is
+        the point, and behind the appendix on paper, where it was a page and a
+        third of the same items.
+      */}
+      <h3 className="mt-8 font-display text-lg text-ink" data-print="appendix">In order</h3>
+      <div className="mt-2 grid gap-5 md:grid-cols-2" data-testid="hub-checklist" data-print="appendix">
         {intel.checklist.phases.map((phase) => (
           <div key={phase.phase} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid={`hub-phase-${phase.phase}`}>
             <p className="label text-accent">{phase.title}</p>
@@ -713,7 +742,7 @@ export function BackupsSection({ intel }: { intel: TravelIntelligence }) {
           </li>
         ))}
       </ol>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-sm" data-testid="hub-regret">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-sm" data-testid="hub-regret" data-print="appendix">
         {(
           [
             ['Don’t miss', intel.regret.dontMiss],
@@ -750,7 +779,7 @@ export function VerifySection({ intel, manifest, pkg }: { intel: TravelIntellige
   const access = intel.access.filter((a) => a.verifyBeforeTravel);
   return (
     <section className="mt-14" aria-labelledby="verify" data-testid="hub-verify">
-      <SectionHeader id="verify" title="Trip confidence" blurb="What Sidequest could check, what to look at again nearer the date, and what is still uncertain. The full provenance is behind the last disclosure." />
+      <SectionHeader id="verify" title="Trip confidence" blurb="What Sidequest could check, what to look at again nearer the date, and what is still uncertain." />
       {/*
         * PRODUCTION LOCK V5 §27 — ONE CONFIDENCE, ONE SET OF NUMBERS.
         *

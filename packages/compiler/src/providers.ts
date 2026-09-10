@@ -81,6 +81,18 @@ export const PROVIDER_GAP_REASONS = [
    * could route is still a leg that exists.
    */
   'out_of_coverage',
+  /**
+   * THE PROVIDER COULD NOT BE REACHED AT ALL.
+   *
+   * V6 §11. A connection refused, a DNS failure or a transport timeout is a
+   * fact about the endpoint, not about the request and not about the ground.
+   * It used to be `provider_error`, which the routing hierarchy did not learn
+   * from — so a deployment pointing at a router that did not exist on the
+   * host attempted every leg of every trip, spent the whole verification
+   * budget, and measured nothing. One unreachable answer is enough to stop
+   * asking that router for the rest of the build and fall through.
+   */
+  'unreachable',
 ] as const;
 export type ProviderGapReason = (typeof PROVIDER_GAP_REASONS)[number];
 

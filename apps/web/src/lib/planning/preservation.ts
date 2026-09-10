@@ -32,6 +32,8 @@ export const PRESERVATION_CATEGORIES = [
   'capacity_conflict',
   /** PRODUCT RECOVERY V1 — a food anchor folded into the day's meal intent: kept, as a meal. */
   'folded_into_meal',
+  /** V6 §11 — movement or a gateway written as a stop, folded into the travel leg or the terminal plan: kept, as logistics. */
+  'folded_into_logistics',
 ] as const;
 export type PreservationCategory = (typeof PRESERVATION_CATEGORIES)[number];
 
@@ -84,10 +86,13 @@ export function preservationCategoryOf(disposition: PackageAnchor['disposition']
       return 'capacity_conflict';
     case 'folded_into_meal':
       return 'folded_into_meal';
+    case 'folded_into_transfer':
+    case 'folded_into_terminal':
+      return 'folded_into_logistics';
   }
 }
 
-const KEPT: ReadonlySet<PreservationCategory> = new Set(['preserved', 'verified', 'partially_verified', 'retained_unverified', 'moved', 'substituted', 'folded_into_meal']);
+const KEPT: ReadonlySet<PreservationCategory> = new Set(['preserved', 'verified', 'partially_verified', 'retained_unverified', 'moved', 'substituted', 'folded_into_meal', 'folded_into_logistics']);
 
 export function buildPreservationReport(draft: TripDraft, itinerary: Itinerary): DraftPreservationReport {
   const dispositions = itinerary.package?.anchors ?? [];

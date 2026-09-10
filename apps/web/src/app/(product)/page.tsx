@@ -2,10 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { countNights, isAbandoned } from '@sidequest/core';
 import { ProductChrome } from '@/components/ProductChrome';
-import { Panel, buttonClass } from '@/components/ui';
+import { buttonClass } from '@/components/ui';
+import { chromeAccount } from '@/lib/auth/chrome';
 import { isCompositionModelConfigured, isFixtureComposer } from '@/lib/providers/switches';
 import { adoptedCompiledRegionId, getLatestJob } from '@/lib/db/compiler-repository';
-import { hasItinerary, listTrips } from '@/lib/db/repository';
+import { hasItinerary, listTripsFor } from '@/lib/db/repository';
+import { currentUserId } from '@/lib/auth/session';
 import { sessionToken } from '@/lib/net/caller';
 import { formatDayRange } from '@/lib/format/dates';
 import { tripProgress } from '@/lib/format/trip-progress';
@@ -55,6 +57,14 @@ export const metadata: Metadata = {
  * system rather than of the trip. What replaced it is a sentence about whether
  * this deployment can research a new destination *today*, which is the only fact
  * on that banner a traveller could ever act on.
+ *
+ * ## V6 — a returning visitor is not a first-time visitor
+ *
+ * The trips used to sit at the *bottom* of the page, behind a hero written for
+ * somebody who has never seen this before, reachable by an in-page anchor. For
+ * anyone with a trip in progress that is the whole product below the fold. They
+ * lead now, as a short strip of the most recent ones, and "All your trips" goes
+ * to the dashboard — which is where pictures, stages and search live.
  */
 
 const INTENTS = [
@@ -62,41 +72,38 @@ const INTENTS = [
     href: '/trips/new',
     title: 'I know where I am going',
     body: 'Name a town, a region, a park or a country. We work out how much of it your dates can hold.',
-    kind: 'primary' as const,
   },
   {
     href: '/decide',
     title: 'Help me decide where to go',
     body: 'Tell us when you are free and what you are after. We rank real places against your dates.',
-    kind: 'secondary' as const,
   },
   {
     href: '/trips/new?have=plan',
     title: 'I already have a plan',
     body: 'List the places you have lined up. We build the region around them and say which do not fit.',
-    kind: 'secondary' as const,
   },
 ];
 
 const PROMISES = [
   {
     title: 'It thinks in regions',
-    body: 'A town becomes the valley it sits in; a country becomes the two or three parts of it a trip can actually hold. What gets left out is named, with the reason.',
+    body: 'A town becomes the valley it sits in; a country becomes the two or three parts of it a trip can hold. What gets left out is named, with the reason.',
   },
   {
     title: 'It ranks by fit, not by reviews',
-    body: 'A quiet viewpoint can outrank the postcard shot if you said crowds ruin a place. Every card explains itself using your own answers.',
+    body: 'A quiet viewpoint can outrank the postcard shot if you said crowds ruin a place.',
   },
   {
     title: 'It tells you what will not work',
-    body: 'Closed on your dates, four hours further than it looks, or open only in summer — you find that out here rather than at the gate.',
+    body: 'Closed on your dates, four hours further than it looks, open only in summer — you find out here rather than at the gate.',
   },
 ];
 
 const STEPS: [string, string][] = [
-  ['Say where, or say when', 'A destination you know, or dates and preferences and no idea yet.'],
-  ['We shape the region', 'Areas, bases, travel times and how much your dates can hold.'],
-  ['We check the sources', 'Opening hours, access, seasonal closures and cost, from whoever publishes them.'],
+  ['Say where, or say when', 'A destination you know, or dates and no idea yet.'],
+  ['We shape the region', 'Bases, travel times, and how much your dates can hold.'],
+  ['We check the sources', 'Hours, access, seasonal closures, cost.'],
   ['You get a plan', 'Day by day, with what we could not establish said out loud.'],
 ];
 
@@ -133,7 +140,7 @@ export default async function HomePage() {
    * a page render cannot set a cookie — a first-time visitor has no token, and
    * an empty list is the right answer for somebody who has made nothing.
    */
-  const rows: TripListRow[] = listTrips(await sessionToken({ mint: false }))
+  const rows: TripListRow[] = listTripsFor({ userId: await currentUserId(), ownerToken: await sessionToken({ mint: false }) })
     .map((trip) => {
       const job = getLatestJob(trip.id);
       const progress = tripProgress({
@@ -172,46 +179,77 @@ export default async function HomePage() {
     .map(({ rank: _rank, updatedAt: _updatedAt, ...row }) => row);
 
   return (
-    <ProductChrome>
-      <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-20">
+    <ProductChrome account={await chromeAccount()}>
+      <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
+        {rows.length > 0 ? (
+          <section className="mb-14 sm:mb-16" aria-labelledby="your-trips">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+              <h2 id="your-trips" className="font-display text-2xl text-ink">
+                Pick up where you left off
+              </h2>
+              <Link
+                href="/trips"
+                className="text-sm text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                data-testid="home-all-trips"
+              >
+                All your trips →
+              </Link>
+            </div>
+            <div className="mt-4">
+              <TripList rows={rows} />
+            </div>
+          </section>
+        ) : null}
+
         <div className="grid gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16">
           <section>
             <p className="eyebrow">Plan anywhere</p>
-            <h1 className="mt-4 font-display text-4xl leading-[1.08] text-ink sm:text-5xl">
+            <h1 className="display-hero mt-4 text-ink">
               The trip you meant to take, and the detour you did not know about.
             </h1>
             <p className="measure mt-6 text-lg leading-relaxed text-ink-muted">
               Answer one set of questions and Sidequest works out what is actually worth your time —
               the famous stops, the quiet ones an hour off the road, what is shut on your dates, and
-              what to skip. Ranked by how you travel, not by how many people have reviewed it.
+              what to skip.
             </p>
 
             {/*
               THREE DOORS, IN THE TRAVELLER'S WORDS.
 
               Not "Mode 1 / Mode 2 / Mode 3", and not three identical cards
-              either: the first is the one most people want and is the only
-              filled control on the page. Each says what it needs *from you*, so
-              nobody picks the wrong one and finds out three screens later.
+              either: the first is the one most people want, so it leads and is
+              the only one drawn as a filled card. Each says what it needs *from
+              you*, so nobody picks the wrong one and finds out three screens
+              later.
             */}
-            <ul className="mt-8 space-y-3">
-              {INTENTS.map((intent) => (
+            <ul className="mt-9 space-y-2.5">
+              {INTENTS.map((intent, index) => (
                 <li key={intent.href}>
                   <Link
                     href={intent.href}
-                    className="group flex min-h-11 items-baseline justify-between gap-4 rounded-[var(--radius-card)] border border-rule bg-paper-raised px-4 py-3.5 transition-colors hover:border-pine focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                    className={`group flex min-h-11 items-center gap-4 rounded-[var(--radius-card)] border px-4 py-4 transition-colors focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 ${
+                      index === 0
+                        ? 'border-accent bg-accent-soft hover:border-accent-strong'
+                        : 'border-rule bg-paper-raised hover:border-ink-faint'
+                    }`}
                   >
-                    <span className="min-w-0">
-                      <span className="block font-medium text-ink group-hover:text-pine">
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block font-display text-xl leading-tight ${
+                          index === 0 ? 'text-accent-strong' : 'text-ink group-hover:text-pine'
+                        }`}
+                      >
                         {intent.title}
                       </span>
-                      <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">
+                      <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
                         {intent.body}
                       </span>
                     </span>
                     <span
                       aria-hidden="true"
-                      className="shrink-0 self-center text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-pine"
+                      className={`text-lg transition-transform group-hover:translate-x-0.5 ${
+                        index === 0 ? 'text-accent' : 'text-ink-faint group-hover:text-pine'
+                      }`}
                     >
                       →
                     </span>
@@ -220,70 +258,73 @@ export default async function HomePage() {
               ))}
             </ul>
 
-            <p className="mt-4 text-sm text-ink-faint">
+            <p className="mt-5 text-sm text-ink-muted">
               No account needed. Nothing is researched until you have seen what we made of it.
             </p>
 
             {!compileReady ? (
-              <Panel className="mt-5 border-amber bg-amber-soft p-4">
-                <p className="text-sm leading-relaxed text-ink">
-                  <strong className="font-medium">
-                    This deployment cannot compose a new trip right now.
-                  </strong>{' '}
-                  Trips you have already built still open normally. A new one needs whoever set
-                  this up to finish the setup.
-                </p>
-              </Panel>
-            ) : null}
-
-            {rows.length > 0 ? (
-              <p className="mt-5 text-sm">
-                <a href="#your-trips" className="text-pine underline underline-offset-4">
-                  Or pick up one of your {rows.length} trip{rows.length === 1 ? '' : 's'}
-                </a>
+              <p className="mt-5 rounded-[var(--radius-card)] border border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
+                <strong className="font-medium">
+                  This deployment cannot compose a new trip right now.
+                </strong>{' '}
+                Trips you have already built still open normally.
               </p>
             ) : null}
           </section>
 
-          <section aria-labelledby="how-heading" className="lg:pt-16">
-            <h2 id="how-heading" className="eyebrow">
-              How it works
+          <section aria-labelledby="how-heading" className="min-w-0">
+            <h2 id="how-heading" className="sr-only">
+              How Sidequest works
             </h2>
             {/*
-              THE ROUTE MOTIF, DRAWN RATHER THAN IMPORTED.
+              THE ROUTE MOTIF, DRAWN ON THE ATLAS GROUND.
 
-              One continuous line threading the four numbered stops, at the
-              weight of a rule and in the same ink — the product's own noun
-              stated in the layout instead of in an illustration. §5 lists
-              "placeholder illustrations" among the things to avoid, and an SVG
-              of a landscape nobody is planning would be exactly that.
+              One continuous line threading the four numbered stops, on the dark
+              cartographic surface the rest of the product uses for a map — the
+              product's own noun stated in the layout instead of in a stock
+              illustration. §5 lists "placeholder illustrations" among the things
+              to avoid, and a picture of a landscape nobody is planning would be
+              exactly that.
 
-              `aria-hidden` and deliberately unanimated: §18 asks for motion
-              that reinforces movement through a route, and a decorative line
-              that moves on a landing page reinforces nothing.
+              Deliberately unanimated: §18 asks for motion that reinforces
+              movement through a route, and a decorative line that moves on a
+              landing page reinforces nothing.
             */}
-            <ol className="relative mt-5 space-y-5">
-              <span
-                aria-hidden="true"
-                className="absolute top-3 bottom-3 left-3.5 w-px bg-rule"
-              />
-              {STEPS.map(([title, body], index) => (
-                <li key={title} className="relative flex gap-4">
-                  <span
-                    aria-hidden="true"
-                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rule bg-paper text-xs font-medium text-ink-faint"
-                  >
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-medium text-ink">{title}</span>
-                    <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">
-                      {body}
+            <div className="atlas rounded-[var(--radius-plate)] p-6 sm:p-7">
+              <p className="type-meta uppercase tracking-[0.16em]" style={{ color: 'var(--color-atlas-muted)' }}>
+                How it works
+              </p>
+              <ol className="relative mt-5 space-y-6">
+                <span
+                  aria-hidden="true"
+                  className="absolute top-3 bottom-3 left-[0.9375rem] w-px"
+                  style={{ background: 'rgb(255 255 255 / 0.18)' }}
+                />
+                {STEPS.map(([title, body], index) => (
+                  <li key={title} className="relative flex gap-4">
+                    <span
+                      aria-hidden="true"
+                      className="numeral mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-medium"
+                      style={{
+                        borderColor: 'rgb(255 255 255 / 0.25)',
+                        background: 'var(--color-atlas)',
+                        color: 'var(--color-route-bright)',
+                      }}
+                    >
+                      {index + 1}
                     </span>
-                  </span>
-                </li>
-              ))}
-            </ol>
+                    <span className="min-w-0">
+                      <span className="block font-display text-lg leading-snug" style={{ color: 'var(--color-atlas-ink)' }}>
+                        {title}
+                      </span>
+                      <span className="mt-0.5 block type-small" style={{ color: 'var(--color-atlas-muted)' }}>
+                        {body}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
 
             {/*
               WHY THE WAIT IS WORTH IT, BESIDE WHAT THE WAIT IS.
@@ -291,45 +332,26 @@ export default async function HomePage() {
               These three used to be a full-width band under everything else,
               which left this column ending halfway down the fold — the "giant
               empty space" §5 lists among the things to avoid — and put the
-              product's actual argument below the point most people stop. They
-              answer the fourth question the homepage owes a visitor, so they
-              belong next to the third.
+              product's actual argument below the point most people stop.
             */}
-            <div className="mt-8 space-y-5 border-t border-rule pt-6">
+            <div className="mt-8 space-y-5">
               {PROMISES.map((item) => (
-                <div key={item.title}>
+                <div key={item.title} className="rule-top pt-4">
                   <h3 className="font-display text-lg text-ink">{item.title}</h3>
                   <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.body}</p>
                 </div>
               ))}
             </div>
+
+            {rows.length === 0 ? (
+              <div className="mt-8">
+                <Link href="/trips/new" className={buttonClass('primary', 'lg')}>
+                  Start a trip
+                </Link>
+              </div>
+            ) : null}
           </section>
         </div>
-
-        {rows.length > 0 ? (
-          <section className="mt-16 border-t border-rule pt-12" aria-labelledby="your-trips">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              {/*
-                `scroll-mt` because the product header is sticky: without it the
-                in-page link from the hero lands with the heading underneath the
-                bar, which reads as the anchor having missed.
-              */}
-              <h2 id="your-trips" className="scroll-mt-24 font-display text-2xl text-ink">
-                Your trips
-              </h2>
-              <Link href="/trips/new" className={buttonClass('secondary', 'sm')}>
-                Start another
-              </Link>
-            </div>
-            <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
-              Each one says where it actually got to. Opening a trip takes you to the next thing it
-              is waiting on — nothing is researched again without you asking.
-            </p>
-            <div className="mt-5">
-              <TripList rows={rows} />
-            </div>
-          </section>
-        ) : null}
       </div>
     </ProductChrome>
   );

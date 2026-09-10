@@ -36,11 +36,11 @@ async function expectCanonicalItinerary(page: Page) {
   // Real content on every day: activities and meals, never the stale "Nothing scheduled" copy beside content.
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
-  // A stop nothing could verify is kept and labelled ("Confirm later"), not dropped; a checked one says so.
+  // V6 — a stop nothing could verify is kept and labelled ("Check before relying"), not dropped; a verified one says so.
   await expect(page.getByRole('heading', { name: 'A Quiet Overlook Nobody Documented', exact: true })).toBeVisible();
   const days = page.locator('#hub-view-days');
-  await expect(days.getByText('Confirm later').first()).toBeVisible();
-  await expect(days.getByText('Checked').first()).toBeVisible();
+  await expect(days.getByText('Check before relying').first()).toBeVisible();
+  await expect(days.getByText('Verified').first()).toBeVisible();
   await openHubView(page, 'plan');
   await expect(page.getByTestId('where-to-stay')).toBeVisible();
   await openHubView(page, 'prepare');
@@ -127,7 +127,7 @@ test('Plan with smart defaults composes a complete trip before any question is a
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
-  await expect(page.locator('#hub-view-days').getByText('Confirm later').first()).toBeVisible();
+  await expect(page.locator('#hub-view-days').getByText('Check before relying').first()).toBeVisible();
   await openHubView(page, 'prepare');
   await expect(page.getByTestId('packing-list')).toBeVisible();
 });
@@ -154,5 +154,5 @@ test('Explore experiences first, then the board, verifies against the compiled r
   await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await openHubView(page, 'days');
-  await expect(page.locator('#hub-view-days').getByText('Checked').first()).toBeVisible();
+  await expect(page.locator('#hub-view-days').getByText('Verified').first()).toBeVisible();
 });

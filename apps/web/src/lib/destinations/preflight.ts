@@ -55,10 +55,14 @@ const MAX_FEATURES = 400;
  * client into both decide pages' render graph. See `providers/switches.ts`.
  */
 import { isClimateEnabled } from '../providers/switches';
+import { fixtureClimateProvider } from '../climate/fixture';
 export { isClimateEnabled };
 
 function climateProvider() {
-  return isClimateEnabled() ? openMeteoClimateProvider() : unavailableClimateProvider();
+  if (!isClimateEnabled()) return unavailableClimateProvider();
+  /* V6 — a deterministic climate so the browser suite can press "Use this timing". */
+  if (process.env.SIDEQUEST_CLIMATE_PROVIDER?.trim().toLowerCase() === 'fixture') return fixtureClimateProvider();
+  return openMeteoClimateProvider();
 }
 
 /**

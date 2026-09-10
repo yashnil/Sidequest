@@ -66,7 +66,27 @@ export function HubShell({
   initialView?: HubViewId;
 }) {
   const [view, setView] = useState<HubViewId>(initialView);
+  const [appendix, setAppendix] = useState(printAppendix);
   const labelId = useId();
+
+  /*
+   * V6 — `?appendix=1` HAS TO REACH THE PACKET.
+   *
+   * The band offers "Print with evidence appendix", which links to
+   * `?appendix=1`, and nothing on the server ever read that parameter — the
+   * page takes `params` only — so the flag arrived here `false` on every
+   * request and the link printed exactly the same packet as the button beside
+   * it. Read on the client instead: the printed document is produced by the
+   * browser, so the browser's own address is the right authority for what it
+   * should contain. The server prop still wins whenever it is set.
+   */
+  useEffect(() => {
+    if (printAppendix) return;
+    const apply = () => setAppendix(new URLSearchParams(window.location.search).get('appendix') === '1');
+    apply();
+    window.addEventListener('popstate', apply);
+    return () => window.removeEventListener('popstate', apply);
+  }, [printAppendix]);
 
   useEffect(() => {
     const apply = () => {
@@ -91,7 +111,7 @@ export function HubShell({
   }
 
   return (
-    <div id="trip-hub" data-hub-view={view} {...(printAppendix ? { 'data-print-appendix': 'true' } : {})} className="scroll-mt-[var(--chrome-height)]">
+    <div id="trip-hub" data-hub-view={view} {...(appendix ? { 'data-print-appendix': 'true' } : {})} className="scroll-mt-[var(--chrome-height)]">
       <nav aria-label="Trip hub" className="sticky top-[var(--chrome-height)] z-20 -mx-5 border-b border-rule bg-paper/95 px-5 backdrop-blur-[2px] print:hidden max-sm:hidden sm:-mx-6 sm:px-6" data-testid="trip-hub-nav">
         <div className="mx-auto flex max-w-[1600px] items-center gap-1 overflow-x-auto" role="tablist" aria-labelledby={labelId}>
           <span id={labelId} className="sr-only">

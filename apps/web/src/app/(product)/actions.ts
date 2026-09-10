@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getActiveJob } from '@/lib/db/compiler-repository';
-import { deleteTrip, getTrip, tripOwnerToken } from '@/lib/db/repository';
-import { sessionToken } from '@/lib/net/caller';
+import { deleteTrip, getTrip } from '@/lib/db/repository';
+import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 /**
  * THE ONE THING A TRIP LIST HAS TO BE ABLE TO DO AND COULD NOT.
@@ -62,14 +62,9 @@ export async function deleteTripAction(tripId: string): Promise<DeleteTripResult
    * it would also mean a delete request created a cookie, and a request that is
    * about to be refused should leave nothing behind.
    */
-  const owner = tripOwnerToken(tripId);
-  const asking = await sessionToken({ mint: false });
-  if (!owner || !asking || owner !== asking) {
-    return {
-      ok: false,
-      error: 'That trip belongs to a different browser, so we did not remove it.',
-    };
-  }
+  /* V6 §50 — one boundary: the account when the trip has one, the browser cookie otherwise. */
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   /**
    * NOT WHILE SOMETHING IS WRITING TO IT.

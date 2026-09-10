@@ -1,4 +1,4 @@
-import { describeEdgeTime, tripDates, type Itinerary, type TravelerProfile, type Trip } from '@sidequest/core';
+import { STRENUOUS_BLOCKERS, dayStrain, describeEdgeTime, isGatewayName, isTransferName, tripDates, type ContractConflict, type Itinerary, type TravelerProfile, type Trip, type TripContract } from '@sidequest/core';
 import type { TripDraft } from './trip-draft';
 import { buildPreservationReport, type DraftPreservationReport } from './preservation';
 
@@ -62,6 +62,21 @@ export const QUALITY_CHECK_IDS = [
   'backups_are_local',
   /** §7 — nothing states an arrival or departure time the traveller never gave. */
   'edge_times_not_invented',
+  /*
+   * V6 — the contract. Structural, like everything above: the itinerary's
+   * dates against the dates the traveller locked, and every recorded conflict
+   * between the composition and a locked fact.
+   */
+  /** V6 §2 — the itinerary is dated to the contract's window, never to a model window or a placeholder. */
+  'locked_dates_preserved',
+  /** V6 §2 — every contradiction of a locked fact was refused and recorded, none adopted. */
+  'contract_respected',
+  /** V6 §11 — no transfer or gateway is a scheduled stop, a signature or a core experience. */
+  'transfers_not_experiences',
+  /** V6 §12 — a daylight-only outdoor stop is not scheduled after sunset when the sunset is known. */
+  'daylight_respected',
+  /** V6 §5 — a strenuous day with a party member who cannot do it offers that member something else. */
+  'party_hard_fails',
 ] as const;
 export type QualityCheckId = (typeof QUALITY_CHECK_IDS)[number];
 
@@ -105,10 +120,31 @@ export function auditItinerary(input: {
   trip: Trip;
   bookedConflicts?: readonly string[];
   preservation?: DraftPreservationReport;
+  /** V6 — the contract the build ran under, and what the enforcement recorded. */
+  contract?: TripContract;
+  contractConflicts?: readonly ContractConflict[];
+  /** V6 — functional needs across the party (the contract's union), by key or label. */
+  partyNeeds?: readonly string[];
 }): QualityAudit {
   const { draft, itinerary, profile, trip } = input;
   const checks: QualityCheck[] = [];
   const add = (id: QualityCheckId, ok: boolean, severity: QualityCheck['severity'], detail: string) => checks.push({ id, ok, severity, detail });
+
+  // --- V6: the contract ------------------------------------------------------------
+  if (input.contract) {
+    const c = input.contract.timing;
+    if (!c.open && c.startDate.value && c.endDate.value) {
+      const first = itinerary.days[0]?.date;
+      const last = itinerary.days[itinerary.days.length - 1]?.date;
+      const held = first === c.startDate.value && last === c.endDate.value && itinerary.startDate === c.startDate.value && itinerary.endDate === c.endDate.value;
+      add('locked_dates_preserved', held, 'error', held ? `dated ${c.startDate.value} to ${c.endDate.value}, as ${c.decidedBy === 'traveller' ? 'the traveller chose' : 'decided'}` : `the contract holds ${c.startDate.value} to ${c.endDate.value} (${c.lock}) but the itinerary runs ${first ?? '?'} to ${last ?? '?'}`);
+    } else {
+      add('locked_dates_preserved', true, 'error', 'the window was open; the composition chose it');
+    }
+    const conflicts = input.contractConflicts ?? [];
+    const adopted = conflicts.filter((k) => k.resolution !== 'field_rejected' && k.resolution !== 'contract_kept');
+    add('contract_respected', adopted.length === 0, 'error', conflicts.length === 0 ? 'nothing contradicted a locked fact' : adopted.length === 0 ? `${conflicts.length} contradiction(s) refused: ${conflicts.map((k) => k.field).join(', ')}` : `${adopted.length} contradiction(s) adopted: ${adopted.map((k) => k.field).join(', ')}`);
+  }
 
   // --- dates ------------------------------------------------------------------------
   const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
@@ -253,7 +289,7 @@ export function auditItinerary(input: {
   add('bases_are_places_to_sleep', landmarkBases.length === 0, 'error', landmarkBases.length === 0 ? 'every base is a town, area or lodging' : `base(s) named for a landmark: ${landmarkBases.map((b) => b.name).join(', ')}`);
 
   // --- PRODUCTION LOCK V5 -----------------------------------------------------------------
-  auditV5({ draft, itinerary, profile, trip, add });
+  auditV5({ draft, itinerary, profile, trip, add, ...(input.partyNeeds ? { partyNeeds: input.partyNeeds } : {}) });
 
   const errors = checks.filter((c) => !c.ok && c.severity === 'error').length;
   const warnings = checks.filter((c) => !c.ok && c.severity === 'warning').length;
@@ -280,6 +316,7 @@ function auditV5(input: {
   profile: TravelerProfile;
   trip: Trip;
   add: (id: QualityCheckId, ok: boolean, severity: QualityCheck['severity'], detail: string) => void;
+  partyNeeds?: readonly string[];
 }): void {
   const { draft, itinerary, profile, trip, add } = input;
   const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -375,6 +412,61 @@ function auditV5(input: {
   }
   const withIntent = draft.days.reduce((n, d) => n + d.anchors.filter((a) => a.timeOfDay && a.timeOfDay !== 'any').length, 0);
   add('time_intent_respected', timeBreaches.length === 0, 'error', timeBreaches.length === 0 ? `${withIntent} time-dependent experience(s) sit in their part of the day` : timeBreaches.slice(0, 4).join('; '));
+
+  /*
+   * V6 §11 — TRANSPORT IS NOT A POI.
+   *
+   * "Drive Bhopal to Bandhavgarh" was a core anchor, a signature and a "Don't
+   * miss" on a live trip. The reconciler now folds transfers and gateways
+   * into the legs and the terminal plan; this check says whether any escaped:
+   * a scheduled activity whose title is a transfer, or a signature that names
+   * one.
+   */
+  const scheduledTransfers = itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'activity' && (isTransferName(item.title) || isGatewayName(item.title))).map((item) => `day ${day.dayNumber}: ${item.title}`));
+  const transferSignatures = signatures.filter((name) => isTransferName(name) || isGatewayName(name));
+  add(
+    'transfers_not_experiences',
+    scheduledTransfers.length === 0 && transferSignatures.length === 0,
+    'error',
+    scheduledTransfers.length === 0 && transferSignatures.length === 0
+      ? 'no transfer or gateway is scheduled as an experience'
+      : [...scheduledTransfers.map((t) => `${t} is scheduled as a stop`), ...transferSignatures.map((t) => `"${t}" is named as a signature`)].slice(0, 4).join('; '),
+  );
+
+  /*
+   * V6 §12 — DAYLIGHT. Only where the sunset is known for the day, and only
+   * for stops the plan itself marked daylight-only or that are outdoor by
+   * category. A missing sunset produces no finding: unknown ≠ false.
+   */
+  const daylightBreaches: string[] = [];
+  for (const day of itinerary.days) {
+    const sunset = day.weather.sunsetMinute;
+    if (sunset === undefined) continue;
+    for (const item of day.items) {
+      if (item.kind !== 'activity') continue;
+      const outdoor = item.daylightOnly === true || /\b(hike|trail|viewpoint|summit|lookout|falls|glacier|beach|lake|gorge|canyon|trek|pass)\b/i.test(item.title);
+      if (!outdoor) continue;
+      if (/\b(night|stargaz|aurora|northern lights|sunset|dusk|evening)\b/i.test(item.title)) continue;
+      if (item.startMinute > sunset - 30) daylightBreaches.push(`day ${day.dayNumber}: ${item.title} starts at ${String(Math.floor(item.startMinute / 60)).padStart(2, '0')}:${String(item.startMinute % 60).padStart(2, '0')}, after sunset (${String(Math.floor(sunset / 60)).padStart(2, '0')}:${String(sunset % 60).padStart(2, '0')})`);
+    }
+  }
+  add('daylight_respected', daylightBreaches.length === 0, 'warning', daylightBreaches.length === 0 ? 'no daylight-only stop is scheduled after a known sunset' : daylightBreaches.slice(0, 4).join('; '));
+
+  /*
+   * V6 §5 — PARTY HARD FAILS. A day that goes up or down steep ground is not
+   * a preference problem for someone who cannot do steep ground; it is a day
+   * they cannot do. It fails only on affirmative evidence — a stop that names
+   * a hike, a descent, a climb (`dayStrain`) — and passes when the day offers
+   * that person something else. A day the model merely called "intense" is
+   * not evidence: a live jeep-safari day was declared contradicted for a
+   * grandmother who avoids descents, when nothing in it went downhill. It
+   * says nothing when nobody in the party has such a need.
+   */
+  const strenuousBlockers = (input.partyNeeds ?? []).filter((need: string) => (STRENUOUS_BLOCKERS as readonly string[]).includes(need) || /steep|limited walking|step-free|wheelchair|cannot stand|pregnan/i.test(need));
+  const hardFailDays = strenuousBlockers.length === 0
+    ? []
+    : itinerary.days.filter((day) => { const strain = dayStrain(day); return strain.demanding.length > 0 && !strain.accommodated; }).map((day) => day.dayNumber);
+  add('party_hard_fails', hardFailDays.length === 0, 'error', strenuousBlockers.length === 0 ? 'no party member has a need that rules out steep or long ground' : hardFailDays.length === 0 ? `no day puts steep or long ground in front of someone who needs "${strenuousBlockers[0]}" without an easier option` : `days ${hardFailDays.join(', ')} hold steep or long ground with no easier option for someone who needs "${strenuousBlockers[0]}"`);
 
   /*
    * §10 — a multi-day experience is one thing. Two properties: its days are

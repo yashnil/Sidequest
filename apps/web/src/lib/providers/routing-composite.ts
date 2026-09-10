@@ -41,6 +41,8 @@ import type { RoutingCoverage } from './routing-coverage';
 interface LocalReach {
   /** True once the local router has refused a pair for being outside its tiles. */
   outOfCoverage: boolean;
+  /** V6 §11 — true once the local router could not be reached at all. Same consequence: stop asking it. */
+  unreachable: boolean;
   /** How many pairs it refused that way, for the log line and the diagnostics. */
   refusals: number;
 }
@@ -59,7 +61,9 @@ export function createCompositeRouting(input: { local: RoutingProvider | null; l
   const { local, localCoverage, global } = input;
   if (!local && !global) return null;
 
-  const reach: LocalReach = { outOfCoverage: false, refusals: 0 };
+  const reach: LocalReach = { outOfCoverage: false, unreachable: false, refusals: 0 };
+  /** The local router is out of the picture for the rest of this build, for either reason. */
+  const localExhausted = () => reach.outOfCoverage || reach.unreachable;
 
   /**
    * Record what a local answer said about the local router's reach.
@@ -72,7 +76,8 @@ export function createCompositeRouting(input: { local: RoutingProvider | null; l
    */
   const noteLocalAnswer = (result: { failedPairs: readonly { reason: string }[] }): void => {
     const refusals = result.failedPairs.filter((pair) => pair.reason === 'out_of_coverage').length;
-    if (refusals === 0) return;
+    const unreachable = result.failedPairs.filter((pair) => pair.reason === 'unreachable').length;
+    if (refusals === 0 && unreachable === 0) return;
     reach.refusals += refusals;
     if (!reach.outOfCoverage && reach.refusals >= COVERAGE_STRIKES_BEFORE_FALLTHROUGH) {
       reach.outOfCoverage = true;
@@ -83,12 +88,28 @@ export function createCompositeRouting(input: { local: RoutingProvider | null; l
         fallthrough: global?.name ?? 'none (estimates only)',
       });
     }
+    /*
+     * V6 §11 — A ROUTER THAT CANNOT BE REACHED IS NOT ASKED AGAIN.
+     *
+     * The adapter already retried the request once. A second pair failing the
+     * same way would establish nothing the first did not, and a production
+     * deployment pointed at a loopback router that did not exist spent the
+     * whole verification budget establishing it twenty-three times.
+     */
+    if (!reach.unreachable && unreachable > 0) {
+      reach.unreachable = true;
+      console.warn('The local router could not be reached; falling through for the rest of this build', {
+        provider: local?.name ?? 'local',
+        unreachablePairs: unreachable,
+        fallthrough: global?.name ?? 'none (estimates only)',
+      });
+    }
   };
 
   /* A local-only composite with no declared coverage still has to learn, so it can no longer be returned bare. */
   const name = [local ? `${local.name}${localCoverage.declared ? ` (${localCoverage.label})` : ''}` : null, global?.name ?? null].filter(Boolean).join(' → ');
   const localUsable = (points: readonly { lat: number; lng: number }[]): boolean =>
-    local !== null && !reach.outOfCoverage && localCoverage.coversAll(points);
+    local !== null && !localExhausted() && localCoverage.coversAll(points);
   const pick = (points: readonly { lat: number; lng: number }[]): RoutingProvider | null => {
     if (localUsable(points)) return local;
     if (global) return global;
@@ -133,9 +154,11 @@ export function createCompositeRouting(input: { local: RoutingProvider | null; l
       if (!provider) {
         return unmeasured(
           points,
-          reach.outOfCoverage
-            ? 'The local router does not cover this trip and no global router is configured; nothing was asked.'
-            : 'No configured router covers these points; nothing was asked.',
+          reach.unreachable
+            ? 'The local router could not be reached and no global router is configured; nothing more was asked.'
+            : reach.outOfCoverage
+              ? 'The local router does not cover this trip and no global router is configured; nothing was asked.'
+              : 'No configured router covers these points; nothing was asked.',
         );
       }
       if (!provider.supportedModes().includes(mode)) {
@@ -156,7 +179,7 @@ export function createCompositeRouting(input: { local: RoutingProvider | null; l
        * cost one request, the answer is available, and this is the leg the whole
        * routing hierarchy exists to deliver.
        */
-      if (reach.outOfCoverage && global && global.supportedModes().includes(mode)) {
+      if (localExhausted() && global && global.supportedModes().includes(mode)) {
         return global.matrix({ points, mode, maxElements });
       }
       return result;
@@ -166,8 +189,8 @@ export function createCompositeRouting(input: { local: RoutingProvider | null; l
       if (!provider?.route) return { found: false, minutes: null, km: null, reason: 'insufficient_evidence' };
       const result = await provider.route({ from, to, mode });
       if (provider !== local) return result;
-      if (result.found || result.reason !== 'out_of_coverage') return result;
-      noteLocalAnswer({ failedPairs: [{ reason: 'out_of_coverage' }] });
+      if (result.found || (result.reason !== 'out_of_coverage' && result.reason !== 'unreachable')) return result;
+      noteLocalAnswer({ failedPairs: [{ reason: result.reason }] });
       if (global?.route) return global.route({ from, to, mode });
       /* No global router: the honest answer is "nobody was able to say", not "no route". */
       return { found: false, minutes: null, km: null, reason: 'insufficient_evidence' };

@@ -169,12 +169,15 @@ export const compactDaySchema = z.object({
   why: str().optional(),
   /** §10 — the multi-day experience this day is one day of, by name. */
   partOf: str().optional(),
+  /** V6 §5 — one line: "Who: what they do instead; rejoin where/when". Only when part of the party does something else today. */
+  split: str().optional(),
 });
 
 export const compactTripDraftWireSchema = z.object({
   archetype: z.enum(CURRENT_TRIP_ARCHETYPES as [string, ...string[]]),
   purpose: str(),
-  routeRationale: str(),
+  /** Why these bases in this order. Short key: the compact wire pays for V6's `split` with four renamed keys the normaliser has always accepted as aliases. */
+  route: str(),
   /** §9 — the one to three experiences this trip is built around, by name. */
   signatures: z.array(str()).optional(),
   /** §5/§6 — the window the model chose, only when the traveller asked it to choose. */
@@ -182,7 +185,7 @@ export const compactTripDraftWireSchema = z.object({
   /** What this season opens and closes for this trip. */
   timingRationale: str().optional(),
   /** The strategy, in a sentence: who drives, what is hired, what is guided. */
-  transportSummary: str(),
+  transport: str(),
   /** §14 — how road travel is arranged. `none` when nothing on wheels is the traveller's responsibility. */
   driving: z.enum(DRAFT_DRIVING_ARRANGEMENTS).optional(),
   /**
@@ -203,10 +206,10 @@ export const compactTripDraftWireSchema = z.object({
   bookFirst: z.array(str()).optional(),
   stays: z.array(compactStaySchema),
   days: z.array(compactDaySchema),
-  omissions: z.array(z.object({ name: str(), reason: str() })),
+  omissions: z.array(z.object({ name: str(), why: str() })),
   tradeoffs: z.array(str()),
-  /** §25 — each backup names the day it is for, so it can be checked for reachability. */
-  backups: z.array(z.object({ trigger: str(), alternative: str(), day: z.number().optional() })),
+  /** §25 — each backup names the day it is for, so it can be checked for reachability. `then` is what to do instead. */
+  backups: z.array(z.object({ trigger: str(), then: str(), day: z.number().optional() })),
 });
 export type CompactTripDraftWire = z.infer<typeof compactTripDraftWireSchema>;
 
@@ -664,6 +667,27 @@ function capped(value: unknown, cap: number, path: string, touched: string[]): s
  * semantic failures are rejected with the precise path, what was expected
  * and what arrived. Nothing here writes travel content the model did not.
  */
+/** "Who: does; rejoin at X" → parts. Accepts an object with the same three keys. Null when nothing usable. */
+export function parseSplit(raw: unknown): { who: string; does: string; rejoin?: string } | null {
+  if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    const who = typeof o.who === 'string' ? o.who.trim() : '';
+    const does = typeof (o.does ?? o.what) === 'string' ? String(o.does ?? o.what).trim() : '';
+    const rejoin = typeof (o.rejoin ?? o.meet) === 'string' ? String(o.rejoin ?? o.meet).trim() : '';
+    return who && does ? { who, does, ...(rejoin ? { rejoin } : {}) } : null;
+  }
+  if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+  const text = raw.trim();
+  const colon = text.indexOf(':');
+  const who = colon > 0 && colon <= 60 ? text.slice(0, colon).trim() : 'Part of the party';
+  const rest = colon > 0 && colon <= 60 ? text.slice(colon + 1).trim() : text;
+  const rejoinMatch = rest.match(/(?:;|\.|,)?\s*(?:rejoin|meet|back together|regroup)\b\s*(?:at|by|in)?\s*(.+)$/i);
+  const does = rejoinMatch ? rest.slice(0, rejoinMatch.index).replace(/[;,.\s]+$/, '').trim() : rest;
+  const rejoin = rejoinMatch?.[1]?.trim();
+  if (!does) return null;
+  return { who, does, ...(rejoin ? { rejoin } : {}) };
+}
+
 export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}): WireNormalization {
   const root = record(raw);
   if (!root) return { ok: false, kind: 'structural', issues: [{ path: '', code: 'not_an_object', message: 'the answer is not a JSON object', received: raw === null ? 'null' : Array.isArray(raw) ? 'array' : typeof raw }] };
@@ -851,6 +875,15 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     /* One rationale per day on the compact wire; `note` and `whyItFits` on the long one. */
     const whyItFits = capped(day.whyItFits ?? day.travelerFit ?? day.fit ?? day.why, DRAFT_SOFT_PROSE_CAPS.whyItFits, `days[${index}].why`, touched);
     const partOf = capped(day.partOf ?? day.experience ?? day.multiDay, 60, `days[${index}].partOf`, touched);
+    /*
+     * V6 §5 — the split travels as one line to keep the wire grammar-eligible:
+     * "Mum: takes the lakeside boardwalk and the museum; rejoin at the hotel at five".
+     * An object is accepted too, for a model that writes one anyway.
+     */
+    const splitParsed = parseSplit(day.split);
+    const splitWho = splitParsed ? capped(splitParsed.who, 60, `days[${index}].split.who`, touched) : undefined;
+    const splitDoes = splitParsed ? capped(splitParsed.does, DRAFT_SOFT_PROSE_CAPS.dayNote, `days[${index}].split.does`, touched) : undefined;
+    const splitRejoin = splitParsed?.rejoin ? capped(splitParsed.rejoin, 80, `days[${index}].split.rejoin`, touched) : undefined;
     days.push({
       dayNumber: index + 1,
       baseId,
@@ -862,6 +895,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
       ...(note ? { note } : {}),
       ...(whyItFits ? { whyItFits } : {}),
       ...(partOf ? { partOf } : {}),
+      ...(splitWho && splitDoes ? { split: { who: splitWho, does: splitDoes, ...(splitRejoin ? { rejoin: splitRejoin } : {}) } } : {}),
     });
   });
 
@@ -932,7 +966,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     package: {
       foodStrategy: stringList(root.foodStrategy ?? pkg?.foodStrategy, 'foodStrategy', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy).slice(0, 6),
       transport: {
-        summary: capped(root.transportSummary ?? transportObject?.summary, DRAFT_SOFT_PROSE_CAPS.transportSummary, 'transportSummary', touched) ?? 'Getting around as the days describe.',
+        summary: capped(root.transportSummary ?? (typeof root.transport === 'string' ? root.transport : undefined) ?? transportObject?.summary, DRAFT_SOFT_PROSE_CAPS.transportSummary, 'transportSummary', touched) ?? 'Getting around as the days describe.',
         notes: stringList(root.transportNotes ?? transportObject?.notes, 'transportNotes', touched, DRAFT_SOFT_PROSE_CAPS.transportNote).slice(0, 6),
       },
       beforeYouGo: stringList(root.beforeYouGo ?? pkg?.beforeYouGo, 'beforeYouGo', touched, DRAFT_SOFT_PROSE_CAPS.beforeYouGo).slice(0, 10),
@@ -951,7 +985,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
         .slice(0, 6),
     },
   };
-  if (!sanitizeProse(root.transportSummary ?? transportObject?.summary)) touched.push('transportSummary (absent → default)');
+  if (!sanitizeProse(root.transportSummary ?? (typeof root.transport === 'string' ? root.transport : undefined) ?? transportObject?.summary)) touched.push('transportSummary (absent → default)');
 
   if (issues.length > 0) return { ok: false, kind: 'semantic', issues };
 

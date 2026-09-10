@@ -1185,18 +1185,54 @@ export async function adoptDateWindowAction(
 
   const nights = countNights(trip.basics.startDate, trip.basics.endDate);
   const { startDate, endDate } = datesInWindow({ month, year }, Math.max(1, nights));
+  const now = new Date();
 
-  updateTripDates(tripId, startDate, endDate);
+  /*
+   * V6 — "MOVE MY TRIP TO JUNE" IS A DECISION, AND IT IS RECORDED AS ONE.
+   *
+   * This door used to write the dates and nothing else. The composer still
+   * said `mode: best_time` with no accepted recommendation, so at composition
+   * `timingIntentOf` reported the question open, the brief dropped the dates
+   * the traveller had just chosen, the model picked its own month, and the
+   * adoption path overwrote the row. "Accepted February, produced November."
+   * Now the row carries the lock and the composer carries the acceptance.
+   */
+  updateTripDates(tripId, startDate, endDate, 'traveler');
   if (intent.composer) {
+    const prior = intent.composer.dates.recommendation;
     saveComposerAnswers(tripId, {
       ...intent.composer,
-      dates: { ...intent.composer.dates, startDate, endDate, year },
-      updatedAt: new Date().toISOString(),
+      dates: {
+        ...intent.composer.dates,
+        startDate,
+        endDate,
+        year,
+        recommendation: {
+          startDate,
+          endDate,
+          label: prior && prior.month === month && prior.year === year ? prior.label : monthLabel(month),
+          month,
+          year,
+          reasons: prior && prior.month === month && prior.year === year ? prior.reasons : [],
+          tradeoffs: prior && prior.month === month && prior.year === year ? prior.tradeoffs : [],
+          unknowns: [],
+          basis: 'traveller_window',
+          generatedAt: now.toISOString(),
+          accepted: true,
+          decidedBy: 'traveller',
+        },
+      },
+      updatedAt: now.toISOString(),
     });
   }
 
   revalidatePath(`/trips/${tripId}/plan`);
   return { ok: true };
+}
+
+const MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function monthLabel(month: number): string {
+  return MONTH_LABELS[month - 1] ?? `Month ${month}`;
 }
 
 export async function adoptTripLengthAction(
@@ -1224,9 +1260,15 @@ export async function adoptTripLengthAction(
 
   updateTripDates(tripId, trip.basics.startDate, endDate);
   if (intent.composer) {
+    const recommendation = intent.composer.dates.recommendation;
     saveComposerAnswers(tripId, {
       ...intent.composer,
-      dates: { ...intent.composer.dates, endDate },
+      dates: {
+        ...intent.composer.dates,
+        endDate,
+        /* V6 — an accepted window grows with the length; otherwise the brief keeps the old end date. */
+        ...(recommendation?.accepted ? { recommendation: { ...recommendation, endDate } } : {}),
+      },
       duration: { ...intent.composer.duration, mode: 'fixed', nights },
       updatedAt: new Date().toISOString(),
     });

@@ -42,6 +42,18 @@ export interface RefinementReply {
   summary?: RefinementSummary;
   answer?: string;
   version?: number;
+  /**
+   * V6 §30 — WHICH OF THE THREE THINGS THIS REPLY IS.
+   *
+   * `answer` is a sentence about the trip and nothing moved. `proposal` is a
+   * change Sidequest is offering to make, with its scope and its days, and
+   * nothing has landed yet. `applied` is a change that has landed and can be
+   * undone. Optional because a reply from before the field existed carries
+   * none, and the shape of the reply still decides how it renders.
+   */
+  mode?: 'answer' | 'proposal' | 'applied';
+  /** The preview behind a proposal: what it would touch, and what it would do. */
+  proposal?: { scope: string; changes: readonly string[]; days: readonly number[] };
 }
 
 export interface AskSidequestProps {
@@ -68,7 +80,8 @@ type Exchange =
   | { kind: 'request'; text: string }
   | { kind: 'answer'; text: string }
   | { kind: 'question'; text: string; because?: string; options: string[]; runId: string }
-  | { kind: 'result'; summary: RefinementSummary }
+  | { kind: 'proposal'; text: string; scope: string; changes: readonly string[]; days: readonly number[]; options: string[]; runId: string; answered?: string }
+  | { kind: 'result'; summary: RefinementSummary; undoable: boolean }
   | { kind: 'error'; text: string };
 
 export function AskSidequest(props: AskSidequestProps) {
@@ -131,9 +144,23 @@ export function AskSidequest(props: AskSidequestProps) {
 
   const record = (reply: RefinementReply) => {
     if (!reply.ok && reply.error) return setExchanges((previous) => [...previous, { kind: 'error', text: reply.error! }]);
+    /*
+     * A proposal is not a clarifying question. The traveller is being shown a
+     * change before it lands — its scope, the days it touches and what it would
+     * do — and the two buttons are a decision, not an answer. Rendering it as a
+     * generic question put "Apply / Cancel" under a bare sentence with nothing
+     * to decide on.
+     */
+    if (reply.mode === 'proposal' && reply.proposal && reply.question && reply.runId) {
+      const proposal = reply.proposal;
+      return setExchanges((previous) => [
+        ...previous,
+        { kind: 'proposal', text: reply.question!.question, scope: proposal.scope, changes: proposal.changes, days: proposal.days, options: reply.question!.options, runId: reply.runId! },
+      ]);
+    }
     if (reply.question && reply.runId) return setExchanges((previous) => [...previous, { kind: 'question', text: reply.question!.question, ...(reply.question!.because ? { because: reply.question!.because } : {}), options: reply.question!.options, runId: reply.runId! }]);
     if (reply.answer) return setExchanges((previous) => [...previous, { kind: 'answer', text: reply.answer! }]);
-    if (reply.summary) return setExchanges((previous) => [...previous, { kind: 'result', summary: reply.summary! }]);
+    if (reply.summary) return setExchanges((previous) => [...previous, { kind: 'result', summary: reply.summary!, undoable: reply.mode === 'applied' }]);
     setExchanges((previous) => [...previous, { kind: 'error', text: 'Nothing changed.' }]);
   };
 
@@ -157,7 +184,12 @@ export function AskSidequest(props: AskSidequestProps) {
 
   const answer = (runId: string, choice: string) => {
     if (busy) return;
-    setExchanges((previous) => [...previous, { kind: 'request', text: choice }]);
+    /*
+     * V6 — a proposal answered is settled. Its buttons go, so a second press
+     * (a double tap, a walker in a loop) cannot send "Apply" to a run that has
+     * already applied and be told the question is no longer open.
+     */
+    setExchanges((previous) => [...previous.map((entry) => (entry.kind === 'proposal' && entry.runId === runId ? { ...entry, answered: choice } : entry)), { kind: 'request', text: choice }]);
     setBusy(true);
     startTransition(async () => {
       try {
@@ -181,8 +213,9 @@ export function AskSidequest(props: AskSidequestProps) {
   };
 
   const working = busy || pending;
-  const lastQuestion = [...exchanges].reverse().find((entry) => entry.kind === 'question');
-  const awaiting = lastQuestion !== undefined && exchanges.indexOf(lastQuestion) === exchanges.length - 1;
+  /* A proposal waits on a decision exactly as a question waits on an answer: the composer stays shut until one of the two buttons is pressed. */
+  const lastPrompt = [...exchanges].reverse().find((entry) => entry.kind === 'question' || entry.kind === 'proposal');
+  const awaiting = lastPrompt !== undefined && exchanges.indexOf(lastPrompt) === exchanges.length - 1;
 
   return (
     <>
@@ -251,6 +284,42 @@ export function AskSidequest(props: AskSidequestProps) {
                         <p className="text-ink">{entry.text}</p>
                       ) : entry.kind === 'error' ? (
                         <p data-testid="ask-sidequest-error" className="rounded-lg border border-rule px-3 py-2 text-ink-faint">{entry.text}</p>
+                      ) : entry.kind === 'proposal' ? (
+                        <div data-testid="ask-proposal" className="rounded-lg border border-accent/40 bg-accent-soft/40 px-3 py-3">
+                          <h3 className="font-display text-base leading-snug text-ink">{proposalHeading(entry.days, entry.text)}</h3>
+                          <p className="mt-1 text-ink-muted">{entry.scope}</p>
+                          {entry.changes.length > 0 ? (
+                            <ul className="mt-2 flex flex-col gap-0.5 text-ink">
+                              {entry.changes.map((change, changeIndex) => (
+                                <li key={changeIndex}>{change}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {entry.answered ? (
+                            <p className="mt-2 text-ink-faint" data-testid="ask-proposal-answered">{entry.answered === applyOption(entry.options) ? 'Applied.' : 'Cancelled.'}</p>
+                          ) : (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              data-testid="ask-proposal-apply"
+                              onClick={() => answer(entry.runId, applyOption(entry.options))}
+                              disabled={working}
+                              className={cx(buttonClass('primary', 'sm'), 'disabled:opacity-50')}
+                            >
+                              {applyOption(entry.options)}
+                            </button>
+                            <button
+                              type="button"
+                              data-testid="ask-proposal-cancel"
+                              onClick={() => answer(entry.runId, cancelOption(entry.options))}
+                              disabled={working}
+                              className={cx(buttonClass('secondary', 'sm'), 'disabled:opacity-50')}
+                            >
+                              {cancelOption(entry.options)}
+                            </button>
+                          </div>
+                          )}
+                        </div>
                       ) : entry.kind === 'question' ? (
                         <div data-testid="ask-sidequest-question">
                           <p className="text-ink">{entry.text}</p>
@@ -274,6 +343,13 @@ export function AskSidequest(props: AskSidequestProps) {
                           <ChangeList title="Kept" items={entry.summary.kept} />
                           <ChangeList title="Rechecking" items={entry.summary.rechecking} muted />
                           {entry.summary.refused.length > 0 ? <ChangeList title="Not changed" items={entry.summary.refused} muted /> : null}
+                          {entry.undoable ? (
+                            <p>
+                              <button type="button" onClick={undo} disabled={working} className={cx(buttonClass('secondary', 'sm'), 'disabled:opacity-50')} data-testid="ask-sidequest-undo-applied">
+                                Undo this change
+                              </button>
+                            </p>
+                          ) : null}
                         </div>
                       )}
                     </li>
@@ -339,6 +415,29 @@ export function AskSidequest(props: AskSidequestProps) {
       ) : null}
     </>
   );
+}
+
+/**
+ * "Change days 4–6?" — the days the proposal touches, as a range a person reads.
+ *
+ * Falls back to the model's own question when the proposal names no day, which
+ * is the honest rendering of a change whose scope is the whole trip.
+ */
+function proposalHeading(days: readonly number[], fallback: string): string {
+  if (days.length === 0) return fallback;
+  const sorted = [...new Set(days)].sort((a, b) => a - b);
+  const contiguous = sorted.every((day, index) => index === 0 || day === sorted[index - 1]! + 1);
+  if (sorted.length === 1) return `Change day ${sorted[0]}?`;
+  return contiguous ? `Change days ${sorted[0]}\u2013${sorted[sorted.length - 1]}?` : `Change days ${sorted.join(', ')}?`;
+}
+
+/* The run's own option words, so the button sends exactly what the server expects. */
+function applyOption(options: readonly string[]): string {
+  return options.find((option) => /^(apply|yes|go ahead|do it)/i.test(option)) ?? options[0] ?? 'Apply';
+}
+
+function cancelOption(options: readonly string[]): string {
+  return options.find((option) => /^(cancel|no|leave|keep)/i.test(option)) ?? options[options.length - 1] ?? 'Cancel';
 }
 
 function ChangeList({ title, items, muted = false }: { title: string; items: readonly string[]; muted?: boolean }) {

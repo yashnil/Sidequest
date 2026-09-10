@@ -109,17 +109,26 @@ export class RoutingError extends Error {
    * request could not.
    */
   readonly deterministic: boolean;
+  /**
+   * V6 §11 — the service could not be reached: connection refused, DNS,
+   * transport timeout, or a circuit already open because it stopped
+   * answering. A fact about the endpoint, carried so the routing hierarchy
+   * stops asking it and falls through instead of spending the build's budget
+   * on twenty-three identical failures.
+   */
+  readonly unreachable: boolean;
 
   constructor(
     code: RoutingError['code'],
     message: string,
-    options: { deterministic?: boolean; outOfCoverage?: boolean } = {},
+    options: { deterministic?: boolean; outOfCoverage?: boolean; unreachable?: boolean } = {},
   ) {
     super(message);
     this.name = 'RoutingError';
     this.code = code;
     this.outOfCoverage = options.outOfCoverage ?? false;
     this.deterministic = options.deterministic ?? false;
+    this.unreachable = options.unreachable ?? false;
   }
 }
 
@@ -160,11 +169,14 @@ export type ValhallaFailureReason =
    * on requests that were refused before they were sent. `routing-composite.ts`
    * now learns from this reason and falls through.
    */
-  | 'out_of_coverage';
+  | 'out_of_coverage'
+  /** V6 §11 — the endpoint could not be reached. See `RoutingError.unreachable`. */
+  | 'unreachable';
 
 function classifyRoutingFailure(error: unknown): ValhallaFailureReason {
   if (error instanceof RoutingError && error.code === 'rate_limited') return 'rate_limited';
   if (error instanceof RoutingError && error.outOfCoverage) return 'out_of_coverage';
+  if (error instanceof RoutingError && error.unreachable) return 'unreachable';
   return 'provider_error';
 }
 
@@ -339,7 +351,7 @@ async function fetchBlock(
   maxAttempts: number = MAX_ATTEMPTS,
 ): Promise<{ minutes: number[][]; km: number[][]; noRoute: boolean[][] }> {
   if (circuit?.open) {
-    throw new RoutingError('request_failed', 'The routing service stopped answering.');
+    throw new RoutingError('request_failed', 'The routing service stopped answering.', { unreachable: true });
   }
 
   const body = {
@@ -373,7 +385,8 @@ async function fetchBlock(
         signal: requestSignal(REQUEST_TIMEOUT_MS),
       });
     } catch {
-      lastError = new RoutingError('request_failed', 'The routing service did not answer.');
+      /* A throw from fetch is transport: refused, unresolved, timed out. The service was never reached. */
+      lastError = new RoutingError('request_failed', 'The routing service could not be reached.', { unreachable: true });
       continue;
     }
 
@@ -1080,6 +1093,7 @@ export async function computeMatrix(
   const reasonCounts: Record<ValhallaFailureReason, number> = {
     not_found: 0,
     out_of_coverage: 0,
+    unreachable: 0,
     provider_error: 0,
     rate_limited: 0,
     budget_exhausted: 0,

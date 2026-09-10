@@ -35,6 +35,7 @@ import {
 import { destinationEntryById, destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
 import { guardAction, sessionToken } from '@/lib/net/caller';
+import { currentUserId } from '@/lib/auth/session';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 /**
@@ -231,6 +232,7 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
               basis: 'climate_normals' as const,
               generatedAt: now.toISOString(),
               accepted: true,
+              decidedBy: 'traveller' as const,
             },
           }
         : {}),
@@ -329,6 +331,14 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
     adults: input.adults,
     children: input.children,
     travelerNeeds: input.travelerNeeds,
+    /*
+     * V6 — THE LOCK IS WRITTEN WITH THE DATES.
+     *
+     * Typed dates and an accepted window are the traveller's decision and
+     * travel as `traveler`. Every other mode leaves the two dates above as a
+     * placeholder with no lock, which is what tells the composition to choose.
+     */
+    ...(timingLockFor(input) ? { timingLock: timingLockFor(input) } : {}),
   });
   if (!basics.success) {
     const fieldErrors: Record<string, string> = {};
@@ -373,7 +383,7 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
      * "your trips". Minted here if there is none yet: an action may set a
      * cookie, and this is the first moment there is anything to own.
      */
-    tripId = createTrip(basics, await sessionToken({ mint: true })).id;
+    tripId = createTrip(basics, await sessionToken({ mint: true }), await currentUserId()).id;
     saveComposerAnswers(tripId, answers);
     if (!region) {
       saveDestinationQuery(tripId, 'known_destination', input.destinationText);
@@ -582,6 +592,21 @@ function resolveNights(input: z.infer<typeof inputSchema>): number {
  * `dates.mode` rather than from these two values. Nothing may present a
  * materialised date as a decision.
  */
+/**
+ * V6 — who has decided the dates at this door, if anyone.
+ *
+ * `exact` and `flexible` carry dates the traveller typed. A `recommendation`
+ * in the payload exists only because they pressed "Use this timing". Both are
+ * theirs. Everything else is a placeholder that the composition is asked to
+ * replace, and must not be locked — locking it would silently make October
+ * the answer to "when is best".
+ */
+function timingLockFor(input: z.infer<typeof inputSchema>): 'traveler' | null {
+  if ((input.dateMode === 'exact' || input.dateMode === 'flexible') && input.startDate && input.endDate) return 'traveler';
+  if (input.recommendation) return 'traveler';
+  return null;
+}
+
 function materialiseDates(
   input: z.infer<typeof inputSchema>,
   nights: number,

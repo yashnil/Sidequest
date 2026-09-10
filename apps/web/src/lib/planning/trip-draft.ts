@@ -352,6 +352,24 @@ export const draftDaySchema = z.object({
    * reordered independently of each other.
    */
   partOf: prose(60).optional(),
+  /**
+   * V6 §5 — A SPLIT EXPERIENCE: same base, different activities, a rejoin.
+   *
+   * A heterogeneous party is not averaged. When three people want the
+   * seven-hour hike and one cannot do steep ground, the day says who does
+   * what and where they meet again, rather than dropping the hike or
+   * dragging the fourth up it. Optional; most days have none.
+   */
+  split: z
+    .object({
+      /** Who does something else: "Mum", "the two of you who are not hiking". */
+      who: prose(60),
+      /** What they do instead. */
+      does: prose(DRAFT_SOFT_PROSE_CAPS.dayNote),
+      /** Where and roughly when everyone is together again. */
+      rejoin: prose(80).optional(),
+    })
+    .optional(),
 });
 export type DraftDay = z.infer<typeof draftDaySchema>;
 

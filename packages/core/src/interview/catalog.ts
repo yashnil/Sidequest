@@ -100,6 +100,21 @@ export interface InterviewTraveller {
   carried: readonly string[];
   /** Whether the composer captured must-do / avoid text, so the names question need not ask again. */
   composerNamedPlaces?: boolean;
+  /**
+   * V6 §6 — WHO IS TRAVELLING, AS THE SELECTOR READS IT.
+   *
+   * Present only when the traveller described people. `needs` are functional
+   * need keys across the party; `drivers` counts members who said they can
+   * drive (null when nobody said either way); `dietsRecorded` is true when
+   * every member has a diet on record, which makes the trip-level dietary
+   * question redundant rather than wrong.
+   */
+  party?: {
+    members: number;
+    needs: readonly string[];
+    drivers: number | null;
+    dietsRecorded: boolean;
+  };
 }
 
 export interface InterviewContext {
@@ -771,7 +786,8 @@ const DIETARY: QuestionDefinition = {
   burden: 1,
   criticality: 2,
   optional: true,
-  relevance: () => 1,
+  /* V6 — asked of everyone, unless every named member already has a diet on record: then it is redundant, not wrong. */
+  relevance: (ctx) => (ctx.traveller.party?.dietsRecorded ? 0.2 : 1),
   read: (answers) => ({ needs: answers.dietaryNeeds, strict: answers.dietaryStrict, notes: answers.dietaryNotes ?? '' }),
   /*
    * MVP V3, Stage 16 — a diet, any number of exclusions, and the traveller's
@@ -983,7 +999,7 @@ const DAILY_DRIVING: QuestionDefinition = choice({
   burden: 1,
   criticality: 2,
   dependsOn: ['transport_mode'],
-  relevance: (ctx, answers) => (answers.willDrive && (t(ctx, 'road_trip_region') || t(ctx, 'mountain') || t(ctx, 'compact_country') || t(ctx, 'broad_geography') || t(ctx, 'remote') || ctx.destination.traits.length === 0) ? 1 : 0),
+  relevance: (ctx, answers) => (answers.willDrive && ctx.traveller.party?.drivers !== 0 && (t(ctx, 'road_trip_region') || t(ctx, 'mountain') || t(ctx, 'compact_country') || t(ctx, 'broad_geography') || t(ctx, 'remote') || ctx.destination.traits.length === 0) ? 1 : 0),
   read: (answers) => String([90, 150, 240, 360].reduce((best, m) => (Math.abs(m - answers.maxDailyTravelMinutes) < Math.abs(best - answers.maxDailyTravelMinutes) ? m : best), 150)),
   apply: (value) => ({ maxDailyTravelMinutes: Math.max(30, Math.min(480, Number(value) || 150)) }),
   smartDefault: (ctx) => (t(ctx, 'broad_geography') || t(ctx, 'remote') ? { value: '240', reason: `Distances around ${ctx.destination.proseName} are long, so we'll allow up to four hours on the days that need it and keep the others short.`, source: 'destination_prior' } : { value: '150', reason: "We'll keep driving to about two and a half hours a day, round trip.", source: 'smart_default' }),
@@ -1004,7 +1020,7 @@ const ROAD_COMFORT: QuestionDefinition = choice({
   burden: 1,
   criticality: 2,
   dependsOn: ['transport_mode'],
-  relevance: (ctx, answers) => (answers.willDrive && (t(ctx, 'mountain') || t(ctx, 'remote') || t(ctx, 'wilderness') || t(ctx, 'winter_access')) ? 1 : 0),
+  relevance: (ctx, answers) => (answers.willDrive && ctx.traveller.party?.drivers !== 0 && (t(ctx, 'mountain') || t(ctx, 'remote') || t(ctx, 'wilderness') || t(ctx, 'winter_access')) ? 1 : 0),
   read: (answers) => (answers.comfortableGravelRoads ? 'gravel' : answers.comfortableMountainRoads ? 'mountain' : 'paved'),
   apply: (value) => ({ comfortableMountainRoads: value !== 'paved', comfortableGravelRoads: value === 'gravel' }),
   smartDefault: (ctx) => (t(ctx, 'winter_access') ? { value: 'paved', reason: "Your dates fall in the winter season, so we'll keep to paved, maintained roads unless you say otherwise.", source: 'destination_prior' } : { value: 'mountain', reason: "We'll assume mountain passes on tarmac are fine and keep off gravel unless you say otherwise.", source: 'smart_default' }),
@@ -1282,7 +1298,7 @@ const EVERYONE_EVERY_DAY: QuestionDefinition = choice({
   impacts: ['group_fit', 'day_density', 'effort'],
   burden: 1,
   criticality: 1,
-  relevance: (ctx) => (ctx.traveller.adults + ctx.traveller.children >= 3 || t(ctx, 'family_logistics_sensitive') ? 1 : 0),
+  relevance: (ctx) => (ctx.traveller.adults + ctx.traveller.children >= 3 || t(ctx, 'family_logistics_sensitive') || (ctx.traveller.party?.needs.length ?? 0) > 0 ? 1 : 0),
   read: (answers) => (answers.everyoneEveryDay ? 'yes' : 'no'),
   apply: (value) => ({ everyoneEveryDay: value !== 'no' }),
   smartDefault: (ctx) => (ctx.traveller.children > 0 ? { value: 'yes', reason: "With children along we'll keep the group together and every stop workable for all of you.", source: 'smart_default' } : { value: 'no', reason: "We'll allow the group to split for an afternoon when appetites differ.", source: 'smart_default' }),

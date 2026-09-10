@@ -1,8 +1,9 @@
 import 'server-only';
 import { cookies } from 'next/headers';
 import type { Trip } from '@sidequest/core';
-import { getTrip, tripOwnerToken } from '../db/repository';
+import { getTrip, tripOwner } from '../db/repository';
 import { SESSION_COOKIE } from './caller';
+import { currentUserId } from '../auth/session';
 
 /**
  * ONE BOUNDARY FOR EVERY TRIP DOOR, NOT A BOUNDARY PER BUTTON.
@@ -46,6 +47,9 @@ import { SESSION_COOKIE } from './caller';
 export const FOREIGN_TRIP_REFUSAL =
   'This trip was made in a different browser, so only that browser can work on it.';
 
+/** V6 §50 — the refusal when the trip belongs to an account this request is not signed in to. */
+export const FOREIGN_ACCOUNT_TRIP_REFUSAL = 'This trip belongs to a different account. Sign in to that account to work on it.';
+
 /** The session this request presented, or the fact that there is no request. */
 async function browserSession(): Promise<{ inRequest: boolean; token: string | null }> {
   try {
@@ -68,8 +72,21 @@ async function browserSession(): Promise<{ inRequest: boolean; token: string | n
 export async function tripAccessRefusal(tripId: string): Promise<string | null> {
   const { inRequest, token } = await browserSession();
   if (!inRequest) return null;
-  const owner = tripOwnerToken(tripId);
-  if (!owner || !token || owner !== token) return FOREIGN_TRIP_REFUSAL;
+  const owner = tripOwner(tripId);
+  if (!owner) return FOREIGN_TRIP_REFUSAL;
+  /*
+   * V6 §50 — ACCOUNT FIRST, BROWSER ONLY WHILE THERE IS NO ACCOUNT.
+   *
+   * A claimed trip answers to its `user_id` and to nothing else: the cookie
+   * that made it stops being authorisation the moment the trip belongs to an
+   * account, so a shared computer cannot reach a trip its previous user
+   * saved. An unclaimed trip keeps the browser rule unchanged.
+   */
+  if (owner.userId) {
+    const userId = await currentUserId();
+    return userId === owner.userId ? null : FOREIGN_ACCOUNT_TRIP_REFUSAL;
+  }
+  if (!owner.ownerToken || !token || owner.ownerToken !== token) return FOREIGN_TRIP_REFUSAL;
   return null;
 }
 

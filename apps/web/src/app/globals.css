@@ -553,6 +553,45 @@
   .atlas-muted {
     color: var(--color-atlas-muted);
   }
+  /*
+   * V6 — A PHOTOGRAPH AS THE BAND'S GROUND.
+   *
+   * One of this trip's own places, bled off the right edge and dissolved into
+   * the atlas ink so the destination's name never sits on a busy area of the
+   * picture. The mask does the work rather than an overlay, so the darkest part
+   * of the band is the ink itself and the picture is never tinted — a
+   * photograph somebody licensed should look like the photograph they licensed.
+   */
+  .atlas-figure {
+    mask-image: linear-gradient(to right, transparent 0%, rgb(0 0 0 / 0.35) 26%, rgb(0 0 0 / 0.9) 62%, #000 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgb(0 0 0 / 0.35) 26%, rgb(0 0 0 / 0.9) 62%, #000 100%);
+  }
+  /* The frame fills the band rather than keeping its own aspect: the band decides the shape here. */
+  .atlas-figure-fill > figure,
+  .atlas-figure-fill > figure > div {
+    height: 100% !important;
+    aspect-ratio: auto !important;
+  }
+  /* The place sheet arrives from the edge it sits on; nothing moves on a reduced-motion machine. */
+  .sheet-enter {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity var(--motion-base) var(--ease-out),
+      transform var(--motion-base) var(--ease-out);
+    @starting-style {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @media (min-width: 640px) {
+    .sheet-enter {
+      @starting-style {
+        opacity: 0;
+        transform: translateX(18px);
+      }
+    }
+  }
   /* Controls that were designed for paper sit on the atlas as quiet outlined pills. */
   .atlas-actions > button,
   .atlas-actions > form button,
@@ -695,9 +734,15 @@
     size: A4;
     margin: 12mm 12mm 14mm;
   }
+  /*
+   * 8.5pt, not 9.5. Nearly every size in this product is a fixed rem — a
+   * Tailwind `text-sm` does not inherit a parent's `font-size` — so the root
+   * size is the only lever that scales the whole packet, and a percentage off
+   * it is a square off the page count.
+   */
   html {
-    font-size: 9.5pt;
-    line-height: 1.4;
+    font-size: 8.5pt;
+    line-height: 1.38;
   }
   h1,
   h2,
@@ -743,8 +788,100 @@
   [data-view="map"] {
     display: none !important;
   }
-  [data-view="days"] {
+  /*
+   * V6 — THE PACKET IS SIX SECTIONS, ONE PER OPENING.
+   *
+   *   1 the trip, its route and its map          (overview)
+   *   2 the days                                 (days)
+   *   3 stays and bookings, 4 transport and food (plan)
+   *   5 what to arrange and pack                 (prepare)
+   *   6 what to settle before committing         (critical checks)
+   *
+   * Everything evaluative or archival — the verification ledger, the critique,
+   * what was considered and left out, the plan's own notes — prints only for
+   * `?appendix=1`. The measured cost of not doing this was 18 A4 pages for a
+   * five-day trip.
+   */
+  [data-view="days"],
+  [data-view="prepare"] {
     break-before: page;
+  }
+  /*
+   * Bookings appears twice by design on screen — "the same list as Book first,
+   * in a different order" — and twice on paper is a wasted page. The packet
+   * keeps Book first (which says what would break the trip) and the traveller's
+   * own bookings; the re-grouping is a screen affordance.
+   */
+  [data-plan-panel="bookings"] [data-testid="booking-progress"],
+  [data-plan-panel="bookings"] [data-testid^="hub-bookings-group-"],
+  [data-view="overview"] [data-testid="booking-progress"],
+  [data-view="overview"] [data-testid="overview-book-first"] {
+    display: none !important;
+  }
+  [data-testid="hub-packing-list"] {
+    columns: 3 !important;
+    font-size: 0.9em;
+  }
+  [data-testid="hub-food"] ol,
+  [data-testid="hub-backups"] ol {
+    font-size: 0.85em;
+  }
+  /*
+   * Packet density, second pass. Measured on a five-day Mammoth Lakes plan: the
+   * three-phase checklist alone took 1.3 A4 pages of 40%-empty cards, and the
+   * section rules between eight prepare sections took most of another. Type
+   * size, section rhythm and card padding, in that order — never by cutting a
+   * fact a traveller would have to look up.
+   */
+  /* A tick box's reason is for the screen, where there is room to read it. */
+  .check-hint {
+    display: none !important;
+  }
+  [data-view="plan"] section,
+  [data-view="prepare"] section {
+    margin-top: 0.9rem !important;
+  }
+  [data-view="prepare"] .rule-strong,
+  [data-view="prepare"] .rule-top {
+    padding-top: 0.5rem !important;
+  }
+  [data-testid="where-to-stay"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    font-size: 0.9em;
+  }
+  [data-testid="where-to-stay"] > li {
+    padding: 0.5rem !important;
+  }
+  [data-testid="hub-readiness-primary"] > li {
+    padding-top: 0.35rem !important;
+    padding-bottom: 0.35rem !important;
+  }
+  /* The days are the packet's centre of gravity; they set the tightest rhythm on it. */
+  [data-view="days"] [id^="day-"] > div {
+    padding: 0.45rem 0.6rem 0.25rem !important;
+  }
+  [data-view="days"] [id^="day-"] > div + div {
+    padding: 0.15rem 0.6rem 0.35rem !important;
+  }
+  [data-view="days"] [data-row-kind] {
+    padding: 0.22rem 0.6rem !important;
+  }
+  [data-view="days"] h2 {
+    font-size: 1.15rem !important;
+  }
+  [data-view="days"] ol > li + li {
+    margin-top: 0.9rem !important;
+  }
+  [data-view="days"] [data-testid^="day-notes-"] {
+    font-size: 0.9em;
+  }
+  /* The place sheet and its trigger are screen affordances; paper prints the name. */
+  [data-testid="place-sheet"] {
+    display: none !important;
+  }
+  [data-testid="stop-open-sheet"] {
+    display: inline !important;
+    text-decoration: none !important;
   }
   /*
    * Packet density, measured on the Ireland replay (10 days, 7 bases): the map

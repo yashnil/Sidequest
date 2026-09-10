@@ -187,7 +187,12 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
         kind,
         necessity: leg.mode === 'flight' ? 'required' : 'strongly_recommended',
         priority: bookingPriorityFor({ necessity: leg.mode === 'flight' ? 'required' : 'strongly_recommended', hardDependency: true, fixedDateTime: true, limitedCapacity: leg.mode === 'flight', fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
-        reason: leg.mode === 'flight' ? 'The route moves by air here; without the seat the next base is out of reach.' : `The route crosses water or hands over to an operator here; ${leg.durationBasis === 'unmeasured' ? 'the timetable was not checked, so confirm it' : 'confirm the sailing'}.`,
+        reason:
+          leg.mode === 'flight'
+            ? `The route flies from ${leg.originName} to ${leg.destinationName}; without the seat the next base is out of reach.`
+            : leg.mode === 'ferry' || leg.mode === 'boat'
+              ? `${leg.originName} to ${leg.destinationName} is by ${leg.mode}; ${leg.durationBasis === 'unmeasured' ? 'the sailing times were not checked, so confirm them' : 'confirm the sailing time'}.`
+              : `${leg.originName} to ${leg.destinationName} is a transfer an operator arranges; ${leg.durationBasis === 'unmeasured' ? 'its timing was not checked, so confirm it with them' : 'confirm the pickup time'}.`,
         ...(leg.dayNumber ? { dayNumber: leg.dayNumber } : {}),
         ...(day ? { date: day.date } : {}),
         status: booked ? 'booked' : 'open',

@@ -1,4 +1,4 @@
-import { renderTravelerBriefXml, type TravelerBrief } from '@sidequest/core';
+import { contractBands, renderTravelerBriefXml, type TravelerBrief, type TripContract } from '@sidequest/core';
 import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import type { CompositionTimingBrief } from './canonical-input';
 import { createHash } from 'node:crypto';
@@ -117,6 +117,13 @@ export interface CompositionContext {
    */
   timing?: CompositionTimingBrief;
   /**
+   * V6 §2/§14 — the trip contract. Rendered as the four bands the prompt
+   * speaks (MUST KEEP / MUST AVOID / MAY DECIDE / SIDEQUEST WILL VERIFY) so
+   * the model is told, in sentences, which facts it may not override. The
+   * enforcement after the call refuses anything that contradicts a lock.
+   */
+  contract?: TripContract;
+  /**
    * A handful of derived planning numbers for the DETERMINISTIC consumers of
    * this context — the offline fixture composer and the wire normaliser's day
    * count. Not part of what the model reads: everything the model is told about
@@ -131,7 +138,7 @@ export interface CompositionPlanningFacts {
   budgetBand: string;
 }
 
-export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-09.3-v5';
+export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-10.1-v6';
 
 /**
  * Output ceiling — sized so it is never what truncates a trip.
@@ -240,6 +247,7 @@ Optimise the draft for all of the following, in this order when they conflict:
 21. Remote logistics are honest. Safari regions, rainforests, mountain countries and remote islands move by flight, boat, guide transfer, private driver, lodge transfer, horse or 4x4; say so in the transport strategy and on the activity that needs it, rather than pretending a road route exists.
 22. Season is part of the plan, not a backdrop. Say what these dates open and close: what is at its best, what is shut, what needs an earlier start, what the light does. When you are choosing the dates yourself, choose them for the trip you are designing — the strongest month for a high-country traverse and for a food-and-neighbourhood trip in the same country are not the same month — and give the traveller the reason.
 23. Money is a shape, not a number. Say where the plan deliberately spends and where it saves, in the transport strategy and the stay reasons. Do not state prices, fares or nightly rates: Sidequest costs the trip from its own data.
+24. A party is people, not an average. When the brief names travellers, every one of them is on every day: a person's hard rule (a diet, a need such as no steep ground or step-free access) binds the whole plan, and their tastes shape it. Never let three people's appetite for a strenuous day quietly drop the fourth. Where one person cannot do the day's core, or where interests genuinely diverge, write a 'split' on that day as one line — "Who: what they do instead; rejoin where and when" — rather than dropping the core or dragging them through it. Most days need no split; use it once or twice where it makes the trip better for everyone.
 </quality_contract>
 
 <examples>
@@ -285,7 +293,7 @@ Omit any optional field you have nothing specific to say about rather than filli
 <output_contract>
 Return one JSON object and nothing else.
 
-Trip: archetype; signatures (the one to three experiences this trip is built around, by name); purpose (why this trip suits this traveller); routeRationale (why these bases in this order); timingRationale (what these dates open and close); transportSummary (the strategy — who drives, what is hired, what is guided); driving (rental_self_drive, owned_self_drive, private_driver, taxi_rideshare, operator_transfer or none); bookFirst (what to book first, in the order the ITINERARY depends on it — the guide, permit, hut or limited service the trip stands on, before the ordinary bed; one short line each, only where a booking genuinely gates something); stays; days; omissions (name, reason); tradeoffs; backups (trigger, alternative, day).
+Trip: archetype; signatures (the one to three experiences this trip is built around, by name); purpose (why this trip suits this traveller); route (why these bases in this order); timingRationale (what these dates open and close); transport (the strategy, one sentence — who drives, what is hired, what is guided); driving (rental_self_drive, owned_self_drive, private_driver, taxi_rideshare, operator_transfer or none); bookFirst (what to book first, in the order the ITINERARY depends on it — the guide, permit, hut or limited service the trip stands on, before the ordinary bed; one short line each, only where a booking genuinely gates something); stays; days (each may carry split: "Who: what they do instead; rejoin where and when"); omissions (name, why); tradeoffs; backups (trigger, then, day).
 
 window: only when you were asked to choose the dates — startDate and endDate as YYYY-MM-DD, spanning exactly the day count given.
 
@@ -379,7 +387,7 @@ export function buildCompositionTask(context: CompositionContext): string {
       : []),
     ...(envelope.travellerPhrase
       ? [
-          `The traveller wrote: "${envelope.travellerPhrase}". That phrase is what they asked for; the name and coordinates above are the nearest thing Sidequest could resolve it to and may be narrower, wider or beside the point. Plan the trip they described. If their phrase names a region, a landscape or an area with no single centre, treat it as that rather than as the settlement above, and say in routeRationale how you read it.`,
+          `The traveller wrote: "${envelope.travellerPhrase}". That phrase is what they asked for; the name and coordinates above are the nearest thing Sidequest could resolve it to and may be narrower, wider or beside the point. Plan the trip they described. If their phrase names a region, a landscape or an area with no single centre, treat it as that rather than as the settlement above, and say in route how you read it.`,
         ]
       : []),
     /*
@@ -421,6 +429,7 @@ export function buildCompositionTask(context: CompositionContext): string {
     '',
     renderTravelerBriefXml(brief),
     '',
+    ...(context.contract ? [renderContractBands(context.contract), ''] : []),
     ...(context.mode === 'quick' ? ['The traveller gave only the essentials and asked Sidequest to plan what it thinks is right. Choose sensible defaults confidently.', ''] : []),
     'DAY WINDOWS (hard). Nothing may be scheduled before the arrival on day 1 or after the departure on the last day: a morning departure means the last day holds at most a short walk or nothing. Keep every day inside a normal waking window and never assume a late night the traveller did not ask for.',
     ...(context.bookedFacts && context.bookedFacts.length > 0
@@ -431,9 +440,30 @@ export function buildCompositionTask(context: CompositionContext): string {
     'WHAT TO RETURN',
     `One draft covering day 1 to day ${days} in order, no day missing; every day names one of the stays by its exact name; nights across stays sum to ${nights}. A stay is named after the real town or area where the traveller sleeps (lodgingArea and lodgingStyle say where and how to book), never after a hotel.`,
     `Archetypes: ${CURRENT_TRIP_ARCHETYPES.join(', ')}. Activity categories: ${ANCHOR_CATEGORIES.join(', ')}. Transport values: ${DRAFT_TRANSPORTS.join(', ')}. Driving arrangements: ${DRAFT_DRIVING_ARRANGEMENTS.join(', ')}. Time-of-day values: ${WIRE_TIME_OF_DAY.join(', ')}.`,
+    'An activity is a place or an experience with a name. Movement between places ("Drive X to Y", "Transfer to Z", "Flight to W") and arrival or departure points (an airport, a station) are never activities: Sidequest builds the legs and the terminal plan from the stays and the transport values. Name a gateway only in transport notes, and only one — if the traveller has not chosen between two airports, say so in unresolved.',
     'Every activity carries its real name and, where the name could mean more than one place, a locality. Keep each prose field to a sentence or two; no web addresses, no markup.',
   ];
   return lines.join('\n');
+}
+
+/**
+ * V6 — the contract in four bands. Sentences, not fields: the model reads a
+ * brief. `must_keep` is what it may not change, `must_avoid` what it may not
+ * schedule, `may_decide` its own territory, `sidequest_will_verify` what it
+ * need not pretend to know (so it names places confidently and leaves the
+ * checking to the deterministic layer).
+ */
+export function renderContractBands(contract: TripContract): string {
+  const bands = contractBands(contract);
+  const block = (tag: string, lines: readonly string[]) => (lines.length > 0 ? [`<${tag}>`, ...lines.map((line) => `- ${line}`), `</${tag}>`] : []);
+  return [
+    '<contract>',
+    ...block('must_keep', bands.mustKeep),
+    ...block('must_avoid', bands.mustAvoid),
+    ...block('may_decide', bands.mayDecide),
+    ...block('sidequest_will_verify', bands.willVerify),
+    '</contract>',
+  ].join('\n');
 }
 
 export type CompositionOutcome =

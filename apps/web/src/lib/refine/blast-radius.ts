@@ -25,6 +25,42 @@ const TRIP_FACTS = {
   booked: 'booked_facts',
 } as const;
 
+function multiDayRuns(draft: TripDraft, days: readonly number[]): number[] {
+  const expanded = new Set(days);
+  for (const dayNumber of days) {
+    const partOf = draft.days.find((day) => day.dayNumber === dayNumber)?.partOf;
+    if (!partOf) continue;
+    for (const day of draft.days) if (day.partOf === partOf) expanded.add(day.dayNumber);
+  }
+  return [...expanded].sort((a, b) => a - b);
+}
+
+/** Intents that may legitimately move where the traveller sleeps. */
+const BASE_INTENTS: ReadonlySet<RefinementIntent> = new Set<RefinementIntent>(['preserve_x_change_y', 'change_stay', 'change_base', 'change_route', 'try_alternative', 'major_replan', 'change_booked_fact']);
+
+/**
+ * V6 — THE RADIUS, BOUNDED TO THE PATCH.
+ *
+ * The intent radius is the envelope the request allows; the patch is what the
+ * model actually proposes. The scope shown to the traveller and written into
+ * the contract is their intersection, plus two consequences the patch cannot
+ * express on its own: a multi-day run moves whole, and a night moved moves the
+ * days that sleep on it. So a day the request named but the patch never
+ * touches is not "changed" (the live Hokkaido proposal listed the two kept
+ * Biei days as changing), a day the patch reaches outside the envelope stays
+ * preserved and is refused with that reason, and a stay the patch edits under
+ * an intent that may move stays is in scope rather than silently held.
+ */
+export function radiusForPatch(input: { radius: BlastRadius; reach: { days: readonly number[]; bases: readonly string[] }; intent: RefinementIntent; draft: TripDraft }): BlastRadius {
+  const { radius, reach, intent, draft } = input;
+  if (radius.wholeTrip) return radius;
+  const bases = BASE_INTENTS.has(intent) ? [...new Set([...radius.bases, ...reach.bases.filter((id) => draft.bases.some((base) => base.id === id))])] : [...radius.bases];
+  const envelope = new Set(radius.days);
+  const reached = multiDayRuns(draft, reach.days);
+  const days = reach.days.length === 0 ? [...radius.days] : reached.filter((day) => envelope.has(day) || radius.days.length === 0 || reach.bases.length > 0);
+  return { ...radius, days: [...new Set(days)].sort((a, b) => a - b), bases };
+}
+
 /**
  * Which days and bases an intent reaches, given the days the request named.
  *
@@ -52,15 +88,7 @@ export function blastRadiusFor(input: {
    * a system that edited only day 5 would produce a route whose days no longer
    * join up. Pulling the whole run into the radius is what makes that visible.
    */
-  const withMultiDayRuns = (days: readonly number[]): number[] => {
-    const expanded = new Set(days);
-    for (const dayNumber of days) {
-      const partOf = draft.days.find((day) => day.dayNumber === dayNumber)?.partOf;
-      if (!partOf) continue;
-      for (const day of draft.days) if (day.partOf === partOf) expanded.add(day.dayNumber);
-    }
-    return [...expanded].sort((a, b) => a - b);
-  };
+  const withMultiDayRuns = (days: readonly number[]): number[] => multiDayRuns(draft, days);
 
   switch (intent) {
     case 'ask_about_trip':

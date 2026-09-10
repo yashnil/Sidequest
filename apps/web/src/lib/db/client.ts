@@ -2,7 +2,7 @@ import 'server-only';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, REFINEMENT_SCHEMA_SQL, SCHEMA_SQL } from './schema';
+import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, REFINEMENT_SCHEMA_SQL, SCHEMA_SQL, SCHEMA_USER_VERSION, V6_SCHEMA_SQL, V6_TABLE_REBUILDS } from './schema';
 
 /**
  * Local persistence driver.
@@ -53,11 +53,58 @@ export function getDb(): Database.Database {
    * hot path and a migration nobody can point to.
    */
   db.exec(REFINEMENT_SCHEMA_SQL);
+  /*
+   * V6 — users, sessions, travellers, party, evidence, lifecycle history, and
+   * the five formerly lazy tables. `users` has to exist before the column
+   * migration adds `trips.user_id REFERENCES users(id)`.
+   */
+  db.exec(V6_SCHEMA_SQL);
   applyColumnMigrations(db);
+  applyTableRebuilds(db);
   applyIndexMigrations(db);
+  stampSchemaVersion(db);
 
   globalForDb.sidequestDb = db;
   return db;
+}
+
+/**
+ * V6 — REBUILD A TABLE THAT EXISTS WITHOUT ITS FOREIGN KEY.
+ *
+ * Runs once per table: skipped when `PRAGMA foreign_key_list` already names
+ * `trips`. One transaction per table, with `foreign_keys` left ON so the copy
+ * itself refuses an orphan rather than carrying one. Orphans are counted and
+ * logged; they are the rows this repair exists to stop accumulating.
+ */
+function applyTableRebuilds(db: Database.Database): void {
+  for (const rebuild of V6_TABLE_REBUILDS) {
+    const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`).get(rebuild.table) as { name: string } | undefined;
+    if (!exists) continue;
+    const keys = db.prepare(`PRAGMA foreign_key_list(${rebuild.table})`).all() as { table: string }[];
+    if (keys.some((key) => key.table === 'trips')) continue;
+    const run = db.transaction(() => {
+      db.exec(`DROP TABLE IF EXISTS ${rebuild.table}__v6`);
+      db.exec(rebuild.create);
+      const cols = rebuild.columns.join(', ');
+      const orphans = (db.prepare(`SELECT COUNT(*) AS n FROM ${rebuild.table} WHERE trip_id NOT IN (SELECT id FROM trips)`).get() as { n: number }).n;
+      db.exec(`INSERT INTO ${rebuild.table}__v6 (${cols}) SELECT ${cols} FROM ${rebuild.table} WHERE trip_id IN (SELECT id FROM trips)`);
+      db.exec(`DROP TABLE ${rebuild.table}`);
+      db.exec(`ALTER TABLE ${rebuild.table}__v6 RENAME TO ${rebuild.table}`);
+      for (const index of rebuild.indexes) db.exec(index);
+      return orphans;
+    });
+    try {
+      const orphans = run();
+      if (orphans > 0) console.warn('Rebuilt a table with its foreign key; orphaned rows were not carried', { table: rebuild.table, orphans });
+    } catch (error) {
+      console.error('Could not rebuild a table with its foreign key; the old shape stands', { table: rebuild.table, error });
+    }
+  }
+}
+
+function stampSchemaVersion(db: Database.Database): void {
+  const current = (db.pragma('user_version', { simple: true }) as number) ?? 0;
+  if (current < SCHEMA_USER_VERSION) db.pragma(`user_version = ${SCHEMA_USER_VERSION}`);
 }
 
 /**

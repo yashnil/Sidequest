@@ -160,10 +160,13 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
   // hours the composed day leads with; the gondola's own window is asserted above.
   await expect(page.getByText(/sets the shape of this day/).first()).toBeVisible();
   // And where the hours came from, with no claim to have checked today.
-  // EXPERIENCE V2 — the source of the hours sits behind the stop's details disclosure.
-  await page.locator('#hub-view-days [data-testid="stop-details"]').evaluateAll((els) => els.forEach((el) => el.setAttribute('open', '')));
-  await expect(page.getByText(/Hours from/).first()).toBeVisible();
-  await expect(page.getByText(/We have not checked today/).first()).toBeVisible();
+  // V6 — the stop's detail is a sheet the traveller opens by pressing the stop, not a disclosure under it.
+  await page.locator('#hub-view-days [data-row-kind="activity"]').filter({ hasText: 'Open 09:00–16:30' }).first().getByTestId('stop-open-sheet').click();
+  const sheet = page.getByTestId('place-sheet');
+  await expect(sheet.getByText(/Hours from/).first()).toBeVisible();
+  await expect(sheet.getByText(/We have not checked today/).first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
 
   // The one screen an assertion cannot judge: captured every run so the hours
   // treatment gets looked at in light, dark and at a phone width.
@@ -243,8 +246,9 @@ test('the grounds are still schedulable on a day the visitor centre is shut', as
   await expect(
     page.getByRole('heading', { name: 'Manzanar National Historic Site', exact: true }),
   ).toBeVisible();
-  await page.locator('#hub-view-days [data-testid="stop-details"]').evaluateAll((els) => els.forEach((el) => el.setAttribute('open', '')));
-  await expect(page.getByText(/Signed for daylight use only/).first()).toBeVisible();
+  await page.locator('#hub-view-days [data-row-kind="activity"]').filter({ hasText: 'Manzanar National Historic Site' }).first().getByTestId('stop-open-sheet').click();
+  await expect(page.getByTestId('place-sheet').getByText(/Signed for daylight use only/).first()).toBeVisible();
+  await page.keyboard.press('Escape');
   // No borrowed schedule: the grounds show no opening window.
   await expect(page.getByText(/Open 09:00–16:30/)).toHaveCount(0);
 });

@@ -60,9 +60,41 @@ export interface TravelerBriefOwnWords {
   mobilityNotes?: string;
 }
 
+/**
+ * V6 §3/§5 — one named person on the trip, as the composition reads them.
+ *
+ * Only what changes the plan: hard dietary rules, functional needs, what
+ * this person enjoys when it differs from the group, their physical capacity
+ * and their own words about what to plan around. No diagnosis, no private
+ * notes, no age unless it was given as a planning fact.
+ */
+export interface TravelerBriefPartyMember {
+  displayName: string;
+  ageGroup?: string;
+  relationship?: string;
+  /** Hard dietary rules, one label each. */
+  dietaryHard: readonly string[];
+  /** Soft dietary preferences. */
+  dietarySoft: readonly string[];
+  /** Functional needs, one label each. */
+  needs: readonly string[];
+  /** "avoid steep climbs", "loves markets" — the differences from the group, in planning words. */
+  differences: readonly string[];
+  physicalCapability?: 'low' | 'moderate' | 'high';
+  /** Their own words about what to plan around, verbatim. */
+  notes?: string;
+  /** False when this person's preferences are not to shape the plan (a baby, an invited guest who has not answered). */
+  preferencesApply: boolean;
+  constraintsApply: boolean;
+}
+
 export interface TravelerBrief {
   version: typeof TRAVELER_BRIEF_VERSION;
   tripFacts: TravelerBriefTripFacts;
+  /** V6 — every named member of the party; empty when the traveller gave only counts. */
+  party: TravelerBriefPartyMember[];
+  /** V6 — what earlier trips taught Sidequest about this account, as leanings. */
+  learned: string[];
   hardConstraints: string[];
   travelStyle: string[];
   priorities: { theme: string; frequency: string; assumed: boolean }[];
@@ -109,6 +141,9 @@ export function buildTravelerBrief(input: {
   trip: TravelerBriefTripFacts;
   signals?: Partial<TravelerBriefSignals>;
   ownWords?: Partial<TravelerBriefOwnWords>;
+  party?: readonly TravelerBriefPartyMember[];
+  /** V6 §18 — leanings learned from earlier trips, medium or high confidence, phrased as leanings. Never rules. */
+  learned?: readonly string[];
 }): TravelerBrief {
   const { profile, trip } = input;
   const provenance = profile.provenance;
@@ -130,6 +165,12 @@ export function buildTravelerBrief(input: {
   // --- hard --------------------------------------------------------------------
   const hard: string[] = [];
   for (const constraint of profile.hard) hard.push(describeHard(constraint));
+  /* V6 §5 — a person's hard rules are the group's hard rules: the kitchen and the trail do not average. */
+  for (const member of input.party ?? []) {
+    if (!member.constraintsApply) continue;
+    for (const rule of member.dietaryHard) hard.push(`${member.displayName} cannot eat: ${rule}`);
+    for (const need of member.needs) hard.push(`${member.displayName}: ${need}`);
+  }
   if (profile.food.dietaryStrict && profile.food.dietaryNeeds.length > 0) {
     hard.push(`Dietary needs are absolute: ${profile.food.dietaryNeeds.map((n) => DIETARY_NEED_LABELS[n]).join(', ')}${profile.food.dietaryNotes ? ` — in their words: "${profile.food.dietaryNotes}"` : ''}`);
   }
@@ -267,6 +308,8 @@ export function buildTravelerBrief(input: {
   return {
     version: TRAVELER_BRIEF_VERSION,
     tripFacts: trip,
+    party: [...(input.party ?? [])],
+    learned: [...(input.learned ?? [])],
     hardConstraints: [...new Set(hard)],
     travelStyle,
     priorities,
@@ -319,6 +362,25 @@ export function renderTravelerBriefXml(brief: TravelerBrief): string {
   const lines: string[] = [
     `<traveler_brief version="${brief.version}">`,
     ...section('trip_facts', tripFacts),
+    ...(brief.party.length > 0
+      ? section(
+          'party',
+          brief.party.map((m) => {
+            const bits = [
+              m.ageGroup ? m.ageGroup : null,
+              m.relationship ? m.relationship : null,
+              m.physicalCapability ? `${m.physicalCapability} physical capacity` : null,
+              m.dietaryHard.length > 0 ? `cannot eat ${m.dietaryHard.join(', ')}` : null,
+              m.dietarySoft.length > 0 ? `prefers to avoid ${m.dietarySoft.join(', ')}` : null,
+              m.needs.length > 0 ? `plan around: ${m.needs.join('; ')}` : null,
+              ...m.differences,
+              m.notes ? `in their words: "${m.notes}"` : null,
+              !m.preferencesApply ? 'their tastes do not shape the plan' : null,
+            ].filter(Boolean);
+            return `${m.displayName}${bits.length > 0 ? ` — ${bits.join('; ')}` : ''}`;
+          }),
+        )
+      : []),
     ...section('hard_constraints', brief.hardConstraints, 'none stated'),
     ...section('travel_style', brief.travelStyle),
     ...section(
@@ -345,6 +407,7 @@ export function renderTravelerBriefXml(brief: TravelerBrief): string {
       brief.inTheirWords.map((entry) => `On ${entry.about}: "${entry.note}"`),
     ),
     ...section('assumptions', brief.assumptions, 'none — the traveller answered everything'),
+    ...(brief.learned.length > 0 ? section('learned_leanings', brief.learned.map((line) => `${line} — a leaning from earlier trips, never a rule; this trip's own answers win`)) : []),
     '</traveler_brief>',
   ];
   return lines.join('\n');

@@ -21,6 +21,7 @@ import { Panel } from '@/components/ui';
 import { getAnswers, getProfile } from '@/lib/db/repository';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
+import { partyFactsFor } from '@/lib/db/party-repository';
 import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { interviewContextFor } from '@/lib/interview/screening';
 import { compiledRegionFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
@@ -120,7 +121,9 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
     durationAdvice = fit.note ?? (fit.suggestion ? `your ${nights} night${nights === 1 ? '' : 's'} suits “${fit.suggestion.label}” — ${fit.suggestion.covers}.` : null);
   }
 
+  const party = partyFactsFor(id);
   const interviewContext = interviewContextFor({
+    ...(party ? { party } : {}),
     trip,
     intent,
     region: resolved.ok ? resolved.context : null,

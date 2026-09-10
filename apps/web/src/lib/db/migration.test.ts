@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { COLUMN_MIGRATIONS, SCHEMA_SQL } from './schema';
+import { COLUMN_MIGRATIONS, SCHEMA_SQL, V6_SCHEMA_SQL } from './schema';
 
 /**
  * MIGRATING A DATABASE THAT ACTUALLY HAS SOMETHING IN IT.
@@ -142,6 +142,8 @@ function migrate(databasePath: string): void {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA_SQL);
+  /* V6 — `users` must exist before `trips.user_id REFERENCES users(id)` is added, exactly as the driver orders it. */
+  db.exec(V6_SCHEMA_SQL);
   const apply = db.transaction(() => {
     for (const migration of COLUMN_MIGRATIONS) {
       const columns = db

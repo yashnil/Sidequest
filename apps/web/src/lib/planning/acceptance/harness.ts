@@ -234,6 +234,8 @@ export interface DayShape {
   meals?: TripDraft['days'][number]['meals'];
   /** PRODUCTION LOCK V5 §10 — the multi-day experience this day is one day of. */
   partOf?: string;
+  /** V6 §5 — a split experience on this day. */
+  split?: { who: string; does: string; rejoin?: string };
 }
 
 export function draftOf(input: {
@@ -273,6 +275,7 @@ export function draftOf(input: {
       })),
       meals: d.meals ?? { lunch: 'somewhere near the first stop', dinner: 'near base' },
       ...(d.partOf ? { partOf: d.partOf } : {}),
+      ...(d.split ? { split: d.split } : {}),
     })),
     omissions: input.omissions ? [...input.omissions] : [],
     unresolved: [],

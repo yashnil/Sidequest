@@ -30,6 +30,8 @@ const MOBILE = viewport('mobile');
 const RESPONSIVE_SPEC = ['**/viewports.spec.ts', '**/benchmark-viewports.spec.ts'];
 /** Today mode needs the fixture clock; `playwright.today.config.ts` runs it and clears this ignore. */
 const TODAY_SPEC = '**/live-world-today.spec.ts';
+/** V6 — needs the fixture climate; `playwright.timing.config.ts` runs it on its own server. */
+const TIMING_LOCK_SPEC = '**/timing-lock.spec.ts';
 
 /**
  * The port is not defined here. `config.port` in the root package.json is the one
@@ -175,12 +177,12 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'light' },
-      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC, TIMING_LOCK_SPEC],
     },
     {
       name: 'desktop-dark',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'dark' },
-      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC, TIMING_LOCK_SPEC],
     },
     {
       // Chromium at an iPhone viewport. This verifies responsive layout and touch
@@ -190,7 +192,7 @@ export default defineConfig({
       // viewport is stated, for the reason above.
       name: 'mobile',
       use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: MOBILE },
-      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC, TIMING_LOCK_SPEC],
     },
     /**
      * The tablet width, and only the responsive spec at it.
@@ -272,7 +274,7 @@ export default defineConfig({
     // ownership *is* that cookie, so a policy change in Chromium would take the
     // whole suite red for a reason no failure message would name. Pinned rather
     // than left to luck; see `secureCookiesEnabled` in lib/net/caller.ts.
-    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= GOOGLE_MAPS_API_KEY= SIDEQUEST_GEOCODER_PROVIDER=off SIDEQUEST_PLACE_BACKBONE=off SIDEQUEST_POI_PROVIDER=off SIDEQUEST_ROUTES_PROVIDER=off SIDEQUEST_RESEARCH_PROVIDER=off SIDEQUEST_IMAGERY_PROVIDER=fixture SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_COMPOSER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
+    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= GOOGLE_MAPS_API_KEY= SIDEQUEST_GEOCODER_PROVIDER=off SIDEQUEST_PLACE_BACKBONE=off SIDEQUEST_POI_PROVIDER=off SIDEQUEST_ROUTES_PROVIDER=off SIDEQUEST_RESEARCH_PROVIDER=off SIDEQUEST_IMAGERY_PROVIDER=fixture SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_COMPOSER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_AUTH_PROVIDER=fixture SIDEQUEST_BASE_URL=http://127.0.0.1:${PORT} SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

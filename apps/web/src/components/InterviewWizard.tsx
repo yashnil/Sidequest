@@ -36,6 +36,7 @@ import {
   type ReviewEntry,
   type ReviewGlanceGroup,
   type SmartDefault,
+  materialConflicts,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FOCUS_RING, buttonClass, cx } from './ui';
 import { InterpretationPanel } from './InterpretationPanel';
@@ -337,6 +338,7 @@ export function InterviewWizard({
             ) : null}
             {position === REVIEW_POSITION ? (
               <ReviewScreen
+                tripId={tripId}
                 geometry={geometry}
                 tiles={tiles}
                 context={context}
@@ -831,6 +833,7 @@ function QuestionControl({
 // ---------------------------------------------------------------------------
 
 function ReviewScreen({
+  tripId,
   context,
   qContext,
   answers,
@@ -850,6 +853,7 @@ function ReviewScreen({
   geometry = null,
   tiles = null,
 }: {
+  tripId: string;
   context: InterviewContext;
   qContext: QuestionnaireContext;
   answers: QuestionnaireAnswers;
@@ -870,6 +874,11 @@ function ReviewScreen({
   tiles?: MapBasemap | null;
 }) {
   const [rangeKept, setRangeKept] = useState(false);
+  const [dismissedConflicts, setDismissedConflicts] = useState<string[]>([]);
+  const conflicts = useMemo(
+    () => materialConflicts(answers, { destinationTraits: context.destination.traits, partyNeeds: context.traveller.party?.needs ?? [] }).filter((c) => c.id !== 'drive_ceiling_vs_detour_range'),
+    [answers, context],
+  );
   const ledger = useMemo(() => reviewLedger(context, answers, plan), [context, answers, plan]);
   const glance: ReviewGlanceGroup[] = useMemo(() => reviewGlance(ledger), [ledger]);
   const sketch = useMemo(() => sketchFor(context, answers), [context, answers]);
@@ -889,12 +898,12 @@ function ReviewScreen({
     <div className="enter" data-testid="interview-review">
       <StagePath current="ready" note={`${analytics.answered} answered · ${analytics.decided} decided by Sidequest`} />
       {/* EXPERIENCE V2 — the review is a reveal: the place, one sentence, a handful of statements, the map. */}
-      <p className="mt-6 text-xs text-ink-faint">Sidequest understands</p>
+      <p className="eyebrow mt-6">Sidequest understands</p>
       <h1 ref={headingRef} tabIndex={-1} className="display-xl mt-1.5 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         {context.destination.name}, your way
       </h1>
       {profile ? (
-        <p className="mt-3 max-w-[60ch] type-body text-ink-muted" data-testid="interview-sentence">
+        <p className="mt-4 max-w-[56ch] text-lg leading-relaxed text-ink-muted" data-testid="interview-sentence">
           {sentenceFor(context, answers, sketch)}
         </p>
       ) : null}
@@ -909,22 +918,34 @@ function ReviewScreen({
       */}
       <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
         <section className="min-w-0" data-testid="review-glance">
-          <h2 className="type-meta uppercase tracking-[0.14em] text-ink-faint">Your trip, in one glance</h2>
-          <div className="mt-5 grid gap-x-10 gap-y-7 sm:grid-cols-2">
+          <h2 className="eyebrow">Your trip, in one glance</h2>
+          {/*
+            EACH GROUP IS AN OBJECT, NOT A TABLE ROW.
+
+            The same six groups, on their own ground with their own edge, so the
+            eye can take one at a time. What is *the traveller's own answer* is
+            set in ink; what Sidequest read for them is set muted with a hairline
+            marker beside it — the assumption stated as a texture rather than as
+            the word "assumed" repeated six times.
+          */}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {glance.map((group) => (
-              <div key={group.id} className="min-w-0 rule-top pt-3.5" data-testid={`glance-${group.id}`}>
+              <div key={group.id} className="min-w-0 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid={`glance-${group.id}`}>
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="label text-ink-faint">{group.title}</h3>
-                  <button type="button" onClick={() => onJump(group.editQuestionId)} className={cx('shrink-0 text-xs text-accent underline underline-offset-4', FOCUS_RING)} data-testid={`glance-edit-${group.id}`}>
+                  <button type="button" onClick={() => onJump(group.editQuestionId)} className={cx('shrink-0 text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid={`glance-edit-${group.id}`}>
                     Edit
                     <span className="sr-only"> {group.title.toLowerCase()}</span>
                   </button>
                 </div>
-                <ul className="mt-2 space-y-1.5">
+                <ul className="mt-2.5 space-y-2">
                   {group.lines.map((line) => (
-                    <li key={line.text} className={cx('font-display text-lg leading-snug', line.assumed ? 'text-ink-muted' : 'text-ink')}>
-                      {line.text}
-                      {line.assumed ? <span className="sr-only"> (Sidequest&rsquo;s read)</span> : null}
+                    <li key={line.text} className={cx('flex gap-2 font-display text-lg leading-snug', line.assumed ? 'text-ink-muted' : 'text-ink')}>
+                      {line.assumed ? <span aria-hidden="true" className="mt-2.5 h-px w-3 shrink-0 bg-ink-faint" /> : null}
+                      <span className="min-w-0">
+                        {line.text}
+                        {line.assumed ? <span className="sr-only"> (Sidequest&rsquo;s read)</span> : null}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -937,7 +958,20 @@ function ReviewScreen({
         </div>
       </div>
 
-      {durationAdvice ? <p className="mt-6 rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk p-4 text-sm leading-relaxed text-ink-muted">You asked for a steer on trip length: {durationAdvice}</p> : null}
+      {/* V6 §3 — people, not counts: the door to describing each person is on the review, where the party is first stated. */}
+      <p className="mt-6 text-sm leading-relaxed text-ink-muted" data-testid="review-party-link">
+        Travelling with others?{' '}
+        <a href={`/trips/${tripId}/party`} className={cx('text-accent underline underline-offset-4', FOCUS_RING)}>
+          Describe each person
+        </a>{' '}
+        — a diet, a knee, an early riser — and the plan is built for all of them.
+      </p>
+
+      {durationAdvice ? (
+        <p className="mt-6 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4 text-sm leading-relaxed text-ink-muted">
+          <span className="font-medium text-ink">How long this deserves.</span> {durationAdvice}
+        </p>
+      ) : null}
 
       {sufficiency.kind === 'one_question' ? (
         <div className="mt-6 rounded-[var(--radius-card)] border-l-4 border-accent bg-accent-soft p-5" data-testid="critical-unknown">
@@ -953,6 +987,26 @@ function ReviewScreen({
           </div>
         </div>
       ) : null}
+
+      {/* V6 §8 — the contradiction engine: only material conflicts with no safe reading interrupt, each with real resolutions. */}
+      {conflicts.filter((c) => !dismissedConflicts.includes(c.id)).map((conflict) => (
+        <div key={conflict.id} className="mt-6 rounded-[var(--radius-card)] border-l-4 border-amber bg-amber-soft p-5" data-testid={`conflict-${conflict.id}`}>
+          <h3 className="font-display text-lg text-ink">These two answers pull in different directions</h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+            “{conflict.sides[0]}” and “{conflict.sides[1]}”.{conflict.moreRecent !== null ? ` You said the ${conflict.moreRecent === 0 ? 'first' : 'second'} more recently.` : ''} Which should the trip follow?
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {conflict.resolutions.map((resolution) => (
+              <button key={resolution.id} type="button" className={buttonClass('secondary')} onClick={() => onUpdate(resolution.patch)} data-testid={`conflict-resolve-${resolution.id}`}>
+                {resolution.label}
+              </button>
+            ))}
+            <button type="button" className={buttonClass('ghost')} onClick={() => setDismissedConflicts((d) => [...d, conflict.id])}>
+              Leave it to Sidequest
+            </button>
+          </div>
+        </div>
+      ))}
 
       {reconcile && !rangeKept ? (
         <div className="mt-6 rounded-[var(--radius-card)] border-l-4 border-amber bg-amber-soft p-5" data-testid="mobility-reconciliation">
@@ -971,24 +1025,32 @@ function ReviewScreen({
         </div>
       ) : null}
 
-      <section className="mt-10 rule-top pt-5" data-testid="review-hard">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      {/*
+        THE THINGS THE PLAN MAY NOT BREAK.
+
+        Distinguished from everything above by ground and by colour, because it
+        is the one section on this screen that is a *promise* rather than a
+        reading: these are the answers the composition is forbidden to trade
+        away, and a traveller should be able to find them without reading.
+      */}
+      <section className="mt-10 rounded-[var(--radius-card)] border border-clay/30 bg-clay-soft/40 p-5" data-testid="review-hard">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <h3 className="flex items-center gap-2 font-display text-xl text-ink">
-            <Glyph id="lock" className="h-4 w-4 text-clay" />
+            <Glyph id="lock" className="h-5 w-5 text-clay" />
             Hard rules
           </h3>
           {ledger.hard.length === 0 ? (
             <p className="text-sm text-ink-muted">None — everything here is a preference.</p>
           ) : (
-            <ul className="flex flex-wrap gap-2 text-sm text-ink">
+            <ul className="flex min-w-0 flex-wrap gap-2 text-sm text-ink">
               {ledger.hard.map((entry) => (
-                <li key={entry.label} className="rounded-full border border-clay/40 bg-clay-soft px-3 py-1" title={entry.detail}>
+                <li key={entry.label} className="rounded-full border border-clay/40 bg-paper-raised px-3 py-1.5" title={entry.detail}>
                   {entry.label}
                 </li>
               ))}
             </ul>
           )}
-          <button type="button" onClick={() => onJump('hard_constraints')} className={cx('text-sm text-accent underline underline-offset-4', FOCUS_RING)}>
+          <button type="button" onClick={() => onJump('hard_constraints')} className={cx('inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4', FOCUS_RING)}>
             Change the hard rules
           </button>
         </div>
@@ -1007,8 +1069,8 @@ function ReviewScreen({
       {unresolved.length > 0 ? (
         <section className="mt-10 rounded-[var(--radius-card)] border border-dashed border-rule p-5">
           <h3 className="font-display text-lg text-ink">In your own words</h3>
-          <p className="mt-1 text-sm text-ink-muted">Saved with your trip exactly as you wrote it. We could not turn these into settings, so they have not steered anything above.</p>
-          <ul className="mt-3 space-y-1.5 font-display text-base italic text-ink-muted">
+          <p className="mt-1 text-sm text-ink-muted">Kept exactly as you wrote it. These are not settings, so they have not steered anything above.</p>
+          <ul className="mt-3 space-y-1.5 font-display text-lg italic text-ink-muted">
             {unresolved.map((entry) => (
               <li key={`${entry.field ?? 'mustDo'}-${entry.span[0]}-${entry.quote}`}>“{entry.quote}”</li>
             ))}

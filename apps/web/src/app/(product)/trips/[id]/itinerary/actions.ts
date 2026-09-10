@@ -26,9 +26,7 @@ import {
   saveItinerary,
   setItineraryLock,
   setSelection,
-  tripOwnerToken,
 } from '@/lib/db/repository';
-import { sessionToken } from '@/lib/net/caller';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 export type { BuildResult } from '@/lib/planning/build';
@@ -250,14 +248,8 @@ export async function createShareLinkAction(tripId: string): Promise<ShareLinkRe
   const trip = getTrip(tripId);
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
 
-  const owner = tripOwnerToken(tripId);
-  const asking = await sessionToken({ mint: false });
-  if (!owner || !asking || owner !== asking) {
-    return {
-      ok: false,
-      error: 'This trip was made in a different browser, so only that browser can share it.',
-    };
-  }
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
 
   const token = ensureShareToken(tripId);
   if (!token) {

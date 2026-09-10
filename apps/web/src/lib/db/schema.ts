@@ -1755,6 +1755,263 @@ CREATE INDEX IF NOT EXISTS idx_refinement_runs_trip
   ON refinement_runs(trip_id, started_at DESC);
 `;
 
+/**
+ * V6 — TRAVELER INTELLIGENCE OS: ACCOUNTS, PEOPLE, EVIDENCE, LIFECYCLE.
+ *
+ * Declared here, in the schema pass, rather than lazily on first use — Ship
+ * V1 W1 recorded the lazy pattern as a migration surface nobody could point
+ * to. Every trip-scoped table cascades from `trips`; every user-scoped table
+ * cascades from `users`. Deleting an account deletes its trips, its
+ * travellers, its sessions and its evidence, and leaves nothing behind.
+ *
+ * Ownership rule (V6 §50): a resource is authorised by `user_id` when it has
+ * one, and by the browser's `owner_token` only while it has none. A thread
+ * id, a share token and a trip id are never authorisation.
+ */
+export const V6_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS users (
+  id               TEXT PRIMARY KEY,
+  email            TEXT,
+  email_verified   INTEGER NOT NULL DEFAULT 0,
+  display_name     TEXT,
+  picture_url      TEXT,
+  provider         TEXT NOT NULL,
+  provider_subject TEXT NOT NULL,
+  home_airport     TEXT,
+  profile_json     TEXT NOT NULL DEFAULT '{}',
+  created_at       TEXT NOT NULL,
+  last_seen_at     TEXT NOT NULL,
+  UNIQUE (provider, provider_subject)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
+
+-- A signed-in browser session. The cookie carries a random token; only its
+-- SHA-256 is stored, so the table is useless to anyone who reads it.
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   TEXT NOT NULL UNIQUE,
+  created_at   TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  user_agent   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+
+-- One OAuth round trip: the state, the PKCE verifier and where to return.
+-- Rows live ten minutes and are deleted on use.
+CREATE TABLE IF NOT EXISTS auth_states (
+  state         TEXT PRIMARY KEY,
+  provider      TEXT NOT NULL,
+  code_verifier TEXT NOT NULL,
+  return_to     TEXT,
+  owner_token   TEXT,
+  created_at    TEXT NOT NULL,
+  expires_at    TEXT NOT NULL
+);
+
+-- A person somebody described. Owned by an account, or by the browser that
+-- made it until that browser signs in and claims it.
+CREATE TABLE IF NOT EXISTS travelers (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT REFERENCES users(id) ON DELETE CASCADE,
+  owner_token  TEXT,
+  display_name TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_travelers_user ON travelers(user_id);
+CREATE INDEX IF NOT EXISTS idx_travelers_owner ON travelers(owner_token);
+
+CREATE TABLE IF NOT EXISTS trip_party_members (
+  trip_id           TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  traveler_id       TEXT NOT NULL REFERENCES travelers(id) ON DELETE CASCADE,
+  role              TEXT NOT NULL,
+  preferences_apply INTEGER NOT NULL DEFAULT 1,
+  constraints_apply INTEGER NOT NULL DEFAULT 1,
+  participation     TEXT NOT NULL DEFAULT 'described',
+  position          INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (trip_id, traveler_id)
+);
+
+-- Explicit and behavioural preference signals (V6 §18). Hard constraints
+-- are never learned from here; this table holds taste, never medicine.
+CREATE TABLE IF NOT EXISTS preference_evidence (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+  owner_token TEXT,
+  traveler_id TEXT REFERENCES travelers(id) ON DELETE CASCADE,
+  trip_id     TEXT REFERENCES trips(id) ON DELETE CASCADE,
+  scope       TEXT NOT NULL,
+  signal      TEXT NOT NULL,
+  feature     TEXT NOT NULL,
+  polarity    INTEGER NOT NULL,
+  strength    REAL NOT NULL,
+  source      TEXT NOT NULL,
+  context_json TEXT NOT NULL DEFAULT '{}',
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_preference_evidence_user ON preference_evidence(user_id, feature);
+CREATE INDEX IF NOT EXISTS idx_preference_evidence_trip ON preference_evidence(trip_id);
+
+CREATE TABLE IF NOT EXISTS trip_status_history (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  lifecycle  TEXT NOT NULL,
+  basis      TEXT NOT NULL,
+  note       TEXT,
+  changed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trip_status_history_trip ON trip_status_history(trip_id, id);
+
+CREATE TABLE IF NOT EXISTS saved_ideas (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+  owner_token TEXT,
+  trip_id     TEXT REFERENCES trips(id) ON DELETE CASCADE,
+  payload_json TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_saved_ideas_user ON saved_ideas(user_id);
+
+-- Post-trip feedback (V6 §46). Lightweight, optional, feeds the evidence ledger.
+CREATE TABLE IF NOT EXISTS trip_feedback (
+  id          TEXT PRIMARY KEY,
+  trip_id     TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  payload_json TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+-- The five tables Ship V1 recorded as lazily created, now declared with the
+-- cascade they always needed. An existing database is rebuilt by
+-- \`V6_TABLE_REBUILDS\` below; a fresh one gets these directly.
+CREATE TABLE IF NOT EXISTS booked_plan_items (
+  id           TEXT PRIMARY KEY,
+  trip_id      TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  payload_json TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS booked_plan_items_trip ON booked_plan_items(trip_id);
+CREATE TABLE IF NOT EXISTS readiness_profiles (
+  trip_id      TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  payload_json TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trip_checks (
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  list       TEXT NOT NULL,
+  item_id    TEXT NOT NULL,
+  checked_at TEXT NOT NULL,
+  PRIMARY KEY (trip_id, list, item_id)
+);
+CREATE TABLE IF NOT EXISTS trip_intelligence (
+  trip_id      TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  fingerprint  TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  built_at     TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trip_fx_rates (
+  trip_id      TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  payload_json TEXT NOT NULL,
+  fetched_at   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS itinerary_locks (
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  place_id   TEXT NOT NULL,
+  day_number INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (trip_id, place_id)
+);
+`;
+
+/**
+ * V6 — TABLES THAT EXIST WITHOUT THE FOREIGN KEY THEY NEED.
+ *
+ * SQLite cannot add a constraint to an existing table. Each entry names a
+ * table and the definition it should have; the migration runner checks
+ * \`PRAGMA foreign_key_list\` and, when the table exists with no reference to
+ * \`trips\`, rebuilds it in one transaction: create the new shape under a
+ * temporary name, copy every row whose trip still exists, drop the old table,
+ * rename. Rows whose trip is already gone — the orphans this repair exists to
+ * stop — are counted and logged, not carried.
+ */
+export const V6_TABLE_REBUILDS: readonly { table: string; create: string; columns: readonly string[]; indexes: readonly string[] }[] = [
+  {
+    table: 'booked_plan_items',
+    create: `CREATE TABLE booked_plan_items__v6 (
+      id TEXT PRIMARY KEY,
+      trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    columns: ['id', 'trip_id', 'payload_json', 'created_at'],
+    indexes: ['CREATE INDEX IF NOT EXISTS booked_plan_items_trip ON booked_plan_items(trip_id)'],
+  },
+  {
+    table: 'readiness_profiles',
+    create: `CREATE TABLE readiness_profiles__v6 (
+      trip_id TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+    columns: ['trip_id', 'payload_json', 'updated_at'],
+    indexes: [],
+  },
+  {
+    table: 'trip_checks',
+    create: `CREATE TABLE trip_checks__v6 (
+      trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      list TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      checked_at TEXT NOT NULL,
+      PRIMARY KEY (trip_id, list, item_id)
+    )`,
+    columns: ['trip_id', 'list', 'item_id', 'checked_at'],
+    indexes: [],
+  },
+  {
+    table: 'trip_intelligence',
+    create: `CREATE TABLE trip_intelligence__v6 (
+      trip_id TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+      fingerprint TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      built_at TEXT NOT NULL
+    )`,
+    columns: ['trip_id', 'fingerprint', 'payload_json', 'built_at'],
+    indexes: [],
+  },
+  {
+    table: 'trip_fx_rates',
+    create: `CREATE TABLE trip_fx_rates__v6 (
+      trip_id TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+      payload_json TEXT NOT NULL,
+      fetched_at TEXT NOT NULL
+    )`,
+    columns: ['trip_id', 'payload_json', 'fetched_at'],
+    indexes: [],
+  },
+  {
+    table: 'itinerary_locks',
+    create: `CREATE TABLE itinerary_locks__v6 (
+      trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      place_id TEXT NOT NULL,
+      day_number INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (trip_id, place_id)
+    )`,
+    columns: ['trip_id', 'place_id', 'day_number', 'created_at'],
+    indexes: [],
+  },
+];
+
+/**
+ * V6 — the schema version the migration runner stamps into
+ * \`PRAGMA user_version\` once every step below has run. A database at or
+ * above this number skips the steps; the idempotent DDL above still runs.
+ */
+export const SCHEMA_USER_VERSION = 6;
+
 export const COLUMN_MIGRATIONS: readonly {
   table: string;
   column: string;
@@ -1946,6 +2203,18 @@ export const COLUMN_MIGRATIONS: readonly {
    * existed has no link in circulation, which is exactly what null says.
    */
   { table: 'trips', column: 'share_token', definition: 'TEXT' },
+  /** V6 — the durable half of the timing lock: `traveler` | `sidequest` | NULL. See `tripBasicsSchema.timingLock`. */
+  { table: 'trips', column: 'timing_lock', definition: 'TEXT' },
+  /** V6 §22/§50 — the account that owns the trip. NULL while the trip is an unclaimed browser trip. */
+  { table: 'trips', column: 'user_id', definition: 'TEXT REFERENCES users(id) ON DELETE CASCADE' },
+  /** V6 §25 — a traveller-given name for the trip. NULL reads as the destination. */
+  { table: 'trips', column: 'title', definition: 'TEXT' },
+  /** V6 §24 — the lifecycle the traveller set by hand, when they overrode the inferred one. */
+  { table: 'trips', column: 'lifecycle_override', definition: 'TEXT' },
+  /** V6 §24 — when the lifecycle was last changed, by anyone. */
+  { table: 'trips', column: 'lifecycle_changed_at', definition: 'TEXT' },
+  /** V6 §26 — the provider a booked item was arranged with. Lives in payload_json; column kept for a future index. */
+  { table: 'trips', column: 'archived_at', definition: 'TEXT' },
   { table: 'provisional_selections', column: 'board_id', definition: 'TEXT' },
   { table: 'provisional_selections', column: 'board_version', definition: 'INTEGER' },
   /**
@@ -2147,4 +2416,7 @@ export const INDEX_MIGRATIONS: readonly string[] = [
    */
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_trips_share_token
      ON trips(share_token) WHERE share_token IS NOT NULL`,
+  /** V6 — the dashboard lists by account first, then by unclaimed browser. */
+  `CREATE INDEX IF NOT EXISTS idx_trips_user
+     ON trips(user_id, updated_at DESC) WHERE user_id IS NOT NULL`,
 ];
