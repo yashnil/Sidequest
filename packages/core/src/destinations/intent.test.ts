@@ -41,7 +41,8 @@ describe('the traveller keeps their own words', () => {
     const intent = buildDestinationIntent({ rawText: 'the steppes', now: NOW });
     expect(intent.rawText).toBe('the steppes');
     expect(intent.interpretedLabel).toBe('the steppes');
-    expect(intent.interpretationType).toBe('unresolved');
+    /* V7 — the graph reads "steppes" as a landscape word: an area, not nothing. */
+    expect(intent.interpretationType).toBe('natural_area');
     expect(intent.confidence).toBe('low');
     expect(intent.countries).toEqual([]);
   });

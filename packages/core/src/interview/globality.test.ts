@@ -137,7 +137,7 @@ describe('safe defaults when the evidence is thin', () => {
     const decision = questionById(ctx, answers, 'transport_mode')!.smartDefault!(ctx, answers);
     expect(decision.value).not.toBe('rent_car');
     expect(decision.source).toBe('smart_default');
-    expect(decision.reason).toMatch(/don't know .* well enough/);
+    expect(decision.reason).toMatch(/will choose how to get around .* once it sees the route/);
   });
 
   it('a rail-oriented country reads as transit-rich and leads with trains, not a hire car', () => {

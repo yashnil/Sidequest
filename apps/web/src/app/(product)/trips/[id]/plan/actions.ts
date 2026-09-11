@@ -61,6 +61,7 @@ import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
 import { destinationDivisionIds } from '@/lib/destinations/identity';
+import { resolveDestinationPhrase } from '@/lib/destinations/intent-resolution';
 import { runPreflight } from '@/lib/destinations/preflight';
 import { getProvisionalBoard } from '@/lib/db/provisional-repository';
 import { estimateRemainingForRun, runBucket } from '@/lib/db/timing-repository';
@@ -160,8 +161,14 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
   if (limited) return { ok: false, error: limited };
 
   try {
-    const resolution = await resolver.resolve({ query, now: new Date() });
-    saveResolution(tripId, resolution);
+    /*
+     * V7 §2 — the phrase is read as a graph and resolved part by part; a
+     * composite ("Kenya and Tanzania") becomes one candidate whose geometry is
+     * the union of its parts, and a described part of a country ("rural
+     * Japan") anchors on the country. Nothing here can answer "not a place".
+     */
+    const { outcome, resolution } = await resolveDestinationPhrase({ text: query, resolver, now: new Date() });
+    saveResolution(tripId, resolution, outcome.graph);
 
     /**
      * One credible reading needs no screen.
@@ -978,6 +985,7 @@ const FEATURE_TYPE_FROM_ENTITY: Partial<Record<string, SelectedDestination['feat
   subregion: 'county',
   city: 'city',
   metro_area: 'city',
+  municipality: 'city',
   neighbourhood: 'district',
   island: 'island',
   archipelago: 'island',

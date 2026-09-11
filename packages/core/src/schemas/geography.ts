@@ -37,6 +37,8 @@ export const DESTINATION_ENTITY_TYPES = [
   'neighbourhood',
   'city',
   'metro_area',
+  /** V7 — a city that is also a first-level division: a direct-administered municipality, a city-state, a prefecture-city. */
+  'municipality',
   'island',
   'archipelago',
   'protected_area',
@@ -55,6 +57,7 @@ export const DESTINATION_ENTITY_TYPE_LABELS: Record<DestinationEntityType, strin
   neighbourhood: 'A neighbourhood',
   city: 'A city or town',
   metro_area: 'A city and its surroundings',
+  municipality: 'A city and its region',
   island: 'An island',
   archipelago: 'A group of islands',
   protected_area: 'A park or protected area',

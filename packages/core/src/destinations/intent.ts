@@ -11,6 +11,7 @@ import {
   ambiguityReasonSchema,
   type DestinationResolution,
 } from '../schemas/resolution';
+import { destinationIntentGraphSchema, parseDestinationIntent, type DestinationIntentGraph } from './intent-graph';
 
 /**
  * WHAT THE TRAVELLER MEANT, KEPT AS ONE RECORD FOR THE LIFE OF THE TRIP.
@@ -128,6 +129,13 @@ export const destinationIntentSchema = z.object({
   sources: z.array(destinationIntentSourceSchema).default([]),
   ambiguities: z.array(ambiguityReasonSchema).default([]),
   recordedAt: z.string().min(1),
+  /**
+   * V7 §2 — the composable reading of the phrase: its parts, their kinds, the
+   * countries it names, and the union envelope once parts have resolved.
+   * Optional so every record written before V7 still parses; readers fall back
+   * to `interpretationType`.
+   */
+  graph: destinationIntentGraphSchema.optional(),
 });
 export type DestinationIntent = z.infer<typeof destinationIntentSchema>;
 
@@ -179,6 +187,8 @@ export interface DestinationIntentInput {
   selected?: SelectedDestination | null;
   /** Whatever the resolver made of the text. Enriches; never gates. */
   resolution?: DestinationResolution | null;
+  /** V7 — the parsed (and possibly part-resolved) graph. Parsed from `rawText` when absent. */
+  graph?: DestinationIntentGraph | null;
   now: Date;
 }
 
@@ -194,11 +204,13 @@ export function buildDestinationIntent(input: DestinationIntentInput): Destinati
   const rawText = input.rawText.trim();
   const normalizedText = normalizeDestinationQuery(rawText) || rawText.toLowerCase();
   const recordedAt = input.now.toISOString();
+  const graph = input.graph ?? (rawText ? safeParseGraph(rawText) : null);
   const base = {
     schemaVersion: DESTINATION_INTENT_VERSION,
     rawText,
     normalizedText,
     recordedAt,
+    ...(graph ? { graph } : {}),
   } as const;
 
   const selected = input.selected ?? null;
@@ -257,18 +269,29 @@ export function buildDestinationIntent(input: DestinationIntentInput): Destinati
      * than any gazetteer is. The countries the candidates agreed on are kept,
      * because that much *is* evidence.
      */
+    /*
+     * V7 — the graph knows more than the phrase's punctuation: two countries
+     * are a multi-area trip with an envelope, "rural Japan" is a described
+     * part of one country, and a phrase whose parts partly resolved carries
+     * their union as its centre. Nothing here can refuse.
+     */
+    const graphCountries = graph?.countries ?? [];
+    const graphType: DestinationInterpretationType | null = graph ? interpretationTypeOf(graph) : null;
     return destinationIntentSchema.parse({
       ...base,
-      interpretedLabel: rawText,
-      interpretationType: phraseNamesSeveralPlaces(rawText)
-        ? 'multi_area'
-        : candidates.length > 1
-          ? 'descriptive_area'
-          : resolution
+      interpretedLabel: graph?.travellerLabel ?? rawText,
+      interpretationType:
+        graphType ??
+        (phraseNamesSeveralPlaces(rawText)
+          ? 'multi_area'
+          : candidates.length > 1
             ? 'descriptive_area'
-            : 'unresolved',
-      countries,
-      confidence: 'low',
+            : resolution
+              ? 'descriptive_area'
+              : 'unresolved'),
+      countries: countries.length > 0 ? countries : graphCountries,
+      ...(graph?.envelope ? { center: graph.envelope.center, ...(graph.envelope.bounds ? { bounds: graph.envelope.bounds } : {}) } : {}),
+      confidence: graph && graph.confidence === 'high' ? 'medium' : 'low',
       sources: resolution ? ['traveller_text', 'resolution'] : ['traveller_text'],
       ambiguities: resolution?.ambiguityReasons ?? [],
     });
@@ -323,3 +346,38 @@ const FEATURE_FROM_BREADTH: Record<ScopeBreadth, DestinationFeatureType> = {
   city: 'city',
   local: 'district',
 };
+
+
+function safeParseGraph(rawText: string): DestinationIntentGraph | null {
+  try {
+    return parseDestinationIntent(rawText);
+  } catch {
+    return null;
+  }
+}
+
+/** The flat interpretation type a graph implies, for readers that predate it. */
+export function interpretationTypeOf(graph: DestinationIntentGraph): DestinationInterpretationType {
+  if (graph.children.length > 1) return 'multi_area';
+  const only = graph.children[0]!;
+  switch (only.kind) {
+    case 'city':
+    case 'municipality':
+      return 'locality';
+    case 'country':
+    case 'admin_region':
+      return 'administrative_area';
+    case 'park':
+    case 'island':
+    case 'island_chain':
+    case 'coast':
+    case 'mountain_range':
+    case 'natural_region':
+      return 'natural_area';
+    case 'corridor':
+    case 'vague_region':
+      return 'descriptive_area';
+    default:
+      return only.resolution ? 'locality' : 'descriptive_area';
+  }
+}

@@ -47,7 +47,8 @@ describe('a day as map marks', () => {
       [1, 'One'],
       [2, 'Two'],
     ]);
-    expect(model.connectors.map((c) => c.style)).toEqual(['measured_drive', 'unmeasured', 'measured_transit']);
+    /* V7 §14 — a train is drawn as a train, whatever the router said. */
+    expect(model.connectors.map((c) => c.style)).toEqual(['measured_drive', 'unmeasured', 'rail']);
     expect(model.base).toEqual(coordinates.base);
     expect(model.omitted).toBe(0);
   });

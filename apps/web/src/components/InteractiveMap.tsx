@@ -52,7 +52,18 @@ export type MapConnectorStyle =
    * evidence, on a drawing whose whole point is that nothing has been measured
    * yet. A conceptual line has its own style and is captioned as one.
    */
-  | 'conceptual';
+  | 'conceptual'
+  /**
+   * V7 §14 — A LINE DRAWN BY HOW YOU MOVE, NOT BY WHAT WAS MEASURED.
+   *
+   * A cruise, a train and a flight are not road legs a router timed; they are
+   * journeys with their own operator, and the map says which they are. Each has
+   * its own mark so a river passage never reads as a drive.
+   */
+  | 'boat'
+  | 'rail'
+  | 'flight'
+  | 'trail';
 
 export interface MapConnector {
   id: string;
@@ -146,6 +157,10 @@ const CONNECTOR_STYLE: Record<MapConnectorStyle, { stroke: string; dash?: string
   unmeasured: { stroke: 'var(--color-ink-faint)', dash: '3 4', width: 1.5, opacity: 0.7 },
   sightline: { stroke: 'var(--color-pine)', dash: '3 4', width: 1.5, opacity: 0.55 },
   conceptual: { stroke: 'var(--color-map-route)', dash: '7 6', width: 2, opacity: 0.65 },
+  boat: { stroke: 'var(--color-map-route)', dash: '1 7', width: 3.5, opacity: 0.9 },
+  rail: { stroke: 'var(--color-ink)', dash: '10 3 2 3', width: 2.5, opacity: 0.85 },
+  flight: { stroke: 'var(--color-ink-faint)', dash: '1 9', width: 2, opacity: 0.8 },
+  trail: { stroke: 'var(--color-pine)', dash: '2 3', width: 2.5, opacity: 0.9 },
 };
 
 export function InteractiveMap({
@@ -281,6 +296,10 @@ export function InteractiveMap({
   const hasStraightMeasured = connectors.some((c) => c.style.startsWith('measured') && !(c.path && c.path.length > 1));
   const hasEstimated = connectors.some((c) => c.style === 'estimated');
   const hasUnmeasured = connectors.some((c) => c.style === 'unmeasured' || c.style === 'sightline');
+  const hasBoat = connectors.some((c) => c.style === 'boat');
+  const hasRail = connectors.some((c) => c.style === 'rail');
+  const hasFlight = connectors.some((c) => c.style === 'flight');
+  const hasTrail = connectors.some((c) => c.style === 'trail');
 
   function onKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
     const handled: Record<string, () => void> = {
@@ -559,6 +578,10 @@ export function InteractiveMap({
             thing every other rule in this file exists to prevent.
           */}
           {hasUnmeasured ? <span>Short dashes: straight connectors, not routes.</span> : null}
+          {hasBoat ? <span>Round dots: by boat, on the operator’s timing.</span> : null}
+          {hasRail ? <span>Long-short dashes: by train.</span> : null}
+          {hasFlight ? <span>Faint dots: a flight, drawn point to point.</span> : null}
+          {hasTrail ? <span>Fine dots: on the trail.</span> : null}
           {caption}
           {basemapDrawn || placedTiles.length > 0 ? (
             <span>{tiles!.attribution}</span>

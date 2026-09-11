@@ -85,6 +85,8 @@ const nominatimPlaceSchema = z.object({
    * them. Values only — no key is trusted to be a language tag without checking.
    */
   namedetails: z.record(z.string(), z.string()).optional(),
+  /** V7 — `place`, `population`, `wikidata`, `admin_level`… as the record tags them; asked for so a state-typed record can say it is a city. */
+  extratags: z.record(z.string(), z.string()).optional(),
   category: z.string().optional(),
   type: z.string().optional(),
   addresstype: z.string().optional(),
@@ -102,6 +104,8 @@ export interface GeocodeResult {
 
 export interface GeocodeOptions {
   limit?: number;
+  /** V7 — Nominatim's own class filter: `settlement` asks only for populated places, `state` only for first-level divisions. */
+  featureType?: 'country' | 'state' | 'city' | 'settlement';
   /** Injected so a contract test can drive the parser without a network. */
   fetchImpl?: typeof fetch;
   cache?: {
@@ -116,9 +120,13 @@ export function geocodeCacheKey(query: string, limit: number): string {
   return ['nominatim', 'v1', geocoderEndpoint(), String(limit), query.trim().toLowerCase()].join('|');
 }
 
+export function geocodeCacheKeyFor(query: string, limit: number, featureType: string | undefined): string {
+  return featureType ? `${geocodeCacheKey(query, limit)}|${featureType}` : geocodeCacheKey(query, limit);
+}
+
 export async function geocode(query: string, options: GeocodeOptions = {}): Promise<GeocodeResult> {
   const limit = Math.min(10, Math.max(1, options.limit ?? 5));
-  const key = geocodeCacheKey(query, limit);
+  const key = geocodeCacheKeyFor(query, limit, options.featureType);
 
   const cached = options.cache?.read(key);
   if (cached) return { places: cached, calls: 0, cacheHit: true };
@@ -315,6 +323,7 @@ export function classifyNominatim(place: NominatimPlace): {
     | 'protected_area'
     | 'subregion'
     | 'state_or_province'
+    | 'municipality'
     | 'country'
     | 'multi_country'
     | 'route_or_corridor'
@@ -322,9 +331,20 @@ export function classifyNominatim(place: NominatimPlace): {
 } {
   const type = (place.addresstype ?? place.type ?? '').toLowerCase();
   const category = (place.category ?? '').toLowerCase();
+  const placeTag = (place.extratags?.place ?? '').toLowerCase();
 
   if (type === 'country') return { breadth: 'country', entityType: 'country' };
   if (type === 'state' || type === 'province' || type === 'region') {
+    /*
+     * V7 — A FIRST-LEVEL DIVISION THAT IS A CITY.
+     *
+     * A direct-administered municipality (Chongqing, Shanghai), a city-state
+     * and a prefecture-city all sit at admin level 4 and come back typed
+     * `state`. The record's own `place` tag says what it is; when the tag
+     * says city or municipality this is a city with a region attached, and
+     * "a state or province you drive across" is the wrong reading of it.
+     */
+    if (placeTag === 'city' || placeTag === 'municipality') return { breadth: 'region', entityType: 'municipality' };
     return { breadth: 'region', entityType: 'state_or_province' };
   }
   if (type === 'county' || type === 'state_district' || type === 'district') {

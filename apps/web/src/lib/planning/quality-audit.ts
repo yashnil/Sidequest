@@ -1,6 +1,9 @@
+import { episodesOf } from './trip-draft';
 import { STRENUOUS_BLOCKERS, dayStrain, describeEdgeTime, isGatewayName, isTransferName, tripDates, type ContractConflict, type Itinerary, type TravelerProfile, type Trip, type TripContract } from '@sidequest/core';
-import type { TripDraft } from './trip-draft';
+import { impliesSelfDriving, type TripDraft } from './trip-draft';
 import { buildPreservationReport, type DraftPreservationReport } from './preservation';
+import { auditTopology } from './topology';
+import { modeStatusFor, type TravelReality } from '@sidequest/core';
 
 /**
  * THE DETERMINISTIC QUALITY AUDIT — STRUCTURE, NEVER TASTE.
@@ -77,6 +80,19 @@ export const QUALITY_CHECK_IDS = [
   'daylight_respected',
   /** V6 §5 — a strenuous day with a party member who cannot do it offers that member something else. */
   'party_hard_fails',
+  /*
+   * V7 §9 — topology. Read from `topology.ts`; every one is a contradiction
+   * between what the draft promises and what the plan's own legs carry.
+   */
+  'base_moves_have_transfers',
+  'transfer_endpoints_match',
+  'episode_modes_respected',
+  'promised_transport_is_structured',
+  'last_day_reaches_departure',
+  /** V7 §6 — the timing rationale does not contradict the climate the plan's own days carry. */
+  'timing_rationale_consistent',
+  /** V7 §7 — the plan's driving arrangement is not one the destination's compiled reality calls discouraged or unavailable. */
+  'transport_reality_respected',
 ] as const;
 export type QualityCheckId = (typeof QUALITY_CHECK_IDS)[number];
 
@@ -125,6 +141,8 @@ export function auditItinerary(input: {
   contractConflicts?: readonly ContractConflict[];
   /** V6 — functional needs across the party (the contract's union), by key or label. */
   partyNeeds?: readonly string[];
+  /** V7 §3 — the travel reality the build ran under, for the transport check. */
+  reality?: TravelReality | null;
 }): QualityAudit {
   const { draft, itinerary, profile, trip } = input;
   const checks: QualityCheck[] = [];
@@ -202,7 +220,10 @@ export function auditItinerary(input: {
   add('booked_respected', conflicts.length === 0, 'error', conflicts.length === 0 ? 'no booked fact is contradicted' : conflicts.slice(0, 3).join(' '));
 
   // --- duplicates ----------------------------------------------------------------------
-  const scheduledTitles = itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'activity').map((item) => item.title.trim().toLowerCase()));
+  /* V7 §8 — the same reserve on every day of a safari, the same river on every day of a cruise, is the episode, not a repeat. */
+  const repeatEpisodes = new Set(['safari', 'cruise', 'trek', 'resort_stay', 'expedition_boat', 'hut_to_hut']);
+  const episodeDays = new Set(episodesOf(draft).filter((e) => repeatEpisodes.has(e.kind)).flatMap((e) => Array.from({ length: e.toDay - e.fromDay + 1 }, (_, i) => e.fromDay + i)));
+  const scheduledTitles = itinerary.days.filter((day) => !episodeDays.has(day.dayNumber)).flatMap((day) => day.items.filter((item) => item.kind === 'activity').map((item) => item.title.trim().toLowerCase()));
   const duplicates = scheduledTitles.filter((title, index) => scheduledTitles.indexOf(title) !== index);
   add('no_duplicate_anchors', duplicates.length === 0, 'warning', duplicates.length === 0 ? 'no activity appears twice' : `repeated: ${[...new Set(duplicates)].slice(0, 4).join(', ')}`);
 
@@ -290,6 +311,35 @@ export function auditItinerary(input: {
 
   // --- PRODUCTION LOCK V5 -----------------------------------------------------------------
   auditV5({ draft, itinerary, profile, trip, add, ...(input.partyNeeds ? { partyNeeds: input.partyNeeds } : {}) });
+
+  // --- V7 §9: topology ---------------------------------------------------------------------
+  for (const check of auditTopology({ draft, itinerary })) add(check.id, check.ok, check.severity, check.detail);
+
+  // --- V7 §6: the timing rationale against the days' own climate ---------------------------
+  {
+    const rationale = draft.timingRationale ?? '';
+    const withWeather = itinerary.days.filter((day) => day.weather.precipitationProbabilityPercent !== undefined || day.weather.precipitationMm !== undefined || day.weather.temperatureMaxC !== undefined);
+    const wetDays = withWeather.filter((day) => (day.weather.precipitationProbabilityPercent ?? 0) >= 50 || (day.weather.precipitationMm ?? 0) >= 4).length;
+    const hotDays = withWeather.filter((day) => (day.weather.temperatureMaxC ?? 0) >= 33).length;
+    const coldDays = withWeather.filter((day) => (day.weather.temperatureMinC ?? 99) <= 0).length;
+    const contradictions: string[] = [];
+    if (rationale && withWeather.length >= 3) {
+      if (/\b(dry|driest|little rain|rain-free|mostly dry|dry season)\b/i.test(rationale) && wetDays * 2 >= withWeather.length) contradictions.push(`says dry while ${wetDays} of ${withWeather.length} days carry rain on the record`);
+      if (/\b(mild|comfortable|pleasant|cool)\b/i.test(rationale) && hotDays * 2 >= withWeather.length) contradictions.push(`says ${/\bcool\b/i.test(rationale) ? 'cool' : 'comfortable'} while ${hotDays} of ${withWeather.length} days reach 33 °C or more`);
+      if (/\b(warm|hot|sunny)\b/i.test(rationale) && !/\b(cold|cool|chilly)\b/i.test(rationale) && coldDays * 2 >= withWeather.length) contradictions.push(`says warm while ${coldDays} of ${withWeather.length} days freeze overnight`);
+    }
+    add('timing_rationale_consistent', contradictions.length === 0, 'warning', !rationale ? 'no timing rationale to check' : withWeather.length < 3 ? 'too little weather on the days to check the rationale against' : contradictions.length === 0 ? 'the timing rationale agrees with the climate on the days' : contradictions.join('; '));
+  }
+
+  // --- V7 §7: the driving arrangement against the compiled reality ---------------------------
+  {
+    const reality = input.reality ?? null;
+    const selfDrive = impliesSelfDriving(draft.driving);
+    const status = reality ? modeStatusFor(reality, 'self_drive') : 'unknown';
+    const bad = selfDrive && (status === 'discouraged' || status === 'unavailable');
+    const friction = selfDrive && status === 'friction';
+    add('transport_reality_respected', !bad, 'error', !reality ? 'no compiled reality for this destination' : !selfDrive ? `nobody drives themselves; self-drive here is ${status}` : bad ? `the plan has the traveller driving where the compiled reality calls self-drive ${status}: ${reality.modes.find((m) => m.mode === 'self_drive')?.reason ?? ''}` : friction ? `self-drive is possible with friction here: ${reality.modes.find((m) => m.mode === 'self_drive')?.reason ?? ''}` : `self-drive is ${status} here`);
+  }
 
   const errors = checks.filter((c) => !c.ok && c.severity === 'error').length;
   const warnings = checks.filter((c) => !c.ok && c.severity === 'warning').length;

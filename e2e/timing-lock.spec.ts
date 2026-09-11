@@ -25,17 +25,20 @@ test('the accepted window is the trip’s dates, from the press to the finished 
   await continueButton(page).click();
   await expect(page.getByTestId('destination-canvas')).toHaveAttribute('data-state', 'framed', { timeout: 15_000 });
 
+  /*
+   * V7 §7 — BEST_TIME V4. "Tell me when it is best" records the mode here and
+   * defers the window: nothing is compared before Sidequest knows who is going
+   * and what for. The pick appears on the review, scored on the whole profile.
+   */
   await expect(page.getByTestId('timing-best')).toBeVisible();
   await page.getByTestId('timing-best').click();
-  const accept = page.getByTestId('timing-accept');
-  await expect(accept).toBeVisible({ timeout: 20_000 });
-  const window = (await page.getByTestId('timing-pick').innerText()).match(/(\d{4}-\d{2}-\d{2}) → (\d{4}-\d{2}-\d{2})/);
-  expect(window, 'the pick shows its dates').toBeTruthy();
-  const [, startDate, endDate] = window!;
-  await accept.click();
+  await expect(page.getByTestId('timing-deferred')).toBeVisible();
+  await expect(page.getByTestId('timing-accept')).toHaveCount(0);
+  await continueButton(page).click();
 
-  /* Nights are pre-filled from the window; confirm them. Who: a couple. */
+  /* Nights: nothing is pre-filled because no window was picked yet; choose seven. Who: a couple. */
   await expect(page.getByRole('heading', { name: /How many nights/ })).toBeVisible();
+  await page.getByTestId('nights-7').click();
   await continueButton(page).click();
   await expect(page.getByTestId('party-couple')).toBeVisible();
   await page.getByTestId('party-couple').click();
@@ -45,9 +48,17 @@ test('the accepted window is the trip’s dates, from the press to the finished 
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 30_000 });
   const tripId = /\/trips\/([^/]+)\//.exec(page.url())![1]!;
 
-  /* The review states the accepted dates as the traveller's, before anything is built. */
+  /* The review carries the pick — with its dates — and "Use this timing" locks them to the traveller before anything is built. */
   await completeQuestionnaire(page);
   await expect(page.getByTestId('interview-review')).toBeVisible();
+  const accept = page.getByTestId('timing-accept');
+  await expect(accept).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('review-timing-basis')).toContainText(/climate normals/);
+  const window = (await page.getByTestId('timing-pick').innerText()).match(/(\d{4}-\d{2}-\d{2}) → (\d{4}-\d{2}-\d{2})/);
+  expect(window, 'the pick shows its dates').toBeTruthy();
+  const [, startDate, endDate] = window!;
+  await accept.click();
+  await expect(page.getByTestId('review-timing-accepted')).toBeVisible();
   await page.getByRole('button', { name: /Build my trip/ }).click();
   await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/itinerary(#[a-z-]+)?$`), { timeout: 120_000 });
 

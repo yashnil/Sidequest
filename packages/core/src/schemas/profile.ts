@@ -170,6 +170,16 @@ export const questionnaireAnswersSchema = z.object({
    */
   preferenceNotes: z.record(z.string().max(60), z.string().max(300)).optional(),
   /**
+   * V7 §5 — WHAT SIDEQUEST READ FROM A NOTE, BESIDE THE NOTE.
+   *
+   * Deterministic readings of `preferenceNotes` (the composer's phrase table,
+   * no model call), keyed by question id. Each reading is a chip the traveller
+   * saw and could switch off; `accepted: false` is a reading they rejected. The
+   * note itself is never rewritten — the brief carries the sentence verbatim and
+   * these readings as what Sidequest took from it.
+   */
+  noteReadings: z.record(z.string().max(60), z.array(z.object({ id: z.string().max(120), kind: z.string().max(40), value: z.string().max(80), label: z.string().max(80), strength: z.string().max(40), accepted: z.boolean() }).strict()).max(12)).optional(),
+  /**
    * Steps the traveller explicitly handed to us, as opposed to steps they
    * accepted the defaults on.
    *
@@ -229,6 +239,8 @@ export function interviewAnswerFields() {
     scopeStrategy: coverageStrategySchema.default('best_subset'),
     /** Groups. */
     everyoneEveryDay: z.boolean().default(true),
+    /** V7 §7 — the transport shape the traveller chose in the interview, kept as its own word so "car" is never the only thing a plan can say. */
+    transportChoice: z.enum(['rent_car', 'self_drive', 'mixed', 'guided', 'taxis', 'boats_transfers', 'no_car', 'transit_walk', 'rail_transfers']).optional(),
     groupNotes: z.string().max(500).optional(),
     /** Hard constraints and explicit names. Never inferred from prose. */
     hardConstraints: z.array(hardConstraintSchema).max(24).default([]),
@@ -377,6 +389,7 @@ export const travelerProfileSchema = z.object({
     dayTripAppetite: dayTripAppetiteSchema,
     scopeStrategy: coverageStrategySchema,
     everyoneEveryDay: z.boolean(),
+    transportChoice: z.enum(['rent_car', 'self_drive', 'mixed', 'guided', 'taxis', 'boats_transfers', 'no_car', 'transit_walk', 'rail_transfers']).optional(),
     groupNotes: z.string().max(500).optional(),
     mustInclude: z.array(z.string()).default([]),
     mustAvoid: z.array(z.string()).default([]),
@@ -395,6 +408,8 @@ export const travelerProfileSchema = z.object({
    * Optional so every profile stored before this field parses unchanged.
    */
   preferenceNotes: z.record(z.string().max(60), z.string().max(300)).optional(),
+  /** V7 §5 — the accepted readings of each note, for the brief. */
+  noteReadings: z.record(z.string().max(60), z.array(z.object({ label: z.string().max(80), strength: z.string().max(40) }).strict()).max(12)).optional(),
   derived: derivedProfileSchema,
 });
 export type TravelerProfile = z.infer<typeof travelerProfileSchema>;

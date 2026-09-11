@@ -1,6 +1,7 @@
 import type { DestinationEntityType, ScopeBreadth } from '../schemas/geography';
 import type { TransportMode } from '../schemas/access';
 import type { TravelerNeed } from '../schemas/trip';
+import type { TravelReality } from '../reality/schema';
 
 /**
  * DESTINATION SCREENING — GENERIC TRAITS, EACH WITH THE EVIDENCE THAT EARNED IT.
@@ -46,6 +47,12 @@ export const DESTINATION_TRAITS = [
   'cold_sensitive',
   'weather_exposed',
   'family_logistics_sensitive',
+  /** V7 — the phrase names more than one country: borders, entry rules and currencies are part of the trip. */
+  'cross_border',
+  /** V7 — several named areas in one trip: the route between them is the first decision. */
+  'multi_area',
+  /** V7 — a city that is also a large region: an urban core plus regional days by rail, driver or transit, never a road trip by default. */
+  'city_region',
 ] as const;
 export type DestinationTrait = (typeof DESTINATION_TRAITS)[number];
 
@@ -75,6 +82,9 @@ export const DESTINATION_TRAIT_LABELS: Record<DestinationTrait, string> = {
   cold_sensitive: 'Cold in your dates',
   weather_exposed: 'Days depend on the weather',
   family_logistics_sensitive: 'Group logistics matter',
+  cross_border: 'Crosses a border',
+  multi_area: 'Several areas in one trip',
+  city_region: 'A city and its region',
 };
 
 export type DestinationClassSignal = 'urban' | 'coastal' | 'mountain' | 'countryside';
@@ -130,6 +140,10 @@ export interface ScreeningSignals {
   travelerNeeds?: readonly TravelerNeed[];
   adults?: number;
   children?: number;
+  /** V7 — every country the phrase names or sits in. */
+  countries?: readonly string[];
+  /** V7 — the shape of the intent graph, when one was recorded. */
+  intent?: { parts: number; crossBorder: boolean; kinds: readonly string[]; relationship: string };
 }
 
 export type ScreeningEvidence = 'screened' | 'partial' | 'none';
@@ -147,7 +161,7 @@ export type AssumptionConfidence = 'high' | 'low';
 
 export interface DestinationAssumption {
   bases: 'one' | 'few' | 'many' | 'undecided';
-  movement: 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | 'undecided';
+  movement: 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | 'rail_transfers' | 'undecided';
   /** How sure the movement reading is. The sidebar and smart defaults act on `high` only. */
   confidence: AssumptionConfidence;
   /** How sure the base-count reading is, separately: a car can be certain while the number of beds is not. */
@@ -173,6 +187,8 @@ export interface DestinationQuestionContext {
   understanding: string[];
   /** The route/transport shape Sidequest would assume, stated so it can be checked. */
   assumption?: DestinationAssumption;
+  /** V7 §3 — what is operationally true here, when the country is known. Read by the transport question and the sketch. */
+  reality?: TravelReality;
 }
 
 const BREADTH_RANK: Record<ScopeBreadth, number> = {
@@ -189,6 +205,7 @@ const SCALE_LABEL: Record<DestinationEntityType, string> = {
   neighbourhood: 'A neighbourhood',
   city: 'A city',
   metro_area: 'A city and its surroundings',
+  municipality: 'A city and its region',
   island: 'An island',
   archipelago: 'A group of islands',
   protected_area: 'A park or protected area',
@@ -252,7 +269,7 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   }
 
   // --- urban ------------------------------------------------------------------
-  const urbanEntity = entity === 'city' || entity === 'metro_area' || entity === 'neighbourhood' || (entity === undefined && urbanFeature);
+  const urbanEntity = entity === 'city' || entity === 'metro_area' || entity === 'neighbourhood' || entity === 'municipality' || (entity === undefined && urbanFeature);
   if (urbanEntity && entity) add('dense_urban', `You named ${SCALE_LABEL[entity].toLowerCase()}.`);
   else if (urbanEntity) add('dense_urban', `You named a ${featureType}.`);
   else if (classes.has('urban') && !classes.has('mountain') && (rank === undefined || rank <= 1)) {
@@ -303,6 +320,11 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
     add('high_altitude', `Places here sit as high as ${compiled!.maxElevationMetres} m.`);
   }
 
+  // --- V7: a city-region, several areas, a border ------------------------------------
+  if (entity === 'municipality') add('city_region', 'You named a city that is also a large region: the core is urban; the region is reached by rail, driver or transit, not a road trip.');
+  if (signals.intent && signals.intent.parts > 1) add('multi_area', `You named ${signals.intent.parts} areas in one trip.`);
+  if (signals.intent?.crossBorder || (signals.countries?.length ?? 0) > 1) add('cross_border', `This trip crosses a border (${(signals.countries ?? []).join(', ')}): entry rules, currencies and the transport between countries are part of the plan.`);
+
   // --- road trips, breadth, bases ----------------------------------------------------
   const roadEntity = entity === 'subregion' || entity === 'state_or_province' || entity === 'route_or_corridor';
   if (roadEntity) add('road_trip_region', `${SCALE_LABEL[entity!]} is usually covered by road.`);
@@ -315,7 +337,7 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   else if (transport?.primaryMode === 'drive' && transport.carAvailable !== false) add('car_dependent', 'The trip scope assumes driving as the way around.');
   else if (signals.seededClass === 'mountain' && !urbanEntity) add('car_dependent', 'The best of this region is spread along its roads.');
 
-  if (breadth === 'country' || breadth === 'multi_country') {
+  if (breadth === 'country' || breadth === 'multi_country' || (signals.intent?.crossBorder ?? false)) {
     if (extentKm !== undefined && extentKm <= 600) add('compact_country', `About ${extentKm} km corner to corner — crossable in a day.`);
     else add('broad_geography', extentKm ? `About ${extentKm} km corner to corner — more than one trip's worth.` : 'A whole country is more than one trip covers.');
   } else if (extentKm !== undefined && extentKm >= 400) {
@@ -402,7 +424,7 @@ function assumptionFor(traits: Map<DestinationTrait, string>, nights: number, na
   // --- bases -------------------------------------------------------------------
   let bases: DestinationAssumption['bases'] = 'undecided';
   let basesConfident = false;
-  if (has('broad_geography')) {
+  if (has('broad_geography') || has('cross_border') || has('multi_area')) {
     bases = 'many';
     basesConfident = true;
   } else if (has('multi_base_likely')) {
@@ -427,7 +449,10 @@ function assumptionFor(traits: Map<DestinationTrait, string>, nights: number, na
   } else if (has('transit_rich')) {
     movement = 'transit_walk';
     movementConfident = true;
-  } else if (has('car_dependent') || has('road_trip_region')) {
+  } else if (has('city_region')) {
+    /* V7 — the shape of a city-region never settles the mode: the travel reality layer does, with the country's facts. */
+    movement = 'undecided';
+  } else if (has('car_dependent') || (has('road_trip_region') && !has('cross_border') && !has('multi_area'))) {
     movement = 'car';
     movementConfident = true;
   } else if (has('dense_urban')) {

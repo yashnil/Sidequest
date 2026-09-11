@@ -73,7 +73,18 @@ export function TimingStep({
    * chosen a mode that means "you choose". It is never fetched speculatively:
    * a climate lookup nobody asked for is a provider call nobody authorised.
    */
-  const wantsPick = draft.dateMode === 'best_time' || draft.dateMode === 'window' || draft.dateMode === 'months' || draft.dateMode === 'season';
+  /*
+   * V7 §7 — BEST_TIME V4: "TELL ME WHEN IT IS BEST" RECORDS THE MODE, NOT THE DATES.
+   *
+   * The window for that answer is chosen on the review, once the interview
+   * knows what the trip is for and who is going, and scored with crowds and
+   * closures as well as climate. Only a traveller who has already narrowed —
+   * a month, a season, a free stretch — is shown a comparison here, because
+   * for them it is a check on their own answer rather than a decision made
+   * before the questions.
+   */
+  const wantsPick = draft.dateMode === 'window' || draft.dateMode === 'months' || draft.dateMode === 'season';
+  const deferredToReview = draft.dateMode === 'best_time';
   const key = `${draft.dateMode}:${draft.months.join(',')}:${draft.season}:${draft.earliest}:${draft.latest}:${draft.nights ?? ''}:${draft.destinationEntryId ?? draft.destinationCenter?.lat ?? ''}`;
   useEffect(() => {
     if (!wantsPick) return;
@@ -267,6 +278,15 @@ export function TimingStep({
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {deferredToReview ? (
+        <section className="rise mt-8 max-w-2xl" aria-live="polite" data-testid="timing-pick">
+          <p className="flex gap-3 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4 type-body text-ink-muted" data-testid="timing-deferred">
+            <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-faint" />
+            <span className="min-w-0">Sidequest will choose the best window once it understands the trip — who is going, what it is for, and which weeks are busy where you are headed. You will see the pick, with its reasons, before anything is built.</span>
+          </p>
+        </section>
       ) : null}
 
       {/* The recommendation: a period, the reasons, what it costs, and a way to see another. */}

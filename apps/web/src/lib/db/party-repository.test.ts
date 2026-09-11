@@ -46,7 +46,7 @@ describe('the party repository', () => {
     const contract = listPartyMembersForContract(trip.id);
     expect(contract[0]?.needs).toEqual(['Avoid steep descents']);
     expect(JSON.stringify(contract)).not.toMatch(/osteoarthritis|knee surgery/);
-    expect(partyFactsFor(trip.id)).toEqual({ members: 1, needs: ['avoid_steep_descents'], drivers: null, dietsRecorded: true });
+    expect(partyFactsFor(trip.id)).toEqual({ members: 1, needs: ['avoid_steep_descents'], drivers: null, dietsRecorded: true, differences: true });
     /* Claiming the browser moves the person to the account. */
     const { upsertUser } = await import('./auth-repository');
     const user = upsertUser({ provider: 'fixture', subject: 'a@example.com', email: 'a@example.com' });

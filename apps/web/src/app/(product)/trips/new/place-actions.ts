@@ -1,9 +1,10 @@
 'use server';
 
-import { countryFromText, foldForMatch, sanitizePlaceText, type DestinationIndexEntry } from '@sidequest/core';
+import { countryFromText, foldForMatch, intentIsComposite, parseDestinationIntent, sanitizePlaceText, type DestinationIndexEntry, type IntentNodeKind } from '@sidequest/core';
 import { entriesByPrefix } from '@/lib/db/destination-index-repository';
 import { verificationProviders } from '@/lib/planning/verification-providers';
 import { guardAction } from '@/lib/net/caller';
+import { resolveIntentGraph } from '@/lib/destinations/intent-resolution';
 
 /**
  * WHERE THE TYPED WORDS ARE, BEFORE ANY TRIP EXISTS.
@@ -51,9 +52,16 @@ export interface PlacedDestination {
   featureType?: string;
   countryCode?: string;
   /** Which tier answered. Never rendered as-is; the UI decides what to say about certainty. */
-  source: 'index' | 'reference' | 'geocoder';
+  source: 'index' | 'reference' | 'geocoder' | 'composite';
   /** The populated place a country-scale coordinate names, so a climate answer can say where it was read. */
   referencePoint?: string;
+  /**
+   * V7 §2 — the parts of a phrase that names more than one thing, each with
+   * whether it was placed. The canvas captions "Kenya and Tanzania · two
+   * countries" from this rather than the empty world.
+   */
+  parts?: { label: string; kind: IntentNodeKind; placed: boolean }[];
+  crossBorder?: boolean;
 }
 
 export type PlaceResult =
@@ -83,6 +91,43 @@ export async function placeDestinationAction(raw: { text: string }): Promise<Pla
         source: 'index',
       },
     };
+  }
+
+  /*
+   * V7 §2 — A PHRASE THAT NAMES MORE THAN ONE THING IS PLACED AS THEIR UNION.
+   *
+   * "Kenya and Tanzania" used to fall through every tier: the reference found
+   * two countries and returned none, the geocoder found nothing for the
+   * phrase. The intent graph places each part by the cheapest tier that can
+   * (the reference for a country, the resolver for a named part, capped) and
+   * the canvas frames the box that holds all of them.
+   */
+  const graph = parseDestinationIntent(query);
+  if (intentIsComposite(graph) || graph.children[0]!.kind === 'vague_region') {
+    const { resolver } = verificationProviders();
+    const limited = resolver && graph.children.some((c) => c.kind !== 'country' && c.kind !== 'vague_region') ? await guardAction('destination_resolve') : null;
+    const outcome = await resolveIntentGraph({ graph, resolver: limited ? null : resolver, now: new Date(), maxGeocoderCalls: 2 });
+    const placed = outcome.graph;
+    const parts = placed.children.map((c) => ({ label: c.label, kind: c.kind, placed: Boolean(c.resolution) }));
+    if (placed.envelope) {
+      const only = placed.children.length === 1 ? placed.children[0]! : null;
+      return {
+        ok: true,
+        placed: {
+          query,
+          name: placed.travellerLabel,
+          center: placed.envelope.center,
+          bounds: placed.envelope.bounds ?? null,
+          featureType: only?.resolution?.featureType ?? (placed.crossBorder ? 'multi_country' : 'composite'),
+          ...(placed.countries.length === 1 ? { countryCode: placed.countries[0]! } : {}),
+          source: only?.resolution?.source ?? 'composite',
+          ...(only?.resolution?.source === 'reference' ? { referencePoint: only.resolution.label } : {}),
+          parts,
+          crossBorder: placed.crossBorder,
+        },
+      };
+    }
+    return { ok: true, placed: null, reason: resolver ? 'unresolved' : 'no_resolver' };
   }
 
   /* 2 — the bundled country reference. No network, no database, no failure mode. */

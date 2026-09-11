@@ -1,4 +1,4 @@
-import { contractBands, renderTravelerBriefXml, type TravelerBrief, type TripContract } from '@sidequest/core';
+import { contractBands, renderTravelerBriefXml, MODE_CONCEPT_LABELS, MODE_STATUS_LABELS, type TravelerBrief, type TravelReality, type TripContract } from '@sidequest/core';
 import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import type { CompositionTimingBrief } from './canonical-input';
 import { createHash } from 'node:crypto';
@@ -130,6 +130,14 @@ export interface CompositionContext {
    * the traveller travels in `brief`, so there is exactly one account of them.
    */
   planningFacts?: CompositionPlanningFacts;
+  /**
+   * V7 §3 — what is operationally true about travelling here, compiled from
+   * reference data with provenance: which modes work, which do not and why,
+   * what needs setting up, when the crowds are. Rendered as
+   * `<travel_reality>`: context the model designs with, never an allow-list,
+   * and never something it may restate as a verified fact.
+   */
+  reality?: TravelReality | null;
 }
 
 export interface CompositionPlanningFacts {
@@ -138,7 +146,7 @@ export interface CompositionPlanningFacts {
   budgetBand: string;
 }
 
-export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-10.1-v6';
+export const COMPOSITION_PROMPT_VERSION = 'sidequest-trip-draft/2026-09-10.2-v7';
 
 /**
  * Output ceiling — sized so it is never what truncates a trip.
@@ -233,13 +241,13 @@ Optimise the draft for all of the following, in this order when they conflict:
 7. Scope discipline. A broad country or region is narrowed to the coherent subset that fits the days at the traveller's pace; the rest becomes deliberate omissions. Seven days is not a whole archipelago; two weeks across two countries is one coherent route, not every park and city.
 8. Geographic coherence. Group each day's experiences by area, sequence them in travel order, choose bases that cut wasted transfer time, and never zig-zag between regions. Alternate demanding and easy days, and put recovery where the plan has earned it rather than at a fixed interval.
 9. Day realism. Respect arrival, departure, day start, effort, meals, recovery, weather sensitivity and hotel changes. Give a day as many experiences as it genuinely holds — often two or three, sometimes one when that one is a whole day, fewer on transfer and edge days. Never pad a day to fill it, and never default to three attractions because three is a number.
-10. Multi-day experiences are single things. A trek, a circuit, a river descent, a hut-to-hut traverse or a lodge programme that occupies several consecutive days is ONE experience: put its name in 'partOf' on every day it covers, and let each of those days describe that day of it rather than restating the whole. Do not decompose it into unrelated day trips from a hotel, and do not compress it into one day because a day is the usual unit.
-11. Transfer days are real days. A relocation acknowledges checkout, the transfer and check-in, and holds only what realistically fits before and after — often one stop en route, chosen because it is on the way.
+10. Multi-day experiences are single things. A trek, a circuit, a river cruise, a hut-to-hut traverse, a safari programme, a sleeper train or a lodge programme that occupies several consecutive days is ONE experience: declare it once in 'episodes' (its kind, its first and last day, and how it moves inside itself — boat, walk, four_wheel_drive, rail, car, guide), put its name in 'partOf' on every day it covers, and let each of those days describe that day of it rather than restating the whole. Inside a cruise the gorges and shore stops are reached by the boat, never by road; inside a trek the camps are reached on foot; the operator's timetable is the clock. Do not decompose an episode into unrelated day trips from a hotel, and do not compress it into one day because a day is the usual unit. A night on board is a stay whose lodging says so ("river cruise ship", "sleeper train").
+11. Transfer days are real days, and every base change says how it moves. A relocation acknowledges checkout, the transfer and check-in, and holds only what realistically fits before and after — often one stop en route, chosen because it is on the way. When the move is a flight, a train, a boat or a hired driver rather than an ordinary road leg, say so on that day in 'move' (how, the gateway or town it goes through, and whether it opens or closes the day); a day that promises "fly home via X" in its theme and carries no move has not been designed. The last day's move is the leg to the departure gateway when the trip ends somewhere other than where it flies out from.
 12. Variety without randomness. Balance icons, personal discoveries, rest, food, neighbourhoods, outdoors and culture according to the brief; avoid repetitive days unless repetition is a stated priority.
 13. Time of day is part of the design. Where an experience only works at a particular hour — a night market, a sunrise summit, a sunset ridge, an evening performance, a market before it packs up, a tide — say so in 'when'. Leave 'when' out for everything the day can hold at any hour, which is most of it. Never write a night experience into a morning, and never schedule two 'when' values that cannot both happen on the same day.
-14. Food is geography, and a meal is never an activity. Meal intent names a kind of place and where it sits in the day, specifically enough that somebody could go and find it: "dim sum in Sheung Wan before the heritage walk", "packed lunch from the last shop before the pass", "the fish place by the harbour after the boat". "Lunch near base" and "dinner somewhere local" are not decisions and must not be written. Put the day's food quarter in 'meals.area' where the food has a geography of its own. Put meals in 'meals', never in the activity list; an activity is a place or experience with a name. Only write a meal where it is a decision.
+14. Food is a strategy, then geography, and a meal is never an activity. Write the trip's food strategy in 'food': the dishes and kinds of place this destination is actually known for that this traveller should seek (never a generic word like "dumplings" for a whole region), the quarters, markets and streets the trip eats in, and the caveats — what needs booking, what the diet rules out and what replaces it. Then on each day: Meal intent names a kind of place and where it sits in the day, specifically enough that somebody could go and find it: "dim sum in Sheung Wan before the heritage walk", "packed lunch from the last shop before the pass", "the fish place by the harbour after the boat". "Lunch near base" and "dinner somewhere local" are not decisions and must not be written. Put the day's food quarter in 'meals.area' where the food has a geography of its own. Put meals in 'meals', never in the activity list; an activity is a place or experience with a name. Only write a meal where it is a decision.
 15. Lodging is part of the experience, not a budget consequence. Choose the kind of place that serves the days and say it in 'lodging': yurt camp, mountain hut, refuge, tented camp, safari lodge, homestay, guesthouse, sleeper train, boat, hostel, apartment, hotel. A mid-range budget is a spending level, not an instruction to write "mid-range guesthouse" on every night of a trip; a mountain trip sleeps in the mountains, a safari sleeps in camp, and a night that is itself the journey says so. Never promise a named hotel. Avoid one-night stays unless the move materially improves the trip. A stay is the town, village, camp or vessel where the traveller sleeps, never a landmark.
-16. Transport says WHO IS AT THE WHEEL. Set 'driving' once for the trip: rental_self_drive only when the traveller genuinely hires and drives a car, owned_self_drive for their own vehicle, private_driver for a hired driver, taxi_rideshare, operator_transfer when the trip's operator or lodge moves them, and none when nothing on wheels is theirs to be responsible for. This is not a detail — Sidequest writes rental, permit, parking and fuel advice from it, and a trip with a driver that says rental_self_drive hands the traveller a page of advice about a car they will never touch.
+16. Transport is what is TRUE HERE, then who is at the wheel. Where <travel_reality> is given, design with it: if self-drive is discouraged or needs a permit a visitor cannot easily get, do not build a self-drive trip; use the modes it calls recommended (metro and walking in the city, high-speed rail or a hired driver between regions, guided transfers in the parks). Name the modes precisely — high_speed_rail is not rail, taxi is not car, a hired driver is private_transfer. Never state a legal or operational fact from the reality block as verified; it is compiled reference, and Sidequest says so to the traveller. Then say WHO IS AT THE WHEEL. Set 'driving' once for the trip: rental_self_drive only when the traveller genuinely hires and drives a car, owned_self_drive for their own vehicle, private_driver for a hired driver, taxi_rideshare, operator_transfer when the trip's operator or lodge moves them, and none when nothing on wheels is theirs to be responsible for. This is not a detail — Sidequest writes rental, permit, parking and fuel advice from it, and a trip with a driver that says rental_self_drive hands the traveller a page of advice about a car they will never touch.
 17. Bookability follows the service, not the mode. Do not say a ferry must be booked because it is a ferry, or a train needs a seat reservation because it is a train: many run turn-up-and-go and some are reservation-only. Where a booking genuinely gates the trip, put it in bookFirst and say why. Order that list by what the ITINERARY depends on — a trek guide, a horse operator, a permit, a mountain hut, a limited train, a lodge with four rooms — not by size of purchase. An ordinary city hotel almost never outranks the signature experience.
 18. Backups belong to a day and to a reason. Each backup names the day it covers, a trigger that day is actually exposed to, and an alternative reachable from where the traveller sleeps that night. A closure fallback for a mountain lake is no use attached to a city afternoon, and nothing needs a backup on a departure morning.
 19. Tradeoffs and omissions are explicit. Say what the plan deliberately does not do and what it leaves out, with the reason.
@@ -293,7 +301,7 @@ Omit any optional field you have nothing specific to say about rather than filli
 <output_contract>
 Return one JSON object and nothing else.
 
-Trip: archetype; signatures (the one to three experiences this trip is built around, by name); purpose (why this trip suits this traveller); route (why these bases in this order); timingRationale (what these dates open and close); transport (the strategy, one sentence — who drives, what is hired, what is guided); driving (rental_self_drive, owned_self_drive, private_driver, taxi_rideshare, operator_transfer or none); bookFirst (what to book first, in the order the ITINERARY depends on it — the guide, permit, hut or limited service the trip stands on, before the ordinary bed; one short line each, only where a booking genuinely gates something); stays; days (each may carry split: "Who: what they do instead; rejoin where and when"); omissions (name, why); tradeoffs; backups (trigger, then, day).
+Trip: archetype; signatures (the one to three experiences this trip is built around, by name); purpose (why this trip suits this traveller); route (why these bases in this order); timingRationale (what these dates open and close); transport (the strategy, one sentence — who drives, what is hired, what is guided); driving (rental_self_drive, owned_self_drive, private_driver, taxi_rideshare, operator_transfer or none); episodes (each multi-day experience: name; kind — cruise, trek, safari, sleeper_train, expedition_boat, guided_overland, road_trip_segment, resort_stay, bike_tour, hut_to_hut; days as [first, last]; how it moves inside itself; omit the array when there is none); food (seek: the dishes and kinds of place to look for; areas: the quarters and markets the trip eats in; notes: bookings and dietary caveats); bookFirst (what to book first, in the order the ITINERARY depends on it — the cruise, the guide, permit, hut or limited service the trip stands on, before the ordinary bed; one short line each, only where a booking genuinely gates something); stays; days (each may carry split: "Who: what they do instead; rejoin where and when", and move: {how, via, when} on a day whose main movement is a flight, train, boat or hired driver); omissions (name, why); tradeoffs; backups (trigger, then, day).
 
 window: only when you were asked to choose the dates — startDate and endDate as YYYY-MM-DD, spanning exactly the day count given.
 
@@ -301,7 +309,7 @@ stays: name — the town, village, camp or vessel where the traveller sleeps, a 
 
 days, one per calendar day in order, first to last: stay (a stay's name, verbatim); theme; acts; meals; why (one sentence on why this day suits this traveller); partOf only when this day is one day of a named multi-day experience. The day's number is its position, so do not write one.
 
-acts, in the order they happen: name; kind; why (one short sentence); near only when the place is not in the stay itself; mins when you have a view on time on site; how only when reaching it is not the day's default way of getting around; when only where the experience depends on the hour (sunrise, morning, midday, afternoon, sunset, evening, night) — leave it out otherwise. The transport vocabulary is walk, metro, rail, bus, car, ferry, boat, flight, private_transfer, four_wheel_drive, guide_or_lodge_transfer and horse — use the one that is the truth, and never car for a route that has no road.
+acts, in the order they happen: name; kind; why (one short sentence); near only when the place is not in the stay itself; mins when you have a view on time on site; how only when reaching it is not the day's default way of getting around; when only where the experience depends on the hour (sunrise, morning, midday, afternoon, sunset, evening, night) — leave it out otherwise. The transport vocabulary is walk, metro, rail, high_speed_rail, bus, car, taxi, ferry, boat, flight, private_transfer, four_wheel_drive, guide_or_lodge_transfer and horse — use the one that is the truth, never car for a route that has no road, never car for a taxi, never rail for a bullet train.
 
 meals: b, l, d — meal intent, specific enough to act on, and only where the meal is a decision; area — the quarter, market or neighbourhood the day's food sits in.
 
@@ -430,6 +438,7 @@ export function buildCompositionTask(context: CompositionContext): string {
     renderTravelerBriefXml(brief),
     '',
     ...(context.contract ? [renderContractBands(context.contract), ''] : []),
+    ...(context.reality ? [renderTravelReality(context.reality), ''] : []),
     ...(context.mode === 'quick' ? ['The traveller gave only the essentials and asked Sidequest to plan what it thinks is right. Choose sensible defaults confidently.', ''] : []),
     'DAY WINDOWS (hard). Nothing may be scheduled before the arrival on day 1 or after the departure on the last day: a morning departure means the last day holds at most a short walk or nothing. Keep every day inside a normal waking window and never assume a late night the traveller did not ask for.',
     ...(context.bookedFacts && context.bookedFacts.length > 0
@@ -443,6 +452,24 @@ export function buildCompositionTask(context: CompositionContext): string {
     'An activity is a place or an experience with a name. Movement between places ("Drive X to Y", "Transfer to Z", "Flight to W") and arrival or departure points (an airport, a station) are never activities: Sidequest builds the legs and the terminal plan from the stays and the transport values. Name a gateway only in transport notes, and only one — if the traveller has not chosen between two airports, say so in unresolved.',
     'Every activity carries its real name and, where the name could mean more than one place, a locality. Keep each prose field to a sentence or two; no web addresses, no markup.',
   ];
+  return lines.join('\n');
+}
+
+/**
+ * V7 §3 — the travel reality as sentences the model designs with. Compiled
+ * reference facts, each with its status; the model is told twice that they
+ * are reference, not verified, and that the traveller's own answers still win.
+ */
+export function renderTravelReality(reality: TravelReality): string {
+  const lines: string[] = ['<travel_reality>', `Compiled reference about getting around ${reality.destination.label}; design with it, but never restate a legal or operational item as verified fact — Sidequest tells the traveller it is reference.`];
+  if (reality.recommendation) lines.push(`Sidequest's read: ${reality.recommendation.sentence}`);
+  const shown = reality.modes.filter((m) => m.status !== 'unknown').slice(0, 10);
+  for (const m of shown) lines.push(`- ${MODE_CONCEPT_LABELS[m.mode]}${m.scope !== 'all' ? ` (${m.scope})` : ''}: ${MODE_STATUS_LABELS[m.status].toLowerCase()} — ${m.reason.split('. ')[0]}.`);
+  const facts = reality.facts.filter((f) => f.topic === 'payment' || f.topic === 'holidays' || f.topic === 'border' || f.topic === 'seasonal_access' || f.topic === 'permits').slice(0, 5);
+  for (const f of facts) lines.push(`- ${f.statement}`);
+  if (reality.crowdPeriods.length > 0) lines.push(`Busy periods: ${reality.crowdPeriods.map((p) => `${p.name} (${p.ranges.map((r) => `${r.from} to ${r.to}`).join(', ')})`).join('; ')}.`);
+  if (reality.unknowns.length > 0) lines.push(`Not compiled: ${reality.unknowns[0]}`);
+  lines.push('</travel_reality>');
   return lines.join('\n');
 }
 

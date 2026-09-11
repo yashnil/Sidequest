@@ -112,6 +112,7 @@ const CLASSES_BY_ENTITY_TYPE: Partial<Record<DestinationEntityType, readonly Des
     neighbourhood: ['urban'],
     city: ['urban'],
     metro_area: ['urban'],
+    municipality: ['urban', 'countryside'],
     island: ['coastal', 'countryside'],
     archipelago: ['coastal', 'countryside'],
     protected_area: ['mountain', 'countryside'],

@@ -393,6 +393,23 @@ export async function itineraryViewModel(
     capabilities: { forecast: registry.byId['weather.forecast']?.available ?? false, traffic: registry.byId['routing.traffic']?.available ?? false, hours: registry.byId['places.hours']?.available ?? false, transit: registry.byId['routing.transit']?.available ?? false },
   });
 
+  /*
+   * V7 §14 — A TRIP WITH NO COMPILED REGION STILL HAS A MAP.
+   *
+   * Every stop the reconciler placed carries its resolved position on
+   * `package.anchors[].identity`, and every base it geocoded carries its own
+   * `coordinates`. The map used to read the compiled region alone, so the two
+   * live V7 builds — both regionless — said "no stop has a confirmed position"
+   * over thirteen positioned stops. The compiled region still wins where it
+   * exists; the plan's own identities fill what it does not cover.
+   */
+  for (const anchor of itinerary.package?.anchors ?? []) {
+    if (anchor.placeId && anchor.identity?.coordinates && !coordinates.has(anchor.placeId)) coordinates.set(anchor.placeId, { lat: anchor.identity.coordinates.lat, lng: anchor.identity.coordinates.lng });
+  }
+  for (const base of itinerary.package?.bases ?? []) {
+    if (base.coordinates && !coordinates.has(base.id)) coordinates.set(base.id, { lat: base.coordinates.lat, lng: base.coordinates.lng });
+    if (base.placeId && base.coordinates && !coordinates.has(base.placeId)) coordinates.set(base.placeId, { lat: base.coordinates.lat, lng: base.coordinates.lng });
+  }
   return {
     appliedItinerary: loaded.itinerary,
     intelligence: loaded.intelligence,

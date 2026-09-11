@@ -60,6 +60,8 @@ export interface PackingInput {
   /** The plan carries intense days or trail-like stops even if no anchor is categorised as a hike. */
   strenuous?: boolean;
   modelPacking: readonly string[];
+  /** V7 §13 — the episode kinds on the plan, so a cruise packs like a cruise and a trek like a trek. */
+  episodeKinds?: readonly string[];
 }
 
 export function buildPackingIntelligence(input: PackingInput): PackingIntelligence {
@@ -93,6 +95,18 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   const water = cats.has('beach') || cats.has('geothermal') || (cats.has('water') && interestOn(input.profile, 'beaches_and_swimming'));
   const wildlife = cats.has('wildlife');
   const legs = new Set(input.legModes);
+  const episodes = new Set(input.episodeKinds ?? []);
+  /*
+   * V7 §13 — EVERY ITEM EARNS ITS PLACE. "Remote" used to mean "any guided
+   * transfer anywhere", which put two litres of water a day and a headtorch on
+   * a river cruise. Water and a torch belong to trail days and camps; a car
+   * charger belongs to a car the traveller drives; a sleeping-bag liner to a
+   * hut. A cruise packs for a deck, not for a bivouac.
+   */
+  const trek = episodes.has('trek') || episodes.has('hut_to_hut');
+  const camps = input.lodgingKinds.includes('hut') || input.lodgingKinds.includes('camp');
+  const trailDays = hikes || trek;
+  const remoteOutdoors = input.remote && (trailDays || camps || episodes.has('safari') || episodes.has('guided_overland'));
 
   // Documents ---------------------------------------------------------------
   add('essential_documents', 'Passport or ID, valid for the trip', input.international === 'no' ? 'Your carrier will ask for photo ID.' : 'Required at the border; validity rules are the destination’s.');
@@ -130,12 +144,13 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   // Electronics -------------------------------------------------------------
   add('electronics', 'Phone charger and a power bank', 'Maps, tickets and photos all run the battery down.');
   if (input.international === 'yes') add('electronics', 'Plug adapter for the destination', 'Plug type not verified by Sidequest — check before you go.');
-  if (input.remote || input.drives) add('electronics', 'Car charger or a second power bank', 'Long days away from a socket.');
+  if (input.drives) add('electronics', 'Car charger', 'You are driving; the phone is the map.');
+  else if (remoteOutdoors) add('electronics', 'A second power bank', 'Long days away from a socket.');
 
   // Health ------------------------------------------------------------------
   add('health_toiletries', 'Prescription medicines in original packaging, plus a few days extra', 'Sidequest never infers what you take; bring what you need and check destination restrictions.');
   add('health_toiletries', 'Small first-aid kit', hikes ? 'Blisters and scrapes on trail days.' : 'For the small things.');
-  if (cats.has('geothermal') || cats.has('wildlife') || input.remote) add('health_toiletries', 'Insect repellent', 'Outdoor evenings on the plan.', true);
+  if (cats.has('geothermal') || cats.has('wildlife') || remoteOutdoors) add('health_toiletries', 'Insect repellent', 'Outdoor evenings on the plan.', true);
 
   // Transport ---------------------------------------------------------------
   if (legs.has('ferry') || legs.has('boat')) add('transport', 'Motion-sickness remedy and a dry bag', 'Ferry or boat legs on the plan.', true);
@@ -144,12 +159,11 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   if (legs.has('rail') || legs.has('metro') || legs.has('bus')) add('transport', 'Transit pass or contactless card', 'Local transport is the plan.');
 
   // Remote ------------------------------------------------------------------
-  if (input.remote) {
-    add('remote_travel', 'Two litres of water per person per day', 'Remote sections with no services.');
-    add('remote_travel', 'Downloaded plan, maps and emergency numbers', 'No signal is the assumption out there.');
-    add('remote_travel', 'Headtorch', 'Late returns in the dark.', true);
-  }
-  if (input.lodgingKinds.includes('hut') || input.lodgingKinds.includes('camp')) add('remote_travel', 'Sleeping bag liner, earplugs, quick-dry towel', 'Hut or camp nights on the plan.');
+  if (remoteOutdoors && trailDays) add('remote_travel', 'Two litres of water per person on trail days', 'Trail sections with no services.');
+  if (input.remote) add('remote_travel', 'Downloaded plan, maps and emergency numbers', 'No signal is the assumption out there.');
+  if (trek || camps) add('remote_travel', 'Headtorch', 'Trek days that can end in the dark, and camp nights.', true);
+  if (camps || trek) add('remote_travel', 'Sleeping bag liner, earplugs, quick-dry towel', 'Hut or camp nights on the plan.');
+  if (episodes.has('cruise') || episodes.has('expedition_boat')) add('activity_specific', 'A layer for the deck and a small day bag for shore stops', 'Nights on board; excursions leave the ship with what you carry.', true);
   if (input.lodgingKinds.includes('hostel')) add('optional', 'Padlock and earplugs', 'Hostel nights.', true);
 
   const mapped = new Set(items.map((i) => i.label.toLowerCase()));

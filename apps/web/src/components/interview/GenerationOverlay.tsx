@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { DestinationMap, type DestinationGeometry } from './DestinationMap';
 import type { MapBasemap } from '../map-adapter';
-import { generationProgressAction, type GenerationProgressView } from '@/app/(product)/trips/[id]/questionnaire/progress-actions';
+import type { GenerationProgressView } from '@/app/(product)/trips/[id]/questionnaire/progress-actions';
 
 /**
  * THE ONE-TO-TWO-MINUTE WAIT IS A PRODUCT MOMENT — AND IT TELLS THE TRUTH.
@@ -41,8 +41,15 @@ export function GenerationOverlay({ tripId, destination, geometry = null, tiles 
     if (!tripId) return;
     let stopped = false;
     let timer = 0;
+    /*
+     * V7 §16 — a GET route, never a server action: a tab's server actions run
+     * one at a time, so a poll made through one waited behind the build itself
+     * and the screen never moved. See `api/trips/[id]/progress/route.ts`.
+     */
     const poll = async () => {
-      const view = await generationProgressAction(tripId).catch(() => null);
+      const view = await fetch(`/api/trips/${encodeURIComponent(tripId)}/progress`, { cache: 'no-store' })
+        .then((response) => (response.ok ? (response.json() as Promise<GenerationProgressView>) : null))
+        .catch(() => null);
       if (stopped) return;
       if (view) setProgress(view);
       if (!view?.finished) timer = window.setTimeout(() => void poll(), POLL_MS);
@@ -83,6 +90,17 @@ export function GenerationOverlay({ tripId, destination, geometry = null, tiles 
               );
             })}
           </ol>
+          {/* V7 §16 — what has actually been counted so far. Sentences from real counters; never a percentage, never a provider name. */}
+          {progress && progress.milestones.length > 0 ? (
+            <ul className="mt-6 space-y-1 text-sm text-[var(--color-atlas-ink)]" aria-label="Progress so far" data-testid="generation-milestones">
+              {progress.milestones.map((line) => (
+                <li key={line} className="rise flex gap-2">
+                  <span aria-hidden="true" className="atlas-muted">—</span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <p className="numeral mt-8 type-small atlas-muted">
             {seconds}s elapsed · usually under two minutes. Your answers are saved either way.
           </p>

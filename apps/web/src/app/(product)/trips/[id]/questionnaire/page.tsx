@@ -24,6 +24,7 @@ import { getIntent } from '@/lib/db/compiler-repository';
 import { partyFactsFor } from '@/lib/db/party-repository';
 import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { interviewContextFor } from '@/lib/interview/screening';
+import { timingIntentOf } from '@/lib/planning/canonical-input';
 import { compiledRegionFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
 import { isFixtureComposer } from '@/lib/providers/switches';
 import { providerReadiness } from '@/lib/compiler/readiness';
@@ -177,6 +178,7 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       fixtureMode={isFixtureComposer()}
       geometry={geometry}
       tiles={tiles}
+      timingOpen={timingIntentOf({ composer: intent?.composer ?? null, trip, at: new Date().toISOString() }).sidequestChooses}
       {...(interpretation
         ? { interpretation: { set: interpretation, mustDo: intent?.composer?.mustDo ?? '', avoid: intent?.composer?.avoid ?? '' } }
         : {})}

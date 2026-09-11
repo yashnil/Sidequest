@@ -147,24 +147,70 @@ export interface WindowFeatures {
   daylight: number;
   snow: number;
   heat: number;
+  /** V7 §7 — 1 when no known busy period or closure touches the month, lower as more of it is covered. */
+  crowds: number;
 }
 
-export function windowFeatures(normal: ClimateNormal, answers?: TripComposerAnswers): WindowFeatures {
+/**
+ * V7 §7 — A CROWD PERIOD THE MONTH TOUCHES.
+ *
+ * Compiled per country in the travel-reality layer (national holidays, peak
+ * weeks, seasonal closures). Only the periods handed in are scored; a month with
+ * none is not "quiet", it is "nothing known", which is why the standing unknown
+ * about crowds stays in the output whenever no period was supplied at all.
+ */
+export interface CrowdPeriodForDates {
+  name: string;
+  ranges: readonly { from: string; to: string }[];
+  effect: 'very_busy' | 'busy' | 'closures';
+  note: string;
+  movable?: boolean;
+}
+
+/** Days of the month (1–12) that a month-day range covers, capped to the month. */
+function daysCovered(month: number, range: { from: string; to: string }): number {
+  const mm = String(month).padStart(2, '0');
+  const first = `${mm}-01`;
+  const last = `${mm}-31`;
+  const spans: [string, string][] = range.from <= range.to ? [[range.from, range.to]] : [[range.from, '12-31'], ['01-01', range.to]];
+  let days = 0;
+  for (const [from, to] of spans) {
+    const lo = from > first ? from : first;
+    const hi = to < last ? to : last;
+    if (lo > hi) continue;
+    days += Number(hi.slice(3)) - Number(lo.slice(3)) + 1;
+  }
+  return Math.min(31, days);
+}
+
+export function crowdScore(month: number, periods: readonly CrowdPeriodForDates[]): { score: number; touching: CrowdPeriodForDates[] } {
+  const touching = periods.filter((p) => p.ranges.some((r) => daysCovered(month, r) > 0));
+  let covered = 0;
+  for (const period of touching) {
+    const days = period.ranges.reduce((n, r) => n + daysCovered(month, r), 0);
+    covered += days * (period.effect === 'very_busy' ? 1 : period.effect === 'closures' ? 0.8 : 0.5);
+  }
+  return { score: clamp01(1 - Math.min(31, covered) / 31), touching };
+}
+
+export function windowFeatures(normal: ClimateNormal, answers?: TripComposerAnswers, crowdPeriods: readonly CrowdPeriodForDates[] = []): WindowFeatures {
   return {
     temperature: temperatureScore(normal, answers),
     dryness: drynessScore(normal, answers),
     daylight: daylightScore(normal),
     snow: snowScore(normal, answers),
     heat: heatScore(normal),
+    crowds: crowdScore(normal.month, crowdPeriods).score,
   };
 }
 
 const WEIGHTS: Record<keyof WindowFeatures, number> = {
-  temperature: 0.32,
-  dryness: 0.24,
-  daylight: 0.2,
-  snow: 0.14,
-  heat: 0.1,
+  temperature: 0.3,
+  dryness: 0.22,
+  daylight: 0.18,
+  snow: 0.12,
+  heat: 0.08,
+  crowds: 0.1,
 };
 
 /**
@@ -177,8 +223,17 @@ const WEIGHTS: Record<keyof WindowFeatures, number> = {
  * where nothing is known about the trip. Every reweighting is stated in the
  * reasons so the traveller can see what decided it.
  */
-export function experienceWeights(answers?: TripComposerAnswers): { weights: Record<keyof WindowFeatures, number>; basis: string } {
+export function experienceWeights(answers?: TripComposerAnswers, interests: readonly string[] = [], crowdTolerance?: string): { weights: Record<keyof WindowFeatures, number>; basis: string } {
   const themes = new Set<string>(answers?.themes ?? []);
+  /* V7 §7 — the interview's interests, once known, refine what the composer's themes began. */
+  for (const interest of interests) {
+    if (/hik|trail|mountain|outdoor|scenic_drive|national_park/.test(interest)) themes.add('outdoors');
+    if (/beach|water|snorkel|dive|kayak|sail/.test(interest)) themes.add('water');
+    if (/food|cafe|market|dining|street_food/.test(interest)) themes.add('food');
+    if (/wildlife|safari|bird/.test(interest)) themes.add('wildlife');
+    if (/museum|history|architecture|culture|neighbourhood|nightlife/.test(interest)) themes.add('culture');
+    if (/ski|snow/.test(interest)) themes.add('snow');
+  }
   const strenuous = answers?.outdoorIntensity === 'strenuous';
   const w = { ...WEIGHTS };
   let basis = 'general comfort';
@@ -212,13 +267,21 @@ export function experienceWeights(answers?: TripComposerAnswers): { weights: Rec
     w.dryness += 0.1;
     basis = outdoors ? basis : 'dry-season wildlife viewing';
   }
+  if (themes.has('snow')) {
+    w.snow += 0.2;
+    basis = 'snow';
+  }
+  /* Somebody who told the interview they avoid crowds has said the busy weeks matter more. */
+  if (crowdTolerance === 'avoid' || crowdTolerance === 'low') {
+    w.crowds += 0.15;
+  }
   const total = Object.values(w).reduce((a, b) => a + Math.max(0, b), 0);
   const normalised = Object.fromEntries(Object.entries(w).map(([k, v]) => [k, Math.max(0, v) / total])) as Record<keyof WindowFeatures, number>;
   return { weights: normalised, basis };
 }
 
-export function scoreWindow(features: WindowFeatures, answers?: TripComposerAnswers): number {
-  const { weights } = experienceWeights(answers);
+export function scoreWindow(features: WindowFeatures, answers?: TripComposerAnswers, interests: readonly string[] = [], crowdTolerance?: string): number {
+  const { weights } = experienceWeights(answers, interests, crowdTolerance);
   let total = 0;
   for (const [key, weight] of Object.entries(weights) as [keyof WindowFeatures, number][]) {
     total += features[key] * weight;
@@ -237,9 +300,17 @@ export function scoreWindow(features: WindowFeatures, answers?: TripComposerAnsw
 function narrate(
   normal: ClimateNormal,
   features: WindowFeatures,
+  crowdPeriods: readonly CrowdPeriodForDates[] = [],
 ): { reasons: string[]; tradeoffs: string[] } {
   const reasons: string[] = [];
   const tradeoffs: string[] = [];
+
+  /* V7 §7 — the busy weeks and closures the month touches, named, never folded into a number. */
+  const { touching } = crowdScore(normal.month, crowdPeriods);
+  for (const period of touching.slice(0, 2)) {
+    tradeoffs.push(`${period.effect === 'closures' ? 'Closures' : period.effect === 'very_busy' ? 'Very busy' : 'Busy'} around ${period.name}${period.movable ? ' (the dates move each year)' : ''}: ${period.note}`);
+  }
+  if (crowdPeriods.length > 0 && touching.length === 0) reasons.push('Clear of the busy periods Sidequest knows about for this destination.');
 
   if (features.temperature >= 0.85) {
     reasons.push(
@@ -304,6 +375,11 @@ export interface RecommendDatesInput {
   limit?: number;
   /** Injected so the same inputs always produce the same answer. */
   now: Date;
+  /** V7 §7 — the interview's interests, when the window is chosen after the profile is known. */
+  interests?: readonly string[];
+  crowdTolerance?: string;
+  /** V7 §7 — busy periods and closures compiled for the destination's countries. */
+  crowdPeriods?: readonly CrowdPeriodForDates[];
 }
 
 /**
@@ -339,9 +415,9 @@ export function recommendDateWindows(input: RecommendDatesInput): DateGuidance {
   const windows: DateWindow[] = [];
   for (const normal of input.profile.months) {
     if (!allowed.has(normal.month)) continue;
-    const features = windowFeatures(normal, input.answers);
-    const score = scoreWindow(features, input.answers);
-    const { reasons, tradeoffs } = narrate(normal, features);
+    const features = windowFeatures(normal, input.answers, input.crowdPeriods ?? []);
+    const score = scoreWindow(features, input.answers, input.interests ?? [], input.crowdTolerance);
+    const { reasons, tradeoffs } = narrate(normal, features, input.crowdPeriods ?? []);
     const year = input.year > currentYear || normal.month >= currentMonth ? input.year : input.year + 1;
 
     windows.push({
@@ -351,7 +427,7 @@ export function recommendDateWindows(input: RecommendDatesInput): DateGuidance {
       score,
       reasons,
       tradeoffs,
-      unknowns: [...STANDING_UNKNOWNS],
+      unknowns: input.crowdPeriods && input.crowdPeriods.length > 0 ? STANDING_UNKNOWNS.filter((u) => !u.startsWith('How busy')) : [...STANDING_UNKNOWNS],
       climate: {
         temperature: { low: normal.temperature.low, high: normal.temperature.high },
         daylightHours: normal.daylightHours,

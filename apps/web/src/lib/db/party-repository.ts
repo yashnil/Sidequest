@@ -216,7 +216,7 @@ export function listPartyMembersForBrief(tripId: string, groupInterests: Record<
 }
 
 /** V6 §6 — the party as the question selector reads it. Undefined when nobody was described. */
-export function partyFactsFor(tripId: string): { members: number; needs: string[]; drivers: number | null; dietsRecorded: boolean } | undefined {
+export function partyFactsFor(tripId: string): { members: number; needs: string[]; drivers: number | null; dietsRecorded: boolean; differences: boolean } | undefined {
   const members = listPartyMembers(tripId);
   if (members.length === 0) return undefined;
   const binding = members.filter((m) => m.constraintsApply);
@@ -224,7 +224,11 @@ export function partyFactsFor(tripId: string): { members: number; needs: string[
   const anyDrivingSaid = members.some((m) => m.traveler.profile.transportComfort.includes('drives') || m.traveler.needs.includes('cannot_drive'));
   const drivers = anyDrivingSaid ? members.filter((m) => m.traveler.profile.transportComfort.includes('drives') && !m.traveler.needs.includes('cannot_drive')).length : null;
   const dietsRecorded = members.every((m) => m.traveler.diet.needs.length > 0 || Boolean(m.traveler.diet.notes));
-  return { members: members.length, needs, drivers, dietsRecorded };
+  /* V7 §5 — the split question needs a difference to split over: a need, a diet that differs, a capacity that differs, or a note about someone. */
+  const dietKeys = new Set(members.map((m) => [...m.traveler.diet.needs].sort().join(',')));
+  const capacities = new Set(members.map((m) => m.traveler.profile.physicalCapability ?? 'unstated'));
+  const differences = needs.length > 0 || dietKeys.size > 1 || capacities.size > 1 || members.some((m) => Boolean(m.traveler.needsNotes));
+  return { members: members.length, needs, drivers, dietsRecorded, differences };
 }
 
 /**

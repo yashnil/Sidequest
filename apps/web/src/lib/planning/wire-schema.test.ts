@@ -46,9 +46,10 @@ it('the mode is decided locally from the measured profile, once, and matches the
    * this is a closure about latency with one live call to spend. The guard is
    * still exercised, and still decides if the pin is removed.
    */
-  expect(verdict.suitable, 'the compact wire should be small enough for a grammar').toBe(true);
+  /* V7 — episodes, day moves and the food strategy pushed the schema past the grammar ceiling; the pin to prompt mode stands, and the guard says why. */
+  expect(verdict.suitable, 'the V7 compact wire is deliberately past the grammar ceiling').toBe(false);
   expect(decision.enforcement).toBe('prompt');
-  expect(decision.reasons.join(' ')).toMatch(/pinned to prompt mode/);
+  expect(decision.reasons.join(' ')).toMatch(/bytes >/);
   expect(decision.schemaSha256).toMatch(/^[0-9a-f]{64}$/);
   expect(compositionWireDecision()).toBe(decision);
   /*

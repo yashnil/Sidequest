@@ -1,6 +1,6 @@
 'use server';
 
-import { GENERATION_STAGES, GENERATION_STAGE_DETAIL, GENERATION_STAGE_LABELS, getGenerationProgress, type GenerationStage } from '@/lib/db/generation-progress-repository';
+import { GENERATION_STAGES, GENERATION_STAGE_DETAIL, GENERATION_STAGE_LABELS, getGenerationProgress, milestonesFor, type GenerationStage } from '@/lib/db/generation-progress-repository';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 /**
@@ -23,6 +23,8 @@ export interface GenerationProgressView {
   elapsedSeconds: number;
   finished: boolean;
   outcome: 'ok' | 'failed' | null;
+  /** V7 §16 — what has actually been counted, as sentences a traveller can read. */
+  milestones: string[];
 }
 
 export async function generationProgressAction(tripId: string): Promise<GenerationProgressView | null> {
@@ -40,5 +42,6 @@ export async function generationProgressAction(tripId: string): Promise<Generati
     elapsedSeconds: Number.isNaN(startedAt) ? 0 : Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
     finished: progress.finished,
     outcome: progress.outcome,
+    milestones: milestonesFor(progress.counters, progress.stage),
   };
 }

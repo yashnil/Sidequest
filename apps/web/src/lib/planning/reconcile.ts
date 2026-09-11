@@ -83,7 +83,7 @@ import {
   type UnresolvedRelocation,
 } from './skeleton-adapter';
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
-import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, type AnchorRole, type DraftAnchor, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving } from './trip-draft';
+import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRoad, episodesOf, type AnchorRole, type DraftAnchor, type DraftEpisode, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving } from './trip-draft';
 
 /**
  * THE RECONCILER — MODEL DRAFT + VERIFICATION OVERLAY + MINIMAL DETERMINISTIC
@@ -326,6 +326,11 @@ function transportModeFor(hint: DraftTransport | undefined, matrixMode: TravelTi
     case 'ferry':
     case 'boat':
       return 'ferry';
+    /* V7 §7 — a taxi or ride-hailing hop is a road leg somebody else drives; high-speed rail is a timetable. */
+    case 'taxi':
+      return 'rideshare';
+    case 'high_speed_rail':
+      return 'rail';
     /* A ride is arranged movement the road router cannot answer, like the two above it. */
     case 'private_transfer':
     case 'guide_or_lodge_transfer':
@@ -342,7 +347,51 @@ function transportModeFor(hint: DraftTransport | undefined, matrixMode: TravelTi
 
 /** Whether a road router could ever have measured this hint — a ferry or a flight leg that the router cannot see is `mode_not_routed`, never "no route". */
 function roadRoutable(hint: DraftTransport | undefined): boolean {
-  return hint === undefined || hint === 'car' || hint === 'four_wheel_drive' || hint === 'walk' || hint === 'bus' || hint === 'private_transfer' || hint === 'unknown';
+  return hint === undefined || hint === 'car' || hint === 'four_wheel_drive' || hint === 'walk' || hint === 'bus' || hint === 'private_transfer' || hint === 'taxi' || hint === 'unknown';
+}
+
+/** V7 §8 — the transport hint an episode's own movement implies for a stop inside it that names none. */
+function episodeHint(episode: DraftEpisode | null): DraftTransport | undefined {
+  switch (episode?.mode) {
+    case 'boat':
+      return 'boat';
+    case 'walk':
+      return 'walk';
+    case 'four_wheel_drive':
+      return 'four_wheel_drive';
+    case 'rail':
+      return 'rail';
+    case 'horse':
+      return 'horse';
+    case 'guide_or_lodge_transfer':
+      return 'guide_or_lodge_transfer';
+    case 'car':
+      return 'car';
+    default:
+      return undefined;
+  }
+}
+
+/** The traveller-facing verb for a leg inside an episode. */
+function episodeLegLabel(episode: DraftEpisode): string {
+  switch (episode.mode) {
+    case 'boat':
+      return 'Boat passage to';
+    case 'walk':
+      return 'On the trail to';
+    case 'four_wheel_drive':
+      return 'Game drive to';
+    case 'rail':
+      return 'By train to';
+    case 'horse':
+      return 'On horseback to';
+    case 'bicycle':
+      return 'By bike to';
+    case 'guide_or_lodge_transfer':
+      return 'With the guide to';
+    default:
+      return 'On to';
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -487,8 +536,15 @@ function settleAmbiguousBase(candidates: readonly { sourceId: string; name: stri
 }
 
 /** What kind of place the draft says the traveller sleeps in. Lodges and camps keep their own names; towns are localities. */
-function draftBaseKind(base: { name: string; lodgingStyle?: string; lodgingArea?: string }): BaseKind {
+function draftBaseKind(base: { name: string; lodgingStyle?: string; lodgingArea?: string; overnight?: string }): BaseKind {
   const text = `${base.name} ${base.lodgingStyle ?? ''}`;
+  /*
+   * V7 §8 — A NIGHT ON A SHIP OR A SLEEPER IS NOT A TOWN. The bed moves; the
+   * geocoder must never be asked to place "the cruise ship", and no surface may
+   * offer parking, a neighbourhood or a hotel booking for it.
+   */
+  if (base.overnight === 'boat' || base.overnight === 'train' || /\b(cruise ship|river ship|the ship|aboard|on board|sleeper train|liveaboard)\b/i.test(text)) return 'vessel';
+  if (base.overnight === 'hut' || base.overnight === 'refuge' || (base.overnight === 'tent' && /\b(trail|trek|camp)\b/i.test(text))) return 'trail_camp';
   if (/\b(tented|camp|campsite|bush camp|mobile camp)\b/i.test(text)) return 'camp';
   if (/\b(lodge|homestay|hut|cabin|ranch|estancia|ryokan|farm ?stay|eco.?lodge|retreat|manor|castle hotel)\b/i.test(text)) return 'lodge';
   if (/\b(hotel|inn|guesthouse|hostel|resort|b&b|apartment|riad|pousada|pension|villa)\b/i.test(base.name)) return 'lodging_property';
@@ -504,7 +560,7 @@ function draftBaseKind(base: { name: string; lodgingStyle?: string; lodgingArea?
  * different name (a spelling the geocoder corrected) replaces the draft's.
  */
 function baseDisplayName(input: { kind: BaseKind; draftName: string; localityName: string; canonicalName: string | undefined; landmark: boolean }): string {
-  if (input.kind === 'lodge' || input.kind === 'camp' || input.kind === 'lodging_property') return input.draftName;
+  if (input.kind === 'lodge' || input.kind === 'camp' || input.kind === 'lodging_property' || input.kind === 'vessel' || input.kind === 'trail_camp') return input.draftName;
   if (!input.canonicalName || input.landmark) return input.localityName;
   const canonical = normalizeName(input.canonicalName);
   const draftName = normalizeName(input.draftName);
@@ -692,7 +748,12 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
    * looked for once more; and the traveller-facing name is the draft's own
    * locality (or the lodge/camp the draft meant), never the record's label.
    */
+  const episodes = episodesOf(draft);
   const baseResolutions = await mapConcurrent(draft.bases, BASE_RESOLUTION_CONCURRENCY, async (base) => {
+    if (draftBaseKind(base) === 'vessel') {
+      /* V7 §8 — a ship or a sleeper is placed by its route, never by a geocoder. */
+      return { base, outcome: null, settled: null, landmarkFallback: false, secondLookup: null as { name: string; sourceId: string; coordinates: { lat: number; lng: number } } | null, vessel: true };
+    }
     if (deadline()) {
       providerNotes.push(`Base "${base.name}" was not looked up: the verification deadline had passed.`);
       return { base, outcome: null, settled: null, landmarkFallback: false, secondLookup: null as { name: string; sourceId: string; coordinates: { lat: number; lng: number } } | null };
@@ -730,7 +791,12 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     const kind = draftBaseKind(base);
     const localityName = base.locality ?? base.name;
     if (!outcome) {
-      bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null, displayName: kind === 'lodge' || kind === 'camp' ? base.name : localityName, locality: localityName, baseKind: kind });
+      if ('vessel' in resolution && resolution.vessel) {
+        const episode = episodes.find((e) => draft.days.some((d) => d.baseId === base.id && d.dayNumber >= e.fromDay && d.dayNumber <= e.toDay));
+        bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null, displayName: base.name, locality: localityName, baseKind: 'vessel', ...(episode ? { episode: episode.name } : {}) });
+        continue;
+      }
+      bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null, displayName: kind === 'lodge' || kind === 'camp' || kind === 'vessel' || kind === 'trail_camp' ? base.name : localityName, locality: localityName, baseKind: kind });
       continue;
     }
     let identity: ResolvedBaseIdentity | null = null;
@@ -880,6 +946,39 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   if (!closure.ok) providerNotes.push(closure.detail);
 
   // --- Date → base ------------------------------------------------------------
+  /*
+   * V7 §9 — A MOVE AT THE END OF A DAY DECIDES WHERE THAT NIGHT IS SLEPT.
+   *
+   * "Disembark at Yichang and take the train back to Chongqing" written as
+   * `move.when: 'end'` on the cruise's last day, with the next day in the
+   * city, means the night is in the city — whatever the stay counts said.
+   * The live Chongqing build kept that night on the ship, so the train had
+   * nowhere to be and the next morning walked from a moored vessel to a park.
+   * The nights move with the traveller; the note says so.
+   */
+  /* The base a day sleeps at, by the stay counts as they stand (the same walk `baseForDate` makes below). */
+  const baseIndexForDay = (d: number): number => {
+    let cumulative = 0;
+    let index = 0;
+    while (index < bases.length - 1 && d >= cumulative + bases[index]!.nights) {
+      cumulative += bases[index]!.nights;
+      index += 1;
+    }
+    return index;
+  };
+  for (let d = 0; d < draft.days.length - 1; d += 1) {
+    const today = draft.days[d]!;
+    const tomorrow = draft.days[d + 1]!;
+    if (!today.move || today.move.when !== 'end' || today.baseId === tomorrow.baseId) continue;
+    const from = baseIndexForDay(d);
+    const to = baseIndexForDay(d + 1);
+    if (from === to || bases[from] === undefined || bases[to] === undefined || bases[from]!.nights <= 1) continue;
+    bases[from]!.nights -= 1;
+    bases[to]!.nights += 1;
+    today.baseId = tomorrow.baseId;
+    deviations.push({ kind: 'night_moved_with_transfer', detail: `Day ${today.dayNumber} ends with a ${today.move.how ?? 'transfer'} to ${bases[to]!.name}, so that night is slept there rather than at ${bases[from]!.name}.`, skeletonDayNumber: today.dayNumber });
+  }
+
   const baseForDate: (ResolvedBase | null)[] = [];
   {
     let cumulative = 0;
@@ -1189,6 +1288,9 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       previousBase,
       relocation,
       anchors: dayAnchors,
+      episode: episodeForDay(episodes, dayNumber),
+      episodeEntersToday: episodes.some((e) => e.fromDay === dayNumber),
+      isLastDay: d === dates.length - 1,
       context,
       extraMatrix,
       ledger,
@@ -1305,9 +1407,50 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
         why: draftBase?.why ?? 'Inserted by Sidequest so that no single transfer exceeds your daily driving limit.',
         ...(draftBase?.lodgingArea ? { area: draftBase.lodgingArea } : {}),
         ...(draftBase?.lodgingStyle ? { style: draftBase.lodgingStyle } : {}),
-        verification: base.identity ? (context.candidates.some((c) => c.place.id === base.identity!.id) ? 'verified' : 'partially_verified') : 'unverified',
+        verification: base.identity ? (context.candidates.some((c) => c.place.id === base.identity!.id) ? 'verified' : 'partially_verified') : base.baseKind === 'vessel' ? 'partially_verified' : 'unverified',
         ...(base.identity ? { placeId: base.identity.id } : {}),
         ...(draftBase ? {} : { insertedBySidequest: true }),
+        ...(base.episode ? { episode: base.episode } : {}),
+      };
+    }),
+    /*
+     * V7 §8 — the episodes, with whether the plan carries a structured leg
+     * into and out of each. A cruise the traveller boards on day 4 needs a
+     * transfer on day 4; one that ends on the last day needs the last day to
+     * reach the departure gateway. `missing` is what the feasibility report
+     * turns into a dependency.
+     */
+    episodes: episodes.map((episode) => {
+      const dayNumbers = days.filter((day) => day.dayNumber >= episode.fromDay && day.dayNumber <= episode.toDay).map((day) => day.dayNumber);
+      const baseIds = [...new Set(draft.days.filter((d) => d.dayNumber >= episode.fromDay && d.dayNumber <= episode.toDay).map((d) => d.baseId))].map((id) => bases.find((b) => b.skeletonBaseId.split('#')[0] === id)?.skeletonBaseId ?? id);
+      const transferOn = (dayNumber: number) => {
+        const day = days.find((d) => d.dayNumber === dayNumber);
+        const yesterday = days.find((d) => d.dayNumber === dayNumber - 1);
+        return day?.items.some((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId && (item.travel.role === 'transfer' || (yesterday !== undefined && (item.travel.fromId === yesterday.baseId || item.travel.fromName === yesterday.baseName)))) ?? false;
+      };
+      const baseChanges = (dayNumber: number) => {
+        const today = draft.days.find((d) => d.dayNumber === dayNumber);
+        const yesterday = draft.days.find((d) => d.dayNumber === dayNumber - 1);
+        return Boolean(today && yesterday && today.baseId !== yesterday.baseId);
+      };
+      const entryNeeded = episode.fromDay > 1 && baseChanges(episode.fromDay);
+      const exitDay = episode.toDay + 1;
+      const isLast = episode.toDay >= dates.length;
+      const lastDayMovesOut = draft.days.find((d) => d.dayNumber === episode.toDay)?.move?.when === 'end';
+      const exitNeeded = isLast ? (bases.find((b) => draft.days[episode.toDay - 1]?.baseId === b.skeletonBaseId.split('#')[0])?.baseKind === 'vessel') : baseChanges(exitDay) || lastDayMovesOut;
+      return {
+        name: episode.name,
+        kind: episode.kind,
+        dayNumbers,
+        baseIds,
+        mode: episode.mode,
+        timing: episode.timing ?? 'unknown',
+        ...(episode.startGateway ? { startGateway: episode.startGateway } : {}),
+        ...(episode.endGateway ? { endGateway: episode.endGateway } : {}),
+        ...(episode.meals ? { meals: episode.meals } : {}),
+        ...(episode.why ? { why: episode.why } : {}),
+        entryLeg: !entryNeeded ? ('not_needed' as const) : transferOn(episode.fromDay) ? ('present' as const) : ('missing' as const),
+        exitLeg: !exitNeeded ? ('not_needed' as const) : transferOn(isLast ? episode.toDay : exitDay) || (lastDayMovesOut && transferOn(episode.toDay)) ? ('present' as const) : ('missing' as const),
       };
     }),
     foodStrategy: [...draft.package.foodStrategy],
@@ -1346,7 +1489,18 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     }),
     { driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, driveKm: 0 },
   );
-  const primaryMode: TransportMode = context.profile.transport.willDrive ? 'drive' : context.matrix.mode === 'foot' ? 'walk' : 'public_bus';
+  /*
+   * V7 §9 — THE TRIP'S PRIMARY MODE IS WHAT THE LEGS SAY, NOT WHAT THE PROFILE
+   * TICKED. A traveller who said they would drive but whose plan moves by rail
+   * and a hired driver is not on a driving trip. Self-drive keeps `drive`; any
+   * other arrangement takes the mode that carries the most minutes across the
+   * plan's own legs, and falls back to the old reading only when no leg exists.
+   */
+  const minutesByModeAcrossTrip = new Map<TransportMode, number>();
+  for (const day of days) for (const item of day.items) if (item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId) minutesByModeAcrossTrip.set(item.travel.mode, (minutesByModeAcrossTrip.get(item.travel.mode) ?? 0) + item.durationMinutes);
+  const busiest = [...minutesByModeAcrossTrip.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const selfDrives = impliesSelfDriving(draft.driving) || (draft.driving === undefined && context.profile.transport.willDrive);
+  const primaryMode: TransportMode = selfDrives ? 'drive' : busiest && busiest !== 'unsupported' ? busiest : context.profile.transport.willDrive ? 'drive' : context.matrix.mode === 'foot' ? 'walk' : 'public_bus';
   const routerName = context.matrix.provenance.kind === 'measured' ? 'the routing provider' : `${context.matrix.provenance.kind} road data`;
   const itinerary: Itinerary = {
     version: ITINERARY_VERSION,
@@ -1478,6 +1632,10 @@ interface DayLayoutInput {
   previousBase: ResolvedBase | null;
   relocation: boolean;
   anchors: readonly ReconciledAnchor[];
+  /** V7 §8 — the episode this day sits inside, when it does. */
+  episode?: DraftEpisode | null;
+  episodeEntersToday?: boolean;
+  isLastDay?: boolean;
   context: ReconcileContext;
   extraMatrix: RouteMatrixResult | null;
   ledger: ReturnType<typeof emptyLedger>;
@@ -1583,6 +1741,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
   /* V6 §12 — set when the base-to-base transfer of a relocation day is an allowance rather than a measurement or an estimate. */
   let unmeasuredMajorTransfer = false;
   let hadLunch = false;
+  let hadDinner = false;
 
   const pointFor = (b: ResolvedBase): Point => ({ id: b.identity?.id ?? `base:${b.skeletonBaseId}`, name: b.displayName ?? b.identity?.name ?? b.name, coordinates: b.identity?.coordinates ?? null, ...(b.locality ?? b.displayName ? { locality: (b.locality ?? b.displayName)! } : {}) });
   const startPoint: Point = previousBase && input.relocation ? pointFor(previousBase) : base ? pointFor(base) : { id: 'base:unknown', name: 'your base', coordinates: null };
@@ -1594,11 +1753,18 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
    * day whose stops finish at ten has lunch at half past eleven, not at ten.
    * Returns false when the window has no room for it.
    */
-  const placeMeal = (slot: 'lunch' | 'dinner', intent: string | undefined): boolean => {
-    const earliest = slot === 'lunch' ? LUNCH_EARLIEST : DINNER_EARLIEST;
+  const placeMeal = (slot: 'lunch' | 'dinner', intent: string | undefined, early = false): boolean => {
+    const earliest = slot === 'lunch' ? LUNCH_EARLIEST : early ? DINNER_EARLIEST - 30 : DINNER_EARLIEST;
     const latest = slot === 'lunch' ? LUNCH_LATEST + 60 : DINNER_LATEST;
     const start = Math.max(clock, earliest);
-    if (start + MEAL_MINUTES[slot] > Math.min(window.window.endMinute, latest)) return false;
+    /* An evening that ends at seven still eats: dinner may run the day on by an hour, and the day's window follows it. */
+    const hardEnd = input.isLast || /Back at base by/.test(window.window.note ?? '');
+    const endAllowed = slot === 'dinner' && !hardEnd ? Math.min(window.window.endMinute + 60, latest) : Math.min(window.window.endMinute, latest);
+    if (start + MEAL_MINUTES[slot] > endAllowed) return false;
+    if (slot === 'dinner' && start + MEAL_MINUTES[slot] > window.window.endMinute) {
+      window.window.usableMinutes += start + MEAL_MINUTES[slot] - window.window.endMinute;
+      window.window.endMinute = start + MEAL_MINUTES[slot];
+    }
     clock = start;
     pushMeal(slot, intent);
     return true;
@@ -1643,8 +1809,74 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
    * hint is checked against the geometry first: a "walk" over 75 km of open
    * country is a drive for a driver and transit for everyone else.
    */
-  const pushLeg = (from: Point, to: Point, hint: DraftTransport | undefined, role: TravelSegment['role']) => {
+  const episode = input.episode ?? null;
+  const offRoad = episodeIsOffRoad(episode);
+  const pushLeg = (from: Point, to: Point, hintGiven: DraftTransport | undefined, role: TravelSegment['role'], options: { inEpisode?: boolean } = {}) => {
     if (from.id === to.id) return;
+    /*
+     * V7 §8 — INSIDE AN OFF-ROAD EPISODE THE ROAD ROUTER IS NEVER ASKED.
+     *
+     * A gorge on a river cruise, a checkpoint on a trek, a station on a sleeper
+     * are reached by the episode's own movement. The stop's hint, when it names
+     * none, is the episode's mode; the leg is never measured on roads, never
+     * "corrected" to a drive because it is 90 km apart, and carries the
+     * episode's name so every surface draws it as what it is.
+     */
+    const inEpisode = options.inEpisode === true && episode !== null;
+    /* Inside any episode a stop with no hint of its own moves the episode's way: a game drive on a safari, a boat on a cruise. */
+    const hint: DraftTransport | undefined = inEpisode ? (hintGiven ?? episodeHint(episode)) : hintGiven;
+    if (inEpisode && offRoad && episode) {
+      const mode = transportModeFor(hint, context.matrix.mode, canDrive);
+      const fromCoordinates = from.coordinates;
+      const toCoordinates = to.coordinates;
+      const straightLineKm = fromCoordinates && toCoordinates ? haversineKm(fromCoordinates, toCoordinates) : null;
+      if (straightLineKm !== null && straightLineKm <= 0.15) return;
+      const estimate = episode.mode === 'walk' && fromCoordinates && toCoordinates ? estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode: 'walk' }) : null;
+      const operatorTimed = episode.timing !== 'self';
+      const allowance = estimate ? null : operatorTimed ? 45 : 60;
+      const duration = estimate ? estimate.minutes : allowance!;
+      const stamp = input.measuredAt ?? new Date().toISOString();
+      const travel: TravelSegment = {
+        fromId: from.id,
+        toId: to.id,
+        fromName: from.name,
+        toName: to.name,
+        minutes: estimate ? estimate.minutes : null,
+        km: null,
+        mode,
+        role,
+        provenance: estimate ? 'estimated' : 'unmeasured',
+        ...(estimate ? { basis: 'estimated', measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : { unmeasuredReason: operatorTimed ? 'operator_unpublished' : 'mode_not_routed' }),
+        episode: episode.name,
+        episodeMode: episode.mode,
+        ...(hint ? { hint } : {}),
+      };
+      items.push({
+        id: `d${input.dayNumber}-leg-${items.length}`,
+        kind: 'travel',
+        title: `${episodeLegLabel(episode)} ${to.name}`,
+        startMinute: clamp(clock),
+        endMinute: clamp(clock + duration),
+        durationMinutes: clamp(clock + duration) - clamp(clock),
+        travel,
+        reason: estimate
+          ? `About ${estimate.minutes} min on foot, estimated from map distance (roughly ${estimate.approxKm} km) — part of ${episode.name}.`
+          : operatorTimed
+            ? `Part of ${episode.name}: the operator's timetable sets this, so the day shows parts of the day rather than clock times until it is confirmed.`
+            : `Part of ${episode.name}; timing is yours and not measured.`,
+        weatherSensitive: false,
+        timing: { precision: estimate ? 'estimated' : 'band', ...(allowance !== null ? { allowanceMinutes: allowance } : {}) },
+      });
+      clock += duration;
+      legsUnmeasured += 1;
+      totals.unmeasuredLegCount += 1;
+      if (estimate) {
+        legsEstimated += 1;
+        totals.estimatedMinutes += duration;
+      } else totals.allowanceMinutes += duration;
+      if (!modes.includes(mode)) modes.push(mode);
+      return;
+    }
     // LIVE WORLD V1 — on a transit-mode trip a metro/rail/bus hint is what the network measures, not a mode the road router refuses.
     const routable = roadRoutable(hint) || (context.matrix.mode === 'transit' && (hint === 'metro' || hint === 'rail' || hint === 'bus'));
     let measured = from.coordinates && to.coordinates && routable ? measuredLeg(context.matrix, input.extraMatrix, from.id, to.id) : null;
@@ -1704,6 +1936,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
       ...(plausible.corrected ? { modeCorrectedFrom: hinted } : {}),
+      ...(hint ? { hint } : {}),
       ...(confirmation?.staticMinutes !== undefined ? { staticMinutes: confirmation.staticMinutes } : {}),
       ...(confirmation?.effectiveDepartAt ? { effectiveDepartAt: confirmation.effectiveDepartAt } : {}),
       ...(confirmation?.transitSummary ? { transitSummary: confirmation.transitSummary } : {}),
@@ -1745,7 +1978,14 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
         legsEstimated += 1;
         totals.estimatedMinutes += duration;
       } else {
-        if (role === 'transfer') unmeasuredMajorTransfer = true;
+        /*
+         * V7 §9 — a transfer the router could not time because it is a flight,
+         * a train, a boat or an arranged transfer is a booking with a timetable,
+         * not a measurement gap: the feasibility report reads it from the leg's
+         * own mode. Only a road transfer nobody could time or estimate is the
+         * "major transfer not measured" dependency.
+         */
+        if (role === 'transfer' && roadRoutable(hint) && mode !== 'ferry' && mode !== 'private_transfer' && mode !== 'unsupported') unmeasuredMajorTransfer = true;
         totals.allowanceMinutes += duration;
       }
     }
@@ -1776,10 +2016,35 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     .map((entry) => entry.anchor);
 
   let cursor = startPoint;
+  /*
+   * V7 §9 — A MOVE THAT OPENS THE DAY. "Disembark at Yichang, then explore"
+   * and "fly to Chongqing, then the old town" put the transfer first, and the
+   * day's stops start from the new base. The draft says so with `move.when`;
+   * absent, the transfer closes the day as it always did.
+   */
+  const move = draftDay?.move;
+  const moveFirst = Boolean(input.relocation && move && move.when === 'start');
+  if (moveFirst) {
+    pushLeg(startPoint, endPoint, move!.how, 'transfer');
+    cursor = endPoint;
+  }
+  const episodeStopIds = new Set(input.anchors.map((a) => a.id));
   for (const anchor of scheduledOrder) {
     // The plan keeps the name the model wrote; a geocoder's record name ("Trinity College Dublin" for "Trinity College and the Book of Kells") is matched against, never shown as the stop.
     const target: Point = { id: anchor.identity?.id ?? `draft:${anchor.id}`, name: anchor.draft.name, coordinates: anchor.identity?.coordinates ?? null, ...(anchor.draft.locality ? { locality: anchor.draft.locality } : {}) };
-    pushLeg(cursor, target, anchor.draft.transport, 'approach');
+    /* A stop inside an episode is reached by the episode's movement unless the day is the one that enters it and this is the first stop (the approach to the pier or trailhead is ordinary travel). */
+    const firstStopOnEntryDay = input.episodeEntersToday === true && cursor === startPoint && !moveFirst;
+    /*
+     * A named dinner before an evening stop: "hotpot, then Hongyadong after
+     * dark" is dinner at seven and the skyline at eight, not the skyline and
+     * then nowhere to eat because the day's window closed. The live Chongqing
+     * arrival day lost its only meal this way.
+     */
+    if (!hadDinner && draftDay?.meals?.dinner && (anchor.draft.timeOfDay === 'evening' || anchor.draft.timeOfDay === 'night') && clock >= DINNER_EARLIEST - 30) {
+      clock = Math.max(clock, DINNER_EARLIEST - 30);
+      hadDinner = placeMeal('dinner', draftDay.meals.dinner, true);
+    }
+    pushLeg(cursor, target, anchor.draft.transport, 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
     if (!hadLunch && clock >= LUNCH_EARLIEST && clock <= LUNCH_LATEST) {
       hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
     }
@@ -1859,11 +2124,28 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
   if (!hadLunch && anchors.length > 0 && clock <= LUNCH_LATEST) {
     hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
   }
-  pushLeg(cursor, endPoint, input.relocation ? draftDay?.anchors[0]?.transport : undefined, input.relocation ? 'transfer' : 'return');
+  if (!moveFirst) {
+    /* The day's own move names the transfer's mode; failing that, the first stop's hint; an ordinary day returns to base. */
+    const transferHint = input.relocation ? (move?.how ?? draftDay?.anchors[0]?.transport) : undefined;
+    pushLeg(cursor, endPoint, transferHint, input.relocation ? 'transfer' : 'return', { inEpisode: episode !== null && !input.relocation && cursor !== startPoint });
+  } else if (cursor !== endPoint) {
+    pushLeg(cursor, endPoint, undefined, 'return', { inEpisode: episode !== null && offRoad });
+  }
+  /*
+   * V7 §9 — THE LAST DAY REACHES THE DEPARTURE GATEWAY. A plan that ends on a
+   * ship at Yichang and flies home from Chongqing has a flight on its last
+   * day; the draft says so with `move`, and the leg is built here so the
+   * budget counts it, the bookings list it and the days show it.
+   */
+  if (input.isLastDay && !input.relocation && move) {
+    const gatewayName = move.via ?? 'the departure gateway';
+    const gateway: Point = { id: `gateway:${normalizeName(gatewayName).replace(/\s+/g, '-') || 'departure'}`, name: gatewayName, coordinates: null };
+    pushLeg(endPoint, gateway, move.how, 'transfer');
+  }
   if (!hadLunch && draftDay?.meals?.lunch && clock <= LUNCH_LATEST) {
     placeMeal('lunch', draftDay.meals.lunch);
   }
-  if (draftDay?.meals?.dinner || !input.isLast) {
+  if (!hadDinner && (draftDay?.meals?.dinner || !input.isLast)) {
     placeMeal('dinner', draftDay?.meals?.dinner);
   }
 

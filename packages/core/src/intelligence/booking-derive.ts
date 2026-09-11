@@ -3,6 +3,7 @@ import type { TravelerProfile } from '../schemas/profile';
 import { bookingItemSchema, bookingPriorityFor, type BookedPlanItem, type BookingItem, type BookingItemKind } from './booking';
 import type { TransportLeg } from './transport';
 import { baseDaySpans } from './lodging';
+import type { TravelReality } from '../reality/schema';
 
 /**
  * WHAT THIS TRIP DEPENDS ON SOMEBODY ARRANGING.
@@ -21,6 +22,10 @@ export interface DeriveBookingsInput {
   booked: readonly BookedPlanItem[];
   daysUntilTrip: number;
   remoteBaseIds: ReadonlySet<string>;
+  /** V7 §14 — whether the traveller drives a car they hired; a hired driver or an operator produces no rental row. */
+  selfDrives?: boolean;
+  /** V7 §14 — booking lead times compiled for the destination, when known. */
+  reality?: TravelReality | null;
 }
 
 function matchBooked(booked: readonly BookedPlanItem[], kind: BookingItemKind, opts: { date?: string; baseId?: string; placeId?: string; title?: string }): BookedPlanItem | undefined {
@@ -38,6 +43,8 @@ function matchBooked(booked: readonly BookedPlanItem[], kind: BookingItemKind, o
     rental_vehicle: ['rental_car'],
     shuttle: ['transfer'],
     internal_transfer: ['transfer'],
+    cruise: ['activity', 'custom', 'lodging'],
+    programme: ['activity', 'custom'],
   };
   const key = opts.title?.toLowerCase();
   return booked.find(
@@ -92,8 +99,11 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
     const pkgBase = pkg?.bases.find((b) => b.id === span.baseId);
     return { id: span.baseId, name: span.name, nights: pkgBase?.nights ?? Math.max(0, span.dayNumbers.length - 1), firstDayNumber: span.dayNumbers[0] };
   });
+  const vesselBaseIds = new Set((pkg?.bases ?? []).filter((b) => b.baseKind === 'vessel').map((b) => b.id));
   bases.forEach((base, index) => {
     if (base.nights === 0) return;
+    /* V7 §8 — a night on a ship or a sleeper is booked as the episode, never as "a bed in the cruise ship". */
+    if (vesselBaseIds.has(base.id)) return;
     const firstDay = itinerary.days.find((d) => d.dayNumber === base.firstDayNumber);
     const booked = matchBooked(input.booked, 'accommodation', { baseId: base.id, date: firstDay?.date, title: base.name });
     const remote = input.remoteBaseIds.has(base.id);
@@ -145,6 +155,34 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
     );
   }
 
+  // V7 §14 — the episodes: a cruise, a trek, a safari programme is one booking the trip stands on -----
+  const leadFor = (kind: NonNullable<TravelReality['bookingLeads']>[number]['kind']) => input.reality?.bookingLeads.find((b) => b.kind === kind) ?? null;
+  for (const episode of pkg?.episodes ?? []) {
+    const firstDay = itinerary.days.find((d) => d.dayNumber === episode.dayNumbers[0]);
+    const kind: BookingItemKind = episode.kind === 'cruise' || episode.kind === 'expedition_boat' ? 'cruise' : episode.kind === 'road_trip_segment' || episode.kind === 'resort_stay' ? 'accommodation' : 'programme';
+    if (kind === 'accommodation') continue;
+    const lead = episode.kind === 'cruise' || episode.kind === 'expedition_boat' ? leadFor('cruise') : episode.kind === 'safari' ? leadFor('safari_lodge') : episode.kind === 'trek' || episode.kind === 'hut_to_hut' ? (leadFor('permit') ?? leadFor('guide')) : null;
+    const booked = matchBooked(input.booked, kind, { date: firstDay?.date, title: episode.name });
+    const nights = Math.max(0, episode.dayNumbers.length - 1);
+    items.push(
+      bookingItemSchema.parse({
+        id: `booking:episode:${episode.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        title: `${episode.name}${nights > 0 ? ` (${episode.dayNumbers.length} days${episode.kind === 'cruise' || episode.kind === 'expedition_boat' ? `, ${nights} night${nights === 1 ? '' : 's'} on board` : ''})` : ''}`,
+        kind,
+        necessity: 'required',
+        priority: 'book_first',
+        reason: `${episode.kind === 'cruise' || episode.kind === 'expedition_boat' ? 'The cabin is the bed, the boat is the transport and the stops are the operator’s' : episode.kind === 'safari' ? 'The camps and the driver-guide are the trip on these days' : 'An operated multi-day experience with fixed departures'}; days ${episode.dayNumbers[0]}–${episode.dayNumbers[episode.dayNumbers.length - 1]} depend on it.${lead ? ` ${lead.note}` : ''}`,
+        ...(firstDay ? { dayNumber: firstDay.dayNumber, date: firstDay.date } : {}),
+        ...(lead ? { bookingWindow: `Usually needs booking about ${Math.round(lead.leadDays / 30) >= 2 ? `${Math.round(lead.leadDays / 30)} months` : `${lead.leadDays} days`} ahead` } : {}),
+        capacityEvidence: 'unknown',
+        status: booked ? (booked.status === 'soft_hold' ? 'soft_hold' : 'booked') : 'open',
+        ...(booked ? { bookedItemId: booked.id } : {}),
+        travelerAction: `Book ${episode.name} with the operator${episode.startGateway ? ` (boarding at ${episode.startGateway})` : ''}`,
+        authority: 'model_proposal',
+      }),
+    );
+  }
+
   // The car the route needs -----------------------------------------------------------
   /*
    * QUALITY V1 — only when the plan is actually self-driven. A safari circuit
@@ -153,9 +191,11 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
    * "Rental car for the whole trip — 0 km of the plan is driven". The model's
    * own transport summary says how the route moves; when it moves by
    * transfers, drivers or guides, the transfer legs below are the bookings.
+   * V7 — the draft's own `driving` word decides where it exists.
    */
   const movesByTransfers = /\b(transfer|driver|guide|guided|4x4 (game|safari)|game drive)/i.test(itinerary.package?.transport.summary ?? '');
-  if (itinerary.transportStrategy.primaryMode === 'drive' && profile.transport.willDrive && !movesByTransfers) {
+  const selfDrives = input.selfDrives ?? (itinerary.transportStrategy.primaryMode === 'drive' && profile.transport.willDrive && !movesByTransfers);
+  if (selfDrives) {
     const booked = matchBooked(input.booked, 'rental_vehicle', { date: itinerary.startDate, title: 'car' });
     items.push(
       bookingItemSchema.parse({
@@ -174,30 +214,37 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
     );
   }
 
-  // Flights, ferries and guided transfers the model routed through -----------------------
+  // Flights, ferries, trains and guided transfers the model routed through -----------------------
+  const railLead = leadFor('rail');
   for (const leg of input.legs) {
-    if (leg.mode !== 'flight' && leg.mode !== 'ferry' && leg.mode !== 'boat' && leg.mode !== 'guide_transfer' && leg.mode !== 'lodge_transfer') continue;
-    const kind: BookingItemKind = leg.mode === 'flight' ? 'flight' : leg.mode === 'ferry' || leg.mode === 'boat' ? 'ferry' : 'internal_transfer';
+    /* V7 §14 — a regional train (a base move, or high-speed rail by the draft's own word) is a reservation; a metro hop is not. */
+    const regionalRail = leg.mode === 'rail' && (leg.role === 'base_move' || leg.role === 'transfer' || (leg.durationMinutes ?? 0) >= 90 || /high_speed/i.test(String(leg.notes.join(' '))));
+    if (leg.mode !== 'flight' && leg.mode !== 'ferry' && leg.mode !== 'boat' && leg.mode !== 'guide_transfer' && leg.mode !== 'lodge_transfer' && !regionalRail) continue;
+    if (leg.episode !== undefined && leg.role !== 'base_move' && leg.role !== 'transfer') continue; // movement inside an episode is the operator's, booked with the episode
+    const kind: BookingItemKind = leg.mode === 'flight' ? 'flight' : leg.mode === 'ferry' || leg.mode === 'boat' ? 'ferry' : regionalRail ? 'train' : 'internal_transfer';
     const day = leg.dayNumber ? itinerary.days.find((d) => d.dayNumber === leg.dayNumber) : undefined;
     const booked = matchBooked(input.booked, kind, { date: day?.date, title: leg.destinationName });
     items.push(
       bookingItemSchema.parse({
         id: `booking:leg:${leg.id}`,
-        title: `${leg.mode === 'flight' ? 'Flight' : leg.mode === 'ferry' ? 'Ferry' : leg.mode === 'boat' ? 'Boat' : 'Transfer'}: ${leg.originName} → ${leg.destinationName}`,
+        title: `${leg.mode === 'flight' ? 'Flight' : leg.mode === 'ferry' ? 'Ferry' : leg.mode === 'boat' ? 'Boat' : kind === 'train' ? 'Train' : 'Transfer'}: ${leg.originName} → ${leg.destinationName}`,
         kind,
         necessity: leg.mode === 'flight' ? 'required' : 'strongly_recommended',
-        priority: bookingPriorityFor({ necessity: leg.mode === 'flight' ? 'required' : 'strongly_recommended', hardDependency: true, fixedDateTime: true, limitedCapacity: leg.mode === 'flight', fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
+        priority: bookingPriorityFor({ necessity: leg.mode === 'flight' ? 'required' : 'strongly_recommended', hardDependency: true, fixedDateTime: true, limitedCapacity: leg.mode === 'flight' || (kind === 'train' && railLead !== null), fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
         reason:
           leg.mode === 'flight'
             ? `The route flies from ${leg.originName} to ${leg.destinationName}; without the seat the next base is out of reach.`
             : leg.mode === 'ferry' || leg.mode === 'boat'
               ? `${leg.originName} to ${leg.destinationName} is by ${leg.mode}; ${leg.durationBasis === 'unmeasured' ? 'the sailing times were not checked, so confirm them' : 'confirm the sailing time'}.`
-              : `${leg.originName} to ${leg.destinationName} is a transfer an operator arranges; ${leg.durationBasis === 'unmeasured' ? 'its timing was not checked, so confirm it with them' : 'confirm the pickup time'}.`,
+              : kind === 'train'
+                ? `${leg.originName} to ${leg.destinationName} is by train; ${railLead ? railLead.note : 'seats on busy routes sell out, so book once the dates are firm'}.`
+                : `${leg.originName} to ${leg.destinationName} is a transfer an operator arranges; ${leg.durationBasis === 'unmeasured' ? 'its timing was not checked, so confirm it with them' : 'confirm the pickup time'}.`,
+        ...(kind === 'train' && railLead ? { bookingWindow: `Seats usually open about ${railLead.leadDays} days ahead` } : {}),
         ...(leg.dayNumber ? { dayNumber: leg.dayNumber } : {}),
         ...(day ? { date: day.date } : {}),
         status: booked ? 'booked' : 'open',
         ...(booked ? { bookedItemId: booked.id } : {}),
-        travelerAction: `Book the ${leg.mode === 'flight' ? 'flight' : leg.mode === 'ferry' || leg.mode === 'boat' ? 'crossing' : 'transfer'} to ${leg.destinationName}`,
+        travelerAction: `Book the ${leg.mode === 'flight' ? 'flight' : leg.mode === 'ferry' || leg.mode === 'boat' ? 'crossing' : kind === 'train' ? 'train' : 'transfer'} to ${leg.destinationName}`,
         authority: leg.durationBasis === 'scheduled_transit' ? 'official_current' : 'model_proposal',
       }),
     );

@@ -116,7 +116,7 @@ export interface TravelerBrief {
    * trip that fits and one that technically satisfies every setting. Rendered
    * verbatim, in the traveller's own words, alongside the setting it qualifies.
    */
-  inTheirWords: { about: string; note: string }[];
+  inTheirWords: { about: string; note: string; readAs?: string[] }[];
   ownWords: TravelerBriefOwnWords;
 }
 
@@ -225,7 +225,9 @@ export function buildTravelerBrief(input: {
   transport.push(
     line(
       'transport_mode',
-      profile.transport.willDrive
+      interview.transportChoice === 'rail_transfers'
+        ? 'Getting around: trains and hired transfers for the regional days; on foot, metro and ride-hailing in the city; no self-drive'
+        : profile.transport.willDrive
         ? `Getting around: a car, at most ${profile.transport.maxDailyDriveMinutes} minutes driving on an ordinary day (a relocation to a new base is judged separately)`
         : interview.guideWillingness === 'prefer'
           ? 'Getting around: guided, with arranged transfers; no car'
@@ -294,7 +296,12 @@ export function buildTravelerBrief(input: {
    * qualifies. Nothing is parsed out of these; they travel as written.
    */
   const inTheirWords = Object.entries(profile.preferenceNotes ?? {})
-    .flatMap(([questionId, note]) => (typeof note === 'string' && note.trim().length > 0 ? [{ about: questionId.replace(/[_:]/g, ' '), note: note.trim() }] : []))
+    .flatMap(([questionId, note]) => {
+      if (typeof note !== 'string' || note.trim().length === 0) return [];
+      /* V7 §5 — what Sidequest read from the note, as accepted on screen; the sentence itself stays verbatim. */
+      const readings = (profile.noteReadings?.[questionId] ?? []).map((r) => `${r.label} (${r.strength.replace(/_/g, ' ')})`);
+      return [{ about: questionId.replace(/[_:]/g, ' '), note: note.trim(), ...(readings.length > 0 ? { readAs: readings } : {}) }];
+    })
     .slice(0, 12);
 
   const ownWords: TravelerBriefOwnWords = {
@@ -404,7 +411,7 @@ export function renderTravelerBriefXml(brief: TravelerBrief): string {
     ]),
     ...section(
       'in_their_words',
-      brief.inTheirWords.map((entry) => `On ${entry.about}: "${entry.note}"`),
+      brief.inTheirWords.map((entry) => `On ${entry.about}: "${entry.note}"${entry.readAs && entry.readAs.length > 0 ? ` [read as: ${entry.readAs.join('; ')}]` : ''}`),
     ),
     ...section('assumptions', brief.assumptions, 'none — the traveller answered everything'),
     ...(brief.learned.length > 0 ? section('learned_leanings', brief.learned.map((line) => `${line} — a leaning from earlier trips, never a rule; this trip's own answers win`)) : []),

@@ -161,6 +161,38 @@ export function createOpenResolver(input: {
         .map((place) => toCandidate(place, query))
         .filter((candidate): candidate is DestinationCandidate => candidate !== null);
 
+      /*
+       * V7 §2 — A STATE-TYPED RECORD THAT IS ALSO A SETTLEMENT IS A CITY-REGION.
+       *
+       * A direct-administered municipality comes back typed `state` and was read
+       * as "a state or province you drive across". The evidence that it is a city
+       * is the geocoder's own: asked for settlements only, it returns a populated
+       * place of the same name inside the division's box. One extra call, only
+       * for a state-typed leading answer, cached like every other.
+       */
+      const lead = candidates[0];
+      const inside = (point: { lat: number; lng: number }, bounds: NonNullable<DestinationCandidate['bounds']>) =>
+        point.lat >= bounds.southWest.lat && point.lat <= bounds.northEast.lat && point.lng >= bounds.southWest.lng && point.lng <= bounds.northEast.lng;
+      /* The same answer often carries the city itself (Chongqing the node inside Chongqing the division): that is the corroboration, with no extra call. */
+      const sibling = lead && lead.entityType === 'state_or_province' && lead.bounds ? candidates.slice(1).find((c) => c.entityType === 'city' && normalizeDestinationQuery(c.displayName) === normalizeDestinationQuery(query) && inside(c.center, lead.bounds!)) : undefined;
+      if (lead && sibling) {
+        candidates[0] = { ...lead, entityType: 'municipality', note: 'Published both as a first-level division and as a city of the same name inside it.' };
+      } else if (lead && lead.entityType === 'state_or_province' && lead.bounds) {
+        try {
+          const settlements = await geocode(query, { limit: 3, featureType: 'settlement', cache: cacheFor<NominatimPlace[]>('nominatim', TTL.geocode) });
+          diagnostics.geocoderCalls += settlements.calls;
+          if (settlements.cacheHit) diagnostics.geocoderCacheHits += 1;
+          const inside = settlements.places.find((place) => {
+            const lat = Number(place.lat);
+            const lng = Number(place.lon);
+            return isExactNameMatch(query, place) && lat >= lead.bounds!.southWest.lat && lat <= lead.bounds!.northEast.lat && lng >= lead.bounds!.southWest.lng && lng <= lead.bounds!.northEast.lng;
+          });
+          if (inside) candidates[0] = { ...lead, entityType: 'municipality', note: 'Published both as a first-level division and as a city of the same name inside it.' };
+        } catch {
+          /* The division stands as typed; a corroboration that failed is not evidence either way. */
+        }
+      }
+
       const ambiguityReasons: DestinationResolution['ambiguityReasons'] = [];
       if (candidates.length === 0) ambiguityReasons.push('no_match');
       if (candidates.length > 1) ambiguityReasons.push('multiple_matching_places');

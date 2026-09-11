@@ -549,6 +549,8 @@ export type SkeletonDeviationKind =
    * `anchor_unresolved`/`anchor_infeasible_no_substitute` already follow.
    */
   | 'anchor_unroutable'
+  /** V7 §9 — a day whose `move` ends elsewhere sleeps there; the stay counts were re-derived. */
+  | 'night_moved_with_transfer'
   /**
    * A model-proposed anchor that was not on the board resolved to a real
    * place through a deterministic geocoder lookup — `partially_verified`:
@@ -1019,7 +1021,9 @@ export interface ResolvedBase {
   canonicalName?: string;
   /** The draft's stated locality, when it gave one. */
   locality?: string;
-  baseKind?: 'locality' | 'neighbourhood' | 'lodging_property' | 'lodge' | 'camp' | 'remote_base' | 'other';
+  baseKind?: 'locality' | 'neighbourhood' | 'lodging_property' | 'lodge' | 'camp' | 'remote_base' | 'vessel' | 'trail_camp' | 'other';
+  /** V7 §8 — the episode a moving overnight (a ship, a sleeper) belongs to, by name. */
+  episode?: string;
 }
 
 export function identityFromPlace(place: Place): ResolvedBaseIdentity {

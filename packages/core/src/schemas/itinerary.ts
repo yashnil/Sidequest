@@ -207,6 +207,16 @@ export const travelSegmentSchema = z
     estimate: z.object({ straightLineKm: z.number().min(0), approxKm: z.number().min(0), kmh: z.number().min(0) }).optional(),
     /** Set when the model's transport hint was overridden because the geometry made it implausible (a 90 km "walk"). Carries the hinted mode. */
     modeCorrectedFrom: transportModeSchema.optional(),
+    /**
+     * V7 §8 — the multi-day episode this leg moves inside, by name, and the
+     * movement the episode owns (a boat passage, a trail section, a game
+     * drive). A leg that carries these is never a road leg, whatever the
+     * matrix mode, and every surface draws it by `episodeMode`.
+     */
+    episode: z.string().min(1).optional(),
+    episodeMode: z.enum(['boat', 'walk', 'four_wheel_drive', 'rail', 'car', 'bicycle', 'guide_or_lodge_transfer', 'horse', 'none']).optional(),
+    /** V7 §9 — the draft's own word for how this leg moves (flight, high_speed_rail, taxi…), kept so intelligence never re-guesses it from a title. */
+    hint: z.string().min(1).optional(),
   })
   .refine((leg) => (leg.provenance === 'unmeasured') === (leg.minutes === null), {
     message: 'A leg has a duration when and only when somebody measured or published one',
@@ -1201,8 +1211,10 @@ export const packageBaseSchema = z.object({
   displayName: z.string().min(1).optional(),
   canonicalName: z.string().min(1).optional(),
   locality: z.string().min(1).optional(),
-  baseKind: z.enum(['locality', 'neighbourhood', 'lodging_property', 'lodge', 'camp', 'remote_base', 'other']).optional(),
+  baseKind: z.enum(['locality', 'neighbourhood', 'lodging_property', 'lodge', 'camp', 'remote_base', 'vessel', 'trail_camp', 'other']).optional(),
   coordinates: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  /** V7 §8 — the episode this base belongs to (a ship, a trail camp, a safari camp), by name. */
+  episode: z.string().min(1).optional(),
 });
 export type BaseKind = NonNullable<z.infer<typeof packageBaseSchema>['baseKind']>;
 
@@ -1301,6 +1313,37 @@ export const tripPackageSchema = z.object({
   }),
   /** What to book first, in the model's judgement — lodges, internal flights, timed tickets. */
   bookingPriorities: z.array(z.string().min(1)).default([]),
+  /**
+   * V7 §8 — THE EPISODES, PERSISTED. One object per multi-day experience:
+   * its days, its bases, its movement, its operator timing and its gateways.
+   * The Days, Map, Plan, Budget, Bookings and Packing surfaces all read this
+   * one record, which is what makes them agree.
+   */
+  episodes: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        kind: z.enum(['cruise', 'trek', 'safari', 'sleeper_train', 'expedition_boat', 'guided_overland', 'road_trip_segment', 'resort_stay', 'bike_tour', 'hut_to_hut']),
+        dayNumbers: z.array(z.number().int().min(1)),
+        baseIds: z.array(z.string().min(1)).default([]),
+        mode: z.enum(['boat', 'walk', 'four_wheel_drive', 'rail', 'car', 'bicycle', 'guide_or_lodge_transfer', 'horse', 'none']),
+        timing: z.enum(['operator', 'self', 'unknown']),
+        startGateway: z.string().min(1).optional(),
+        endGateway: z.string().min(1).optional(),
+        meals: z.enum(['included', 'some', 'none']).optional(),
+        why: z.string().min(1).optional(),
+        /** Whether the transition into and out of the episode is a structured leg on the plan. */
+        entryLeg: z.enum(['present', 'missing', 'not_needed']).default('not_needed'),
+        exitLeg: z.enum(['present', 'missing', 'not_needed']).default('not_needed'),
+      }),
+    )
+    .default([]),
+  /**
+   * V7 §3 — the travel reality the build ran under, persisted so the hub and
+   * the intelligence read the same facts the interview promised. Untyped
+   * here (the reality schema lives in `reality/schema.ts`); validated there.
+   */
+  reality: z.unknown().optional(),
   /**
    * QUALITY V1 — the draft preservation report: every proposed experience's
    * fate in numbers, silent loss (must be zero), and the draft-vs-final

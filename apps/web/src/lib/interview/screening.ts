@@ -19,6 +19,8 @@ import {
 } from '@sidequest/core';
 import type { TripIntentRecord } from '@/lib/db/compiler-repository';
 import type { RegionContext } from '@/lib/region';
+import { buildTravelReality, withTravelReality, type TravelReality } from '@sidequest/core';
+import { capability } from '@/lib/providers/registry';
 
 /**
  * DESTINATION SCREENING FOR ONE TRIP — FROM WHAT IS ALREADY ON DISK.
@@ -111,6 +113,16 @@ export function screeningSignalsFor(input: ScreeningInputs): ScreeningSignals {
   if (composer?.shape) signals.composerShape = composer.shape;
   if (composer?.transport) signals.composerTransport = composer.transport;
 
+  // --- V7 §2: the intent graph — several countries, a described part of one, a landscape ------------
+  const graph = intent?.destinationIntent?.graph ?? null;
+  if (graph) {
+    if (graph.countries.length > 0) signals.countries = [...graph.countries];
+    if (!signals.countryCode && graph.countries.length === 1) signals.countryCode = graph.countries[0]!;
+    signals.intent = { parts: graph.children.length, crossBorder: graph.crossBorder, kinds: graph.children.map((c) => c.kind), relationship: graph.relationship };
+    if (!signals.center && graph.envelope) signals.center = graph.envelope.center;
+    if (!signals.bounds && graph.envelope?.bounds) signals.bounds = graph.envelope.bounds;
+  }
+
   // --- climate for the dates, from the preflight when it looked ------------------------
   const climate = climateFor(intent?.preflight?.dates ?? null, trip.basics.startDate);
   if (climate) signals.climate = climate;
@@ -175,8 +187,36 @@ function seededClassOf(seeded: Region, region: RegionContext | null): Destinatio
   return 'countryside';
 }
 
-export function destinationContextFor(input: ScreeningInputs): DestinationQuestionContext {
-  return screenDestination(screeningSignalsFor(input));
+export function destinationContextFor(input: ScreeningInputs, extra: { party?: InterviewContext['traveller']['party']; willDrive?: boolean } = {}): DestinationQuestionContext {
+  const signals = screeningSignalsFor(input);
+  const screened = screenDestination(signals);
+  return withTravelReality(screened, travelRealityFor({ signals, screened, intent: input.intent, ...extra }));
+}
+
+/**
+ * V7 §3 — THE REALITY FOR THIS TRIP, FROM WHAT IS ALREADY ON DISK.
+ *
+ * Countries from the intent graph (or the resolved candidate), the screening's
+ * traits, the party's drivers, what this deployment can measure. A pure
+ * function; the same inputs on the questionnaire page and in the build give
+ * the same reality, which is what lets the interview's promise and the plan's
+ * transport agree.
+ */
+export function travelRealityFor(input: { signals: ScreeningSignals; screened: DestinationQuestionContext; intent: TripIntentRecord | null; party?: InterviewContext['traveller']['party']; willDrive?: boolean }): TravelReality {
+  const graph = input.intent?.destinationIntent?.graph ?? null;
+  const countries = graph?.countries.length ? graph.countries : input.signals.countryCode ? [input.signals.countryCode] : [];
+  return buildTravelReality({
+    label: input.screened.name,
+    countries,
+    crossBorder: graph?.crossBorder ?? countries.length > 1,
+    ...(input.signals.entityType ? { entityType: input.signals.entityType } : {}),
+    traits: input.screened.traits,
+    ...(graph ? { intentKinds: graph.children.map((c) => c.kind) } : {}),
+    tripDays: input.signals.tripDays,
+    ...(input.party ? { party: { size: input.party.members, drivers: input.party.drivers } } : {}),
+    capabilities: { roadRouting: Boolean(capability('routing.drive')?.configured), transit: Boolean(capability('routing.transit')?.configured) },
+    ...(input.willDrive !== undefined ? { willDrive: input.willDrive } : {}),
+  });
 }
 
 /** The composer fields the interview treats as already answered, by question field name. */
@@ -191,7 +231,7 @@ export function carriedFieldsFor(composer: TripComposerAnswers | null, carried: 
 export function interviewContextFor(input: ScreeningInputs & { offeredInterests: readonly Interest[]; carried: readonly string[]; answers?: QuestionnaireAnswers; party?: InterviewContext['traveller']['party'] }): InterviewContext {
   const composer = input.intent?.composer ?? null;
   return {
-    destination: destinationContextFor(input),
+    destination: destinationContextFor(input, { ...(input.party ? { party: input.party } : {}), ...(input.answers?.provenance.transport_mode?.source === 'explicit' ? { willDrive: input.answers.willDrive } : {}) }),
     traveller: {
       ...(input.party ? { party: input.party } : {}),
       travelerNeeds: input.trip.basics.travelerNeeds,
@@ -204,4 +244,15 @@ export function interviewContextFor(input: ScreeningInputs & { offeredInterests:
       composerNamedPlaces: Boolean(composer?.mustDo || composer?.avoid),
     },
   };
+}
+
+
+/**
+ * V7 §3 — the reality for a trip, from the same inputs the questionnaire page
+ * reads, for the build. One function, two callers, one answer.
+ */
+export function realityForTrip(input: ScreeningInputs & { party?: InterviewContext['traveller']['party']; willDrive?: boolean }): TravelReality {
+  const signals = screeningSignalsFor(input);
+  const screened = screenDestination(signals);
+  return travelRealityFor({ signals, screened, intent: input.intent, ...(input.party ? { party: input.party } : {}), ...(input.willDrive !== undefined ? { willDrive: input.willDrive } : {}) });
 }

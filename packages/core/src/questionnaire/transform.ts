@@ -590,6 +590,9 @@ export function buildTravelerProfile(
     hard: [...answers.hardConstraints],
     provenance: { ...answers.provenance },
     ...(answers.preferenceNotes && Object.keys(answers.preferenceNotes).length > 0 ? { preferenceNotes: { ...answers.preferenceNotes } } : {}),
+    ...(answers.noteReadings && Object.keys(answers.noteReadings).length > 0
+      ? { noteReadings: Object.fromEntries(Object.entries(answers.noteReadings).map(([id, readings]) => [id, readings.filter((r) => r.accepted).map((r) => ({ label: r.label, strength: r.strength }))]).filter(([, readings]) => (readings as unknown[]).length > 0)) }
+      : {}),
     derived: deriveProfileValues(answers, context),
   };
 
@@ -626,6 +629,7 @@ export function interviewBlockFrom(answers: QuestionnaireAnswers): TravelerProfi
     dayTripAppetite: answers.dayTripAppetite,
     scopeStrategy: answers.scopeStrategy,
     everyoneEveryDay: answers.everyoneEveryDay,
+    ...(answers.transportChoice ? { transportChoice: answers.transportChoice } : {}),
     ...(answers.groupNotes ? { groupNotes: answers.groupNotes } : {}),
     mustInclude: [...answers.mustInclude],
     mustAvoid: [...answers.mustAvoid],

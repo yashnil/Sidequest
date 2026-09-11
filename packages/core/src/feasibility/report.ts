@@ -93,9 +93,22 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
   if (baseConsistency && !baseConsistency.ok) items.push({ area: 'bases', severity: 'dependency', detail: `Where you sleep is not continuous: ${baseConsistency.detail}.` });
 
   // --- transport -------------------------------------------------------------------------
+  const OPERATOR_TIMED = new Set(['flight', 'boat', 'ferry', 'high_speed_rail', 'rail', 'four_wheel_drive', 'guide_or_lodge_transfer', 'private_transfer']);
   for (const day of itinerary.days) {
     if (day.totals.unmeasuredMajorTransfer) {
-      items.push({ area: 'transport', severity: 'dependency', dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} moves base and the main transfer has not been measured, so the day cannot be timed yet.` });
+      /*
+       * V7 §4 — a transfer an operator runs (a flight, a lodge's 4x4, a hired
+       * driver, a train) is not something a road router could have timed, and
+       * its absence from the router is not a gap in the plan: it is a booking
+       * whose hours the operator sets. A caution to confirm, never a dependency.
+       */
+      const transfer = day.items.find((item) => item.kind === 'travel' && item.travel?.role === 'transfer');
+      const hint = transfer?.travel?.hint ?? '';
+      if (OPERATOR_TIMED.has(hint) || transfer?.travel?.episodeMode) {
+        items.push({ area: 'transport', severity: 'caution', dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} moves base by ${hint.replace(/_/g, ' ') || 'an arranged transfer'}; the operator sets the hours, so confirm them when you book.` });
+      } else {
+        items.push({ area: 'transport', severity: 'dependency', dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} moves base and the main transfer has not been measured, so the day cannot be timed yet.` });
+      }
     }
   }
   /* Legs nobody could time or estimate are cautions: those days are shown in parts of the day, not clocks. */
@@ -137,6 +150,29 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
   for (const issue of itinerary.issues) {
     if (issue.code === 'gateway_unresolved') items.push({ area: 'transport', severity: 'dependency', ...(issue.dayNumber ? { dayNumber: issue.dayNumber } : {}), detail: issue.message });
   }
+
+  // --- V7 §9: topology and episodes -----------------------------------------------------------
+  /* A base change with no leg, a promised flight with no flight, a last day that never reaches the airport: each is a decision the plan cannot do without. */
+  const TOPOLOGY_LEAD: Record<string, string> = {
+    base_moves_have_transfers: 'A base change has no transfer',
+    transfer_endpoints_match: 'A transfer does not join the two nights it should',
+    promised_transport_is_structured: 'A promised flight, boat or train is not on the plan',
+    last_day_reaches_departure: 'The last day does not reach where the trip leaves from',
+    episode_modes_respected: 'A road leg sits inside an episode that does not move by road',
+  };
+  for (const id of ['base_moves_have_transfers', 'transfer_endpoints_match', 'promised_transport_is_structured', 'last_day_reaches_departure', 'episode_modes_respected'] as const) {
+    const check = input.audit?.checks.find((c) => c.id === id);
+    if (check && !check.ok) items.push({ area: 'transport', severity: id === 'episode_modes_respected' ? 'caution' : 'dependency', detail: `${TOPOLOGY_LEAD[id]}: ${check.detail}.` });
+  }
+  for (const episode of pkg?.episodes ?? []) {
+    if (episode.entryLeg === 'missing') items.push({ area: 'transport', severity: 'dependency', dayNumber: episode.dayNumbers[0], detail: `${episode.name} starts on day ${episode.dayNumbers[0]} but nothing on that day gets you to it${episode.startGateway ? ` (${episode.startGateway})` : ''}.` });
+    if (episode.exitLeg === 'missing') items.push({ area: 'transport', severity: 'dependency', dayNumber: episode.dayNumbers[episode.dayNumbers.length - 1], detail: `${episode.name} ends on day ${episode.dayNumbers[episode.dayNumbers.length - 1]} and the plan does not say how you leave it${episode.endGateway ? ` (${episode.endGateway})` : ''}.` });
+    if (episode.timing === 'operator' && episode.dayNumbers.length > 0) items.push({ area: 'booking', severity: 'caution', dayNumber: episode.dayNumbers[0], detail: `${episode.name} runs on the operator's timetable; the hours inside it are theirs to confirm.` });
+  }
+  const realityCheck = input.audit?.checks.find((c) => c.id === 'transport_reality_respected');
+  if (realityCheck && !realityCheck.ok) items.push({ area: 'transport', severity: 'dependency', detail: realityCheck.detail });
+  const timingCheck = input.audit?.checks.find((c) => c.id === 'timing_rationale_consistent');
+  if (timingCheck && !timingCheck.ok) items.push({ area: 'season', severity: 'caution', detail: `The reason given for these dates does not match the climate on the days: ${timingCheck.detail}.` });
 
   // --- daylight --------------------------------------------------------------------------
   const daylight = input.audit?.checks.find((c) => c.id === 'daylight_respected');

@@ -212,11 +212,24 @@ export default async function PlanPage({ params }: { params: Promise<{ id: strin
   if (!identityKnown && !resolverAvailable && intent.resolution === null) {
     redirect(`/trips/${id}/questionnaire`);
   }
+  /*
+   * V7 §2 — UNRESOLVED IS NOT INVALID.
+   *
+   * A phrase the resolver could not place ("the steppes") used to be sent to a
+   * screen that said it read "more like the kind of trip you want than
+   * somewhere on a map". That screen is for a *model's* reading that the text
+   * is not a place at all (the research path's corroboration); a geocoder
+   * drawing a blank says nothing of the kind. The interview starts from the
+   * traveller's own words, exactly as it does on a deployment with no resolver.
+   */
+  if (!identityKnown && !researchRequested && decision?.kind === 'no_match') {
+    redirect(`/trips/${id}/questionnaire`);
+  }
 
   const step = decideStep({
     hasIdentity: intent.selectedDestination !== null,
     hasResolution: intent.resolution !== null,
-    notAPlace: decision?.kind === 'not_a_place' || decision?.kind === 'no_match',
+    notAPlace: decision?.kind === 'not_a_place',
     needsChoice: decision?.kind === 'choose',
     hasSelection: selectedCandidate !== undefined,
     hasPreflight: intent.preflight !== null,

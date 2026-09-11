@@ -2,6 +2,7 @@ import 'server-only';
 import {
   buildTravelerBrief,
   countNights,
+  countryFacts,
   currencyForCountry,
   type TravelerBrief,
   displayNameOf,
@@ -43,10 +44,11 @@ import {
   productionRouteMatrix,
   productionSubregionGeometries,
 } from './skeleton-orchestrator';
-import type { TripDraft } from './trip-draft';
+import { episodesOf, type TripDraft } from './trip-draft';
 import { defaultProfileFor } from './default-profile';
 import { listBookedItems } from '@/lib/db/intelligence-repository';
-import { listPartyMembersForBrief, listPartyMembersForContract, profileWithPartyDiet } from '@/lib/db/party-repository';
+import { listPartyMembersForBrief, listPartyMembersForContract, partyFactsFor, profileWithPartyDiet } from '@/lib/db/party-repository';
+import { realityForTrip } from '@/lib/interview/screening';
 import { learnedForOwner } from '@/lib/db/preference-evidence-repository';
 import { compactBookedFacts } from '@/lib/intelligence/booked-facts';
 import { applyBookedFacts, bookedLeaveByMinute } from '@/lib/intelligence/booked-reconcile';
@@ -57,7 +59,7 @@ import { buildPreservationReport, describePreservation, type DraftPreservationRe
 import { auditItinerary, type QualityAudit } from './quality-audit';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
-import { beginGeneration, finishGeneration, markGenerationStage } from '../db/generation-progress-repository';
+import { beginGeneration, finishGeneration, markGenerationStage, noteGenerationCounters, type GenerationCounters } from '../db/generation-progress-repository';
 import { fetchReferenceRate } from '../providers/fx';
 import { saveFxRate } from '@/lib/db/intelligence-repository';
 
@@ -364,6 +366,14 @@ export async function generateSidequestPlanForTrip(
   const resolvedName = candidate?.displayName ?? region?.region.name ?? trip.basics.destinationInput;
   const rawDestinationPhrase = (storedIntent?.rawText || intent?.destinationQuery || composer?.destinationQuery || trip.basics.destinationInput || '').trim();
   const destinationName = storedIntent?.interpretedLabel || resolvedName;
+  const referenceTimeZone = (() => {
+    const codes = [...(intent?.destinationIntent?.graph?.countries ?? []), ...(candidate?.countryCode ? [candidate.countryCode] : [])];
+    for (const code of codes) {
+      const zone = countryFacts(code)?.timeZone;
+      if (zone) return zone;
+    }
+    return null;
+  })();
   const envelope: DestinationEnvelope = {
     name: destinationName,
     ...(candidate?.qualifiedName ? { qualifiedName: candidate.qualifiedName } : {}),
@@ -371,7 +381,8 @@ export async function generateSidequestPlanForTrip(
     ...(candidate?.countryName ? { countryName: candidate.countryName } : {}),
     ...(candidate?.breadth ? { scale: candidate.breadth } : {}),
     center: candidate?.center ?? region?.region.baseCoordinates ?? { lat: 0, lng: 0 },
-    ...(candidate?.timeZones?.[0] ? { timeZone: candidate.timeZones[0] } : {}),
+    /* The candidate's zone, else the first named country's reference zone: a sunset computed in UTC is a wrong sunset, not a missing one. */
+    ...(candidate?.timeZones?.[0] ? { timeZone: candidate.timeZones[0] } : referenceTimeZone ? { timeZone: referenceTimeZone } : {}),
     ...(region ? { knownAreas: region.compiled.subregions.map((s) => s.name).slice(0, 8) } : {}),
     ...(storedIntent && storedIntent.interpretationType !== 'unresolved' ? { interpretation: storedIntent.interpretationType } : {}),
     /*
@@ -416,6 +427,21 @@ export async function generateSidequestPlanForTrip(
    * records the conflict on the package.
    */
   let contract = buildTripContract({ trip, input, bookedFacts, members: listPartyMembersForContract(tripId), now });
+  /*
+   * V7 §3 — the travel reality, from the same inputs the interview read, so
+   * what the interview promised and what the plan is built with agree. It
+   * reaches the composition as `<travel_reality>`, the audit as the transport
+   * check, and the package so the hub and the intelligence read the same.
+   */
+  const partyFacts = partyFactsFor(tripId);
+  const reality = (() => {
+    try {
+      return realityForTrip({ trip, intent, region, ...(partyFacts ? { party: partyFacts } : {}), ...(profile.provenance.transport_mode?.source === 'explicit' ? { willDrive: profile.transport.willDrive } : {}) });
+    } catch (error) {
+      console.warn('Travel reality could not be built; the plan proceeds without it', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+      return null;
+    }
+  })();
   const context: CompositionContext = {
     envelope,
     ...(boardSignals ? { boardSignals } : {}),
@@ -424,6 +450,7 @@ export async function generateSidequestPlanForTrip(
     ...(bookedFacts.length > 0 ? { bookedFacts } : {}),
     timing,
     contract,
+    reality,
     planningFacts: { carAvailable: input.movement.carAvailable, desiredBaseCount: input.movement.desiredBaseCount.value ?? 1, budgetBand: profile.budgetStyle },
   };
   const preparationMs = since(preparationStartedMs);
@@ -580,6 +607,16 @@ export async function generateSidequestPlanForTrip(
   }
   if (!options.reuseStoredDraft) saveTripDraft({ tripId, draft, modelCall: modelCalls[0] ?? null, now });
   progress('route');
+  /* V7 §16 — what the draft actually holds, counted, for the screen that is waiting. */
+  const counters = (partial: GenerationCounters) => {
+    try {
+      noteGenerationCounters(tripId, partial, new Date());
+    } catch {
+      /* best-effort, like the stage itself */
+    }
+  };
+  const draftedStops = draft.days.reduce((n, d) => n + d.anchors.length, 0);
+  counters({ days: draft.days.length, stops: draftedStops, bases: draft.bases.length, episodes: episodesOf(draft).length });
   options.onDraftGenerated?.(draft);
 
   // --- Verification + reconciliation, bounded by what is left of the budget ---
@@ -635,7 +672,17 @@ export async function generateSidequestPlanForTrip(
     ...(identitySeams.resolvePlaceIdentity ? { resolvePlaceIdentity: timed('placeResolutionMs', identitySeams.resolvePlaceIdentity) } : {}),
     ...(identitySeams.operationalEvidence ? { operationalEvidence: timed('operationalMs', identitySeams.operationalEvidence) } : {}),
   };
-  const timedGeocoder = geocoder ? timed('placeResolutionMs', geocoder) : undefined;
+  /* Every place the reconciler resolves and every leg it times is counted as it happens; the seams below are the only doors. */
+  let placesMatched = 0;
+  let legsTimed = 0;
+  const countingGeocoder = geocoder
+    ? (async (...args: Parameters<typeof geocoder>) => {
+        const result = await geocoder(...args);
+        if (result) counters({ placesMatched: ++placesMatched });
+        return result;
+      }) as typeof geocoder
+    : undefined;
+  const timedGeocoder = countingGeocoder ? timed('placeResolutionMs', countingGeocoder) : undefined;
   // PRODUCT RECOVERY V1 — the corridor settlement search used to be untimed; the live Ireland build spent most of a minute in it invisibly.
   const timedNearby = nearby ? timed('placeResolutionMs', nearby) : undefined;
   /*
@@ -662,7 +709,13 @@ export async function generateSidequestPlanForTrip(
   };
   const routeMatrixFor = (m: 'car' | 'foot' | 'transit') => (routing ? timed('routingMs', (points: Parameters<typeof productionRouteMatrix>[2]) => productionRouteMatrix(routing, m, points)) : undefined);
   const confirmRouteFor = (m: 'car' | 'foot' | 'transit') =>
-    routing ? timed('routingMs', (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => policyConfirmRoute({ routing, mode: m, from, to, departAt: new Date(`${trip.basics.startDate}T09:00:00Z`), now })) : undefined;
+    routing
+      ? timed('routingMs', async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+          const leg = await policyConfirmRoute({ routing, mode: m, from, to, departAt: new Date(`${trip.basics.startDate}T09:00:00Z`), now });
+          if (leg) counters({ legsTimed: ++legsTimed });
+          return leg;
+        })
+      : undefined;
 
   const leaveBy = bookedLeaveByMinute(booked, trip.basics.endDate);
   const reconcileContext: ReconcileContext = region
@@ -735,7 +788,7 @@ export async function generateSidequestPlanForTrip(
   progress('preparing');
   const intelligenceStartedMs = performance.now();
   const preservation = buildPreservationReport(draft, applied.itinerary);
-  const quality = auditItinerary({ draft, itinerary: applied.itinerary, profile: verifyingProfile, trip, bookedConflicts: applied.conflicts, preservation, contract, contractConflicts, partyNeeds: contract.party.needs });
+  const quality = auditItinerary({ draft, itinerary: applied.itinerary, profile: verifyingProfile, trip, bookedConflicts: applied.conflicts, preservation, contract, contractConflicts, partyNeeds: contract.party.needs, reality });
   /*
    * V6 §12 — THE FEASIBILITY REPORT DECIDES "READY".
    *
@@ -790,6 +843,7 @@ export async function generateSidequestPlanForTrip(
         status: itineraryStatusForVerdict(feasibility.verdict),
         package: {
           ...applied.itinerary.package,
+          ...(reality ? { reality } : {}),
           feasibility,
           preservation: {
             version: 1 as const,

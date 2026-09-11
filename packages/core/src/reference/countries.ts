@@ -115,6 +115,12 @@ export function countryFacts(code: string | undefined | null): CountryFacts | nu
   return BY_CODE.get(code.toUpperCase()) ?? null;
 }
 
+/** The published reference point for a country code, or null for a country the app holds no point for. */
+export function countryPointFor(code: string | undefined | null): CountryPoint | null {
+  if (!code) return null;
+  return COUNTRY_POINTS[code.toUpperCase()] ?? null;
+}
+
 /**
  * WHERE A COUNTRY IS, WELL ENOUGH TO PLACE IT ON A MAP AND READ ITS SEASONS.
  *
@@ -324,6 +330,77 @@ export function countryFromText(text: string | null | undefined): CountryMatch |
   }
   if (hits.size !== 1) return null;
   return built([...hits][0]!, 'phrase');
+}
+
+/**
+ * V7 — EVERY COUNTRY NAMED IN A PHRASE, IN THE ORDER THEY APPEAR.
+ *
+ * `countryFromText` answers "which one country is this phrase about" and is
+ * right to refuse when two are named. A phrase that names two is not nothing:
+ * "Kenya and Tanzania" is a two-country trip, and the destination intent
+ * graph needs every hit with the words it occupied, longest window first and
+ * never overlapping, so that "south korea" is one hit and not "korea" twice.
+ * Pure; the same table lookup as `countryFromText`.
+ */
+export interface CountryHit extends CountryMatch {
+  /** The folded words of the phrase this hit occupies, first index inclusive, last exclusive. */
+  wordSpan: [number, number];
+}
+
+export function countriesInText(text: string | null | undefined): CountryHit[] {
+  if (!text) return [];
+  const folded = foldPlain(text);
+  if (!folded) return [];
+  const words = folded.split(' ').filter(Boolean);
+  if (words.length === 0 || words.length > MAX_PHRASE_WORDS * 3) return [];
+  const taken = new Array<boolean>(words.length).fill(false);
+  const hits: CountryHit[] = [];
+  for (let size = Math.min(words.length, 4); size >= 1; size -= 1) {
+    for (let start = 0; start + size <= words.length; start += 1) {
+      if (taken.slice(start, start + size).some(Boolean)) continue;
+      const window = words.slice(start, start + size).join(' ');
+      const code = BY_FOLDED_NAME.get(window) ?? (size > 1 && words[start] === 'the' ? BY_FOLDED_NAME.get(words.slice(start + 1, start + size).join(' ')) : undefined);
+      if (!code) continue;
+      const match = built(code, size === words.length ? 'name' : 'phrase');
+      if (!match) continue;
+      for (let i = start; i < start + size; i += 1) taken[i] = true;
+      hits.push({ ...match, wordSpan: [start, start + size] });
+    }
+  }
+  return hits.sort((a, b) => a.wordSpan[0] - b.wordSpan[0]);
+}
+
+/**
+ * NATIONALITY ADJECTIVES → COUNTRY CODES. Reference data beside the country
+ * table it points into: "Chilean and Argentine Patagonia" and "Scottish
+ * Highlands" attach a country to a landscape without the landscape's own name
+ * meaning anything to any code.
+ */
+export const DEMONYM_COUNTRIES: Readonly<Record<string, string>> = {
+  chilean: 'CL', argentine: 'AR', argentinian: 'AR', peruvian: 'PE', brazilian: 'BR', colombian: 'CO', mexican: 'MX', costa: 'CR',
+  scottish: 'GB', english: 'GB', welsh: 'GB', british: 'GB', irish: 'IE', french: 'FR', spanish: 'ES', portuguese: 'PT', italian: 'IT', german: 'DE', austrian: 'AT', swiss: 'CH', dutch: 'NL', belgian: 'BE', greek: 'GR', croatian: 'HR', slovenian: 'SI', czech: 'CZ', polish: 'PL', hungarian: 'HU', icelandic: 'IS', norwegian: 'NO', swedish: 'SE', danish: 'DK', finnish: 'FI', turkish: 'TR', moroccan: 'MA', egyptian: 'EG',
+  kenyan: 'KE', tanzanian: 'TZ', namibian: 'NA', botswanan: 'BW', rwandan: 'RW', ugandan: 'UG', 'south african': 'ZA',
+  japanese: 'JP', korean: 'KR', chinese: 'CN', taiwanese: 'TW', thai: 'TH', vietnamese: 'VN', cambodian: 'KH', indonesian: 'ID', balinese: 'ID', filipino: 'PH', malaysian: 'MY', indian: 'IN', nepalese: 'NP', nepali: 'NP', 'sri lankan': 'LK', jordanian: 'JO', israeli: 'IL', emirati: 'AE', kyrgyz: 'KG',
+  australian: 'AU', 'new zealand': 'NZ', kiwi: 'NZ', fijian: 'FJ', american: 'US', canadian: 'CA', alaskan: 'US', hawaiian: 'US', californian: 'US',
+};
+
+
+export function isDemonym(word: string): boolean {
+  return Object.prototype.hasOwnProperty.call(DEMONYM_COUNTRIES, word.toLowerCase());
+}
+
+/** The country a nationality word in the phrase points at, or null. */
+export function countryFromDemonym(text: string): string | null {
+  const folded = foldPlain(text);
+  for (const [adjective, code] of Object.entries(DEMONYM_COUNTRIES)) {
+    if (new RegExp(`\\b${adjective}\\b`).test(folded)) return code;
+  }
+  return null;
+}
+
+/** The folded words of a phrase, exactly as `countriesInText` counts them. */
+export function foldedWordsOf(text: string): string[] {
+  return foldPlain(text).split(' ').filter(Boolean);
 }
 
 function built(code: string, how: 'name' | 'phrase'): CountryMatch | null {

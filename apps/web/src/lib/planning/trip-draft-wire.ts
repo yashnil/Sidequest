@@ -6,6 +6,9 @@ import {
   DRAFT_DRIVING_ARRANGEMENTS,
   DRAFT_SOFT_PROSE_CAPS,
   DRAFT_TRANSPORTS,
+  EPISODE_DEFAULT_MODE,
+  EPISODE_KINDS,
+  EPISODE_MODES,
   TRIP_ARCHETYPES,
   WIRE_TIME_OF_DAY,
   draftStructureIssues,
@@ -16,6 +19,8 @@ import {
   type DraftDrivingArrangement,
   type DraftTimeOfDay,
   type DraftTransport,
+  type EpisodeKind,
+  type EpisodeMode,
   type OvernightKind,
   type TripArchetype,
   type TripDraft,
@@ -171,6 +176,27 @@ export const compactDaySchema = z.object({
   partOf: str().optional(),
   /** V6 §5 — one line: "Who: what they do instead; rejoin where/when". Only when part of the party does something else today. */
   split: str().optional(),
+  /**
+   * V7 §9 — the day's main movement when it is a flight, a train, a boat or a
+   * hired driver rather than an ordinary road leg: `how`, the gateway or town
+   * it goes through (`via`), and whether it opens or closes the day (`when`).
+   * Only on days that move base or reach the departure gateway.
+   */
+  move: z.object({ how: z.enum(DRAFT_TRANSPORTS), via: str().optional(), when: z.enum(['start', 'end']).optional() }).optional(),
+});
+
+/**
+ * V7 §8 — a multi-day experience, declared once. `days` is [first, last];
+ * `how` is the movement inside it (boat, walk, four_wheel_drive, rail, car,
+ * bicycle, guide_or_lodge_transfer, horse, none). Operator timing follows
+ * from the kind, and the gateways at each end are the `move` on the days
+ * that enter and leave it — nothing is written twice.
+ */
+export const compactEpisodeSchema = z.object({
+  name: str(),
+  kind: z.enum(EPISODE_KINDS),
+  days: z.array(z.number()),
+  how: z.enum(EPISODE_MODES).optional(),
 });
 
 export const compactTripDraftWireSchema = z.object({
@@ -204,6 +230,15 @@ export const compactTripDraftWireSchema = z.object({
    * ordering, not by prose.
    */
   bookFirst: z.array(str()).optional(),
+  /** V7 §8 — the multi-day experiences the trip contains. Omit when there are none. */
+  episodes: z.array(compactEpisodeSchema).optional(),
+  /**
+   * V7 §11 — the food strategy the model authors: dishes and kinds of place
+   * to seek, the quarters and markets the trip eats in, and the caveats
+   * (bookings, dietary reality). Restored to the wire: the compact schema had
+   * dropped it and every plan's food section fell back to a template.
+   */
+  food: z.object({ seek: z.array(str()).optional(), areas: z.array(str()).optional(), notes: z.array(str()).optional() }).optional(),
   stays: z.array(compactStaySchema),
   days: z.array(compactDaySchema),
   omissions: z.array(z.object({ name: str(), why: str() })),
@@ -451,7 +486,7 @@ const CATEGORY_ALIASES: Record<string, AnchorCategory> = {
   activity: 'activity', experience: 'activity', tour: 'activity', class: 'activity', workshop: 'activity', show: 'activity', performance: 'activity', music: 'activity', scenic_drive: 'scenic_drive', drive: 'scenic_drive', road: 'scenic_drive', route: 'scenic_drive', beach: 'beach', beaches: 'beach', swimming: 'beach', town: 'town', village: 'town', city: 'town', relaxation: 'relaxation', rest: 'relaxation', spa: 'relaxation', pool: 'relaxation', wellness: 'relaxation', other: 'other', transfer: 'other', transport: 'other', flight: 'other',
 };
 const ROLE_ALIASES: Record<string, AnchorRole> = { core: 'core', main: 'core', must: 'core', must_do: 'core', must_see: 'core', essential: 'core', anchor: 'core', primary: 'core', key: 'core', secondary: 'secondary', side: 'secondary', supporting: 'secondary', optional: 'optional', maybe: 'optional', if_time: 'optional', nice_to_have: 'optional', flex: 'flex', flexible: 'flex', backup: 'flex', spare: 'flex', filler: 'flex' };
-const TRANSPORT_ALIASES: Record<string, DraftTransport> = { walk: 'walk', walking: 'walk', foot: 'walk', on_foot: 'walk', hike: 'walk', metro: 'metro', subway: 'metro', tube: 'metro', underground: 'metro', mtr: 'metro', tram: 'metro', rail: 'rail', train: 'rail', bus: 'bus', coach: 'bus', shuttle: 'bus', car: 'car', drive: 'car', driving: 'car', self_drive: 'car', rental_car: 'car', taxi: 'car', rideshare: 'car', uber: 'car', ferry: 'ferry', boat: 'boat', cruise: 'boat', kayak: 'boat', flight: 'flight', fly: 'flight', plane: 'flight', air: 'flight', private_transfer: 'private_transfer', transfer: 'private_transfer', driver: 'private_transfer', private_driver: 'private_transfer', four_wheel_drive: 'four_wheel_drive', '4x4': 'four_wheel_drive', '4wd': 'four_wheel_drive', jeep: 'four_wheel_drive', game_vehicle: 'four_wheel_drive', horse: 'horse', horseback: 'horse', riding: 'horse', pony: 'horse', horse_trek: 'horse', guide_or_lodge_transfer: 'guide_or_lodge_transfer', guide: 'guide_or_lodge_transfer', guided: 'guide_or_lodge_transfer', lodge_transfer: 'guide_or_lodge_transfer', lodge: 'guide_or_lodge_transfer', tour: 'guide_or_lodge_transfer', unknown: 'unknown' };
+const TRANSPORT_ALIASES: Record<string, DraftTransport> = { walk: 'walk', walking: 'walk', foot: 'walk', on_foot: 'walk', hike: 'walk', metro: 'metro', subway: 'metro', tube: 'metro', underground: 'metro', mtr: 'metro', tram: 'metro', monorail: 'metro', light_rail: 'metro', cable_car: 'metro', cableway: 'metro', gondola: 'metro', ropeway: 'metro', funicular: 'metro', rail: 'rail', train: 'rail', bus: 'bus', coach: 'bus', shuttle: 'bus', car: 'car', drive: 'car', driving: 'car', self_drive: 'car', rental_car: 'car', taxi: 'taxi', cab: 'taxi', rideshare: 'taxi', ride_hailing: 'taxi', uber: 'taxi', didi: 'taxi', grab: 'taxi', high_speed_rail: 'high_speed_rail', hsr: 'high_speed_rail', bullet_train: 'high_speed_rail', shinkansen: 'high_speed_rail', tgv: 'high_speed_rail', ktx: 'high_speed_rail', ave: 'high_speed_rail', ferry: 'ferry', boat: 'boat', cruise: 'boat', kayak: 'boat', flight: 'flight', fly: 'flight', plane: 'flight', air: 'flight', private_transfer: 'private_transfer', transfer: 'private_transfer', driver: 'private_transfer', private_driver: 'private_transfer', four_wheel_drive: 'four_wheel_drive', '4x4': 'four_wheel_drive', '4wd': 'four_wheel_drive', jeep: 'four_wheel_drive', game_vehicle: 'four_wheel_drive', horse: 'horse', horseback: 'horse', riding: 'horse', pony: 'horse', horse_trek: 'horse', guide_or_lodge_transfer: 'guide_or_lodge_transfer', guide: 'guide_or_lodge_transfer', guided: 'guide_or_lodge_transfer', lodge_transfer: 'guide_or_lodge_transfer', lodge: 'guide_or_lodge_transfer', tour: 'guide_or_lodge_transfer', unknown: 'unknown' };
 const INTENSITY_ALIASES: Record<string, 'light' | 'moderate' | 'intense'> = { light: 'light', easy: 'light', low: 'light', relaxed: 'light', gentle: 'light', rest: 'light', moderate: 'moderate', medium: 'moderate', balanced: 'moderate', normal: 'moderate', intense: 'intense', hard: 'intense', high: 'intense', strenuous: 'intense', full: 'intense', big: 'intense' };
 const TIME_OF_DAY_ALIASES: Record<string, DraftTimeOfDay> = { sunrise: 'sunrise', dawn: 'sunrise', first_light: 'sunrise', early: 'sunrise', morning: 'morning', am: 'morning', midday: 'midday', noon: 'midday', lunchtime: 'midday', afternoon: 'afternoon', pm: 'afternoon', sunset: 'sunset', dusk: 'sunset', golden_hour: 'sunset', evening: 'evening', dinner: 'evening', night: 'night', late: 'night', after_dark: 'night', nighttime: 'night', any: 'any', anytime: 'any', flexible: 'any' };
 
@@ -884,6 +919,14 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     const splitWho = splitParsed ? capped(splitParsed.who, 60, `days[${index}].split.who`, touched) : undefined;
     const splitDoes = splitParsed ? capped(splitParsed.does, DRAFT_SOFT_PROSE_CAPS.dayNote, `days[${index}].split.does`, touched) : undefined;
     const splitRejoin = splitParsed?.rejoin ? capped(splitParsed.rejoin, 80, `days[${index}].split.rejoin`, touched) : undefined;
+    /* V7 §9 — the day's main movement, when the model named one. */
+    const moveRaw = record(day.move ?? day.transfer);
+    const moveHow = moveRaw ? mapEnum(moveRaw.how ?? moveRaw.mode ?? moveRaw.by, TRANSPORT_ALIASES, null) : { value: null, mapped: false };
+    if (moveRaw && moveHow.mapped) touched.push(`days[${index}].move.how (${String(moveRaw.how ?? '')} → ${moveHow.value})`);
+    const moveVia = moveRaw ? capped(moveRaw.via ?? moveRaw.to ?? moveRaw.through ?? moveRaw.gateway, 60, `days[${index}].move.via`, touched) : undefined;
+    const moveWhenRaw = moveRaw ? String(moveRaw.when ?? moveRaw.at ?? '').toLowerCase() : '';
+    const moveWhen: 'start' | 'end' | undefined = /^(start|first|morning|open|before)/.test(moveWhenRaw) ? 'start' : /^(end|last|evening|after|close)/.test(moveWhenRaw) ? 'end' : undefined;
+    const move = moveHow.value ? { how: moveHow.value, ...(moveVia ? { via: moveVia } : {}), ...(moveWhen ? { when: moveWhen } : {}) } : undefined;
     days.push({
       dayNumber: index + 1,
       baseId,
@@ -896,7 +939,55 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
       ...(whyItFits ? { whyItFits } : {}),
       ...(partOf ? { partOf } : {}),
       ...(splitWho && splitDoes ? { split: { who: splitWho, does: splitDoes, ...(splitRejoin ? { rejoin: splitRejoin } : {}) } } : {}),
+      ...(move ? { move } : {}),
     });
+  });
+
+  // --- V7 §8: episodes ----------------------------------------------------------------
+  const EPISODE_ALIASES: Record<string, EpisodeKind> = {
+    cruise: 'cruise', river_cruise: 'cruise', boat_cruise: 'cruise', liveaboard: 'cruise', trek: 'trek', trekking: 'trek', hike: 'trek', hiking: 'trek', traverse: 'trek', walk: 'trek', pilgrimage: 'trek', safari: 'safari', game_drives: 'safari', safari_circuit: 'safari', sleeper_train: 'sleeper_train', sleeper: 'sleeper_train', night_train: 'sleeper_train', train: 'sleeper_train',
+    expedition_boat: 'expedition_boat', expedition: 'expedition_boat', sailing: 'expedition_boat', guided_overland: 'guided_overland', overland: 'guided_overland', jeep_tour: 'guided_overland', road_trip_segment: 'road_trip_segment', road_trip: 'road_trip_segment', drive: 'road_trip_segment', resort_stay: 'resort_stay', resort: 'resort_stay', bike_tour: 'bike_tour', cycling: 'bike_tour', bike: 'bike_tour', hut_to_hut: 'hut_to_hut', huts: 'hut_to_hut',
+  };
+  const EPISODE_MODE_ALIASES: Record<string, EpisodeMode> = { boat: 'boat', ship: 'boat', cruise: 'boat', ferry: 'boat', walk: 'walk', foot: 'walk', hike: 'walk', trail: 'walk', four_wheel_drive: 'four_wheel_drive', '4x4': 'four_wheel_drive', jeep: 'four_wheel_drive', game_vehicle: 'four_wheel_drive', rail: 'rail', train: 'rail', car: 'car', drive: 'car', bicycle: 'bicycle', bike: 'bicycle', guide_or_lodge_transfer: 'guide_or_lodge_transfer', guide: 'guide_or_lodge_transfer', transfer: 'guide_or_lodge_transfer', horse: 'horse', none: 'none', stay: 'none' };
+  const episodesRaw = Array.isArray(root.episodes) ? root.episodes : [];
+  const episodes: NonNullable<TripDraft['episodes']> = [];
+  episodesRaw.forEach((entry: unknown, index: number) => {
+    const episode = record(entry);
+    const name = sanitizeProse(episode?.name ?? episode?.title);
+    if (!episode || !name) {
+      touched.push(`episodes[${index}] (no name, dropped)`);
+      return;
+    }
+    const kind = mapEnum(episode.kind ?? episode.type, EPISODE_ALIASES, null);
+    if (!kind.value) {
+      touched.push(`episodes[${index}].kind (${String(episode.kind ?? '')} unknown, dropped)`);
+      return;
+    }
+    if (kind.mapped) touched.push(`episodes[${index}].kind (${String(episode.kind)} → ${kind.value})`);
+    const range = Array.isArray(episode.days) ? episode.days.map((d: unknown) => toNumber(d)).filter((d: number | undefined): d is number => d !== undefined) : [toNumber(episode.fromDay ?? episode.from_day ?? episode.start), toNumber(episode.toDay ?? episode.to_day ?? episode.end)].filter((d): d is number => d !== undefined);
+    if (range.length === 0) {
+      touched.push(`episodes[${index}].days (absent, dropped)`);
+      return;
+    }
+    const fromDay = Math.max(1, Math.min(days.length || 40, Math.round(Math.min(...range))));
+    const toDay = Math.max(fromDay, Math.min(days.length || 40, Math.round(Math.max(...range))));
+    const mode = mapEnum(episode.how ?? episode.mode ?? episode.movement, EPISODE_MODE_ALIASES, null);
+    const timingRaw = String(episode.timing ?? episode.clock ?? '').toLowerCase();
+    const timing = /operator|guide|ship|company|fixed/.test(timingRaw) ? 'operator' : /self|own|free/.test(timingRaw) ? 'self' : timingRaw ? 'unknown' : undefined;
+    const mealsRaw = String(episode.meals ?? '').toLowerCase();
+    const meals = /includ|full board|all/.test(mealsRaw) ? 'included' : /some|half|partial|breakfast/.test(mealsRaw) ? 'some' : /none|no\b/.test(mealsRaw) ? 'none' : undefined;
+    const startGateway = capped(episode.from ?? episode.startGateway ?? episode.start_gateway ?? episode.embark, 60, `episodes[${index}].from`, touched);
+    const endGateway = capped(episode.to ?? episode.endGateway ?? episode.end_gateway ?? episode.disembark, 60, `episodes[${index}].to`, touched);
+    const why = capped(episode.why, DRAFT_SOFT_PROSE_CAPS.baseWhy, `episodes[${index}].why`, touched);
+    episodes.push({ name: name.slice(0, 60), kind: kind.value, fromDay, toDay, mode: mode.value ?? EPISODE_DEFAULT_MODE[kind.value], ...(timing ? { timing } : {}), ...(startGateway ? { startGateway } : {}), ...(endGateway ? { endGateway } : {}), ...(meals ? { meals } : {}), ...(why ? { why } : {}) });
+    /* The days an episode covers carry its name, so every reader that keys on `partOf` sees it. */
+    for (let d = fromDay; d <= toDay; d += 1) {
+      const day = days[d - 1];
+      if (day && !day.partOf) {
+        day.partOf = name.slice(0, 60);
+        touched.push(`days[${d - 1}].partOf (absent → "${name.slice(0, 60)}" from the episode)`);
+      }
+    }
   });
 
   // --- trip-level ---------------------------------------------------------------------
@@ -963,8 +1054,24 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
       if (driving.mapped) touched.push(`driving (${String(root.driving ?? '')} → ${driving.value})`);
       return driving.value ? { driving: driving.value } : {};
     })(),
+    ...(episodes.length > 0 ? { episodes: episodes.slice(0, 6) } : {}),
     package: {
-      foodStrategy: stringList(root.foodStrategy ?? pkg?.foodStrategy, 'foodStrategy', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy).slice(0, 6),
+      /*
+       * V7 §11 — the compact wire's `food` object becomes the food strategy
+       * lines: what to seek, where the trip eats, and the caveats — in that
+       * order, so the first line (the headline) is a dish or a kind of place.
+       */
+      foodStrategy: (() => {
+        const explicit = stringList(root.foodStrategy ?? pkg?.foodStrategy, 'foodStrategy', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy);
+        if (explicit.length > 0) return explicit.slice(0, 6);
+        const food = record(root.food);
+        if (!food) return [];
+        const seek = stringList(food.seek ?? food.dishes ?? food.try, 'food.seek', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy);
+        const areas = stringList(food.areas ?? food.where ?? food.quarters, 'food.areas', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy);
+        const notes = stringList(food.notes ?? food.caveats ?? food.book, 'food.notes', touched, DRAFT_SOFT_PROSE_CAPS.foodStrategy);
+        touched.push('food → foodStrategy');
+        return [...seek.map((s) => `Seek: ${s}`), ...areas.map((a) => `Where: ${a}`), ...notes].slice(0, 8);
+      })(),
       transport: {
         summary: capped(root.transportSummary ?? (typeof root.transport === 'string' ? root.transport : undefined) ?? transportObject?.summary, DRAFT_SOFT_PROSE_CAPS.transportSummary, 'transportSummary', touched) ?? 'Getting around as the days describe.',
         notes: stringList(root.transportNotes ?? transportObject?.notes, 'transportNotes', touched, DRAFT_SOFT_PROSE_CAPS.transportNote).slice(0, 6),

@@ -46,8 +46,9 @@ export function weatherScopeKey(input: {
   dates: readonly string[];
   locations: readonly WeatherLocation[];
 }): string {
+  /* The zone is part of the answer (sunrise, sunset, the day's hours), so a location re-read in a different zone is a different scope. */
   const points = input.locations
-    .map((location) => `${location.id}@${location.coordinates.lat},${location.coordinates.lng}`)
+    .map((location) => `${location.id}@${location.coordinates.lat},${location.coordinates.lng}~${location.timeZone}`)
     .sort()
     .join(';');
   const span = `${input.dates[0] ?? '-'}..${input.dates[input.dates.length - 1] ?? '-'}`;

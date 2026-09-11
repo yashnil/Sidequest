@@ -40,6 +40,10 @@ export const budgetLineSchema = z.object({
   includes: z.array(z.string().min(1)).default([]),
   excludes: z.array(z.string().min(1)).default([]),
   provenance: z.enum(['estimate_from_style_bands', 'derived_from_plan', 'booked']),
+  /** V7 §14 — how much to trust the band: an estimate, or a category Sidequest knows exists but cannot price (the band is a placeholder and says so). */
+  precision: z.enum(['estimated', 'unknown']).default('estimated'),
+  /** V7 §14 — lodging and transport bought as one thing (a cruise cabin, a safari camp with drives). */
+  bundle: z.boolean().optional(),
   /** What the traveller has actually paid or been quoted in this category, from their booked items. */
   actual: z.object({ amount: z.number().min(0), currency: z.string().min(1), items: z.number().int().min(1), complete: z.boolean() }).optional(),
 });
@@ -87,6 +91,10 @@ const FUEL_PER_KM: [number, number] = [0.1, 0.2];
 const FLIGHT_LEG: [number, number] = [80, 300];
 const FERRY_LEG: [number, number] = [10, 90];
 const PERMIT: [number, number] = [5, 60];
+/* V7 §14 — the transport a plan with a hired driver, regional trains or a cruise actually buys. Bands, never quotes. */
+const RAIL_LEG: [number, number] = [15, 120];
+const DRIVER_DAY: Record<Style, [number, number]> = { budget: [40, 90], midrange: [60, 140], premium: [100, 220], luxury: [160, 400] };
+const CRUISE_NIGHT: Record<Style, [number, number]> = { budget: [90, 180], midrange: [150, 320], premium: [260, 520], luxury: [450, 1000] };
 
 const PAID_CATEGORIES = new Set(['museum', 'activity', 'historic', 'geothermal', 'wildlife', 'landmark']);
 
@@ -109,6 +117,8 @@ export interface BudgetInput {
    * inference from the primary mode stands.
    */
   selfDrives?: boolean;
+  /** V7 §14 — the draft's driving arrangement, so a hired driver is priced as a driver and never as a rental. */
+  driving?: string;
 }
 
 export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence {
@@ -125,7 +135,17 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
     lines.push(budgetLineSchema.parse({ category, currency, low: Math.round(band[0] * multiplier), high: Math.round(band[1] * multiplier), perPerson, basis, includes, excludes, provenance }));
   };
 
-  push('lodging', LODGING_PER_NIGHT[style], nights, false, `${nights} nights at a ${style} band per room or unit`, ['Room or unit per night'], ['City taxes, resort fees']);
+  /*
+   * V7 §14 — a night on a cruise is a bundle (cabin, meals, excursions), not a
+   * hotel night: it comes off the lodging count and gets its own line.
+   */
+  const cruiseEpisodes = (input.pkg?.episodes ?? []).filter((e) => e.kind === 'cruise' || e.kind === 'expedition_boat');
+  const cruiseNights = cruiseEpisodes.reduce((n, e) => n + Math.max(0, e.dayNumbers.length - 1), 0);
+  const hotelNights = Math.max(0, nights - cruiseNights);
+  push('lodging', LODGING_PER_NIGHT[style], hotelNights, false, `${hotelNights} nights at a ${style} band per room or unit${cruiseNights > 0 ? ` (${cruiseNights} on board are priced with the cruise)` : ''}`, ['Room or unit per night'], ['City taxes, resort fees']);
+  if (cruiseNights > 0) {
+    lines.push(budgetLineSchema.parse({ category: 'lodging', currency, low: Math.round(CRUISE_NIGHT[style][0] * cruiseNights), high: Math.round(CRUISE_NIGHT[style][1] * cruiseNights), perPerson: true, basis: `${cruiseEpisodes.map((e) => e.name).join(', ')}: ${cruiseNights} night${cruiseNights === 1 ? '' : 's'} on board, cabin, meals and included excursions as one booking; cruise prices vary widely by cabin and operator`, includes: ['Cabin', 'Meals on board', 'Included shore excursions'], excludes: ['Optional excursions, drinks, tips'], provenance: 'derived_from_plan', precision: 'unknown', bundle: true }));
+  }
   push('food', FOOD_PER_DAY[style], days, true, `${days} days at a ${style} band`, ['Three meals, coffee, water'], ['Alcohol beyond a drink with dinner']);
   const paidStops = itinerary.days.reduce((n, day) => n + day.items.filter((i) => i.kind === 'activity' && PAID_CATEGORIES.has(categoryOf(input.pkg, i.placeId, i.id))).length, 0);
   push('activities', PAID_STOP[style], paidStops, true, `${paidStops} stops that usually charge entry`, ['Entry tickets'], ['Optional extras, audio guides']);
@@ -157,13 +177,20 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
     const fuelBand: [number, number] = driveKm > 0 ? FUEL_PER_KM : [FUEL_PER_KM[0] * 0.8, FUEL_PER_KM[1] * 1.3];
     push('car_fuel_tolls_parking', [RENTAL_DAY[style][0] + (fuelBand[0] * fuelKm) / days, RENTAL_DAY[style][1] + (fuelBand[1] * fuelKm) / days], days, false, `${days} rental days plus ${fuelBasis}`, ['Rental, basic insurance', ...(fuelKm > 0 ? ['Fuel'] : [])], ['Tolls, parking, one-way fees, full excess cover', ...(fuelKm > 0 ? [] : ['Fuel'])], fuelKm > 0 && driveKm === 0 ? 'estimate_from_style_bands' : undefined);
   }
-  if (primary === 'rail' || primary === 'public_bus' || primary === 'walk') {
-    push('local_transport', LOCAL_TRANSIT_DAY, days, true, `${days} days of local transit`, ['Metro, bus, tram'], ['Taxis late at night'], 'derived_from_plan');
+  if (primary === 'rail' || primary === 'public_bus' || primary === 'walk' || primary === 'rideshare' || (input.driving === 'private_driver' && primary !== 'drive')) {
+    push('local_transport', LOCAL_TRANSIT_DAY, days, true, `${days} days of local transit and short rides`, ['Metro, bus, tram, short ride-hailing hops'], ['Taxis late at night'], 'derived_from_plan');
   }
-  const flights = input.legs.filter((l) => l.mode === 'flight').length;
-  const ferries = input.legs.filter((l) => l.mode === 'ferry' || l.mode === 'boat').length;
-  if (flights > 0 || ferries > 0) {
-    lines.push(budgetLineSchema.parse({ category: 'long_distance_transport', currency, low: flights * FLIGHT_LEG[0] + ferries * FERRY_LEG[0], high: flights * FLIGHT_LEG[1] + ferries * FERRY_LEG[1], perPerson: true, basis: `${flights} internal flight${flights === 1 ? '' : 's'}, ${ferries} ferry or boat leg${ferries === 1 ? '' : 's'}`, includes: ['Standard fares'], excludes: ['Flights to and from the destination'], provenance: 'derived_from_plan' }));
+  /* V7 §14 — a hired driver is priced by the day, for the days the plan actually uses one. */
+  if (input.driving === 'private_driver') {
+    const driverDays = new Set(input.legs.filter((l) => (l.mode === 'private_transfer' || l.mode === 'car' || l.mode === 'four_wheel_drive') && l.role !== 'terminal' && l.dayNumber).map((l) => l.dayNumber!)).size;
+    if (driverDays > 0) push('guides_tours', DRIVER_DAY[style], driverDays, false, `${driverDays} day${driverDays === 1 ? '' : 's'} with a hired car and driver`, ['Car and driver for the day'], ['Tolls, the driver’s meals, tips'], 'derived_from_plan');
+  }
+  const countedLegs = input.legs.filter((l) => l.episode === undefined || l.role === 'base_move' || l.role === 'transfer');
+  const flights = countedLegs.filter((l) => l.mode === 'flight').length;
+  const ferries = countedLegs.filter((l) => l.mode === 'ferry' || l.mode === 'boat').length;
+  const trains = countedLegs.filter((l) => l.mode === 'rail' && (l.role === 'base_move' || l.role === 'transfer' || (l.durationMinutes ?? 0) >= 90)).length;
+  if (flights > 0 || ferries > 0 || trains > 0) {
+    lines.push(budgetLineSchema.parse({ category: 'long_distance_transport', currency, low: flights * FLIGHT_LEG[0] + ferries * FERRY_LEG[0] + trains * RAIL_LEG[0], high: flights * FLIGHT_LEG[1] + ferries * FERRY_LEG[1] + trains * RAIL_LEG[1], perPerson: true, basis: `${flights} internal flight${flights === 1 ? '' : 's'}, ${trains} train leg${trains === 1 ? '' : 's'}, ${ferries} ferry or boat leg${ferries === 1 ? '' : 's'}`, includes: ['Standard fares'], excludes: ['Flights to and from the destination'], provenance: 'derived_from_plan' }));
   }
   if (input.international === 'yes') push('insurance', [3, 10], days, true, `${days} days of travel medical cover`, ['Medical, cancellation'], ['Activity riders'], 'estimate_from_style_bands');
   push('miscellaneous', [5, 15], days, true, 'A small daily allowance for the unplanned', ['Souvenirs, laundry, tips'], []);
@@ -213,7 +240,7 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
   for (const line of lines) {
     const actual = actualsByCategory.get(line.category);
     if (!actual) continue;
-    const complete = line.category === 'lodging' ? bookedLodgingNights >= nights : line.category === 'long_distance_transport' ? flights + ferries > 0 && actual.items >= flights + ferries : false;
+    const complete = line.category === 'lodging' ? bookedLodgingNights >= nights : line.category === 'long_distance_transport' ? flights + ferries + trains > 0 && actual.items >= flights + ferries + trains : false;
     line.actual = { ...actual, complete };
   }
   const actualTotalAmount = [...actualsByCategory.values()].reduce((n, a) => n + a.amount, 0);
@@ -236,7 +263,7 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
     booked,
     ...(actualsByCategory.size > 0 && actualCurrency ? { actualTotal: { amount: actualTotalAmount, currency: actualCurrency }, remainingEstimate } : {}),
     ...(fx ? { fx, displayCurrency: fx.quote, converted } : {}),
-    precisionNote: 'Ranges, not quotes. Sidequest did not look up a single price for this trip; the bands come from your spending style and the shape of the plan.',
+    precisionNote: lines.some((l) => l.precision === 'unknown') ? 'Ranges, not quotes. Sidequest did not look up a single price for this trip; the bands come from your spending style and the shape of the plan, and the lines marked as unknown are placeholders for things whose price varies too much to band.' : 'Ranges, not quotes. Sidequest did not look up a single price for this trip; the bands come from your spending style and the shape of the plan.',
   });
 }
 

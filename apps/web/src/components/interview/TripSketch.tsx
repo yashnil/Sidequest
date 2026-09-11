@@ -68,6 +68,7 @@ const TRANSPORT_BY_VALUE: Record<string, { glyph: GlyphId; label: string }> = {
   boats_transfers: { glyph: 'boat', label: 'Boats between islands' },
   no_car: { glyph: 'transit', label: 'No car: shuttles, taxis and tours' },
   transit_walk: { glyph: 'transit', label: 'On foot and by transit' },
+  rail_transfers: { glyph: 'transit', label: 'Trains and hired transfers; on foot in the city' },
 };
 
 const TRANSPORT_BY_MOVEMENT: Record<string, { glyph: GlyphId; label: string }> = {
@@ -76,6 +77,7 @@ const TRANSPORT_BY_MOVEMENT: Record<string, { glyph: GlyphId; label: string }> =
   guided: TRANSPORT_BY_VALUE.guided!,
   boat: TRANSPORT_BY_VALUE.boats_transfers!,
   mixed: TRANSPORT_BY_VALUE.mixed!,
+  rail_transfers: TRANSPORT_BY_VALUE.rail_transfers!,
 };
 
 export function sketchFor(ctx: InterviewContext, answers: QuestionnaireAnswers): Sketch {

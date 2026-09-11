@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { languageName, sharesLanguage, type CountryFacts } from '../reference/countries';
 import { claim, type SourceClaim } from './claims';
+import type { TravelReality } from '../reality/schema';
 
 /**
  * COUNTRY READINESS: DOCUMENTS, HEALTH, SAFETY, THE PRACTICAL LAYER.
@@ -159,6 +160,8 @@ export const READINESS_ENTRY_KINDS = [
   'connectivity',
   'electricity',
   'language',
+  /** V7 §12 — a thing to set up before landing, from the destination's compiled travel reality (payment apps, rail ticketing, navigation, ride-hailing, permits). */
+  'local_setup',
 ] as const;
 export const readinessEntryKindSchema = z.enum(READINESS_ENTRY_KINDS);
 export type ReadinessEntryKind = z.infer<typeof readinessEntryKindSchema>;
@@ -183,6 +186,7 @@ export const READINESS_SECTION_OF: Record<ReadinessEntryKind, ReadinessSection> 
   connectivity: 'practical',
   electricity: 'practical',
   language: 'practical',
+  local_setup: 'practical',
 };
 
 export const READINESS_SECTION_LABELS: Record<ReadinessSection, string> = {
@@ -243,6 +247,8 @@ export interface ReadinessInput {
   now: Date;
   /** PRODUCT RECOVERY V1 — bundled reference facts for the destination country (`data/countries.ts`), when known. */
   destinationFacts?: CountryFacts | null;
+  /** V7 §12 — the destination's compiled travel reality: what to set up before landing, and the driving facts. */
+  reality?: TravelReality | null;
   /** Reference facts for the traveller's home country, when a citizenship or residence is known. */
   homeFacts?: CountryFacts | null;
   /** Languages the traveller speaks (ISO 639-1), when stated; absent means unknown. */
@@ -364,19 +370,48 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
     const home = input.homeFacts ?? null;
     const sideDiffers = facts && home ? facts.drivingSide !== home.drivingSide : null;
     const sideFact = facts ? `Traffic drives on the ${facts.drivingSide} in ${country}${sideDiffers === true ? ` — the opposite side from ${home!.name}` : sideDiffers === false ? ', the same side as at home' : ''}.` : null;
+    /*
+     * V7 §3 — what the compiled reality knows about driving here, labelled as a
+     * reference and never as an official confirmation. A jurisdiction where a
+     * foreign visitor cannot drive on an IDP says so here in one sentence,
+     * with the source it was compiled from.
+     */
+    const drivingFact = input.reality?.facts.find((f) => f.topic === 'driving' && input.reality!.modes.some((m) => m.mode === 'self_drive' && m.factIds.includes(f.id)));
+    const selfDrive = input.reality?.modes.find((m) => m.mode === 'self_drive');
+    const realityLine = drivingFact && selfDrive && selfDrive.status !== 'recommended' && selfDrive.status !== 'viable' && selfDrive.status !== 'unknown' ? `${drivingFact.statement} (Reference, compiled ${drivingFact.asOf ?? 'by Sidequest'}${drivingFact.sourceName ? ` from ${drivingFact.sourceName}` : ''}; confirm at the official source.)` : null;
     entries.push({
       kind: 'driving_document',
       title: 'Driving',
       state: domesticLicence ? 'not_applicable' : international === 'no' ? 'not_applicable' : 'unverified',
       summary: domesticLicence || international === 'no'
         ? 'Your own licence covers driving here. Carry it, plus the rental agreement.'
-        : `Whether ${country} accepts your licence alone or requires an International Driving Permit is not verified by Sidequest. Rental desks set their own minimum age and licence-age rules, and the excess (deductible) on the rental is worth deciding before you book.${sideFact ? ` ${sideFact}` : ''}`,
-      action: domesticLicence || international === 'no' ? undefined : 'Confirm licence and IDP rules; decide the rental excess cover.',
-      links: fa ? [{ name: fa.name, url: fa.url }] : [{ name: iata.name, url: iata.url }],
+        : realityLine
+          ? `${realityLine} Rental desks set their own minimum age and licence-age rules, and the excess (deductible) on the rental is worth deciding before you book.${sideFact ? ` ${sideFact}` : ''}`
+          : `Whether ${country} accepts your licence alone or requires an International Driving Permit is not verified by Sidequest. Rental desks set their own minimum age and licence-age rules, and the excess (deductible) on the rental is worth deciding before you book.${sideFact ? ` ${sideFact}` : ''}`,
+      action: domesticLicence || international === 'no' ? undefined : realityLine ? 'Confirm the local permit rule at the official source before relying on a hire car.' : 'Confirm licence and IDP rules; decide the rental excess cover.',
+      links: [...(drivingFact?.sourceUrl ? [{ name: drivingFact.sourceName ?? 'Official source', url: drivingFact.sourceUrl }] : []), ...(fa ? [{ name: fa.name, url: fa.url }] : [{ name: iata.name, url: iata.url }])],
       blocking: false,
       phase: 'do_before_booking',
       tier: 'primary',
-      ...(sideFact ? { facts: [sideFact] } : {}),
+      ...(sideFact || realityLine ? { facts: [...(realityLine ? [realityLine] : []), ...(sideFact ? [sideFact] : [])] } : {}),
+    });
+  }
+
+  // V7 §12 — Set these up before you land, from the compiled travel reality ------------
+  for (const item of input.reality?.setup ?? []) {
+    const facts = item.factIds.map((id) => input.reality!.facts.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => Boolean(f));
+    const source = facts.find((f) => f.sourceUrl);
+    entries.push({
+      kind: 'local_setup',
+      title: item.title,
+      state: 'unverified',
+      summary: `${item.why}${facts[0] ? ` ${facts[0].statement}` : ''}`,
+      action: item.when === 'before_you_fly' ? 'Set this up before you fly.' : 'Do this on arrival.',
+      links: source?.sourceUrl ? [{ name: source.sourceName ?? 'Source', url: source.sourceUrl }] : [],
+      blocking: false,
+      phase: item.when === 'before_you_fly' ? 'one_week_out' : 'day_before',
+      tier: item.relevance === 'essential' ? 'primary' : 'more',
+      facts: facts.map((f) => `${f.statement} (${f.authority === 'reference' ? `Reference, compiled ${f.asOf ?? 'by Sidequest'}` : f.authority.replace(/_/g, ' ')}.)`),
     });
   }
 

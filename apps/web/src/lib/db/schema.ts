@@ -2017,6 +2017,12 @@ export const COLUMN_MIGRATIONS: readonly {
   column: string;
   definition: string;
 }[] = [
+  /**
+   * V7 §16 — what the build has counted so far, for the screen that is waiting.
+   * A JSON object of small integers (stops drafted, places matched, legs
+   * timed …) written at the same real boundaries as `stage`; never a percentage.
+   */
+  { table: 'generation_progress', column: 'detail_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   {
     table: 'itineraries',
     column: 'transport_strategy_json',

@@ -161,6 +161,8 @@ export interface LodgingInput {
   booked: readonly BookedPlanItem[];
   /** Property candidates from an accommodation provider. None is configured; kept as the seam. */
   properties?: readonly { baseId: string; name: string; why: string; priceTier: (typeof PRICE_TIERS)[number]; source: string }[];
+  /** V7 §14 — whether the traveller drives a car they park; a hired driver or transit produces no parking advice. */
+  selfDrives?: boolean;
 }
 
 export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligence {
@@ -186,9 +188,11 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
     if (Number.isFinite(latest) && latest >= 21 * 60) tradeoffs.push('Late returns some evenings — somewhere that is easy to get back to after dark.');
     const relocations = days.filter((d) => d.totals.driveMinutes > 150 || d.totals.transitMinutes > 150).length;
     if (relocations > 0) tradeoffs.push(`${relocations} ${relocations === 1 ? 'day' : 'days'} here carries a long transfer.`);
-    if (primaryMode === 'drive') advantages.push('Parking at the door is worth more than a central address on this plan.');
-    if (primaryMode === 'rail' || primaryMode === 'public_bus') advantages.push('Stay within a few minutes of the station or main stop; every day starts and ends there.');
-    if (primaryMode === 'walk') advantages.push('Stay inside the walking radius of the days here — a bed on the edge costs an hour a day.');
+    const vessel = pkgBase?.baseKind === 'vessel';
+    if (vessel) advantages.push('The cabin is booked with the cruise; there is nothing to arrange here beyond the boat itself.');
+    else if (primaryMode === 'drive' && (input.selfDrives ?? true)) advantages.push('Parking at the door is worth more than a central address on this plan.');
+    if (!vessel && (primaryMode === 'rail' || primaryMode === 'public_bus')) advantages.push('Stay within a few minutes of the station or main stop; every day starts and ends there.');
+    if (!vessel && primaryMode === 'walk') advantages.push('Stay inside the walking radius of the days here — a bed on the edge costs an hour a day.');
     if (sourced) advantages.push(sourced.rationale);
     if (sourced) tradeoffs.push(...sourced.tradeoffs);
     if (pkgBase?.verification === 'unverified') tradeoffs.push('Sidequest could not confirm this place on the map; the area advice still stands.');
@@ -203,8 +207,8 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
       why: pkgBase?.why ?? `Base ${index + 1} of the plan.`,
       nights: pkgBase?.nights ?? Math.max(0, days.length - (index === baseIds.length - 1 ? 1 : 0)),
       dayNumbers: days.map((d) => d.dayNumber),
-      style: kind,
-      styleLabel: pkgBase?.style ?? LODGING_KIND_LABELS[kind],
+      style: vessel ? 'no_preference' : kind,
+      styleLabel: vessel ? 'On board' : (pkgBase?.style ?? LODGING_KIND_LABELS[kind]),
       priceTier: tier,
       tradeoffs,
       advantages,

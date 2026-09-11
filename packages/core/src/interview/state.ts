@@ -83,6 +83,8 @@ export function answerQuestion(input: {
    * said.
    */
   note?: string;
+  /** V7 §5 — the readings of the note the traveller left switched on. */
+  readings?: { id: string; kind: string; value: string; label: string; strength: string; accepted: boolean }[];
   now: Date;
   region?: QuestionnaireContext['region'];
 }): QuestionnaireAnswers {
@@ -92,12 +94,16 @@ export function answerQuestion(input: {
   const notes = { ...(answers.preferenceNotes ?? {}) };
   if (note) notes[question.id] = note;
   else delete notes[question.id];
+  const readings = { ...(answers.noteReadings ?? {}) };
+  if (note && input.readings && input.readings.length > 0) readings[question.id] = input.readings.slice(0, 12);
+  else delete readings[question.id];
   const hard = question.hardCapable && isHardValue(value);
   const log = logOf(answers);
   const next: QuestionnaireAnswers = {
     ...answers,
     ...patch,
     preferenceNotes: notes,
+    noteReadings: readings,
     interview: {
       ...log,
       asked: log.asked.includes(question.id) ? log.asked : [...log.asked, question.id],

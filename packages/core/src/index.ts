@@ -78,6 +78,10 @@ export * from './interview/analytics';
 export * from './interview/summary';
 export * from './interview/brief';
 export * from './contract/trip-contract';
+export * from './reality/schema';
+export * from './reality/jurisdictions';
+export * from './reality/build';
+export * from './reality/interview';
 export * from './party/traveler';
 export * from './party/strain';
 export * from './feasibility/report';
@@ -145,6 +149,7 @@ export * from './naming/display-name';
 export * from './pricing/model-rates';
 
 export * from './destinations/intent';
+export * from './destinations/intent-graph';
 export * from './destinations/normalize';
 export * from './destinations/match';
 export * from './destinations/provider';

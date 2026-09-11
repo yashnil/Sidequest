@@ -1,0 +1,296 @@
+{
+  "archetype": "multi_region",
+  "purpose": "Ten days for four fit friends: Chongqing's vertical city and hotpot, Wulong's karst, then the Three Gorges by river cruise, flying home from Chongqing.",
+  "route": "Chongqing first for the city, Wulong for the karst, back to Chongqing to board the Yangtze cruise downstream to Yichang, then fly home via Chongqing.",
+  "signatures": [
+    "Hongya Cave and the vertical city at night",
+    "Three Natural Bridges",
+    "Three Gorges by river"
+  ],
+  "timingRationale": "Late October is dry and mild, after Golden Week crowds and before the winter fog.",
+  "transport": "Walking, metro and DiDi in the city; a hired driver to Wulong; the cruise ship down the gorges; a flight from Yichang back to Chongqing for the flight home.",
+  "driving": "private_driver",
+  "stays": [
+    {
+      "name": "Chongqing",
+      "nights": 3,
+      "why": "The vertical city, hotpot and the river confluence.",
+      "lodging": "small hotel in Jiefangbei, walk to Hongya Cave"
+    },
+    {
+      "name": "Wulong",
+      "nights": 2,
+      "why": "Base for the karst days.",
+      "lodging": "guesthouse near the park gate"
+    },
+    {
+      "name": "Chongqing",
+      "nights": 1,
+      "why": "Back to the river to board.",
+      "lodging": "hotel near Chaotianmen pier"
+    },
+    {
+      "name": "Yangtze river cruise ship",
+      "nights": 3,
+      "why": "Three nights downstream through the gorges to Yichang.",
+      "lodging": "river cruise ship cabin"
+    }
+  ],
+  "days": [
+    {
+      "stay": "Chongqing",
+      "theme": "Arrival and the vertical city",
+      "acts": [
+        {
+          "name": "Hongya Cave",
+          "kind": "landmark",
+          "when": "night",
+          "why": "The stilted cliff city lit up."
+        },
+        {
+          "name": "Jiefangbei",
+          "kind": "neighbourhood",
+          "why": "The centre, on foot."
+        }
+      ],
+      "meals": {
+        "d": "hotpot in Jiefangbei"
+      },
+      "why": "An easy first evening."
+    },
+    {
+      "stay": "Chongqing",
+      "theme": "Old quarters and the river",
+      "acts": [
+        {
+          "name": "Ciqikou Ancient Town",
+          "kind": "neighbourhood",
+          "how": "metro",
+          "why": "The old porcelain port."
+        },
+        {
+          "name": "Liziba Station",
+          "kind": "landmark",
+          "how": "metro",
+          "why": "The train through the building."
+        },
+        {
+          "name": "Eling Park",
+          "kind": "viewpoint",
+          "when": "sunset",
+          "why": "The confluence from above."
+        }
+      ],
+      "meals": {
+        "l": "xiaomian noodles in Ciqikou",
+        "d": "riverside barbecue"
+      },
+      "why": "Neighbourhoods and viewpoints."
+    },
+    {
+      "stay": "Chongqing",
+      "theme": "Markets and the cable car",
+      "acts": [
+        {
+          "name": "Yangtze River Cableway",
+          "kind": "activity",
+          "why": "Across the river in a cabin."
+        },
+        {
+          "name": "Shibati",
+          "kind": "neighbourhood",
+          "why": "The rebuilt stair district."
+        }
+      ],
+      "meals": {
+        "l": "street food in Shibati",
+        "d": "hotpot again, a different style"
+      },
+      "why": "The last full city day."
+    },
+    {
+      "stay": "Wulong",
+      "theme": "Drive to Wulong and the Three Natural Bridges",
+      "acts": [
+        {
+          "name": "Three Natural Bridges",
+          "kind": "nature",
+          "how": "private_transfer",
+          "why": "The karst bridges."
+        }
+      ],
+      "meals": {
+        "l": "on the road",
+        "d": "guesthouse dinner"
+      },
+      "why": "Relocation with one big stop.",
+      "move": {
+        "how": "private_transfer",
+        "via": "Wulong",
+        "when": "start"
+      }
+    },
+    {
+      "stay": "Wulong",
+      "theme": "Longshuixia Fissure and Furong Cave",
+      "acts": [
+        {
+          "name": "Longshuixia Fissure Gorge",
+          "kind": "hike",
+          "why": "The gorge walk."
+        },
+        {
+          "name": "Furong Cave",
+          "kind": "nature",
+          "why": "The cave."
+        }
+      ],
+      "meals": {
+        "l": "near the park",
+        "d": "guesthouse"
+      },
+      "why": "Active karst day."
+    },
+    {
+      "stay": "Chongqing",
+      "theme": "Return to Chongqing and board the cruise",
+      "acts": [
+        {
+          "name": "Chaotianmen Pier",
+          "kind": "landmark",
+          "how": "private_transfer",
+          "why": "Boarding point for the cruise."
+        }
+      ],
+      "meals": {
+        "d": "on board"
+      },
+      "why": "Transfer back and boarding.",
+      "move": {
+        "how": "private_transfer",
+        "via": "Chaotianmen Pier",
+        "when": "start"
+      }
+    },
+    {
+      "stay": "Yangtze river cruise ship",
+      "theme": "Fengdu and the river",
+      "partOf": "Yangtze cruise",
+      "acts": [
+        {
+          "name": "Fengdu Ghost City",
+          "kind": "historic",
+          "why": "Shore excursion."
+        }
+      ],
+      "meals": {
+        "b": "on board",
+        "l": "on board",
+        "d": "on board"
+      },
+      "why": "First cruise day.",
+      "move": {
+        "how": "boat",
+        "when": "start"
+      }
+    },
+    {
+      "stay": "Yangtze river cruise ship",
+      "theme": "Qutang Gorge and Wu Gorge",
+      "partOf": "Yangtze cruise",
+      "acts": [
+        {
+          "name": "Qutang Gorge",
+          "kind": "nature",
+          "why": "The narrowest gorge."
+        },
+        {
+          "name": "Wu Gorge",
+          "kind": "nature",
+          "why": "The longest gorge."
+        },
+        {
+          "name": "Little Three Gorges",
+          "kind": "water",
+          "why": "Small-boat excursion."
+        }
+      ],
+      "meals": {
+        "b": "on board",
+        "l": "on board",
+        "d": "on board"
+      },
+      "why": "The gorges."
+    },
+    {
+      "stay": "Yangtze river cruise ship",
+      "theme": "Three Gorges Dam, disembark at Yichang and fly home via Chongqing",
+      "partOf": "Yangtze cruise",
+      "acts": [
+        {
+          "name": "Three Gorges Dam",
+          "kind": "landmark",
+          "why": "The dam, as the last shore stop."
+        }
+      ],
+      "meals": {
+        "b": "on board"
+      },
+      "why": "Departure.",
+      "move": {
+        "how": "flight",
+        "via": "Chongqing",
+        "when": "end"
+      }
+    }
+  ],
+  "omissions": [
+    {
+      "name": "Dazu Rock Carvings",
+      "why": "A long day trip that would cost the second Wulong day."
+    }
+  ],
+  "tradeoffs": [
+    "Wulong before the cruise means returning to Chongqing once."
+  ],
+  "backups": [
+    {
+      "trigger": "Fog closes the cableway",
+      "then": "Eling Park at dusk instead",
+      "day": 3
+    }
+  ],
+  "episodes": [
+    {
+      "name": "Yangtze cruise",
+      "kind": "cruise",
+      "days": [
+        7,
+        9
+      ],
+      "how": "boat"
+    }
+  ],
+  "food": {
+    "seek": [
+      "hotpot with a red and clear split pot",
+      "Chongqing xiaomian noodles",
+      "suancai fish",
+      "jianghu-style riverside barbecue"
+    ],
+    "areas": [
+      "Jiefangbei and Hongya Cave for the first hotpot",
+      "Ciqikou for noodles and snacks",
+      "Shibati for street food"
+    ],
+    "notes": [
+      "No beef, no pork: order hotpot with fish, tofu and vegetables and say so at the table",
+      "Famous hotpot houses queue after 18:00; go early"
+    ]
+  },
+  "bookFirst": [
+    "Yangtze cruise (3 nights, fixed departures)",
+    "Yichang to Chongqing flight",
+    "Chongqing hotels"
+  ]
+}

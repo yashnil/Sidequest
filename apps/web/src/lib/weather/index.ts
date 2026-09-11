@@ -126,8 +126,9 @@ export function weatherCacheKey(input: {
   dates: readonly string[];
   now: Date;
 }): string {
+  /* The zone is part of the answer: sunrise, sunset and the day's hours are all stated in it, so a location re-read in a different zone is a different entry. */
   const points = input.locations
-    .map((location) => `${location.id}@${location.coordinates.lat},${location.coordinates.lng}`)
+    .map((location) => `${location.id}@${location.coordinates.lat},${location.coordinates.lng}~${location.timeZone}`)
     .sort()
     .join(';');
   const span = `${input.dates[0] ?? '-'}..${input.dates[input.dates.length - 1] ?? '-'}`;

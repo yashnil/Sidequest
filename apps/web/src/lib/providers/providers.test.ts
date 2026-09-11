@@ -66,6 +66,10 @@ describe('nominatim', () => {
     expect(classifyNominatim({ ...NEW_YORK, addresstype: 'country' }).breadth).toBe('country');
     expect(classifyNominatim({ ...NEW_YORK, addresstype: 'island' }).entityType).toBe('island');
     expect(classifyNominatim({ ...NEW_YORK, addresstype: 'state' }).breadth).toBe('region');
+    /* V7 — a first-level division whose own tags say it is a city is a city-region, not a state to drive across. */
+    expect(classifyNominatim({ ...NEW_YORK, addresstype: 'state', extratags: { place: 'city', admin_level: '4' } })).toEqual({ breadth: 'region', entityType: 'municipality' });
+    expect(classifyNominatim({ ...NEW_YORK, addresstype: 'state', extratags: { place: 'municipality' } }).entityType).toBe('municipality');
+    expect(classifyNominatim({ ...NEW_YORK, addresstype: 'state', extratags: { admin_level: '4' } }).entityType).toBe('state_or_province');
   });
 
   it('sizes a scope from the published bounding box rather than a constant', () => {

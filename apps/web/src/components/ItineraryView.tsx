@@ -539,6 +539,7 @@ export function ItineraryView({
                 <DayFocusTarget dayNumber={day.dayNumber}>
                   <DayCard
                     day={day}
+                    episode={itinerary.package?.episodes?.find((e) => e.dayNumbers.includes(day.dayNumber)) ?? null}
                     renderedAt={renderedAt}
                     coordinates={coordinates}
                     tripId={tripId}
@@ -741,9 +742,38 @@ export function ItineraryView({
     </div>
   );
 
+  /* V7 §12 — the local operational set-up compiled for this destination: apps, payments, permits, connectivity. */
+  const localSetup = intelligence?.readiness.entries.filter((entry) => entry.kind === 'local_setup') ?? [];
   const prepare = (
     <div className="mx-auto max-w-5xl pt-6">
       <PrepareTop items={prepareTopItems} />
+      {localSetup.length > 0 ? (
+        <section className="mt-8 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-5" aria-labelledby="local-setup-heading" data-testid="local-setup">
+          <h2 id="local-setup-heading" className="font-display text-xl text-ink">Set these up before you land</h2>
+          <p className="mt-1 text-sm text-ink-muted">What day-to-day life needs where you are going. Reference material compiled by Sidequest with a date on it; confirm at the official source before you rely on it.</p>
+          <ol className="mt-4 divide-y divide-rule">
+            {localSetup.map((entry) => (
+              <li key={entry.title} className="py-3" data-testid="local-setup-item">
+                <p className="font-medium text-ink">
+                  {entry.title}
+                  {entry.tier === 'primary' ? <span className="ml-2 rounded-sm bg-clay-soft px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-clay">Essential</span> : null}
+                </p>
+                <p className="mt-0.5 text-sm text-ink-muted">{entry.summary}</p>
+                {entry.action ? <p className="mt-1 text-sm text-ink">{entry.action}</p> : null}
+                {entry.links.length > 0 ? (
+                  <p className="mt-1 text-xs text-ink-faint">
+                    {entry.links.map((link) => (
+                      <a key={link.url} href={link.url} target="_blank" rel="noreferrer nofollow" className="underline underline-offset-2 hover:text-ink">
+                        {link.name}
+                      </a>
+                    ))}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
       {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} view="book-first" /> : null}
       {intelligence ? <BeforeYouGoSection intel={intelligence} {...(tripId ? { tripId } : {})} readinessProfile={readinessProfile} checks={checks.checklist} /> : null}
       {intelligence ? <PackSection intel={intelligence} {...(tripId ? { tripId } : {})} checks={checks.packing} /> : null}
@@ -1031,12 +1061,29 @@ function overviewMapModel(itinerary: Itinerary, coordinates: Record<string, { la
     const from = bases[i - 1]!.point;
     const to = bases[i]!.point;
     if (!from || !to) continue;
-    const transfer = itinerary.days
+    const transferItems = itinerary.days
       .filter((day) => day.baseId === bases[i]!.id)
       .flatMap((day) => day.items)
-      .find((item) => item.kind === 'travel' && item.travel?.role === 'transfer' && (item.travel.provenance === 'measured' || item.travel.provenance === 'estimated'))?.travel;
+      .filter((item) => item.kind === 'travel' && item.travel?.role === 'transfer');
+    const transfer = (transferItems.find((item) => item.travel!.provenance === 'measured' || item.travel!.provenance === 'estimated') ?? transferItems[0])?.travel;
     const path = transfer?.provenance === 'measured' && transfer.geometry ? decodeShape(transfer.geometry) : undefined;
-    const style: MapConnector['style'] = !transfer ? 'unmeasured' : transfer.provenance === 'estimated' ? 'estimated' : transfer.mode === 'walk' ? 'measured_walk' : transfer.mode === 'rail' || transfer.mode === 'public_bus' || transfer.mode === 'ferry' ? 'measured_transit' : 'measured_drive';
+    /* V7 §14 — a move by boat, train or air is drawn as one, whether or not a router could time it. */
+    const style: MapConnector['style'] =
+      transfer?.episodeMode === 'boat' || transfer?.mode === 'ferry' || transfer?.hint === 'ferry'
+        ? 'boat'
+        : transfer?.hint === 'flight'
+          ? 'flight'
+          : transfer?.episodeMode === 'rail' || transfer?.mode === 'rail' || transfer?.hint === 'high_speed_rail'
+            ? 'rail'
+            : !transfer || transfer.provenance === 'unmeasured'
+              ? 'unmeasured'
+              : transfer.provenance === 'estimated'
+                ? 'estimated'
+                : transfer.mode === 'walk'
+                  ? 'measured_walk'
+                  : transfer.mode === 'public_bus'
+                    ? 'measured_transit'
+                    : 'measured_drive';
     connectors.push({ id: `move-${i}`, from, to, style, ...(path ? { path } : {}) });
   }
   const primaryBase = bases[0]?.point ? { name: bases[0].name, coordinates: bases[0].point } : null;
@@ -1751,8 +1798,23 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
   );
 }
 
+/** V7 §9 — how an episode kind reads on a day. */
+const EPISODE_KIND_WORD: Record<string, string> = {
+  cruise: 'Cruise',
+  trek: 'Trek',
+  safari: 'Safari',
+  sleeper_train: 'Sleeper train',
+  expedition_boat: 'Expedition boat',
+  guided_overland: 'Guided overland',
+  road_trip_segment: 'Road trip',
+  resort_stay: 'Resort stay',
+  bike_tour: 'Bike tour',
+  hut_to_hut: 'Hut to hut',
+};
+
 function DayCard({
   day,
+  episode = null,
   renderedAt,
   coordinates,
   tripId,
@@ -1770,6 +1832,8 @@ function DayCard({
   plannedOff = [],
 }: {
   day: ItineraryDay;
+  /** V7 §9 — the cruise, trek or safari this day sits inside, if any. */
+  episode?: { name: string; kind: string; dayNumbers: number[]; mode: string } | null;
   renderedAt: number;
   coordinates: Record<string, { lat: number; lng: number }>;
   tiles?: MapBasemap | null;
@@ -2011,8 +2075,14 @@ function DayCard({
           */}
           <p className="font-display text-xl leading-snug text-ink">
             {day.theme}
-            <span className="font-sans text-sm text-ink-faint"> · based in {day.baseName}</span>
+            <span className="font-sans text-sm text-ink-faint"> · {episode?.mode === 'boat' ? 'on board' : 'based in'} {day.baseName}</span>
           </p>
+          {/* V7 §9 — a day inside a cruise, trek or safari says so, and says which day of it this is. */}
+          {episode ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-pine/40 bg-pine-soft px-2.5 py-1 text-xs font-medium text-pine-strong" data-testid={`day-episode-${day.dayNumber}`} data-episode-kind={episode.kind}>
+              {EPISODE_KIND_WORD[episode.kind] ?? episode.kind.replace(/_/g, ' ')} · day {episode.dayNumbers.indexOf(day.dayNumber) + 1} of {episode.dayNumbers.length} · {episode.name}
+            </span>
+          ) : null}
           {/*
             One honest verb, only on days it can act on. A light day offered
             "make this easier" is a button that can only apologise.

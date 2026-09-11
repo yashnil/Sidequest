@@ -5,6 +5,8 @@ import {
   DESTINATION_TRAIT_LABELS,
   INTERVIEW_MODULE_LABELS,
   answerQuestion,
+  chipLabel,
+  classifyPreferences,
   applySmartDefaults,
   assessSufficiency,
   buildTravelerProfile,
@@ -39,6 +41,9 @@ import {
   materialConflicts,
 } from '@sidequest/core';
 import { Badge, ErrorNote, FOCUS_RING, buttonClass, cx } from './ui';
+
+/** V7 §5 — one reading of a note, as the chip the traveller saw. */
+type NoteReading = { id: string; kind: string; value: string; label: string; strength: string; accepted: boolean };
 import { InterpretationPanel } from './InterpretationPanel';
 import { formatMinutes, mobilityReconciliation } from '@/lib/interview/reconciliation';
 import { Glyph } from './interview/glyphs';
@@ -61,6 +66,7 @@ import {
 import { mapLayersFor, SketchFigure, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
 import { DestinationMap, type DestinationGeometry } from './interview/DestinationMap';
 import { GenerationOverlay } from './interview/GenerationOverlay';
+import { ReviewTimingCard } from './interview/ReviewTimingCard';
 import type { MapBasemap } from './map-adapter';
 import { StagePath, stageOf } from './interview/StagePath';
 import {
@@ -98,6 +104,7 @@ export function InterviewWizard({
   fixtureMode = false,
   geometry = null,
   tiles = null,
+  timingOpen = false,
 }: {
   tripId: string;
   context: InterviewContext;
@@ -111,6 +118,8 @@ export function InterviewWizard({
   boardAvailable: boolean;
   researchAvailable: boolean;
   fixtureMode?: boolean;
+  /** V7 §7 — true while the traveller has asked Sidequest to choose the dates and has not accepted a window. */
+  timingOpen?: boolean;
 }) {
   const now = useMemo(() => new Date(), []);
   const [answers, setAnswers] = useState<QuestionnaireAnswers>(() => {
@@ -176,9 +185,9 @@ export function InterviewWizard({
     go(nextAfter(null, first), first);
   }
 
-  function answer(value: unknown, note?: string) {
+  function answer(value: unknown, note?: string, readings?: NoteReading[]) {
     if (!current) return;
-    const next = answerQuestion({ answers, ctx: context, question: current.definition, value, now: new Date(), ...(note ? { note } : {}), ...(region ? { region } : {}) });
+    const next = answerQuestion({ answers, ctx: context, question: current.definition, value, now: new Date(), ...(note ? { note } : {}), ...(note && readings ? { readings } : {}), ...(region ? { region } : {}) });
     setCall(null);
     go(nextAfter(current.id, next), next);
   }
@@ -357,6 +366,7 @@ export function InterviewWizard({
                 onPersonalize={personalizeMore}
                 onFinish={finish}
                 onUpdate={(patch) => setAnswers((curr) => withPosition({ ...curr, ...patch }, REVIEW_POSITION))}
+                timingOpen={timingOpen}
               />
             ) : null}
             {current ? (
@@ -551,7 +561,7 @@ function QuestionScreen({
   onCallChange: (id: string) => void;
   /** MVP V3 — a finished stage on the path is a way back to its first question. */
   onJumpStage: (stage: ReturnType<typeof stageOf>) => void;
-  onAnswer: (value: unknown, note?: string) => void;
+  onAnswer: (value: unknown, note?: string, readings?: NoteReading[]) => void;
   onDecide: () => void;
   onSkip: () => void;
   onBack: () => void;
@@ -575,6 +585,27 @@ function QuestionScreen({
   /* MVP V3 — "Something else": the traveller's own line beside the option they chose. */
   const [note, setNote] = useState<string>(() => answers.preferenceNotes?.[def.id] ?? '');
   const [noteOpen, setNoteOpen] = useState(() => Boolean(answers.preferenceNotes?.[def.id]));
+  /*
+   * V7 §5 — "SIDEQUEST READ THIS AS…", BESIDE THE NOTE.
+   *
+   * The composer's deterministic phrase table (no model call, no network) reads
+   * the sentence as it is typed; each reading is a chip the traveller can switch
+   * off, and a switched-off chip stays off when they come back. The note itself
+   * is never rewritten — only the readings travel with it.
+   */
+  const [rejected, setRejected] = useState<Set<string>>(() => new Set((answers.noteReadings?.[def.id] ?? []).filter((r) => !r.accepted).map((r) => r.id)));
+  const readings = useMemo<NoteReading[]>(() => {
+    if (note.trim().length < 3) return [];
+    try {
+      const set = classifyPreferences({ mustDo: note });
+      return set.chips
+        .filter((chip) => chipLabel(chip.target).length > 0)
+        .slice(0, 8)
+        .map((chip) => ({ id: chip.id, kind: chip.target.kind, value: String(chip.target.value), label: chipLabel(chip.target), strength: chip.strength, accepted: !rejected.has(chip.id) }));
+    } catch {
+      return [];
+    }
+  }, [note, rejected]);
   const options = def.options?.(context, answers) ?? [];
   const canContinue = touched && draftIsUsable(def, draft);
   const decidedReason = question.status === 'decided' ? answers.provenance[def.id]?.reason : undefined;
@@ -679,7 +710,38 @@ function QuestionScreen({
                 className="mt-2 w-full max-w-2xl resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
                 data-testid="interview-note"
               />
-              <p className="mt-1.5 type-small text-ink-faint">Kept exactly as you write it and read alongside your answer. Nothing is guessed from it.</p>
+              <p className="mt-1.5 type-small text-ink-faint">Kept exactly as you write it and read alongside your answer.</p>
+              {readings.length > 0 ? (
+                <div className="mt-3" data-testid="interview-note-readings">
+                  <p className="type-small text-ink-muted">Sidequest read this as — switch off anything that is wrong:</p>
+                  <ul className="mt-1.5 flex flex-wrap gap-2">
+                    {readings.map((reading) => (
+                      <li key={reading.id}>
+                        <button
+                          type="button"
+                          aria-pressed={reading.accepted}
+                          onClick={() =>
+                            setRejected((previous) => {
+                              const next = new Set(previous);
+                              if (next.has(reading.id)) next.delete(reading.id);
+                              else next.add(reading.id);
+                              return next;
+                            })
+                          }
+                          className={cx('pressable inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-sm', FOCUS_RING, reading.accepted ? 'border-pine/50 bg-pine-soft text-pine-strong' : 'border-rule bg-paper-raised text-ink-faint line-through')}
+                          data-testid="interview-note-reading"
+                          data-accepted={reading.accepted ? 'true' : 'false'}
+                        >
+                          {reading.label}
+                          <span className="text-xs font-normal opacity-80">{reading.strength.replace(/_/g, ' ')}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : note.trim().length >= 3 ? (
+                <p className="mt-2 type-small text-ink-faint" data-testid="interview-note-readings-none">Nothing in this matched a preference Sidequest can set. It still travels with your answer, word for word.</p>
+              ) : null}
             </div>
           ) : (
             <button type="button" onClick={() => setNoteOpen(true)} className={cx('inline-flex min-h-11 items-center gap-2 text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-note-open">
@@ -725,7 +787,7 @@ function QuestionScreen({
               <Glyph id="compass" className="h-4 w-4" />
               Decide for me
             </button>
-            <button type="button" onClick={() => onAnswer(draft, note)} disabled={pending || !canContinue} className={cx(buttonClass('primary'), 'flex-1 sm:flex-none')} data-testid="interview-continue">
+            <button type="button" onClick={() => onAnswer(draft, note, readings)} disabled={pending || !canContinue} className={cx(buttonClass('primary'), 'flex-1 sm:flex-none')} data-testid="interview-continue">
               {pending ? 'Saving…' : 'Continue →'}
             </button>
           </div>
@@ -852,6 +914,7 @@ function ReviewScreen({
   onUpdate,
   geometry = null,
   tiles = null,
+  timingOpen = false,
 }: {
   tripId: string;
   context: InterviewContext;
@@ -872,8 +935,11 @@ function ReviewScreen({
   onUpdate: (patch: Partial<QuestionnaireAnswers>) => void;
   geometry?: DestinationGeometry | null;
   tiles?: MapBasemap | null;
+  timingOpen?: boolean;
 }) {
   const [rangeKept, setRangeKept] = useState(false);
+  /* V7 §7 — once a window is accepted here the question is closed for this session too; the row already carries the lock. */
+  const [timingAccepted, setTimingAccepted] = useState(false);
   const [dismissedConflicts, setDismissedConflicts] = useState<string[]>([]);
   const conflicts = useMemo(
     () => materialConflicts(answers, { destinationTraits: context.destination.traits, partyNeeds: context.traveller.party?.needs ?? [] }).filter((c) => c.id !== 'drive_ceiling_vs_detour_range'),
@@ -1055,6 +1121,8 @@ function ReviewScreen({
           </button>
         </div>
       </section>
+
+      {timingOpen || timingAccepted ? <ReviewTimingCard tripId={tripId} onAccepted={() => setTimingAccepted(true)} /> : null}
 
       <details className="mt-8 rule-top pt-4" data-testid="review-ledger">
         <summary className={cx('inline-flex min-h-11 cursor-pointer items-center text-sm text-ink-muted underline underline-offset-4', FOCUS_RING)}>

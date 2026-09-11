@@ -20,6 +20,8 @@ import type { TravelerNeed } from '../schemas/trip';
 import { availableRegionalExpansions, EXPANSION_CEILING_MINUTES } from '../questionnaire/definition';
 import type { PlanningImpactKey } from './impact';
 import { hasTrait, type DestinationQuestionContext, type DestinationTrait } from './traits';
+import { modeStatusFor } from '../reality/schema';
+import { movementFromReality } from '../reality/interview';
 
 /**
  * THE QUESTION CATALOG — DECLARATIVE, GENERIC, TEMPLATED BY CONTEXT.
@@ -114,6 +116,8 @@ export interface InterviewTraveller {
     needs: readonly string[];
     drivers: number | null;
     dietsRecorded: boolean;
+    /** V7 §5 — whether the described members actually differ (needs, diets, capacity, notes). */
+    differences?: boolean;
   };
 }
 
@@ -492,33 +496,72 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
           ? 'Some of what is worth doing here cannot be reached without a guide or an arranged transfer.'
           : 'This decides which places are reachable and how the days are shaped.',
   options: (ctx) => {
+    /*
+     * V7 §7 — THE OPTIONS COME FROM WHAT IS TRUE HERE, NOT FROM THE SHAPE ALONE.
+     *
+     * Where the reality layer knows the country, a hire car is offered only
+     * where it is a good idea (or possible with stated friction), trains and
+     * hired transfers are their own option, and nothing collapses into "a car".
+     */
+    const reality = ctx.destination.reality;
+    if (reality?.recommendation) {
+      const options: InterviewOption[] = [];
+      const rec = reality.recommendation;
+      const status = (mode: Parameters<typeof modeStatusFor>[1]) => modeStatusFor(reality, mode);
+      const regionalRail = rec.regional.includes('high_speed_rail') || rec.regional.includes('intercity_train') || rec.regional.includes('private_driver');
+      const urbanTransit = rec.urban.length > 0;
+      if (urbanTransit && regionalRail) options.push({ value: 'rail_transfers', label: 'Trains and hired transfers for the regional days', detail: 'On foot, metro and ride-hailing in the city' });
+      else if (urbanTransit) options.push({ value: 'transit_walk', label: 'On foot and by public transport', detail: 'Keeps the days flexible and the city close' });
+      if (rec.regional.includes('guided_transfer')) options.push({ value: 'guided', label: 'Guided, with transfers arranged', detail: 'Let local operators handle the hard legs' });
+      if (rec.regional.includes('ferry') && !regionalRail) options.push({ value: 'boats_transfers', label: 'Boats and local transfers', detail: 'Move between islands by ferry or short hop' });
+      if (urbanTransit) options.push({ value: 'taxis', label: 'Mostly taxis and rideshare', detail: 'Pay a little to skip the timetable' });
+      const car = status('rental_car');
+      const canDrive = ctx.traveller.party?.drivers !== 0;
+      if (canDrive && (car === 'recommended' || car === 'viable')) options.push({ value: 'rent_car', label: 'Rent a car', detail: rec.regional.includes('rental_car') ? 'Most of what is worth seeing here sits at the end of a drive' : urbanTransit ? 'For days out; not for the city itself' : 'Freedom to reach the far corners' });
+      else if (canDrive && car === 'friction') options.push({ value: 'rent_car', label: 'Rent a car, knowing the catch', detail: (reality.modes.find((m) => m.mode === 'self_drive')?.reason ?? 'Possible with friction').split('. ')[0]! });
+      if (!options.some((o) => o.value === 'mixed')) options.push({ value: 'mixed', label: 'A mix, whatever works', detail: 'Decide leg by leg' });
+      return options.slice(0, 4);
+    }
+    /*
+     * No recommendation (the country is compiled but the shape is unread, or
+     * nothing is compiled): the shape's options, minus a hire car wherever the
+     * country's own facts say driving is discouraged or unavailable.
+     */
+    const carRefused = reality ? ['discouraged', 'unavailable'].includes(modeStatusFor(reality, 'self_drive')) || ['discouraged', 'unavailable'].includes(modeStatusFor(reality, 'rental_car')) : false;
+    const withoutCar = (options: InterviewOption[]): InterviewOption[] => {
+      if (!carRefused) return options;
+      const kept = options.filter((o) => o.value !== 'rent_car' && o.value !== 'self_drive');
+      if (!kept.some((o) => o.value === 'transit_walk' || o.value === 'guided' || o.value === 'boats_transfers')) kept.unshift({ value: 'transit_walk', label: 'On foot and by public transport', detail: 'Keeps the days flexible and the city close' });
+      if (!kept.some((o) => o.value === 'mixed')) kept.push({ value: 'mixed', label: 'A mix, whatever works', detail: 'Decide leg by leg' });
+      return kept;
+    };
     if (t(ctx, 'guide_transfer_likely') || t(ctx, 'wilderness')) {
-      return [
+      return withoutCar([
         { value: 'guided', label: 'Guided, with transfers arranged', detail: 'Let local operators handle the hard legs' },
         { value: 'self_drive', label: 'Self-drive where a road exists', detail: 'A hire car for the reachable parts, transfers only where there is no road' },
         { value: 'mixed', label: 'A mix, whatever works', detail: 'Decide leg by leg' },
-      ];
+      ]);
     }
     if (t(ctx, 'archipelago') && !t(ctx, 'road_trip_region')) {
-      return [
+      return withoutCar([
         { value: 'boats_transfers', label: 'Boats and local transfers', detail: 'Move between islands by ferry or short hop' },
         { value: 'rent_car', label: 'Rent a car on the islands', detail: 'Drive each island, ferry the car where it goes' },
         { value: 'mixed', label: 'A mix', detail: 'Whatever each island needs' },
-      ];
+      ]);
     }
     if (t(ctx, 'dense_urban') || t(ctx, 'transit_rich') || t(ctx, 'walk_heavy')) {
-      return [
+      return withoutCar([
         { value: 'transit_walk', label: 'On foot and by public transport', detail: 'Keeps the days flexible and the city close' },
         { value: 'taxis', label: 'Mostly taxis and rideshare', detail: 'Pay a little to skip the timetable' },
         { value: 'rent_car', label: 'Rent a car', detail: 'For day trips out; not for the city itself' },
-      ];
+      ]);
     }
-    return [
+    return withoutCar([
       { value: 'rent_car', label: 'Rent a car', detail: t(ctx, 'road_trip_region') || t(ctx, 'mountain') ? 'Most of what is worth seeing here sits at the end of a drive' : 'Freedom to reach the far corners' },
       { value: 'no_car', label: 'No car', detail: 'Shuttles, tours, taxis and whatever runs to a timetable' },
       { value: 'transit_walk', label: 'On foot and by public transport', detail: 'Where it goes, and nowhere it does not' },
       { value: 'mixed', label: 'A mix, whatever works', detail: 'A car for the far stops, local transport in town' },
-    ];
+    ]);
   },
   impacts: ['transportation_mode', 'scope', 'base_count', 'trip_archetype', 'driving'],
   burden: 1,
@@ -526,36 +569,61 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
   carriedFields: ['willDrive'],
   // When the destination's shape does not settle the mode, this is asked first: uncertainty becomes a question, not a default.
   relevance: (ctx) => (ctx.destination.assumption?.confidence === 'high' ? 1 : 1.5),
-  read: (answers) => (answers.willDrive ? (answers.guideWillingness === 'prefer' ? 'self_drive' : answers.privateTransfers === 'fine' ? 'mixed' : 'rent_car') : answers.guideWillingness === 'prefer' ? 'guided' : answers.privateTransfers === 'fine' && answers.transportPriority === 'least_stressful' ? 'taxis' : answers.boatsAndFerries === 'fine' && answers.privateTransfers === 'fine' ? 'boats_transfers' : 'transit_walk'),
+  read: (answers) => answers.transportChoice ?? (answers.willDrive ? (answers.guideWillingness === 'prefer' ? 'self_drive' : answers.privateTransfers === 'fine' ? 'mixed' : 'rent_car') : answers.guideWillingness === 'prefer' ? 'guided' : answers.privateTransfers === 'fine' && answers.transportPriority === 'least_stressful' ? 'taxis' : answers.boatsAndFerries === 'fine' && answers.privateTransfers === 'fine' ? 'boats_transfers' : 'transit_walk'),
   apply: (value) => {
-    switch (String(value)) {
+    const choice = String(value) as NonNullable<QuestionnaireAnswers['transportChoice']>;
+    const chosen = (patch: Partial<QuestionnaireAnswers>): Partial<QuestionnaireAnswers> => ({ ...patch, transportChoice: choice });
+    switch (choice) {
+      case 'rail_transfers':
+        return chosen({ willDrive: false, privateTransfers: 'fine', willUseShuttles: true, transportPriority: 'best_value' });
       case 'rent_car':
-        return { willDrive: true, guideWillingness: 'sometimes', transportPriority: 'best_value' };
+        return chosen({ willDrive: true, guideWillingness: 'sometimes', transportPriority: 'best_value' });
       case 'self_drive':
-        return { willDrive: true, guideWillingness: 'sometimes', privateTransfers: 'if_needed' };
+        return chosen({ willDrive: true, guideWillingness: 'sometimes', privateTransfers: 'if_needed' });
       case 'mixed':
-        return { willDrive: true, privateTransfers: 'fine', transportPriority: 'best_value' };
+        return chosen({ willDrive: true, privateTransfers: 'fine', transportPriority: 'best_value' });
       case 'guided':
-        return { willDrive: false, guideWillingness: 'prefer', privateTransfers: 'fine', transportPriority: 'least_stressful' };
+        return chosen({ willDrive: false, guideWillingness: 'prefer', privateTransfers: 'fine', transportPriority: 'least_stressful' });
       case 'taxis':
-        return { willDrive: false, privateTransfers: 'fine', transportPriority: 'least_stressful', willUseShuttles: true };
+        return chosen({ willDrive: false, privateTransfers: 'fine', transportPriority: 'least_stressful', willUseShuttles: true });
       case 'boats_transfers':
-        return { willDrive: false, boatsAndFerries: 'fine', privateTransfers: 'fine', willUseShuttles: true };
+        return chosen({ willDrive: false, boatsAndFerries: 'fine', privateTransfers: 'fine', willUseShuttles: true });
       case 'no_car':
-        return { willDrive: false, willUseShuttles: true, transportPriority: 'best_value' };
+        return chosen({ willDrive: false, willUseShuttles: true, transportPriority: 'best_value' });
       case 'transit_walk':
       default:
-        return { willDrive: false, willUseShuttles: true, transportPriority: 'best_value', privateTransfers: 'if_needed' };
+        return { willDrive: false, willUseShuttles: true, transportPriority: 'best_value', privateTransfers: 'if_needed', transportChoice: 'transit_walk' };
     }
   },
   smartDefault: (ctx) => {
+    /*
+     * V7 §7 — A RECOMMENDATION NEEDS EVIDENCE ABOUT THE COUNTRY, NOT A SHAPE.
+     *
+     * The reality layer's recommendation (compiled facts about driving law,
+     * transit, rail, transfers) is the only thing that may say "Sidequest
+     * recommends". A shape trait alone never recommends a car: a municipality
+     * typed `state` was once told to rent one. Without a recommendation the
+     * honest default is "Sidequest will choose after it sees the route".
+     */
+    const reality = ctx.destination.reality;
+    const fromReality = movementFromReality(reality);
+    if (reality?.recommendation && fromReality) {
+      const value = fromReality === 'rail_transfers' ? 'rail_transfers' : fromReality === 'car' ? 'rent_car' : fromReality === 'guided' ? 'guided' : fromReality === 'boat' ? 'boats_transfers' : fromReality === 'transit_walk' ? 'transit_walk' : 'mixed';
+      return { value, reason: reality.recommendation.sentence, source: 'destination_prior' };
+    }
     const movement = ctx.destination.assumption?.movement;
     if (movement === 'transit_walk') return { value: 'transit_walk', reason: `We'll assume you're happy walking and riding public transport, because that keeps a trip to ${ctx.destination.proseName} flexible.`, source: 'destination_prior' };
     if (movement === 'guided') return { value: 'guided', reason: `We'll assume guided legs and arranged transfers for the remote parts of ${ctx.destination.proseName}, and self-drive nowhere it is not needed.`, source: 'destination_prior' };
     if (movement === 'boat') return { value: 'boats_transfers', reason: `We'll assume boats and local transfers between islands, which is how ${ctx.destination.proseName} is usually done.`, source: 'destination_prior' };
-    if (movement === 'car') return { value: 'rent_car', reason: `We'll assume a hire car, because most of what is worth seeing around ${ctx.destination.proseName} sits at the end of a drive.`, source: 'destination_prior' };
+    /*
+     * A shape alone may still say "car" — but only where no country knowledge
+     * exists to contradict it (a mountain region nobody has compiled). Where
+     * the country IS compiled and did not recommend one, the shape does not
+     * get to overrule the facts.
+     */
+    if (movement === 'car' && (!reality || reality.destination.coverage === 'none')) return { value: 'rent_car', reason: `We'll assume a hire car, because most of what is worth seeing around ${ctx.destination.proseName} sits at the end of a drive.`, source: 'destination_prior' };
     // Nothing supports one mode over another: the least committal choice, said plainly — never "a car" because no better evidence exists.
-    return { value: 'mixed', reason: `We don't know ${ctx.destination.proseName} well enough to pick one way around, so the plan may use a hire car for the far stops and local transport in town; change this if you would rather not drive.`, source: 'smart_default' };
+    return { value: 'mixed', reason: `Sidequest will choose how to get around ${ctx.destination.proseName} once it sees the route; until then the plan may mix a hired ride, trains and local transport. Change this if you already know what you want.`, source: 'smart_default' };
   },
 });
 
@@ -1298,7 +1366,13 @@ const EVERYONE_EVERY_DAY: QuestionDefinition = choice({
   impacts: ['group_fit', 'day_density', 'effort'],
   burden: 1,
   criticality: 1,
-  relevance: (ctx) => (ctx.traveller.adults + ctx.traveller.children >= 3 || t(ctx, 'family_logistics_sensitive') || (ctx.traveller.party?.needs.length ?? 0) > 0 ? 1 : 0),
+  /*
+   * V7 §5 — ASKED ONLY WHEN THERE IS SOMETHING TO SPLIT OVER. "Four adults" is
+   * not a difference; a member with a need, a child in a group of adults, or
+   * described members whose profiles differ is. Otherwise the answer changes
+   * nothing and the question is a survey line.
+   */
+  relevance: (ctx) => ((ctx.traveller.party?.differences ?? false) || (ctx.traveller.party?.needs.length ?? 0) > 0 || (ctx.traveller.children > 0 && ctx.traveller.adults + ctx.traveller.children >= 3) || ctx.traveller.travelerNeeds.length > 0 ? 1 : 0),
   read: (answers) => (answers.everyoneEveryDay ? 'yes' : 'no'),
   apply: (value) => ({ everyoneEveryDay: value !== 'no' }),
   smartDefault: (ctx) => (ctx.traveller.children > 0 ? { value: 'yes', reason: "With children along we'll keep the group together and every stop workable for all of you.", source: 'smart_default' } : { value: 'no', reason: "We'll allow the group to split for an afternoon when appetites differ.", source: 'smart_default' }),

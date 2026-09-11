@@ -24,6 +24,9 @@ export const BOOKING_ITEM_KINDS = [
   'rental_vehicle',
   'shuttle',
   'internal_transfer',
+  /** V7 §14 — a multi-day operated experience booked as one thing: a cruise, a trek with an operator, a safari programme. */
+  'cruise',
+  'programme',
 ] as const;
 export const bookingItemKindSchema = z.enum(BOOKING_ITEM_KINDS);
 export type BookingItemKind = z.infer<typeof bookingItemKindSchema>;
@@ -42,6 +45,8 @@ export const BOOKING_ITEM_KIND_LABELS: Record<BookingItemKind, string> = {
   rental_vehicle: 'Rental vehicle',
   shuttle: 'Shuttle',
   internal_transfer: 'Transfer',
+  cruise: 'Cruise',
+  programme: 'Multi-day programme',
 };
 
 export const BOOKING_NECESSITIES = ['required', 'strongly_recommended', 'optional', 'unknown'] as const;

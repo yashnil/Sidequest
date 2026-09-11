@@ -20,7 +20,13 @@ export interface DayMapModel {
   omitted: number;
 }
 
-function styleFor(mode: TransportMode, provenance: string): MapConnectorStyle {
+function styleFor(mode: TransportMode, provenance: string, episodeMode?: string, hint?: string): MapConnectorStyle {
+  /* V7 §14 — an episode leg is drawn by how it moves, whatever a router said about it. */
+  const m = mode as string;
+  if (episodeMode === 'boat' || m === 'ferry' || hint === 'ferry' || hint === 'boat') return 'boat';
+  if (episodeMode === 'rail' || m === 'rail' || hint === 'rail' || hint === 'high_speed_rail') return 'rail';
+  if (hint === 'flight') return 'flight';
+  if (episodeMode === 'walk' || episodeMode === 'horse') return 'trail';
   if (provenance === 'unmeasured') return 'unmeasured';
   if (provenance === 'estimated') return 'estimated';
   switch (mode) {
@@ -52,7 +58,7 @@ export function dayMapModel(input: {
   const connectors: MapConnector[] = [];
   let omitted = 0;
   let cursor: { lat: number; lng: number } | null = base;
-  let pendingLeg: { mode: TransportMode; provenance: string; id: string; path?: readonly { lat: number; lng: number }[] } | null = null;
+  let pendingLeg: { mode: TransportMode; provenance: string; id: string; episodeMode?: string; hint?: string; path?: readonly { lat: number; lng: number }[] } | null = null;
   let order = 0;
   const pathOf = (geometry: string | undefined) => {
     if (!geometry) return undefined;
@@ -66,10 +72,10 @@ export function dayMapModel(input: {
   for (const item of day.items) {
     if (item.kind === 'travel' && item.travel) {
       const path = item.travel.provenance === 'measured' ? pathOf(item.travel.geometry) : undefined;
-      pendingLeg = { mode: item.travel.mode, provenance: item.travel.provenance, id: item.id, ...(path ? { path } : {}) };
+      pendingLeg = { mode: item.travel.mode, provenance: item.travel.provenance, id: item.id, ...(item.travel.episodeMode ? { episodeMode: item.travel.episodeMode } : {}), ...(item.travel.hint ? { hint: item.travel.hint } : {}), ...(path ? { path } : {}) };
       // A return leg to base closes the loop when the base is placed.
       if (item.travel.role === 'return' && base && cursor && cursor !== base) {
-        connectors.push({ id: `${item.id}-return`, from: cursor, to: base, style: styleFor(item.travel.mode, item.travel.provenance), ...(path ? { path } : {}) });
+        connectors.push({ id: `${item.id}-return`, from: cursor, to: base, style: styleFor(item.travel.mode, item.travel.provenance, item.travel.episodeMode, item.travel.hint), ...(path ? { path } : {}) });
         cursor = base;
         pendingLeg = null;
       }
@@ -84,7 +90,7 @@ export function dayMapModel(input: {
     order += 1;
     markers.push({ id: item.placeId, name: input.nameOf ? input.nameOf(item.placeId, item.title) : item.title, coordinates: point, kind: 'stop', order });
     if (cursor) {
-      connectors.push({ id: `${pendingLeg?.id ?? item.id}-leg`, from: cursor, to: point, style: pendingLeg ? styleFor(pendingLeg.mode, pendingLeg.provenance) : 'unmeasured', ...(pendingLeg?.path ? { path: pendingLeg.path } : {}) });
+      connectors.push({ id: `${pendingLeg?.id ?? item.id}-leg`, from: cursor, to: point, style: pendingLeg ? styleFor(pendingLeg.mode, pendingLeg.provenance, pendingLeg.episodeMode, pendingLeg.hint) : 'unmeasured', ...(pendingLeg?.path ? { path: pendingLeg.path } : {}) });
     }
     cursor = point;
     pendingLeg = null;

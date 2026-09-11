@@ -38,6 +38,8 @@ import {
   type TripBasics,
   type TripComposerAnswers,
   countryFacts,
+  travelRealitySchema,
+  type TravelReality,
 } from '@sidequest/core';
 /** The only part of the draft the intelligence reads: anchor names and the model's transport hints. */
 /**
@@ -130,6 +132,9 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   }
   const hintByName = new Map<string, DraftTransportHint>();
   for (const day of input.draft?.days ?? []) for (const anchor of day.anchors) if (anchor.transport) hintByName.set(normalise(anchor.name), anchor.transport as DraftTransportHint);
+  /* V7 §3 — the reality the build ran under, persisted on the package; absent on a plan built before V7. */
+  const realityParsed = travelRealitySchema.safeParse(pkg?.reality);
+  const reality: TravelReality | null = realityParsed.success ? realityParsed.data : null;
   const rawCategoryOf = (item: ItineraryItem): string => (item.placeId ? categoryByPlace.get(item.placeId) : undefined) ?? categoryByItem.get(item.id) ?? categoryByName.get(normalise(item.title)) ?? (item.kind === 'activity' ? 'other' : item.kind);
   // A "nature" anchor the model called a hike or a trail is a hike for packing, food and access purposes.
   const categoryOf = (item: ItineraryItem): string => {
@@ -143,7 +148,8 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   for (const day of itinerary.days) {
     for (const item of day.items) {
       if (!item.travel) continue;
-      const hint = hintByName.get(normalise(item.travel.toName)) ?? hintByName.get(normalise(item.title.replace(/^(travel|drive|walk|ride|take the \w+) to /i, '')));
+      /* V7 §9 — the leg's own word first (the draft's `how`/`move`), then the stop's hint, then the title. */
+      const hint = (item.travel.hint as DraftTransportHint | undefined) ?? hintByName.get(normalise(item.travel.toName)) ?? hintByName.get(normalise(item.title.replace(/^(travel|drive|walk|ride|take the \w+) to /i, '')));
       const departAt = new Date(`${day.date}T00:00:00Z`);
       departAt.setUTCMinutes(item.startMinute);
       const isBaseMove = item.travel.role === 'transfer' || /relocat|check in|check-in/i.test(item.title);
@@ -195,7 +201,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   const daysUntilTrip = daysUntil(itinerary.startDate, now);
 
   // Lodging first (it needs only bookings), then food with the remote hints lodging and the legs provide -----------
-  const lodging = buildLodgingIntelligence({ itinerary, pkg, profile, sourcedAreas: input.sourcedAreas ?? [], booked: input.booked });
+  const lodging = buildLodgingIntelligence({ itinerary, pkg, profile, sourcedAreas: input.sourcedAreas ?? [], booked: input.booked, selfDrives: drives });
   const remoteDayHints = new Set<number>();
   for (const leg of legs) if (leg.dayNumber && (leg.mode === 'boat' || leg.mode === 'guide_transfer' || leg.mode === 'lodge_transfer' || leg.mode === 'four_wheel_drive')) remoteDayHints.add(leg.dayNumber);
   for (const base of lodging.bases) if (base.style === 'lodge' || base.style === 'camp' || base.style === 'hut' || base.style === 'homestay') for (const d of base.dayNumbers) remoteDayHints.add(d);
@@ -302,14 +308,15 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
     destinationFacts: countryFacts(input.destination.countryCode),
     homeFacts: countryFacts(input.readinessProfile?.residence ?? input.readinessProfile?.citizenship),
     daysUntilTrip,
+    reality,
   });
   claims.push(...readiness.claims);
 
   // Bookings, budget --------------------------------------------------------------------------------------------
-  const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds });
+  const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds, selfDrives: drives, reality });
   const guideDays = new Set(bookings.filter((b) => b.kind === 'tour_guide').map((b) => b.dayNumber)).size;
   const permitCount = bookings.filter((b) => b.kind === 'permit' || b.kind === 'park_entry').length;
-  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(input.fx ? { fx: input.fx } : {}), ...(input.displayCurrency ? { displayCurrency: input.displayCurrency } : {}) });
+  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(statedDriving ? { driving: statedDriving } : {}), ...(input.fx ? { fx: input.fx } : {}), ...(input.displayCurrency ? { displayCurrency: input.displayCurrency } : {}) });
 
   // Weather, access, safety, packing ------------------------------------------------------------------------
   const weather = buildWeatherIntelligence({ itinerary, categoryOf, packageBackups: pkg?.backups ?? [] });
@@ -328,6 +335,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
     children: input.basics.children > 0,
     strenuous,
     modelPacking: pkg?.packing ?? [],
+    episodeKinds: (pkg?.episodes ?? []).map((e) => e.kind),
   });
 
   // Claims from the plan's own evidence ------------------------------------------------------------------------

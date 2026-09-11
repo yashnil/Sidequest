@@ -143,6 +143,14 @@ export const DRAFT_TRANSPORTS = [
    * inventing a duration.
    */
   'horse',
+  /*
+   * V7 §7 — separate concepts, never collapsed into "car". A taxi or
+   * ride-hailing hop is not self-drive and not a hired driver for the day; a
+   * high-speed train is the regional backbone in the countries that have one
+   * and is timetabled, bookable and never a road leg.
+   */
+  'taxi',
+  'high_speed_rail',
   'unknown',
 ] as const;
 export type DraftTransport = (typeof DRAFT_TRANSPORTS)[number];
@@ -370,8 +378,93 @@ export const draftDaySchema = z.object({
       rejoin: prose(80).optional(),
     })
     .optional(),
+  /** V7 §9 — the day's main movement (a relocation's flight, train, boat or driver), when it is not a road leg. */
+  move: z.lazy(() => draftMoveSchema).optional(),
 });
 export type DraftDay = z.infer<typeof draftDaySchema>;
+
+/**
+ * V7 §8 — A MULTI-DAY EXPERIENCE IS ONE THING WITH ITS OWN TRANSPORT REGIME.
+ *
+ * A river cruise, a trek, a safari circuit, a sleeper train, an expedition
+ * boat, a guided overland segment, a resort stay or a bike tour owns its days:
+ * the overnights, the route progression, the operator's timings, the
+ * included meals, the gateways at each end and the movement inside it. The
+ * live Chongqing build flattened a three-night cruise into ordinary places and
+ * road legs — a "6 h 10 drive to Qutang Gorge" from a ship — because the draft
+ * could only say `partOf` and the reconciler could only build road legs.
+ *
+ * `partOf` on each day still links the day to the episode by name; the episode
+ * itself says what kind of thing it is and how it moves, so the reconciler
+ * never asks a road router about a gorge on a river, and the bookings, budget
+ * and packing all read one object.
+ */
+export const EPISODE_KINDS = ['cruise', 'trek', 'safari', 'sleeper_train', 'expedition_boat', 'guided_overland', 'road_trip_segment', 'resort_stay', 'bike_tour', 'hut_to_hut'] as const;
+export type EpisodeKind = (typeof EPISODE_KINDS)[number];
+
+export const EPISODE_KIND_LABELS: Record<EpisodeKind, string> = {
+  cruise: 'Cruise',
+  trek: 'Trek',
+  safari: 'Safari',
+  sleeper_train: 'Sleeper train',
+  expedition_boat: 'Expedition boat',
+  guided_overland: 'Guided overland',
+  road_trip_segment: 'Road trip',
+  resort_stay: 'Resort stay',
+  bike_tour: 'Bike tour',
+  hut_to_hut: 'Hut to hut',
+};
+
+/** How the episode moves inside itself. Never `car` for a river, never a road for a trail. */
+export const EPISODE_MODES = ['boat', 'walk', 'four_wheel_drive', 'rail', 'car', 'bicycle', 'guide_or_lodge_transfer', 'horse', 'none'] as const;
+export type EpisodeMode = (typeof EPISODE_MODES)[number];
+
+/** The movement an episode kind implies when the draft did not say. */
+export const EPISODE_DEFAULT_MODE: Record<EpisodeKind, EpisodeMode> = {
+  cruise: 'boat',
+  trek: 'walk',
+  safari: 'four_wheel_drive',
+  sleeper_train: 'rail',
+  expedition_boat: 'boat',
+  guided_overland: 'guide_or_lodge_transfer',
+  road_trip_segment: 'car',
+  resort_stay: 'none',
+  bike_tour: 'bicycle',
+  hut_to_hut: 'walk',
+};
+
+export const draftEpisodeSchema = z.object({
+  name: prose(60),
+  kind: z.enum(EPISODE_KINDS),
+  /** First and last day numbers of the episode, inclusive. */
+  fromDay: z.number().int().min(1).max(40),
+  toDay: z.number().int().min(1).max(40),
+  mode: z.enum(EPISODE_MODES),
+  /** Who controls the timings inside it. An operator's timings are unknown to Sidequest until confirmed. */
+  timing: z.enum(['operator', 'self', 'unknown']).optional(),
+  /** Where it starts and ends, as places: a pier, a trailhead, a town, an airstrip. */
+  startGateway: prose(60).optional(),
+  endGateway: prose(60).optional(),
+  meals: z.enum(['included', 'some', 'none']).optional(),
+  why: prose(DRAFT_SOFT_PROSE_CAPS.baseWhy).optional(),
+});
+export type DraftEpisode = z.infer<typeof draftEpisodeSchema>;
+
+/**
+ * V7 §9 — THE DAY'S MAIN MOVEMENT, WHEN IT IS NOT A ROAD LEG THE ROUTER CAN GUESS.
+ *
+ * A relocation day says how it moves: a flight, a high-speed train, a boat, a
+ * hired driver. Without this the reconciler built every base change as a road
+ * leg and a promised "fly home via Chongqing" produced only breakfast. `when`
+ * says whether the move opens the day (disembark, then explore) or closes it.
+ */
+export const draftMoveSchema = z.object({
+  how: z.enum(DRAFT_TRANSPORTS),
+  /** The gateway or town the move goes through or to, when it is not the stay itself. */
+  via: prose(60).optional(),
+  when: z.enum(['start', 'end']).optional(),
+});
+export type DraftMove = z.infer<typeof draftMoveSchema>;
 
 /** The consecutive day runs that belong to one named multi-day experience. */
 export function multiDayExperiences(days: readonly DraftDay[]): { name: string; dayNumbers: number[] }[] {
@@ -387,7 +480,7 @@ export function multiDayExperiences(days: readonly DraftDay[]): { name: string; 
 }
 
 export const draftPackageSchema = z.object({
-  foodStrategy: z.array(prose(DRAFT_SOFT_PROSE_CAPS.foodStrategy)).max(6),
+  foodStrategy: z.array(prose(DRAFT_SOFT_PROSE_CAPS.foodStrategy)).max(8),
   transport: z.object({
     summary: prose(DRAFT_SOFT_PROSE_CAPS.transportSummary),
     notes: z.array(prose(DRAFT_SOFT_PROSE_CAPS.transportNote)).max(6),
@@ -470,9 +563,83 @@ export const tripDraftSchema = z.object({
   signatures: z.array(prose(60)).max(3).optional(),
   /** §14 — how the road travel is arranged. `none` for a trip with no vehicle the traveller is responsible for. */
   driving: z.enum(DRAFT_DRIVING_ARRANGEMENTS).optional(),
+  /** V7 §8 — the multi-day experiences this trip contains, each owning its days and its transport regime. */
+  episodes: z.array(draftEpisodeSchema).max(6).optional(),
   package: draftPackageSchema,
 });
 export type TripDraft = z.infer<typeof tripDraftSchema>;
+
+/** Words that say what kind of episode a `partOf` name is, when the draft declared none. Generic words, never a place. */
+const EPISODE_KIND_WORDS: readonly [RegExp, EpisodeKind][] = [
+  [/\b(cruise|river boat|riverboat|liveaboard)\b/i, 'cruise'],
+  [/\b(safari|game drive|game-drive|bush)\b/i, 'safari'],
+  [/\b(sleeper|night train|overnight train)\b/i, 'sleeper_train'],
+  [/\b(hut[- ]to[- ]hut|refuge to refuge)\b/i, 'hut_to_hut'],
+  [/\b(trek|trekking|traverse|circuit walk|hike|hiking|pilgrimage|camino)\b/i, 'trek'],
+  [/\b(expedition|zodiac|sailing|sail)\b/i, 'expedition_boat'],
+  [/\b(overland|4x4 tour|jeep tour|convoy)\b/i, 'guided_overland'],
+  [/\b(bike|cycling|cycle tour)\b/i, 'bike_tour'],
+  [/\b(resort|all[- ]inclusive)\b/i, 'resort_stay'],
+  [/\b(road trip|drive|driving loop)\b/i, 'road_trip_segment'],
+];
+
+/**
+ * THE EPISODES A DRAFT HOLDS — DECLARED, OR READ FROM ITS OWN DAYS.
+ *
+ * A draft written before the episode field existed (or by a model that wrote
+ * `partOf` and nothing more) still names the experience on each day and, for
+ * a cruise, sleeps on a boat. Reading those words back is not inference about
+ * a place; it is reading the model's own declaration of the day's shape. Only
+ * an explicit word sets a kind; a `partOf` nothing matches stays a named run
+ * with no regime, exactly as before.
+ */
+export function episodesOf(draft: Pick<TripDraft, 'days' | 'bases'> & { episodes?: readonly DraftEpisode[] | undefined }): DraftEpisode[] {
+  if (draft.episodes && draft.episodes.length > 0) return draft.episodes.map((e) => ({ ...e }));
+  const runs = multiDayExperiences(draft.days);
+  const episodes: DraftEpisode[] = [];
+  for (const run of runs) {
+    const declared = EPISODE_KIND_WORDS.find(([re]) => re.test(run.name));
+    const baseIds = new Set(draft.days.filter((d) => run.dayNumbers.includes(d.dayNumber)).map((d) => d.baseId));
+    const overnights = draft.bases.filter((b) => baseIds.has(b.id)).map((b) => b.overnight);
+    const kind: EpisodeKind | null = declared?.[1] ?? (overnights.includes('boat') ? 'cruise' : overnights.includes('train') ? 'sleeper_train' : overnights.includes('hut') || overnights.includes('refuge') ? 'hut_to_hut' : null);
+    if (!kind) continue;
+    episodes.push({ name: run.name, kind, fromDay: run.dayNumbers[0]!, toDay: run.dayNumbers[run.dayNumbers.length - 1]!, mode: EPISODE_DEFAULT_MODE[kind], timing: kind === 'road_trip_segment' ? 'self' : 'operator' });
+  }
+  /*
+   * A SAFARI THE DRAFT DID NOT NAME AS ONE.
+   *
+   * Two or more nights at a camp or lodge whose days go back to the same
+   * reserve is a safari, whatever the draft called it: the drives are the
+   * lodge's vehicles on the lodge's timetable, the reserve appears every day
+   * on purpose, and nothing about it is a walk from a hotel. The live Kenya
+   * build drew four game-drive days as walks and flagged the reserve as a
+   * repeated stop.
+   */
+  const covered = new Set(episodes.flatMap((e) => Array.from({ length: e.toDay - e.fromDay + 1 }, (_, i) => e.fromDay + i)));
+  for (const base of draft.bases) {
+    const stayed = draft.days.filter((d) => d.baseId === base.id && !covered.has(d.dayNumber)).map((d) => d.dayNumber).sort((a, b) => a - b);
+    if (stayed.length < 2) continue;
+    const campLike = base.overnight === 'camp' || /\b(camp|tented|safari|lodge)\b/i.test(`${base.name} ${base.lodgingStyle ?? ''}`);
+    if (!campLike) continue;
+    const days = draft.days.filter((d) => stayed.includes(d.dayNumber));
+    const wildlifeDays = days.filter((d) => d.anchors.some((a) => a.category === 'wildlife' || /\b(game drive|reserve|national park|conservancy)\b/i.test(a.name)));
+    if (wildlifeDays.length < 2) continue;
+    const consecutive = stayed.every((n, i) => i === 0 || n === stayed[i - 1]! + 1);
+    if (!consecutive) continue;
+    episodes.push({ name: `${base.name} safari`, kind: 'safari', fromDay: stayed[0]!, toDay: stayed[stayed.length - 1]!, mode: 'four_wheel_drive', timing: 'operator' });
+  }
+  return episodes.sort((a, b) => a.fromDay - b.fromDay);
+}
+
+/** The episode a day belongs to, if any. */
+export function episodeForDay(episodes: readonly DraftEpisode[], dayNumber: number): DraftEpisode | null {
+  return episodes.find((e) => dayNumber >= e.fromDay && dayNumber <= e.toDay) ?? null;
+}
+
+/** True when the movement inside this episode is something a road router must never be asked about. */
+export function episodeIsOffRoad(episode: DraftEpisode | null): boolean {
+  return episode !== null && (episode.mode === 'boat' || episode.mode === 'walk' || episode.mode === 'rail' || episode.mode === 'horse' || episode.mode === 'none');
+}
 
 /** Stable within one draft and independent of provider identity. */
 export function draftAnchorId(dayNumber: number, anchorIndex: number, name: string): string {
@@ -613,5 +780,9 @@ export function draftStructureIssues(draft: TripDraft): string[] {
     if (day.dayNumber !== i + 1) issues.push(`days[${i}] is numbered ${day.dayNumber}, expected ${i + 1}`);
     if (!baseIds.has(day.baseId)) issues.push(`day ${day.dayNumber} names base "${day.baseId}" which the draft does not define`);
   });
+  for (const episode of draft.episodes ?? []) {
+    if (episode.toDay < episode.fromDay) issues.push(`episode "${episode.name}" ends on day ${episode.toDay} before it starts on day ${episode.fromDay}`);
+    if (episode.toDay > draft.days.length) issues.push(`episode "${episode.name}" runs to day ${episode.toDay} but the trip has ${draft.days.length} days`);
+  }
   return issues;
 }

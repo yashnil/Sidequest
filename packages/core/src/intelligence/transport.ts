@@ -106,6 +106,9 @@ export const transportLegSchema = z.object({
   geometry: z.string().min(1).optional(),
   /** The figure is the base-to-base measurement; the day's stops sit en route. */
   viaBases: z.literal(true).optional(),
+  /** V7 §8 — the multi-day episode this leg moves inside, by name; drawn and priced as the episode's movement, never as a road leg. */
+  episode: z.string().min(1).optional(),
+  episodeMode: z.string().min(1).optional(),
   transitSummary: z.string().min(1).optional(),
   costEstimate: z.object({ currency: z.string().min(1), low: z.number().min(0), high: z.number().min(0), basis: z.string().min(1) }).optional(),
   notes: z.array(z.string().min(1)).default([]),
@@ -113,7 +116,7 @@ export const transportLegSchema = z.object({
 export type TransportLeg = z.infer<typeof transportLegSchema>;
 
 /** The draft's transport hints, as the model writes them. Kept in sync with `DRAFT_TRANSPORTS`. */
-export type DraftTransportHint = 'walk' | 'metro' | 'rail' | 'bus' | 'car' | 'ferry' | 'boat' | 'flight' | 'private_transfer' | 'four_wheel_drive' | 'guide_or_lodge_transfer' | 'horse' | 'unknown';
+export type DraftTransportHint = 'walk' | 'metro' | 'rail' | 'bus' | 'car' | 'ferry' | 'boat' | 'flight' | 'private_transfer' | 'four_wheel_drive' | 'guide_or_lodge_transfer' | 'horse' | 'taxi' | 'high_speed_rail' | 'unknown';
 
 export function legModeFromHint(hint: DraftTransportHint | undefined): LegMode | null {
   switch (hint) {
@@ -140,6 +143,10 @@ export function legModeFromHint(hint: DraftTransportHint | undefined): LegMode |
     case 'guide_or_lodge_transfer':
     case 'horse':
       return 'guide_transfer';
+    case 'taxi':
+      return 'taxi';
+    case 'high_speed_rail':
+      return 'rail';
     default:
       return null;
   }
@@ -232,7 +239,8 @@ export function legFromSegment(input: {
    * with a guide, is that boat or that guide — the router's fallback mode
    * ("drive back") is a stand-in the router itself could not measure.
    */
-  const mode = input.segment.provenance === 'unmeasured' && input.segment.unmeasuredReason === 'mode_not_routed' && hinted && !ROAD_ROUTABLE_MODES.has(hinted) ? hinted : legModeFromTransportMode(input.segment.mode, input.hint);
+  const episodeHinted: LegMode | null = input.segment.episodeMode === 'boat' ? 'boat' : input.segment.episodeMode === 'walk' ? 'walk' : input.segment.episodeMode === 'rail' ? 'rail' : input.segment.episodeMode === 'four_wheel_drive' ? 'four_wheel_drive' : input.segment.episodeMode === 'horse' || input.segment.episodeMode === 'guide_or_lodge_transfer' ? 'guide_transfer' : null;
+  const mode = episodeHinted ?? (input.segment.provenance === 'unmeasured' && (input.segment.unmeasuredReason === 'mode_not_routed' || input.segment.unmeasuredReason === 'operator_unpublished') && hinted && !ROAD_ROUTABLE_MODES.has(hinted) ? hinted : legModeFromTransportMode(input.segment.mode, input.hint));
   const basis = durationBasisOf(input.segment);
   const roadRoutable = ROAD_ROUTABLE_MODES.has(mode);
   const unmeasuredReason: TransportLeg['unmeasuredReason'] | undefined =
@@ -272,6 +280,8 @@ export function legFromSegment(input: {
     ...(input.segment.effectiveDepartAt ? { effectiveDepartAt: input.segment.effectiveDepartAt } : {}),
     ...(input.segment.geometry ? { geometry: input.segment.geometry } : {}),
     ...(input.segment.viaBases ? { viaBases: true as const } : {}),
+    ...(input.segment.episode ? { episode: input.segment.episode } : {}),
+    ...(input.segment.episodeMode ? { episodeMode: input.segment.episodeMode } : {}),
     ...(input.segment.transitSummary ? { transitSummary: input.segment.transitSummary } : {}),
     ...(input.segment.serviceId ? { serviceId: input.segment.serviceId } : {}),
     bookingRequired: mode === 'flight' || mode === 'ferry' || mode === 'guide_transfer' || mode === 'lodge_transfer' ? 'recommended' : 'unknown',
