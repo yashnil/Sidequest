@@ -10,6 +10,7 @@ import { isClimateEnabled } from '@/lib/providers/switches';
 import { guardAction } from '@/lib/net/caller';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { timingIntentOf } from '@/lib/planning/canonical-input';
+import { resolveDestinationAction } from '@/app/(product)/trips/[id]/plan/actions';
 import type { TimingWindowView } from '@/app/(product)/trips/new/timing-actions';
 
 /**
@@ -56,8 +57,27 @@ export async function recommendTripTimingAction(tripId: string): Promise<TripTim
   if (guard) return { ok: false, note: guard };
   if (!isClimateEnabled()) return { ok: false, deferred: true, note: 'Sidequest has no climate record to compare months on here, so it will choose the window with the plan.' };
 
-  const candidate = intent?.resolution?.candidates.find((c) => c.id === (intent.selectedCandidateId ?? intent.resolution?.unambiguousCandidateId)) ?? intent?.resolution?.candidates[0] ?? null;
-  const centre = intent?.selectedDestination?.center ?? candidate?.center ?? intent?.destinationIntent?.graph?.envelope?.center ?? null;
+  /*
+   * V8 — the live acceptance walk found the review deferring the window with
+   * "once it has placed the destination" although the phrase resolves cleanly:
+   * resolution is started by the plan screen's client on mount, and a traveller
+   * who leaves that screen before the geocoder answers arrives here with no
+   * centre. Resolve on demand, once, behind the same fence the plan screen
+   * uses; a resolver that cannot answer leaves the honest deferral below.
+   */
+  let intentNow = intent;
+  const centreOf = (of: typeof intent) => {
+    const candidate = of?.resolution?.candidates.find((c) => c.id === (of.selectedCandidateId ?? of.resolution?.unambiguousCandidateId)) ?? of?.resolution?.candidates[0] ?? null;
+    return of?.selectedDestination?.center ?? candidate?.center ?? of?.destinationIntent?.graph?.envelope?.center ?? null;
+  };
+  let centre = centreOf(intentNow);
+  if (!centre && intentNow?.destinationQuery?.trim()) {
+    const resolved = await resolveDestinationAction(tripId).catch(() => ({ ok: false as const }));
+    if (resolved.ok) {
+      intentNow = getIntent(tripId);
+      centre = centreOf(intentNow);
+    }
+  }
   if (!centre) return { ok: false, deferred: true, note: 'Sidequest will choose the best window once it has placed the destination.' };
 
   const now = new Date();
@@ -66,7 +86,7 @@ export async function recommendTripTimingAction(tripId: string): Promise<TripTim
     return { ok: false, deferred: true, note: climate.reason === 'provider_rate_limited' ? 'The climate records are busy this minute. Sidequest will choose the window with the plan if you carry on.' : 'We could not read the climate records just now, so Sidequest will choose the window with the plan.' };
   }
 
-  const composer = intent?.composer ?? null;
+  const composer = intentNow?.composer ?? null;
   const dates = composer?.dates;
   const onlyMonths =
     dates?.months && dates.months.length > 0
@@ -78,7 +98,7 @@ export async function recommendTripTimingAction(tripId: string): Promise<TripTim
           : [];
   const answers = getAnswers(tripId);
   const interests = answers ? chosenInterests(answers) : [];
-  const reality = realityForTrip({ trip, intent, region: null });
+  const reality = realityForTrip({ trip, intent: intentNow, region: null });
   const nights = composer?.duration?.nights ?? nightsOf(trip.basics.startDate, trip.basics.endDate);
   const crowdPeriods = reality.crowdPeriods.map((p) => ({ name: p.name, ranges: p.ranges, effect: p.effect, note: p.note, movable: p.movable }));
 
