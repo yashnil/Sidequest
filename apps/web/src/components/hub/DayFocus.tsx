@@ -128,7 +128,7 @@ export function DayFocusMap({ days, tiles = null }: { days: readonly DayFocusMod
           <p className="type-section text-ink">
             Day {day.dayNumber} <span className="font-sans text-sm text-ink-muted">· {day.theme}</span>
           </p>
-          <span className="type-meta">{day.baseName}</span>
+          <span className="type-small text-ink-muted">{day.baseName}</span>
         </div>
         {placed ? (
           <InteractiveMap
@@ -159,9 +159,9 @@ export function DayFocusMap({ days, tiles = null }: { days: readonly DayFocusMod
             aspect would be to avoid layout shift, and there is no shift here:
             nothing is loading, and nothing will arrive.
           */
-          <p className="rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk px-4 py-3 type-small text-ink-muted">
-            Nothing on this day has a confirmed position yet, so there is nothing honest to draw.
-          </p>
+          <div className="atlas flex min-h-[12rem] items-center justify-center rounded-[var(--radius-plate)] px-6 py-8 text-center" data-testid="day-focus-map-empty">
+            <p className="max-w-[32ch] type-small atlas-muted">Nothing on this day has a confirmed position yet, so there is nothing honest to draw.</p>
+          </div>
         )}
       </div>
     </aside>

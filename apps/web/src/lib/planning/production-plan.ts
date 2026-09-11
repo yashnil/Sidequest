@@ -59,7 +59,7 @@ import { buildPreservationReport, describePreservation, type DraftPreservationRe
 import { auditItinerary, type QualityAudit } from './quality-audit';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
-import { beginGeneration, finishGeneration, markGenerationStage, noteGenerationCounters, type GenerationCounters } from '../db/generation-progress-repository';
+import { beginGeneration, finishGeneration, markGenerationDraftSaved, markGenerationModelInvoked, markGenerationStage, noteGenerationCounters, noteGenerationPlaced, type GenerationCounters } from '../db/generation-progress-repository';
 import { fetchReferenceRate } from '../providers/fx';
 import { saveFxRate } from '@/lib/db/intelligence-repository';
 
@@ -274,6 +274,12 @@ export async function generateSidequestPlanForTrip(
      * one model call is spent by the interpreter before this is reached.
      */
     useDraft?: TripDraft;
+    /**
+     * V8 — the durable run this generation belongs to. When the press already
+     * recorded a run under this key, `beginGeneration` attaches to it rather
+     * than replacing it; see `planning/build-runs.ts`.
+     */
+    buildKey?: string | null;
   } = {},
 ): Promise<ProductionPlanResult> {
   const now = options.now ?? new Date();
@@ -304,7 +310,7 @@ export async function generateSidequestPlanForTrip(
     }
   };
   try {
-    beginGeneration(tripId, now);
+    beginGeneration(tripId, now, { buildKey: options.buildKey ?? null, caller: options.caller ?? null });
   } catch {
     /* the build is what matters */
   }
@@ -500,6 +506,12 @@ export async function generateSidequestPlanForTrip(
   const wire = compositionWireDecision();
   const compositionStartedMs = performance.now();
   progress('composing');
+  /* V8 — from here a failure has a cost: the composition is being invoked. */
+  try {
+    markGenerationModelInvoked(tripId, new Date());
+  } catch {
+    /* progress is best-effort */
+  }
   const outcome = await generateTripDraft({
     model,
     context,
@@ -530,12 +542,13 @@ export async function generateSidequestPlanForTrip(
         /* the log line below still carries it */
       }
     }
+    let failureRef: string | null = null;
     try {
-      finishGeneration(tripId, 'failed', new Date());
+      failureRef = finishGeneration(tripId, 'failed', new Date(), { kind: 'model_failed' }).ref;
     } catch {
       /* the failure is already reported */
     }
-    console.error(`Composition failed: ${outcome.failureKind}${outcome.issueKind ? `/${outcome.issueKind}` : ''} — ${outcome.detail.slice(0, 300)}${outcome.issues?.length ? ` | issues: ${JSON.stringify(outcome.issues.slice(0, 10))}` : ''} | calls: ${JSON.stringify(modelCalls.map((call) => ({ ...(call as unknown as Record<string, unknown>), schemaValidationIssues: undefined })))}`);
+    console.error(`Composition failed [ref ${failureRef ?? 'none'}]: ${outcome.failureKind}${outcome.issueKind ? `/${outcome.issueKind}` : ''} — ${outcome.detail.slice(0, 300)}${outcome.issues?.length ? ` | issues: ${JSON.stringify(outcome.issues.slice(0, 10))}` : ''} | calls: ${JSON.stringify(modelCalls.map((call) => ({ ...(call as unknown as Record<string, unknown>), schemaValidationIssues: undefined })))}`);
     return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, timings: emptyTimings(), modelCalls, diagnostics };
   }
   /*
@@ -606,6 +619,12 @@ export async function generateSidequestPlanForTrip(
     }
   }
   if (!options.reuseStoredDraft) saveTripDraft({ tripId, draft, modelCall: modelCalls[0] ?? null, now });
+  /* V8 — the draft is on disk: a failure from here is retried on it, with no model call. */
+  try {
+    markGenerationDraftSaved(tripId, new Date());
+  } catch {
+    /* progress is best-effort */
+  }
   progress('route');
   /* V7 §16 — what the draft actually holds, counted, for the screen that is waiting. */
   const counters = (partial: GenerationCounters) => {
@@ -679,6 +698,15 @@ export async function generateSidequestPlanForTrip(
     ? (async (...args: Parameters<typeof geocoder>) => {
         const result = await geocoder(...args);
         if (result) counters({ placesMatched: ++placesMatched });
+        /* V8 §14 — the first hit is a real point the build has just placed; the screen draws it. */
+        const hit = Array.isArray(result) ? result[0] : null;
+        if (hit && typeof hit.name === 'string' && Number.isFinite(hit.lat) && Number.isFinite(hit.lng)) {
+          try {
+            noteGenerationPlaced(tripId, { name: hit.name, lat: hit.lat, lng: hit.lng }, new Date());
+          } catch {
+            /* best-effort, like the counters */
+          }
+        }
         return result;
       }) as typeof geocoder
     : undefined;

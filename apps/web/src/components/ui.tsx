@@ -23,11 +23,13 @@ export function cx(...values: (string | false | null | undefined)[]): string {
  * button's own edge, which on a filled primary button is invisible.
  */
 const BUTTON_BASE =
-  'pressable inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm font-medium transition-[background-color,border-color,color,transform] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
+  'pressable inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm font-semibold transition-[background-color,border-color,color,transform,box-shadow] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-ink text-paper hover:bg-ink-muted',
-  secondary: 'border border-rule bg-paper-raised text-ink hover:border-ink-faint',
+  primary: 'bg-ink text-paper shadow-[var(--shadow-card)] hover:bg-ink-muted hover:shadow-[var(--shadow-raised)]',
+  /* V8 — the one filled accent action on a screen: Build my trip, New trip, Use this timing. */
+  accent: 'bg-accent text-paper shadow-[var(--shadow-card)] hover:bg-accent-strong hover:shadow-[var(--shadow-raised)]',
+  secondary: 'border border-rule bg-paper-raised text-ink shadow-[var(--shadow-card)] hover:border-ink-faint hover:shadow-[var(--shadow-raised)]',
   /*
    * `text-ink-muted` here was the product's quiet *action* colour sitting at the
    * same weight as its quiet *prose* colour — 8.1:1 is a fine ratio and a bad
@@ -64,6 +66,17 @@ export function buttonClass(
   size: keyof typeof BUTTON_SIZES = 'md',
 ): string {
   return cx(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size]);
+}
+
+/**
+ * V8 — A SELECTABLE CARD'S THREE STATES, AS ONE CLASS STRING.
+ *
+ * Resting: a card with an edge and a quiet shadow. Selected: filled with the
+ * accent tint, a two-pixel accent edge and the raised shadow — a chosen thing,
+ * not a hovered one. `lift` gives the resting card depth under the pointer.
+ */
+export function selectableCardClass(selected: boolean, extra?: string): string {
+  return cx('lift relative rounded-[var(--radius-card)] transition-colors', selected ? 'card-selected' : 'card', extra);
 }
 
 /**

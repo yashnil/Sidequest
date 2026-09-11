@@ -13,18 +13,27 @@ import { buttonClass } from '@/components/ui';
  * wordmark and the footer were simply *in the response*, which a right-click
  * reads as easily as a test does, and the leakage check caught it.
  *
- * So the boundary that every route carries says nothing about who made it. The
- * traveller-facing version, with the chrome and the trip-shaped wording, lives
- * at `(product)/not-found.tsx` and is what a stale trip link reaches.
+ * So the boundary that every route carries says nothing about who made it —
+ * and still answers the three questions a failure owes: what happened, what
+ * is preserved, what to do now. The traveller-facing version with the chrome
+ * and trip-shaped wording lives under `(product)/trips/[id]/not-found.tsx`.
  */
 export default function NotFound() {
   return (
-    <div className="mx-auto max-w-xl px-5 py-24 text-center sm:px-8">
-      <h1 className="font-display text-4xl text-ink">Nothing here</h1>
-      <p className="mt-3 text-ink-muted">That address does not lead anywhere.</p>
-      <Link href="/" className={`${buttonClass('secondary')} mt-8`}>
-        Go back
-      </Link>
+    <div className="mx-auto max-w-xl px-5 py-20 sm:px-8 sm:py-24">
+      <div className="card-raised enter rounded-[var(--radius-panel)] p-6 text-center sm:p-8">
+        <h1 className="display-lg text-ink">Nothing here</h1>
+        <p className="mt-3 type-body text-ink-muted">That address does not lead anywhere.</p>
+        <p className="mt-1 type-small text-ink-muted">Nothing you were working on is affected.</p>
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <Link href="/" className={buttonClass('primary')}>
+            Go to the front page
+          </Link>
+          <Link href="/trips" className={buttonClass('secondary')}>
+            Your trips
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

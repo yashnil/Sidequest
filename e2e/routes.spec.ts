@@ -21,7 +21,13 @@ import { completeQuestionnaire, createTrip } from './support/trip';
  * somewhere else.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/*
+ * A trip in the future. The list reads a trip's lifecycle from its dates, so a
+ * trip dated in the past is offered "Look back", not "Carry on" — which is right,
+ * and which is why this spec's trip must not sit in a month the calendar has
+ * already passed.
+ */
+const AUGUST = { start: '2027-08-12', end: '2027-08-15' };
 const DESTINATION = 'Mammoth Lakes';
 
 /** A trip at the questionnaire, which is as far as most of these need. */

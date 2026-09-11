@@ -5,7 +5,7 @@ import { authProviders } from '@/lib/auth/config';
 import { currentUser } from '@/lib/auth/session';
 import { countUnclaimedTrips } from '@/lib/db/auth-repository';
 import { sessionToken } from '@/lib/net/caller';
-import { dashboardRowsFor } from '@/lib/trips/dashboard';
+import { dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
 import { buttonClass } from '@/components/ui';
 import { ClaimBanner } from './ClaimBanner';
 import { TripDashboard, type DashboardCardRow } from './TripDashboard';
@@ -25,14 +25,10 @@ export const metadata: Metadata = {
  * route, what is booked, what to do next. Signed out: this browser's trips,
  * the same way, with one quiet offer to keep them.
  *
- * ## "Last touched" is computed here, not in the card
- *
- * The card is a client component and is rendered twice: once on the server and
- * once when React hydrates. "3 days ago" computed from `Date.now()` in both
- * places is two different strings whenever a render straddles a boundary, and
- * React reports that as a hydration error rather than a rounding one. Computing
- * it once, on the server, and sending the finished words down means both renders
- * agree by construction.
+ * "Last touched" is computed here, not in the card: the card is a client
+ * component rendered on the server and again on hydration, and "3 days ago"
+ * from `Date.now()` in both places is a hydration error waiting for midnight.
+ * See `lastTouched` in `lib/trips/dashboard.ts`.
  */
 export default async function TripsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
@@ -60,7 +56,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
           <Link href="/decide" className={buttonClass('secondary')}>
             Help me decide
           </Link>
-          <Link href="/trips/new" className={buttonClass('primary')} data-testid="dashboard-new-trip">
+          <Link href="/trips/new" className={buttonClass('accent')} data-testid="dashboard-new-trip">
             New trip
           </Link>
         </div>
@@ -80,23 +76,4 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
       <TripDashboard rows={rows} sections={DASHBOARD_SECTIONS} query={query} sort={sort} filter={filter} signedIn={Boolean(user)} />
     </div>
   );
-}
-
-/**
- * When a trip was last touched, in the words a person would use.
- *
- * Deliberately coarse. A timestamp to the minute is a database field; what a
- * traveller wants to know is whether this is the thing they were working on
- * yesterday or something they started in the spring.
- */
-function lastTouched(updatedAt: string, now: Date): string {
-  const then = Date.parse(updatedAt);
-  if (Number.isNaN(then)) return 'Saved';
-  const days = Math.floor((now.getTime() - then) / 86_400_000);
-  if (days <= 0) return 'Updated today';
-  if (days === 1) return 'Updated yesterday';
-  if (days < 7) return `Updated ${days} days ago`;
-  if (days < 14) return 'Updated last week';
-  if (days < 60) return `Updated ${Math.round(days / 7)} weeks ago`;
-  return `Updated ${Math.round(days / 30)} months ago`;
 }

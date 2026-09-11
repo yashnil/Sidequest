@@ -1,16 +1,25 @@
 import type { Metadata, Viewport } from 'next';
-import { Instrument_Sans, Instrument_Serif } from 'next/font/google';
+import { Manrope, Newsreader } from 'next/font/google';
 import './globals.css';
 
 /*
- * PRODUCTION UI V1 — one distinctive pairing, self-hosted at build time by
- * next/font (no runtime fetch, no layout shift): Instrument Serif for
- * editorial display, Instrument Sans (variable) for everything a traveller
- * scans. Both are OFL-licensed Google Fonts. Exposed as CSS variables the
- * theme reads; system fallbacks stay in the stack.
+ * V8 — THE LIVING TRAVEL ATLAS PAIRING, SELF-HOSTED AT BUILD TIME.
+ *
+ * Newsreader (variable, optical sizes 6–72) carries destination names,
+ * question titles and the editorial voice: it reads as a travel magazine at
+ * display size and stays legible at card size, where Instrument Serif went
+ * spindly. Manrope (variable) carries every row a traveller scans: wider
+ * counters and a taller x-height than Instrument Sans, so 15 px body and
+ * 13 px metadata are comfortably readable, and its tabular figures set the
+ * durations, prices and dates. Both are OFL-licensed Google Fonts, fetched by
+ * next/font at build time — no runtime request, no layout shift. Exposed as
+ * CSS variables the theme reads; system fallbacks stay in the stack.
+ *
+ * Verified on the review, the interview and the hub before adoption
+ * (`.claude-private/V8-UI-AUDIT.md`, round 2).
  */
-const displayFont = Instrument_Serif({ subsets: ['latin', 'latin-ext'], weight: '400', style: ['normal', 'italic'], variable: '--font-instrument-serif', display: 'swap' });
-const uiFont = Instrument_Sans({ subsets: ['latin', 'latin-ext'], variable: '--font-instrument-sans', display: 'swap' });
+const displayFont = Newsreader({ subsets: ['latin', 'latin-ext'], axes: ['opsz'], style: ['normal', 'italic'], variable: '--font-newsreader', display: 'swap' });
+const uiFont = Manrope({ subsets: ['latin', 'latin-ext'], variable: '--font-manrope', display: 'swap' });
 
 /**
  * THE DOCUMENT, AND NOTHING ELSE.

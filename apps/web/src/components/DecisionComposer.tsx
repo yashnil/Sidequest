@@ -11,7 +11,7 @@ import {
   TRIP_THEMES,
   TRIP_THEME_LABELS,
 } from '@sidequest/core';
-import { Choice, ChoiceGroup, ErrorNote, FieldLabel, Panel, buttonClass, cx } from './ui';
+import { ChoiceGroup, ErrorNote, FOCUS_RING, FieldLabel, OVERLAY_INPUT, buttonClass, cx, selectableCardClass } from './ui';
 import {
   saveDecisionAnswersAction,
   startDecisionAction,
@@ -127,7 +127,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
                 ['undecided', 'Not decided at all'],
               ] as const
             ).map(([value, label]) => (
-              <Choice
+              <Option
                 key={value}
                 name="decideDateMode"
                 value={value}
@@ -159,7 +159,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
           {dateMode === 'season' ? (
             <ChoiceGroup legend="Which season?" columns={4} className="mt-5">
               {(['spring', 'summer', 'autumn', 'winter'] as const).map((value) => (
-                <Choice
+                <Option
                   key={value}
                   name="decideSeason"
                   value={value}
@@ -219,7 +219,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
               }
               className={inputClass}
             />
-            <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+            <p className="mt-2 type-small text-ink-muted">
               This does more work than anything else here: it decides how much ground a place has to
               cover to be worth the trip.
             </p>
@@ -233,7 +233,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
             columns={2}
           >
             {TRIP_THEMES.map((theme) => (
-              <Choice
+              <Option
                 key={theme}
                 name={`decideTheme-${theme}`}
                 type="checkbox"
@@ -255,7 +255,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
         <Section step={3} title="How much moving around?">
           <ChoiceGroup legend="How often would you change where you sleep?" columns={2}>
             {TRIP_SHAPES.map((value) => (
-              <Choice
+              <Option
                 key={value}
                 name="decideShape"
                 value={value}
@@ -268,7 +268,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
 
           <ChoiceGroup legend="How would you get around?" columns={2} className="mt-6">
             {TRANSPORT_INTENTS.map((value) => (
-              <Choice
+              <Option
                 key={value}
                 name="decideTransport"
                 value={value}
@@ -278,7 +278,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
               />
             ))}
           </ChoiceGroup>
-          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+          <p className="mt-2 type-small text-ink-muted">
             Saying nothing means we assume no car, which is the recoverable error — a place we
             ruled out for being spread thin comes back the moment you say you will drive.
           </p>
@@ -286,7 +286,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
           <button
             type="button"
             onClick={() => setShowMore((current) => !current)}
-            className="mt-6 text-sm text-ink-muted underline underline-offset-4 hover:text-pine"
+            className="mt-4 inline-flex min-h-11 items-center text-sm text-ink underline underline-offset-4 hover:text-pine focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
             aria-expanded={showMore}
           >
             {showMore ? 'Fewer questions' : 'A few more that change the answer'}
@@ -302,7 +302,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
                     ['packed', 'Packed'],
                   ] as const
                 ).map(([value, label]) => (
-                  <Choice
+                  <Option
                     key={value}
                     name="decidePace"
                     value={value}
@@ -321,7 +321,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
                     ['strenuous', 'Strenuous'],
                   ] as const
                 ).map(([value, label]) => (
-                  <Choice
+                  <Option
                     key={value}
                     name="decideIntensity"
                     value={value}
@@ -334,7 +334,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
 
               <ChoiceGroup legend="Budget" columns={3}>
                 {BUDGET_BANDS.map((band) => (
-                  <Choice
+                  <Option
                     key={band}
                     name="decideBudget"
                     value={band}
@@ -395,7 +395,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
         <div className="flex flex-wrap items-center gap-4 border-t border-rule pt-7">
           <button
             type="button"
-            className={buttonClass('primary')}
+            className={buttonClass('accent', 'lg')}
             disabled={pending || !ready || !props.indexReady}
             onClick={submit}
           >
@@ -405,14 +405,14 @@ export function DecisionComposer(props: DecisionComposerProps) {
                 ? 'Save and rank again'
                 : 'Show me where to go'}
           </button>
-          <span className="text-sm text-ink-faint">
+          <span className="type-small text-ink-muted">
             {ready ? 'Free, and a few seconds.' : 'Pick at least one thing you are going for.'}
           </span>
         </div>
       </div>
 
       <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="How this is decided">
-        <Panel className="p-5">
+        <div className="card rounded-[var(--radius-panel)] p-5">
           <p className="eyebrow">How we decide</p>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-ink-muted">
             <li>
@@ -432,19 +432,67 @@ export function DecisionComposer(props: DecisionComposerProps) {
               than quietly scored as zero.
             </li>
           </ul>
-          <p className="mt-5 border-t border-rule pt-4 text-xs leading-relaxed text-ink-faint">
+          <p className="mt-5 border-t border-rule pt-4 type-small text-ink-muted">
             No model chooses, orders or removes a destination. The ranking is arithmetic over
             sourced data, and you can open every number behind it.
             {props.climateEnabled ? '' : ' Sidequest has no climate record to compare months with here.'}
           </p>
-        </Panel>
+        </div>
       </aside>
     </div>
   );
 }
 
 const inputClass =
-  'mt-2 w-full rounded-lg border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint';
+  'mt-2 min-h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
+
+/**
+ * V8 — ONE OPTION OF A QUESTION, AS A SELECTABLE CARD.
+ *
+ * The same contract as the kit's `Choice` — a native radio or checkbox
+ * overlaid on its label, so keyboard traversal and announcement are the
+ * browser's — drawn with `selectableCardClass`: a chosen option is a filled
+ * card with the accent edge, a filled mark and a heavier title, never a border
+ * colour alone. The mark is `aria-hidden`; the input's own state is what
+ * assistive technology reads, and a tick inside the label would otherwise be
+ * spoken as part of the option's name.
+ */
+function Option({
+  name,
+  value,
+  checked,
+  onChange,
+  label,
+  type = 'radio',
+}: {
+  name: string;
+  value: string;
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  type?: 'radio' | 'checkbox';
+}) {
+  return (
+    <label className={selectableCardClass(checked, cx('flex min-h-12 cursor-pointer items-center gap-3 px-4 py-3 text-left', FOCUS_RING))}>
+      <input type={type} name={name} value={value} checked={checked} onChange={onChange} className={OVERLAY_INPUT} />
+      <span
+        aria-hidden="true"
+        className={cx(
+          'grid h-5 w-5 shrink-0 place-items-center border transition-colors duration-[var(--motion-fast)]',
+          type === 'checkbox' ? 'rounded-[5px]' : 'rounded-full',
+          checked ? 'border-accent bg-accent text-paper' : 'border-rule bg-paper',
+        )}
+      >
+        {checked ? (
+          <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m3.5 8.5 3 3 6-7" />
+          </svg>
+        ) : null}
+      </span>
+      <span className={cx('min-w-0 text-sm', checked ? 'font-semibold text-accent-strong' : 'text-ink')}>{label}</span>
+    </label>
+  );
+}
 
 function Section({
   step,
@@ -460,11 +508,11 @@ function Section({
       <div className="flex items-baseline gap-3">
         <span
           aria-hidden="true"
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-medium text-paper"
+          className="type-figure flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-xs text-paper"
         >
           {step}
         </span>
-        <h2 id={`decide-step-${step}`} className="font-display text-2xl text-ink">
+        <h2 id={`decide-step-${step}`} className="display-md text-ink">
           {title}
         </h2>
       </div>

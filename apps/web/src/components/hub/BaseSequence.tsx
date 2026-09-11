@@ -34,12 +34,12 @@ export function BaseSequence({ bases, variant = 'paper', className, testId = 'ba
             className={cx('pressable group flex min-w-0 items-center gap-2.5 rounded-full py-1 pr-3 pl-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', onAtlas ? 'hover:bg-white/10 focus-visible:outline-[var(--color-route-bright)]' : 'hover:bg-paper-sunk focus-visible:outline-pine')}
             data-testid="base-sequence-stop"
           >
-            <span aria-hidden="true" className={cx('grid h-6 w-6 shrink-0 place-items-center rounded-sm border-2 text-[10px] font-semibold', node, onAtlas ? 'text-[var(--color-atlas)]' : 'text-paper')}>
+            <span aria-hidden="true" className={cx('type-figure grid h-7 w-7 shrink-0 place-items-center rounded-sm border-2 text-xs', node, onAtlas ? 'text-[var(--color-atlas)]' : 'text-paper')}>
               {index + 1}
             </span>
             <span className="min-w-0">
               <span className={cx('block truncate font-display text-lg leading-tight', text)}>{base.name}</span>
-              <span className={cx('numeral block text-[11px] leading-tight', meta)}>
+              <span className={cx('type-figure block text-xs font-medium leading-tight', meta)}>
                 {base.nights} {base.nights === 1 ? 'night' : 'nights'}
                 {base.insertedBySidequest ? ' · added for your driving limit' : ''}
               </span>

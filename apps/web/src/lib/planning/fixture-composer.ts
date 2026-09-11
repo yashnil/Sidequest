@@ -192,6 +192,17 @@ export class FixtureComposer implements StructuredModel {
   async structured<T>(input: { schema: z.ZodType<T>; normalize?: (raw: unknown) => { value: unknown; normalizedFields: readonly string[] } }): Promise<T> {
     this.calls += 1;
     this.usage.calls += 1;
+    /*
+     * V8 — two fixture-only behaviours the browser suite needs and no real
+     * model has: a composition that fails, and one that takes long enough to
+     * reload the build screen while it runs. Keyed on words in the destination
+     * the traveller typed, because this class exists only under
+     * `SIDEQUEST_COMPOSER_PROVIDER=fixture` and the suite creates its own trips.
+     * A real destination never contains either token.
+     */
+    const name = this.context.envelope.name;
+    if (/\bunbuildable\b/i.test(name)) throw new Error('The fixture composer refused this trip, as asked.');
+    if (/\bslowbuild\b/i.test(name)) await new Promise((resolve) => setTimeout(resolve, 8_000));
     const draft = fixtureDraftFor(this.context, this.hints);
     const normalized = input.normalize ? input.normalize(draft).value : draft;
     // The seam now receives the wire schema (what the model is asked to emit) with a loose validation

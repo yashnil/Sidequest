@@ -37,6 +37,15 @@ export interface DashboardRow {
   nextAction: string;
   href: string;
   progressTone: 'neutral' | 'pine' | 'amber' | 'blue' | 'clay';
+  /**
+   * V8 §9 — where the trip is when no finished plan can speak for it, in
+   * `tripProgress`'s words ("Not planned yet", "Building now", "Waiting on
+   * your answers"), and its rank so the home strip can lead with what
+   * somebody most likely came back for.
+   */
+  progressState: string;
+  progressLabel: string;
+  progressRank: number;
   updatedAt: string;
   startDate: string;
   image: DestinationImage | null;
@@ -88,10 +97,35 @@ function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: nu
     nextAction: reading.lifecycle === 'past' ? 'Look back' : reading.lifecycle === 'archived' ? 'Open' : progress.action,
     href: progress.path(trip.id),
     progressTone: progress.tone,
+    progressState: progress.state,
+    progressLabel: progress.label,
+    progressRank: progress.rank,
     updatedAt: trip.updatedAt,
     startDate: trip.basics.startDate,
     image,
     fallback: imageryFallbackFor({ kind: 'destination', id: entry?.id ?? trip.id, name: trip.basics.destinationInput, ...(entry?.center ? { coordinates: entry.center } : {}) }),
     claimed: Boolean(trip.userId),
   };
+}
+
+/**
+ * When a trip was last touched, in the words a person would use.
+ *
+ * Deliberately coarse. A timestamp to the minute is a database field; what a
+ * traveller wants to know is whether this is the thing they were working on
+ * yesterday or something they started in the spring. Computed on the server,
+ * once, because the card is a client component rendered twice and "3 days
+ * ago" from `Date.now()` in both places is a hydration mismatch waiting for a
+ * midnight.
+ */
+export function lastTouched(updatedAt: string, now: Date): string {
+  const then = Date.parse(updatedAt);
+  if (Number.isNaN(then)) return 'Saved';
+  const days = Math.floor((now.getTime() - then) / 86_400_000);
+  if (days <= 0) return 'Updated today';
+  if (days === 1) return 'Updated yesterday';
+  if (days < 7) return `Updated ${days} days ago`;
+  if (days < 14) return 'Updated last week';
+  if (days < 60) return `Updated ${Math.round(days / 7)} weeks ago`;
+  return `Updated ${Math.round(days / 30)} months ago`;
 }

@@ -12,10 +12,10 @@ const AREA =
 /**
  * THE PROFILE FORM — TWO FACTS AND FOUR PREFERENCES, NOT A SETTINGS PAGE.
  *
- * Grouped so the eye can tell the two halves apart: who you are (a name, the
- * airport you leave from) above the rule, how you usually travel below it. The
- * save state is a real confirmation rather than a grey word — a form that says
- * "Saved." in caption type is a form people press twice.
+ * Two cards so the eye can tell the halves apart: who you are (a name, the
+ * airport you leave from), then how you usually travel. The save state is a
+ * real confirmation rather than a grey word — a form that says "Saved." in
+ * caption type is a form people press twice.
  */
 export function ProfileForm({ initial, email }: { initial: { displayName: string; homeAirport: string; usual: { budgetStyle?: string; pace?: string; drives?: boolean; foodNotes?: string; lodgingNotes?: string } }; email: string | null }) {
   const [displayName, setDisplayName] = useState(initial.displayName);
@@ -36,7 +36,7 @@ export function ProfileForm({ initial, email }: { initial: { displayName: string
 
   return (
     <form
-      className="mt-9"
+      className="mt-8 grid gap-6"
       onSubmit={(event) => {
         event.preventDefault();
         setError(null);
@@ -48,8 +48,8 @@ export function ProfileForm({ initial, email }: { initial: { displayName: string
         });
       }}
     >
-      <section aria-labelledby="profile-you">
-        <h2 id="profile-you" className="type-section rule-top pt-4 text-ink">
+      <section className="card rounded-[var(--radius-panel)] p-5 sm:p-6" aria-labelledby="profile-you">
+        <h2 id="profile-you" className="type-section text-ink">
           You
         </h2>
         {email ? <p className="mt-1 type-small text-ink-muted">Signed in as {email}</p> : null}
@@ -65,8 +65,8 @@ export function ProfileForm({ initial, email }: { initial: { displayName: string
         </div>
       </section>
 
-      <section className="mt-10" aria-labelledby="profile-usual">
-        <h2 id="profile-usual" className="type-section rule-top pt-4 text-ink">
+      <section className="card rounded-[var(--radius-panel)] p-5 sm:p-6" aria-labelledby="profile-usual">
+        <h2 id="profile-usual" className="type-section text-ink">
           How you usually travel
         </h2>
         <p className="mt-1 type-small text-ink-muted">A starting point for a new trip, never a rule.</p>
@@ -106,8 +106,8 @@ export function ProfileForm({ initial, email }: { initial: { displayName: string
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-      <div className="mt-8 flex min-w-0 flex-wrap items-center gap-3">
-        <button type="submit" disabled={pending} className={buttonClass('primary')} data-testid="profile-save">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <button type="submit" disabled={pending} className={buttonClass('accent')} data-testid="profile-save">
           {pending ? 'Saving…' : 'Save profile'}
         </button>
         <p aria-live="polite" className="type-small text-pine">

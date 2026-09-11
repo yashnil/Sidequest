@@ -118,7 +118,7 @@ export function InterpretationPanel({
       : `${kept.length} reading${kept.length === 1 ? '' : 's'} waiting for your say-so`;
     return (
       <div className="mx-auto max-w-3xl px-5 pt-4 sm:px-8">
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-rule bg-paper-sunk px-4 py-1.5">
+        <div className="card flex items-center justify-between gap-3 px-4 py-1.5">
           <p className="min-w-0 truncate text-sm text-ink-muted">
             <span className="font-medium text-ink">What we made of what you wrote</span>
             {' — '}
@@ -379,17 +379,17 @@ export function InterpretationPanel({
         ) : null}
 
         <details className="mt-5 border-t border-rule pt-4">
-          <summary className="cursor-pointer text-xs text-ink-faint">What you actually wrote</summary>
+          <summary className="inline-flex min-h-9 cursor-pointer items-center text-sm text-ink-muted underline underline-offset-4">What you actually wrote</summary>
           <dl className="mt-3 space-y-2 text-sm">
             {mustDo ? (
               <div>
-                <dt className="text-xs uppercase tracking-[0.12em] text-ink-faint">Would regret missing</dt>
+                <dt className="label">Would regret missing</dt>
                 <dd className="mt-0.5 text-ink">{mustDo}</dd>
               </div>
             ) : null}
             {avoid ? (
               <div>
-                <dt className="text-xs uppercase tracking-[0.12em] text-ink-faint">Rather not</dt>
+                <dt className="label">Rather not</dt>
                 <dd className="mt-0.5 text-ink">{avoid}</dd>
               </div>
             ) : null}

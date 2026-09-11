@@ -5,6 +5,7 @@ import { tilesForViewport, type MapBasemap } from './map-adapter';
 import { VectorBasemapLayer, type MapHealth } from './VectorBasemap';
 import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoint, type MapViewport } from './map-projection';
 import { cx } from './ui';
+import { LEG_LINE_STYLE, legPath, legendFor } from './hub/route-styles';
 
 /**
  * ONE INTERACTIVE MAP FOR THE BOARD AND THE ITINERARY.
@@ -148,20 +149,13 @@ function viewportFor(view: View, width: number, height: number): MapViewport {
   };
 }
 
-/* PRODUCTION UI V1 — map colour is functional: the measured route in cartographic teal, an estimated leg in umber dashes, an untimed leg as a faint short-dashed connector. */
-const CONNECTOR_STYLE: Record<MapConnectorStyle, { stroke: string; dash?: string; width: number; opacity: number }> = {
-  measured_drive: { stroke: 'var(--color-map-route)', width: 3, opacity: 0.95 },
-  measured_transit: { stroke: 'var(--color-map-route)', dash: '9 5', width: 3, opacity: 0.95 },
-  measured_walk: { stroke: 'var(--color-pine)', dash: '2 4', width: 2.5, opacity: 0.9 },
-  estimated: { stroke: 'var(--color-map-secondary)', dash: '6 5', width: 2.25, opacity: 0.85 },
-  unmeasured: { stroke: 'var(--color-ink-faint)', dash: '3 4', width: 1.5, opacity: 0.7 },
-  sightline: { stroke: 'var(--color-pine)', dash: '3 4', width: 1.5, opacity: 0.55 },
-  conceptual: { stroke: 'var(--color-map-route)', dash: '7 6', width: 2, opacity: 0.65 },
-  boat: { stroke: 'var(--color-map-route)', dash: '1 7', width: 3.5, opacity: 0.9 },
-  rail: { stroke: 'var(--color-ink)', dash: '10 3 2 3', width: 2.5, opacity: 0.85 },
-  flight: { stroke: 'var(--color-ink-faint)', dash: '1 9', width: 2, opacity: 0.8 },
-  trail: { stroke: 'var(--color-pine)', dash: '2 3', width: 2.5, opacity: 0.9 },
-};
+/*
+ * PRODUCTION UI V1 — map colour is functional: the measured route in
+ * cartographic teal, an estimated leg in umber dashes, an untimed leg as a
+ * faint short-dashed connector. V8 — the line styles and the legend sentences
+ * live together in `hub/route-styles.ts`, so a line and its key cannot drift.
+ */
+const EASE_MS = 420;
 
 export function InteractiveMap({
   markers,
@@ -186,11 +180,49 @@ export function InteractiveMap({
   const fitKey = points.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join('|');
   const fitted = useMemo(() => fitView(points, width, height), [fitKey, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
   const [view, setView] = useState<View>(fitted);
-  const [fittedFor, setFittedFor] = useState(fitKey);
-  if (fittedFor !== fitKey) {
-    setFittedFor(fitKey);
-    setView(fitted);
-  }
+  /*
+   * V8 — THE CAMERA EASES; IT DOES NOT CUT.
+   *
+   * A day filter, "Fit" and the `0` key move the camera through a 420 ms
+   * ease-out tween between the current view and the fitted one, so a reader
+   * keeps their bearings when the drawing changes scale. Zoom steps stay
+   * immediate — they are feedback, not navigation. A reduced-motion machine
+   * jumps straight to the target, and nothing waits on the tween finishing.
+   */
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const animation = useRef<number | null>(null);
+  const animateTo = useCallback((target: View) => {
+    if (animation.current !== null) cancelAnimationFrame(animation.current);
+    const reduced = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || typeof requestAnimationFrame !== 'function') {
+      setView(target);
+      return;
+    }
+    const from = viewRef.current;
+    const started = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / EASE_MS);
+      const eased = 1 - (1 - t) ** 3;
+      setView({ cx: from.cx + (target.cx - from.cx) * eased, cy: from.cy + (target.cy - from.cy) * eased, scale: from.scale * (target.scale / from.scale) ** eased });
+      animation.current = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    animation.current = requestAnimationFrame(step);
+  }, []);
+  useEffect(
+    () => () => {
+      if (animation.current !== null) cancelAnimationFrame(animation.current);
+    },
+    [],
+  );
+  const fittedFor = useRef(fitKey);
+  useEffect(() => {
+    if (fittedFor.current === fitKey) return;
+    fittedFor.current = fitKey;
+    animateTo(fitted);
+  }, [fitKey, fitted, animateTo]);
   const viewport = viewportFor(view, width, height);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
@@ -290,16 +322,10 @@ export function InteractiveMap({
   const basemapDrawn = vector !== null && (basemapHealth === 'ready' || basemapHealth === 'degraded');
   const placedTiles = tiles && tiles.kind !== 'vector' ? tilesForViewport({ viewport, source: tiles, maxTiles: 48 }) : [];
   const centreGeo = viewport.unproject({ x: width / 2, y: height / 2 });
-  const hasMeasured = connectors.some((c) => c.style.startsWith('measured'));
-  const hasConceptual = connectors.some((c) => c.style === 'conceptual');
   const hasRouteShape = connectors.some((c) => c.path && c.path.length > 1);
   const hasStraightMeasured = connectors.some((c) => c.style.startsWith('measured') && !(c.path && c.path.length > 1));
-  const hasEstimated = connectors.some((c) => c.style === 'estimated');
-  const hasUnmeasured = connectors.some((c) => c.style === 'unmeasured' || c.style === 'sightline');
-  const hasBoat = connectors.some((c) => c.style === 'boat');
-  const hasRail = connectors.some((c) => c.style === 'rail');
-  const hasFlight = connectors.some((c) => c.style === 'flight');
-  const hasTrail = connectors.some((c) => c.style === 'trail');
+  /* The legend lists exactly the styles on the drawing — never a line nobody drew. */
+  const legend = legendFor(connectors.map((c) => c.style));
 
   function onKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
     const handled: Record<string, () => void> = {
@@ -310,7 +336,7 @@ export function InteractiveMap({
       '+': () => zoomBy(ZOOM_STEP),
       '=': () => zoomBy(ZOOM_STEP),
       '-': () => zoomBy(1 / ZOOM_STEP),
-      '0': () => setView(fitted),
+      '0': () => animateTo(fitted),
     };
     const action = handled[event.key];
     if (action && event.target === event.currentTarget) {
@@ -401,7 +427,7 @@ export function InteractiveMap({
             ) : null}
 
             {connectors.map((connector) => {
-              const style = CONNECTOR_STYLE[connector.style];
+              const style = LEG_LINE_STYLE[connector.style];
               if (connector.path && connector.path.length > 1) {
                 const points = connector.path.map((p) => viewport.project(p)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
                 return (
@@ -410,8 +436,9 @@ export function InteractiveMap({
               }
               const from = viewport.project(connector.from);
               const to = viewport.project(connector.to);
+              /* A flight arcs, a boat rides a wave, everything else is the straight line it honestly is. */
               return (
-                <line key={connector.id} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} opacity={style.opacity} strokeLinecap="round" data-connector-style={connector.style} data-connector-shape="straight" />
+                <path key={connector.id} d={legPath(connector.style, from, to)} fill="none" stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} opacity={style.opacity} strokeLinecap="round" strokeLinejoin="round" data-connector-style={connector.style} data-connector-shape={style.shape} />
               );
             })}
 
@@ -552,7 +579,7 @@ export function InteractiveMap({
             ))}
           </ol>
         ) : null}
-        <figcaption className={cx('mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-snug text-ink-faint', chromeless && 'sr-only')}>
+        <figcaption className={cx('mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs leading-snug text-ink-faint', chromeless && 'sr-only')} data-testid={`${testId}-legend`}>
           {base ? (
             <span className="flex items-center gap-1.5">
               <span aria-hidden="true" className="inline-block h-2 w-2 rounded-[2px] bg-ink" />
@@ -566,22 +593,24 @@ export function InteractiveMap({
             </span>
           ) : null}
           {markers.some((m) => m.kind === 'stop') ? <span>Numbered in the order of the day.</span> : null}
-          {hasMeasured ? <span>Solid lines: measured legs{hasStraightMeasured ? ' (straight where no road shape was recorded)' : ''}; dotted: on foot.</span> : null}
-          {hasRouteShape && !hasMeasured ? <span>Curved lines follow the measured road.</span> : null}
-          {hasEstimated ? <span>Umber dashes: estimated from map distance.</span> : null}
-          {hasConceptual ? <span>Dashed lines are conceptual — nothing is placed until the plan is built.</span> : null}
           {/*
-            Only when a short dash is actually on the map.
-            It used to appear for any `place` marker, so a screen with one mark
-            and no lines carried a legend for lines nobody had drawn — a caption
-            asserting something the picture does not show, which is the one
-            thing every other rule in this file exists to prevent.
+            One entry per line style actually on the map, each with a sample of
+            the line beside the words. It used to appear for any `place`
+            marker, so a screen with one mark and no lines carried a legend for
+            lines nobody had drawn — a caption asserting something the picture
+            does not show, which is the one thing every other rule in this file
+            exists to prevent.
           */}
-          {hasUnmeasured ? <span>Short dashes: straight connectors, not routes.</span> : null}
-          {hasBoat ? <span>Round dots: by boat, on the operator’s timing.</span> : null}
-          {hasRail ? <span>Long-short dashes: by train.</span> : null}
-          {hasFlight ? <span>Faint dots: a flight, drawn point to point.</span> : null}
-          {hasTrail ? <span>Fine dots: on the trail.</span> : null}
+          {legend.map((entry) => (
+            <span key={entry.style} className="inline-flex items-center gap-1.5" data-legend-style={entry.style} data-legend-basis={entry.basis}>
+              <LegendSample style={entry.style} />
+              <span>
+                {entry.legend}
+                {entry.style.startsWith('measured') && hasStraightMeasured ? ' (straight where no road shape was recorded)' : ''}
+              </span>
+            </span>
+          ))}
+          {hasRouteShape ? <span>Curved lines follow the measured road.</span> : null}
           {caption}
           {basemapDrawn || placedTiles.length > 0 ? (
             <span>{tiles!.attribution}</span>
@@ -592,7 +621,7 @@ export function InteractiveMap({
         </figcaption>
       </figure>
       {/* The attribution stays visible even chromeless: it is a licence obligation, not chrome. */}
-      {chromeless ? <p className="mt-1.5 text-[10px] leading-snug text-ink-faint">{basemapDrawn || placedTiles.length > 0 ? tiles!.attribution : null}</p> : null}
+      {chromeless ? <p className="mt-1.5 text-xs leading-snug text-ink-faint">{basemapDrawn || placedTiles.length > 0 ? tiles!.attribution : null}</p> : null}
       <div className={cx('mt-2 flex-wrap items-center gap-1.5', chromeless ? 'hidden' : 'flex')} aria-label="Map controls">
         <MapButton label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
           +
@@ -600,10 +629,10 @@ export function InteractiveMap({
         <MapButton label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
           −
         </MapButton>
-        <MapButton label="Fit the map to every place" onClick={() => setView(fitted)}>
+        <MapButton label="Fit the map to every place" onClick={() => animateTo(fitted)}>
           Fit
         </MapButton>
-        <span className="text-[11px] text-ink-faint">Drag to pan · arrow keys pan, + and − zoom when the map has focus</span>
+        <span className="text-xs text-ink-faint">Drag to pan · arrow keys pan, + and − zoom when the map has focus</span>
       </div>
     </div>
   );
@@ -611,9 +640,19 @@ export function InteractiveMap({
 
 function MapButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md border border-rule bg-paper-raised px-2 text-sm text-ink hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2">
+    <button type="button" aria-label={label} title={label} onClick={onClick} className="pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-control)] border border-rule bg-paper-raised px-2 text-sm font-medium text-ink shadow-[var(--shadow-card)] hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2">
       {children}
     </button>
+  );
+}
+
+/** A sample of one line style, drawn exactly as the map draws it, for the legend. */
+function LegendSample({ style }: { style: MapConnectorStyle }) {
+  const line = LEG_LINE_STYLE[style];
+  return (
+    <svg viewBox="0 0 36 10" width={36} height={10} aria-hidden="true" className="shrink-0">
+      <path d={legPath(style, { x: 2, y: 5 }, { x: 34, y: 5 })} fill="none" stroke={line.stroke} strokeWidth={Math.min(line.width, 2.5)} strokeDasharray={line.dash} opacity={line.opacity} strokeLinecap="round" />
+    </svg>
   );
 }
 

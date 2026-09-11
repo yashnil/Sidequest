@@ -18,7 +18,7 @@ import { BookedStatusControl } from '@/app/(product)/trips/[id]/itinerary/live-c
  * All three are plain forms that call a server action and let the page
  * re-render from disk. Nothing here keeps its own copy of the plan.
  */
-const inputClass = 'mt-1 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint';
+const inputClass = 'mt-1 min-h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine';
 
 export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string; startDate: string; endDate: string }) {
   const [open, setOpen] = useState(false);
@@ -64,8 +64,8 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
     );
   }
   return (
-    <form action={submit} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="booked-form">
-      <p className="label text-ink-faint">Something you have booked</p>
+    <form action={submit} className="card-raised p-5" data-testid="booked-form">
+      <p className="eyebrow">Something you have booked</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-ink">
           Kind
@@ -115,7 +115,7 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
           </select>
         </label>
         <label className="text-sm text-ink">
-          Confirmation reference <span className="text-ink-faint">(optional, stays on this trip only)</span>
+          Confirmation reference <span className="text-ink-muted">(optional, stays on this trip only)</span>
           <input name="confirmationRef" maxLength={80} autoComplete="off" className={inputClass} />
         </label>
         <label className="text-sm text-ink sm:col-span-2">
@@ -139,14 +139,14 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
 export function BookedItemRow({ tripId, item }: { tripId: string; item: BookedPlanItem }) {
   const [pending, startTransition] = useTransition();
   return (
-    <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5" data-testid="booked-item">
+    <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3" data-testid="booked-item">
       <div className="min-w-0">
         <p className="text-sm text-ink">
-          <span className="font-medium">{item.title}</span>
-          <span className="text-ink-faint"> · {BOOKED_ITEM_TYPE_LABELS[item.type]}</span>
-          {item.status !== 'booked' ? <span className="text-ink-faint"> · {item.status === 'soft_hold' ? 'held' : 'idea'}</span> : null}
+          <span className="font-semibold">{item.title}</span>
+          <span className="text-ink-muted"> · {BOOKED_ITEM_TYPE_LABELS[item.type]}</span>
+          {item.status !== 'booked' ? <span className="text-ink-muted"> · {item.status === 'soft_hold' ? 'held' : 'idea'}</span> : null}
         </p>
-        <p className="numeral text-xs text-ink-muted">
+        <p className="type-figure text-xs font-medium text-ink-muted">
           {item.date ?? 'No date'}
           {item.endDate ? ` → ${item.endDate}` : ''}
           {item.startTime ? ` · ${item.startTime}` : ''}
@@ -156,7 +156,7 @@ export function BookedItemRow({ tripId, item }: { tripId: string; item: BookedPl
       </div>
       <span className="inline-flex flex-wrap items-center gap-3">
         <BookedStatusControl tripId={tripId} id={item.id} status={item.status} {...(item.cost ? { cost: item.cost } : {})} />
-        <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx('text-xs text-ink-faint underline underline-offset-4 hover:text-clay', FOCUS_RING)} data-testid="booked-remove">
+        <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx(buttonClass('ghost', 'sm'), 'hover:text-clay')} data-testid="booked-remove">
           Remove
         </button>
       </span>
@@ -202,7 +202,7 @@ export function ReadinessProfileForm({ tripId, current, drives }: { tripId: stri
           {current ? 'Change what Sidequest knows' : 'Want Sidequest to check travel-document requirements?'}
         </button>
         {current ? (
-          <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await clearReadinessProfileAction(tripId)))} className={cx('text-xs text-ink-faint underline underline-offset-4', FOCUS_RING)}>
+          <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await clearReadinessProfileAction(tripId)))} className={buttonClass('ghost', 'sm')}>
             Forget these details
           </button>
         ) : null}
@@ -210,9 +210,9 @@ export function ReadinessProfileForm({ tripId, current, drives }: { tripId: stri
     );
   }
   return (
-    <form action={submit} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="readiness-form">
-      <p className="label text-ink-faint">Only what changes a requirement</p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-muted">No passport number, no scans, nothing inferred. Kept on this trip only; forget it any time.</p>
+    <form action={submit} className="card-raised p-5" data-testid="readiness-form">
+      <p className="eyebrow">Only what changes a requirement</p>
+      <p className="mt-1 text-sm leading-relaxed text-ink-muted">No passport number, no scans, nothing inferred. Kept on this trip only; forget it any time.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-ink">
           Passport issued by
@@ -264,7 +264,7 @@ export function CheckBox({ tripId, list, itemId, checked, label, hint, testId }:
   const [pending, startTransition] = useTransition();
   const [local, setLocal] = useState(checked);
   return (
-    <label className={cx('flex cursor-pointer items-start gap-3 py-1.5', FOCUS_RING, local && 'text-ink-faint')}>
+    <label className={cx('flex min-h-11 cursor-pointer items-start gap-3 rounded-[var(--radius-control)] py-2', FOCUS_RING, local && 'text-ink-faint')}>
       <input
         type="checkbox"
         checked={local}
@@ -274,11 +274,11 @@ export function CheckBox({ tripId, list, itemId, checked, label, hint, testId }:
           setLocal(next);
           if (tripId) startTransition(async () => void (await setCheckAction(tripId, list, itemId, next)));
         }}
-        className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+        className="mt-1 h-[18px] w-[18px] shrink-0 accent-[var(--color-accent)]"
         {...(testId ? { 'data-testid': testId } : {})}
       />
       <span className="min-w-0">
-        <span className={cx('block text-sm', local ? 'line-through' : 'text-ink')}>{label}</span>
+        <span className={cx('block text-sm font-medium', local ? 'line-through' : 'text-ink')}>{label}</span>
         {hint ? <span className="check-hint block text-xs leading-snug text-ink-muted">{hint}</span> : null}
       </span>
     </label>

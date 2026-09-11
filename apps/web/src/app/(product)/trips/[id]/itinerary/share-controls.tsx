@@ -48,7 +48,7 @@ export function ShareControl({ tripId }: { tripId: string }) {
           {pending ? 'Making a link…' : 'Share this plan'}
         </button>
         {status ? (
-          <p role="alert" className="w-full text-xs leading-relaxed text-clay">
+          <p role="alert" className="w-full text-sm leading-relaxed text-clay">
             {status}
           </p>
         ) : null}
@@ -64,7 +64,7 @@ export function ShareControl({ tripId }: { tripId: string }) {
         aria-label="Share link"
         value={url}
         onFocus={(event) => event.currentTarget.select()}
-        className="min-w-0 flex-1 rounded-lg border border-rule bg-paper-raised px-3 py-2 text-xs text-ink"
+        className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
       />
       <button
         type="button"
@@ -84,11 +84,11 @@ export function ShareControl({ tripId }: { tripId: string }) {
         {copied ? 'Copied' : 'Copy link'}
       </button>
       {status ? (
-        <p role="alert" className="w-full text-xs leading-relaxed text-clay">
+        <p role="alert" className="w-full text-sm leading-relaxed text-clay">
           {status}
         </p>
       ) : null}
-      <p className="w-full text-xs leading-relaxed text-ink-faint">
+      <p className="w-full text-xs leading-relaxed text-ink-muted">
         Anyone with this link can read the plan — and only read it. Your board and controls stay
         yours.
       </p>

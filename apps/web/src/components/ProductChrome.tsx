@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ChromeAccount } from '@/lib/auth/chrome';
 import { MobileNav } from './MobileNav';
+import { ChromeFooter, NavLinks } from './NavLinks';
 import { SignOutButton } from './SignOutButton';
 
 /**
@@ -61,8 +62,10 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
   const user = account.user;
   const signInAvailable = account.signInAvailable;
   const initials = user ? (user.displayName ?? user.email ?? '?').trim().charAt(0).toUpperCase() : null;
-  const navLink =
-    'inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-paper-sunk hover:text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
+  const places: { href: string; label: string; testId: string; place: 'trips' | 'explore' }[] = [
+    { href: '/trips', label: 'Trips', testId: 'nav-trips', place: 'trips' },
+    ...(user ? [{ href: '/decide', label: 'Explore', testId: 'nav-explore', place: 'explore' as const }] : []),
+  ];
   return (
     <>
       <a
@@ -71,47 +74,48 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-30 border-b border-rule bg-paper/95 backdrop-blur-sm" data-testid="product-chrome">
+      {/*
+        V8 — THE SHELL. A compact sticky bar with a wordmark that is a mark
+        (the route dot before the name is the product's one glyph), the two
+        places as pills with a filled active state, New trip as the single
+        filled accent action, and the account as a disc. Backdrop material only
+        here, where it separates the bar from a scrolling map or a dark band.
+      */}
+      <header className="sticky top-0 z-30 border-b border-rule/80 bg-paper/88 backdrop-blur-md" data-testid="product-chrome">
         <div className="mx-auto flex max-w-[1600px] items-center gap-1 px-5 py-1.5 sm:gap-2 sm:px-6">
           <Link
             href="/"
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 font-display text-[1.375rem] leading-none tracking-tight text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 font-display text-[1.5rem] leading-none tracking-tight text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
             aria-label="Sidequest home"
           >
-            <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-accent" />
+            <span aria-hidden="true" className="relative inline-flex h-3 w-3 items-center justify-center">
+              <span className="absolute inset-0 rounded-full border border-accent/50" />
+              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            </span>
             Sidequest
           </Link>
-          <nav aria-label="Primary" className="ml-1 flex items-center gap-1 sm:ml-3">
-            {/* On a phone these are in the bottom bar instead; two navigations at once is one too many. */}
-            <Link href="/trips" className={`${navLink} max-sm:hidden`} data-testid="nav-trips">
-              Trips
-            </Link>
-            {user ? (
-              <Link href="/decide" className={`${navLink} max-sm:hidden`} data-testid="nav-explore">
-                Explore
-              </Link>
-            ) : null}
-          </nav>
+          <NavLinks items={places} />
           <span className="flex-1" />
           <Link
             href="/trips/new"
-            className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-rule px-3.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent-strong focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 max-sm:hidden"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-semibold text-paper shadow-[var(--shadow-card)] transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] hover:bg-accent-strong hover:shadow-[var(--shadow-raised)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 max-sm:hidden"
             data-testid="nav-new-trip"
           >
+            <span aria-hidden="true" className="text-base leading-none">+</span>
             New trip
           </Link>
           {user ? (
             <details className="relative" data-testid="nav-account">
               <summary
-                className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full px-2 text-sm text-ink hover:bg-paper-sunk focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden"
+                className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full px-1.5 text-sm text-ink hover:bg-paper-sunk focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden"
                 aria-label="Your account"
               >
-                <span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-medium text-paper">
+                <span aria-hidden="true" className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-ink font-display text-base text-paper shadow-[var(--shadow-card)]">
                   {initials}
                 </span>
               </summary>
-              <div className="absolute right-0 z-40 mt-1 w-60 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-1.5 shadow-[var(--shadow-card)]">
-                <p className="truncate px-2.5 pt-1.5 pb-2 text-sm font-medium text-ink" data-testid="nav-account-name">
+              <div className="absolute right-0 z-40 mt-2 w-64 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-1.5 shadow-[var(--shadow-float)]">
+                <p className="truncate px-2.5 pt-2 pb-2.5 text-sm font-semibold text-ink" data-testid="nav-account-name">
                   {user.displayName ?? user.email}
                 </p>
                 <Link
@@ -127,7 +131,7 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
           ) : signInAvailable ? (
             <Link
               href="/signin"
-              className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-paper-sunk hover:text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+              className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-sm font-medium text-ink-muted transition-colors hover:bg-paper-sunk hover:text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
               data-testid="nav-signin"
             >
               Sign in
@@ -136,12 +140,8 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
         </div>
       </header>
       {/*
-        The skip link's target, and it now shows when it has been used.
-        `outline-none` was on this element: the one thing a keyboard user gets
-        for pressing "Skip to content" is the knowledge that focus moved, and
-        that class removed it. `focus:` rather than `focus-visible:` because the
-        move is programmatic — the browser's focus-visible heuristic declines for
-        a focus that did not come from a key press on this element.
+        The skip link's target, and it shows when it has been used. `focus:`
+        rather than `focus-visible:` because the move is programmatic.
       */}
       <main
         id="main"
@@ -150,21 +150,14 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
       >
         {children}
       </main>
-      <footer className="mt-12 max-sm:pb-[calc(7rem+env(safe-area-inset-bottom))] border-t border-rule">
-        <div className="mx-auto max-w-[1600px] px-5 py-6 sm:px-6">
-          {/*
-            ONE SENTENCE, NOT A DISCLAIMER PANEL.
-            The paragraph here ran to four lines of small grey type on every
-            screen in the product — a caveat repeated so often it stopped being
-            read. What survives is the part a traveller can act on: a plan is a
-            snapshot, so check the things you are about to pay for.
-          */}
-          <p className="type-small text-ink-muted">
-            Sidequest plans from published sources and freezes a plan on the day it is built. Check
-            opening times, road status and anything you are booking before you rely on it.
-          </p>
-        </div>
-      </footer>
+      {/*
+        ONE SENTENCE, NOT A DISCLAIMER PANEL. What survives is the part a
+        traveller can act on: a plan is a snapshot, so check the things you are
+        about to pay for. Hidden on the build screen, which owns its whole ground.
+      */}
+      <ChromeFooter>
+        Sidequest plans from published sources and freezes a plan on the day it is built. Check opening times, road status and anything you are booking before you rely on it.
+      </ChromeFooter>
       <MobileNav signedIn={Boolean(user)} canSignIn={signInAvailable} />
     </>
   );

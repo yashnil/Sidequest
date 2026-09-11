@@ -2023,6 +2023,28 @@ export const COLUMN_MIGRATIONS: readonly {
    * timed …) written at the same real boundaries as `stage`; never a percentage.
    */
   { table: 'generation_progress', column: 'detail_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
+  /**
+   * V8 — A BUILD IS A DURABLE RUN, NOT AN HTTP REQUEST.
+   *
+   * The production failure of 2026-09-11 (`.claude-private/V8-BUILD-FAILURE.md`):
+   * the browser dropped the Build request half a second in, the server kept
+   * composing and spent the model call, and the traveller had no way back to
+   * the build that finished. The row now carries the client's idempotency key
+   * (a second press, a refresh or a retried request attaches to the run it
+   * already started instead of composing again), a heartbeat the worker
+   * touches while the model is silent (so "lost" can be told from "slow"), and
+   * what the failed run had reached — whether the model was invoked, whether
+   * the draft was saved — which decides whether a retry costs a call.
+   * `failure_ref` is the opaque reference a traveller sees, tied to one
+   * structured log line; `failure_kind` is the traveller-facing category.
+   */
+  { table: 'generation_progress', column: 'build_key', definition: 'TEXT' },
+  { table: 'generation_progress', column: 'caller', definition: 'TEXT' },
+  { table: 'generation_progress', column: 'heartbeat_at', definition: 'TEXT' },
+  { table: 'generation_progress', column: 'model_invoked', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  { table: 'generation_progress', column: 'draft_saved', definition: 'INTEGER NOT NULL DEFAULT 0' },
+  { table: 'generation_progress', column: 'failure_ref', definition: 'TEXT' },
+  { table: 'generation_progress', column: 'failure_kind', definition: 'TEXT' },
   {
     table: 'itineraries',
     column: 'transport_strategy_json',

@@ -190,12 +190,12 @@ function Sheet({ sheet, onClose }: { sheet: OpenSheet; onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="sheet-enter relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[var(--radius-plate)] border border-rule bg-paper-raised shadow-[var(--shadow-panel)] sm:max-h-none sm:w-[min(30rem,92vw)] sm:rounded-none sm:rounded-l-[var(--radius-plate)] sm:border-y-0 sm:border-r-0"
+        className="sheet-enter relative flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-[var(--radius-plate)] border border-rule bg-paper-raised shadow-[var(--shadow-float)] sm:max-h-none sm:w-[min(30rem,92vw)] sm:rounded-none sm:rounded-l-[var(--radius-plate)] sm:border-y-0 sm:border-r-0"
       >
         <div className="flex items-start justify-between gap-4 border-b border-rule px-5 pb-3 pt-4 sm:px-6">
           <div className="min-w-0">
             {detail.kindLabel || detail.confidenceLabel ? (
-              <p className="label text-ink-faint">{[detail.kindLabel, detail.confidenceLabel].filter(Boolean).join(' · ')}</p>
+              <p className="eyebrow">{[detail.kindLabel, detail.confidenceLabel].filter(Boolean).join(' · ')}</p>
             ) : null}
             <h2 id={titleId} className="mt-0.5 font-display text-2xl leading-tight text-ink">
               {detail.name}
@@ -206,7 +206,7 @@ function Sheet({ sheet, onClose }: { sheet: OpenSheet; onClose: () => void }) {
             data-sheet-initial
             data-testid="place-sheet-close"
             onClick={onClose}
-            className="pressable -mr-1 -mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg text-ink-muted hover:bg-paper-sunk hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
+            className="pressable -mr-1 -mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg text-ink-muted hover:bg-paper-sunk hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
             aria-label="Close"
           >
             <span aria-hidden="true">✕</span>
@@ -234,8 +234,8 @@ function Sheet({ sheet, onClose }: { sheet: OpenSheet; onClose: () => void }) {
             <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-3 border-t border-rule pt-4">
               {detail.facts.map((fact) => (
                 <div key={fact.label} className="min-w-0">
-                  <dt className="label text-ink-faint">{fact.label}</dt>
-                  <dd className="mt-0.5 type-small text-ink">{fact.value}</dd>
+                  <dt className="eyebrow">{fact.label}</dt>
+                  <dd className="mt-0.5 type-small font-medium text-ink">{fact.value}</dd>
                 </div>
               ))}
             </dl>
@@ -243,7 +243,7 @@ function Sheet({ sheet, onClose }: { sheet: OpenSheet; onClose: () => void }) {
 
           {detail.route && (detail.route.previous || detail.route.next || detail.route.arrive) ? (
             <div className="mt-5 rounded-[var(--radius-card)] bg-paper-sunk px-4 py-3" data-testid="place-sheet-route">
-              <p className="label text-ink-faint">Where it sits in the day</p>
+              <p className="eyebrow">Where it sits in the day</p>
               <ol className="mt-1.5 space-y-1 type-small text-ink-muted">
                 {detail.route.previous ? <li>Before: {detail.route.previous}</li> : null}
                 {detail.route.arrive ? <li className="text-ink">{detail.route.arrive}</li> : null}
@@ -293,7 +293,7 @@ function Sheet({ sheet, onClose }: { sheet: OpenSheet; onClose: () => void }) {
                 </a>
               </p>
             ) : null}
-            {actions ? <div className="mt-2 text-xs">{actions}</div> : null}
+            {actions ? <div className="mt-2 text-sm">{actions}</div> : null}
           </div>
         ) : null}
       </div>

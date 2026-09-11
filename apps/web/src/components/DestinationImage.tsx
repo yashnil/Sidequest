@@ -328,7 +328,7 @@ export function ImageCredit({
   className?: string;
 }) {
   return (
-    <Tag className={cx('mt-1.5 text-[11px] leading-snug text-ink-faint', className)}>
+    <Tag className={cx('mt-1.5 type-meta', className)}>
       <a
         href={image.filePageUrl}
         target="_blank"

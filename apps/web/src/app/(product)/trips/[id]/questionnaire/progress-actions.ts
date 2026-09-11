@@ -10,9 +10,13 @@ import { tripAccessRefusal } from '@/lib/net/trip-access';
  * build writes as it crosses each real boundary. There is no percentage here and
  * there never will be: a percentage would be a claim about how long a model is
  * going to take, which nobody can make.
+ *
+ * V8 — the screen itself polls `api/trips/[id]/progress` (a GET is not queued
+ * behind a running action); this action remains for callers that already hold
+ * a request scope. The route's `GenerationProgressView` is the wire type.
  */
 
-export interface GenerationProgressView {
+export interface GenerationProgressSummary {
   stage: GenerationStage;
   label: string;
   detail: string;
@@ -27,7 +31,7 @@ export interface GenerationProgressView {
   milestones: string[];
 }
 
-export async function generationProgressAction(tripId: string): Promise<GenerationProgressView | null> {
+export async function generationProgressAction(tripId: string): Promise<GenerationProgressSummary | null> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return null;
   const progress = getGenerationProgress(tripId);

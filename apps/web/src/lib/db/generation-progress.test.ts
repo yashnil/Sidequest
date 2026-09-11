@@ -46,8 +46,16 @@ describe('generation progress counters', () => {
     const lines = progress.milestonesFor(row.counters, row.stage);
     expect(lines).toEqual(['5 days drafted with 12 stops across 2 bases, one multi-day journey kept whole.', '7 of 12 stops matched to a place on the map.', '3 legs timed by a router.']);
     expect(lines.join(' ')).not.toMatch(/%|percent|remaining|valhalla|nominatim|provider/i);
+    /* V8 §14 — a placed point survives later counter writes, is deduplicated, and is bounded. */
+    progress.noteGenerationPlaced(trip.id, { name: 'Nairobi', lat: -1.29, lng: 36.82 }, now);
+    progress.noteGenerationPlaced(trip.id, { name: 'Nairobi', lat: -1.29, lng: 36.82 }, now);
+    progress.noteGenerationCounters(trip.id, { legsEstimated: 2 }, now);
+    progress.markGenerationStage(trip.id, 'preparing', now);
+    expect(progress.getGenerationProgress(trip.id)!.placed).toEqual([{ name: 'Nairobi', lat: -1.29, lng: 36.82 }]);
+    expect(progress.getGenerationProgress(trip.id)!.counters.legsEstimated).toBe(2);
     /* A retry is a new build. */
     progress.beginGeneration(trip.id, new Date('2026-09-10T12:05:00Z'));
     expect(progress.getGenerationProgress(trip.id)!.counters).toEqual({});
+    expect(progress.getGenerationProgress(trip.id)!.placed).toEqual([]);
   });
 });

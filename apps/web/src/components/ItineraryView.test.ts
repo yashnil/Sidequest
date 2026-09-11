@@ -114,7 +114,8 @@ describe('the finished plan is a document about places, not a bare schedule', ()
     const next = html.indexOf(`id="day-${withStops!.dayNumber + 1}"`);
     const day = html.slice(from, next < 0 ? undefined : next);
     const marks = [
-      ...day.matchAll(/rounded-full bg-ink text-\[11px\] font-semibold text-paper">(\d+)</g),
+      /* The mark carries its own id; matching on a class string tied the test to a type size. */
+      ...day.matchAll(/data-testid="stop-number"[^>]*>(\d+)</g),
     ].map((match) => Number(match[1]));
 
     expect(marks.length, 'the day rendered no numbered rows at all').toBeGreaterThan(0);

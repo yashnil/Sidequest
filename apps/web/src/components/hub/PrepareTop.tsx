@@ -25,7 +25,7 @@ const TONE: Record<PrepareTopItem['tone'], { word: string; className: string }> 
 export function PrepareTop({ items }: { items: readonly PrepareTopItem[] }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-[var(--radius-card)] border border-pine/40 bg-pine-soft/50 p-4" data-testid="prepare-top">
+      <div className="card border-pine/40 bg-pine-soft/50 p-5" data-testid="prepare-top">
         <p className="type-body text-ink">Nothing on this trip needs arranging right now. The sections below are here when you want them.</p>
       </div>
     );
@@ -35,11 +35,11 @@ export function PrepareTop({ items }: { items: readonly PrepareTopItem[] }) {
       <h2 id="prepare-top-heading" className="type-title text-ink">
         {items.length === 1 ? 'The one thing that matters' : `The ${items.length === 2 ? 'two' : 'three'} things that matter`}
       </h2>
-      <ol className="mt-4 divide-y divide-rule border-y border-rule">
+      <ol className="mt-4 grid gap-3">
         {items.map((item) => (
           <li key={item.id}>
-            <a href={item.href} className="pressable group flex items-start gap-4 py-3.5 hover:bg-paper-sunk/60" data-testid="prepare-top-item">
-              <span className={cx('numeral mt-0.5 inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]', TONE[item.tone].className)}>{TONE[item.tone].word}</span>
+            <a href={item.href} className="card lift pressable group flex items-start gap-4 px-4 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine" data-testid="prepare-top-item">
+              <span className={cx('eyebrow mt-1 inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 !text-paper', TONE[item.tone].className)}>{TONE[item.tone].word}</span>
               <span className="min-w-0 flex-1">
                 <span className="block font-display text-lg leading-snug text-ink group-hover:underline group-hover:underline-offset-4">{item.title}</span>
                 {item.detail ? <span className="mt-0.5 block type-small text-ink-muted">{item.detail}</span> : null}

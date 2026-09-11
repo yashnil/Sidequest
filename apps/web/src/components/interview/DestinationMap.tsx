@@ -65,6 +65,7 @@ export function DestinationMap({
   dayTrips = null,
   className,
   chromeless = false,
+  compact = false,
 }: {
   geometry: DestinationGeometry;
   tiles?: MapBasemap | null;
@@ -78,6 +79,13 @@ export function DestinationMap({
   className?: string;
   /** Draw the map and its attribution, nothing else. For screens where it is scenery. */
   chromeless?: boolean;
+  /**
+   * V8 — a portrait frame: a shorter map (3:2) with no controls or pan hint and
+   * the caption as one quiet line beneath, so the map can sit beside a block of
+   * text without towering over it. The caption is kept because it is the only
+   * place the conceptual marks are explained.
+   */
+  compact?: boolean;
 }) {
   const [focused, setFocused] = useState<string | null>(null);
   const { markers, connectors, fitPoints } = useMemo(() => {
@@ -193,6 +201,9 @@ export function DestinationMap({
   const extent = geometry.bounds ? `about ${Math.round(kmBetween(geometry.bounds.southWest, geometry.bounds.northEast))} km corner to corner` : null;
   const conceptual = bases >= 2 || dayTrips === 'one_day_trip' || dayTrips === 'several' || movement === 'transit_walk';
   const movementWord = movement === 'car' ? 'by car' : movement === 'transit_walk' ? 'on foot and by transit' : movement === 'guided' ? 'with guides and transfers' : movement === 'boat' ? 'by boat' : movement === 'mixed' ? 'by car where it helps' : null;
+  const captionText = `${geometry.bounds ? 'The thin frame is the destination’s published extent. ' : ''}${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it' : 'One base, days out from it') : `A moving route with ${bases} bases`}${movementWord ? `, ${movementWord}` : ''}. ${
+    bases >= 2 ? 'The hollow marks are bases still to be chosen.' : dayTrips === 'one_day_trip' || dayTrips === 'several' ? 'The outer marks are days out still to be chosen.' : conceptual ? '' : rangeKm === null ? 'No range is drawn until you decide how far the trip should reach.' : 'The ring is the reach you chose.'
+  }`.trim();
   return (
     <div className={cx('min-w-0', className)} data-testid="destination-map">
       <InteractiveMap
@@ -205,8 +216,8 @@ export function DestinationMap({
         onFocus={setFocused}
         tiles={tiles}
         width={420}
-        height={300}
-        chromeless={chromeless}
+        height={compact ? 280 : 300}
+        chromeless={chromeless || compact}
         summary={`${geometry.name}${extent ? `, ${extent}` : ''}. ${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it.' : 'One base with days out from it.') : 'A moving route between bases.'}`}
         caption={
           <span>
@@ -234,6 +245,7 @@ export function DestinationMap({
           </span>
         }
       />
+      {compact ? <p className="type-meta mt-1.5">{captionText}</p> : null}
     </div>
   );
 }

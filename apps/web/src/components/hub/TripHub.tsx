@@ -29,6 +29,7 @@ import { Badge, Panel, cx, type BadgeTone } from '../ui';
 import { TripConfidence } from './TripConfidence';
 import { Glyph } from '../interview/glyphs';
 import { BookedItemForm, BookedItemRow, CheckBox, ReadinessProfileForm } from './HubForms';
+import { checklistRows } from './checklist-titles';
 import { DiscoverButton } from '@/app/(product)/trips/[id]/itinerary/live-controls';
 
 /**
@@ -60,7 +61,7 @@ export function HubNav({ urgent }: { urgent: number }) {
           <li key={section.id} className="shrink-0">
             <a href={`#${section.id}`} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium uppercase tracking-[0.1em] text-ink-muted hover:bg-paper-sunk hover:text-ink" data-testid={`hub-link-${section.id}`}>
               {section.label}
-              {section.id === 'book-first' && urgent > 0 ? <span className="numeral rounded-full bg-accent px-1.5 text-[10px] text-paper">{urgent}</span> : null}
+              {section.id === 'book-first' && urgent > 0 ? <span className="type-figure rounded-full bg-accent px-1.5 text-xs text-paper">{urgent}</span> : null}
             </a>
           </li>
         ))}
@@ -73,7 +74,7 @@ function SectionHeader({ id, title, blurb, testId }: { id: string; title: string
   return (
     <div className="pt-2" id={id} {...(testId ? { 'data-testid': testId } : {})}>
       <h2 className="type-title text-ink">{title}</h2>
-      <p className="mt-1.5 max-w-[62ch] type-small text-ink-muted">{blurb}</p>
+      <p className="mt-2 max-w-[62ch] type-body text-ink-muted">{blurb}</p>
     </div>
   );
 }
@@ -90,8 +91,8 @@ const STATE_WORD: Record<ReadinessEntry['state'], string> = { confirmed: 'Confir
 export function HubUrgent({ intel }: { intel: TravelIntelligence }) {
   if (intel.unresolvedCriticals.length === 0) return null;
   return (
-    <div className="mt-6 rounded-[var(--radius-card)] border-l-4 border-clay bg-clay-soft p-4" data-testid="hub-urgent">
-      <p className="label text-clay">Needs your attention</p>
+    <div className="card mt-6 border-l-4 border-l-clay bg-clay-soft p-5" data-testid="hub-urgent">
+      <p className="eyebrow text-clay">Needs your attention</p>
       <ul className="mt-2 space-y-1 text-sm text-ink">
         {intel.unresolvedCriticals.slice(0, 5).map((line) => (
           <li key={line}>{line}</li>
@@ -105,30 +106,45 @@ export function HubUrgent({ intel }: { intel: TravelIntelligence }) {
 export function BookingProgressLine({ intel }: { intel: TravelIntelligence }) {
   const progress = buildBookingProgress(intel.bookings.items);
   if (progress.critical === 0) return null;
+  const share = progress.critical > 0 ? Math.round((progress.arranged / progress.critical) * 100) : 0;
   return (
-    <div className="mt-5 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="booking-progress">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="font-display text-xl text-ink">
-          {progress.arranged} of {progress.critical} arranged
+    /*
+     * V8 — BOOK FIRST AS A CHECKLIST CARD.
+     *
+     * "0 of 1 arranged" was a line of serif over a grey list. It is a card
+     * now: the count as a figure, a bar that shows how much of what could
+     * break the trip is settled, the next thing to do, and the groups as
+     * tick-lists — the same data, given the shape of the thing it is.
+     */
+    <div className="card p-5" data-testid="booking-progress">
+      <p className="eyebrow">Book first</p>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="type-section text-ink">
+          <span className="type-figure">{progress.arranged}</span> of <span className="type-figure">{progress.critical}</span> arranged
         </p>
-        {progress.nextAction ? (
-          <p className="text-sm text-ink-muted">
-            Next: <span className="text-ink">{progress.nextAction.travelerAction}</span>
-          </p>
-        ) : (
-          <p className="text-sm text-pine">Everything this trip depends on is arranged.</p>
-        )}
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div aria-hidden="true" className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-paper-sunk">
+        <div className="h-full rounded-full bg-pine transition-[width] duration-[var(--motion-page)]" style={{ width: `${share}%` }} />
+      </div>
+      {progress.nextAction ? (
+        <p className="mt-3 type-small text-ink-muted">
+          Next: <span className="font-medium text-ink">{progress.nextAction.travelerAction}</span>
+        </p>
+      ) : (
+        <p className="mt-3 type-small text-pine">Everything this trip depends on is arranged.</p>
+      )}
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
         {progress.groups.map((group) => (
           <div key={group.id} data-testid={`booking-progress-${group.id}`}>
-            <p className="label text-ink-faint">
-              {group.title} · {group.done}/{group.total}
+            <p className="eyebrow">
+              {group.title} · <span className="type-figure">{group.done}/{group.total}</span>
             </p>
-            <ul className="mt-1 space-y-0.5">
+            <ul className="mt-1.5 space-y-1">
               {group.items.map((item) => (
-                <li key={item.id} className={cx('flex items-center gap-2 text-sm', item.done ? 'text-ink-muted' : 'text-ink')}>
-                  <span aria-hidden="true" className={cx('inline-block h-2 w-2 rounded-full', item.done ? 'bg-pine' : 'border border-ink-faint')} />
+                <li key={item.id} className={cx('flex items-start gap-2 text-sm', item.done ? 'text-ink-muted' : 'text-ink')}>
+                  <span aria-hidden="true" className={cx('mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-[0.6rem] leading-none', item.done ? 'border-pine bg-pine text-paper' : 'border-ink-faint bg-paper')}>
+                    {item.done ? '✓' : ''}
+                  </span>
                   <span className={item.done ? 'line-through' : ''}>{item.title}</span>
                   <span className="sr-only">{item.done ? 'arranged' : 'not yet arranged'}</span>
                 </li>
@@ -157,7 +173,7 @@ export function StaysSection({ intel, tripId, itinerary, coordinates = {} }: { i
     <section className="mt-14" aria-labelledby="stays" data-testid="hub-stays">
       <SectionHeader id="stays" title="Where to stay" blurb={lodging.hotelChangeNote} />
       {lodging.churn ? (
-        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted" data-testid="hub-stays-churn" data-level={lodging.churn.level}>
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-muted" data-testid="hub-stays-churn" data-level={lodging.churn.level}>
           <Badge tone={lodging.churn.level === 'aggressive' ? 'amber' : 'neutral'}>{lodging.churn.level === 'settled' ? 'One base' : lodging.churn.level === 'aggressive' ? 'Fast-moving route' : 'Steady route'}</Badge>
           <span className="numeral">
             {lodging.churn.baseCount} bases · {lodging.churn.nights} nights · {lodging.churn.hotelChanges} hotel changes · {lodging.churn.averageNightsPerBase} nights per base
@@ -168,41 +184,58 @@ export function StaysSection({ intel, tripId, itinerary, coordinates = {} }: { i
       {/* A single base is one card, not one card and an equal column of nothing beside it. */}
       <ol className={cx('mt-5 grid gap-4', lodging.bases.length > 1 && 'sm:grid-cols-2')} data-testid="where-to-stay">
         {lodging.bases.map((base, index) => (
-          <li key={base.baseId} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="hub-base">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="font-display text-xl text-ink">
-                <span className="numeral mr-2 text-sm text-accent">{String(index + 1).padStart(2, '0')}</span>
-                {base.name}
-              </p>
-              <span className="numeral text-sm text-ink-muted">{base.nights} {base.nights === 1 ? 'night' : 'nights'}</span>
+          <li key={base.baseId} className="card flex flex-col p-5" data-testid="hub-base">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <span aria-hidden="true" className="type-figure grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-control)] bg-ink text-sm text-paper">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-display text-xl leading-tight text-ink">{base.name}</p>
+                  <p className="mt-1 text-sm text-ink-muted">{base.area !== base.name ? `${base.area} · ` : ''}{base.styleLabel} · {base.priceTier}</p>
+                </div>
+              </div>
+              <span className="shrink-0 text-right">
+                <span className="type-figure block text-lg leading-none text-ink">{base.nights}</span>
+                <span className="type-meta block">{base.nights === 1 ? 'night' : 'nights'}</span>
+              </span>
             </div>
-            <p className="mt-1 text-sm text-ink-muted">{base.area !== base.name ? `${base.area} · ` : ''}{base.styleLabel} · {base.priceTier}</p>
-            <p className="mt-2 text-sm leading-relaxed text-ink">{base.why}</p>
+            <p className="mt-3 text-sm leading-relaxed text-ink">{base.why}</p>
             {base.booked ? (
-              <p className="mt-2 text-sm text-accent-strong" data-testid="hub-base-booked">
-                Booked: {base.booked.title}
+              <p className="mt-3" data-testid="hub-base-booked">
+                <Badge tone="pine">Booked</Badge> <span className="text-sm text-ink">{base.booked.title}</span>
               </p>
-            ) : null}
+            ) : (
+              <p className="mt-3">
+                <Badge>Not booked yet</Badge>
+              </p>
+            )}
             {base.advantages.length > 0 ? (
-              <ul className="mt-2 space-y-0.5 text-xs leading-snug text-ink-muted">
+              <ul className="mt-3 space-y-1 text-sm leading-snug text-ink-muted">
                 {base.advantages.map((a) => (
-                  <li key={a}>+ {a}</li>
+                  <li key={a} className="flex gap-2">
+                    <span aria-hidden="true" className="text-pine">+</span>
+                    <span>{a}</span>
+                  </li>
                 ))}
               </ul>
             ) : null}
             {base.tradeoffs.length > 0 ? (
-              <ul className="mt-1 space-y-0.5 text-xs leading-snug text-ink-muted">
+              <ul className="mt-1.5 space-y-1 text-sm leading-snug text-ink-muted">
                 {base.tradeoffs.map((t) => (
-                  <li key={t}>– {t}</li>
+                  <li key={t} className="flex gap-2">
+                    <span aria-hidden="true" className="text-amber">–</span>
+                    <span>{t}</span>
+                  </li>
                 ))}
               </ul>
             ) : null}
-            {base.alternatives.length > 0 ? <p className="mt-2 text-xs text-ink-faint">Also worth a look: {base.alternatives.map((a) => a.name).join(', ')}.</p> : null}
+            {base.alternatives.length > 0 ? <p className="mt-3 type-meta">Also worth a look: {base.alternatives.map((a) => a.name).join(', ')}.</p> : null}
             {tripId ? <DiscoverButton tripId={tripId} kind="stays" near={nearBase(base.baseId, base.name)} label="Find stays near this base" query={`hotel near ${base.area}`} /> : null}
           </li>
         ))}
       </ol>
-      <p className="mt-3 text-xs leading-relaxed text-ink-faint">{lodging.shortlistBasis}</p>
+      <p className="mt-4 type-meta">{lodging.shortlistBasis}</p>
       {tripId ? (
         <div className="mt-4">
           <BookedItemForm tripId={tripId} startDate={itinerary.startDate} endDate={itinerary.endDate} />
@@ -223,24 +256,33 @@ export function TransportSection({ intel }: { intel: TravelIntelligence }) {
       </div>
       {major.length > 0 ? (
         <>
-          <h3 className="mt-6 font-display text-lg text-ink">The transfers that shape the days</h3>
-          <ol className="mt-2 divide-y divide-rule" data-testid="hub-legs">
-            {major.slice(0, 12).map((leg) => (
-              <li key={leg.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5 text-sm" data-testid="hub-leg" data-mode={leg.mode} data-basis={leg.durationBasis}>
-                <span className="min-w-0 text-ink">
-                  <span className="text-ink-faint">Day {leg.dayNumber} · </span>
-                  {leg.originName} → {leg.destinationName}
-                </span>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Badge>{LEG_MODE_LABELS[leg.mode]}</Badge>
-                  <span className="numeral text-xs text-ink-muted">{leg.durationMinutes === null ? 'not timed' : `${leg.durationMinutes} min`}</span>
-                  <span className="text-xs text-ink-faint" title={DURATION_BASIS_LABELS[leg.durationBasis]}>
-                    {leg.durationBasis === 'unmeasured' ? (leg.unmeasuredReason === 'mode_not_road_routable' ? 'plausible, not road-routed' : 'unmeasured') : leg.durationBasis.replace(/_/g, ' ')}
-                    {leg.trafficState === 'live' ? ' · live traffic' : leg.trafficState === 'typical' ? ' · typical traffic' : ''}
+          <h3 className="mt-8 type-section text-ink">The transfers that shape the days</h3>
+          <ol className="card mt-3 divide-y divide-rule" data-testid="hub-legs">
+            {major.slice(0, 12).map((leg) => {
+              /*
+               * V8 — every leg says what kind of figure it carries. Measured,
+               * estimated from map distance, on the operator's timing, or an
+               * allowance because nobody could time it: the same four words the
+               * Days view and the map legend use.
+               */
+              const state = legDurationState(leg.durationBasis, leg.unmeasuredReason);
+              return (
+                <li key={leg.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 text-sm" data-testid="hub-leg" data-mode={leg.mode} data-basis={leg.durationBasis}>
+                  <span className="min-w-0 flex-1 text-ink">
+                    <span className="type-figure text-ink-faint">Day {leg.dayNumber} · </span>
+                    {leg.originName} → {leg.destinationName}
                   </span>
-                </span>
-              </li>
-            ))}
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge>{LEG_MODE_LABELS[leg.mode]}</Badge>
+                    <span className="type-figure text-sm text-ink">{leg.durationMinutes === null ? 'not timed' : `${leg.durationMinutes} min`}</span>
+                    <Badge tone={state.tone} title={DURATION_BASIS_LABELS[leg.durationBasis]}>
+                      {state.word}
+                      {leg.trafficState === 'live' ? ' · live traffic' : leg.trafficState === 'typical' ? ' · typical traffic' : ''}
+                    </Badge>
+                  </span>
+                </li>
+              );
+            })}
           </ol>
         </>
       ) : null}
@@ -249,31 +291,40 @@ export function TransportSection({ intel }: { intel: TravelIntelligence }) {
           <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted hover:text-ink">Compare ways to make the big transfers</summary>
           <ul className="mt-2 divide-y divide-rule text-sm" data-testid="hub-options">
             {t.options.map((o) => (
-              <li key={`${o.legId}:${o.mode}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+              <li key={`${o.legId}:${o.mode}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5">
                 <span className="text-ink">
                   {o.legLabel} · <span className="font-medium">{LEG_MODE_LABELS[o.mode]}</span>
                   {o.recommended ? <Badge tone="pine">Recommended</Badge> : null}
                 </span>
-                <span className="text-xs text-ink-muted">
-                  cost {o.costBand} · transfers {o.transferBurden} · scenic {o.scenic} · {o.durationMinutes === null ? 'not timed' : `${o.durationMinutes} min`}
+                <span className="text-sm text-ink-muted">
+                  cost {o.costBand} · transfers {o.transferBurden} · scenic {o.scenic} · <span className="type-figure">{o.durationMinutes === null ? 'not timed' : `${o.durationMinutes} min`}</span>
                 </span>
-                <span className="basis-full text-xs text-ink-faint">{o.why}</span>
+                <span className="basis-full type-meta">{o.why}</span>
               </li>
             ))}
           </ul>
         </details>
       ) : null}
-      <p className="mt-3 text-xs leading-relaxed text-ink-faint">{t.modeNote}</p>
+      <p className="mt-4 type-meta">{t.modeNote}</p>
     </div>
   );
 }
 
+/** The four words for what a leg's minutes are, shared with the Days view and the map legend. */
+function legDurationState(basis: string, unmeasuredReason?: string): { word: string; tone: BadgeTone } {
+  if (basis === 'unmeasured') return unmeasuredReason === 'mode_not_road_routable' ? { word: 'operator-timed, not road-routed', tone: 'blue' } : { word: 'allowance — not timed', tone: 'amber' };
+  if (basis === 'estimated' || basis === 'geo_estimate') return { word: 'estimated', tone: 'blue' };
+  if (basis === 'scheduled') return { word: 'timetable', tone: 'pine' };
+  if (basis === 'traffic_aware' || basis === 'static' || basis === 'measured') return { word: 'measured', tone: 'pine' };
+  return { word: basis.replace(/_/g, ' '), tone: 'neutral' };
+}
+
 function TerminalCard({ title, edge, ok }: { title: string; edge: TravelIntelligence['transport']['terminal']['arrival']; ok: boolean }) {
   return (
-    <div className={cx('rounded-[var(--radius-card)] border p-4', ok ? 'border-rule bg-paper-raised' : 'border-clay bg-clay-soft')} data-testid={`hub-terminal-${title.toLowerCase()}`}>
-      <p className="label text-ink-faint">{title} · {edge.basis === 'booked' ? 'from your booking' : edge.basis === 'stated' ? 'from your trip setup' : edge.basis === 'band' ? 'a band, not a time' : 'time unknown'}</p>
-      <p className="mt-1 text-sm text-ink">{edge.note}</p>
-      <ul className="mt-2 space-y-0.5 text-xs text-ink-muted">
+    <div className={cx('card p-5', ok ? '' : 'border-clay bg-clay-soft')} data-testid={`hub-terminal-${title.toLowerCase()}`}>
+      <p className="eyebrow">{title} · {edge.basis === 'booked' ? 'from your booking' : edge.basis === 'stated' ? 'from your trip setup' : edge.basis === 'band' ? 'a band, not a time' : 'time unknown'}</p>
+      <p className="mt-1.5 text-sm text-ink">{edge.note}</p>
+      <ul className="mt-2 space-y-0.5 text-sm text-ink-muted">
         <li>{edge.bufferLabel}: {edge.bufferMinutes} min</li>
         {edge.vehicleLabel ? <li>{edge.vehicleLabel}: {edge.vehicleMinutes} min</li> : null}
         <li>{edge.transferLabel}</li>
@@ -295,13 +346,13 @@ export function FoodSection({ intel, tripId, itinerary, coordinates = {} }: { in
     <div className="mt-6" data-testid="hub-food">
       <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {f.days.filter((day) => day.meals.some((m) => m.role !== 'skip') || day.provisioning.length > 0).map((day) => (
-          <li key={day.dayNumber} className={cx('rounded-[var(--radius-card)] border p-3', day.remote ? 'border-amber bg-amber-soft/40' : 'border-rule bg-paper-raised')} data-testid="hub-food-day" data-remote={day.remote}>
-            <p className="font-display text-base text-ink">
+          <li key={day.dayNumber} className={cx('card p-4', day.remote && 'border-amber bg-amber-soft/40')} data-testid="hub-food-day" data-remote={day.remote}>
+            <p className="font-display text-lg text-ink">
               Day {day.dayNumber}
-              {day.remote ? <span className="ml-2 font-sans text-xs text-amber">remote</span> : null}
-              {f.specialOccasionDay === day.dayNumber ? <span className="ml-2 font-sans text-xs text-accent-strong">the special one</span> : null}
+              {day.remote ? <span className="ml-2 font-sans text-xs font-medium text-amber">remote</span> : null}
+              {f.specialOccasionDay === day.dayNumber ? <span className="ml-2 font-sans text-xs font-medium text-accent-strong">the special one</span> : null}
             </p>
-            <ul className="mt-2 space-y-1 text-xs">
+            <ul className="mt-2 space-y-1 text-sm">
               {day.meals.filter((m) => m.role !== 'skip').map((m) => (
                 <li key={m.slot} className="text-ink-muted">
                   <span className="capitalize text-ink">{m.slot}</span> · {MEAL_ROLE_LABELS[m.role]}
@@ -312,7 +363,7 @@ export function FoodSection({ intel, tripId, itinerary, coordinates = {} }: { in
             </ul>
             {tripId && day.meals.some((m) => m.venueStatus === 'unresolved') ? <DiscoverButton tripId={tripId} kind="food" near={nearDay(day.dayNumber)} label="Find somewhere for a meal near base" /> : null}
             {day.provisioning.length > 0 ? (
-              <ul className="mt-2 space-y-0.5 text-xs text-ink-muted">
+              <ul className="mt-2 space-y-0.5 text-sm text-ink-muted">
                 {day.provisioning.map((p) => (
                   <li key={p}>• {p}</li>
                 ))}
@@ -321,7 +372,7 @@ export function FoodSection({ intel, tripId, itinerary, coordinates = {} }: { in
           </li>
         ))}
       </ol>
-      <p className="mt-3 text-xs leading-relaxed text-ink-faint">{f.venueDataNote}</p>
+      <p className="mt-4 type-meta">{f.venueDataNote}</p>
     </div>
   );
 }
@@ -355,16 +406,16 @@ const BOOKING_GROUP_OF: Record<string, 'Transport' | 'Stays' | 'Experiences' | '
 
 function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['bookings']['items'][number]; members?: readonly TravelIntelligence['bookings']['items'][number][]; elevated?: boolean }) {
   return (
-    <li className={cx('py-3 text-sm', elevated && 'pl-3 border-l-2 border-accent')} data-testid="hub-booking" data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status}>
+    <li className={cx('py-3.5 text-sm', elevated && 'pl-3 border-l-2 border-accent')} data-testid="hub-booking" data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className={cx('text-ink', members && 'font-display text-lg')}>{b.title}</span>
-        <span className="text-xs text-ink-faint">
-          {b.status === 'booked' ? 'Booked' : b.status === 'soft_hold' ? 'Tentative' : b.status === 'not_needed' ? 'Not needed' : 'Need to book'}
-          {b.date ? ` · ${b.date}` : ''}
-          {b.timeLabel ? ` · ${b.timeLabel}` : ''}
+        <span className={cx('font-medium text-ink', members && 'font-display text-lg font-normal')}>{b.title}</span>
+        <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+          <Badge tone={b.status === 'booked' ? 'pine' : b.status === 'soft_hold' ? 'blue' : b.status === 'not_needed' ? 'neutral' : 'amber'}>{b.status === 'booked' ? 'Booked' : b.status === 'soft_hold' ? 'Tentative' : b.status === 'not_needed' ? 'Not needed' : 'Need to book'}</Badge>
+          {b.date ? <span className="type-figure font-medium">{b.date}</span> : null}
+          {b.timeLabel ? <span className="type-figure font-medium">{b.timeLabel}</span> : null}
         </span>
       </div>
-      <p className="text-xs leading-snug text-ink-muted">{b.reason}</p>
+      <p className="mt-1 text-sm leading-snug text-ink-muted">{b.reason}</p>
       {/*
         MVP V3, Stage 48 — the fourth question. What, why and when were all
         answered above; this is what happens if it is gone by the time the
@@ -372,16 +423,16 @@ function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['b
         fallback: silence here means Sidequest has none, not that none exists.
       */}
       {b.ifUnavailable ? (
-        <p className="mt-1 text-xs leading-snug text-ink-muted" data-testid="hub-booking-fallback">
+        <p className="mt-1 text-sm leading-snug text-ink-muted" data-testid="hub-booking-fallback">
           <span className="text-clay">If it is gone:</span> {b.ifUnavailable}
         </p>
       ) : null}
       {members && members.length > 0 ? (
         <details className="mt-1.5" data-testid="hub-stays-group">
-          <summary className="min-h-9 cursor-pointer py-1 text-xs text-accent underline underline-offset-4">View bases</summary>
+          <summary className="min-h-11 cursor-pointer py-2 text-sm text-accent underline underline-offset-4">View bases</summary>
           <ul className="mt-1 divide-y divide-rule">
             {members.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 text-xs" data-testid="hub-booking" data-kind={m.kind} data-status={m.status}>
+              <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm" data-testid="hub-booking" data-kind={m.kind} data-status={m.status}>
                 <span className="text-ink">{m.title}</span>
                 <span className="text-ink-faint">
                   {m.status === 'booked' ? 'Booked' : m.status === 'soft_hold' ? 'Tentative' : 'Need to book'}
@@ -393,7 +444,7 @@ function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['b
         </details>
       ) : null}
       {b.officialSourceUrl ? (
-        <a href={b.officialSourceUrl} target="_blank" rel="noreferrer noopener" className="text-xs text-accent underline underline-offset-4">
+        <a href={b.officialSourceUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-block text-sm text-accent underline underline-offset-4">
           {b.officialSourceName ?? 'Official page'}
         </a>
       ) : null}
@@ -432,12 +483,12 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
             );
           })}
         </div>
-        <div className="mt-8 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid="hub-booked">
+        <div className="card mt-8 p-5" data-testid="hub-booked">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h3 className="font-display text-lg text-ink">What you have booked</h3>
+            <h3 className="type-section text-ink">What you have booked</h3>
             {tripId ? <BookedItemForm tripId={tripId} startDate={itinerary.startDate} endDate={itinerary.endDate} /> : null}
           </div>
-          <p className="mt-1 text-xs text-ink-muted">A booked fact is stronger than anything the plan proposed. Sidequest schedules around it and never moves it.</p>
+          <p className="mt-1 text-sm text-ink-muted">A booked fact is stronger than anything the plan proposed. Sidequest schedules around it and never moves it.</p>
           {booked.length === 0 ? (
             <p className="mt-3 text-sm text-ink-faint">Nothing yet.</p>
           ) : (
@@ -446,14 +497,14 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
             </ul>
           )}
           {honored.length > 0 ? (
-            <ul className="mt-3 space-y-1 text-xs text-pine" data-testid="hub-booked-honored">
+            <ul className="mt-3 space-y-1 text-sm text-pine" data-testid="hub-booked-honored">
               {honored.map((h) => (
                 <li key={h}>✓ {h}</li>
               ))}
             </ul>
           ) : null}
           {conflicts.length > 0 ? (
-            <ul className="mt-3 space-y-1 rounded-[var(--radius-card)] bg-clay-soft p-3 text-xs text-ink" data-testid="hub-booked-conflicts">
+            <ul className="mt-3 space-y-1 rounded-[var(--radius-card)] bg-clay-soft p-3 text-sm text-ink" data-testid="hub-booked-conflicts">
               {conflicts.map((c) => (
                 <li key={c}>{c}</li>
               ))}
@@ -483,10 +534,10 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
               null
             ) : (
               <>
-                <h3 className="font-display text-lg text-ink">
-                  {BOOKING_PRIORITY_COPY[priority].title} <span className="numeral text-sm text-accent">{rows.length}</span>
+                <h3 className="type-section text-ink">
+                  {BOOKING_PRIORITY_COPY[priority].title} <span className="type-figure text-sm text-accent">{rows.length}</span>
                 </h3>
-                <p className="text-xs text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
+                <p className="mt-0.5 text-sm text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
               </>
             )}
             <ul className="mt-2 divide-y divide-rule">
@@ -500,8 +551,8 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
       {open.length === 0 ? <p className="mt-4 text-sm text-ink-muted">Nothing left to arrange from what Sidequest can see.</p> : null}
       {verifyRequirement.length > 0 ? (
         <div className="mt-6" data-testid="hub-verify-requirement">
-          <h3 className="font-display text-lg text-ink">Verify booking requirement</h3>
-          <p className="text-xs text-ink-muted">The plan is not sure these need booking at all. Check, then book only if they do.</p>
+          <h3 className="type-section text-ink">Verify booking requirement</h3>
+          <p className="mt-0.5 text-sm text-ink-muted">The plan is not sure these need booking at all. Check, then book only if they do.</p>
           <ul className="mt-2 divide-y divide-rule text-sm">
             {verifyRequirement.map((line) => (
               <li key={line} className="py-2 text-ink-muted">
@@ -511,8 +562,8 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
           </ul>
         </div>
       ) : null}
-      {done.length > 0 ? <p className="mt-4 text-xs text-ink-faint">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
-      <p className="mt-3 text-xs text-ink-faint">
+      {done.length > 0 ? <p className="mt-4 type-meta">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
+      <p className="mt-3 type-meta">
         Add what you have booked under <a href="#bookings" className="text-accent underline underline-offset-4">Plan → Bookings</a>; the plan reshapes around it.
       </p>
     </section>
@@ -541,14 +592,14 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
         const primary = r.entries.filter((e) => e.state !== 'not_applicable' && (e.tier ?? 'primary') === 'primary');
         const more = r.entries.filter((e) => !primary.includes(e));
         const Entry = ({ e }: { e: ReadinessEntry }) => (
-          <li className="rule-top py-3" data-testid="hub-readiness-entry" data-kind={e.kind} data-state={e.state} data-tier={e.tier ?? 'primary'}>
+          <li className="rule-top py-3.5" data-testid="hub-readiness-entry" data-kind={e.kind} data-state={e.state} data-tier={e.tier ?? 'primary'}>
             <div className="flex flex-wrap items-baseline gap-2">
-              <span className="text-sm font-medium text-ink">{e.title}</span>
+              <span className="text-sm font-semibold text-ink">{e.title}</span>
               <Badge tone={STATE_TONE[e.state]}>{STATE_WORD[e.state]}</Badge>
             </div>
-            <p className="mt-0.5 text-xs leading-snug text-ink-muted">{e.action ? <span className="text-ink">{e.action} </span> : null}{e.summary}</p>
+            <p className="mt-1 text-sm leading-snug text-ink-muted">{e.action ? <span className="text-ink">{e.action} </span> : null}{e.summary}</p>
             {e.links.length > 0 ? (
-              <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
+              <p className="mt-1.5 flex flex-wrap gap-x-3 text-sm">
                 {e.links.map((l) => (
                   <a key={l.url} href={l.url} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">
                     {l.name}
@@ -575,10 +626,10 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
                     <Entry key={e.kind} e={e} />
                   ))}
                 </ul>
-                <p className="mt-3 text-xs leading-relaxed text-ink-faint">{r.coverageNote}</p>
+                <p className="mt-3 type-meta">{r.coverageNote}</p>
               </details>
             ) : (
-              <p className="mt-3 text-xs leading-relaxed text-ink-faint">{r.coverageNote}</p>
+              <p className="mt-3 type-meta">{r.coverageNote}</p>
             )}
           </>
         );
@@ -590,15 +641,25 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
         the point, and behind the appendix on paper, where it was a page and a
         third of the same items.
       */}
-      <h3 className="mt-8 font-display text-lg text-ink" data-print="appendix">In order</h3>
-      <div className="mt-2 grid gap-5 md:grid-cols-2" data-testid="hub-checklist" data-print="appendix">
-        {intel.checklist.phases.map((phase) => (
-          <div key={phase.phase} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4" data-testid={`hub-phase-${phase.phase}`}>
-            <p className="label text-accent">{phase.title}</p>
-            <ul className="mt-2">
-              {phase.items.map((item) => (
-                <li key={item.id}>
-                  <CheckBox tripId={tripId} list="checklist" itemId={item.id} checked={checked.has(item.id)} label={item.blocking ? `${item.title} — blocking` : item.title} hint={item.sourceUrl ? `${item.why} (${item.sourceName})` : item.why} />
+      <h3 className="mt-10 type-section text-ink" data-print="appendix">In order</h3>
+      <p className="mt-1 type-small text-ink-muted" data-print="appendix">What to do now, what to book first, and what waits for the month, the week and the day before.</p>
+      <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="hub-checklist" data-print="appendix">
+        {intel.checklist.phases.map((phase, phaseIndex) => (
+          <div key={phase.phase} className="card p-5" data-testid={`hub-phase-${phase.phase}`}>
+            <p className="flex items-baseline gap-2">
+              <span className="type-figure text-xs text-accent">{String(phaseIndex + 1).padStart(2, '0')}</span>
+              <span className="eyebrow text-accent">{phase.title}</span>
+            </p>
+            <ul className="mt-2 divide-y divide-rule/60">
+              {/*
+                V8 — a row's title is what the row is about. Five rows headed
+                "Set this up before you fly." read as one row five times;
+                `checklistRows` gives each its own subject when a phase repeats
+                a title, and leaves a unique title exactly as written.
+              */}
+              {checklistRows(phase.items).map((row) => (
+                <li key={row.id}>
+                  <CheckBox tripId={tripId} list="checklist" itemId={row.id} checked={checked.has(row.id)} label={row.blocking ? `${row.title} — blocking` : row.title} hint={row.sourceUrl ? `${row.detail} (${row.sourceName})` : row.detail} />
                 </li>
               ))}
             </ul>
@@ -614,8 +675,8 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
               if (list.length === 0) return null;
               return (
                 <div key={bucket}>
-                  <p className="label text-ink-faint">{bucket === 'official' ? 'Official' : bucket === 'practical' ? 'Practical' : 'Unknown'}</p>
-                  <ul className="mt-1 space-y-1.5 text-xs text-ink-muted">
+                  <p className="eyebrow">{bucket === 'official' ? 'Official' : bucket === 'practical' ? 'Practical' : 'Unknown'}</p>
+                  <ul className="mt-1.5 space-y-2 text-sm text-ink-muted">
                     {list.map((e) => (
                       <li key={`${e.title}:${e.detail}`}>
                         <span className="text-ink">{e.title}</span> — {e.detail}
@@ -653,7 +714,7 @@ export function PackSection({ intel, tripId, checks }: { intel: TravelIntelligen
           if (items.length === 0) return null;
           return (
             <div key={category} className="mb-6 break-inside-avoid">
-              <p className="label text-ink-faint">{PACKING_CATEGORY_LABELS[category]}</p>
+              <p className="eyebrow">{PACKING_CATEGORY_LABELS[category]}</p>
               <ul className="mt-1">
                 {items.map((item) => (
                   <li key={item.id}>
@@ -665,7 +726,7 @@ export function PackSection({ intel, tripId, checks }: { intel: TravelIntelligen
           );
         })}
       </div>
-      {p.modelSuggestions.length > 0 ? <p className="mt-2 text-xs text-ink-faint">Also suggested for this trip: {p.modelSuggestions.join(', ')}.</p> : null}
+      {p.modelSuggestions.length > 0 ? <p className="mt-2 type-meta">Also suggested for this trip: {p.modelSuggestions.join(', ')}.</p> : null}
       </div>
     </section>
   );
@@ -676,8 +737,12 @@ export function BudgetSection({ intel }: { intel: TravelIntelligence }) {
   return (
     <section className="mt-14" aria-labelledby="budget" data-testid="hub-budget">
       <SectionHeader id="budget" title="Budget" blurb={b.precisionNote} />
-      <p className="mt-4 font-display text-2xl text-ink">
-        {b.currency} {b.total.low.toLocaleString()}–{b.total.high.toLocaleString()} <span className="font-sans text-sm text-ink-muted">for {b.travellers} {b.travellers === 1 ? 'traveller' : 'travellers'}, estimated</span>
+      <p className="card mt-5 p-5">
+        <span className="eyebrow block">Estimated total</span>
+        <span className="type-figure mt-1 block text-[1.75rem] leading-tight text-ink">
+          {b.currency} {b.total.low.toLocaleString()}–{b.total.high.toLocaleString()}
+        </span>
+        <span className="mt-1 block text-sm text-ink-muted">for {b.travellers} {b.travellers === 1 ? 'traveller' : 'travellers'} — a range, not a quote</span>
       </p>
       {b.envelope ? (
         <p className={cx('mt-1 text-sm', b.envelope.fit === 'over' ? 'text-clay' : b.envelope.fit === 'tight' ? 'text-amber' : 'text-pine')} data-testid="hub-budget-envelope">
@@ -686,23 +751,23 @@ export function BudgetSection({ intel }: { intel: TravelIntelligence }) {
       ) : null}
       <dl className="mt-4 divide-y divide-rule text-sm">
         {b.lines.map((line) => (
-          <div key={line.category} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2">
-            <dt className="text-ink">{BUDGET_CATEGORY_LABELS[line.category]}</dt>
-            <dd className="numeral text-ink">
-              {line.low.toLocaleString()}–{line.high.toLocaleString()} <span className="text-xs text-ink-faint">{line.perPerson ? 'per person' : 'for the party'}</span>
+          <div key={line.category} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-3">
+            <dt className="font-medium text-ink">{BUDGET_CATEGORY_LABELS[line.category]}</dt>
+            <dd className="type-figure text-ink">
+              {line.low.toLocaleString()}–{line.high.toLocaleString()} <span className="font-sans text-xs font-normal text-ink-muted">{line.perPerson ? 'per person' : 'for the party'}</span>
             </dd>
-            <dd className="basis-full text-xs text-ink-faint">{line.basis}{line.excludes.length > 0 ? ` · excludes ${line.excludes.join(', ').toLowerCase()}` : ''}</dd>
+            <dd className="basis-full type-meta">{line.basis}{line.excludes.length > 0 ? ` · excludes ${line.excludes.join(', ').toLowerCase()}` : ''}</dd>
           </div>
         ))}
       </dl>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 text-sm">
-        <div>
-          <p className="label text-ink-faint">Save here</p>
-          <ul className="mt-1 space-y-0.5 text-ink-muted">{b.strategy.saveHere.map((s) => <li key={s}>{s}</li>)}</ul>
+        <div className="card p-4">
+          <p className="eyebrow text-pine">Save here</p>
+          <ul className="mt-1.5 space-y-1 text-ink-muted">{b.strategy.saveHere.map((s) => <li key={s}>{s}</li>)}</ul>
         </div>
-        <div>
-          <p className="label text-ink-faint">Spend here</p>
-          <ul className="mt-1 space-y-0.5 text-ink-muted">{b.strategy.spendHere.map((s) => <li key={s}>{s}</li>)}</ul>
+        <div className="card p-4">
+          <p className="eyebrow text-accent-strong">Spend here</p>
+          <ul className="mt-1.5 space-y-1 text-ink-muted">{b.strategy.spendHere.map((s) => <li key={s}>{s}</li>)}</ul>
         </div>
       </div>
       {b.booked.length > 0 ? (
@@ -710,7 +775,7 @@ export function BudgetSection({ intel }: { intel: TravelIntelligence }) {
           Booked so far: {b.booked.map((x) => `${x.title} ${x.currency} ${x.amount.toLocaleString()}`).join(' · ')}
         </p>
       ) : null}
-      <p className="mt-3 text-xs text-ink-faint">{b.conversionNote}</p>
+      <p className="mt-4 type-meta">{b.conversionNote}</p>
     </section>
   );
 }
@@ -720,25 +785,28 @@ export function BackupsSection({ intel }: { intel: TravelIntelligence }) {
     <div className="mt-6" data-testid="hub-backups">
       <ol className="grid gap-3 sm:grid-cols-2">
         {intel.backups.map((day) => (
-          <li key={day.dayNumber} className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-3 text-sm" data-testid="hub-backup-day">
-            <p className="font-display text-base text-ink">Day {day.dayNumber} · {day.planA}</p>
+          <li key={day.dayNumber} className="card p-4 text-sm" data-testid="hub-backup-day">
+            <p className="font-display text-lg leading-snug text-ink">
+              <span className="type-figure font-sans text-xs text-ink-faint">Day {day.dayNumber} · </span>
+              {day.planA}
+            </p>
             {day.fallback ? (
-              <p className="mt-1 text-xs text-ink-muted">
-                <span className="text-ink">If {day.fallback.trigger.toLowerCase()}:</span> {day.fallback.name}
+              <p className="mt-2 text-sm text-ink-muted">
+                <span className="font-medium text-ink">If {day.fallback.trigger.toLowerCase()}:</span> {day.fallback.name}
                 {day.fallback.verified ? '' : ' (proposed, not verified)'}
               </p>
             ) : (
-              <p className="mt-1 text-xs text-ink-faint">No fallback on record; the flex stops below are the slack.</p>
+              <p className="mt-2 type-meta">No fallback on record; the flex stops below are the slack.</p>
             )}
-            {day.flexItems.length > 0 ? <p className="mt-1 text-xs text-ink-muted">Can move or go: {day.flexItems.join(', ')}</p> : null}
+            {day.flexItems.length > 0 ? <p className="mt-1.5 text-sm text-ink-muted">Can move or go: {day.flexItems.join(', ')}</p> : null}
             {day.triggers.length > 0 ? (
-              <ul className="mt-1 space-y-0.5 text-xs text-ink-faint">
+              <ul className="mt-1.5 space-y-0.5 type-meta">
                 {day.triggers.slice(0, 3).map((t) => (
                   <li key={t}>{t}</li>
                 ))}
               </ul>
             ) : null}
-            {day.decisionPoint ? <p className="mt-1 text-xs text-accent-strong">{day.decisionPoint}</p> : null}
+            {day.decisionPoint ? <p className="mt-2 text-sm font-medium text-accent-strong">{day.decisionPoint}</p> : null}
           </li>
         ))}
       </ol>
@@ -754,12 +822,12 @@ export function BackupsSection({ intel }: { intel: TravelIntelligence }) {
         ).map(([title, list]) =>
           list.length === 0 ? null : (
             <div key={title}>
-              <p className="label text-ink-faint">{title}</p>
-              <ul className="mt-1 space-y-1">
+              <p className="eyebrow">{title}</p>
+              <ul className="mt-1.5 space-y-1.5">
                 {list.map((entry, index) => (
-                  <li key={`${entry.name}:${index}`} className="text-ink">
+                  <li key={`${entry.name}:${index}`} className="font-medium text-ink">
                     {entry.name}
-                    <span className="block text-xs text-ink-muted">{entry.why}</span>
+                    <span className="block text-sm font-normal text-ink-muted">{entry.why}</span>
                   </li>
                 ))}
               </ul>
@@ -807,10 +875,10 @@ export function VerifySection({ intel, manifest, pkg }: { intel: TravelIntellige
                   <Badge tone={item.state === 'due' ? 'amber' : item.state === 'past' ? 'neutral' : 'blue'}>{RECHECK_WINDOW_LABELS[item.window]}</Badge>
                   <span className="ml-2">{item.title}</span>
                 </span>
-                <span className="text-xs text-ink-muted">{item.automatable ? 'Sidequest can re-read this' : 'Read the official source yourself'}</span>
-                <span className="basis-full text-xs text-ink-faint">{item.why}</span>
+                <span className="text-sm text-ink-muted">{item.automatable ? 'Sidequest can re-read this' : 'Read the official source yourself'}</span>
+                <span className="basis-full type-meta">{item.why}</span>
                 {item.sourceUrl ? (
-                  <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener" className="basis-full text-xs text-accent underline underline-offset-4">
+                  <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener" className="basis-full text-sm text-accent underline underline-offset-4">
                     Official source
                   </a>
                 ) : null}
@@ -829,14 +897,14 @@ export function VerifySection({ intel, manifest, pkg }: { intel: TravelIntellige
                   <span className="text-ink-faint">Day {a.dayNumber} · </span>
                   {a.title}
                 </span>
-                <span className="text-xs text-ink-muted">{ACCESS_STATE_LABELS[a.state]}</span>
+                <span className="text-sm text-ink-muted">{ACCESS_STATE_LABELS[a.state]}</span>
                 {a.attribution ? (
-                  <span className="basis-full text-xs text-ink-faint" data-testid="hub-access-attribution">
+                  <span className="basis-full type-meta" data-testid="hub-access-attribution">
                     {a.note} {a.attribution}{a.checkedAt ? ` · read ${a.checkedAt.slice(0, 10)}` : ''}
                   </span>
                 ) : null}
                 {a.sourceUrl ? (
-                  <a href={a.sourceUrl} target="_blank" rel="noreferrer noopener" className="basis-full text-xs text-accent underline underline-offset-4">
+                  <a href={a.sourceUrl} target="_blank" rel="noreferrer noopener" className="basis-full text-sm text-accent underline underline-offset-4">
                     {a.sourceName ?? 'Source'}
                   </a>
                 ) : null}
@@ -847,7 +915,7 @@ export function VerifySection({ intel, manifest, pkg }: { intel: TravelIntellige
       ) : null}
       <details className="mt-6" data-testid="hub-sources" data-print="appendix">
         <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted hover:text-ink">Every fact behind this plan, with its source and how fresh it is ({intel.sourceRegistry.length})</summary>
-        <p className="mt-1 text-xs text-ink-faint">{intel.freshness.note}</p>
+        <p className="mt-1 type-meta">{intel.freshness.note}</p>
         <ul className="mt-2 divide-y divide-rule text-xs">
           {[...material, ...intel.sourceRegistry.filter((c) => !material.includes(c) && c.state !== 'not_applicable')].slice(0, 120).map((c) => (
             <li key={c.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5" data-testid="hub-claim" data-kind={c.kind} data-authority={c.authority} data-state={c.state}>
@@ -875,9 +943,9 @@ export function CritiquePanel({ intel }: { intel: TravelIntelligence }) {
   const c = intel.critique;
   if (!c) return null;
   return (
-    <Panel className="mt-8 p-5" as="section" testId="hub-critique">
-      <p className="label text-accent">Your plan, checked</p>
-      <h2 className="mt-1 font-display text-2xl text-ink">{c.headline}</h2>
+    <Panel className="card mt-8 p-5" as="section" testId="hub-critique">
+      <p className="eyebrow text-accent">Your plan, checked</p>
+      <h2 className="mt-1 type-section text-ink">{c.headline}</h2>
       <ul className="mt-4 divide-y divide-rule">
         {c.findings.map((f) => (
           <li key={`${f.topic}:${f.title}`} className="py-2.5 text-sm" data-testid="hub-critique-finding" data-severity={f.severity} data-topic={f.topic}>
@@ -886,19 +954,19 @@ export function CritiquePanel({ intel }: { intel: TravelIntelligence }) {
               <span className="text-ink">{f.title}</span>
               <span className="sr-only">{f.severity}</span>
             </p>
-            <p className="mt-0.5 pl-4 text-xs leading-snug text-ink-muted">{f.detail}</p>
-            {f.suggestion ? <p className="mt-0.5 pl-4 text-xs text-accent-strong">{f.suggestion}</p> : null}
+            <p className="mt-0.5 pl-4 text-sm leading-snug text-ink-muted">{f.detail}</p>
+            {f.suggestion ? <p className="mt-0.5 pl-4 text-sm text-accent-strong">{f.suggestion}</p> : null}
           </li>
         ))}
       </ul>
       {c.userPlaces.length > 0 ? (
         <div className="mt-4 text-sm" data-testid="hub-critique-places">
-          <p className="label text-ink-faint">Your places</p>
+          <p className="eyebrow">Your places</p>
           <ul className="mt-1 space-y-1">
             {c.userPlaces.map((p, index) => (
               <li key={`${p.name}:${index}`} className="text-ink" data-outcome={p.outcome}>
                 <Badge tone={p.outcome === 'kept' ? 'pine' : p.outcome === 'moved' ? 'blue' : 'clay'}>{p.outcome.replace('_', ' ')}</Badge> {p.name}
-                <span className="block text-xs text-ink-muted">{p.detail}</span>
+                <span className="block text-sm text-ink-muted">{p.detail}</span>
               </li>
             ))}
           </ul>
@@ -915,8 +983,8 @@ export function CritiquePanel({ intel }: { intel: TravelIntelligence }) {
           ).map(([title, list]) =>
             list.length === 0 ? null : (
               <div key={title}>
-                <p className="label text-ink-faint">{title}</p>
-                <ul className="mt-1 space-y-0.5 text-xs text-ink-muted">
+                <p className="eyebrow">{title}</p>
+                <ul className="mt-1 space-y-0.5 text-sm text-ink-muted">
                   {list.map((entry) => (
                     <li key={entry}>{entry}</li>
                   ))}
@@ -943,23 +1011,23 @@ export { Glyph as HubGlyph };
 export function TodaySection({ today, minuteLabel }: { today: TodayView; minuteLabel: (minute: number) => string }) {
   if (!today.active) return null;
   return (
-    <section className="mt-6 rounded-[var(--radius-card)] border border-pine bg-pine-soft/40 p-5" aria-labelledby="today" data-testid="hub-today">
-      <p className="label text-pine">Today · day {today.dayNumber}{today.baseName ? ` · based in ${today.baseName}` : ''}</p>
+    <section className="card-raised mt-6 border-pine bg-pine-soft/40 p-5" aria-labelledby="today" data-testid="hub-today">
+      <p className="eyebrow text-pine">Today · day {today.dayNumber}{today.baseName ? ` · based in ${today.baseName}` : ''}</p>
       <h2 id="today" className="mt-1 font-display text-2xl text-ink">
         {today.theme ?? 'Today'}
       </h2>
       <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs uppercase tracking-[0.12em] text-ink-faint">Now</dt>
+          <dt className="eyebrow">Now</dt>
           <dd className="text-ink" data-testid="today-now">{today.current ? `${today.current.title} · until ${minuteLabel(today.current.endMinute)}` : 'Nothing scheduled right now.'}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-[0.12em] text-ink-faint">Next</dt>
+          <dt className="eyebrow">Next</dt>
           <dd className="text-ink" data-testid="today-next">{today.next ? `${today.next.title} · ${minuteLabel(today.next.startMinute)}` : 'Nothing more today.'}</dd>
         </div>
         {today.nextTransport ? (
           <div>
-            <dt className="text-xs uppercase tracking-[0.12em] text-ink-faint">Next leg</dt>
+            <dt className="eyebrow">Next leg</dt>
             <dd className="text-ink" data-testid="today-leg">
               {today.nextTransport.title} · {today.nextTransport.minutes !== null ? `${today.nextTransport.minutes} min` : 'not measured'} <span className="text-ink-faint">({today.nextTransport.basis.replace(/_/g, ' ')})</span>
             </dd>
@@ -967,7 +1035,7 @@ export function TodaySection({ today, minuteLabel }: { today: TodayView; minuteL
         ) : null}
         {today.weather ? (
           <div>
-            <dt className="text-xs uppercase tracking-[0.12em] text-ink-faint">Weather</dt>
+            <dt className="eyebrow">Weather</dt>
             <dd className="text-ink">{today.weather.summary}{today.weather.cautions.length > 0 ? ` — ${today.weather.cautions.join('; ')}` : ''}</dd>
           </div>
         ) : null}
@@ -985,8 +1053,8 @@ export function TodaySection({ today, minuteLabel }: { today: TodayView; minuteL
         </ul>
       ) : null}
       {today.fallback ? <p className="mt-3 text-sm text-ink-muted">If today goes wrong: {today.fallback}</p> : null}
-      {today.flexAlternatives.length > 0 ? <p className="mt-1 text-xs text-ink-faint">Flexible: {today.flexAlternatives.join(' · ')}</p> : null}
-      <ol className="mt-4 flex flex-wrap gap-2 text-xs" data-testid="today-stops">
+      {today.flexAlternatives.length > 0 ? <p className="mt-1 type-meta">Flexible: {today.flexAlternatives.join(' · ')}</p> : null}
+      <ol className="mt-4 flex flex-wrap gap-2 text-sm" data-testid="today-stops">
         {today.stops.map((stop) => (
           <li key={stop.id} className={cx('rounded-full border px-2.5 py-1', stop.done ? 'border-rule text-ink-faint line-through' : 'border-pine text-ink')}>
             {minuteLabel(stop.startMinute)} {stop.title}

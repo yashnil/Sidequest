@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { buttonClass, cx } from '@/components/ui';
 import { addCustomStopAction, fixDayAction, moveStopAction, setStopDurationAction, setStopKeepAction, shiftStopAction, updateBookedItemAction, discoverStaysAction, discoverFoodAction, type DiscoveryActionResult } from './actions';
 
 /**
@@ -12,7 +13,16 @@ import { addCustomStopAction, fixDayAction, moveStopAction, setStopDurationActio
  * Nothing spends: no rebuild, no provider call, except the two discovery
  * buttons, each of which is one bounded lookup the traveller pressed for.
  */
-const LINK = 'text-xs text-ink-faint underline underline-offset-4 transition-colors hover:text-ink disabled:opacity-50';
+/*
+ * V8 — REAL CONTROLS, NOT UNDERLINED TEXT.
+ *
+ * Every edit affordance on a day was a 12-pixel underlined link, which is the
+ * same object as a citation. They are ghost buttons now: 44 px tall, plainly
+ * pressable, quiet because they have no ground rather than because they are
+ * faded. The text of each is unchanged — the browser suite reads it.
+ */
+const GHOST = buttonClass('ghost', 'sm');
+const FIELD = 'min-h-11 rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine';
 
 export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, role }: { tripId: string; dayNumber: number; stopId: string; title: string; dayCount: number; role?: 'core' | 'secondary' | 'optional' | 'flex' }) {
   const router = useRouter();
@@ -33,22 +43,22 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
   };
   return (
     <div className="print:hidden" data-testid="stop-day-controls">
-      <button type="button" className={LINK} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className={GHOST} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         {open ? 'Close day controls' : 'Move, re-time or keep…'}
       </button>
       {open ? (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-rule bg-paper-sunk/60 p-2 text-xs">
-          <button type="button" disabled={pending} className={LINK} onClick={() => run(() => shiftStopAction(tripId, dayNumber, stopId, 'earlier'))} data-testid="stop-earlier">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2 rounded-[var(--radius-card)] border border-rule bg-paper-sunk/60 p-2 text-sm">
+          <button type="button" disabled={pending} className={GHOST} onClick={() => run(() => shiftStopAction(tripId, dayNumber, stopId, 'earlier'))} data-testid="stop-earlier">
             Earlier
           </button>
-          <button type="button" disabled={pending} className={LINK} onClick={() => run(() => shiftStopAction(tripId, dayNumber, stopId, 'later'))} data-testid="stop-later">
+          <button type="button" disabled={pending} className={GHOST} onClick={() => run(() => shiftStopAction(tripId, dayNumber, stopId, 'later'))} data-testid="stop-later">
             Later
           </button>
-          <label className="inline-flex items-center gap-1 text-ink-muted">
+          <label className="inline-flex items-center gap-2 text-sm text-ink-muted">
             Move to
             <select
               disabled={pending || dayCount < 2}
-              className="rounded border border-rule bg-paper px-1 py-0.5 text-xs"
+              className={cx(FIELD, 'py-1')}
               defaultValue=""
               data-testid="stop-move-day"
               onChange={(event) => {
@@ -66,7 +76,7 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
                 ))}
             </select>
           </label>
-          <label className="inline-flex items-center gap-1 text-ink-muted">
+          <label className="inline-flex items-center gap-2 text-sm text-ink-muted">
             Minutes
             <input
               type="number"
@@ -74,7 +84,7 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
               max={600}
               step={15}
               disabled={pending}
-              className="w-16 rounded border border-rule bg-paper px-1 py-0.5 text-xs"
+              className={cx(FIELD, 'w-24 py-1')}
               data-testid="stop-minutes"
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -86,11 +96,11 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
             />
           </label>
           {role === 'core' ? (
-            <button type="button" disabled={pending} className={LINK} onClick={() => run(() => setStopKeepAction(tripId, dayNumber, stopId, 'optional'))} data-testid="stop-optional">
+            <button type="button" disabled={pending} className={GHOST} onClick={() => run(() => setStopKeepAction(tripId, dayNumber, stopId, 'optional'))} data-testid="stop-optional">
               Mark optional
             </button>
           ) : (
-            <button type="button" disabled={pending} className={LINK} onClick={() => run(() => setStopKeepAction(tripId, dayNumber, stopId, 'must_keep'))} data-testid="stop-must-keep">
+            <button type="button" disabled={pending} className={GHOST} onClick={() => run(() => setStopKeepAction(tripId, dayNumber, stopId, 'must_keep'))} data-testid="stop-must-keep">
               Must keep
             </button>
           )}
@@ -117,7 +127,7 @@ export function FixDayButton({ tripId, dayNumber }: { tripId: string; dayNumber:
       <button
         type="button"
         disabled={pending}
-        className={LINK}
+        className={GHOST}
         data-testid="fix-day"
         onClick={() => {
           setStatus(null);
@@ -137,7 +147,7 @@ export function FixDayButton({ tripId, dayNumber }: { tripId: string; dayNumber:
         {pending ? 'Fixing…' : 'Fix this day'}
       </button>
       {status ? (
-        <span role="status" className="ml-2 text-xs text-ink-muted" data-testid="fix-day-status">
+        <span role="status" className="ml-2 text-sm text-ink-muted" data-testid="fix-day-status">
           {status}
         </span>
       ) : null}
@@ -152,10 +162,10 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   return (
-    <div className="border-t border-rule px-5 py-3 print:hidden" data-testid="add-stop">
+    <div className="border-t border-rule px-4 py-3 print:hidden sm:px-5" data-testid="add-stop">
       {open ? (
         <form
-          className="flex flex-wrap items-end gap-2 text-xs"
+          className="flex flex-wrap items-end gap-2 text-sm"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -175,16 +185,16 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
         >
           <label className="flex flex-col gap-1 text-ink-muted">
             A stop of your own
-            <input name="title" required minLength={2} maxLength={80} className="w-56 rounded border border-rule bg-paper px-2 py-1 text-sm text-ink" placeholder="e.g. Harbour swim" data-testid="add-stop-title" />
+            <input name="title" required minLength={2} maxLength={80} className={cx(FIELD, 'w-64 max-w-full')} placeholder="e.g. Harbour swim" data-testid="add-stop-title" />
           </label>
           <label className="flex flex-col gap-1 text-ink-muted">
             Minutes
-            <input name="minutes" type="number" min={15} max={600} step={15} defaultValue={60} className="w-20 rounded border border-rule bg-paper px-2 py-1 text-sm text-ink" />
+            <input name="minutes" type="number" min={15} max={600} step={15} defaultValue={60} className={cx(FIELD, 'w-24')} />
           </label>
-          <button type="submit" disabled={pending} className="rounded-md border border-rule bg-paper px-3 py-1.5 text-sm text-ink hover:border-ink disabled:opacity-50" data-testid="add-stop-submit">
+          <button type="submit" disabled={pending} className={buttonClass('primary', 'sm')} data-testid="add-stop-submit">
             {pending ? 'Adding…' : 'Add to this day'}
           </button>
-          <button type="button" className={LINK} onClick={() => setOpen(false)}>
+          <button type="button" className={GHOST} onClick={() => setOpen(false)}>
             Cancel
           </button>
           {status ? (
@@ -194,7 +204,7 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
           ) : null}
         </form>
       ) : (
-        <button type="button" className={LINK} onClick={() => setOpen(true)} data-testid="add-stop-open">
+        <button type="button" className={GHOST} onClick={() => setOpen(true)} data-testid="add-stop-open">
           Add a stop of your own
         </button>
       )}
@@ -220,8 +230,8 @@ export function BookedStatusControl({ tripId, id, status, cost }: { tripId: stri
     });
   };
   return (
-    <span className="inline-flex flex-wrap items-center gap-2 text-xs print:hidden" data-testid="booked-status-control">
-      <select value={status} disabled={pending} className="rounded border border-rule bg-paper px-1 py-0.5 text-xs" aria-label="Booking status" data-testid="booked-status" onChange={(event) => apply({ status: event.target.value })}>
+    <span className="inline-flex flex-wrap items-center gap-2 text-sm print:hidden" data-testid="booked-status-control">
+      <select value={status} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Booking status" data-testid="booked-status" onChange={(event) => apply({ status: event.target.value })}>
         {Object.entries(BOOKED_STATUS_LABELS).map(([value, label]) => (
           <option key={value} value={value}>
             {label}
@@ -235,7 +245,7 @@ export function BookedStatusControl({ tripId, id, status, cost }: { tripId: stri
         defaultValue={cost?.amount ?? ''}
         placeholder="cost"
         aria-label="Cost paid"
-        className="w-20 rounded border border-rule bg-paper px-1 py-0.5 text-xs"
+        className={cx(FIELD, 'w-24 py-1')}
         data-testid="booked-cost"
         disabled={pending}
         onKeyDown={(event) => {
@@ -264,7 +274,7 @@ export function DiscoverButton({ tripId, near, kind, label, query }: { tripId: s
       <button
         type="button"
         disabled={pending}
-        className={LINK}
+        className={GHOST}
         data-testid={`discover-${kind}-button`}
         onClick={() =>
           startTransition(async () => {
@@ -276,15 +286,15 @@ export function DiscoverButton({ tripId, near, kind, label, query }: { tripId: s
       </button>
       {result ? (
         !result.ok ? (
-          <p role="alert" className="mt-1 text-xs text-clay">
+          <p role="alert" className="mt-1 text-sm text-clay">
             {result.error}
           </p>
         ) : !result.available ? (
-          <p className="mt-1 text-xs text-ink-muted" data-testid={`discover-${kind}-unavailable`}>
+          <p className="mt-1 text-sm text-ink-muted" data-testid={`discover-${kind}-unavailable`}>
             {result.reason}
           </p>
         ) : (
-          <div className="mt-2 rounded-md border border-rule bg-paper-sunk/50 p-2 text-xs" data-testid={`discover-${kind}-results`}>
+          <div className="card mt-2 p-3 text-sm" data-testid={`discover-${kind}-results`}>
             {/*
               MVP V3, Stages 34 and 35 — ordered by fit, and each row says why it
               is where it is. The rating is shown because it is real information

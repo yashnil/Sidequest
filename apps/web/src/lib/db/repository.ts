@@ -442,7 +442,7 @@ function setTripStatus(tripId: string, status: TripStatus): void {
  * it, so a save that is only about answers cannot silently send somebody back
  * to the beginning.
  */
-export function saveAnswers(tripId: string, answers: QuestionnaireAnswers, step?: number): void {
+export function saveAnswers(tripId: string, answers: QuestionnaireAnswers, step?: number): string {
   const parsed = questionnaireAnswersSchema.parse(answers);
   const now = new Date().toISOString();
   const safeStep = step === undefined ? null : Math.max(0, Math.floor(step));
@@ -470,6 +470,23 @@ export function saveAnswers(tripId: string, answers: QuestionnaireAnswers, step?
          updated_at = excluded.updated_at`,
     )
     .run(tripId, 1, JSON.stringify(parsed), safeStep, now, now, safeStep);
+  return now;
+}
+
+/**
+ * V8 — THE REVISION A CLIENT MUST HOLD BEFORE IT MAY OVERWRITE THE ANSWERS.
+ *
+ * The stored row's `updated_at`, returned by every save and handed to the
+ * wizard on render. A save that presents an older revision comes from a
+ * client that is behind the row — a second tab, or a wizard remounted on the
+ * props of a page rendered before the answers were given — and is refused
+ * rather than applied. The production session of 2026-09-11 lost fourteen
+ * answers to exactly that overwrite (`.claude-private/V8-BUILD-FAILURE.md`).
+ * Null when no row exists yet: the first save has nothing to be behind.
+ */
+export function answersRevision(tripId: string): string | null {
+  const row = getDb().prepare('SELECT updated_at FROM traveler_profiles WHERE trip_id = ?').get(tripId) as { updated_at?: string } | undefined;
+  return row?.updated_at ?? null;
 }
 
 /**
@@ -490,7 +507,7 @@ export function saveProfile(
   tripId: string,
   answers: QuestionnaireAnswers,
   profile: TravelerProfile,
-): void {
+): string {
   const parsedAnswers = questionnaireAnswersSchema.parse(answers);
   const parsedProfile = travelerProfileSchema.parse(profile);
   const now = new Date().toISOString();
@@ -508,6 +525,7 @@ export function saveProfile(
     .run(tripId, parsedProfile.version, JSON.stringify(parsedAnswers), JSON.stringify(parsedProfile), now, now);
 
   setTripStatus(tripId, 'profiled');
+  return now;
 }
 
 export function getAnswers(tripId: string): QuestionnaireAnswers | null {

@@ -18,7 +18,7 @@ import {
   type ShortlistLead,
   type UnknownReason,
 } from '@sidequest/core';
-import { Badge, ErrorNote, Panel, buttonClass, cx } from './ui';
+import { Badge, ErrorNote, Panel, buttonClass, cx, selectableCardClass } from './ui';
 import { DestinationImage, ImageCredit } from './DestinationImage';
 import { adoptDestinationAction, buildShortlistAction } from '@/app/(product)/decide/actions';
 
@@ -153,8 +153,8 @@ export function ShortlistView({
      * three named checks and roughly how long they take.
      */
     return (
-      <Panel className="p-8 text-center">
-        <p className="breathing font-display text-xl text-ink">Putting a shortlist together</p>
+      <Panel className="p-8 text-center shadow-[var(--shadow-card)]">
+        <p className="breathing type-section text-ink">Putting a shortlist together</p>
         <p className="measure mx-auto mt-3 text-sm leading-relaxed text-ink-muted">
           Checking the weather each place gets at that time of year, how much there is to do, and
           how far apart it all is. A few seconds.
@@ -213,8 +213,8 @@ export function ShortlistView({
 
   if (shortlist.picks.length === 0) {
     return (
-      <Panel className="p-8">
-        <h2 className="font-display text-2xl text-ink">Nothing came back</h2>
+      <Panel className="p-8 shadow-[var(--shadow-card)]">
+        <h2 className="display-md text-ink">Nothing came back</h2>
         <p className="measure mt-3 leading-relaxed text-ink-muted">
           {shortlist.considered === 0
             ? 'We had nothing to rank — see below for why. That is about us, not about anywhere.'
@@ -325,14 +325,7 @@ export function ShortlistView({
                       an anchor inside a button is markup browsers resolve
                       inconsistently.
                     */}
-                    <div
-                      className={cx(
-                        'flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border pb-4 transition-colors',
-                        current?.entryId === pick.entryId
-                          ? 'border-pine bg-pine-soft'
-                          : 'border-rule bg-paper-raised hover:border-ink-faint',
-                      )}
-                    >
+                    <div className={selectableCardClass(current?.entryId === pick.entryId, 'flex h-full flex-col overflow-hidden pb-4')}>
                       {/*
                         The same treatment the comparison layout gives its rows,
                         deliberately: one uniform frame, never cropped, the whole
@@ -354,7 +347,7 @@ export function ShortlistView({
                         aria-current={current?.entryId === pick.entryId}
                         className={cx(MIN_TARGET, 'w-full px-4 pt-3 text-left')}
                       >
-                        <span className="block font-display text-base leading-tight text-ink">
+                        <span className="block font-display text-lg leading-tight text-ink">
                           {pick.displayName}
                         </span>
                         <span className="mt-0.5 block text-xs text-ink-muted">
@@ -394,14 +387,7 @@ export function ShortlistView({
                   text area as one large click target and leaves the credit
                   separately reachable, which is what the licence requires anyway.
                 */}
-                <div
-                  className={cx(
-                    'overflow-hidden rounded-[var(--radius-card)] border transition-colors',
-                    current?.entryId === pick.entryId
-                      ? 'border-pine bg-pine-soft'
-                      : 'border-rule bg-paper-raised hover:border-ink-faint',
-                  )}
-                >
+                <div className={selectableCardClass(current?.entryId === pick.entryId, 'overflow-hidden')}>
                   {/*
                     The row image never crops, whatever its licence permits.
 
@@ -422,7 +408,7 @@ export function ShortlistView({
                     className="w-full px-4 pt-3 pb-4 text-left"
                   >
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="font-display text-lg leading-tight text-ink">
+                      <span className="font-display text-xl leading-tight text-ink">
                         {pick.displayName}
                       </span>
                       <span aria-hidden="true" className="text-xs text-ink-faint">
@@ -563,7 +549,7 @@ function Detail({
         : 'What we know about it';
 
   return (
-    <Panel className="self-start p-6" as="section" labelledBy="shortlist-detail-heading">
+    <Panel className="self-start rounded-[var(--radius-panel)] p-6 shadow-[var(--shadow-raised)]" as="section" labelledBy="shortlist-detail-heading">
       {cropSafe ? (
         <DestinationImage crop image={cropSafe} fallback={fallback} ratio="21 / 9" showLabel className="mb-5" />
       ) : (
@@ -577,7 +563,7 @@ function Detail({
       )}
 
       <p className="eyebrow">{eyebrow}</p>
-      <h2 id="shortlist-detail-heading" className="mt-2 font-display text-3xl text-ink">
+      <h2 id="shortlist-detail-heading" className="display-lg mt-2 text-ink">
         {pick.displayName}
       </h2>
       <p className="mt-1 text-sm text-ink-muted">{pick.qualifiedName}</p>
@@ -741,7 +727,7 @@ function Detail({
       <div className="mt-7 flex flex-wrap items-center gap-4 border-t border-rule pt-6">
         <button
           type="button"
-          className={cx(buttonClass('primary'), MIN_TARGET)}
+          className={cx(buttonClass('accent', 'lg'), MIN_TARGET)}
           disabled={pending || adopting}
           onClick={() => {
             onError(null);
@@ -753,7 +739,7 @@ function Detail({
         >
           {adopting ? 'Setting it up…' : `Plan ${pick.displayName}`}
         </button>
-        <span className="text-sm text-ink-faint">
+        <span className="type-small text-ink-muted">
           Your dates, nights and preferences come with you.
         </span>
       </div>

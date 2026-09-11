@@ -16,7 +16,7 @@ import { answerRefinementAction, refineTripAction, undoRefinementAction } from '
  * underneath a traveller who asked a question would look like an edit they did
  * not make.
  */
-export function AskSidequestMount({ tripId, ready, canUndo }: { tripId: string; ready: boolean; canUndo: boolean }) {
+export function AskSidequestMount({ tripId, ready, canUndo, dayCount, baseNames }: { tripId: string; ready: boolean; canUndo: boolean; dayCount?: number; baseNames?: readonly string[] }) {
   const router = useRouter();
   const refreshIfChanged = (reply: RefinementReply): RefinementReply => {
     if (reply.ok && (reply.summary || reply.version !== undefined)) router.refresh();
@@ -27,6 +27,8 @@ export function AskSidequestMount({ tripId, ready, canUndo }: { tripId: string; 
       tripId={tripId}
       ready={ready}
       canUndo={canUndo}
+      {...(dayCount ? { dayCount } : {})}
+      {...(baseNames && baseNames.length > 0 ? { baseNames } : {})}
       onAsk={async (input) => refreshIfChanged(await refineTripAction(input))}
       onAnswer={async (input) => refreshIfChanged(await answerRefinementAction(input))}
       onUndo={async (input) => refreshIfChanged(await undoRefinementAction(input))}

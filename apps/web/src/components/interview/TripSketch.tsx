@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { INTEREST_LABELS, questionById, type Interest, type InterestLevel, type InterviewContext, type QuestionnaireAnswers } from '@sidequest/core';
 import { cx, FOCUS_RING } from '../ui';
 import { Glyph, INTEREST_HUE, type GlyphId } from './glyphs';
 import { DestinationMap, type DestinationGeometry } from './DestinationMap';
+import { PORTRAIT_S, timing } from './choreography';
 import type { MapBasemap } from '../map-adapter';
 
 /**
@@ -269,26 +271,40 @@ function ProfileMark({ assumed, open }: { assumed: boolean; open: boolean }) {
   );
 }
 
+/** The party, in people rather than a head count when a count is all there is. */
+export function partyLine(traveller: { adults: number; children: number }): string {
+  const adults = `${traveller.adults} ${traveller.adults === 1 ? 'adult' : 'adults'}`;
+  return traveller.children > 0 ? `${adults}, ${traveller.children} ${traveller.children === 1 ? 'child' : 'children'}` : adults;
+}
+
 export function TripProfileList({ sketch, compact = false }: { sketch: Sketch; compact?: boolean }) {
+  const reduced = useReducedMotion();
   const rows = profileRows(sketch);
   return (
     <div>
       <ul className="divide-y divide-rule" data-testid="trip-profile">
-        {rows.map((row) => (
-          <li key={row.key} className="flex items-start gap-2.5 py-2">
-            <ProfileMark assumed={row.assumed} open={row.open} />
-            <span className="min-w-0 flex-1">
-              {row.label ? <span className="label block text-ink-faint">{row.label}</span> : null}
-              <span className={cx('block text-sm leading-snug', row.open ? 'text-ink-faint' : 'text-ink')} {...(row.testId ? { 'data-testid': row.testId } : {})}>
-                {row.value}
-                {row.assumed && !row.open ? <span className="sr-only"> (Sidequest’s read)</span> : null}
+        {/*
+          V8 — a fact settling into the portrait is a `layout` move: a row that
+          appears after an answer slides the rows below it down rather than
+          jumping them. ≤ 320 ms; none under reduced motion.
+        */}
+        <AnimatePresence initial={false}>
+          {rows.map((row) => (
+            <motion.li key={row.key} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={timing(PORTRAIT_S, reduced)} className="flex items-start gap-2.5 py-2">
+              <ProfileMark assumed={row.assumed} open={row.open} />
+              <span className="min-w-0 flex-1">
+                {row.label ? <span className="label block">{row.label}</span> : null}
+                <span className={cx('block text-sm leading-snug', row.open ? 'text-ink-faint' : 'text-ink')} {...(row.testId ? { 'data-testid': row.testId } : {})}>
+                  {row.value}
+                  {row.assumed && !row.open ? <span className="sr-only"> (Sidequest’s read)</span> : null}
+                </span>
               </span>
-            </span>
-          </li>
-        ))}
+            </motion.li>
+          ))}
+        </AnimatePresence>
       </ul>
       {!compact ? (
-        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint" aria-hidden="true">
+        <p className="type-meta mt-2 flex flex-wrap items-center gap-x-3 gap-y-1" aria-hidden="true">
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-2 w-2 rounded-full bg-accent" /> you said
           </span>
@@ -312,17 +328,42 @@ export function mapLayersFor(sketch: Sketch, answers: QuestionnaireAnswers): { b
   return { bases: sketch.shapeOpen ? 1 : sketch.bases, movement, dayTrips };
 }
 
+/**
+ * V8 — THE TRIP PORTRAIT.
+ *
+ * The persistent, lightweight picture of the trip beside every question: the
+ * destination as a name, the nights and the party as figures, the map (or the
+ * sketch when nothing is placed), then the settled facts as a short list with
+ * each marked as the traveller's own or Sidequest's read. It is the same object
+ * the review opens on, so nothing in it is a surprise there. The test ids the
+ * browser battery reads (`trip-sketch`, `sketch-shape`, `sketch-transport`,
+ * `sketch-range`) stay on the same facts.
+ */
 export function TripSketchPanel({ ctx, answers, className, compact = false, geometry = null, tiles = null }: { ctx: InterviewContext; answers: QuestionnaireAnswers; className?: string; compact?: boolean; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
   const sketch = sketchFor(ctx, answers);
   const layers = mapLayersFor(sketch, answers);
   return (
-    <aside className={cx('min-w-0', className)} aria-label="Your trip so far" data-testid="trip-sketch">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-display text-xl leading-tight text-ink">{sketch.destination}</p>
-        <p className="numeral shrink-0 text-xs text-ink-faint">
-          {[sketch.scale, `${sketch.nights} ${sketch.nights === 1 ? 'night' : 'nights'}`].filter(Boolean).join(' · ')}
-        </p>
-      </div>
+    <aside className={cx('card min-w-0 p-4', className)} aria-label="Your trip so far" data-testid="trip-sketch">
+      <p className="label">Your trip so far</p>
+      <p className="font-display mt-1 text-2xl leading-tight text-ink">{sketch.destination}</p>
+      <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
+        {sketch.scale ? (
+          <div className="min-w-0">
+            <dt className="sr-only">Scope</dt>
+            <dd className="type-small text-ink-muted">{sketch.scale}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt className="sr-only">Length</dt>
+          <dd className="type-figure type-small text-ink">
+            {sketch.nights} {sketch.nights === 1 ? 'night' : 'nights'}
+          </dd>
+        </div>
+        <div>
+          <dt className="sr-only">Who</dt>
+          <dd className="type-figure type-small text-ink">{partyLine(ctx.traveller)}</dd>
+        </div>
+      </dl>
       {geometry ? (
         <DestinationMap geometry={geometry} tiles={tiles} shape={layers.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} bases={layers.bases} movement={layers.movement} dayTrips={layers.dayTrips} className="mt-3" />
       ) : (
@@ -335,35 +376,51 @@ export function TripSketchPanel({ ctx, answers, className, compact = false, geom
   );
 }
 
-/** On a phone: a sheet that opens from a slim bar. */
+/**
+ * On a phone: the portrait as a collapsed sheet under the question that opens
+ * with a height animation and closes the same way. The question comes first;
+ * the picture is one tap away and never pushes the action bar out of reach.
+ */
 export function TripSketchSheet({ ctx, answers, geometry = null, tiles = null }: { ctx: InterviewContext; answers: QuestionnaireAnswers; geometry?: DestinationGeometry | null; tiles?: MapBasemap | null }) {
   const [open, setOpen] = useState(false);
+  const reduced = useReducedMotion();
+  const bodyId = useId();
   const sketch = sketchFor(ctx, answers);
+  const settled = [!sketch.shapeOpen ? sketch.shapeLabel : null, !sketch.transport.open ? sketch.transport.label : null, !sketch.rangeOpen ? sketch.rangeLabel : null].filter(Boolean).join(' · ');
   return (
     <div className="lg:hidden" data-testid="trip-sketch-sheet">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        aria-controls="trip-sketch-sheet-body"
-        className={cx('flex w-full items-center justify-between gap-3 rounded-[var(--radius-card)] border border-rule bg-paper-raised px-4 py-3 text-left', FOCUS_RING)}
+        aria-controls={bodyId}
+        className={cx('pressable flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left', open ? 'card-raised' : 'card', FOCUS_RING)}
       >
-        <span className="flex items-center gap-3">
-          <span className="plate inline-flex h-9 w-9 items-center justify-center rounded-full" style={{ '--plate-hue': sketch.hue } as React.CSSProperties} aria-hidden="true">
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="plate inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full" style={{ '--plate-hue': sketch.hue } as React.CSSProperties} aria-hidden="true">
             <Glyph id={sketch.transport.glyph} className="h-4 w-4 text-ink" />
           </span>
-          <span>
-            <span className="label block text-ink-faint">Your trip so far</span>
-            <span className="block text-sm text-ink">
-              {[!sketch.shapeOpen ? sketch.shapeLabel : null, !sketch.transport.open ? sketch.transport.label : null, !sketch.rangeOpen ? sketch.rangeLabel : null].filter(Boolean).join(' · ') || 'Nothing decided yet'}
+          <span className="min-w-0">
+            <span className="block type-small font-semibold text-ink">
+              {sketch.destination}
+              <span className="type-figure ml-2 font-normal text-ink-muted">
+                {sketch.nights} {sketch.nights === 1 ? 'night' : 'nights'}
+              </span>
             </span>
+            <span className="type-meta block truncate">{settled || 'Nothing decided yet'}</span>
           </span>
         </span>
-        <span className="text-sm text-accent">{open ? 'Hide' : 'Show'}</span>
+        <span className="shrink-0 text-sm text-accent">{open ? 'Hide' : 'Show'}</span>
       </button>
-      <div id="trip-sketch-sheet-body" className={cx('enter mt-3', !open && 'hidden')}>
-        <TripSketchPanel ctx={ctx} answers={answers} geometry={geometry} tiles={tiles} />
-      </div>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div key="body" id={bodyId} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={timing(PORTRAIT_S, reduced)} className="overflow-hidden">
+            <div className="pt-3">
+              <TripSketchPanel ctx={ctx} answers={answers} geometry={geometry} tiles={tiles} />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

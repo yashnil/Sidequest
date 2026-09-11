@@ -1,26 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { countNights, isAbandoned } from '@sidequest/core';
 import { ProductChrome } from '@/components/ProductChrome';
 import { buttonClass } from '@/components/ui';
 import { chromeAccount } from '@/lib/auth/chrome';
 import { isCompositionModelConfigured, isFixtureComposer } from '@/lib/providers/switches';
-import { adoptedCompiledRegionId, getLatestJob } from '@/lib/db/compiler-repository';
-import { hasItinerary, listTripsFor } from '@/lib/db/repository';
 import { currentUserId } from '@/lib/auth/session';
 import { sessionToken } from '@/lib/net/caller';
-import { formatDayRange } from '@/lib/format/dates';
-import { tripProgress } from '@/lib/format/trip-progress';
-import { TripList, type TripListRow } from './TripList';
+import { dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
+import type { DashboardCardRow } from './trips/TripCard';
+import { TripList } from './TripList';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Every route in the product shared one title, because the root layout set a
  * default and nothing overrode it — so a browser with six Sidequest tabs open
- * showed six identical ones, and a screen-reader user heard the marketing
- * sentence on arrival at every screen. Each route this slice touches now names
- * itself.
+ * showed six identical ones. Each route names itself.
  */
 export const metadata: Metadata = {
   title: 'Sidequest — trips built around how you actually travel',
@@ -29,42 +24,26 @@ export const metadata: Metadata = {
 /**
  * THE FRONT DOOR.
  *
- * Four things a visitor must be able to get in about one glance (§5): what this
- * does, why it is different from the other thing they could open, what they can
- * do here, and why the output is worth the wait. And one thing a *returning*
- * visitor must be able to do, which this page could not: find their own trips
- * and tell them apart.
+ * V8 §8. A signed-out visitor understands within seconds: tell Sidequest how
+ * you actually travel, get a trip built around you, checked against the real
+ * world. One editorial headline, a living atlas beside it (a route drawing
+ * itself and three base marks settling in — a claim about no real place),
+ * four example destinations that open the composer already filled in, one
+ * filled action, three doors as cards with depth, and six short words for what
+ * Sidequest adds. Not a twelve-section landing page.
  *
- * ## What was here and why it went
+ * A returning visitor is not a first-time visitor: their trips lead, as the
+ * same rich cards the dashboard shows, and "All your trips" goes to the
+ * dashboard — which is where the lifecycle sections, search and sort live.
  *
- * **Two doors, not three.** "I know where I am going" and "Help me decide" were
- * presented as the whole product. The third intent — somebody who already has a
- * plan and wants it stress-tested — existed as a grey footnote on another page
- * reading "Coming later", which is a promise made where nobody who wants it will
- * look. It is a real door now, and the copy on it says exactly what this build
- * does with an existing plan and what it does not: it rebuilds the days around
- * the places you name and tells you which of them do not fit. It does not
- * critique your plan, and it does not claim to.
+ * ## What used to be here and why it went
  *
- * **A trip list that could not describe a trip.** `slice(0, 8)` by creation
- * date, with a ternary for the label. See `tripProgress` and `TripList` for the
- * two halves of that repair.
- *
- * **An index-statistics banner.** "Destination search covers 109,853 places
- * worldwide, from the overture 2026-07-22.0 release." A catalogue release id and
- * a six-figure count are what §5 means by a fake user count: a big number
- * offered as proof, about a thing nobody asked about, in the vocabulary of the
- * system rather than of the trip. What replaced it is a sentence about whether
- * this deployment can research a new destination *today*, which is the only fact
- * on that banner a traveller could ever act on.
- *
- * ## V6 — a returning visitor is not a first-time visitor
- *
- * The trips used to sit at the *bottom* of the page, behind a hero written for
- * somebody who has never seen this before, reachable by an in-page anchor. For
- * anyone with a trip in progress that is the whole product below the fold. They
- * lead now, as a short strip of the most recent ones, and "All your trips" goes
- * to the dashboard — which is where pictures, stages and search live.
+ * A four-step "How it works" box and three promise paragraphs. Both were
+ * true and both were prose about the product where the visitor wanted to see
+ * the product: the atlas shows the shape of what is built, the proof strip
+ * says the six things it accounts for in six words each, and the doors say
+ * what each needs *from you* so nobody picks the wrong one and finds out
+ * three screens later.
  */
 
 const INTENTS = [
@@ -72,111 +51,52 @@ const INTENTS = [
     href: '/trips/new',
     title: 'I know where I am going',
     body: 'Name a town, a region, a park or a country. We work out how much of it your dates can hold.',
+    glyph: 'pin',
   },
   {
     href: '/decide',
     title: 'Help me decide where to go',
     body: 'Tell us when you are free and what you are after. We rank real places against your dates.',
+    glyph: 'compass',
   },
   {
     href: '/trips/new?have=plan',
     title: 'I already have a plan',
     body: 'List the places you have lined up. We build the region around them and say which do not fit.',
+    glyph: 'list',
   },
-];
+] as const;
 
-const PROMISES = [
-  {
-    title: 'It thinks in regions',
-    body: 'A town becomes the valley it sits in; a country becomes the two or three parts of it a trip can hold. What gets left out is named, with the reason.',
-  },
-  {
-    title: 'It ranks by fit, not by reviews',
-    body: 'A quiet viewpoint can outrank the postcard shot if you said crowds ruin a place.',
-  },
-  {
-    title: 'It tells you what will not work',
-    body: 'Closed on your dates, four hours further than it looks, open only in summer — you find out here rather than at the gate.',
-  },
-];
+/** Example prompts. Places, not itineraries: nothing here claims a route exists for them. */
+const PROMPTS = ['Kenya and Tanzania', 'Ten days in Japan', 'Iceland ring road', 'Chongqing and the Yangtze'];
 
-const STEPS: [string, string][] = [
-  ['Say where, or say when', 'A destination you know, or dates and no idea yet.'],
-  ['We shape the region', 'Bases, travel times, and how much your dates can hold.'],
-  ['We check the sources', 'Hours, access, seasonal closures, cost.'],
-  ['You get a plan', 'Day by day, with what we could not establish said out loud.'],
+/** Six short items, not six sections: what the trip already accounts for when it arrives. */
+const PROOF: [string, string][] = [
+  ['Route', 'Bases, and the order you sleep in them.'],
+  ['Logistics', 'Travel timed where it can be, and said where it cannot.'],
+  ['Timing', 'What your dates open, close and crowd.'],
+  ['Reality', 'Every named place checked against the map.'],
+  ['Group constraints', 'One person’s hard rule is the group’s.'],
+  ['Preparation', 'What to book, pack and keep a fallback for.'],
 ];
 
 export default async function HomePage() {
   const now = new Date();
-  /*
-   * Whether a typed destination can be researched at all on this deployment.
-   *
-   * The one fact worth keeping from the banner this page used to end with. It
-   * appears only when the answer is no: "Everything else works" told nobody
-   * anything, and the failing case is the one that cost a founder fifteen
-   * minutes of questionnaire before the flow admitted it could not build.
-   * `readiness.ts` imports nothing, which is what makes asking this free.
-   */
   /* Planning needs a composer, never the research stack: that is optional, behind "Explore experiences first". */
   const compileReady = isFixtureComposer() || isCompositionModelConfigured();
 
-  /**
-   * WHAT EACH TRIP ACTUALLY IS, FROM FACTS THAT ARE CHEAP TO READ.
-   *
-   * Three reads per trip and not one of them parses a compiled region: a
-   * homepage listing sixty trips must not deserialise sixty artifacts to write
-   * sixty labels. The job row already carries the artifact pointer and the
-   * heartbeat, and `trips.status` already carries whether anybody answered the
-   * questionnaire — `saveProfile` sets it. `tripProgress` decides what the
-   * combination means, and is tested without a database.
-   */
   /*
-   * This browser's trips, not the database's.
+   * This browser's trips, not the database's. `mint: false` because a page
+   * render cannot set a cookie — a first-time visitor has no token, and an
+   * empty list is the right answer for somebody who has made nothing.
    *
-   * `listTrips()` took no owner and this heading says "your trips" over the
-   * result, which on the live database meant a visitor was shown a hundred and
-   * eighty strangers' plans with a Remove button on each. `mint: false` because
-   * a page render cannot set a cookie — a first-time visitor has no token, and
-   * an empty list is the right answer for somebody who has made nothing.
+   * By what somebody came back for, then by recency inside that. Sorting by
+   * creation date alone is what put the only trip in the database with a
+   * finished plan in eighth place, behind seven abandoned drafts.
    */
-  const rows: TripListRow[] = listTripsFor({ userId: await currentUserId(), ownerToken: await sessionToken({ mint: false }) })
-    .map((trip) => {
-      const job = getLatestJob(trip.id);
-      const progress = tripProgress({
-        status: trip.status,
-        jobState: job?.state ?? null,
-        jobLive: job ? !isAbandoned(job, now) : false,
-        /*
-         * The region the *trip* stands on, not the one its last job produced.
-         * See `adoptedCompiledRegionId`: an edit clears the first and leaves
-         * the second, and reading the job sent an edited trip to a 404.
-         */
-        hasCompiledRegion: adoptedCompiledRegionId(trip.id) !== null,
-        hasItinerary: hasItinerary(trip.id),
-      });
-      return {
-        id: trip.id,
-        destination: trip.basics.destinationInput,
-        dates: formatDayRange(trip.basics.startDate, trip.basics.endDate),
-        nights: countNights(trip.basics.startDate, trip.basics.endDate),
-        state: progress.state,
-        label: progress.label,
-        action: progress.action,
-        href: progress.path(trip.id),
-        tone: progress.tone,
-        rank: progress.rank,
-        updatedAt: trip.updatedAt,
-      };
-    })
-    /*
-     * By what somebody came back for, then by recency inside that. Sorting by
-     * creation date alone is what put the only trip in the database with a
-     * finished plan in eighth place, behind seven abandoned drafts of the same
-     * destination.
-     */
-    .sort((a, b) => a.rank - b.rank || b.updatedAt.localeCompare(a.updatedAt))
-    .map(({ rank: _rank, updatedAt: _updatedAt, ...row }) => row);
+  const rows: DashboardCardRow[] = dashboardRowsFor({ userId: await currentUserId(), ownerToken: await sessionToken({ mint: false }) }, now)
+    .sort((a, b) => a.progressRank - b.progressRank || b.updatedAt.localeCompare(a.updatedAt))
+    .map((row) => ({ ...row, updatedLabel: lastTouched(row.updatedAt, now) }));
 
   return (
     <ProductChrome account={await chromeAccount()}>
@@ -184,175 +104,193 @@ export default async function HomePage() {
         {rows.length > 0 ? (
           <section className="mb-14 sm:mb-16" aria-labelledby="your-trips">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-              <h2 id="your-trips" className="font-display text-2xl text-ink">
+              <h2 id="your-trips" className="type-title text-ink">
                 Pick up where you left off
               </h2>
-              <Link
-                href="/trips"
-                className="text-sm text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
-                data-testid="home-all-trips"
-              >
-                All your trips →
+              <Link href="/trips" className={buttonClass('ghost', 'sm')} data-testid="home-all-trips">
+                All your trips
+                <span aria-hidden="true">→</span>
               </Link>
             </div>
-            <div className="mt-4">
+            <div className="mt-5">
               <TripList rows={rows} />
             </div>
           </section>
         ) : null}
 
-        <div className="grid gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-16">
-          <section>
+        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-center lg:gap-16" aria-labelledby="home-heading">
+          <div className="min-w-0">
             <p className="eyebrow">Plan anywhere</p>
-            <h1 className="display-hero mt-4 text-ink">
+            <h1 id="home-heading" className="display-hero mt-4 text-ink">
               The trip you meant to take, and the detour you did not know about.
             </h1>
-            <p className="measure mt-6 text-lg leading-relaxed text-ink-muted">
-              Answer one set of questions and Sidequest works out what is actually worth your time —
-              the famous stops, the quiet ones an hour off the road, what is shut on your dates, and
-              what to skip.
+            <p className="measure mt-6 type-body text-lg text-ink-muted">
+              Tell Sidequest how you actually travel. You get a trip built around you and checked
+              against the real world — the famous stops, the quiet ones an hour off the road, what is
+              shut on your dates, and what to skip.
             </p>
 
-            {/*
-              THREE DOORS, IN THE TRAVELLER'S WORDS.
-
-              Not "Mode 1 / Mode 2 / Mode 3", and not three identical cards
-              either: the first is the one most people want, so it leads and is
-              the only one drawn as a filled card. Each says what it needs *from
-              you*, so nobody picks the wrong one and finds out three screens
-              later.
-            */}
-            <ul className="mt-9 space-y-2.5">
-              {INTENTS.map((intent, index) => (
-                <li key={intent.href}>
-                  <Link
-                    href={intent.href}
-                    className={`group flex min-h-11 items-center gap-4 rounded-[var(--radius-card)] border px-4 py-4 transition-colors focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 ${
-                      index === 0
-                        ? 'border-accent bg-accent-soft hover:border-accent-strong'
-                        : 'border-rule bg-paper-raised hover:border-ink-faint'
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={`block font-display text-xl leading-tight ${
-                          index === 0 ? 'text-accent-strong' : 'text-ink group-hover:text-pine'
-                        }`}
-                      >
-                        {intent.title}
-                      </span>
-                      <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                        {intent.body}
-                      </span>
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className={`text-lg transition-transform group-hover:translate-x-0.5 ${
-                        index === 0 ? 'text-accent' : 'text-ink-faint group-hover:text-pine'
-                      }`}
-                    >
-                      →
-                    </span>
-                  </Link>
-                </li>
+            <div className="mt-7 flex flex-wrap items-center gap-2" aria-label="Try a destination">
+              <span className="type-small text-ink-faint">Try</span>
+              {PROMPTS.map((prompt) => (
+                <Link
+                  key={prompt}
+                  href={`/trips/new?destination=${encodeURIComponent(prompt)}`}
+                  className="pressable lift inline-flex min-h-11 items-center rounded-full border border-rule bg-paper-raised px-4 text-sm font-medium text-ink shadow-[var(--shadow-card)] hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                  data-testid="home-prompt"
+                >
+                  {prompt}
+                </Link>
               ))}
-            </ul>
+            </div>
 
-            <p className="mt-5 text-sm text-ink-muted">
-              No account needed. Nothing is researched until you have seen what we made of it.
-            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
+              <Link href="/trips/new" className={buttonClass('accent', 'lg')} data-testid="home-new-trip">
+                New trip
+              </Link>
+              <p className="type-small text-ink-muted">No account needed. Nothing is researched until you have seen what we made of it.</p>
+            </div>
 
             {!compileReady ? (
-              <p className="mt-5 rounded-[var(--radius-card)] border border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
-                <strong className="font-medium">
-                  This deployment cannot compose a new trip right now.
-                </strong>{' '}
-                Trips you have already built still open normally.
+              <p className="card mt-6 border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
+                <strong className="font-semibold">This deployment cannot compose a new trip right now.</strong> Trips you have
+                already built still open normally.
               </p>
             ) : null}
-          </section>
+          </div>
 
-          <section aria-labelledby="how-heading" className="min-w-0">
-            <h2 id="how-heading" className="sr-only">
-              How Sidequest works
-            </h2>
-            {/*
-              THE ROUTE MOTIF, DRAWN ON THE ATLAS GROUND.
+          <LivingAtlas />
+        </section>
 
-              One continuous line threading the four numbered stops, on the dark
-              cartographic surface the rest of the product uses for a map — the
-              product's own noun stated in the layout instead of in a stock
-              illustration. §5 lists "placeholder illustrations" among the things
-              to avoid, and a picture of a landscape nobody is planning would be
-              exactly that.
+        {/*
+          THREE DOORS, IN THE TRAVELLER'S WORDS.
 
-              Deliberately unanimated: §18 asks for motion that reinforces
-              movement through a route, and a decorative line that moves on a
-              landing page reinforces nothing.
-            */}
-            <div className="atlas rounded-[var(--radius-plate)] p-6 sm:p-7">
-              <p className="type-meta uppercase tracking-[0.16em]" style={{ color: 'var(--color-atlas-muted)' }}>
-                How it works
-              </p>
-              <ol className="relative mt-5 space-y-6">
-                <span
-                  aria-hidden="true"
-                  className="absolute top-3 bottom-3 left-[0.9375rem] w-px"
-                  style={{ background: 'rgb(255 255 255 / 0.18)' }}
-                />
-                {STEPS.map(([title, body], index) => (
-                  <li key={title} className="relative flex gap-4">
-                    <span
-                      aria-hidden="true"
-                      className="numeral mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-medium"
-                      style={{
-                        borderColor: 'rgb(255 255 255 / 0.25)',
-                        background: 'var(--color-atlas)',
-                        color: 'var(--color-route-bright)',
-                      }}
-                    >
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block font-display text-lg leading-snug" style={{ color: 'var(--color-atlas-ink)' }}>
-                        {title}
-                      </span>
-                      <span className="mt-0.5 block type-small" style={{ color: 'var(--color-atlas-muted)' }}>
-                        {body}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            {/*
-              WHY THE WAIT IS WORTH IT, BESIDE WHAT THE WAIT IS.
-
-              These three used to be a full-width band under everything else,
-              which left this column ending halfway down the fold — the "giant
-              empty space" §5 lists among the things to avoid — and put the
-              product's actual argument below the point most people stop.
-            */}
-            <div className="mt-8 space-y-5">
-              {PROMISES.map((item) => (
-                <div key={item.title} className="rule-top pt-4">
-                  <h3 className="font-display text-lg text-ink">{item.title}</h3>
-                  <p className="mt-1 text-sm leading-relaxed text-ink-muted">{item.body}</p>
-                </div>
-              ))}
-            </div>
-
-            {rows.length === 0 ? (
-              <div className="mt-8">
-                <Link href="/trips/new" className={buttonClass('primary', 'lg')}>
-                  Start a trip
+          Not "Mode 1 / Mode 2 / Mode 3", and not three bordered rows: cards with
+          depth that lift under the pointer. Each says what it needs *from you*.
+        */}
+        <section className="mt-14 sm:mt-16" aria-labelledby="doors-heading">
+          <h2 id="doors-heading" className="sr-only">
+            Three ways to start
+          </h2>
+          <ul className="grid gap-4 sm:grid-cols-3">
+            {INTENTS.map((intent) => (
+              <li key={intent.href} className="min-w-0">
+                <Link
+                  href={intent.href}
+                  className="card lift pressable group flex h-full min-w-0 flex-col gap-3 rounded-[var(--radius-panel)] p-5 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                >
+                  <span aria-hidden="true" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-paper-sunk text-ink">
+                    <DoorGlyph kind={intent.glyph} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-display text-[1.375rem] leading-tight text-ink group-hover:text-pine">{intent.title}</span>
+                    <span className="mt-1.5 block type-small text-ink-muted">{intent.body}</span>
+                  </span>
+                  <span aria-hidden="true" className="text-lg text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-pine">
+                    →
+                  </span>
                 </Link>
-              </div>
-            ) : null}
-          </section>
-        </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* WHAT SIDEQUEST ADDS — six words, one line each, no sections. */}
+        <section className="mt-14 rule-top pt-8 sm:mt-16" aria-labelledby="proof-heading">
+          <h2 id="proof-heading" className="type-small font-semibold text-ink-muted">
+            Already accounted for when the plan arrives
+          </h2>
+          <ul className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+            {PROOF.map(([word, line]) => (
+              <li key={word} className="min-w-0">
+                <p className="font-display text-xl leading-tight text-ink">{word}</p>
+                <p className="mt-1 type-small text-ink-muted">{line}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     </ProductChrome>
+  );
+}
+
+/**
+ * THE LIVING ATLAS.
+ *
+ * The dark atlas ground with a route drawing itself in and three hollow base
+ * marks that settle as the line reaches them. CSS only, on a server component:
+ * `route-draw` for the line, a local keyframe for the marks, and both held
+ * still under reduced motion. Decorative and `aria-hidden`; the coastline is
+ * an invented contour and the marks sit on no coordinates, so nothing here is
+ * a claim about a real place.
+ */
+function LivingAtlas() {
+  return (
+    <div aria-hidden="true" className="atlas atlas-live relative aspect-[5/4] w-full overflow-hidden rounded-[var(--radius-plate)] shadow-[var(--shadow-raised)] sm:aspect-[4/3]">
+      <svg viewBox="0 0 400 300" className="absolute inset-0 h-full w-full" fill="none">
+        {/* An invented shoreline: two soft contours in the atlas ink, quieter than the grid. */}
+        <path d="M-10 190 C 60 150, 120 210, 190 170 S 320 120, 420 160" stroke="rgb(255 255 255 / 0.08)" strokeWidth={22} strokeLinecap="round" />
+        <path d="M-10 215 C 70 180, 140 240, 220 200 S 330 150, 420 190" stroke="rgb(255 255 255 / 0.05)" strokeWidth={34} strokeLinecap="round" />
+        {/* The route, drawing itself once. */}
+        <path d="M64 216 C 110 160, 160 200, 208 136 S 296 84, 336 100" pathLength={1} className="route-draw" stroke="var(--color-route-bright)" strokeWidth={2.2} strokeLinecap="round" strokeOpacity={0.85} />
+        {/* Three bases, settling in as the line reaches them. */}
+        <g className="home-atlas-mark" style={{ animationDelay: '150ms' }}>
+          <circle cx="64" cy="216" r="7" stroke="var(--color-route-bright)" strokeWidth={2} fill="var(--color-atlas)" />
+        </g>
+        <g className="home-atlas-mark" style={{ animationDelay: '800ms' }}>
+          <circle cx="208" cy="136" r="7" stroke="var(--color-route-bright)" strokeWidth={2} fill="var(--color-atlas)" />
+        </g>
+        <g className="home-atlas-mark" style={{ animationDelay: '1450ms' }}>
+          <circle cx="336" cy="100" r="16" stroke="var(--color-route-bright)" strokeWidth={1} strokeOpacity={0.35} className="breathing" />
+          <circle cx="336" cy="100" r="7" stroke="var(--color-route-bright)" strokeWidth={2} fill="var(--color-atlas)" />
+        </g>
+      </svg>
+      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5 sm:p-6">
+        <p className="font-display text-xl leading-tight text-[var(--color-atlas-ink)] sm:text-2xl">Where you sleep, in order.</p>
+        <p className="type-small atlas-muted">Then the days between.</p>
+      </div>
+      <style>{`
+        .home-atlas-mark {
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: home-atlas-settle var(--motion-page) var(--ease-spring) both;
+        }
+        @keyframes home-atlas-settle {
+          from { opacity: 0; transform: scale(0.4); }
+          to { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .home-atlas-mark { animation: none; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function DoorGlyph({ kind }: { kind: 'pin' | 'compass' | 'list' }) {
+  const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  if (kind === 'pin') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" {...stroke}>
+        <path d="M12 21s6-5.6 6-11a6 6 0 1 0-12 0c0 5.4 6 11 6 11Z" />
+        <circle cx="12" cy="10" r="2.2" />
+      </svg>
+    );
+  }
+  if (kind === 'compass') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" {...stroke}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m15.5 8.5-2 5-5 2 2-5Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" {...stroke}>
+      <path d="M8 6h12M8 12h12M8 18h12" />
+      <circle cx="4" cy="6" r="1" />
+      <circle cx="4" cy="12" r="1" />
+      <circle cx="4" cy="18" r="1" />
+    </svg>
   );
 }

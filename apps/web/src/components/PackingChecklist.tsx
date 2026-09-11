@@ -17,7 +17,7 @@ export function PackingChecklist({ items }: { items: readonly string[] }) {
         const checked = done.has(item);
         return (
           <li key={item}>
-            <label className={cx('relative flex min-h-9 cursor-pointer items-start gap-2.5 rounded-md px-1 text-sm', FOCUS_RING, checked ? 'text-ink-faint line-through' : 'text-ink')}>
+            <label className={cx('relative flex min-h-11 cursor-pointer items-start gap-2.5 rounded-md px-1 py-1.5 text-sm', FOCUS_RING, checked ? 'text-ink-faint line-through' : 'text-ink')}>
               <input
                 type="checkbox"
                 className={OVERLAY_INPUT}
@@ -31,7 +31,7 @@ export function PackingChecklist({ items }: { items: readonly string[] }) {
                   })
                 }
               />
-              <span aria-hidden="true" className={cx('mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px]', checked ? 'border-pine bg-pine text-paper' : 'border-rule bg-paper')}>
+              <span aria-hidden="true" className={cx('mt-0.5 inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border text-xs leading-none', checked ? 'border-pine bg-pine text-paper' : 'border-rule bg-paper')}>
                 {checked ? '✓' : ''}
               </span>
               <span>{item}</span>

@@ -258,6 +258,15 @@ export const ACTION_RATE_RULES = {
    * they are two halves of the same button press.
    */
   decide_shortlist: { capacity: 6, refillPerMinute: 3 },
+  /**
+   * V8 — starts one durable build run (one billed composition, backstopped by
+   * the daily ceiling). A duplicate press attaches to the run it already
+   * started and is not charged here; sized for a person retrying a failed
+   * build, not for a loop.
+   */
+  build_start: { capacity: 4, refillPerMinute: 1 },
+  /** V8 — a browser reporting a page failure so its reference reaches the log. Local write only. */
+  client_failure_report: { capacity: 6, refillPerMinute: 2 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type GuardedActionKind = keyof typeof ACTION_RATE_RULES;

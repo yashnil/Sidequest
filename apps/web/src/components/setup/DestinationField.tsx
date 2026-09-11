@@ -57,6 +57,7 @@ export function DestinationField({
   onTextChange,
   onSelect,
   onSubmit,
+  onSettle,
   autoFocus = true,
 }: {
   value: string;
@@ -64,6 +65,13 @@ export function DestinationField({
   onTextChange: (text: string) => void;
   onSelect: (suggestion: DestinationSuggestionView) => void;
   onSubmit?: () => void;
+  /**
+   * V8 — the traveller has finished with the field (it lost focus with words in
+   * it). The one moment placement may run before Continue: never per keystroke,
+   * because the geocoder's policy forbids autocomplete, and never for a pick,
+   * which already carries its own coordinate.
+   */
+  onSettle?: (text: string) => void;
   autoFocus?: boolean;
 }) {
   /*
@@ -139,7 +147,7 @@ export function DestinationField({
 
   return (
     <div>
-      <label htmlFor={inputId} className="label block text-ink-faint">
+      <label htmlFor={inputId} className="label block">
         Destination
       </label>
       <input
@@ -155,6 +163,9 @@ export function DestinationField({
         onChange={(event) => {
           setChosen(null);
           onTextChange(event.target.value);
+        }}
+        onBlur={() => {
+          if (!chosen && value.trim().length >= MIN_CHARS) onSettle?.(value);
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
@@ -181,7 +192,7 @@ export function DestinationField({
         traveller edits. It is the answer to "did that click register?".
       */}
       {chosen ? (
-        <p className="rise mt-3 inline-flex items-center gap-2 rounded-full border border-pine/40 bg-pine-soft px-3 py-1 text-sm text-pine-strong" data-testid="destination-chosen">
+        <p className="rise mt-3 inline-flex min-h-9 items-center gap-2 rounded-full border border-pine/40 bg-pine-soft px-3 py-1 text-sm text-pine-strong" data-testid="destination-chosen">
           <span aria-hidden="true">✓</span>
           {chosen.qualifiedName}
           <button

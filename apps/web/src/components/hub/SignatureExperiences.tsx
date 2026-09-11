@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cx } from '../ui';
 
 /**
  * V6 — THE THREE THINGS THIS TRIP IS BUILT AROUND.
@@ -29,27 +30,36 @@ export function SignatureExperiences({ experiences }: { experiences: readonly Si
   const framed = experiences.some((experience) => experience.image);
   return (
     <section aria-labelledby="signature-experiences" data-testid="defining-moments">
-      <h2 id="signature-experiences" className="type-meta uppercase tracking-[0.14em]">
+      <p className="eyebrow">Signature experiences</p>
+      <h2 id="signature-experiences" className="mt-1 type-section text-ink">
         The trip is built around
       </h2>
-      <ol className={framed ? 'mt-4 grid gap-5 sm:grid-cols-3' : 'mt-3 divide-y divide-rule border-y border-rule'}>
+      {/*
+        V8 — cards, with a picture where one of this trip's own places has a
+        licensed one and a fixed-ratio plate where none does, so three cards
+        line up whether or not each has a photograph. Never a stand-in picture
+        of somewhere else.
+      */}
+      {/*
+        Two columns from `sm`, three only from `xl`: the overview is itself two
+        columns from `lg`, and three cards inside a 560-pixel column wrapped
+        every title onto five lines on a tablet.
+      */}
+      <ol className={cx('mt-4 grid gap-4', experiences.length > 1 && 'sm:grid-cols-2', experiences.length > 2 && 'xl:grid-cols-3')}>
         {experiences.map((experience) => (
-          <li key={experience.id} className={framed ? 'min-w-0' : ''}>
-            <a
-              href={`#day-${experience.dayNumber}`}
-              className={
-                framed
-                  ? 'pressable group block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine'
-                  : 'pressable group flex items-baseline gap-4 py-3 hover:bg-paper-sunk/60'
-              }
-              data-testid="signature-experience"
-            >
-              {framed && experience.image ? <div className="mb-2.5">{experience.image}</div> : null}
-              {framed ? null : <span className="numeral w-10 shrink-0 text-xs text-ink-faint">Day {experience.dayNumber}</span>}
-              <span className="min-w-0 flex-1">
-                {framed ? <span className="numeral block text-xs text-ink-faint">Day {experience.dayNumber}</span> : null}
-                <span className="block font-display text-xl leading-snug text-ink group-hover:underline group-hover:underline-offset-4">{experience.name}</span>
-                {experience.why ? <span className="mt-1 block type-small text-ink-muted">{experience.why}</span> : null}
+          <li key={experience.id} className="min-w-0">
+            <a href={`#day-${experience.dayNumber}`} className="card lift pressable group flex h-full flex-col overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine" data-testid="signature-experience">
+              {framed ? (
+                experience.image ? (
+                  <div className="[&_figure]:m-0 [&_img]:rounded-none">{experience.image}</div>
+                ) : (
+                  <div aria-hidden="true" className="atlas aspect-[4/3] w-full" />
+                )
+              ) : null}
+              <span className="flex min-w-0 flex-1 flex-col px-4 pb-4 pt-3.5">
+                <span className="type-figure text-xs text-ink-faint">Day {experience.dayNumber}</span>
+                <span className="mt-1 block font-display text-xl leading-snug text-ink group-hover:underline group-hover:underline-offset-4">{experience.name}</span>
+                {experience.why ? <span className="mt-1.5 block type-small text-ink-muted">{experience.why}</span> : null}
               </span>
             </a>
           </li>

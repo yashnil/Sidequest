@@ -18,7 +18,8 @@ import { resolveRegion } from '@sidequest/core/data';
 import { carAvailableFromAnswers } from '@sidequest/compiler';
 import { InterviewWizard } from '@/components/InterviewWizard';
 import { Panel } from '@/components/ui';
-import { getAnswers, getProfile } from '@/lib/db/repository';
+import { answersRevision, getAnswers, getProfile } from '@/lib/db/repository';
+import { buildRunView } from '@/lib/planning/build-run-view';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { partyFactsFor } from '@/lib/db/party-repository';
@@ -150,6 +151,22 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       : null;
   const tiles = resolveMapBasemap(process.env);
 
+  /*
+   * V8 — three things the review reads from the row rather than from memory:
+   * the answers' revision (so a stale client can never overwrite them), a run
+   * that is live or failed on this trip (so the review points at it instead of
+   * starting another), and the window the traveller accepted (so a reload
+   * shows the dates they chose, locked, rather than asking the question again).
+   */
+  const revision = answersRevision(id);
+  const run = buildRunView(id);
+  const activeBuild = run.state === 'running' || run.state === 'failed' || run.state === 'lost' ? run : null;
+  const recommendation = intent?.composer?.dates?.recommendation;
+  const acceptedWindow =
+    trip.basics.timingLock === 'traveler' && recommendation?.accepted && recommendation.startDate === trip.basics.startDate && recommendation.endDate === trip.basics.endDate
+      ? { label: recommendation.label, startDate: recommendation.startDate, endDate: recommendation.endDate, month: recommendation.month, year: recommendation.year, reasons: [...recommendation.reasons], tradeoffs: [...recommendation.tradeoffs] }
+      : null;
+
   const wizard = (
     <InterviewWizard
       /*
@@ -179,6 +196,9 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       geometry={geometry}
       tiles={tiles}
       timingOpen={timingIntentOf({ composer: intent?.composer ?? null, trip, at: new Date().toISOString() }).sidequestChooses}
+      revision={revision}
+      activeBuild={activeBuild}
+      acceptedWindow={acceptedWindow}
       {...(interpretation
         ? { interpretation: { set: interpretation, mustDo: intent?.composer?.mustDo ?? '', avoid: intent?.composer?.avoid ?? '' } }
         : {})}

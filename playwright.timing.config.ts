@@ -13,7 +13,7 @@ const webServer = base.webServer as { command: string } & Record<string, unknown
 
 export default defineConfig({
   ...base,
-  testMatch: /timing-lock\.spec\.ts/,
+  testMatch: /(timing-lock|build-lifecycle|v8-experience)\.spec\.ts/,
   projects: (base.projects ?? []).filter((project) => project.name === 'desktop').map((project) => ({ ...project, testIgnore: [] })),
   webServer: { ...webServer, command: webServer.command.replace('SIDEQUEST_CLIMATE_PROVIDER=off', 'SIDEQUEST_CLIMATE_PROVIDER=fixture') },
 });

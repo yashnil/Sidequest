@@ -5,10 +5,17 @@ import { describe, expect, it, vi } from 'vitest';
 /*
  * The list refreshes the route after a removal. There is no app router in a
  * unit test and no effect runs under `renderToStaticMarkup` anyway; the markup
- * is what is under test.
+ * is what is under test. The card's own menu actions are never reached from
+ * the home strip, but the module imports them, so they are stubbed too.
  */
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
 vi.mock('./actions', () => ({ deleteTripAction: async () => ({ ok: true }) }));
+vi.mock('./trips/dashboard-actions', () => ({
+  archiveTripAction: async () => ({ ok: true }),
+  duplicateTripAction: async () => ({ ok: true }),
+  renameTripAction: async () => ({ ok: true }),
+  setLifecycleAction: async () => ({ ok: true }),
+}));
 
 const { TripList } = await import('./TripList');
 
@@ -18,41 +25,48 @@ const { TripList } = await import('./TripList');
  * A reviewer measured the homepage at every phone width: **8px of horizontal
  * overflow at 375 (iPhone SE/8), 23px at 360 (most Androids), 63px at 320**, in
  * both colour schemes, on the only route in the product that overflows at all.
- * The offending node was the same at every width — the trip row's action cluster
- * (`Badge` + action link + Remove), carrying `shrink-0`, with a 363px intrinsic
- * floor and a right edge fixed at 383px once the 20px page padding is added.
+ * The offending node was the trip row's action cluster, carrying `shrink-0`,
+ * with a 363px intrinsic floor. The row *around* it wrapped; the cluster could
+ * not participate, because `shrink-0` forbids it narrowing and nothing let it
+ * wrap onto its own lines.
  *
- * The row *around* it wraps. The cluster could not participate in that, because
- * `shrink-0` forbids it narrowing and nothing let it wrap onto its own lines.
- *
- * Two things this test is honest about:
+ * V8 moved the strip onto the shared `TripCard`, and the property carries
+ * over unchanged: no flex island inside the card may refuse both to shrink and
+ * to wrap, and every wrapping cluster must be allowed narrower than its
+ * content (`min-w-0`).
  *
  * **It is a class-list assertion, and that is a stand-in.** The real assertion
- * is `document.documentElement.scrollWidth <= clientWidth` at 360 and 375, in a
- * browser. The browser suite cannot currently make it: `e2e/support/viewports.ts`
- * declares one mobile width, 390, which is seven pixels above the threshold —
- * so the guard that exists is structurally unable to see this class of failure.
- * Adding a narrow width there is a separate, necessary change.
- *
- * **It asserts the rule, not the fix.** "No island in a wrapping row that can
- * neither shrink nor wrap" is the property; `shrink-0` on a multi-control flex
- * container is the shape it takes. A snapshot of the exact class string would
- * pass forever and mean nothing the moment somebody re-expressed the same
- * mistake with `w-[363px]`, but it would at least fail on the literal
- * regression — which is more than the repository has today.
+ * is `scrollWidth <= clientWidth` at 360 and 375, in a browser the suite does
+ * not currently drive at those widths.
  */
 
-/** The widest label/action pair `trip-progress.ts` can produce. */
+/** The widest label/action pair the server can produce, on a card with everything on it. */
 const WORST_CASE = {
   id: 'trip-1',
+  title: 'Santiago Metropolitan Region',
   destination: 'Santiago Metropolitan Region',
   dates: 'Sat 12 Sep — Sun 20 Sep',
+  timing: 'fixed' as const,
   nights: 8,
-  state: 'needs_answers',
-  label: 'Waiting on your answers',
-  action: 'Answer the questions',
+  party: '2 adults, 2 children',
+  lifecycle: 'planning' as const,
+  lifecycleBasis: 'inferred' as const,
+  bases: ['Santiago', 'Valparaíso', 'Cajón del Maipo', 'Viña del Mar', 'Pirque'],
+  itineraryStatus: 'ready_with_cautions' as const,
+  feasibilitySummary: '6 things worth reading before you commit.',
+  bookedCount: 0,
+  nextAction: 'Answer the questions',
   href: '/trips/trip-1/questionnaire',
-  tone: 'amber' as const,
+  progressTone: 'amber' as const,
+  progressState: 'needs_answers',
+  progressLabel: 'Waiting on your answers',
+  progressRank: 3,
+  updatedAt: '2026-09-01T00:00:00.000Z',
+  startDate: '2026-09-12',
+  image: null,
+  fallback: { kind: 'regional_graphic' as const, label: 'Santiago Metropolitan Region', hue: 120, horizon: 0.5, drift: 0.5, marks: 1, description: 'A generated graphic for Santiago Metropolitan Region' },
+  claimed: false,
+  updatedLabel: 'Updated today',
 };
 
 function render(): string {
@@ -69,16 +83,9 @@ function flexContainers(markup: string): string[] {
 /**
  * Flex containers that are themselves *items* of another flex container.
  *
- * The distinction is load-bearing and the reason the first draft of the second
- * test below was wrong: `min-w-0` overrides `min-width: auto`, which is a rule
- * about flex **items**. The outermost row is an ordinary block child of an
- * `<li>` and its width is the list's; the clusters inside it are items, and
- * their automatic minimum size is their own content — which is the floor this
- * whole finding is about.
- *
- * A depth walk over the rendered markup rather than a DOM, because
- * `renderToStaticMarkup` gives well-formed output and pulling in a parser to
- * read two levels of nesting would be more machinery than the property needs.
+ * `min-w-0` overrides `min-width: auto`, which is a rule about flex **items**;
+ * the clusters inside the card are items, and their automatic minimum size is
+ * their own content — which is the floor this whole finding is about.
  */
 function nestedFlexContainers(markup: string): string[] {
   const found: string[] = [];
@@ -92,19 +99,16 @@ function nestedFlexContainers(markup: string): string[] {
     const classes = /class="([^"]*)"/.exec(attributes ?? '')?.[1] ?? '';
     const flex = isFlex(classes);
     if (flex && stack.some(Boolean)) found.push(classes);
-    // Void elements never open a scope; `img`/`input` are the ones this markup has.
-    if (!selfClosing && !['img', 'input', 'br', 'hr', 'meta', 'link'].includes(tag!)) {
+    if (!selfClosing && !['img', 'input', 'br', 'hr', 'meta', 'link', 'circle', 'path'].includes(tag!)) {
       stack.push(flex);
     }
   }
   return found;
 }
 
-describe('the trip list can narrow to a phone', () => {
+describe('the trip strip can narrow to a phone', () => {
   it('has no flex island that refuses both to shrink and to wrap', () => {
-    const offenders = flexContainers(render()).filter(
-      (classes) => classes.includes('shrink-0') && !classes.includes('flex-wrap'),
-    );
+    const offenders = flexContainers(render()).filter((classes) => classes.includes('shrink-0') && !classes.includes('flex-wrap'));
     expect(
       offenders,
       'a flex container that is `shrink-0` and does not wrap has its content width as a hard floor. ' +
@@ -112,21 +116,42 @@ describe('the trip list can narrow to a phone', () => {
     ).toEqual([]);
   });
 
-  /**
-   * And the other half of the same failure: `flex-wrap` alone is not enough,
-   * because a flex item's automatic minimum size is its content. `min-w-0` is
-   * what actually permits it to be narrower than the sum of its children.
-   */
-  it('lets the action cluster be narrower than its contents', () => {
-    const wrapping = nestedFlexContainers(render()).filter((classes) =>
-      classes.includes('flex-wrap'),
-    );
-    expect(wrapping.length, 'the row’s clusters must wrap').toBeGreaterThan(0);
+  it('lets every wrapping cluster be narrower than its contents', () => {
+    const wrapping = nestedFlexContainers(render()).filter((classes) => classes.includes('flex-wrap'));
+    expect(wrapping.length, 'the card’s clusters must wrap').toBeGreaterThan(0);
     for (const classes of wrapping) {
-      expect(
-        classes,
-        `a wrapping flex container without min-w-0 still cannot go below its content width: "${classes}"`,
-      ).toContain('min-w-0');
+      expect(classes, `a wrapping flex container without min-w-0 still cannot go below its content width: "${classes}"`).toContain('min-w-0');
     }
+  });
+});
+
+/**
+ * V8 §8/§9 — the strip is the dashboard's card, and it says what the row says.
+ */
+describe('the trip strip shows the shared card', () => {
+  it('sets the dates as a figure and composes the standing line', () => {
+    const markup = render();
+    expect(markup).toContain('data-testid="trip-card"');
+    expect(markup).toMatch(/type-figure[^>]*>Sat 12 Sep — Sun 20 Sep</);
+    expect(markup).toContain('8 nights');
+    expect(markup).toContain('2 adults, 2 children');
+    expect(markup).toContain('Ready, with cautions');
+    expect(markup).toContain('Nothing booked yet');
+    /* The route preview folds a long base list rather than wrapping five names. */
+    expect(markup).toContain('+1 more');
+    expect(markup).not.toContain('Pirque');
+  });
+
+  it('draws the atlas route sketch, never a gradient stand-in, when there is no photograph', () => {
+    const markup = render();
+    expect(markup).toContain('route-draw');
+    expect(markup).not.toContain('linear-gradient(');
+  });
+
+  it('keeps the remove control named for the trip, and the action as the row’s own', () => {
+    const markup = render();
+    expect(markup).toContain('aria-label="Remove the Santiago Metropolitan Region trip"');
+    expect(markup).toContain('>Answer the questions<');
+    expect(markup).toContain('aria-label="Open Santiago Metropolitan Region"');
   });
 });

@@ -140,14 +140,18 @@ test('an ambiguous destination asks which reading was meant', async ({ page }) =
   );
 });
 
-test('a query that is not a place is refused rather than guessed at', async ({ page }) => {
+/*
+ * V7 — a phrase the geocoder cannot place is never told it "isn't somewhere":
+ * the interview starts from the traveller's own words, and only the research
+ * path's explicit reading may ever say a query is not a place. (This test used
+ * to assert the V6 refusal screen; the plan page has redirected a bare
+ * `no_match` to the questionnaire since V7, so the old assertion could not pass.)
+ */
+test('a query the geocoder cannot place is interviewed from the traveller’s own words, never refused', async ({ page }) => {
   await createTrip(page, 'somewhere scenic and cool');
-  await waitForLookup(page);
-
-  await expect(page.getByRole('heading', { name: 'Where should we start looking?' })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByText(/reads more like the kind of trip you want/i)).toBeVisible();
+  await expect(page.getByTestId('interview')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('somewhere scenic and cool');
+  await expect(page.getByText(/reads more like the kind of trip you want/i)).toHaveCount(0);
   // It must not have compiled anything.
   await expect(page.getByRole('heading', { name: REGION_READY_HEADING })).toHaveCount(0);
 });

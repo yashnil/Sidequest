@@ -101,15 +101,28 @@ describe('programmatic focus targets keep a visible indicator', () => {
     ).toEqual([]);
   });
 
-  /** And the two that were repaired actually carry a ring, not merely no `outline-none`. */
-  it.each([
-    'app/(product)/error.tsx',
-    'app/(product)/decide/error.tsx',
-  ])('%s gives its focused heading a ring', (relative) => {
-    const text = readFileSync(join(WEB_SRC, relative), 'utf8');
+  /**
+   * And the repaired heading actually carries a ring, not merely no
+   * `outline-none`.
+   *
+   * V8 moved the focused heading out of the two route boundaries and into the
+   * shared `RouteFailure`, so the ring is asserted where the heading now lives
+   * and the boundaries are asserted to render it — a boundary that grew its
+   * own heading again would have to satisfy the scan above on its own.
+   */
+  it('RouteFailure gives its focused heading a ring', () => {
+    const text = readFileSync(join(WEB_SRC, 'components/RouteFailure.tsx'), 'utf8');
     expect(text).toContain('tabIndex={-1}');
     expect(text, 'the heading focus is moved to must paint an outline on focus').toMatch(
       /focus:outline-2\s+focus:outline-pine/,
     );
+  });
+
+  it.each([
+    'app/(product)/error.tsx',
+    'app/(product)/decide/error.tsx',
+  ])('%s renders the shared failure boundary', (relative) => {
+    const text = readFileSync(join(WEB_SRC, relative), 'utf8');
+    expect(text).toContain('<RouteFailure');
   });
 });

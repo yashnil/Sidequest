@@ -4,7 +4,6 @@ import { DecisionComposer } from '@/components/DecisionComposer';
 import { destinationIndexRelease } from '@/lib/db/destination-index-repository';
 import { isClimateEnabled } from '@/lib/providers/switches';
 import { seedDestinationIndexIfRequested } from '@/lib/destinations/seed';
-import { Panel } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +36,10 @@ export default function DecidePage() {
   return (
     <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
       <p className="eyebrow">Where should I go</p>
-      <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl">
+      <h1 className="display-xl mt-3 text-ink">
         Tell us when and what for. We will tell you where.
       </h1>
-      <p className="measure mt-3 leading-relaxed text-ink-muted">
+      <p className="measure mt-4 type-body text-lg text-ink-muted">
         Four questions. We rank real places against climate records, how much ground each one
         covers, and how much there is to do — then show you what each choice costs you.
       </p>
@@ -53,22 +52,22 @@ export default function DecidePage() {
         a claim about the world rather than about this build.
       */}
       {!release ? (
-        <Panel className="mt-8 bg-paper-sunk p-5">
-          <p className="text-sm leading-relaxed text-ink">
+        <div className="card mt-8 p-5">
+          <p className="type-body text-ink">
             This build has no place index, so there is nothing for us to rank. That is a gap in us
             rather than a statement about anywhere.{' '}
             <Link href="/trips/new" className="underline underline-offset-4 hover:text-pine">
               You can still plan a destination you already have in mind.
             </Link>
           </p>
-        </Panel>
+        </div>
       ) : null}
 
       <div className="mt-10">
         <DecisionComposer climateEnabled={isClimateEnabled()} indexReady={release !== null} />
       </div>
 
-      <p className="mt-14 border-t border-rule pt-6 text-sm text-ink-faint">
+      <p className="mt-14 rule-top pt-6 type-small text-ink-muted">
         Already know where you are going?{' '}
         <Link href="/trips/new" className="underline underline-offset-4 hover:text-pine">
           Start from a destination instead.

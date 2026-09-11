@@ -3,6 +3,8 @@ node_modules/
 out/
 dist/
 build/
+# The App Router route segment `trips/[id]/build` (V8) is source, not build output.
+!apps/web/src/app/**/build/
 coverage/
 *.tsbuildinfo
 next-env.d.ts

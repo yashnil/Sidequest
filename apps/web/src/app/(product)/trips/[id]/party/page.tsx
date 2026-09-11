@@ -30,27 +30,25 @@ export default async function PartyPage({ params }: { params: Promise<{ id: stri
   const members = listPartyMembers(id);
   const available = listTravelers({ userId: await currentUserId(), ownerToken: await sessionToken({ mint: false }) }).filter((t) => !members.some((m) => m.travelerId === t.id));
   const built = hasItinerary(id);
+  const adults = `${trip.basics.adults} adult${trip.basics.adults === 1 ? '' : 's'}`;
+  const party = trip.basics.children > 0 ? `${adults}, ${trip.basics.children} child${trip.basics.children === 1 ? '' : 'ren'}` : adults;
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14" data-testid="party-page">
       <p className="eyebrow">{trip.title ?? trip.basics.destinationInput}</p>
       <h1 className="display-xl mt-3 text-ink">Who is going?</h1>
       <p className="measure mt-4 type-body text-ink-muted">
-        <span className="text-ink">
-          {trip.basics.adults} adult{trip.basics.adults === 1 ? '' : 's'}
-          {trip.basics.children > 0 ? `, ${trip.basics.children} child${trip.basics.children === 1 ? '' : 'ren'}` : ''}.
-        </span>{' '}
-        Describe anyone whose needs or tastes should shape the plan — a diet, a knee, an early
-        riser, someone who does not drive. It is planned around, and never shared.
+        <span className="type-figure text-ink">{party}.</span> Describe anyone whose needs or tastes should shape the plan — a diet, a knee, an early riser, someone who does not drive. It is planned around, and never
+        shared.
       </p>
 
       <PartyEditor tripId={id} members={members.map((m) => ({ ...m, traveler: m.traveler }))} available={available.map((t) => ({ id: t.id, displayName: t.displayName, relationship: t.relationship ?? null }))} />
 
-      <div className="mt-12 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rule-top pt-5">
+      <div className="sticky bottom-0 z-10 -mx-5 mt-12 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/95 px-5 py-3 backdrop-blur-sm sm:-mx-8 sm:px-8">
         <Link href={built ? `/trips/${id}/itinerary` : `/trips/${id}/questionnaire`} className={buttonClass('primary', 'lg')} data-testid="party-done">
-          {built ? 'Back to the trip' : 'Continue'}
+          {built ? 'Back to the trip' : 'Continue to the review'}
         </Link>
-        {built ? <span className="type-small text-ink-muted">Applied the next time the trip is built or a day is changed.</span> : null}
+        {built ? <span className="type-small text-ink-muted">Applied the next time the trip is built or a day is changed.</span> : <span className="type-small text-ink-muted">Nothing here is required to build.</span>}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { Glyph, type GlyphId } from '../interview/glyphs';
-import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
+import { ErrorNote, FOCUS_RING, buttonClass, cx, selectableCardClass } from '../ui';
 import { recommendTimingAction, type TimingResult, type TimingWindowView } from '@/app/(product)/trips/new/timing-actions';
 import { nightsBetween, type SetupDraft } from './setup-draft';
 
@@ -124,8 +124,8 @@ export function TimingStep({
   const current = windows[shown] ?? null;
 
   return (
-    <div className="enter">
-      <p className="label text-ink-faint">The trip</p>
+    <div>
+      <p className="label">The trip</p>
       <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[24ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
         When can you travel?
       </h1>
@@ -143,22 +143,16 @@ export function TimingStep({
               role="radio"
               aria-checked={on}
               onClick={() => setFamily(card.value)}
-              className={cx(
-                'pressable relative flex min-h-28 flex-col gap-2 rounded-[var(--radius-card)] border p-4 pr-9 text-left transition-[border-color,background-color,box-shadow]',
-                FOCUS_RING,
-                on
-                  ? 'border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent)]'
-                  : 'border-rule bg-paper-raised hover:border-ink-faint',
-              )}
+              className={selectableCardClass(on, cx('pressable flex min-h-28 flex-col gap-2 p-4 pr-10 text-left', FOCUS_RING))}
               data-testid={`timing-${card.value}`}
             >
-              <Glyph id={card.glyph} className={cx('h-7 w-7', on ? 'text-accent' : 'text-ink-faint')} />
-              <span className={cx('font-display text-xl leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{card.title}</span>
-              <span className={cx('type-small leading-relaxed', on ? 'text-accent-strong/85' : 'text-ink-muted')}>{card.implication}</span>
+              <Glyph id={card.glyph} className={cx('h-7 w-7', on ? 'text-accent' : 'text-ink-muted')} />
+              <span className={cx('font-display text-xl leading-snug', on ? 'font-semibold text-accent-strong' : 'text-ink')}>{card.title}</span>
+              <span className={cx('type-small leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{card.implication}</span>
               {/* The chosen card says so three ways: ground, doubled edge, and a mark. */}
               {on ? (
-                <span aria-hidden="true" className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[0.625rem] text-paper">
-                  ✓
+                <span aria-hidden="true" className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-paper">
+                  <Glyph id="check" className="h-3 w-3" strokeWidth={2.5} />
                 </span>
               ) : null}
             </button>
@@ -170,16 +164,16 @@ export function TimingStep({
         <div className="rise mt-7 max-w-xl">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="label text-ink-faint">Arrive</span>
+              <span className="label">Arrive</span>
               <input type="date" value={draft.startDate} onChange={(event) => onChange({ startDate: event.target.value })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-start" />
             </label>
             <label className="block">
-              <span className="label text-ink-faint">Leave</span>
+              <span className="label">Leave</span>
               <input type="date" value={draft.endDate} onChange={(event) => onChange({ endDate: event.target.value })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-end" />
             </label>
           </div>
           {nightsBetween(draft.startDate, draft.endDate) !== null ? (
-            <p className="numeral mt-3 text-sm text-ink-muted">{nightsBetween(draft.startDate, draft.endDate)} nights · {(nightsBetween(draft.startDate, draft.endDate) ?? 0) + 1} days</p>
+            <p className="type-figure mt-3 text-sm text-ink-muted">{nightsBetween(draft.startDate, draft.endDate)} nights · {(nightsBetween(draft.startDate, draft.endDate) ?? 0) + 1} days</p>
           ) : draft.startDate && draft.endDate ? (
             <p className="mt-3 type-small text-clay">The second date needs to be after the first.</p>
           ) : (
@@ -268,11 +262,11 @@ export function TimingStep({
           {draft.dateMode === 'window' ? (
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="label text-ink-faint">Free from</span>
+                <span className="label">Free from</span>
                 <input type="date" value={draft.earliest} onChange={(event) => onChange({ earliest: event.target.value, pick: null })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-earliest" />
               </label>
               <label className="block">
-                <span className="label text-ink-faint">Until</span>
+                <span className="label">Until</span>
                 <input type="date" value={draft.latest} onChange={(event) => onChange({ latest: event.target.value, pick: null })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-latest" />
               </label>
             </div>
@@ -295,7 +289,7 @@ export function TimingStep({
           {pending && !result ? (
             <p className="breathing type-body text-ink-muted">Comparing the months on climate records…</p>
           ) : result?.ok && current ? (
-            <div className="overflow-hidden rounded-[var(--radius-panel)] border border-accent/40 bg-accent-soft">
+            <div className="card-raised overflow-hidden rounded-[var(--radius-panel)] border-accent/40 bg-accent-soft">
               <div className="p-5 sm:p-6">
                 <p className="label text-accent-strong">{shown === 0 ? 'Sidequest’s pick' : 'Another window'}</p>
                 <p className="mt-1.5 font-display text-4xl leading-none text-ink">{current.label}</p>
@@ -304,7 +298,7 @@ export function TimingStep({
                   `timing-lock.spec.ts` reads the window straight out of this
                   block to prove the accepted dates reach the trip.
                 */}
-                <p className="numeral mt-2 text-sm text-ink-muted">
+                <p className="type-figure mt-2 text-sm text-ink-muted">
                   {current.startDate} → {current.endDate}
                 </p>
 
@@ -347,7 +341,7 @@ export function TimingStep({
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className={buttonClass('primary')}
+                  className={buttonClass('accent')}
                   onClick={() => {
                     /* V6 — the pick travels WITH the advance; see `SetupFlow#advance`. */
                     onContinue({ pick: { ...current }, nights: nightsBetween(current.startDate, current.endDate) ?? draft.nights });
@@ -429,7 +423,7 @@ function YearStrip({ startDate, endDate }: { startDate: string; endDate: string 
           <span
             key={`${initial}-${index}`}
             className={cx(
-              'numeral flex h-7 flex-1 items-center justify-center rounded-[0.25rem] text-[0.6875rem] font-medium',
+              'type-figure flex h-7 flex-1 items-center justify-center rounded-[0.25rem] text-xs',
               on ? 'bg-accent text-paper' : 'bg-paper-raised text-ink-faint',
             )}
           >

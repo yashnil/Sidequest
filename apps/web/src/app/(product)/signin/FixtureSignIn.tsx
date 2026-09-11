@@ -12,11 +12,10 @@ const INPUT =
  * THE FIXTURE DOOR — AND IT SAYS SO.
  *
  * An email, no password, no message sent. Only rendered where the deployment
- * opened it; the server action refuses everywhere else. It used to look exactly
- * like the real door with a grey line under it saying "a development door",
- * which is the version somebody demonstrates to a customer by accident. It is
- * drawn as what it is instead: a dashed outline, a labelled header, and a
- * secondary button — unmistakably not the way a traveller signs in.
+ * opened it; the server action refuses everywhere else. It sits inside the
+ * sign-in card like any other door, but wears a "Development door" badge and a
+ * secondary button — unmistakably not the way a traveller signs in. The badge
+ * exists only because this component does: production never renders it.
  */
 export function FixtureSignIn({ returnTo }: { returnTo: string }) {
   const [email, setEmail] = useState('');
@@ -26,12 +25,10 @@ export function FixtureSignIn({ returnTo }: { returnTo: string }) {
   const router = useRouter();
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk/50 p-5" data-testid="signin-fixture">
+    <section data-testid="signin-fixture">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 className="type-section text-ink">Sign in with an email</h2>
-        <span className="rounded-full border border-amber/50 bg-amber-soft px-2 py-0.5 text-xs font-medium text-amber">
-          Development door
-        </span>
+        <span className="rounded-full border border-amber/50 bg-amber-soft px-2 py-0.5 text-xs font-medium text-amber">Development door</span>
       </div>
       <p className="mt-1.5 type-small text-ink-muted">No password, and no email is sent.</p>
       <form

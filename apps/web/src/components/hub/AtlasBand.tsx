@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cx } from '../ui';
+import { fixNumberArticles } from './article';
 
 /**
  * EXPERIENCE V2 — THE ATLAS BAND.
@@ -77,7 +78,8 @@ export function AtlasBand({
             {facts.map((fact) => (
               <div key={fact.label} className="min-w-0 max-w-[34ch]">
                 <dt className="label text-[var(--color-atlas-muted)]">{fact.label}</dt>
-                <dd className="mt-1 type-small text-[var(--color-atlas-ink)]">{fact.value}</dd>
+                {/* A fact that is a sentence gets the article a figure takes — "An 8-day", never "A 8-day". */}
+                <dd className="mt-1 type-small text-[var(--color-atlas-ink)]">{typeof fact.value === 'string' ? fixNumberArticles(fact.value) : fact.value}</dd>
               </div>
             ))}
           </dl>

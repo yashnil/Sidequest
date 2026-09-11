@@ -1,7 +1,7 @@
 export default function ItineraryLoading() {
   return (
     <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-14" data-loading="true">
-      <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Your trip</p>
+      <p className="eyebrow">Your trip</p>
       <p className="mt-3 font-display text-3xl text-ink sm:text-5xl" aria-live="polite">
         Building the days…
       </p>

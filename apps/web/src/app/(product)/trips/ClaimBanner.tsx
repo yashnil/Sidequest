@@ -22,14 +22,14 @@ export function ClaimBanner({ count }: { count: number }) {
   const router = useRouter();
   if (done !== null) {
     return (
-      <p className="mt-6 flex items-center gap-2.5 rounded-[var(--radius-card)] border border-pine/40 bg-pine-soft px-4 py-3 text-sm text-pine-strong" data-testid="claim-done">
+      <p className="card mt-6 flex items-center gap-2.5 border-pine/40 bg-pine-soft px-4 py-3 text-sm text-pine-strong" data-testid="claim-done">
         <span aria-hidden="true">✓</span>
         {done === 1 ? 'One trip is' : `${done} trips are`} now saved to your account.
       </p>
     );
   }
   return (
-    <div className="mt-6 flex min-w-0 flex-wrap items-center justify-between gap-x-5 gap-y-3 rounded-[var(--radius-card)] border border-rule bg-paper-raised px-4 py-3.5" data-testid="claim-banner">
+    <div className="card mt-6 flex min-w-0 flex-wrap items-center justify-between gap-x-5 gap-y-3 px-4 py-3.5 sm:px-5" data-testid="claim-banner">
       <p className="min-w-0 text-sm leading-relaxed text-ink">
         {/* The e2e proof matches on this sentence; keep the words if you move them. */}
         This browser made {count === 1 ? 'a trip' : `${count} trips`} before you signed in. Keep{' '}

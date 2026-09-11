@@ -180,7 +180,13 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       * hub's five views so it is reachable from all of them, and outside the
       * print flow entirely.
       */}
-    <AskSidequestMount tripId={id} ready={Boolean(getTripDraft(id))} canUndo={undoTarget(id) !== null} />
+    <AskSidequestMount
+      tripId={id}
+      ready={Boolean(getTripDraft(id))}
+      canUndo={undoTarget(id) !== null}
+      dayCount={model.appliedItinerary.days.length}
+      baseNames={(model.appliedItinerary.package?.bases ?? []).map((base) => base.displayName ?? base.name)}
+    />
     </>
   );
 }

@@ -34,7 +34,7 @@ export function StaleItineraryView({
   return (
     <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-14">
       <header className="border-b border-rule pb-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-faint">Your trip</p>
+        <p className="eyebrow">Your trip</p>
         <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-5xl">
           {display.baseName}
         </h1>
@@ -44,7 +44,7 @@ export function StaleItineraryView({
         </p>
       </header>
 
-      <Panel className="mt-8 border-amber bg-amber-soft p-5" testId="stale-itinerary-banner">
+      <Panel className="card mt-8 border-amber bg-amber-soft p-5" testId="stale-itinerary-banner">
         <h2 className="font-display text-lg text-ink">
           Built by an earlier version of Sidequest
           {display.savedAt ? ` on ${humanDate(display.savedAt)}` : ''}

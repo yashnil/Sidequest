@@ -58,12 +58,12 @@ export function PlanSubnav({ panels, badges = {}, initial = 'stays' }: { panels:
                 window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${section.anchors[0]}`);
               }}
               className={cx(
-                'pressable relative inline-flex min-h-11 shrink-0 items-center gap-1.5 px-3 text-sm font-medium transition-colors',
+                'pressable relative inline-flex min-h-11 shrink-0 items-center gap-1.5 px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-pine',
                 on ? 'text-ink after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:bg-[var(--color-route)]' : 'text-ink-muted hover:text-ink',
               )}
             >
               {section.label}
-              {badge ? <span className="numeral rounded-full bg-paper-sunk px-1.5 text-[10px] leading-4 text-ink-muted">{badge}</span> : null}
+              {badge ? <span className="type-figure rounded-full bg-paper-sunk px-1.5 text-xs leading-5 text-ink-muted">{badge}</span> : null}
             </button>
           );
         })}

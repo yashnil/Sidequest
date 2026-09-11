@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { buttonClass } from '@/components/ui';
 import {
   easeDayAction,
   regenerateItineraryAction,
@@ -94,7 +95,7 @@ export function StopEditMenu({
           setOffers(null);
           setStatus(null);
         }}
-        className="pressable inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-transparent px-2 text-ink-muted transition-colors hover:border-rule hover:bg-paper-sunk hover:text-ink"
+        className="pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-transparent px-2 text-lg text-ink-muted transition-colors hover:border-rule hover:bg-paper-sunk hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
       >
         {locked ? '🔒' : '⋯'}
       </button>
@@ -102,7 +103,7 @@ export function StopEditMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-rule bg-paper p-1 shadow-lg"
+          className="absolute right-0 z-30 mt-1 w-64 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-1 shadow-[var(--shadow-float)]"
         >
           {offers === null ? (
             <>
@@ -124,13 +125,13 @@ export function StopEditMenu({
               </MenuButton>
             </>
           ) : offers.length === 0 ? (
-            <p className="px-3 py-2 text-xs leading-relaxed text-ink-muted">
+            <p className="px-3 py-2 text-sm leading-relaxed text-ink-muted">
               Nothing else on your board fits this slot — same day, similar effort, reachable and
               open. Removing it is still an option.
             </p>
           ) : (
             <>
-              <p className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-[0.12em] text-ink-faint">
+              <p className="eyebrow px-3 pt-2 pb-1">
                 Swap {title} for
               </p>
               {offers.map((offer) => (
@@ -180,7 +181,7 @@ function MenuButton({
       role="menuitem"
       disabled={disabled}
       onClick={onClick}
-      className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-paper-sunk disabled:opacity-50 ${
+      className={`block min-h-11 w-full rounded-[var(--radius-control)] px-3 py-2 text-left text-sm transition-colors hover:bg-paper-sunk disabled:opacity-50 ${
         tone === 'danger' ? 'text-clay' : 'text-ink'
       }`}
     >
@@ -211,12 +212,12 @@ export function EaseDayButton({ tripId, dayNumber }: { tripId: string; dayNumber
             router.refresh();
           });
         }}
-        className="text-xs text-ink-faint underline underline-offset-4 transition-colors hover:text-ink disabled:opacity-50"
+        className={buttonClass('ghost', 'sm')}
       >
         {pending ? 'Rearranging…' : 'Make this day easier'}
       </button>
       {status ? (
-        <span role="alert" className="ml-2 text-xs text-clay">
+        <span role="alert" className="ml-2 text-sm text-clay">
           {status}
         </span>
       ) : null}
@@ -290,7 +291,7 @@ export function RegenerateButton({ tripId }: { tripId: string }) {
         {pending ? 'Regenerating your trip. This can take a minute or two.' : ''}
       </span>
       {status ? (
-        <span role="alert" className="text-xs text-clay">
+        <span role="alert" className="text-sm text-clay">
           {status}
         </span>
       ) : null}

@@ -13,7 +13,7 @@ import {
   type InterviewOption,
   type QuestionnaireAnswers,
 } from '@sidequest/core';
-import { cx, FOCUS_RING, OVERLAY_INPUT } from '../ui';
+import { cx, FOCUS_RING, OVERLAY_INPUT, selectableCardClass } from '../ui';
 import { Glyph, INTEREST_CONTEXT, INTEREST_GLYPH, INTEREST_HUE, type GlyphId } from './glyphs';
 
 /**
@@ -32,20 +32,51 @@ import { Glyph, INTEREST_CONTEXT, INTEREST_GLYPH, INTEREST_HUE, type GlyphId } f
 // Shared selection surface
 // ---------------------------------------------------------------------------
 
-const CARD = 'relative flex min-h-11 cursor-pointer rounded-[var(--radius-card)] border text-left transition-[border-color,background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-out)]';
-const CARD_IDLE = 'border-rule bg-paper-raised hover:border-ink-faint';
-const CARD_ON = 'border-accent bg-accent-soft shadow-[inset_0_0_0_1px_var(--color-accent)]';
+/*
+ * V8 — every option is a selectable card from `ui.tsx`: resting paper with an
+ * edge and a quiet shadow, a lift under the pointer, and when chosen the accent
+ * fill, the doubled accent edge, the raised shadow, a filled mark and a heavier
+ * title. `pressable` answers the press within the fast token. A selected state
+ * is never only a border colour.
+ */
+const CARD = 'pressable flex min-h-11 cursor-pointer text-left';
+function card(on: boolean, extra?: string): string {
+  return selectableCardClass(on, cx(CARD, FOCUS_RING, extra));
+}
+const TITLE_ON = 'font-semibold text-accent-strong';
+const TITLE_OFF = 'text-ink';
 
 function Check({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={cx(
-        'absolute top-2.5 right-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px] transition-[opacity,transform] duration-[var(--motion-fast)]',
+        'absolute top-2.5 right-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full border transition-[opacity,transform] duration-[var(--motion-fast)]',
         on ? 'scale-100 border-accent bg-accent text-paper opacity-100' : 'scale-75 border-rule opacity-0',
       )}
     >
-      ✓
+      <Glyph id="check" className="h-3 w-3" strokeWidth={2.5} />
+    </span>
+  );
+}
+
+/**
+ * The destination's recommendation, attached to the card it recommends.
+ *
+ * One quiet note on the recommended option rather than a green banner above the
+ * question *and* a chip on the card saying the same thing. The reason is the
+ * screening's own sentence about this place; the note is never a pre-tick.
+ */
+export function RecommendedNote({ reason }: { reason?: string | undefined }) {
+  return (
+    <span className="mt-2.5 flex items-start gap-1.5 rounded-[var(--radius-control)] bg-pine-soft/70 px-2.5 py-1.5 text-xs leading-snug text-pine-strong" data-testid="interview-recommendation">
+      <Glyph id="compass" className="mt-px h-3.5 w-3.5 shrink-0" />
+      <span>
+        <span className="font-semibold" data-testid="option-recommended">
+          Sidequest recommends this here.
+        </span>
+        {reason ? <> {reason}</> : null}
+      </span>
     </span>
   );
 }
@@ -91,6 +122,7 @@ export function OptionCards({
   lettered = false,
   columns = 2,
   recommended = null,
+  recommendedReason,
 }: {
   name: string;
   options: readonly InterviewOption[];
@@ -101,6 +133,8 @@ export function OptionCards({
   columns?: 1 | 2 | 3;
   /** MVP V3 — marked because of what this destination is, never as a pre-tick. */
   recommended?: string | null;
+  /** The screening's sentence about why, shown on the recommended card. */
+  recommendedReason?: string | undefined;
 }) {
   return (
     <fieldset className="min-w-0">
@@ -110,7 +144,7 @@ export function OptionCards({
           const on = value === option.value;
           const glyph = glyphs?.[option.value];
           return (
-            <label key={option.value} className={cx(CARD, 'flex-col gap-3 p-4 pr-10', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+            <label key={option.value} className={card(on, 'flex-col gap-3 p-4 pr-10')}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
               <span className="flex items-center gap-3">
                 {lettered ? (
@@ -121,13 +155,9 @@ export function OptionCards({
                 {glyph ? <Glyph id={glyph} className={cx('h-7 w-7', on ? 'text-accent' : 'text-ink-muted')} /> : null}
               </span>
               <span className="min-w-0">
-                <span className={cx('block font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
-                {option.detail ? <span className="mt-1 block text-sm leading-relaxed text-ink-muted">{option.detail}</span> : null}
-                {recommended === option.value ? (
-                  <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-pine/40 bg-pine-soft px-2 py-0.5 text-[11px] font-medium text-pine-strong" data-testid="option-recommended">
-                    Recommended here
-                  </span>
-                ) : null}
+                <span className={cx('block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
+                {option.detail ? <span className={cx('mt-1 block text-sm leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
+                {recommended === option.value ? <RecommendedNote reason={recommendedReason} /> : null}
               </span>
               <Check on={on} />
             </label>
@@ -159,7 +189,7 @@ export function InterestGrid({ context, offered, value, onChange }: { context: I
             return (
               <label
                 key={interest}
-                className={cx(CARD, 'flex-col overflow-hidden', FOCUS_RING, on ? 'border-accent shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'border-rule hover:border-ink-faint')}
+                className={card(on, 'flex-col overflow-hidden')}
                 style={{ '--plate-hue': hue } as React.CSSProperties}
               >
                 <input
@@ -174,9 +204,9 @@ export function InterestGrid({ context, offered, value, onChange }: { context: I
                 <span className={cx('plate flex h-16 items-end px-3 pb-2 transition-[filter] duration-[var(--motion-fast)]', on ? 'brightness-[0.97]' : '')} aria-hidden="true">
                   <Glyph id={INTEREST_GLYPH[interest]} className={cx('h-7 w-7', on ? 'text-accent-strong' : 'text-ink')} />
                 </span>
-                <span className={cx('flex flex-1 flex-col px-3 py-2.5', on ? 'bg-accent-soft' : 'bg-paper-raised')}>
-                  <span className={cx('font-display text-base leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{INTEREST_LABELS[interest]}</span>
-                  <span className="mt-0.5 text-xs leading-snug text-ink-muted">{INTEREST_CONTEXT[interest]}</span>
+                <span className="flex flex-1 flex-col px-3 py-2.5">
+                  <span className={cx('font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{INTEREST_LABELS[interest]}</span>
+                  <span className={cx('mt-0.5 text-xs leading-snug', on ? 'text-ink' : 'text-ink-muted')}>{INTEREST_CONTEXT[interest]}</span>
                 </span>
                 <Check on={on} />
               </label>
@@ -220,14 +250,14 @@ export function RoleMeter({ name, options, value, onChange, interest }: { name: 
           const on = value === option.value;
           const reached = index >= 0 && i <= index;
           return (
-            <label key={option.value} className={cx(CARD, 'flex-col p-3.5 pr-9', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+            <label key={option.value} className={card(on, 'flex-col p-3.5 pr-9')}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
               <span className="flex gap-1" aria-hidden="true">
                 {[0, 1, 2, 3].map((step) => (
                   <span key={step} className={cx('h-1.5 flex-1 rounded-full transition-colors duration-[var(--motion-base)]', step <= i && reached ? 'bg-accent' : step <= i ? 'bg-ink-faint/50' : 'bg-rule')} />
                 ))}
               </span>
-              <span className={cx('mt-3 block font-display text-base leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
+              <span className={cx('mt-3 block font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
               {option.detail ? <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{option.detail}</span> : null}
               <Check on={on} />
             </label>
@@ -275,7 +305,7 @@ export function RoleMatrix({ name, options, value, onChange, interests }: { name
                 const on = current === option.value;
                 const index = options.findIndex((o) => o.value === current);
                 return (
-                  <label key={option.value} className={cx('relative flex min-h-11 cursor-pointer items-center justify-center rounded-[var(--radius-control)] border px-2.5 py-2 text-center text-sm leading-snug transition-colors duration-[var(--motion-fast)]', FOCUS_RING, on ? 'border-accent bg-accent-soft text-accent-strong' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')} title={option.detail}>
+                  <label key={option.value} className={cx('pressable relative flex min-h-11 cursor-pointer items-center justify-center rounded-[var(--radius-control)] border px-2.5 py-2 text-center text-sm leading-snug transition-colors duration-[var(--motion-fast)]', FOCUS_RING, on ? 'border-accent bg-accent-soft font-semibold text-accent-strong shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')} title={option.detail}>
                     <input type="radio" name={`${name}:${interest}`} value={option.value} checked={on} onChange={() => onChange({ ...value, [interest]: option.value })} className={OVERLAY_INPUT} />
                     <span className="flex flex-col items-center gap-1.5">
                       <span className="flex gap-0.5" aria-hidden="true">
@@ -312,7 +342,7 @@ const TRANSPORT_GLYPH: Record<string, GlyphId> = {
   mixed: 'compass',
 };
 
-export function TransportChoice({ name, options, value, onChange, recommended = null }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; recommended?: string | null }) {
+export function TransportChoice({ name, options, value, onChange, recommended = null, recommendedReason }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; recommended?: string | null; recommendedReason?: string | undefined }) {
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">How you get around</legend>
@@ -320,18 +350,14 @@ export function TransportChoice({ name, options, value, onChange, recommended = 
         {options.map((option) => {
           const on = value === option.value;
           return (
-            <label key={option.value} className={cx(CARD, 'flex-col items-start p-4 pr-9', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+            <label key={option.value} className={card(on, 'flex-col items-start p-4 pr-9')}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
               <span className={cx('inline-flex h-12 w-12 items-center justify-center rounded-full border', on ? 'border-accent bg-paper-raised text-accent' : 'border-rule bg-paper-sunk text-ink')} aria-hidden="true">
                 <Glyph id={TRANSPORT_GLYPH[option.value] ?? 'compass'} className="h-6 w-6" />
               </span>
-              <span className={cx('mt-3 block font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
-              {option.detail ? <span className="mt-1 block text-sm leading-relaxed text-ink-muted">{option.detail}</span> : null}
-              {recommended === option.value ? (
-                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-pine/40 bg-pine-soft px-2 py-0.5 text-[11px] font-medium text-pine-strong" data-testid="option-recommended">
-                  Recommended here
-                </span>
-              ) : null}
+              <span className={cx('mt-3 block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
+              {option.detail ? <span className={cx('mt-1 block text-sm leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
+              {recommended === option.value ? <RecommendedNote reason={recommendedReason} /> : null}
               <Check on={on} />
             </label>
           );
@@ -372,17 +398,17 @@ export function RhythmChoice({ name, options, value, onChange }: { name: string;
         {options.map((option, index) => {
           const on = value === option.value;
           return (
-            <label key={option.value} className={cx(CARD, 'items-start gap-4 p-4 pr-10', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+            <label key={option.value} className={card(on, 'items-start gap-4 p-4 pr-10')}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
               <span aria-hidden="true" className={cx('mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-display text-sm', on ? 'border-accent bg-accent text-paper' : 'border-rule text-ink-muted')}>
                 {String.fromCharCode(65 + index)}
               </span>
               <span className="min-w-0 flex-1">
-                <span className={cx('block font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
-                {option.detail ? <span className="mt-0.5 block text-sm text-ink-muted">{option.detail}</span> : null}
+                <span className={cx('block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
+                {option.detail ? <span className={cx('mt-0.5 block text-sm', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
                 <span className="mt-3 block max-w-xs">
                   <DayStrip value={option.value} on={on} />
-                  <span className="label mt-1 flex justify-between text-ink-faint" aria-hidden="true">
+                  <span className="label mt-1 flex justify-between" aria-hidden="true">
                     <span>morning</span>
                     <span>evening</span>
                   </span>
@@ -423,11 +449,11 @@ export function SpectrumChoice({ name, options, value, onChange }: { name: strin
           const on = value === option.value;
           const level = SPECTRUM_LEVEL[option.value] ?? index;
           return (
-            <label key={option.value} className={cx(CARD, 'flex-col p-4 pr-9', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+            <label key={option.value} className={card(on, 'flex-col p-4 pr-9')}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
               <ProfileLine level={level} on={on} />
-              <span className={cx('mt-2 block font-display text-lg leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
-              {option.detail ? <span className="mt-1 block text-sm leading-relaxed text-ink-muted">{option.detail}</span> : null}
+              <span className={cx('mt-2 block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
+              {option.detail ? <span className={cx('mt-1 block text-sm leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
               <Check on={on} />
             </label>
           );
@@ -472,7 +498,7 @@ export function RangeMapChoice({ name, options, value, onChange, baseName }: { n
           <text x={120} y={122} textAnchor="middle" fontSize={10} fill="var(--color-ink)" fontFamily="var(--font-display)">
             {baseName}
           </text>
-          <text x={12} y={190} fontSize={8} fill="var(--color-ink-muted)" letterSpacing={1}>
+          <text x={12} y={190} fontSize={9} fill="var(--color-ink-muted)" letterSpacing={1}>
             SCHEMATIC · NOT TO SCALE
           </text>
         </svg>
@@ -483,7 +509,7 @@ export function RangeMapChoice({ name, options, value, onChange, baseName }: { n
           {options.map((option) => {
             const on = value === option.value;
             return (
-              <label key={option.value} className={cx(CARD, 'items-center gap-3 px-4 py-3 pr-10', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+              <label key={option.value} className={card(on, 'items-center gap-3 px-4 py-3 pr-10')}>
                 <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
                 <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center">
                   <svg viewBox="0 0 32 32" className="h-8 w-8">
@@ -492,7 +518,7 @@ export function RangeMapChoice({ name, options, value, onChange, baseName }: { n
                   </svg>
                 </span>
                 <span className="min-w-0">
-                  <span className={cx('block font-display text-base leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
+                  <span className={cx('block font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
                   {option.detail ? <span className="block text-xs text-ink-muted">{option.detail}</span> : null}
                 </span>
                 <Check on={on} />
@@ -524,14 +550,14 @@ export function BudgetAxis({ options, value, onChange }: { options: readonly Int
             const on = value.style === option.value;
             const coins = BUDGET_COINS[option.value] ?? 3;
             return (
-              <label key={option.value} className={cx(CARD, 'flex-col items-start p-3.5 pr-8', FOCUS_RING, on ? CARD_ON : CARD_IDLE)}>
+              <label key={option.value} className={card(on, 'flex-col items-start p-3.5 pr-8')}>
                 <input type="radio" name="budget" value={option.value} checked={on} onChange={() => onChange({ ...value, style: option.value })} className={OVERLAY_INPUT} />
                 <span className="flex gap-0.5" aria-hidden="true">
                   {[1, 2, 3, 4, 5].map((step) => (
                     <span key={step} className={cx('h-2 w-2 rounded-full', step <= coins ? (on ? 'bg-accent' : 'bg-ink-muted') : 'bg-rule')} />
                   ))}
                 </span>
-                <span className={cx('mt-2.5 block font-display text-base leading-snug', on ? 'text-accent-strong' : 'text-ink')}>{option.label}</span>
+                <span className={cx('mt-2.5 block font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
                 {option.detail ? <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{option.detail}</span> : null}
                 <Check on={on} />
               </label>
@@ -539,11 +565,11 @@ export function BudgetAxis({ options, value, onChange }: { options: readonly Int
           })}
         </div>
         {unsure ? (
-          <label className={cx(CARD, 'mt-3 items-center gap-3 px-4 py-3 pr-10', FOCUS_RING, value.style === 'dont_know' ? CARD_ON : 'border-dashed border-rule bg-transparent hover:border-ink-faint')}>
+          <label className={cx(value.style === 'dont_know' ? card(true, 'mt-3 items-center gap-3 px-4 py-3 pr-10') : cx(CARD, FOCUS_RING, 'relative mt-3 items-center gap-3 rounded-[var(--radius-card)] border border-dashed border-rule bg-transparent px-4 py-3 pr-10 hover:border-ink-faint'))}>
             <input type="radio" name="budget" value="dont_know" checked={value.style === 'dont_know'} onChange={() => onChange({ ...value, style: 'dont_know' })} className={OVERLAY_INPUT} />
             <Glyph id="compass" className={cx('h-6 w-6', value.style === 'dont_know' ? 'text-accent' : 'text-ink-muted')} />
             <span>
-              <span className={cx('block text-sm font-medium', value.style === 'dont_know' ? 'text-accent-strong' : 'text-ink')}>{unsure.label}</span>
+              <span className={cx('block text-sm font-medium', value.style === 'dont_know' ? 'font-semibold text-accent-strong' : 'text-ink')}>{unsure.label}</span>
               {unsure.detail ? <span className="block text-xs text-ink-muted">{unsure.detail}</span> : null}
             </span>
             <Check on={value.style === 'dont_know'} />
@@ -555,19 +581,19 @@ export function BudgetAxis({ options, value, onChange }: { options: readonly Int
           Add a rough envelope (optional)
         </button>
       ) : (
-        <fieldset className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4">
+        <fieldset className="card p-4">
           <legend className="px-1 text-sm font-medium text-ink">A rough envelope, excluding flights</legend>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <label className="text-sm text-ink">
-              <span className="label block text-ink-faint">Amount</span>
-              <input type="number" min={1} max={1000000} inputMode="numeric" value={value.envelope?.amount ?? ''} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), amount: Number(event.target.value) || undefined, basis: value.envelope?.basis ?? 'per_person_per_day', currency: value.envelope?.currency ?? 'USD' } })} className="numeral mt-1 w-32 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base" />
+              <span className="label block">Amount</span>
+              <input type="number" min={1} max={1000000} inputMode="numeric" value={value.envelope?.amount ?? ''} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), amount: Number(event.target.value) || undefined, basis: value.envelope?.basis ?? 'per_person_per_day', currency: value.envelope?.currency ?? 'USD' } })} className="type-figure mt-1 w-32 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base" />
             </label>
             <label className="text-sm text-ink">
-              <span className="label block text-ink-faint">Currency</span>
+              <span className="label block">Currency</span>
               <input type="text" maxLength={3} value={value.envelope?.currency ?? 'USD'} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), currency: event.target.value.toUpperCase(), basis: value.envelope?.basis ?? 'per_person_per_day' } })} className="mt-1 w-20 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base uppercase" />
             </label>
             <label className="text-sm text-ink">
-              <span className="label block text-ink-faint">Per</span>
+              <span className="label block">Per</span>
               <select value={value.envelope?.basis ?? 'per_person_per_day'} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), basis: event.target.value, currency: value.envelope?.currency ?? 'USD' } })} className="mt-1 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base">
                 <option value="per_person_per_day">person, per day</option>
                 <option value="per_person_trip">person, whole trip</option>
@@ -597,16 +623,18 @@ export function ChipGroup({ name, options, value, onChange, tone = 'accent' }: {
             <label
               key={option.value}
               className={cx(
-                'relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full border px-4 py-2 text-sm transition-colors duration-[var(--motion-fast)]',
+                'pressable relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full border px-4 py-2 text-sm transition-colors duration-[var(--motion-fast)]',
                 FOCUS_RING,
-                on ? (tone === 'clay' ? 'border-clay bg-clay-soft text-clay' : 'border-accent bg-accent-soft text-accent-strong') : 'border-rule bg-paper-raised text-ink hover:border-ink-faint',
+                on
+                  ? tone === 'clay'
+                    ? 'border-clay bg-clay-soft font-medium text-clay shadow-[inset_0_0_0_1px_var(--color-clay)]'
+                    : 'border-accent bg-accent-soft font-medium text-accent-strong shadow-[inset_0_0_0_1px_var(--color-accent)]'
+                  : 'border-rule bg-paper-raised text-ink hover:border-ink-faint',
               )}
               title={option.detail}
             >
               <input type="checkbox" name={name} value={option.value} checked={on} onChange={(event) => onChange(event.target.checked ? [...value, option.value] : value.filter((entry) => entry !== option.value))} className={OVERLAY_INPUT} />
-              <span aria-hidden="true" className={cx('text-xs', on ? 'opacity-100' : 'opacity-0')}>
-                ✓
-              </span>
+              <span aria-hidden="true" className={cx('inline-block h-2 w-2 rounded-full', on ? (tone === 'clay' ? 'bg-clay' : 'bg-accent') : 'border border-ink-faint')} />
               {option.label}
             </label>
           );
@@ -644,7 +672,7 @@ export function DietaryControl({
         if (inGroup.length === 0) return null;
         return (
           <fieldset key={kind}>
-            <legend className="label text-ink-faint">{DIETARY_NEED_KIND_LABELS[kind]}</legend>
+            <legend className="type-small font-medium text-ink">{DIETARY_NEED_KIND_LABELS[kind]}</legend>
             <div className="mt-2">
               <ChipGroup name={`dietary-${kind}`} options={inGroup.map((option) => ({ value: option.value, label: option.label }))} value={value.needs} onChange={(needs) => set({ needs: [...new Set([...value.needs.filter((entry) => !inGroup.some((option) => option.value === entry)), ...needs.filter((entry) => inGroup.some((option) => option.value === entry))])] })} tone={kind === 'allergy' ? 'clay' : 'accent'} />
             </div>
@@ -652,7 +680,7 @@ export function DietaryControl({
         );
       })}
       <div>
-        <label htmlFor="dietary-notes" className="label block text-ink-faint">
+        <label htmlFor="dietary-notes" className="type-small block font-medium text-ink">
           Anything else, in your words
         </label>
         <textarea
@@ -675,7 +703,7 @@ export function DietaryControl({
 
 export function SeriousToggle({ label, detail, checked, onChange }: { label: string; detail: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className={cx('flex cursor-pointer gap-3 rounded-[var(--radius-card)] border-l-4 p-4 transition-colors', checked ? 'border-clay bg-clay-soft' : 'border-rule bg-paper-raised')}>
+    <label className={cx('card flex cursor-pointer gap-3 border-l-4 p-4 transition-colors', checked ? 'border-l-clay bg-clay-soft' : 'border-l-rule')}>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-clay)]" />
       <span>
         <span className="flex items-center gap-2 text-sm font-medium text-ink">
@@ -710,7 +738,7 @@ export function HardLimitsControl({ context, answers, value, onChange }: { conte
           <Glyph id="lock" className="h-4 w-4 text-clay" />
           Rules, not wishes. Tick only what must hold.
         </legend>
-        <ul className="divide-y divide-rule overflow-hidden rounded-[var(--radius-card)] border border-rule bg-paper-raised">
+        <ul className="card divide-y divide-rule overflow-hidden">
           {offer.map((entry) => {
             const on = has(entry.code);
             return (
@@ -722,7 +750,7 @@ export function HardLimitsControl({ context, answers, value, onChange }: { conte
                     <span className="block text-sm leading-relaxed text-ink-muted">{entry.detail}</span>
                   </span>
                   {on && entry.values ? (
-                    <select value={valueOf(entry.code) ?? entry.values[0]!.value} onChange={(event) => setValue(entry.code, Number(event.target.value))} onClick={(event) => event.stopPropagation()} className="numeral shrink-0 rounded-[var(--radius-control)] border border-clay/40 bg-paper px-2 py-1.5 text-sm" aria-label={`${entry.label} value`}>
+                    <select value={valueOf(entry.code) ?? entry.values[0]!.value} onChange={(event) => setValue(entry.code, Number(event.target.value))} onClick={(event) => event.stopPropagation()} className="type-figure min-h-11 shrink-0 rounded-[var(--radius-control)] border border-clay/40 bg-paper px-2 py-1.5 text-sm" aria-label={`${entry.label} value`}>
                       {entry.values.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}

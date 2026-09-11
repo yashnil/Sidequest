@@ -1,6 +1,7 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
@@ -21,12 +22,15 @@ import {
   type QuestionnaireStepId,
 } from '@sidequest/core';
 import {
+  answersRevision,
   clearItinerary,
   getTrip,
   replaceAutoSelections,
   saveAnswers,
   saveProfile,
 } from '@/lib/db/repository';
+import type { Trip } from '@sidequest/core';
+import { buildRunView, retryPlanFor, startBuildRun, type BuildRunView } from '@/lib/planning/build-runs';
 import { getIntent, saveComposerAnswers } from '@/lib/db/compiler-repository';
 import {
   attributableWorkMs,
@@ -55,12 +59,38 @@ import { generateSidequestPlanForTrip } from '@/lib/planning/production-plan';
 import { ensurePreflightAction, proposeScopeAction } from '@/app/(product)/trips/[id]/plan/actions';
 import { unansweredRequired } from '@sidequest/core';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
-import { callerKey, chargeAction, checkAction } from '@/lib/net/caller';
+import { callerKey, chargeAction, checkAction, guardAction } from '@/lib/net/caller';
 import { dailySpendGate, recordDailySpend } from '@/lib/compiler/daily-ceiling';
+import { STALE_ANSWERS_MESSAGE } from '@/lib/interview/messages';
 
 export interface SaveResult {
   ok: boolean;
   error?: string;
+  /**
+   * V8 — the stored answers' revision after this save, for the next one.
+   * See `answersRevision`.
+   */
+  revision?: string | null;
+  /**
+   * V8 — the save was refused because this client is behind the stored row.
+   * Nothing was written; the screen offers to reload rather than overwrite.
+   */
+  stale?: boolean;
+}
+
+/**
+ * V8 — is this client allowed to write over the stored answers?
+ *
+ * A client that never received a revision (the first save, an older page) is
+ * not refused: the guard exists for the case that lost fourteen answers — a
+ * wizard remounted on stale props — and that wizard *had* a revision, an old
+ * one. Refusing clients that hold none would break every first visit for no
+ * protection at all.
+ */
+function answersAreStale(tripId: string, revision: string | null | undefined): boolean {
+  if (revision === undefined || revision === null) return false;
+  const stored = answersRevision(tripId);
+  return stored !== null && stored !== revision;
 }
 
 /**
@@ -87,6 +117,8 @@ export async function saveDraftAction(
    * the end — after an edit elsewhere changed which steps exist.
    */
   step?: number | QuestionnaireStepId,
+  /** V8 — the revision this client last saw. A client behind the row is refused, never applied. */
+  revision?: string | null,
 ): Promise<SaveResult> {
   const parsed = questionnaireAnswersSchema.safeParse(answers);
   if (!parsed.success) {
@@ -104,8 +136,9 @@ export async function saveDraftAction(
     // every other trip door. See `lib/net/trip-access`.
     const refusal = await tripAccessRefusal(tripId);
     if (refusal) return { ok: false, error: refusal };
-    saveAnswers(tripId, parsed.data, ordinal);
-    return { ok: true };
+    if (answersAreStale(tripId, revision)) return { ok: false, stale: true, error: STALE_ANSWERS_MESSAGE, revision: answersRevision(tripId) };
+    const next = saveAnswers(tripId, parsed.data, ordinal);
+    return { ok: true, revision: next };
   } catch (error) {
     console.error('Failed to save questionnaire draft', error);
     return { ok: false, error: 'We could not save your progress just then. Your answers are still here — try again.' };
@@ -251,6 +284,25 @@ export async function completeAndBuildAction(tripId: string, answers: Questionna
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
+  const saved = await persistProfileForBuild(trip, answers);
+  if (!saved.ok) return saved;
+  const generated = await generateSidequestPlanForTrip(tripId, { caller: 'interview_build_action', mode: 'full' });
+  if (!generated.ok) return { ok: false, error: generated.error ?? 'We could not compose your trip just now.' };
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  redirect(`/trips/${tripId}/itinerary`);
+}
+
+/**
+ * The profile write every Build shares: validate, derive, save, seed the board.
+ *
+ * V8 — the stored plan is **not** cleared here any more. It used to be, so that
+ * a plan built from replaced answers could not be shown as current; but a
+ * build that then failed left the traveller with nothing at all, and the
+ * failure screen has to be able to say "your earlier plan is still there" and
+ * mean it. A successful build replaces the plan; a failed one leaves it.
+ */
+async function persistProfileForBuild(trip: Trip, answers: QuestionnaireAnswers): Promise<SaveResult> {
+  const tripId = trip.id;
   const parsed = validatedQuestionnaireAnswersSchema.safeParse(answers);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Something in the questionnaire is incomplete.' };
@@ -258,22 +310,85 @@ export async function completeAndBuildAction(tripId: string, answers: Questionna
   try {
     const tripDays = countTripDays(trip.basics.startDate, trip.basics.endDate);
     const profile = buildTravelerProfile(parsed.data, { travelerNeeds: trip.basics.travelerNeeds, tripDays });
-    saveProfile(tripId, parsed.data, profile);
-    clearItinerary(tripId);
+    const revision = saveProfile(tripId, parsed.data, profile);
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
       const board = boardFor(trip, profile, resolved.context);
       const selection = autoSelect({ candidates: board.candidates, profile, tripDays, transitUnmeasured: board.transitUnmeasured });
       replaceAutoSelections(tripId, selection.selectedIds);
     }
+    return { ok: true, revision };
   } catch (error) {
-    console.error('Failed to save traveler profile before building', error);
+    console.error('Failed to save traveler profile before building', { tripId, message: error instanceof Error ? error.message : 'unknown' });
     return { ok: false, error: 'We could not save your profile. Nothing was lost — try again.' };
   }
-  const generated = await generateSidequestPlanForTrip(tripId, { caller: 'interview_build_action', mode: 'full' });
-  if (!generated.ok) return { ok: false, error: generated.error ?? 'We could not compose your trip just now.' };
-  revalidatePath(`/trips/${tripId}/itinerary`);
-  redirect(`/trips/${tripId}/itinerary`);
+}
+
+export type StartBuildResult =
+  | { ok: true; buildKey: string; view: BuildRunView; revision: string | null }
+  | { ok: false; error: string; stale?: boolean; revision?: string | null };
+
+const buildKeySchema = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
+
+/**
+ * V8 — "BUILD MY TRIP": ONE PRESS, ONE DURABLE RUN, AN ANSWER IN MILLISECONDS.
+ *
+ * Saves the profile exactly as before, records the run under the client's
+ * key, schedules the one generation to run after this response, and returns
+ * the run's state. The client goes straight to `/trips/[id]/build`, which is
+ * rendered from the row — so a request that dies on the wire, a refresh, a
+ * back button or a second press all find the same build. Nothing here awaits
+ * the model, and nothing here can leave the traveller on a page that asks
+ * them to answer the interview again.
+ */
+export async function startBuildAction(tripId: string, answers: QuestionnaireAnswers, buildKey: string, revision?: string | null): Promise<StartBuildResult> {
+  if (!buildKeySchema.safeParse(buildKey).success) return { ok: false, error: 'That build could not be started.' };
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  /*
+   * A run already open under this key is this press, arriving twice: attach
+   * before touching anything, and before the fence, because a duplicate is
+   * never a second build.
+   */
+  const current = buildRunView(tripId);
+  if (current.state === 'running') return { ok: true, buildKey: current.buildKey ?? buildKey, view: current, revision: answersRevision(tripId) };
+  if (current.state !== 'none' && current.buildKey === buildKey) return { ok: true, buildKey, view: current, revision: answersRevision(tripId) };
+  if (answersAreStale(tripId, revision)) return { ok: false, stale: true, error: STALE_ANSWERS_MESSAGE, revision: answersRevision(tripId) };
+  const fence = await guardAction('build_start');
+  if (fence) return { ok: false, error: fence };
+  const saved = await persistProfileForBuild(trip, answers);
+  if (!saved.ok) return { ok: false, error: saved.error ?? 'We could not save your profile.' };
+  const caller = await callerKey();
+  const run = startBuildRun({ tripId, buildKey, caller: caller ?? 'interview_build_action', mode: 'full' });
+  return { ok: true, buildKey, view: run.view, revision: saved.revision ?? null };
+}
+
+/**
+ * V8 — "TRY BUILD AGAIN", FROM THE BUILD SCREEN. NEVER FROM THE INTERVIEW.
+ *
+ * Uses the profile already saved — zero questionnaire repetition — and spends
+ * a model call only when the failed run never produced a draft: a run that
+ * failed after its draft was saved is re-verified from that draft. Refused
+ * while a run is live, so an impatient second press cannot start a second
+ * composition.
+ */
+export async function retryBuildAction(tripId: string, buildKey: string): Promise<StartBuildResult> {
+  if (!buildKeySchema.safeParse(buildKey).success) return { ok: false, error: 'That build could not be started.' };
+  const trip = getTrip(tripId);
+  if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const current = buildRunView(tripId);
+  if (current.state === 'running') return { ok: true, buildKey: current.buildKey ?? buildKey, view: current, revision: answersRevision(tripId) };
+  if (current.state !== 'none' && current.buildKey === buildKey) return { ok: true, buildKey, view: current, revision: answersRevision(tripId) };
+  const fence = await guardAction('build_start');
+  if (fence) return { ok: false, error: fence };
+  const caller = await callerKey();
+  const { reuseStoredDraft } = retryPlanFor(current);
+  const run = startBuildRun({ tripId, buildKey, caller: caller ?? 'interview_retry_action', mode: 'full', reuseStoredDraft });
+  return { ok: true, buildKey, view: run.view, revision: answersRevision(tripId) };
 }
 
 /**
