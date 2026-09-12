@@ -1,0 +1,47 @@
+[
+ {
+  "place_id": 34589178,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 349348,
+  "lat": "-19.1540046",
+  "lon": "22.9800936",
+  "category": "leisure",
+  "type": "nature_reserve",
+  "place_rank": 24,
+  "importance": 0.4815572625868757,
+  "addresstype": "nature_reserve",
+  "name": "Okavango Delta",
+  "display_name": "Okavango Delta, North-West District, Botswana",
+  "address": {
+   "nature_reserve": "Okavango Delta",
+   "state": "North-West District",
+   "ISO3166-2-lvl4": "BW-NW",
+   "country": "Botswana",
+   "country_code": "bw"
+  },
+  "extratags": {
+   "ramsar": "yes",
+   "ref:whc": "1432",
+   "boundary": "protected_area",
+   "heritage": "1",
+   "seasonal": "yes",
+   "wikidata": "Q650872",
+   "wikipedia": "en:Okavango Delta",
+   "whc:criteria": "(vii)(ix)(x)",
+   "protect_class": "98",
+   "heritage:website": "https://whc.unesco.org/en/list/1432/",
+   "heritage:operator": "whc",
+   "whc:inscription_date": "2014"
+  },
+  "namedetails": {
+   "name": "Okavango Delta"
+  },
+  "boundingbox": [
+   "-20.1975042",
+   "-18.1104554",
+   "21.6644543",
+   "23.9072166"
+  ]
+ }
+]

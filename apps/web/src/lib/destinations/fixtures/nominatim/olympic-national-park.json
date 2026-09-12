@@ -1,0 +1,66 @@
+[
+ {
+  "place_id": 416384032,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 163769,
+  "lat": "47.7865324",
+  "lon": "-123.5360503",
+  "category": "leisure",
+  "type": "nature_reserve",
+  "place_rank": 24,
+  "importance": 0.5265098341503026,
+  "addresstype": "nature_reserve",
+  "name": "Olympic National Park",
+  "display_name": "Olympic National Park, Washington, 98343, United States",
+  "address": {
+   "nature_reserve": "Olympic National Park",
+   "state": "Washington",
+   "ISO3166-2-lvl4": "US-WA",
+   "postcode": "98343",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "network": "National Parks of the United States",
+   "ref:whc": "151",
+   "boundary": "protected_area",
+   "heritage": "1",
+   "operator": "National Park Service",
+   "wikidata": "Q372093",
+   "ownership": "national",
+   "protected": "perpetuity",
+   "wikipedia": "en:Olympic National Park",
+   "whc:criteria": "(vii)(ix)",
+   "operator:type": "public",
+   "protect_class": "2",
+   "operator:short": "NPS",
+   "protected_area": "national_park",
+   "network:wikidata": "Q34918903",
+   "protection_title": "National Park",
+   "heritage:operator": "whc",
+   "operator:wikidata": "Q308439",
+   "operator:wikipedia": "en:National Park Service",
+   "whc:inscription_date": "1981"
+  },
+  "namedetails": {
+   "name": "Olympic National Park",
+   "name:ar": "المنتزه الأولمبي الوطني",
+   "name:de": "Olympic-Nationalpark",
+   "name:en": "Olympic National Park",
+   "name:es": "Parque Nacional Olímpico",
+   "name:fr": "Parc national Olympique",
+   "name:ja": "オリンピック国立公園",
+   "name:ko": "올림픽국립공원",
+   "name:nl": "Olympisch Nationaal park",
+   "name:ru": "Национальный парк Олимпик",
+   "name:zh": "奥林匹克国家公园"
+  },
+  "boundingbox": [
+   "47.4697688",
+   "48.2752636",
+   "-124.7425886",
+   "-123.1240183"
+  ]
+ }
+]

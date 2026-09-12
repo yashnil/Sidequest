@@ -91,6 +91,8 @@ const nominatimPlaceSchema = z.object({
   type: z.string().optional(),
   addresstype: z.string().optional(),
   importance: z.number().optional(),
+  /** V8.1 — Nominatim's address rank: 30 is a building or business, 16–18 a town, 4–8 a country or first-level division. */
+  place_rank: z.number().optional(),
   boundingbox: z.array(z.string()).length(4).optional(),
   address: z.record(z.string(), z.string()).optional(),
 });
@@ -117,7 +119,8 @@ export interface GeocodeOptions {
 export function geocodeCacheKey(query: string, limit: number): string {
   // The endpoint is in the key: a result from the public instance must never be
   // served to a run pointed at a self-hosted one, or the reverse.
-  return ['nominatim', 'v1', geocoderEndpoint(), String(limit), query.trim().toLowerCase()].join('|');
+  // `v2`: responses now carry `extratags` and `place_rank`; a `v1` entry cached without them must not be served for thirty days.
+  return ['nominatim', 'v2', geocoderEndpoint(), String(limit), query.trim().toLowerCase()].join('|');
 }
 
 export function geocodeCacheKeyFor(query: string, limit: number, featureType: string | undefined): string {
@@ -147,6 +150,8 @@ export async function geocode(query: string, options: GeocodeOptions = {}): Prom
    * somebody invented.
    */
   url.searchParams.set('namedetails', '1');
+  /* V8.1 — the record's own tags (`place`, `natural`, `wikidata`): the evidence a state-typed city or a landscape row is read from. */
+  url.searchParams.set('extratags', '1');
   // Asking for the polygon would be the obvious thing and is the wrong thing:
   // a boundary is kilobytes we do not use, on somebody else's bandwidth.
   url.searchParams.set('polygon_geojson', '0');
@@ -321,6 +326,7 @@ export function classifyNominatim(place: NominatimPlace): {
     | 'island'
     | 'archipelago'
     | 'protected_area'
+    | 'natural_region'
     | 'subregion'
     | 'state_or_province'
     | 'municipality'
@@ -334,6 +340,9 @@ export function classifyNominatim(place: NominatimPlace): {
   const placeTag = (place.extratags?.place ?? '').toLowerCase();
 
   if (type === 'country') return { breadth: 'country', entityType: 'country' };
+  if (type === 'region' && placeTag !== 'city' && placeTag !== 'municipality') {
+    return { breadth: 'region', entityType: 'subregion' };
+  }
   if (type === 'state' || type === 'province' || type === 'region') {
     /*
      * V7 — A FIRST-LEVEL DIVISION THAT IS A CITY.
@@ -350,6 +359,26 @@ export function classifyNominatim(place: NominatimPlace): {
   if (type === 'county' || type === 'state_district' || type === 'district') {
     return { breadth: 'subregion', entityType: 'subregion' };
   }
+  /*
+   * V8.1 — WHAT A ROW IS, BEFORE WHERE IT SITS.
+   *
+   * A business, an office, an airport, a shop or a road came through here as
+   * `unknown` at city breadth, which is how "Resorts of the Canadian Rockies"
+   * on 17 Avenue SW stood in for the Rockies. The record's own class says it
+   * is a thing *in* a place: read that first. A named landscape
+   * (`natural=mountain_range`, `desert`, `valley`…) is a region of its own
+   * kind, and a `region` row (`place=region`, `boundary=region`) is a region,
+   * not a state to drive across.
+   */
+  if (POINT_CATEGORIES.has(category) || (category === 'place' && POINT_PLACE_TYPES.has(type))) {
+    return { breadth: 'local', entityType: 'point_of_interest' };
+  }
+  if (category === 'highway' || category === 'railway' || category === 'route') {
+    return { breadth: 'local', entityType: 'route_or_corridor' };
+  }
+  if (category === 'natural' || (category === 'place' && NATURAL_PLACE_TYPES.has(type))) {
+    return { breadth: NATURAL_LOCAL_TYPES.has(type) ? 'local' : 'subregion', entityType: NATURAL_LOCAL_TYPES.has(type) ? 'point_of_interest' : 'natural_region' };
+  }
   if (type === 'island' || type === 'islet') return { breadth: 'subregion', entityType: 'island' };
   if (type === 'archipelago') return { breadth: 'subregion', entityType: 'archipelago' };
   if (type === 'city' || type === 'town' || type === 'municipality') {
@@ -364,9 +393,16 @@ export function classifyNominatim(place: NominatimPlace): {
   if (category === 'leisure' || category === 'boundary') {
     return { breadth: 'subregion', entityType: 'protected_area' };
   }
-  if (category === 'natural') return { breadth: 'subregion', entityType: 'protected_area' };
   return { breadth: 'city', entityType: 'unknown' };
 }
+
+/** Record classes that are a thing in a place rather than a place: read as a point of interest whatever their address type says. */
+const POINT_CATEGORIES = new Set(['shop', 'office', 'amenity', 'tourism', 'aeroway', 'craft', 'building', 'man_made', 'historic', 'emergency', 'healthcare', 'club', 'military', 'power', 'public_transport', 'information', 'sport', 'attraction', 'leisure_point']);
+const POINT_PLACE_TYPES = new Set(['house', 'houses', 'farm', 'isolated_dwelling', 'allotments', 'square', 'plot', 'locality']);
+/** `place=*` values that name a landscape rather than a settlement. */
+const NATURAL_PLACE_TYPES = new Set(['sea', 'ocean', 'archipelago', 'island', 'islet']);
+/** Natural features small enough to stand on: a peak, a spring, a cave, a tree. */
+const NATURAL_LOCAL_TYPES = new Set(['peak', 'spring', 'cave_entrance', 'tree', 'rock', 'stone', 'saddle', 'hot_spring', 'geyser', 'cliff', 'arch', 'sinkhole', 'volcano', 'hill', 'waterfall', 'bay_point']);
 
 export function boundsOf(place: NominatimPlace):
   | { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } }

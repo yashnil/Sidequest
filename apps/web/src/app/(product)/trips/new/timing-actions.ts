@@ -9,7 +9,7 @@ import {
   type ConcreteWindow,
   type DateWindow,
 } from '@sidequest/core';
-import { climateWithReason } from '@/lib/destinations/preflight';
+import { geographicScaleOf, regionalClimate } from '@/lib/climate/regional';
 import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { isClimateEnabled } from '@/lib/providers/switches';
 import { guardAction } from '@/lib/net/caller';
@@ -44,6 +44,17 @@ const inputSchema = z.object({
   season: z.enum(['spring', 'summer', 'autumn', 'winter']).nullable().default(null),
   earliest: z.string().max(10).nullable().default(null),
   latest: z.string().max(10).nullable().default(null),
+  /**
+   * V8.1 — the destination's extent and scale, when the semantic gate placed
+   * it as an area. A region is read at several points inside its box rather
+   * than at one coordinate; a place with no box or below regional scale is
+   * read at its centre as before. An unrecognised scale reads as a place.
+   */
+  bounds: z
+    .object({ southWest: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }), northEast: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }) })
+    .nullable()
+    .default(null),
+  scale: z.string().max(20).nullable().default(null),
 });
 export type TimingInput = z.input<typeof inputSchema>;
 
@@ -66,6 +77,10 @@ export type TimingResult =
       unknowns: string[];
       attribution: string;
       sampleYears: string;
+      /** V8.1 — how many points across the destination the normals were read at. One for a place; up to three for a region. */
+      sampledPoints: number;
+      /** The sentence about what a regional average hides, when there is one. Also the first entry of `unknowns`. */
+      regionalNote: string | null;
     }
   /**
    * NOT YET, RATHER THAN NOT AT ALL (§5).
@@ -127,7 +142,9 @@ export async function recommendTimingAction(raw: TimingInput): Promise<TimingRes
   }
 
   const now = new Date();
-  const climate = await climateWithReason(centre, now);
+  /* An index pick carries its own box; a typed destination's box and scale arrive from the setup draft. */
+  const extent = entry?.bounds ?? input.bounds ?? null;
+  const climate = await regionalClimate({ center: centre, bounds: extent, scale: geographicScaleOf(input.scale) }, now);
   if (!climate.profile) {
     /*
      * A climate archive that did not answer is not a place without seasons. The
@@ -186,8 +203,10 @@ export async function recommendTimingAction(raw: TimingInput): Promise<TimingRes
     ok: true,
     pick,
     alternatives: placed.slice(1),
-    unknowns: [...guidance.windows[0]!.unknowns],
-    attribution: guidance.attribution,
+    unknowns: [...(climate.note ? [climate.note] : []), ...guidance.windows[0]!.unknowns],
+    attribution: climate.sampled > 1 ? `${guidance.attribution}, read at ${climate.sampled} points across the destination` : guidance.attribution,
     sampleYears: `${guidance.sampleYearFrom}–${guidance.sampleYearTo}`,
+    sampledPoints: climate.sampled,
+    regionalNote: climate.note,
   };
 }

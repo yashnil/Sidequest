@@ -53,6 +53,11 @@ export const CORE_BUDGET = 7;
 export const CORE_ROLE_BUDGET = 2;
 export const DESTINATION_BUDGET = 5;
 
+/** V8.1 — the destination tier's cap for this trip: one more slot where the ground itself asks more (a mountain or wilderness region). */
+export function destinationBudgetFor(ctx: InterviewContext): number {
+  return DESTINATION_BUDGET + (ctx.destination.traits.includes('mountain') || ctx.destination.traits.includes('wilderness') ? 1 : 0);
+}
+
 export type QuestionStatus = 'open' | 'answered' | 'decided' | 'skipped' | 'carried';
 
 export interface PlannedQuestion {
@@ -176,14 +181,21 @@ export function planInterview(input: { ctx: InterviewContext; answers: Questionn
   for (const q of destinationVisible) {
     if (q.status === 'open' && q.definition.criticality < 3 && q.score < WORTH_ASKING_SCORE) demoted.add(q.id);
   }
-  if (destinationVisible.filter((q) => !demoted.has(q.id)).length > DESTINATION_BUDGET) {
+  /*
+   * V8.1 — one more slot where the ground itself asks more: a mountain or
+   * wilderness region has physically meaningful questions (trail length,
+   * altitude, road comfort, where to sleep) that a city does not, and five
+   * slots forced the trail question out behind the route questions.
+   */
+  const budget = destinationBudgetFor(ctx);
+  if (destinationVisible.filter((q) => !demoted.has(q.id)).length > budget) {
     const demotable = destinationVisible
       .filter((q) => q.status === 'open' && q.definition.criticality < 3)
       .sort((a, b) => a.definition.criticality - b.definition.criticality || a.score - b.score || a.id.localeCompare(b.id));
     let kept = destinationVisible.filter((q) => !demoted.has(q.id)).length;
     for (const q of demotable) {
       if (demoted.has(q.id)) continue;
-      if (kept <= DESTINATION_BUDGET) break;
+      if (kept <= budget) break;
       demoted.add(q.id);
       kept -= 1;
     }

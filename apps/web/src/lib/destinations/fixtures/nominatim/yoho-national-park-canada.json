@@ -1,0 +1,45 @@
+[
+ {
+  "place_id": 377549685,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 9368703,
+  "lat": "51.3747764",
+  "lon": "-116.5358482",
+  "category": "leisure",
+  "type": "nature_reserve",
+  "place_rank": 24,
+  "importance": 0.5295430139741558,
+  "addresstype": "nature_reserve",
+  "name": "Yoho National Park",
+  "display_name": "Yoho National Park, Columbia-Shuswap Regional District, British Columbia, Canada",
+  "address": {
+   "nature_reserve": "Yoho National Park",
+   "county": "Columbia-Shuswap Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "website": "https://parks.canada.ca/pn-np/bc/yoho",
+   "boundary": "national_park",
+   "operator": "Parks Canada",
+   "wikidata": "Q828404",
+   "wikipedia": "en:Yoho National Park",
+   "snowmobile": "no",
+   "operator:type": "public",
+   "protect_class": "2",
+   "operator:wikidata": "Q349487"
+  },
+  "namedetails": {
+   "name": "Yoho National Park"
+  },
+  "boundingbox": [
+   "51.1039715",
+   "51.6448944",
+   "-116.7897898",
+   "-116.2577885"
+  ]
+ }
+]

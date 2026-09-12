@@ -1,0 +1,65 @@
+[
+ {
+  "place_id": 88849210,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 1685406,
+  "lat": "46.0212076",
+  "lon": "7.7492540",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.5397707924352323,
+  "addresstype": "town",
+  "name": "Zermatt",
+  "display_name": "Zermatt, Visp, Oberwallis, Valais/Wallis, 3920, Schweiz/Suisse/Svizzera/Svizra",
+  "address": {
+   "town": "Zermatt",
+   "county": "Visp",
+   "state_district": "Oberwallis",
+   "state": "Valais/Wallis",
+   "ISO3166-2-lvl4": "CH-VS",
+   "postcode": "3920",
+   "country": "Schweiz/Suisse/Svizzera/Svizra",
+   "country_code": "ch"
+  },
+  "extratags": {
+   "ele": "1608",
+   "is_in": "Wallis",
+   "website": "https://www.zermatt.ch/",
+   "wikidata": "Q27494",
+   "wikipedia": "de:Zermatt",
+   "population": "5786",
+   "linked_place": "town",
+   "opengeodb:lat": "46.0221644",
+   "opengeodb:lon": "7.7496219",
+   "openGeoDB:name": "Zermatt",
+   "openGeoDB:type": "Gemeinde",
+   "openGeoDB:is_in": "Bezirk Visp,Valais;Wallis,Valais,Schweiz,Europe",
+   "openGeoDB:layer": "6",
+   "openGeoDB:loc_id": "32184",
+   "openGeoDB:version": "0.2.6.11 / 2007-12-04 / http://fa-technik.adfc.de/code/opengeodb/dump/",
+   "openGeoDB:sort_name": "ZERMATT",
+   "openGeoDB:population": "5786",
+   "swisstopo:BFS_NUMMER": "6300",
+   "openGeoDB:auto_update": "population",
+   "openGeoDB:is_in_loc_id": "78686",
+   "openGeoDB:postal_codes": "3920",
+   "openGeoDB:community_identification_number": "G6300",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "Zermatt",
+   "name:ko": "체르마트",
+   "old_name:fr": "Praborgne",
+   "name:ja": "ツェルマット",
+   "name:uk": "Церматт"
+  },
+  "boundingbox": [
+   "45.9167499",
+   "46.0643293",
+   "7.5749926",
+   "7.9086793"
+  ]
+ }
+]

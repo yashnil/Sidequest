@@ -128,7 +128,32 @@ export function toCandidate(place: NominatimPlace, query: string): DestinationCa
       },
     ],
     confidence: assessConfidence(signals),
+    /* V8.1 — the row's own class travels with the candidate so the semantic gate can read it. */
+    providerClass: {
+      ...(place.osm_type === 'node' || place.osm_type === 'way' || place.osm_type === 'relation' ? { osmType: place.osm_type } : {}),
+      ...(place.category ? { category: place.category } : {}),
+      ...(place.type ? { type: place.type } : {}),
+      ...(typeof place.place_rank === 'number' ? { rank: Math.max(0, Math.min(40, Math.round(place.place_rank))) } : {}),
+    },
   };
+}
+
+function insideBounds(point: { lat: number; lng: number }, bounds: NonNullable<DestinationCandidate['bounds']>): boolean {
+  return point.lat >= bounds.southWest.lat && point.lat <= bounds.northEast.lat && point.lng >= bounds.southWest.lng && point.lng <= bounds.northEast.lng;
+}
+
+/**
+ * V7 §2 — a state-typed leading row that the same answer also carries as a
+ * city of the same name inside its box is a city-region. Shared with the
+ * recorded resolver so the corpus reads Chongqing the way production does.
+ */
+export function promoteMunicipalityInPlace(candidates: DestinationCandidate[], query: string): boolean {
+  const lead = candidates[0];
+  if (!lead || lead.entityType !== 'state_or_province' || !lead.bounds) return false;
+  const sibling = candidates.slice(1).find((c) => c.entityType === 'city' && normalizeDestinationQuery(c.displayName) === normalizeDestinationQuery(query) && insideBounds(c.center, lead.bounds!));
+  if (!sibling) return false;
+  candidates[0] = { ...lead, entityType: 'municipality', note: 'Published both as a first-level division and as a city of the same name inside it.' };
+  return true;
 }
 
 /**
@@ -171,12 +196,9 @@ export function createOpenResolver(input: {
        * for a state-typed leading answer, cached like every other.
        */
       const lead = candidates[0];
-      const inside = (point: { lat: number; lng: number }, bounds: NonNullable<DestinationCandidate['bounds']>) =>
-        point.lat >= bounds.southWest.lat && point.lat <= bounds.northEast.lat && point.lng >= bounds.southWest.lng && point.lng <= bounds.northEast.lng;
       /* The same answer often carries the city itself (Chongqing the node inside Chongqing the division): that is the corroboration, with no extra call. */
-      const sibling = lead && lead.entityType === 'state_or_province' && lead.bounds ? candidates.slice(1).find((c) => c.entityType === 'city' && normalizeDestinationQuery(c.displayName) === normalizeDestinationQuery(query) && inside(c.center, lead.bounds!)) : undefined;
-      if (lead && sibling) {
-        candidates[0] = { ...lead, entityType: 'municipality', note: 'Published both as a first-level division and as a city of the same name inside it.' };
+      if (lead && promoteMunicipalityInPlace(candidates, query)) {
+        /* promoted */
       } else if (lead && lead.entityType === 'state_or_province' && lead.bounds) {
         try {
           const settlements = await geocode(query, { limit: 3, featureType: 'settlement', cache: cacheFor<NominatimPlace[]>('nominatim', TTL.geocode) });

@@ -43,6 +43,8 @@ export const DESTINATION_FEATURE_TYPES = [
   'island',
   'national_park',
   'protected_area',
+  /** V8.1 — a named landscape a gate accepted or an interpreter read: a mountain region, a coast, a desert. */
+  'natural_region',
   'landmark',
   'other',
 ] as const;
@@ -60,6 +62,7 @@ export const DESTINATION_FEATURE_TYPE_LABELS: Record<DestinationFeatureType, str
   island: 'Island',
   national_park: 'National park',
   protected_area: 'Protected area',
+  natural_region: 'Natural region',
   landmark: 'Landmark',
   other: 'Place',
 };
@@ -76,6 +79,7 @@ export const FEATURE_TYPE_BREADTH: Record<DestinationFeatureType, z.infer<typeof
   island: 'subregion',
   national_park: 'subregion',
   protected_area: 'subregion',
+  natural_region: 'region',
   landmark: 'local',
   other: 'city',
 };
@@ -95,6 +99,7 @@ export const FEATURE_TYPE_ENTITY: Record<
   island: 'island',
   national_park: 'protected_area',
   protected_area: 'protected_area',
+  natural_region: 'natural_region',
   landmark: 'unknown',
   other: 'unknown',
 };

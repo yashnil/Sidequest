@@ -52,6 +52,8 @@ export const PROMPT_VERSIONS = {
    * prompt comes to be changed without its version moving.
    */
   interpretPreferences: 'interpret-preferences/2026-08-03.1',
+  /** V8.1 — reading a destination phrase as a geographic concept: a type, a scale, countries and names, never a coordinate. */
+  interpretDestinationConcept: 'interpret-destination-concept/2026-09-11.1',
 } as const;
 
 /**

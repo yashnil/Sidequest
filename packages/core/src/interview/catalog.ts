@@ -1226,7 +1226,8 @@ const RUSTIC_LODGING: QuestionDefinition = choice({
   impacts: ['lodging', 'base_count', 'remote_logistics'],
   burden: 1,
   criticality: 1,
-  relevance: (ctx) => (t(ctx, 'remote') || t(ctx, 'wilderness') ? 1 : 0),
+  /* V8.1 — in mountain country the bed near the trailhead is a hut, a camp or a lodge; the question is whether the plan may use one. */
+  relevance: (ctx) => (t(ctx, 'remote') || t(ctx, 'wilderness') || t(ctx, 'mountain') ? 1 : 0),
   read: (answers) => (answers.rusticLodgingOk ? 'yes' : 'no'),
   apply: (value, answers) => ({ rusticLodgingOk: value !== 'no', ...(value !== 'no' && answers.lodgingStyle === 'no_preference' ? { lodgingStyle: 'nature_lodge' as const } : {}) }),
   smartDefault: () => ({ value: 'yes', reason: "We'll assume a simple bed near the good stuff beats a hotel two hours away.", source: 'destination_prior' }),
@@ -1293,9 +1294,11 @@ const HIKE_APPETITE: QuestionDefinition = choice({
     { value: 'short', label: 'Three easy scenic stops', detail: 'Short walks from the car park' },
     { value: 'none', label: 'No real hikes', detail: 'Viewpoints and easy paths only' },
   ],
-  impacts: ['effort', 'activity_frequency', 'day_density'],
+  /* V8.1 — `scope` too: a full-day hike decides how far that day can reach. */
+  impacts: ['effort', 'activity_frequency', 'day_density', 'scope'],
   burden: 1,
-  criticality: 1,
+  /* V8.1 — criticality 2: in a mountain region the length of the trail decides the shape of most days, and the trail-setting question depends on it. */
+  criticality: 2,
   relevance: (ctx, answers) => (chosenInterests(answers).includes('hiking') || t(ctx, 'mountain') || t(ctx, 'wilderness') ? 1 : 0),
   read: (answers) => answers.hikeAppetite,
   apply: (value, answers) => {
@@ -1323,10 +1326,78 @@ const ALTITUDE_COMFORT: QuestionDefinition = choice({
   hardCapable: true,
   burden: 1,
   criticality: 2,
-  relevance: (ctx) => (t(ctx, 'high_altitude') || ctx.traveller.travelerNeeds.includes('altitude_sensitive') ? 1 : 0),
+  /* V8.1 — a mountain region exposes the traveller to elevation whether or not a compiled region has measured a peak yet. */
+  relevance: (ctx) => (t(ctx, 'high_altitude') || t(ctx, 'mountain') || ctx.traveller.travelerNeeds.includes('altitude_sensitive') ? 1 : 0),
   read: (answers) => answers.altitudeComfort,
   apply: (value) => ({ altitudeComfort: (['fine', 'take_it_slow', 'avoid_high'].includes(String(value)) ? String(value) : 'fine') as QuestionnaireAnswers['altitudeComfort'] }),
   smartDefault: (ctx) => (ctx.traveller.travelerNeeds.includes('altitude_sensitive') ? { value: 'take_it_slow', reason: 'You told us somebody is sensitive to altitude, so the first days stay low and easy.', source: 'smart_default' } : { value: 'take_it_slow', reason: "We'll pace the first days for the altitude — easy starts, sleeping low — which costs nothing if you turn out to be fine.", source: 'destination_prior' }),
+});
+
+/**
+ * V8.1 — TWO QUESTIONS ONLY A MOUNTAIN OR WILDERNESS REGION EARNS.
+ *
+ * "The Canadian Rockies" used to be interviewed like a city because the
+ * geocoder had resolved it to one (`.claude-private/V8.1-DESTINATION-FAILURE.md`).
+ * With the semantic reading in place the `mountain`/`wilderness` traits are
+ * real, and the questions that change a mountain plan most are where the
+ * trail starts and ends, and whether the permit-bound days shape the trip.
+ */
+const TRAIL_SETTING: QuestionDefinition = choice({
+  id: 'trail_setting',
+  module: 'altitude_outdoor',
+  tier: 'destination',
+  kind: 'scenario',
+  prompt: () => 'Front-country or backcountry?',
+  why: (ctx) => `In ${ctx.destination.proseName} the same mountain offers a marked trail from a car park and a two-day approach to a hut. This decides which kind of day the plan may build.`,
+  options: () => [
+    { value: 'frontcountry', label: 'Front-country', detail: 'Marked trails, car parks, back by dinner' },
+    { value: 'mixed', label: 'Mostly front-country', detail: 'With one bigger day if it earns its place' },
+    { value: 'backcountry', label: 'Backcountry', detail: 'Huts, long approaches, real remoteness' },
+  ],
+  impacts: ['effort', 'remote_logistics', 'lodging'],
+  burden: 1,
+  criticality: 2,
+  /* Asked once the trail length is known: where a day starts and ends only makes sense after how long it is. */
+  dependsOn: ['hike_appetite'],
+  relevance: (ctx) => (t(ctx, 'mountain') || t(ctx, 'wilderness') ? 1 : 0),
+  read: (answers) => answers.trailSetting,
+  apply: (value, answers) => {
+    const setting = (['frontcountry', 'mixed', 'backcountry'].includes(String(value)) ? String(value) : 'mixed') as QuestionnaireAnswers['trailSetting'];
+    return {
+      trailSetting: setting,
+      /* A backcountry day is a hut or a camp by definition; a front-country-only traveller has said nothing about beds. */
+      ...(setting === 'backcountry' ? { rusticLodgingOk: true } : {}),
+      ...(setting === 'frontcountry' && answers.hikeAppetite === 'full_day' ? { hikeAppetite: 'half_day' as const } : {}),
+    };
+  },
+  smartDefault: (_ctx, answers) =>
+    answers.hikeAppetite === 'full_day' && answers.rusticLodgingOk
+      ? { value: 'mixed', reason: 'You want a real hike and a simple bed is fine, so one bigger day with a hut or camp is on the table; the rest stays front-country.', source: 'smart_default' }
+      : answers.hikeAppetite === 'none' || answers.hikeAppetite === 'short'
+        ? { value: 'frontcountry', reason: 'Short walks from the car park keep every day front-country.', source: 'smart_default' }
+        : { value: 'mixed', reason: "We'll keep the days front-country — marked trails, back by dinner — and leave room for one bigger day.", source: 'destination_prior' },
+});
+
+const PERMIT_ACTIVITIES: QuestionDefinition = choice({
+  id: 'permit_activities',
+  module: 'altitude_outdoor',
+  tier: 'destination',
+  prompt: () => 'Some of the best days here need a permit or a booking weeks ahead.',
+  why: () => 'A trail quota, a hut bed, a park shuttle or a guided crossing is booked long before the trip. This decides whether the plan is built around those days or leaves them out.',
+  options: () => [
+    { value: 'build_around', label: 'Build around them', detail: 'Plan the best days and tell me exactly what to book' },
+    { value: 'keep_flexible', label: 'Keep it flexible', detail: 'Skip anything that needs a permit or an early booking' },
+  ],
+  impacts: ['activity_frequency', 'scope', 'day_density'],
+  burden: 1,
+  criticality: 1,
+  relevance: (ctx) => (t(ctx, 'mountain') || t(ctx, 'wilderness') ? 1 : 0),
+  read: (answers) => answers.permitSensitiveActivities,
+  apply: (value) => ({ permitSensitiveActivities: (value === 'build_around' ? 'build_around' : 'keep_flexible') as QuestionnaireAnswers['permitSensitiveActivities'] }),
+  smartDefault: (_ctx, answers) =>
+    answers.hikeAppetite === 'full_day' || answers.trailSetting === 'backcountry'
+      ? { value: 'build_around', reason: 'You want the big days, and the big days here are the ones that need booking, so the plan is built around them and says what to book.', source: 'smart_default' }
+      : { value: 'keep_flexible', reason: "We'll keep the plan flexible and leave out anything that needs a permit weeks ahead; say so if a permit-bound day is the point.", source: 'destination_prior' },
 });
 
 const COVERAGE_STRATEGY: QuestionDefinition = choice({
@@ -1591,6 +1662,8 @@ export const DESTINATION_QUESTIONS: readonly QuestionDefinition[] = [
   INTERNAL_FLIGHTS,
   HIKE_APPETITE,
   ALTITUDE_COMFORT,
+  TRAIL_SETTING,
+  PERMIT_ACTIVITIES,
   EVERYONE_EVERY_DAY,
   WEATHER_AVOIDANCES,
 ];

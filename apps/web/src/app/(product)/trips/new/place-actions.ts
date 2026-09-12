@@ -1,10 +1,10 @@
 'use server';
 
-import { countryFromText, foldForMatch, intentIsComposite, parseDestinationIntent, sanitizePlaceText, type DestinationIndexEntry, type IntentNodeKind } from '@sidequest/core';
+import { countryFromText, foldForMatch, parseDestinationIntent, sanitizePlaceText, type DestinationIndexEntry, type IntentNodeKind } from '@sidequest/core';
 import { entriesByPrefix } from '@/lib/db/destination-index-repository';
 import { verificationProviders } from '@/lib/planning/verification-providers';
 import { guardAction } from '@/lib/net/caller';
-import { resolveIntentGraph } from '@/lib/destinations/intent-resolution';
+import { resolveDestinationPhrase, type GraphResolutionOutcome } from '@/lib/destinations/intent-resolution';
 
 /**
  * WHERE THE TYPED WORDS ARE, BEFORE ANY TRIP EXISTS.
@@ -52,7 +52,7 @@ export interface PlacedDestination {
   featureType?: string;
   countryCode?: string;
   /** Which tier answered. Never rendered as-is; the UI decides what to say about certainty. */
-  source: 'index' | 'reference' | 'geocoder' | 'composite';
+  source: 'index' | 'reference' | 'geocoder' | 'composite' | 'interpretation';
   /** The populated place a country-scale coordinate names, so a climate answer can say where it was read. */
   referencePoint?: string;
   /**
@@ -62,6 +62,15 @@ export interface PlacedDestination {
    */
   parts?: { label: string; kind: IntentNodeKind; placed: boolean }[];
   crossBorder?: boolean;
+  /**
+   * V8.1 — the semantic reading: what kind of thing, at what scale, how the
+   * extent was arrived at, and the gateways (context, never the destination).
+   * The canvas frames and captions from these rather than from a row's class.
+   */
+  semanticType?: string;
+  scale?: string;
+  extentSource?: string;
+  gateways?: string[];
 }
 
 export type PlaceResult =
@@ -89,88 +98,60 @@ export async function placeDestinationAction(raw: { text: string }): Promise<Pla
         ...(indexed.featureType ? { featureType: indexed.featureType } : {}),
         ...(indexed.countryCode ? { countryCode: indexed.countryCode } : {}),
         source: 'index',
+        extentSource: indexed.bounds ? 'published' : 'none',
+        gateways: [],
+      },
+    };
+  }
+
+  /* 2 — the bundled country reference. No network, no database, no failure mode. */
+  const graph = parseDestinationIntent(query);
+  const bare = graph.children.length === 1 && graph.children[0]!.kind === 'country' ? countryFromText(query) : null;
+  if (bare) {
+    return {
+      ok: true,
+      placed: {
+        query,
+        name: bare.how === 'name' ? bare.facts.name : query,
+        center: { lat: bare.point.lat, lng: bare.point.lng },
+        bounds: null,
+        featureType: 'country',
+        countryCode: bare.facts.code,
+        source: 'reference',
+        referencePoint: bare.point.place,
+        semanticType: 'country',
+        scale: 'country',
+        extentSource: 'none',
+        gateways: [],
       },
     };
   }
 
   /*
-   * V7 §2 — A PHRASE THAT NAMES MORE THAN ONE THING IS PLACED AS THEIR UNION.
-   *
-   * "Kenya and Tanzania" used to fall through every tier: the reference found
-   * two countries and returned none, the geocoder found nothing for the
-   * phrase. The intent graph places each part by the cheapest tier that can
-   * (the reference for a country, the resolver for a named part, capped) and
-   * the canvas frames the box that holds all of them.
+   * 3 — the intent graph, resolved part by part through the semantic gate
+   * (`lib/destinations/intent-resolution.ts`). V7 placed a phrase that names
+   * more than one thing as their union; V8.1 sends *every* phrase through the
+   * same path, because the door that handed a single part's raw text to the
+   * geocoder and adopted its first row is how "the Canadian Rockies" became a
+   * shop in Calgary. A country child costs nothing; a named part costs one
+   * geocoder call behind the fence that exists for it; a region the evidence
+   * cannot settle may cost the interpreter one bounded reading.
    */
-  const graph = parseDestinationIntent(query);
-  if (intentIsComposite(graph) || graph.children[0]!.kind === 'vague_region') {
-    const { resolver } = verificationProviders();
-    const limited = resolver && graph.children.some((c) => c.kind !== 'country' && c.kind !== 'vague_region') ? await guardAction('destination_resolve') : null;
-    const outcome = await resolveIntentGraph({ graph, resolver: limited ? null : resolver, now: new Date(), maxGeocoderCalls: 2 });
-    const placed = outcome.graph;
-    const parts = placed.children.map((c) => ({ label: c.label, kind: c.kind, placed: Boolean(c.resolution) }));
-    if (placed.envelope) {
-      const only = placed.children.length === 1 ? placed.children[0]! : null;
-      return {
-        ok: true,
-        placed: {
-          query,
-          name: placed.travellerLabel,
-          center: placed.envelope.center,
-          bounds: placed.envelope.bounds ?? null,
-          featureType: only?.resolution?.featureType ?? (placed.crossBorder ? 'multi_country' : 'composite'),
-          ...(placed.countries.length === 1 ? { countryCode: placed.countries[0]! } : {}),
-          source: only?.resolution?.source ?? 'composite',
-          ...(only?.resolution?.source === 'reference' ? { referencePoint: only.resolution.label } : {}),
-          parts,
-          crossBorder: placed.crossBorder,
-        },
-      };
-    }
-    return { ok: true, placed: null, reason: resolver ? 'unresolved' : 'no_resolver' };
-  }
-
-  /* 2 — the bundled country reference. No network, no database, no failure mode. */
-  const country = countryFromText(query);
-  if (country) {
-    return {
-      ok: true,
-      placed: {
-        query,
-        name: country.how === 'name' ? country.facts.name : query,
-        center: { lat: country.point.lat, lng: country.point.lng },
-        bounds: null,
-        featureType: 'country',
-        countryCode: country.facts.code,
-        source: 'reference',
-        referencePoint: country.point.place,
-      },
-    };
-  }
-
-  /* 3 — the configured geocoder, once, behind the fence that exists for it. */
   const { resolver } = verificationProviders();
-  if (!resolver) return { ok: true, placed: null, reason: 'no_resolver' };
-
-  const limited = await guardAction('destination_resolve');
-  if (limited) return { ok: true, placed: null, reason: 'rate_limited' };
-
+  const needsResolver = graph.children.some((c) => c.kind !== 'country' && c.kind !== 'vague_region');
+  if (needsResolver && !resolver) {
+    /* No geocoder: a country in the phrase still places it; anything else stays honestly unplaced. */
+    const offline = await resolveDestinationPhrase({ text: query, resolver: null, now: new Date(), interpreter: null });
+    return placedFrom(query, offline.outcome, 'no_resolver');
+  }
+  const limited = needsResolver ? await guardAction('destination_resolve') : null;
+  if (limited) {
+    const offline = await resolveDestinationPhrase({ text: query, resolver: null, now: new Date(), interpreter: null });
+    return placedFrom(query, offline.outcome, 'rate_limited');
+  }
   try {
-    const resolution = await resolver.resolve({ query, now: new Date() });
-    const candidate = resolution.candidates[0];
-    if (!candidate) return { ok: true, placed: null, reason: 'unresolved' };
-    return {
-      ok: true,
-      placed: {
-        query,
-        name: candidate.displayName,
-        center: candidate.center,
-        bounds: candidate.bounds ?? null,
-        featureType: candidate.entityType,
-        ...(candidate.countryCode ? { countryCode: candidate.countryCode } : {}),
-        source: 'geocoder',
-      },
-    };
+    const { outcome } = await resolveDestinationPhrase({ text: query, resolver, now: new Date() });
+    return placedFrom(query, outcome, 'unresolved');
   } catch (error) {
     /*
      * A provider that failed is not a place that does not exist (§5). The caller
@@ -179,6 +160,34 @@ export async function placeDestinationAction(raw: { text: string }): Promise<Pla
     console.warn('A typed destination could not be placed', { reason: error instanceof Error ? error.name : 'unknown' });
     return { ok: true, placed: null, reason: 'provider_failed' };
   }
+}
+
+/** The placed shape from a resolved graph, or the reason it stayed unplaced. */
+function placedFrom(query: string, outcome: GraphResolutionOutcome, reason: 'unresolved' | 'no_resolver' | 'rate_limited'): PlaceResult {
+  const { graph, semantics } = outcome;
+  const only = graph.children.length === 1 ? graph.children[0]! : null;
+  const centre = semantics.center ?? graph.envelope?.center ?? null;
+  if (!centre) return { ok: true, placed: null, reason };
+  const parts = graph.children.map((c) => ({ label: c.label, kind: c.kind, placed: Boolean(c.resolution) }));
+  const featureType = only?.resolution?.featureType ?? (graph.crossBorder ? 'multi_country' : 'composite');
+  return {
+    ok: true,
+    placed: {
+      query,
+      name: semantics.label,
+      center: centre,
+      bounds: semantics.extent?.bounds ?? graph.envelope?.bounds ?? null,
+      featureType: semantics.type === 'mountain_region' || semantics.type === 'natural_region' || semantics.type === 'coast' ? 'natural_region' : featureType,
+      ...(semantics.countries.length === 1 ? { countryCode: semantics.countries[0]! } : {}),
+      source: only?.resolution?.source ?? 'composite',
+      ...(only?.resolution?.source === 'reference' ? { referencePoint: only.resolution.label } : {}),
+      ...(graph.children.length > 1 ? { parts, crossBorder: graph.crossBorder } : {}),
+      semanticType: semantics.type,
+      scale: semantics.scale,
+      extentSource: semantics.extent?.source ?? 'none',
+      gateways: semantics.gateways.map((g) => g.label),
+    },
+  };
 }
 
 /**

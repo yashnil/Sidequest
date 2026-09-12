@@ -1,0 +1,44 @@
+[
+ {
+  "place_id": 271892832,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 25706756,
+  "lat": "56.6827647",
+  "lon": "-5.1014552",
+  "category": "place",
+  "type": "village",
+  "place_rank": 19,
+  "importance": 0.4516019431702966,
+  "addresstype": "village",
+  "name": "Glencoe",
+  "display_name": "Glencoe, Highland, Alba / Scotland, PH49 4HS, United Kingdom",
+  "address": {
+   "village": "Glencoe",
+   "county": "Highland",
+   "ISO3166-2-lvl6": "GB-HLD",
+   "state": "Alba / Scotland",
+   "ISO3166-2-lvl4": "GB-SCT",
+   "postcode": "PH49 4HS",
+   "country": "United Kingdom",
+   "country_code": "gb"
+  },
+  "extratags": {
+   "wikidata": "Q956688",
+   "wikipedia": "en:Glencoe, Highland",
+   "population": "312"
+  },
+  "namedetails": {
+   "name": "Glencoe",
+   "name:en": "Glencoe",
+   "name:gd": "A’ Chàrnaich",
+   "alt_name": "Glencoe Village;Carnoch"
+  },
+  "boundingbox": [
+   "56.6627647",
+   "56.7027647",
+   "-5.1214552",
+   "-5.0814552"
+  ]
+ }
+]

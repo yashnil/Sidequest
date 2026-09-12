@@ -150,6 +150,8 @@ export * from './pricing/model-rates';
 
 export * from './destinations/intent';
 export * from './destinations/intent-graph';
+export * from './destinations/semantics';
+export * from './climate/regional';
 export * from './destinations/normalize';
 export * from './destinations/match';
 export * from './destinations/provider';

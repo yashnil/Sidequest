@@ -51,3 +51,40 @@ describe('the timing recommendation when the evidence is not there', () => {
     expect(result.ok === false ? result.note : '').toMatch(/Sidequest will choose the best window/);
   });
 });
+
+describe('V8.1 — a region is compared at several points, and says so', () => {
+  it('reads a regional box at three points and puts the spread sentence first among the unknowns', async () => {
+    process.env.SIDEQUEST_CLIMATE_PROVIDER = 'fixture';
+    const { recommendTimingAction } = await import('./timing-actions');
+    const result = await recommendTimingAction({
+      entryId: null,
+      lat: 51.5,
+      lng: -116.5,
+      bounds: { southWest: { lat: 49, lng: -119 }, northEast: { lat: 54, lng: -114 } },
+      scale: 'region',
+      nights: 7,
+      months: [],
+      season: null,
+      earliest: null,
+      latest: null,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.sampledPoints).toBe(3);
+    expect(result.regionalNote).toMatch(/^Compared 3 points across the region/);
+    expect(result.unknowns[0]).toBe(result.regionalNote);
+    expect(result.attribution).toMatch(/3 points across the destination/);
+    expect(result.regionalNote).not.toMatch(/%/);
+  });
+
+  it('reads a town at one point with no hedge, and ignores a scale it does not recognise', async () => {
+    process.env.SIDEQUEST_CLIMATE_PROVIDER = 'fixture';
+    const { recommendTimingAction } = await import('./timing-actions');
+    const result = await recommendTimingAction({ entryId: null, lat: 48.2, lng: 16.4, bounds: { southWest: { lat: 48.1, lng: 16.2 }, northEast: { lat: 48.3, lng: 16.6 } }, scale: 'shop', nights: 5, months: [], season: null, earliest: null, latest: null });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.sampledPoints).toBe(1);
+    expect(result.regionalNote).toBeNull();
+    expect(result.unknowns.some((u) => /points across/.test(u))).toBe(false);
+  });
+});

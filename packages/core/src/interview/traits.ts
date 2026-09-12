@@ -2,6 +2,7 @@ import type { DestinationEntityType, ScopeBreadth } from '../schemas/geography';
 import type { TransportMode } from '../schemas/access';
 import type { TravelerNeed } from '../schemas/trip';
 import type { TravelReality } from '../reality/schema';
+import { GEOGRAPHIC_SEMANTIC_TYPE_LABELS, type GeographicScale, type GeographicSemanticType } from '../destinations/semantics';
 
 /**
  * DESTINATION SCREENING — GENERIC TRAITS, EACH WITH THE EVIDENCE THAT EARNED IT.
@@ -144,6 +145,13 @@ export interface ScreeningSignals {
   countries?: readonly string[];
   /** V7 — the shape of the intent graph, when one was recorded. */
   intent?: { parts: number; crossBorder: boolean; kinds: readonly string[]; relationship: string };
+  /**
+   * V8.1 — what kind of thing the destination is and at what scale, once the
+   * semantic gate has read the evidence: a mountain region, a coast, a desert,
+   * a travel region. The landscape word the traveller used is kept so a desert
+   * can be told from a lake district without either being named.
+   */
+  semantic?: { type: GeographicSemanticType; scale: GeographicScale; landscape?: string; extentSource?: string; gateways?: number };
 }
 
 export type ScreeningEvidence = 'screened' | 'partial' | 'none';
@@ -209,12 +217,24 @@ const SCALE_LABEL: Record<DestinationEntityType, string> = {
   island: 'An island',
   archipelago: 'A group of islands',
   protected_area: 'A park or protected area',
+  natural_region: 'A natural region',
   subregion: 'A region',
   state_or_province: 'A state or province',
   country: 'A whole country',
   multi_country: 'Several countries',
   route_or_corridor: 'A route',
   unknown: '',
+};
+
+const SCALE_WORDS: Record<GeographicScale, string> = {
+  point: 'A single place',
+  neighbourhood: 'A neighbourhood',
+  settlement: 'A town',
+  district: 'A district',
+  subregion: 'A sub-region',
+  region: 'A region hundreds of kilometres across',
+  country: 'An area the size of a country',
+  continental: 'An area spanning several countries',
 };
 
 function diagonalKm(bounds: NonNullable<ScreeningSignals['bounds']>): number {
@@ -310,6 +330,34 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   if (allowed.has('ferry')) add('water_transfer', 'The trip scope allows ferries.');
   if (classes.has('coastal')) add('beach', 'The coast is part of what this place is known for.');
 
+  // --- V8.1: the semantic reading — what kind of place, from the gate, never from a name ----
+  const semantic = signals.semantic;
+  const landscape = semantic?.landscape?.toLowerCase() ?? '';
+  const WILD = /\b(desert|delta|jungle|rainforest|outback|tundra|savanna|savannah|wetlands|marsh|bush|glacier|steppe|steppes|dunes|caldera|rift)\b/;
+  if (semantic?.type === 'mountain_region') {
+    add('mountain', 'You named a mountain region: trails, passes, altitude and weather shape every day.');
+    add('road_trip_region', 'A mountain region is reached by its roads and valleys, not one centre (a prior; the transport question checks it).');
+    add('weather_exposed', 'Mountain days happen outdoors and turn on the weather.');
+  } else if (semantic?.type === 'coast') {
+    add('beach', 'You named a coast.');
+    add('weather_exposed', 'Coastal days happen outdoors.');
+  } else if (semantic?.type === 'natural_region' || entity === 'natural_region') {
+    add('weather_exposed', 'A landscape is seen outdoors, so the days depend on the weather.');
+    add('road_trip_region', 'A natural region is covered along its roads and tracks (a prior; the transport question checks it).');
+    if (WILD.test(landscape)) {
+      add('wilderness', `You named a ${landscape}: services are thin and distances real.`);
+      add('remote', `A ${landscape} is far from most services by nature.`);
+    }
+  } else if (semantic?.type === 'island_group') {
+    add('archipelago', 'You named a group of islands.');
+    add('water_transfer', 'Moving between islands means boats or short flights.');
+  } else if (semantic?.type === 'informal_region') {
+    add('road_trip_region', 'A travel region is usually covered by road (a prior; the transport question checks it).');
+  }
+  if (semantic && (semantic.scale === 'region' || semantic.scale === 'country' || semantic.scale === 'continental') && extentKm === undefined) {
+    add('broad_geography', `${SCALE_WORDS[semantic.scale]} — more than one trip covers.`);
+  }
+
   // --- mountains, altitude, wilderness ------------------------------------------
   if (classes.has('mountain')) add('mountain', 'Trails, peaks and high ground are part of what was found here.');
   if (entity === 'protected_area' || featureType === 'national_park' || featureType === 'protected_area') {
@@ -388,7 +436,8 @@ export function screenDestination(signals: ScreeningSignals): DestinationQuestio
   // --- the understanding lines and the assumption to check --------------------------
   const evidence: ScreeningEvidence = signalCount === 0 ? 'none' : signalCount >= 3 ? 'screened' : 'partial';
   const understanding: string[] = [];
-  const scaleLabel = entity && entity !== 'unknown' ? SCALE_LABEL[entity] : undefined;
+  /* V8.1 — the semantic reading names the kind of thing ("A mountain region") before a row's class does. */
+  const scaleLabel = semantic && semantic.type !== 'unknown' ? GEOGRAPHIC_SEMANTIC_TYPE_LABELS[semantic.type] : entity && entity !== 'unknown' ? SCALE_LABEL[entity] : undefined;
   if (scaleLabel) understanding.push(scaleLabel);
   const headlineTraits = (['dense_urban', 'mountain', 'island', 'archipelago', 'wilderness', 'broad_geography', 'compact_country', 'road_trip_region', 'beach'] as DestinationTrait[]).filter((t) => traits.has(t));
   if (headlineTraits.length > 0) understanding.push(headlineTraits.map((t) => DESTINATION_TRAIT_LABELS[t]).slice(0, 3).join(' · '));

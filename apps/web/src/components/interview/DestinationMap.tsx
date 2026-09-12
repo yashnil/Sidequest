@@ -22,6 +22,16 @@ export interface DestinationGeometry {
   center: { lat: number; lng: number };
   bounds?: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } } | null;
   featureType?: string;
+  /**
+   * V8.1 — the semantic reading. `scale` sets how wide to frame when nobody
+   * published an extent (a mountain region is never a 40 km box around one
+   * point); `extentSource` says how the frame was arrived at, so the caption
+   * never calls a box drawn around representative areas a published extent;
+   * `gateways` are named in the caption as context, never drawn as the destination.
+   */
+  scale?: string;
+  extentSource?: string;
+  gateways?: string[];
 }
 
 const URBAN_FEATURES = new Set(['city', 'town', 'district', 'neighbourhood', 'metro_area']);
@@ -35,12 +45,29 @@ const URBAN_FEATURES = new Set(['city', 'town', 'district', 'neighbourhood', 'me
  */
 const FRAME_KM: Record<string, number> = {
   country: 800,
+  multi_country: 1200,
   dependency: 300,
   region: 200,
+  natural_region: 260,
+  state_or_province: 200,
+  subregion: 120,
   county: 90,
   island: 90,
+  archipelago: 200,
   national_park: 60,
   protected_area: 60,
+};
+
+/** V8.1 — the same rule keyed on the semantic scale, which outranks a row's class when both are known. */
+const SCALE_KM: Record<string, number> = {
+  point: 3,
+  neighbourhood: 6,
+  settlement: 14,
+  district: 45,
+  subregion: 120,
+  region: 260,
+  country: 800,
+  continental: 1600,
 };
 
 export type ConceptualMovement = 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | null;
@@ -191,7 +218,7 @@ export function DestinationMap({
        * kilometres long. Keyed on the published feature type, so it is the same
        * rule for every country and no destination is named.
        */
-      const frameKm = rangeKm ?? FRAME_KM[geometry.featureType ?? ''] ?? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 12 : 40);
+      const frameKm = rangeKm ?? SCALE_KM[geometry.scale ?? ''] ?? FRAME_KM[geometry.featureType ?? ''] ?? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 12 : 40);
       const dLat = frameKm / 111;
       const dLng = frameKm / (111 * Math.max(0.2, Math.cos((geometry.center.lat * Math.PI) / 180)));
       fitPoints.push({ lat: geometry.center.lat + dLat, lng: geometry.center.lng + dLng }, { lat: geometry.center.lat - dLat, lng: geometry.center.lng - dLng });
@@ -199,11 +226,22 @@ export function DestinationMap({
     return { markers, connectors, fitPoints };
   }, [geometry, rangeKm, bases, movement, dayTrips, tiles]);
   const extent = geometry.bounds ? `about ${Math.round(kmBetween(geometry.bounds.southWest, geometry.bounds.northEast))} km corner to corner` : null;
+  /* V8.1 — what the thin frame is, honestly: a published edge, the box around the parts of the phrase, or the box around areas inside a region. */
+  const frameSentence = geometry.bounds
+    ? geometry.extentSource === 'interpreted_parts'
+      ? 'The thin frame holds the areas inside this region that could be placed; the region itself has no published edge. '
+      : geometry.extentSource === 'union_of_parts'
+        ? 'The thin frame holds every part of what you named. '
+        : 'The thin frame is the destination’s published extent. '
+    : geometry.scale === 'region' || geometry.scale === 'country' || geometry.scale === 'continental' || geometry.scale === 'subregion'
+      ? 'Nobody publishes an edge for this, so it is framed at regional scale rather than as a point. '
+      : '';
+  const gatewaySentence = geometry.gateways && geometry.gateways.length > 0 ? ` Gateways: ${geometry.gateways.slice(0, 3).join(', ')}.` : '';
   const conceptual = bases >= 2 || dayTrips === 'one_day_trip' || dayTrips === 'several' || movement === 'transit_walk';
   const movementWord = movement === 'car' ? 'by car' : movement === 'transit_walk' ? 'on foot and by transit' : movement === 'guided' ? 'with guides and transfers' : movement === 'boat' ? 'by boat' : movement === 'mixed' ? 'by car where it helps' : null;
-  const captionText = `${geometry.bounds ? 'The thin frame is the destination’s published extent. ' : ''}${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it' : 'One base, days out from it') : `A moving route with ${bases} bases`}${movementWord ? `, ${movementWord}` : ''}. ${
+  const captionText = `${frameSentence}${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it' : 'One base, days out from it') : `A moving route with ${bases} bases`}${movementWord ? `, ${movementWord}` : ''}. ${
     bases >= 2 ? 'The hollow marks are bases still to be chosen.' : dayTrips === 'one_day_trip' || dayTrips === 'several' ? 'The outer marks are days out still to be chosen.' : conceptual ? '' : rangeKm === null ? 'No range is drawn until you decide how far the trip should reach.' : 'The ring is the reach you chose.'
-  }`.trim();
+  }${gatewaySentence}`.trim();
   return (
     <div className={cx('min-w-0', className)} data-testid="destination-map">
       <InteractiveMap
@@ -218,12 +256,13 @@ export function DestinationMap({
         width={420}
         height={compact ? 280 : 300}
         chromeless={chromeless || compact}
-        summary={`${geometry.name}${extent ? `, ${extent}` : ''}. ${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it.' : 'One base with days out from it.') : 'A moving route between bases.'}`}
+        summary={`${geometry.name}${extent ? `, ${extent}` : ''}. ${shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it.' : 'One base with days out from it.') : 'A moving route between bases.'}${gatewaySentence}`}
         caption={
           <span>
-            {geometry.bounds ? 'The thin frame is the destination’s published extent. ' : ''}
+            {frameSentence}
             {shape === 'stay_put' ? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 'One base, the city around it' : 'One base, days out from it') : `A moving route with ${bases} bases`}
             {movementWord ? `, ${movementWord}` : ''}.{' '}
+            {gatewaySentence ? <span data-testid="destination-map-gateways">{gatewaySentence.trim()} </span> : null}
             {/*
               ONE LINE FOR THE MARKS NOBODY HAS CHOSEN YET.
 

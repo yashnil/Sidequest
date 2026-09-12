@@ -1,0 +1,39 @@
+[
+ {
+  "place_id": 34412902,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 13979637,
+  "lat": "-19.2945810",
+  "lon": "23.2938892",
+  "category": "leisure",
+  "type": "nature_reserve",
+  "place_rank": 24,
+  "importance": 0.311877314681546,
+  "addresstype": "nature_reserve",
+  "name": "NG/28 Moremi Game Reserve",
+  "display_name": "NG/28 Moremi Game Reserve, North-West District, Botswana",
+  "address": {
+   "nature_reserve": "NG/28 Moremi Game Reserve",
+   "state": "North-West District",
+   "ISO3166-2-lvl4": "BW-NW",
+   "country": "Botswana",
+   "country_code": "bw"
+  },
+  "extratags": {
+   "boundary": "protected_area",
+   "wikidata": "Q353112",
+   "protect_class": "2",
+   "protection_title": "Game Reserve"
+  },
+  "namedetails": {
+   "name": "NG/28 Moremi Game Reserve"
+  },
+  "boundingbox": [
+   "-19.6029797",
+   "-18.9862160",
+   "22.5545785",
+   "23.8821917"
+  ]
+ }
+]

@@ -42,6 +42,8 @@ export const DESTINATION_ENTITY_TYPES = [
   'island',
   'archipelago',
   'protected_area',
+  /** V8.1 — a named landscape: a mountain range, a desert, a delta, a valley, a coast. Not administrative, not protected by law. */
+  'natural_region',
   'subregion',
   'state_or_province',
   'country',
@@ -61,6 +63,7 @@ export const DESTINATION_ENTITY_TYPE_LABELS: Record<DestinationEntityType, strin
   island: 'An island',
   archipelago: 'A group of islands',
   protected_area: 'A park or protected area',
+  natural_region: 'A natural region',
   subregion: 'A region',
   state_or_province: 'A state or province',
   country: 'A whole country',

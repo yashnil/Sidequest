@@ -66,8 +66,9 @@ export default async function BuildPage({ params }: { params: Promise<{ id: stri
   /* The same map the review showed, so the screens read as one continuous surface. */
   const intent = getIntent(id);
   const selected = intent?.selectedDestination ?? intent?.resolution?.candidates.find((c) => c.id === (intent?.selectedCandidateId ?? intent?.resolution?.unambiguousCandidateId)) ?? intent?.resolution?.candidates[0] ?? null;
+  const semantics = intent?.destinationIntent?.semantics ?? null;
   let geometry: DestinationGeometry | null = selected?.center
-    ? { name: selected.displayName ?? trip.basics.destinationInput, center: selected.center, bounds: selected.bounds ?? null, featureType: 'entityType' in selected ? selected.entityType : selected.featureType }
+    ? { name: selected.displayName ?? trip.basics.destinationInput, center: selected.center, bounds: selected.bounds ?? null, featureType: 'entityType' in selected ? selected.entityType : selected.featureType, ...(semantics ? { scale: semantics.scale, ...(semantics.extent ? { extentSource: semantics.extent.source } : {}) } : {}) }
     : null;
   if (!geometry) {
     const resolved = await resolveTripRegion(trip);

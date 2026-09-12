@@ -121,7 +121,7 @@ export function SetupFlow({
           const restored = { ...current, ...(JSON.parse(saved) as Partial<SetupDraft>) };
           /* Somebody who arrived with a destination in the address bar meant that one, not the one they typed last week. */
           return initialDestination && restored.destinationText.trim() !== initialDestination
-            ? { ...restored, destinationText: initialDestination, destinationEntryId: null, destinationCenter: null, destinationBounds: null, destinationFeatureType: null }
+            ? { ...restored, destinationText: initialDestination, destinationEntryId: null, destinationCenter: null, destinationBounds: null, destinationFeatureType: null, destinationSemanticType: null, destinationScale: null, destinationExtentSource: null, destinationGateways: [] }
             : restored;
         });
       }
@@ -191,7 +191,16 @@ export function SetupFlow({
   }, []);
 
   const geometry: DestinationGeometry | null = draft.destinationCenter
-    ? { name: draft.destinationText.trim() || 'Your destination', center: draft.destinationCenter, bounds: draft.destinationBounds ?? null, ...(draft.destinationFeatureType ? { featureType: draft.destinationFeatureType } : {}) }
+    ? {
+        name: draft.destinationText.trim() || 'Your destination',
+        center: draft.destinationCenter,
+        bounds: draft.destinationBounds ?? null,
+        ...(draft.destinationFeatureType ? { featureType: draft.destinationFeatureType } : {}),
+        /* V8.1 — how wide to frame when nobody published an extent, and how the extent was arrived at. */
+        ...(draft.destinationScale ? { scale: draft.destinationScale } : {}),
+        ...(draft.destinationExtentSource ? { extentSource: draft.destinationExtentSource } : {}),
+        ...(draft.destinationGateways.length > 0 ? { gateways: draft.destinationGateways } : {}),
+      }
     : null;
 
   /*
@@ -232,6 +241,10 @@ export function SetupFlow({
                   destinationCenter: placed.center,
                   destinationBounds: placed.bounds ?? null,
                   destinationFeatureType: placed.featureType ?? null,
+                  destinationSemanticType: placed.semanticType ?? null,
+                  destinationScale: placed.scale ?? null,
+                  destinationExtentSource: placed.extentSource ?? null,
+                  destinationGateways: placed.gateways ?? [],
                 },
           );
         }
@@ -260,7 +273,8 @@ export function SetupFlow({
   }, [initialDestination, editing, place]);
 
   const summary = useMemo(() => summaryOf(draft), [draft]);
-  const scope = scopeWords(draft.destinationFeatureType);
+  /* The semantic reading names the kind of thing first; the row's own class is the fallback. */
+  const scope = scopeWords(draft.destinationSemanticType) ?? scopeWords(draft.destinationFeatureType);
 
   function submit(source: SetupDraft = draft) {
     setError(null);
@@ -453,7 +467,7 @@ function WhereStep({
         <DestinationField
           value={draft.destinationText}
           selectedId={draft.destinationEntryId}
-          onTextChange={(text) => onChange({ destinationText: text, destinationEntryId: null, destinationCenter: null, destinationBounds: null, destinationFeatureType: null })}
+          onTextChange={(text) => onChange({ destinationText: text, destinationEntryId: null, destinationCenter: null, destinationBounds: null, destinationFeatureType: null, destinationSemanticType: null, destinationScale: null, destinationExtentSource: null, destinationGateways: [] })}
           onSelect={(suggestion: DestinationSuggestionView) =>
             onChange({
               destinationText: suggestion.displayName,
@@ -461,6 +475,10 @@ function WhereStep({
               destinationCenter: suggestion.center ?? null,
               destinationBounds: suggestion.bounds ?? null,
               destinationFeatureType: suggestion.featureType,
+              destinationSemanticType: null,
+              destinationScale: null,
+              destinationExtentSource: suggestion.bounds ? 'published' : null,
+              destinationGateways: [],
             })
           }
           onSubmit={onSubmit}

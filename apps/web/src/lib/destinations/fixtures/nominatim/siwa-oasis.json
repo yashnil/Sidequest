@@ -1,0 +1,103 @@
+[
+ {
+  "place_id": 51758749,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 3179841,
+  "lat": "29.2154979",
+  "lon": "25.4689726",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.5169786836148043,
+  "addresstype": "lake",
+  "name": "بحيرة سيوة",
+  "display_name": "بحيرة سيوة, واحة سيوة, مطروح, مصر",
+  "address": {
+   "lake": "بحيرة سيوة",
+   "city": "واحة سيوة",
+   "state": "مطروح",
+   "ISO3166-2-lvl4": "EG-MT",
+   "country": "مصر",
+   "country_code": "eg"
+  },
+  "extratags": {
+   "salt": "yes",
+   "natural": "water",
+   "wikidata": "Q2008735"
+  },
+  "namedetails": {
+   "name": "بحيرة سيوة",
+   "name:ar": "بحيرة سيوة",
+   "name:de": "Siwa-See",
+   "name:en": "Siwa Oasis",
+   "name:es": "Lago Siwa",
+   "name:fr": "Lac Siwa",
+   "name:hu": "Szíva-oázis",
+   "name:ru": "Озеро Сива",
+   "name:sk": "Sívske oázy",
+   "alt_name:hu": "Sziva-tó",
+   "alt_name:sk": "oázy Siva"
+  },
+  "boundingbox": [
+   "29.1893859",
+   "29.2416086",
+   "25.4159084",
+   "25.5082608"
+  ]
+ },
+ {
+  "place_id": 51599817,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 324629407,
+  "lat": "29.2034664",
+  "lon": "25.5192273",
+  "category": "place",
+  "type": "city",
+  "place_rank": 16,
+  "importance": 0.5169786836148043,
+  "addresstype": "city",
+  "name": "واحة سيوة",
+  "display_name": "واحة سيوة, مطروح, مصر",
+  "address": {
+   "city": "واحة سيوة",
+   "state": "مطروح",
+   "ISO3166-2-lvl4": "EG-MT",
+   "country": "مصر",
+   "country_code": "eg"
+  },
+  "extratags": {
+   "wikidata": "Q2008735",
+   "wikipedia": "ar:سيوة",
+   "population": "35000",
+   "wikimedia_commons": "Category:Siwa"
+  },
+  "namedetails": {
+   "name": "واحة سيوة",
+   "name:ar": "واحة سيوة",
+   "name:de": "Siwa Oasis",
+   "name:en": "Siwa Oasis",
+   "name:es": "Siwa",
+   "name:fr": "Siwa",
+   "name:he": "סיווה",
+   "name:hu": "Szíva-oázis",
+   "name:ko": "시와오아시스",
+   "name:lt": "Siva",
+   "name:ru": "Сива",
+   "name:sv": "Siwa",
+   "name:uk": "Сіва",
+   "int_name": "Siwa Oasis",
+   "name:kab": "Isiwan",
+   "alt_name:ar": "قسم سيوة",
+   "short_name:ar": "سيوة",
+   "official_name:ar": "سيوة"
+  },
+  "boundingbox": [
+   "29.0434664",
+   "29.3634664",
+   "25.3592273",
+   "25.6792273"
+  ]
+ }
+]

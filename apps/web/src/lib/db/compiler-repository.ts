@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   buildDestinationIntent,
   type DestinationIntentGraph,
+  type DestinationSemantics,
   destinationIntentSchema,
   type DestinationIntent,
   clarificationSetSchema,
@@ -249,7 +250,7 @@ export function saveDestinationQuery(
   upsertIntent(tripId, { mode, destination_query: query });
 }
 
-export function saveResolution(tripId: string, resolution: DestinationResolution, graph?: DestinationIntentGraph | null): void {
+export function saveResolution(tripId: string, resolution: DestinationResolution, graph?: DestinationIntentGraph | null, semantics?: DestinationSemantics | null): void {
   // Parsed before it is written, so a malformed provider response never reaches
   // the table it would later be read back out of.
   const parsed = destinationResolutionSchema.parse(resolution);
@@ -275,7 +276,7 @@ export function saveResolution(tripId: string, resolution: DestinationResolution
   if (!rawText.trim()) return;
   saveDestinationIntent(
     tripId,
-    buildDestinationIntent({ rawText, resolution: parsed, ...(graph ? { graph } : {}), now: new Date() }),
+    buildDestinationIntent({ rawText, resolution: parsed, ...(graph ? { graph } : {}), ...(semantics ? { semantics } : {}), now: new Date() }),
   );
 }
 

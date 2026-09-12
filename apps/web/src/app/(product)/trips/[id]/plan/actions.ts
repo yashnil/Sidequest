@@ -167,8 +167,8 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
      * the union of its parts, and a described part of a country ("rural
      * Japan") anchors on the country. Nothing here can answer "not a place".
      */
-    const { outcome, resolution } = await resolveDestinationPhrase({ text: query, resolver, now: new Date() });
-    saveResolution(tripId, resolution, outcome.graph);
+    const { outcome, resolution, semantics } = await resolveDestinationPhrase({ text: query, resolver, now: new Date() });
+    saveResolution(tripId, resolution, outcome.graph, semantics);
 
     /**
      * One credible reading needs no screen.
@@ -983,6 +983,7 @@ const FEATURE_TYPE_FROM_ENTITY: Partial<Record<string, SelectedDestination['feat
   multi_country: 'country',
   state_or_province: 'region',
   subregion: 'county',
+  natural_region: 'natural_region',
   city: 'city',
   metro_area: 'city',
   municipality: 'city',

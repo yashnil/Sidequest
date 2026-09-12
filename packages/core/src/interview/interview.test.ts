@@ -6,7 +6,7 @@ import { ELABORATING_QUESTIONS, INTERVIEW_QUESTIONS, interviewCatalog, questionB
 import { isPlanningImpactKey, PLANNING_IMPACT_CONSUMERS, PLANNING_IMPACT_KEYS } from './impact';
 import { interviewAnalytics } from './analytics';
 import { reviewLedger, personalityBars, personalitySentence } from './review';
-import { CORE_BUDGET, CORE_ROLE_BUDGET, DESTINATION_BUDGET, planInterview, nextOpenQuestion } from './selector';
+import { CORE_BUDGET, CORE_ROLE_BUDGET, destinationBudgetFor, planInterview, nextOpenQuestion } from './selector';
 import { answerQuestion, applySmartDefaults, decideQuestion, interviewComplete, skipQuestion, withScreening } from './state';
 import { compositionPreferenceSummary, renderPreferenceSummary } from './summary';
 import { screenDestination, unscreenedDestination, type ScreeningSignals } from './traits';
@@ -213,8 +213,9 @@ describe('the selector', () => {
       const ctx = shape();
       const plan = planInterview({ ctx, answers: fresh(ctx) });
       expect(plan.byTier.core).toBeLessThanOrEqual(CORE_BUDGET + CORE_ROLE_BUDGET + 2);
-      expect(plan.byTier.destination).toBeLessThanOrEqual(DESTINATION_BUDGET);
-      expect(plan.shown.length).toBeLessThanOrEqual(CORE_BUDGET + CORE_ROLE_BUDGET + 2 + DESTINATION_BUDGET);
+      /* V8.1 — a mountain or wilderness region earns one more destination slot (`destinationBudgetFor`). */
+      expect(plan.byTier.destination).toBeLessThanOrEqual(destinationBudgetFor(ctx));
+      expect(plan.shown.length).toBeLessThanOrEqual(CORE_BUDGET + CORE_ROLE_BUDGET + 2 + destinationBudgetFor(ctx));
       const core = plan.questions.filter((q) => q.tier === 'core' && !q.id.startsWith('priority_role') && q.id !== 'priorities' && q.id !== 'hard_constraints');
       for (let i = 1; i < core.length; i += 1) expect(core[i - 1]!.score).toBeGreaterThanOrEqual(core[i]!.score);
     }

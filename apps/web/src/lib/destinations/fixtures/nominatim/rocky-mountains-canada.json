@@ -1,0 +1,108 @@
+[
+ {
+  "place_id": 377859935,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 7141879075,
+  "lat": "50.6472837",
+  "lon": "-115.3166200",
+  "category": "natural",
+  "type": "mountain_range",
+  "place_rank": 18,
+  "importance": 0.16004500114442663,
+  "addresstype": "mountain_range",
+  "name": "Rocky Mountains",
+  "display_name": "Rocky Mountains, Area F (Columbia Lake/Windermere Lake), Regional District of East Kootenay, British Columbia, Canada",
+  "address": {
+   "mountain_range": "Rocky Mountains",
+   "city": "Area F (Columbia Lake/Windermere Lake)",
+   "county": "Regional District of East Kootenay",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Rocky Mountains"
+  },
+  "boundingbox": [
+   "50.6472337",
+   "50.6473337",
+   "-115.3166700",
+   "-115.3165700"
+  ]
+ },
+ {
+  "place_id": 378680632,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 7141879078,
+  "lat": "49.8086347",
+  "lon": "-114.6843912",
+  "category": "natural",
+  "type": "mountain_range",
+  "place_rank": 18,
+  "importance": 0.16004500114442663,
+  "addresstype": "mountain_range",
+  "name": "Rocky Mountains",
+  "display_name": "Rocky Mountains, Area A (Upper Flathead/Elk Valley), Regional District of East Kootenay, British Columbia, Canada",
+  "address": {
+   "mountain_range": "Rocky Mountains",
+   "city": "Area A (Upper Flathead/Elk Valley)",
+   "county": "Regional District of East Kootenay",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Rocky Mountains"
+  },
+  "boundingbox": [
+   "49.8085847",
+   "49.8086847",
+   "-114.6844412",
+   "-114.6843412"
+  ]
+ },
+ {
+  "place_id": 379434807,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 10823246626,
+  "lat": "57.1256982",
+  "lon": "-125.0934866",
+  "category": "natural",
+  "type": "peak",
+  "place_rank": 18,
+  "importance": 0.16004500114442663,
+  "addresstype": "peak",
+  "name": "Montagnes Rocheuses",
+  "display_name": "Montagnes Rocheuses, Area B (Finlay Valley/Beatton Valley), Peace River Regional District, British Columbia, Canada",
+  "address": {
+   "peak": "Montagnes Rocheuses",
+   "city": "Area B (Finlay Valley/Beatton Valley)",
+   "county": "Peace River Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "ele": "1731"
+  },
+  "namedetails": {
+   "name": "Montagnes Rocheuses",
+   "name:en": "Rocky Mountains",
+   "name:fr": "Montagnes Rocheuses"
+  },
+  "boundingbox": [
+   "57.1256482",
+   "57.1257482",
+   "-125.0935366",
+   "-125.0934366"
+  ]
+ }
+]

@@ -1,0 +1,70 @@
+[
+ {
+  "place_id": 449830,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 3405247,
+  "lat": "-41.1334781",
+  "lon": "-71.3101474",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.5174896656672183,
+  "addresstype": "city",
+  "name": "San Carlos de Bariloche",
+  "display_name": "San Carlos de Bariloche, Municipio de San Carlos de Bariloche, Departamento Bariloche, Río Negro, 8400, Argentina",
+  "address": {
+   "city": "San Carlos de Bariloche",
+   "municipality": "Municipio de San Carlos de Bariloche",
+   "state_district": "Departamento Bariloche",
+   "state": "Río Negro",
+   "ISO3166-2-lvl4": "AR-R",
+   "postcode": "8400",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "wikidata": "Q47772",
+   "wikipedia": "es:San Carlos de Bariloche",
+   "population": "135755",
+   "source_ref": "http://earth-info.nga.mil/gns/html/cntyfile/ar.zip",
+   "linked_place": "city",
+   "population:date": "2022-05-18",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "San Carlos de Bariloche",
+   "name:es": "San Carlos de Bariloche",
+   "name:ru": "Сан-Карлос-де-Барилоче",
+   "alt_name": "Bariloche",
+   "name:af": "Bariloche",
+   "name:ar": "باريلوتشي",
+   "name:bg": "Сан Карлос де Барилоче",
+   "name:de": "Bariloche",
+   "name:en": "San Carlos de Bariloche",
+   "name:eo": "Bariloĉe",
+   "name:fa": "باریلوچه",
+   "name:gn": "Bariloche",
+   "name:he": "בארילוצ'ה",
+   "name:hy": "Սան Կառլոս դե Բարիլոչե",
+   "name:is": "Bariloche",
+   "name:ja": "サン・カルロス・デ・バリローチェ",
+   "name:ka": "სან-კარლოს-დე-ბარილოჩე",
+   "name:ko": "산카를로스데바릴로체",
+   "name:lt": "San Karlos de Bariločė",
+   "name:nl": "Bariloche (Río Negro)",
+   "name:pl": "Bariloche",
+   "name:pt": "Bariloche",
+   "name:uk": "Сан-Карлос-де-Барілоче",
+   "name:zh": "圣卡洛斯-德巴里洛切",
+   "name:arn": "Vuriloche",
+   "short_name": "Bariloche"
+  },
+  "boundingbox": [
+   "-41.2062430",
+   "-41.0370632",
+   "-71.5881237",
+   "-71.1373764"
+  ]
+ }
+]

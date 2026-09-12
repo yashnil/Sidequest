@@ -134,7 +134,9 @@ export function ReviewTimingCard({
                 <summary className="inline-flex min-h-9 cursor-pointer items-center underline underline-offset-4">What this does not know</summary>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {result.unknowns.map((unknown) => (
-                    <li key={unknown}>{unknown}</li>
+                    <li key={unknown} {...(unknown === result.regionalNote ? { 'data-testid': 'review-timing-regional-note' } : {})}>
+                      {unknown}
+                    </li>
                   ))}
                   <li>
                     {result.attribution} · normals from {result.sampleYears}.

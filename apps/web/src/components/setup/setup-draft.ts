@@ -43,6 +43,11 @@ export interface SetupDraft {
   destinationCenter: { lat: number; lng: number } | null;
   destinationBounds: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } } | null;
   destinationFeatureType: string | null;
+  /** V8.1 — the semantic reading once the gate has placed the words: what kind of thing, at what scale, how the extent was arrived at, and the gateways (context, never the destination). */
+  destinationSemanticType: string | null;
+  destinationScale: string | null;
+  destinationExtentSource: string | null;
+  destinationGateways: string[];
 
   dateMode: DateMode;
   startDate: string;
@@ -92,6 +97,10 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
     destinationCenter: null,
     destinationBounds: null,
     destinationFeatureType: null,
+    destinationSemanticType: null,
+    destinationScale: null,
+    destinationExtentSource: null,
+    destinationGateways: [],
     dateMode: 'exact',
     /*
      * Empty, not prefilled. Two dates a month out are a decision nobody made,
@@ -131,6 +140,10 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
     destinationCenter: prior.destination?.center ?? null,
     destinationBounds: prior.destination?.bounds ?? null,
     destinationFeatureType: prior.destination?.featureType ?? null,
+    destinationSemanticType: null,
+    destinationScale: null,
+    destinationExtentSource: null,
+    destinationGateways: [],
     dateMode: prior.dates.mode,
     startDate: prior.dates.startDate ?? base.startDate,
     endDate: prior.dates.endDate ?? base.endDate,

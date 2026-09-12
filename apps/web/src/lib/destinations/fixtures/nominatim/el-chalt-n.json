@@ -1,0 +1,158 @@
+[
+ {
+  "place_id": 233540,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 10312049,
+  "lat": "-49.3319564",
+  "lon": "-72.8860438",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.36212526445830706,
+  "addresstype": "village",
+  "name": "El Chaltén",
+  "display_name": "El Chaltén, Municipio de El Chaltén, Lago Argentino, Santa Cruz, Argentina",
+  "address": {
+   "village": "El Chaltén",
+   "municipality": "Municipio de El Chaltén",
+   "state_district": "Lago Argentino",
+   "state": "Santa Cruz",
+   "ISO3166-2-lvl4": "AR-Z",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "wikidata": "Q1323978",
+   "wikipedia": "es:El Chaltén",
+   "population": "1865",
+   "linked_place": "village",
+   "population:date": "2022-05-18",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "El Chaltén",
+   "name:es": "El Chaltén",
+   "name:en": "El Chalten",
+   "_place_name:es": "El Chaltén"
+  },
+  "boundingbox": [
+   "-49.3342361",
+   "-49.3210216",
+   "-72.8978341",
+   "-72.8805971"
+  ]
+ },
+ {
+  "place_id": 304336,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 11586853,
+  "lat": "-46.4391683",
+  "lon": "-67.5508462",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 18,
+  "importance": 0.16005000152590218,
+  "addresstype": "city_district",
+  "name": "El Chaltén",
+  "display_name": "El Chaltén, Humedal, Caleta Olivia, Deseado, Santa Cruz, Argentina",
+  "address": {
+   "city_district": "El Chaltén",
+   "city": "Humedal",
+   "municipality": "Caleta Olivia",
+   "state_district": "Deseado",
+   "state": "Santa Cruz",
+   "ISO3166-2-lvl4": "AR-Z",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "population": "1",
+   "admin_level": "9"
+  },
+  "namedetails": {
+   "name": "El Chaltén"
+  },
+  "boundingbox": [
+   "-46.4404699",
+   "-46.4377448",
+   "-67.5596449",
+   "-67.5408191"
+  ]
+ },
+ {
+  "place_id": 271641,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 5301350,
+  "lat": "-46.5473752",
+  "lon": "-68.9508683",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 18,
+  "importance": 0.16005000152590218,
+  "addresstype": "city_district",
+  "name": "El Chaltén",
+  "display_name": "El Chaltén, Las Heras, Deseado, Santa Cruz, Argentina",
+  "address": {
+   "city_district": "El Chaltén",
+   "town": "Las Heras",
+   "municipality": "Las Heras",
+   "state_district": "Deseado",
+   "state": "Santa Cruz",
+   "ISO3166-2-lvl4": "AR-Z",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "admin_level": "9"
+  },
+  "namedetails": {
+   "name": "El Chaltén"
+  },
+  "boundingbox": [
+   "-46.5511590",
+   "-46.5433435",
+   "-68.9537030",
+   "-68.9475654"
+  ]
+ },
+ {
+  "place_id": 314611,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 7178462545,
+  "lat": "-46.4392634",
+  "lon": "-67.5463448",
+  "category": "place",
+  "type": "suburb",
+  "place_rank": 19,
+  "importance": 0.14671666819256882,
+  "addresstype": "suburb",
+  "name": "El Chaltén",
+  "display_name": "El Chaltén, Humedal, Caleta Olivia, Deseado, Santa Cruz, 9011, Argentina",
+  "address": {
+   "suburb": "El Chaltén",
+   "city_district": "El Chaltén",
+   "city": "Humedal",
+   "municipality": "Caleta Olivia",
+   "state_district": "Deseado",
+   "state": "Santa Cruz",
+   "ISO3166-2-lvl4": "AR-Z",
+   "postcode": "9011",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "El Chaltén"
+  },
+  "boundingbox": [
+   "-46.4592634",
+   "-46.4192634",
+   "-67.5663448",
+   "-67.5263448"
+  ]
+ }
+]

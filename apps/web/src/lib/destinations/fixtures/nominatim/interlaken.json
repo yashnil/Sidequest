@@ -1,0 +1,236 @@
+[
+ {
+  "place_id": 416845977,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 1682493,
+  "lat": "46.6855231",
+  "lon": "7.8585139",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.5333993901640744,
+  "addresstype": "town",
+  "name": "Interlaken",
+  "display_name": "Interlaken, Verwaltungskreis Interlaken-Oberhasli, Verwaltungsregion Oberland, Bern/Berne, 3800, Schweiz/Suisse/Svizzera/Svizra",
+  "address": {
+   "town": "Interlaken",
+   "county": "Verwaltungskreis Interlaken-Oberhasli",
+   "state_district": "Verwaltungsregion Oberland",
+   "state": "Bern/Berne",
+   "ISO3166-2-lvl4": "CH-BE",
+   "postcode": "3800",
+   "country": "Schweiz/Suisse/Svizzera/Svizra",
+   "country_code": "ch"
+  },
+  "extratags": {
+   "ele": "568",
+   "website": "https://www.interlaken-gemeinde.ch/",
+   "wikidata": "Q68103",
+   "wikipedia": "de:Interlaken",
+   "population": "5504",
+   "linked_place": "town",
+   "swisstopo:SHN": "CH02500581",
+   "swisstopo:OBJEKTART": "Gemeindegebiet",
+   "swisstopo:BEZIRKSNUM": "250",
+   "swisstopo:BFS_NUMMER": "581",
+   "swisstopo:KANTONSNUM": "2",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "Interlaken",
+   "name:ko": "인터라켄",
+   "name:zh": "因特拉肯",
+   "name:zh-Hans": "因特拉肯",
+   "name:zh-Hant": "因特拉肯",
+   "name:ar": "انترلاكن",
+   "name:be": "Інтэрлакен",
+   "name:ru": "Интерлакен"
+  },
+  "boundingbox": [
+   "46.6645890",
+   "46.7040906",
+   "7.8267786",
+   "7.8887741"
+  ]
+ },
+ {
+  "place_id": 355916793,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 170391,
+  "lat": "40.2334459",
+  "lon": "-74.0156930",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.44144021327567107,
+  "addresstype": "village",
+  "name": "Interlaken",
+  "display_name": "Interlaken, Monmouth County, New Jersey, United States",
+  "address": {
+   "village": "Interlaken",
+   "county": "Monmouth County",
+   "state": "New Jersey",
+   "ISO3166-2-lvl4": "US-NJ",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "5",
+   "wikidata": "Q1082542",
+   "wikipedia": "en:Interlaken, New Jersey",
+   "population": "881",
+   "border_type": "borough",
+   "linked_place": "village",
+   "population:date": "2006",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "Interlaken",
+   "name:en": "Interlaken",
+   "_place_name:en": "Interlaken"
+  },
+  "boundingbox": [
+   "40.2302340",
+   "40.2408740",
+   "-74.0244450",
+   "-74.0061990"
+  ]
+ },
+ {
+  "place_id": 351916959,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 176087,
+  "lat": "42.6170155",
+  "lon": "-76.7249502",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.435952575725974,
+  "addresstype": "hamlet",
+  "name": "Village of Interlaken",
+  "display_name": "Village of Interlaken, Town of Covert, Seneca County, New York, United States",
+  "address": {
+   "hamlet": "Village of Interlaken",
+   "village": "Town of Covert",
+   "county": "Seneca County",
+   "state": "New York",
+   "ISO3166-2-lvl4": "US-NY",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "276",
+   "wikidata": "Q3452440",
+   "wikipedia": "en:Interlaken, New York",
+   "population": "595",
+   "border_type": "village",
+   "linked_place": "hamlet",
+   "nist:fips_code": "360991866337528",
+   "ref:us:ny:swis": "452001",
+   "population:date": "2020",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "Village of Interlaken",
+   "name:en": "Village of Interlaken",
+   "_place_name": "Interlaken",
+   "official_name": "Village of Interlaken",
+   "_place_name:en": "Interlaken"
+  },
+  "boundingbox": [
+   "42.6131020",
+   "42.6256700",
+   "-76.7335240",
+   "-76.7171090"
+  ]
+ },
+ {
+  "place_id": 321775925,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 33167201,
+  "lat": "36.9529645",
+  "lon": "-121.7307620",
+  "category": "place",
+  "type": "locality",
+  "place_rank": 25,
+  "importance": 0.3733250944850813,
+  "addresstype": "village",
+  "name": "Interlaken",
+  "display_name": "Interlaken, Santa Cruz County, California, 95076, United States",
+  "address": {
+   "village": "Interlaken",
+   "county": "Santa Cruz County",
+   "state": "California",
+   "ISO3166-2-lvl4": "US-CA",
+   "postcode": "95076",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "39",
+   "boundary": "census",
+   "wikidata": "Q600900",
+   "wikipedia": "en:Interlaken, California",
+   "linked_place": "village"
+  },
+  "namedetails": {
+   "name": "Interlaken",
+   "name:en": "Interlaken",
+   "_place_name:en": "Interlaken"
+  },
+  "boundingbox": [
+   "36.9159226",
+   "36.9900080",
+   "-121.7694108",
+   "-121.6971770"
+  ]
+ },
+ {
+  "place_id": 357241127,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 1455530,
+  "lat": "40.9605629",
+  "lon": "-73.7997934",
+  "category": "water",
+  "type": "reservoir",
+  "place_rank": 20,
+  "importance": 0.31298735030903774,
+  "addresstype": "reservoir",
+  "name": "Lake Innisfree",
+  "display_name": "Lake Innisfree, Waverly, Town of Eastchester, Westchester County, New York, United States",
+  "address": {
+   "reservoir": "Lake Innisfree",
+   "hamlet": "Waverly",
+   "town": "Town of Eastchester",
+   "county": "Westchester County",
+   "state": "New York",
+   "ISO3166-2-lvl4": "US-NY",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "50",
+   "salt": "no",
+   "tidal": "no",
+   "natural": "water",
+   "wikidata": "Q18215921",
+   "intermittent": "no"
+  },
+  "namedetails": {
+   "name": "Lake Innisfree",
+   "name:en": "Lake Innisfree",
+   "alt_name": "Lake Isle;Interlaken;Reservoir Number One"
+  },
+  "boundingbox": [
+   "40.9565464",
+   "40.9646019",
+   "-73.8076024",
+   "-73.7972560"
+  ]
+ }
+]

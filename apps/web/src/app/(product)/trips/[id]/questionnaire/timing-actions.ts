@@ -1,8 +1,8 @@
 'use server';
 
 import { z } from 'zod';
-import { chosenInterests, concreteWindow, crowdPeriodsTouching, monthsBetween, recommendDateWindows, seasonMonths, type DateWindow } from '@sidequest/core';
-import { climateWithReason } from '@/lib/destinations/preflight';
+import { chosenInterests, concreteWindow, crowdPeriodsTouching, diagonalKm, monthsBetween, recommendDateWindows, scaleOfDiagonalKm, seasonMonths, type DateWindow, type GeographicScale } from '@sidequest/core';
+import { regionalClimate } from '@/lib/climate/regional';
 import { getAnswers, getTrip, updateTripDates } from '@/lib/db/repository';
 import { getIntent, saveComposerAnswers } from '@/lib/db/compiler-repository';
 import { realityForTrip } from '@/lib/interview/screening';
@@ -30,7 +30,7 @@ import type { TimingWindowView } from '@/app/(product)/trips/new/timing-actions'
 const tripIdSchema = z.string().trim().min(1).max(64);
 
 export type TripTimingResult =
-  | { ok: true; pick: TimingWindowView; alternatives: TimingWindowView[]; unknowns: string[]; basis: string; attribution: string; sampleYears: string }
+  | { ok: true; pick: TimingWindowView; alternatives: TimingWindowView[]; unknowns: string[]; basis: string; attribution: string; sampleYears: string; sampledPoints: number; regionalNote: string | null }
   | { ok: false; deferred: true; note: string }
   | { ok: false; deferred?: false; note: string };
 
@@ -66,22 +66,38 @@ export async function recommendTripTimingAction(tripId: string): Promise<TripTim
    * uses; a resolver that cannot answer leaves the honest deferral below.
    */
   let intentNow = intent;
-  const centreOf = (of: typeof intent) => {
+  /*
+   * V8.1 — WHERE, AND HOW BIG.
+   *
+   * The semantic reading (when the gate produced one) carries a representative
+   * centre, the extent as evidence found it, and the scale; a region is then
+   * compared at several points inside its box rather than at whatever single
+   * coordinate a geocoder row happened to hold. Without a reading, the selected
+   * candidate's own centre and box stand, scaled by the box.
+   */
+  const placementOf = (of: typeof intent): { center: { lat: number; lng: number }; bounds: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } } | null; scale: GeographicScale } | null => {
+    const semantics = of?.destinationIntent?.semantics;
+    if (semantics?.center) return { center: semantics.center, bounds: semantics.extent?.bounds ?? null, scale: semantics.scale };
     const candidate = of?.resolution?.candidates.find((c) => c.id === (of.selectedCandidateId ?? of.resolution?.unambiguousCandidateId)) ?? of?.resolution?.candidates[0] ?? null;
-    return of?.selectedDestination?.center ?? candidate?.center ?? of?.destinationIntent?.graph?.envelope?.center ?? null;
+    const picked = of?.selectedDestination ?? null;
+    const center = picked?.center ?? candidate?.center ?? of?.destinationIntent?.graph?.envelope?.center ?? null;
+    if (!center) return null;
+    const bounds = picked?.bounds ?? candidate?.bounds ?? of?.destinationIntent?.graph?.envelope?.bounds ?? null;
+    return { center, bounds, scale: bounds ? scaleOfDiagonalKm(diagonalKm(bounds)) : 'settlement' };
   };
-  let centre = centreOf(intentNow);
-  if (!centre && intentNow?.destinationQuery?.trim()) {
+  let placement = placementOf(intentNow);
+  if (!placement && intentNow?.destinationQuery?.trim()) {
     const resolved = await resolveDestinationAction(tripId).catch(() => ({ ok: false as const }));
     if (resolved.ok) {
       intentNow = getIntent(tripId);
-      centre = centreOf(intentNow);
+      placement = placementOf(intentNow);
     }
   }
-  if (!centre) return { ok: false, deferred: true, note: 'Sidequest will choose the best window once it has placed the destination.' };
+  if (!placement) return { ok: false, deferred: true, note: 'Sidequest will choose the best window once it has placed the destination.' };
+  const centre = placement.center;
 
   const now = new Date();
-  const climate = await climateWithReason(centre, now);
+  const climate = await regionalClimate(placement, now);
   if (!climate.profile) {
     return { ok: false, deferred: true, note: climate.reason === 'provider_rate_limited' ? 'The climate records are busy this minute. Sidequest will choose the window with the plan if you carry on.' : 'We could not read the climate records just now, so Sidequest will choose the window with the plan.' };
   }
@@ -116,8 +132,8 @@ export async function recommendTripTimingAction(tripId: string): Promise<TripTim
   if (!pick) return { ok: false, note: 'We could not place a window on the calendar for this destination.' };
 
   const touching = crowdPeriodsTouching(reality, pick.startDate, pick.endDate);
-  const basis = [interests.length > 0 ? `what you ranked (${interests.slice(0, 3).map((i) => i.replace(/_/g, ' ')).join(', ')})` : null, crowdPeriods.length > 0 ? `${crowdPeriods.length} known busy period${crowdPeriods.length === 1 ? '' : 's'}${touching.length > 0 ? `, ${touching.length} touching this window` : ''}` : null, 'twenty years of climate normals'].filter((s): s is string => s !== null).join('; ');
-  return { ok: true, pick, alternatives: placed.slice(1), unknowns: [...guidance.windows[0]!.unknowns], basis, attribution: guidance.attribution, sampleYears: `${guidance.sampleYearFrom}–${guidance.sampleYearTo}` };
+  const basis = [interests.length > 0 ? `what you ranked (${interests.slice(0, 3).map((i) => i.replace(/_/g, ' ')).join(', ')})` : null, crowdPeriods.length > 0 ? `${crowdPeriods.length} known busy period${crowdPeriods.length === 1 ? '' : 's'}${touching.length > 0 ? `, ${touching.length} touching this window` : ''}` : null, climate.sampled > 1 ? `twenty years of climate normals at ${climate.sampled} points across the region` : 'twenty years of climate normals'].filter((s): s is string => s !== null).join('; ');
+  return { ok: true, pick, alternatives: placed.slice(1), unknowns: [...(climate.note ? [climate.note] : []), ...guidance.windows[0]!.unknowns], basis, attribution: guidance.attribution, sampleYears: `${guidance.sampleYearFrom}–${guidance.sampleYearTo}`, sampledPoints: climate.sampled, regionalNote: climate.note };
 }
 
 const acceptSchema = z.object({

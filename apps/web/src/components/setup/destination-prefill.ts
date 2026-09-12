@@ -46,6 +46,17 @@ const SCOPE_WORDS: Record<string, string> = {
   archipelago: 'A group of islands',
   national_park: 'A national park',
   protected_area: 'A protected area',
+  /* V8.1 — the semantic reading's own vocabulary, when the gate produced one. */
+  natural_region: 'A natural region',
+  mountain_region: 'A mountain region',
+  coast: 'A coast',
+  island_group: 'A group of islands',
+  informal_region: 'A travel region',
+  admin_area: 'A region',
+  settlement: 'A city or town',
+  city_region: 'A city and its region',
+  multi_country: 'Several countries',
+  composite: 'Several areas in one trip',
 };
 
 export function scopeWords(featureType: string | null | undefined): string | null {

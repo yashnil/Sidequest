@@ -85,7 +85,7 @@ export function TimingStep({
    */
   const wantsPick = draft.dateMode === 'window' || draft.dateMode === 'months' || draft.dateMode === 'season';
   const deferredToReview = draft.dateMode === 'best_time';
-  const key = `${draft.dateMode}:${draft.months.join(',')}:${draft.season}:${draft.earliest}:${draft.latest}:${draft.nights ?? ''}:${draft.destinationEntryId ?? draft.destinationCenter?.lat ?? ''}`;
+  const key = `${draft.dateMode}:${draft.months.join(',')}:${draft.season}:${draft.earliest}:${draft.latest}:${draft.nights ?? ''}:${draft.destinationEntryId ?? draft.destinationCenter?.lat ?? ''}:${draft.destinationScale ?? ''}`;
   useEffect(() => {
     if (!wantsPick) return;
     let cancelled = false;
@@ -94,6 +94,9 @@ export function TimingStep({
         entryId: draft.destinationEntryId,
         lat: draft.destinationCenter?.lat ?? null,
         lng: draft.destinationCenter?.lng ?? null,
+        /* V8.1 — a region is read at several points inside its box, not at one coordinate. */
+        bounds: draft.destinationBounds,
+        scale: draft.destinationScale,
         nights: draft.nights ?? 7,
         months: draft.dateMode === 'months' ? draft.months : [],
         season: draft.dateMode === 'season' ? draft.season : null,
@@ -363,7 +366,9 @@ export function TimingStep({
                 </summary>
                 <ul className="mt-2 space-y-1 pb-1 type-small text-ink-muted">
                   {result.unknowns.map((unknown) => (
-                    <li key={unknown}>{unknown}</li>
+                    <li key={unknown} {...(unknown === result.regionalNote ? { 'data-testid': 'timing-regional-note' } : {})}>
+                      {unknown}
+                    </li>
                   ))}
                   <li>
                     {result.attribution} · normals from {result.sampleYears}.

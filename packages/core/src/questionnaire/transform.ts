@@ -623,6 +623,8 @@ export function interviewBlockFrom(answers: QuestionnaireAnswers): TravelerProfi
     remoteComfort: answers.remoteComfort,
     altitudeComfort: answers.altitudeComfort,
     hikeAppetite: answers.hikeAppetite,
+    trailSetting: answers.trailSetting,
+    permitSensitiveActivities: answers.permitSensitiveActivities,
     walkingTolerance: answers.walkingTolerance,
     stairsAndHills: answers.stairsAndHills,
     lateNights: answers.lateNights,

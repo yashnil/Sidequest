@@ -220,6 +220,7 @@ const GLANCE_GROUPS: { id: string; title: string; questions: string[] }[] = [
   { id: 'shape', title: 'The trip', questions: ['coverage_strategy', 'base_moves', 'transport_mode', 'day_trips'] },
   { id: 'priorities', title: 'You care most about', questions: ['priorities', 'priority_roles'] },
   { id: 'feel', title: 'How it should feel', questions: ['day_shape', 'day_start', 'effort', 'walking_tolerance', 'free_time', 'late_nights'] },
+  { id: 'outdoors', title: 'On the trail', questions: ['hike_appetite', 'trail_setting', 'altitude_comfort', 'permit_activities'] },
   { id: 'choices', title: 'What wins a tie', questions: ['iconic_crowds', 'famous_vs_hidden', 'convenience_spend', 'budget'] },
   { id: 'food', title: 'Food', questions: ['food_tradeoff', 'dietary', 'breakfast', 'special_meals'] },
   { id: 'stay', title: 'Where you sleep', questions: ['lodging_style', 'rustic_lodging'] },

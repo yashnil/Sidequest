@@ -1,0 +1,104 @@
+[
+ {
+  "place_id": 273179851,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 17917137,
+  "lat": "56.8178257",
+  "lon": "-5.1109516",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.5057622755834682,
+  "addresstype": "town",
+  "name": "Fort William",
+  "display_name": "Fort William, Highland, Alba / Scotland, PH33 6AJ, United Kingdom",
+  "address": {
+   "town": "Fort William",
+   "county": "Highland",
+   "ISO3166-2-lvl6": "GB-HLD",
+   "state": "Alba / Scotland",
+   "ISO3166-2-lvl4": "GB-SCT",
+   "postcode": "PH33 6AJ",
+   "country": "United Kingdom",
+   "country_code": "gb"
+  },
+  "extratags": {
+   "wikidata": "Q848909",
+   "wikipedia": "en:Fort William, Scotland",
+   "population": "5610"
+  },
+  "namedetails": {
+   "name": "Fort William",
+   "name:be": "Форт-Уільям",
+   "name:en": "Fort William",
+   "name:ga": "An Gearasdan",
+   "name:gd": "An Gearasdan",
+   "name:he": "פורט ויליאם",
+   "name:ru": "Форт-Уильям",
+   "name:uk": "Форт-Вільям",
+   "alt_name": "An Gearasdan",
+   "name:sco": "The Fort",
+   "alt_name:sco": "Fort Weelum",
+   "name:gd:genitive": "a' Ghearasdain"
+  },
+  "boundingbox": [
+   "56.7778257",
+   "56.8578257",
+   "-5.1509516",
+   "-5.0709516"
+  ]
+ },
+ {
+  "place_id": 273224698,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 26530357,
+  "lat": "56.8205581",
+  "lon": "-5.1053126",
+  "category": "railway",
+  "type": "station",
+  "place_rank": 30,
+  "importance": 0.3966620202275504,
+  "addresstype": "railway",
+  "name": "Fort William",
+  "display_name": "Fort William, Nevis Terrace, The Parade, An Àird, Fort William, Highland, Alba / Scotland, PH33 6TQ, United Kingdom",
+  "address": {
+   "railway": "Fort William",
+   "road": "Nevis Terrace",
+   "neighbourhood": "The Parade",
+   "suburb": "An Àird",
+   "town": "Fort William",
+   "county": "Highland",
+   "ISO3166-2-lvl6": "GB-HLD",
+   "state": "Alba / Scotland",
+   "ISO3166-2-lvl4": "GB-SCT",
+   "postcode": "PH33 6TQ",
+   "country": "United Kingdom",
+   "country_code": "gb"
+  },
+  "extratags": {
+   "train": "yes",
+   "network": "National Rail",
+   "ref:crs": "FTW",
+   "operator": "ScotRail",
+   "wikidata": "Q2264654",
+   "wikipedia": "en:Fort William railway station",
+   "wheelchair": "limited",
+   "network:website": "https://www.nationalrail.co.uk/stations/ftw/",
+   "network:wikidata": "Q26334",
+   "public_transport": "station"
+  },
+  "namedetails": {
+   "name": "Fort William",
+   "name:en": "Fort William",
+   "name:gd": "An Gearasdan"
+  },
+  "boundingbox": [
+   "56.8155581",
+   "56.8255581",
+   "-5.1103126",
+   "-5.1003126"
+  ]
+ }
+]

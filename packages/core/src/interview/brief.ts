@@ -210,6 +210,12 @@ export function buildTravelerBrief(input: {
   if (interview.hikeAppetite !== 'half_day' || provenance.hike_appetite) {
     secondary.push(line('hike_appetite', interview.hikeAppetite === 'none' ? 'No real hikes; viewpoints and easy paths' : interview.hikeAppetite === 'short' ? 'Hikes under two hours, gentle' : interview.hikeAppetite === 'full_day' ? 'A full-day hike is welcome' : 'Half-day hikes are fine'));
   }
+  if (interview.trailSetting !== 'mixed' || provenance.trail_setting) {
+    secondary.push(line('trail_setting', interview.trailSetting === 'backcountry' ? 'Trails: backcountry welcome — huts, long approaches, real remoteness' : interview.trailSetting === 'frontcountry' ? 'Trails: front-country only — marked trails from a car park, back by dinner' : 'Trails: mostly front-country, with room for one bigger day'));
+  }
+  if (interview.permitSensitiveActivities !== 'keep_flexible' || provenance.permit_activities) {
+    secondary.push(line('permit_activities', interview.permitSensitiveActivities === 'build_around' ? 'Permit-sensitive days: build the trip around them and list exactly what to book and by when' : 'Permit-sensitive days: leave out anything that needs a permit or a booking weeks ahead'));
+  }
   if (interview.dayTripAppetite !== 'one_day_trip' || provenance.day_trips) {
     secondary.push(line('day_trips', interview.dayTripAppetite === 'stay_in_city' ? 'Stay in the city every day' : interview.dayTripAppetite === 'several' ? 'Several day trips out of the city' : 'One day trip out of the city at most'));
   }

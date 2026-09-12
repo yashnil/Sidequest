@@ -1,0 +1,131 @@
+[
+ {
+  "place_id": 377520841,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 647037918,
+  "lat": "51.0375675",
+  "lon": "-114.0972202",
+  "category": "information",
+  "type": "office",
+  "place_rank": 30,
+  "importance": 0.00007414892805366625,
+  "addresstype": "information",
+  "name": "Resorts of the Canadian Rockies",
+  "display_name": "Resorts of the Canadian Rockies, 1505, 17 Avenue SW, Bankview, Calgary, Alberta, T2T 0E2, Canada",
+  "address": {
+   "information": "Resorts of the Canadian Rockies",
+   "house_number": "1505",
+   "road": "17 Avenue SW",
+   "suburb": "Bankview",
+   "city": "Calgary",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T2T 0E2",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "level": "1",
+   "phone": "+1-403-254-7669",
+   "tourism": "information",
+   "building": "office"
+  },
+  "namedetails": {
+   "name": "Resorts of the Canadian Rockies"
+  },
+  "boundingbox": [
+   "51.0375138",
+   "51.0376521",
+   "-114.0974763",
+   "-114.0969337"
+  ]
+ },
+ {
+  "place_id": 378388031,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 12727109203,
+  "lat": "49.1638887",
+  "lon": "-123.1415487",
+  "category": "information",
+  "type": "board",
+  "place_rank": 30,
+  "importance": 0.00005980544747077161,
+  "addresstype": "information",
+  "name": "First Air Crossing of the Canadian Rockies",
+  "display_name": "First Air Crossing of the Canadian Rockies, Minoru Gate, City Centre, Richmond, Metro Vancouver Regional District, British Columbia, V6Y 1R8, Canada",
+  "address": {
+   "information": "First Air Crossing of the Canadian Rockies",
+   "road": "Minoru Gate",
+   "suburb": "City Centre",
+   "city": "Richmond",
+   "county": "Metro Vancouver Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "postcode": "V6Y 1R8",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "access": "yes",
+   "tourism": "information",
+   "operator": "Parks Canada",
+   "board_type": "history",
+   "inscription": "On August 7, 1919, Captain E.C. Hoy made the first crossing of the Canadian Rockies by air from Vancouver following a route over Vernon, Grand Forks, Cranbrook, and through Crawford Pass. His Canadian built Curtiss JN4 (\"Jenny\"), its flying altitude limit"
+  },
+  "namedetails": {
+   "name": "First Air Crossing of the Canadian Rockies"
+  },
+  "boundingbox": [
+   "49.1638387",
+   "49.1639387",
+   "-123.1415987",
+   "-123.1414987"
+  ]
+ },
+ {
+  "place_id": 377381547,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 202755721,
+  "lat": "51.1752949",
+  "lon": "-115.5733363",
+  "category": "tourism",
+  "type": "museum",
+  "place_rank": 30,
+  "importance": 0.00005955825131604513,
+  "addresstype": "tourism",
+  "name": "Whyte Museum of the Canadian Rockies",
+  "display_name": "Whyte Museum of the Canadian Rockies, 111, Bear Street, Downtown District, Banff, Alberta, T1L 1A0, Canada",
+  "address": {
+   "tourism": "Whyte Museum of the Canadian Rockies",
+   "house_number": "111",
+   "road": "Bear Street",
+   "neighbourhood": "Downtown District",
+   "town": "Banff",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1L 1A0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "fee": "yes",
+   "website": "https://www.whyte.org/",
+   "building": "museum",
+   "start_date": "1967",
+   "opening_hours": "url=https://www.whyte.org/visit",
+   "check_date:opening_hours": "2023-09-12"
+  },
+  "namedetails": {
+   "name": "Whyte Museum of the Canadian Rockies"
+  },
+  "boundingbox": [
+   "51.1748337",
+   "51.1754732",
+   "-115.5736015",
+   "-115.5728228"
+  ]
+ }
+]

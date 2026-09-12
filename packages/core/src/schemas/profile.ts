@@ -10,6 +10,8 @@ import {
   guideWillingnessSchema,
   hardConstraintSchema,
   hikeAppetiteSchema,
+  permitStrategySchema,
+  trailSettingSchema,
   iconicCrowdStrategySchema,
   interviewLogSchema,
   lateNightAppetiteSchema,
@@ -230,6 +232,9 @@ export function interviewAnswerFields() {
     remoteComfort: toleranceSchema.default('fine'),
     altitudeComfort: altitudeComfortSchema.default('fine'),
     hikeAppetite: hikeAppetiteSchema.default('half_day'),
+    /** V8.1 — mountain and wilderness regions: where the trail starts, and whether permit-bound days shape the trip. */
+    trailSetting: trailSettingSchema.default('mixed'),
+    permitSensitiveActivities: permitStrategySchema.default('keep_flexible'),
     /** Cities. */
     walkingTolerance: walkingToleranceSchema.default('moderate'),
     stairsAndHills: toleranceSchema.default('fine'),
@@ -383,6 +388,8 @@ export const travelerProfileSchema = z.object({
     remoteComfort: toleranceSchema,
     altitudeComfort: altitudeComfortSchema,
     hikeAppetite: hikeAppetiteSchema,
+    trailSetting: trailSettingSchema.default('mixed'),
+    permitSensitiveActivities: permitStrategySchema.default('keep_flexible'),
     walkingTolerance: walkingToleranceSchema,
     stairsAndHills: toleranceSchema,
     lateNights: lateNightAppetiteSchema,

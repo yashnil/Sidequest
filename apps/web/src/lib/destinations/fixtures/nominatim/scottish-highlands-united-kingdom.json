@@ -1,0 +1,79 @@
+[
+ {
+  "place_id": 273178152,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 5594819121,
+  "lat": "56.8000000",
+  "lon": "-5.0000000",
+  "category": "natural",
+  "type": "mountain_range",
+  "place_rank": 18,
+  "importance": 0.16000999999999999,
+  "addresstype": "mountain_range",
+  "name": "Scottish Highlands",
+  "display_name": "Scottish Highlands, Highland, Alba / Scotland, United Kingdom",
+  "address": {
+   "mountain_range": "Scottish Highlands",
+   "county": "Highland",
+   "ISO3166-2-lvl6": "GB-HLD",
+   "state": "Alba / Scotland",
+   "ISO3166-2-lvl4": "GB-SCT",
+   "country": "United Kingdom",
+   "country_code": "gb"
+  },
+  "extratags": {
+   "wikidata": "Q106652",
+   "wikipedia": "en:Scottish Highlands"
+  },
+  "namedetails": {
+   "name": "Scottish Highlands",
+   "name:cs": "Skotská vysočina",
+   "name:en": "Scottish Highlands",
+   "short_name": "Highlands"
+  },
+  "boundingbox": [
+   "56.7999500",
+   "56.8000500",
+   "-5.0000500",
+   "-4.9999500"
+  ]
+ },
+ {
+  "place_id": 273449305,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 11177357891,
+  "lat": "57.3333333",
+  "lon": "-4.2500000",
+  "category": "natural",
+  "type": "mountain_range",
+  "place_rank": 18,
+  "importance": 0.16006526665140763,
+  "addresstype": "mountain_range",
+  "name": "Highlands",
+  "display_name": "Highlands, Highland, Alba / Scotland, United Kingdom",
+  "address": {
+   "mountain_range": "Highlands",
+   "county": "Highland",
+   "ISO3166-2-lvl6": "GB-HLD",
+   "state": "Alba / Scotland",
+   "ISO3166-2-lvl4": "GB-SCT",
+   "country": "United Kingdom",
+   "country_code": "gb"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Highlands",
+   "name:en": "Highlands",
+   "name:sk": "Škótske vrchy",
+   "alt_name": "Scottish Highlands"
+  },
+  "boundingbox": [
+   "57.3332833",
+   "57.3333833",
+   "-4.2500500",
+   "-4.2499500"
+  ]
+ }
+]

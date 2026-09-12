@@ -1,0 +1,123 @@
+[
+ {
+  "place_id": 425167779,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 2698607,
+  "lat": "45.9083263",
+  "lon": "9.1420628",
+  "category": "boundary",
+  "type": "region",
+  "place_rank": 18,
+  "importance": 0.7224670975960791,
+  "addresstype": "region",
+  "name": "Alps",
+  "display_name": "Alps, Italia",
+  "address": {
+   "region": "Alps",
+   "country": "Italia",
+   "country_code": "it"
+  },
+  "extratags": {
+   "wikidata": "Q1286",
+   "wikipedia": "de:Alpen",
+   "region:type": "mountain_area",
+   "wikimedia_commons": "Category:Alps"
+  },
+  "namedetails": {
+   "name": "Alps",
+   "name:be": "Альпы",
+   "name:bg": "Алпи",
+   "name:br": "Alpoù",
+   "name:cs": "Alpy",
+   "name:de": "Alpen",
+   "name:el": "Άλπεις",
+   "name:en": "Alps",
+   "name:fr": "Alpes",
+   "name:hu": "Alpok",
+   "name:is": "Alpafjöll",
+   "name:it": "Alpi",
+   "name:nl": "Alpen",
+   "name:pt": "Alpes",
+   "name:ru": "Альпы",
+   "name:sk": "Alpy",
+   "name:sl": "Alpe",
+   "name:tt": "Альп таулары",
+   "name:fur": "Alps",
+   "old_name:is": "Mundíufjöll"
+  },
+  "boundingbox": [
+   "43.4077305",
+   "48.4092924",
+   "5.0455740",
+   "16.6058353"
+  ]
+ },
+ {
+  "place_id": 90185733,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 3792877,
+  "lat": "45.2968119",
+  "lon": "4.6604809",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 8,
+  "importance": 0.7476093615113178,
+  "addresstype": "state",
+  "name": "Auvergne-Rhône-Alpes",
+  "display_name": "Auvergne-Rhône-Alpes, France métropolitaine, France",
+  "address": {
+   "state": "Auvergne-Rhône-Alpes",
+   "ISO3166-2-lvl4": "FR-ARA",
+   "region": "France métropolitaine",
+   "country": "France",
+   "country_code": "fr"
+  },
+  "extratags": {
+   "website": "https://www.auvergnerhonealpes.fr/",
+   "ref:nuts": "FRK",
+   "wikidata": "Q18338206",
+   "ref:INSEE": "84",
+   "wikipedia": "fr:Auvergne-Rhône-Alpes",
+   "population": "8042936",
+   "ref:nuts:1": "FRK",
+   "start_date": "2016-01-01",
+   "linked_place": "state",
+   "ref:FR:SIREN": "200053767",
+   "population:date": "2019",
+   "admin_level": "4"
+  },
+  "namedetails": {
+   "name": "Auvergne-Rhône-Alpes",
+   "name:ar": "أوفيرن-رون ألب",
+   "name:br": "Arvern-Ron-Alpoù",
+   "name:ca": "Alvèrnia-Roine-Alps",
+   "name:de": "Auvergne-Rhone-Alpen",
+   "name:en": "Auvergne-Rhône-Alpes",
+   "name:eo": "Aŭvernjo-Rodano-Alpoj",
+   "name:eu": "Auvernia-Rodano-Alpeak",
+   "name:fa": "اوورنی-رون-آلپ",
+   "name:fr": "Auvergne-Rhône-Alpes",
+   "name:hu": "Auvergne-Rhône-Alpes",
+   "name:ja": "オーヴェルニュ＝ローヌ＝アルプ地域圏",
+   "name:ko": "오베르뉴론알프",
+   "name:oc": "Auvèrnhe-Ròse-Aups",
+   "name:pl": "Owernia-Rodan-Alpy",
+   "name:ru": "Овернь — Рона — Альпы",
+   "name:uk": "Овернь-Рона-Альпи",
+   "name:ur": "اوویغنئے-غون-آلپ",
+   "name:azb": "اوورنی-رون-آلپ",
+   "ISO3166-2": "FR-ARA",
+   "name:zh-Hans": "奥弗涅-罗讷-阿尔卑斯",
+   "name:zh-Hant": "奧弗涅-隆-阿爾卑斯",
+   "_place_name:ja": "オーヴェルニュ＝ローヌ＝アルプ"
+  },
+  "boundingbox": [
+   "44.1151806",
+   "46.8041547",
+   "2.0629360",
+   "7.1859342"
+  ]
+ }
+]

@@ -22,6 +22,7 @@ import { modelCallCeiling } from './limits';
  * Nominatim, Valhalla, Overture and the research model into its import graph.
  */
 import { compilerProviderChoice } from './readiness';
+import { recordedResolver } from '../destinations/fixtures/recorded-resolver';
 export {
   compilerProviderChoice,
   providerReadiness,
@@ -193,7 +194,15 @@ function fixtureProviders(): CompilerProviders {
     ...base,
     resolver: {
       name: 'fixture-resolver',
-      async resolve({ query }): Promise<DestinationResolution> {
+      async resolve({ query, now }): Promise<DestinationResolution> {
+        /*
+         * V8.1 — a query the regression corpus recorded answers with the
+         * public geocoder's real rows (a shop named after a mountain range, a
+         * village in Arizona), so the browser suite exercises the semantic
+         * gate on evidence rather than on a synthetic world that cannot fool it.
+         */
+        const recorded = await recordedResolver().resolve({ query, now });
+        if (recorded.candidates.length > 0) return { ...recorded, providersConsulted: ['fixture-resolver'] };
         const entry = fixtureMatch(query);
 
         if (!entry.isPlace) {
@@ -208,10 +217,21 @@ function fixtureProviders(): CompilerProviders {
           };
         }
 
+        /*
+         * V8.1 — the fixture's contract is "this string names these worlds": the
+         * query travels with each candidate as an alias, and the default world
+         * (any string nobody listed) answers under the traveller's own words, so
+         * the semantic gate reads the synthetic world as an answer to the phrase
+         * rather than as an unrelated metro named after nothing.
+         */
+        const listed = FIXTURE_DESTINATIONS.some((row) => row.match === entry.match);
         const candidates: DestinationCandidate[] = entry.worlds.map((key) => {
           const candidate = syntheticCandidate(SYNTHETIC_WORLDS[key]!);
+          const typed = query.trim();
           return {
             ...candidate,
+            ...(listed ? {} : { displayName: typed, qualifiedName: `${typed} (${candidate.displayName})` }),
+            aliases: [...new Set([...candidate.aliases, typed, candidate.displayName])],
             confidence: assessConfidence(
               entry.worlds.length > 1
                 ? ['exact_name_match', 'single_provider_only']

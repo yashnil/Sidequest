@@ -1,0 +1,263 @@
+{
+  "_note": "Recorded shape of the destination-concept interpreter (SIDEQUEST_DESTINATION_INTERPRETER=fixture and the regression corpus). Names only, never coordinates: every coordinate below is looked up by the geocoder and passed through the semantic gate. Test data, not a lookup table the product reads.",
+  "the canadian rockies": {
+    "isPlace": true,
+    "type": "mountain_region",
+    "scale": "region",
+    "countries": [
+      "CA"
+    ],
+    "regions": [
+      "Alberta",
+      "British Columbia"
+    ],
+    "representativeAreas": [
+      "Banff National Park",
+      "Jasper National Park",
+      "Yoho National Park",
+      "Kootenay National Park"
+    ],
+    "gateways": [
+      "Calgary",
+      "Edmonton",
+      "Vancouver"
+    ],
+    "ambiguity": "none",
+    "note": "The Canadian segment of the Rocky Mountains: a chain of national parks along the Alberta–British Columbia divide, reached from Calgary.",
+    "landscape": "mountains"
+  },
+  "patagonia": {
+    "isPlace": true,
+    "type": "informal_region",
+    "scale": "region",
+    "countries": [
+      "AR",
+      "CL"
+    ],
+    "regions": [
+      "Santa Cruz",
+      "Chubut",
+      "Río Negro",
+      "Magallanes",
+      "Aysén"
+    ],
+    "representativeAreas": [
+      "El Calafate",
+      "El Chaltén",
+      "Torres del Paine National Park",
+      "Bariloche"
+    ],
+    "gateways": [
+      "Buenos Aires",
+      "Santiago",
+      "Punta Arenas"
+    ],
+    "ambiguity": "shared_name",
+    "note": "The southern third of South America across Argentina and Chile; several towns elsewhere share the name."
+  },
+  "the scottish highlands": {
+    "isPlace": true,
+    "type": "mountain_region",
+    "scale": "region",
+    "countries": [
+      "GB"
+    ],
+    "regions": [
+      "Highland",
+      "Scotland"
+    ],
+    "representativeAreas": [
+      "Fort William",
+      "Inverness",
+      "Glencoe",
+      "Isle of Skye"
+    ],
+    "gateways": [
+      "Inverness",
+      "Glasgow",
+      "Edinburgh"
+    ],
+    "ambiguity": "none",
+    "note": "The mountainous north and west of Scotland.",
+    "landscape": "mountains"
+  },
+  "the alps": {
+    "isPlace": true,
+    "type": "mountain_region",
+    "scale": "region",
+    "countries": [
+      "FR",
+      "CH",
+      "IT",
+      "AT",
+      "DE",
+      "SI"
+    ],
+    "regions": [],
+    "representativeAreas": [
+      "Chamonix",
+      "Zermatt",
+      "Innsbruck",
+      "Interlaken"
+    ],
+    "gateways": [
+      "Geneva",
+      "Zurich",
+      "Milan",
+      "Munich"
+    ],
+    "ambiguity": "none",
+    "note": "Europe's main mountain range across six countries.",
+    "landscape": "mountains"
+  },
+  "the dolomites": {
+    "isPlace": true,
+    "type": "mountain_region",
+    "scale": "subregion",
+    "countries": [
+      "IT"
+    ],
+    "regions": [
+      "Trentino-Alto Adige",
+      "Veneto"
+    ],
+    "representativeAreas": [
+      "Cortina d'Ampezzo",
+      "Val Gardena",
+      "Bolzano",
+      "Alta Badia"
+    ],
+    "gateways": [
+      "Venice",
+      "Verona",
+      "Innsbruck"
+    ],
+    "ambiguity": "none",
+    "note": "A mountain group in north-eastern Italy.",
+    "landscape": "mountains"
+  },
+  "the lake district": {
+    "isPlace": true,
+    "type": "natural_region",
+    "scale": "subregion",
+    "countries": [
+      "GB"
+    ],
+    "regions": [
+      "Cumbria"
+    ],
+    "representativeAreas": [
+      "Keswick",
+      "Windermere",
+      "Ambleside",
+      "Lake District National Park"
+    ],
+    "gateways": [
+      "Manchester",
+      "Penrith"
+    ],
+    "ambiguity": "none",
+    "note": "A mountainous lake region in north-west England, mostly a national park.",
+    "landscape": "lake_region"
+  },
+  "the amalfi coast": {
+    "isPlace": true,
+    "type": "coast",
+    "scale": "district",
+    "countries": [
+      "IT"
+    ],
+    "regions": [
+      "Campania"
+    ],
+    "representativeAreas": [
+      "Amalfi",
+      "Positano",
+      "Ravello",
+      "Sorrento"
+    ],
+    "gateways": [
+      "Naples",
+      "Salerno"
+    ],
+    "ambiguity": "none",
+    "note": "A stretch of coastline south of Naples.",
+    "landscape": "coast"
+  },
+  "the sahara": {
+    "isPlace": true,
+    "type": "natural_region",
+    "scale": "continental",
+    "countries": [
+      "MA",
+      "DZ",
+      "TN",
+      "EG",
+      "MR",
+      "NE"
+    ],
+    "regions": [],
+    "representativeAreas": [
+      "Merzouga",
+      "Douz",
+      "Siwa Oasis",
+      "Tamanrasset"
+    ],
+    "gateways": [
+      "Marrakesh",
+      "Cairo",
+      "Tunis"
+    ],
+    "ambiguity": "vague",
+    "note": "The desert across North Africa; a trip covers one edge of it.",
+    "landscape": "desert"
+  },
+  "the pacific northwest": {
+    "isPlace": true,
+    "type": "informal_region",
+    "scale": "region",
+    "countries": [
+      "US",
+      "CA"
+    ],
+    "regions": [
+      "Washington",
+      "Oregon",
+      "British Columbia"
+    ],
+    "representativeAreas": [
+      "Seattle",
+      "Portland",
+      "Olympic National Park",
+      "Mount Rainier National Park"
+    ],
+    "gateways": [
+      "Seattle",
+      "Portland",
+      "Vancouver"
+    ],
+    "ambiguity": "vague",
+    "note": "The coastal north-west of North America, usually Washington and Oregon with British Columbia."
+  },
+  "the okavango delta": {
+    "isPlace": true,
+    "type": "natural_region",
+    "scale": "subregion",
+    "countries": [
+      "BW"
+    ],
+    "regions": [
+      "North-West District"
+    ],
+    "representativeAreas": [
+      "Maun",
+      "Moremi Game Reserve"
+    ],
+    "gateways": [
+      "Maun"
+    ],
+    "ambiguity": "none",
+    "note": "An inland delta in northern Botswana, reached through Maun.",
+    "landscape": "delta"
+  }
+}

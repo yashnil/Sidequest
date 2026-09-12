@@ -1,0 +1,54 @@
+[
+ {
+  "place_id": 74058614,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 2139488,
+  "lat": "46.2945720",
+  "lon": "12.0513238",
+  "category": "boundary",
+  "type": "region",
+  "place_rank": 18,
+  "importance": 0.593381139776757,
+  "addresstype": "region",
+  "name": "Dolomiti",
+  "display_name": "Dolomiti, Veneto, Italia",
+  "address": {
+   "region": "Dolomiti",
+   "state": "Veneto",
+   "ISO3166-2-lvl4": "IT-34",
+   "country": "Italia",
+   "country_code": "it"
+  },
+  "extratags": {
+   "ref:whc": "1237rev",
+   "website": "https://www.dolomitiunesco.info/",
+   "heritage": "1",
+   "ref:aveo": "52",
+   "wikidata": "Q1283",
+   "wikipedia": "it:Dolomiti",
+   "region:type": "mountain_area",
+   "whc:criteria": "(vii)(viii)",
+   "heritage:website": "https://whc.unesco.org/en/list/1237/",
+   "heritage:operator": "whc",
+   "wikimedia_commons": "Category:Dolomites",
+   "whc:inscription_date": "2009"
+  },
+  "namedetails": {
+   "name": "Dolomiti",
+   "name:cs": "Dolomity",
+   "name:de": "Dolomiten",
+   "name:en": "Dolomites",
+   "name:fr": "Dolomites",
+   "name:it": "Dolomiti",
+   "name:nl": "Dolomieten",
+   "name:sk": "Dolomity"
+  },
+  "boundingbox": [
+   "45.7731226",
+   "46.8160366",
+   "11.3887057",
+   "12.5475598"
+  ]
+ }
+]

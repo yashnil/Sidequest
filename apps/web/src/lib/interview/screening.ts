@@ -122,6 +122,21 @@ export function screeningSignalsFor(input: ScreeningInputs): ScreeningSignals {
     if (!signals.center && graph.envelope) signals.center = graph.envelope.center;
     if (!signals.bounds && graph.envelope?.bounds) signals.bounds = graph.envelope.bounds;
   }
+  /* --- V8.1: the semantic reading — what kind of thing, at what scale, from the gate ------------- */
+  const semantics = intent?.destinationIntent?.semantics ?? null;
+  if (semantics) {
+    const landscape = semantics.landscape ?? graph?.children.find((c) => c.landscape)?.landscape;
+    signals.semantic = { type: semantics.type, scale: semantics.scale, ...(landscape ? { landscape } : {}), ...(semantics.extent ? { extentSource: semantics.extent.source } : {}), gateways: semantics.gateways.length };
+    if (!signals.center && semantics.center) signals.center = semantics.center;
+    if (!signals.bounds && semantics.extent) signals.bounds = semantics.extent.bounds;
+    if (semantics.countries.length > 0) signals.countries = [...new Set([...(signals.countries ?? []), ...semantics.countries])];
+    if (!signals.countryCode && semantics.countries.length === 1) signals.countryCode = semantics.countries[0]!;
+    /* A concept the gate read as a landscape is one, whatever a same-named row was typed as. */
+    if (semantics.type === 'mountain_region' || semantics.type === 'natural_region' || semantics.type === 'coast') {
+      signals.entityType = 'natural_region';
+      if (!signals.breadth || signals.breadth === 'local' || signals.breadth === 'city') signals.breadth = semantics.scale === 'continental' || semantics.scale === 'country' ? 'country' : semantics.scale === 'region' || semantics.scale === 'subregion' ? 'region' : 'subregion';
+    }
+  }
 
   // --- climate for the dates, from the preflight when it looked ------------------------
   const climate = climateFor(intent?.preflight?.dates ?? null, trip.basics.startDate);

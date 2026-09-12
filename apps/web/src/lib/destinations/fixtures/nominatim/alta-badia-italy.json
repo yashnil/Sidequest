@@ -1,0 +1,43 @@
+[
+ {
+  "place_id": 74242637,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 12342024,
+  "lat": "46.5646703",
+  "lon": "11.9102193",
+  "category": "landuse",
+  "type": "winter_sports",
+  "place_rank": 24,
+  "importance": 0.46891675692100493,
+  "addresstype": "winter_sports",
+  "name": "Alta Badia",
+  "display_name": "Alta Badia, Badia - Abtei, Pustertal - Val Pusteria, Bolzano - Bozen, Trentino-Alto Adige/Südtirol, Italia",
+  "address": {
+   "winter_sports": "Alta Badia",
+   "village": "Badia - Abtei",
+   "municipality": "Pustertal - Val Pusteria",
+   "county": "Bolzano - Bozen",
+   "ISO3166-2-lvl6": "IT-BZ",
+   "state": "Trentino-Alto Adige/Südtirol",
+   "ISO3166-2-lvl4": "IT-32",
+   "country": "Italia",
+   "country_code": "it"
+  },
+  "extratags": {
+   "website": "https://www.altabadia.org/",
+   "wikidata": "Q433534",
+   "wikipedia": "it:Alta Badia"
+  },
+  "namedetails": {
+   "name": "Alta Badia",
+   "old_name:de": "Hochabtei"
+  },
+  "boundingbox": [
+   "46.5149461",
+   "46.6150016",
+   "11.8032876",
+   "11.9809714"
+  ]
+ }
+]

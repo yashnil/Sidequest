@@ -12,6 +12,7 @@ import {
   type DestinationResolution,
 } from '../schemas/resolution';
 import { destinationIntentGraphSchema, parseDestinationIntent, type DestinationIntentGraph } from './intent-graph';
+import { destinationSemanticsSchema, type DestinationSemantics } from './semantics';
 
 /**
  * WHAT THE TRAVELLER MEANT, KEPT AS ONE RECORD FOR THE LIFE OF THE TRIP.
@@ -83,6 +84,7 @@ const TYPE_FROM_FEATURE: Record<DestinationFeatureType, DestinationInterpretatio
   island: 'natural_area',
   national_park: 'natural_area',
   protected_area: 'natural_area',
+  natural_region: 'natural_area',
   landmark: 'landmark',
   other: 'unresolved',
 };
@@ -136,6 +138,14 @@ export const destinationIntentSchema = z.object({
    * to `interpretationType`.
    */
   graph: destinationIntentGraphSchema.optional(),
+  /**
+   * V8.1 — the semantic reading: what kind of thing this is, at what scale,
+   * with its evidence-qualified centre and extent, its parts and its gateways
+   * kept separate from its identity. Optional so every record written before
+   * this pass still parses; readers fall back to `graph` and then to
+   * `interpretationType`.
+   */
+  semantics: destinationSemanticsSchema.optional(),
 });
 export type DestinationIntent = z.infer<typeof destinationIntentSchema>;
 
@@ -189,6 +199,8 @@ export interface DestinationIntentInput {
   resolution?: DestinationResolution | null;
   /** V7 — the parsed (and possibly part-resolved) graph. Parsed from `rawText` when absent. */
   graph?: DestinationIntentGraph | null;
+  /** V8.1 — the semantic reading the gate produced, when the resolution went through it. */
+  semantics?: DestinationSemantics | null;
   now: Date;
 }
 
@@ -205,12 +217,14 @@ export function buildDestinationIntent(input: DestinationIntentInput): Destinati
   const normalizedText = normalizeDestinationQuery(rawText) || rawText.toLowerCase();
   const recordedAt = input.now.toISOString();
   const graph = input.graph ?? (rawText ? safeParseGraph(rawText) : null);
+  const semantics = input.semantics ?? null;
   const base = {
     schemaVersion: DESTINATION_INTENT_VERSION,
     rawText,
     normalizedText,
     recordedAt,
     ...(graph ? { graph } : {}),
+    ...(semantics ? { semantics } : {}),
   } as const;
 
   const selected = input.selected ?? null;

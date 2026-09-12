@@ -59,6 +59,7 @@ const FEATURE_TYPE_BONUS: Record<DestinationFeatureType, number> = {
   town: 0.03,
   county: 0.02,
   protected_area: 0.02,
+  natural_region: 0.04,
   district: 0,
   landmark: 0,
   other: 0,

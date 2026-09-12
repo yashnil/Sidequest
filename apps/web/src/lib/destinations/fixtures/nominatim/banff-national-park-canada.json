@@ -1,0 +1,46 @@
+[
+ {
+  "place_id": 378048821,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 6365995,
+  "lat": "51.4881335",
+  "lon": "-115.9380498",
+  "category": "boundary",
+  "type": "national_park",
+  "place_rank": 25,
+  "importance": 0.5368070737817536,
+  "addresstype": "national_park",
+  "name": "Banff National Park",
+  "display_name": "Banff National Park, Alberta, Canada",
+  "address": {
+   "national_park": "Banff National Park",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "phone": "+1-403-762-1550",
+   "leisure": "nature_reserve",
+   "website": "https://parks.canada.ca/pn-np/ab/banff",
+   "wikidata": "Q41858",
+   "wikipedia": "en:Banff National Park",
+   "snowmobile": "no",
+   "protect_class": "2",
+   "protection_title": "National Park"
+  },
+  "namedetails": {
+   "name": "Banff National Park",
+   "name:de": "Banff-Nationalpark",
+   "name:en": "Banff National Park",
+   "name:fr": "Parc national de Banff"
+  },
+  "boundingbox": [
+   "50.7050607",
+   "52.2714549",
+   "-117.3171150",
+   "-115.1649126"
+  ]
+ }
+]

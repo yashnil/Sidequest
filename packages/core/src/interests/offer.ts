@@ -116,6 +116,8 @@ const CLASSES_BY_ENTITY_TYPE: Partial<Record<DestinationEntityType, readonly Des
     island: ['coastal', 'countryside'],
     archipelago: ['coastal', 'countryside'],
     protected_area: ['mountain', 'countryside'],
+    /** V8.1 — a named landscape: outdoors first, and the countryside around it. */
+    natural_region: ['mountain', 'countryside'],
   };
 
 function lower(value: string | undefined): string {

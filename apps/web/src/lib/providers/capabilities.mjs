@@ -48,7 +48,8 @@ export const CONSUMERS = {
   'readiness.advisory': 'core/intelligence/readiness.ts#OfficialTravelSourceRegistry → intelligence/build.ts',
   'readiness.health': 'core/intelligence/readiness.ts#OfficialTravelSourceRegistry → intelligence/build.ts',
   'maps.tiles': 'components/map-adapter.ts#resolveMapTileSource → InteractiveMap',
-  'destinations.resolution': 'trips/new/place-actions.ts#placeDestinationAction (index → bundled country reference → geocoder) → the setup canvas and the timing recommendation, then plan/actions.ts#resolveDestinationAction once the trip exists',
+  'destinations.resolution': 'trips/new/place-actions.ts#placeDestinationAction (index → bundled country reference → geocoder through destinations/intent-resolution.ts, every row gated by core destinations/semantics.ts) → the setup canvas and the timing recommendation, then plan/actions.ts#resolveDestinationAction once the trip exists',
+  'destinations.interpretation': 'destinations/interpretation.ts#interpretDestinationConcept ← destinations/intent-resolution.ts (only when the gate finds the evidence insufficient for a region-like part; a classification and names, never a coordinate; every name geocoded and gated)',
   'destinations.suggestions': 'api/destinations/suggest → destinations/provider.ts#localSuggestionProvider (the local index only, never a network call while typing)',
   'auth.sign_in': 'api/auth/google/callback/route.ts + signin/actions.ts#fixtureSignInAction → lib/auth/session.ts#currentUser → lib/net/trip-access.ts#tripAccessRefusal (account first, browser cookie only while unclaimed)',
 };
@@ -185,6 +186,25 @@ export function capabilityRegistry(env = process.env) {
       ? []
       : ['No geocoder: a city, region or park typed as free text is not placed before the trip exists. Set SIDEQUEST_GEOCODER_PROVIDER=nominatim (keyless) to place them.'],
   });
+  /*
+   * V8.1 — the world-model tier behind the semantic gate. A classification
+   * and names, never a coordinate; the geocoder locates what it names.
+   */
+  const interpreterChoice = read(env, 'SIDEQUEST_DESTINATION_INTERPRETER').toLowerCase();
+  const interpreter = interpreterChoice === 'fixture' ? 'fixture' : interpreterChoice === 'off' ? 'off' : anthropic ? 'anthropic' : 'off';
+  add('destinations.interpretation', 'destinations', {
+    configured: interpreter !== 'off',
+    provider: interpreter === 'off' ? null : interpreter === 'fixture' ? 'fixture' : 'anthropic',
+    costClass: interpreter === 'anthropic' ? 'metered' : 'none',
+    fixture: interpreter === 'fixture',
+    freshness: 'stable',
+    coverage: interpreter === 'anthropic'
+      ? 'One bounded reading of a phrase the deterministic sources could not settle: a mountain range with no published extent, a name shared across countries, a landscape nobody bounds. Cached thirty days; charged to the daily model-call ledger.'
+      : interpreter === 'fixture'
+        ? 'The recorded corpus only.'
+        : 'Deterministic sources only: a region the geocoder cannot bound stays typed but unplaced.',
+    limitations: interpreter === 'anthropic' ? [] : ['Set SIDEQUEST_DESTINATION_INTERPRETER=anthropic with ANTHROPIC_API_KEY to read broad natural regions the geocoder cannot bound.'],
+  });
   add('destinations.suggestions', 'destinations', {
     configured: set(env, 'SIDEQUEST_DESTINATION_INDEX_SEED'),
     provider: set(env, 'SIDEQUEST_DESTINATION_INDEX_SEED') ? 'sidequest' : null,
@@ -199,7 +219,8 @@ export function capabilityRegistry(env = process.env) {
   add('maps.tiles', 'maps', { configured: tiles, provider: openFreeMap ? 'openfreemap' : tiles ? 'tiles' : null, costClass: openFreeMap ? 'free' : tiles ? 'metered' : 'none', coverage: openFreeMap ? 'OpenFreeMap vector basemap (OpenMapTiles / OpenStreetMap), rendered in the browser.' : tiles ? 'Basemap tiles.' : 'Positions and geometry only, no basemap.', limitations: openFreeMap ? ['Public instance, no SLA; attribution rendered under every map.'] : tiles ? [] : ['Maps draw positions and routes without a basemap.'] });
 
   const byId = Object.fromEntries(capabilities.map((c) => [c.id, c]));
-  const realProviders = capabilities.some((c) => c.group !== 'composition' && c.configured && !c.fixture && c.provider && c.provider !== 'sidequest' && c.provider !== 'official-source-registry' && c.costClass !== 'none');
+  /* A model (composition, or the V8.1 destination interpreter) is not a world-data provider: `mode` says whether the world is real, and the model is counted through `composition`. */
+  const realProviders = capabilities.some((c) => c.group !== 'composition' && c.configured && !c.fixture && c.provider && c.provider !== 'sidequest' && c.provider !== 'official-source-registry' && c.provider !== 'anthropic' && c.costClass !== 'none');
   const composition = fixtureComposer ? 'fixture' : anthropic ? 'anthropic' : 'off';
   const mode = composition === 'off' ? 'off' : composition === 'fixture' && !realProviders ? 'fixture' : composition === 'anthropic' && realProviders ? 'live' : 'mixed';
   return { mode, composition, capabilities, byId };

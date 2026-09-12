@@ -1,0 +1,36 @@
+[
+ {
+  "place_id": 28699021,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 1410037428,
+  "lat": "-31.9120821",
+  "lon": "141.4698384",
+  "category": "highway",
+  "type": "path",
+  "place_rank": 27,
+  "importance": 0.04005495002670328,
+  "addresstype": "road",
+  "name": "Amalfi Coast",
+  "display_name": "Amalfi Coast, Broken Hill, New South Wales, 2880, Australia",
+  "address": {
+   "road": "Amalfi Coast",
+   "city": "Broken Hill",
+   "state": "New South Wales",
+   "ISO3166-2-lvl4": "AU-NSW",
+   "postcode": "2880",
+   "country": "Australia",
+   "country_code": "au"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Amalfi Coast"
+  },
+  "boundingbox": [
+   "-31.9141331",
+   "-31.9098171",
+   "141.4670259",
+   "141.4710529"
+  ]
+ }
+]

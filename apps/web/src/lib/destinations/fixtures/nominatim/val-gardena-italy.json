@@ -1,0 +1,44 @@
+[
+ {
+  "place_id": 73982370,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 338449531,
+  "lat": "46.5760331",
+  "lon": "11.6483076",
+  "category": "natural",
+  "type": "valley",
+  "place_rank": 22,
+  "importance": 0.5268678794481195,
+  "addresstype": "valley",
+  "name": "Gherdëina - Grödnertal - Val Gardena",
+  "display_name": "Gherdëina - Grödnertal - Val Gardena, Urtijëi - St. Ulrich in Gröden - Ortisei, Salten-Schlern - Salto-Sciliar, Bolzano - Bozen, Trentino-Alto Adige/Südtirol, Italia",
+  "address": {
+   "valley": "Gherdëina - Grödnertal - Val Gardena",
+   "village": "Urtijëi - St. Ulrich in Gröden - Ortisei",
+   "municipality": "Salten-Schlern - Salto-Sciliar",
+   "county": "Bolzano - Bozen",
+   "ISO3166-2-lvl6": "IT-BZ",
+   "state": "Trentino-Alto Adige/Südtirol",
+   "ISO3166-2-lvl4": "IT-32",
+   "country": "Italia",
+   "country_code": "it"
+  },
+  "extratags": {
+   "wikidata": "Q384885",
+   "wikipedia": "it:Val Gardena"
+  },
+  "namedetails": {
+   "name": "Gherdëina - Grödnertal - Val Gardena",
+   "name:de": "Grödnertal",
+   "name:it": "Val Gardena",
+   "name:lld": "Gherdëina"
+  },
+  "boundingbox": [
+   "46.5535545",
+   "46.5987654",
+   "11.5340662",
+   "11.7642817"
+  ]
+ }
+]

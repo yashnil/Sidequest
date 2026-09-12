@@ -94,7 +94,7 @@ export const intentNodeResolutionSchema = z.object({
   featureType: z.string().min(1).optional(),
   countryCode: z.string().length(2).optional(),
   /** Which tier answered: the index, the bundled country reference, or a geocoder. */
-  source: z.enum(['index', 'reference', 'geocoder', 'composite']),
+  source: z.enum(['index', 'reference', 'geocoder', 'composite', 'interpretation']),
   /** The resolver's candidate id, when a geocoder answered. */
   candidateId: z.string().min(1).optional(),
   /** The civil time zone the answering source published for the part, when it did. */
@@ -136,6 +136,11 @@ export type DestinationIntentGraph = z.infer<typeof destinationIntentGraphSchema
 // ---------------------------------------------------------------------------
 // Vocabulary — generic words only, never a place name
 // ---------------------------------------------------------------------------
+
+/** Words that qualify a place rather than name one; exported so the semantic gate can ignore them when comparing names. */
+export function isQualifierWord(word: string): boolean {
+  return QUALIFIERS.has(word.toLowerCase());
+}
 
 const QUALIFIERS = new Set(['rural', 'northern', 'southern', 'eastern', 'western', 'central', 'coastal', 'inland', 'remote', 'upper', 'lower', 'north', 'south', 'east', 'west', 'interior', 'countryside', 'outer', 'inner', 'greater', 'wild', 'highland', 'lowland', 'urban', 'tropical', 'alpine']);
 

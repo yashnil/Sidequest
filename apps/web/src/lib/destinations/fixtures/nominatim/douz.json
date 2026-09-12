@@ -1,0 +1,48 @@
+[
+ {
+  "place_id": 54621870,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 264881676,
+  "lat": "33.4571102",
+  "lon": "9.0249829",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.48438994910691024,
+  "addresstype": "town",
+  "name": "دوز",
+  "display_name": "دوز, العبادلة, معتمدية دوز الشمالية, ولاية قبلي, 4216, تونس",
+  "address": {
+   "town": "دوز",
+   "county": "العبادلة",
+   "state_district": "معتمدية دوز الشمالية",
+   "state": "ولاية قبلي",
+   "ISO3166-2-lvl4": "TN-73",
+   "postcode": "4216",
+   "country": "تونس",
+   "country_code": "tn"
+  },
+  "extratags": {
+   "wikidata": "Q1009268",
+   "wikipedia": "ar:دوز",
+   "wikimedia_commons": "Category:Douz"
+  },
+  "namedetails": {
+   "name": "دوز",
+   "name:ar": "دوز",
+   "name:en": "Douz",
+   "name:eo": "Douz",
+   "name:fr": "Douz",
+   "name:pl": "Duz",
+   "name:ru": "Дуз",
+   "name:kab": "Duz"
+  },
+  "boundingbox": [
+   "33.4171102",
+   "33.4971102",
+   "8.9849829",
+   "9.0649829"
+  ]
+ }
+]

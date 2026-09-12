@@ -1,0 +1,45 @@
+[
+ {
+  "place_id": 240225,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 2622290,
+  "lat": "-51.0405776",
+  "lon": "-72.9845251",
+  "category": "boundary",
+  "type": "national_park",
+  "place_rank": 25,
+  "importance": 0.4440950859909343,
+  "addresstype": "national_park",
+  "name": "Parque Nacional Torres del Paine",
+  "display_name": "Parque Nacional Torres del Paine, Región de Magallanes y de la Antártica Chilena, Chile",
+  "address": {
+   "national_park": "Parque Nacional Torres del Paine",
+   "state": "Región de Magallanes y de la Antártica Chilena",
+   "ISO3166-2-lvl4": "CL-MA",
+   "country": "Chile",
+   "country_code": "cl"
+  },
+  "extratags": {
+   "leisure": "nature_reserve",
+   "website": "https://www.conaf.cl/parques/parque-nacional-torres-del-paine/",
+   "operator": "conaf",
+   "wikidata": "Q901646",
+   "ownership": "national",
+   "wikipedia": "es:Parque nacional Torres del Paine",
+   "protect_class": "2"
+  },
+  "namedetails": {
+   "name": "Parque Nacional Torres del Paine",
+   "name:de": "Nationalpark Torres del Paine",
+   "name:en": "Torres del Paine National Park",
+   "name:es": "Parque Nacional Torres del Paine"
+  },
+  "boundingbox": [
+   "-51.3308529",
+   "-50.7503890",
+   "-73.5056360",
+   "-72.5915837"
+  ]
+ }
+]

@@ -1,0 +1,206 @@
+[
+ {
+  "place_id": 312811921,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 14523782,
+  "lat": "31.5402016",
+  "lon": "-110.7539270",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.3771535532601069,
+  "addresstype": "village",
+  "name": "Patagonia",
+  "display_name": "Patagonia, Santa Cruz County, Arizona, 85624, United States",
+  "address": {
+   "village": "Patagonia",
+   "county": "Santa Cruz County",
+   "state": "Arizona",
+   "ISO3166-2-lvl4": "US-AZ",
+   "postcode": "85624",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "1236",
+   "wikidata": "Q1024689",
+   "wikipedia": "en:Patagonia, Arizona",
+   "population": "804",
+   "linked_place": "village",
+   "population:date": "2020",
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "Patagonia",
+   "name:en": "Patagonia",
+   "alt_name": "Town of Patagonia",
+   "_place_name:en": "Patagonia"
+  },
+  "boundingbox": [
+   "31.5360839",
+   "31.5506939",
+   "-110.7648796",
+   "-110.7329066"
+  ]
+ },
+ {
+  "place_id": 305298350,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 4052233,
+  "lat": "3.2684853",
+  "lon": "-75.7999455",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 16,
+  "importance": 0.18671166781109327,
+  "addresstype": "city",
+  "name": "Patagonia",
+  "display_name": "Patagonia, Planadas, Sur, Tolima, RAP (Especial) Central, Colombia",
+  "address": {
+   "city": "Patagonia",
+   "county": "Planadas",
+   "state_district": "Sur",
+   "state": "Tolima",
+   "ISO3166-2-lvl4": "CO-TOL",
+   "region": "RAP (Especial) Central",
+   "country": "Colombia",
+   "country_code": "co"
+  },
+  "extratags": {
+   "admin_level": "8"
+  },
+  "namedetails": {
+   "name": "Patagonia"
+  },
+  "boundingbox": [
+   "3.2449567",
+   "3.2917686",
+   "-75.8102948",
+   "-75.7892390"
+  ]
+ },
+ {
+  "place_id": 229983,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 10901374,
+  "lat": "-51.6538867",
+  "lon": "-69.2921939",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 18,
+  "importance": 0.1600553437094682,
+  "addresstype": "suburb",
+  "name": "Patagonia",
+  "display_name": "Patagonia, Río Gallegos, Municipio de Río Gallegos, Güer Aike, Santa Cruz, Argentina",
+  "address": {
+   "suburb": "Patagonia",
+   "city_district": "Río Gallegos",
+   "city": "Municipio de Río Gallegos",
+   "state_district": "Güer Aike",
+   "state": "Santa Cruz",
+   "ISO3166-2-lvl4": "AR-Z",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "linked_place": "suburb",
+   "admin_level": "9"
+  },
+  "namedetails": {
+   "name": "Patagonia",
+   "name:es": "Patagonia",
+   "_place_name:es": "Patagonia"
+  },
+  "boundingbox": [
+   "-51.6580983",
+   "-51.6500053",
+   "-69.2998477",
+   "-69.2864860"
+  ]
+ },
+ {
+  "place_id": 18622897,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 6413315,
+  "lat": "-38.6964145",
+  "lon": "-62.2193858",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 18,
+  "importance": 0.16005522468909741,
+  "addresstype": "suburb",
+  "name": "Patagonia",
+  "display_name": "Patagonia, Bahía Blanca, Cuartel II, Partido de Bahía Blanca, Buenos Aires, Argentina",
+  "address": {
+   "suburb": "Patagonia",
+   "city": "Bahía Blanca",
+   "county": "Cuartel II",
+   "state_district": "Partido de Bahía Blanca",
+   "state": "Buenos Aires",
+   "ISO3166-2-lvl4": "AR-B",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "source_ref": "http://earth-info.nga.mil/gns/html/cntyfile/ar.zip",
+   "linked_place": "suburb",
+   "admin_level": "9"
+  },
+  "namedetails": {
+   "name": "Patagonia",
+   "name:es": "Patagonia",
+   "alt_name": "Parque Patagonia",
+   "_place_name:es": "Patagonia"
+  },
+  "boundingbox": [
+   "-38.7096550",
+   "-38.6836937",
+   "-62.2330667",
+   "-62.2042537"
+  ]
+ },
+ {
+  "place_id": 408164,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 4679438,
+  "lat": "-42.7535942",
+  "lon": "-65.0411898",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 18,
+  "importance": 0.16005452887769892,
+  "addresstype": "suburb",
+  "name": "Patagonia",
+  "display_name": "Patagonia, Municipio de Puerto Madryn, Departamento Biedma, Chubut, U9120, Argentina",
+  "address": {
+   "suburb": "Patagonia",
+   "city": "Municipio de Puerto Madryn",
+   "state_district": "Departamento Biedma",
+   "state": "Chubut",
+   "ISO3166-2-lvl4": "AR-U",
+   "postcode": "U9120",
+   "country": "Argentina",
+   "country_code": "ar"
+  },
+  "extratags": {
+   "linked_place": "suburb",
+   "admin_level": "9"
+  },
+  "namedetails": {
+   "name": "Patagonia",
+   "name:es": "Patagonia",
+   "_place_name:es": "Patagonia"
+  },
+  "boundingbox": [
+   "-42.7569430",
+   "-42.7498877",
+   "-65.0466536",
+   "-65.0382862"
+  ]
+ }
+]

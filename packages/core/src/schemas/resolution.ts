@@ -102,6 +102,25 @@ export const destinationCandidateSchema = z.object({
   confidence: confidenceAssessmentSchema,
   /** One line on what this interpretation would mean for the trip. */
   note: z.string().min(1).optional(),
+  /**
+   * V8.1 — WHAT THE PROVIDER ITSELF SAID THE ROW IS.
+   *
+   * `entityType` is Sidequest's reading; this is the evidence it was read
+   * from: the record's own class and type (`office`/`information`,
+   * `natural`/`mountain_range`), its geometry kind (a node has no extent; a
+   * relation's box is a real footprint) and its address rank (30 is a
+   * building or business). The semantic gate reads these so a shop named
+   * after a mountain range can be told from the range. Optional: every
+   * resolution written before this pass lacks it and is read as unknown.
+   */
+  providerClass: z
+    .object({
+      osmType: z.enum(['node', 'way', 'relation']).optional(),
+      category: z.string().min(1).optional(),
+      type: z.string().min(1).optional(),
+      rank: z.number().int().min(0).max(40).optional(),
+    })
+    .optional(),
 });
 export type DestinationCandidate = z.infer<typeof destinationCandidateSchema>;
 

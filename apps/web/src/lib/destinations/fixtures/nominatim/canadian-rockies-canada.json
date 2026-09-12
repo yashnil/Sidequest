@@ -1,0 +1,205 @@
+[
+ {
+  "place_id": 372944964,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 23032570,
+  "lat": "49.6128609",
+  "lon": "-115.7839110",
+  "category": "aeroway",
+  "type": "aerodrome",
+  "place_rank": 30,
+  "importance": 0.37064251329451636,
+  "addresstype": "aeroway",
+  "name": "Cranbrook/Canadian Rockies International Airport",
+  "display_name": "Cranbrook/Canadian Rockies International Airport, Airport Access Road, Cranbrook, Regional District of East Kootenay, British Columbia, V1C 7E2, Canada",
+  "address": {
+   "aeroway": "Cranbrook/Canadian Rockies International Airport",
+   "road": "Airport Access Road",
+   "city": "Cranbrook",
+   "county": "Regional District of East Kootenay",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "postcode": "V1C 7E2",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "area": "yes",
+   "wikidata": "Q908580",
+   "wikipedia": "en:Cranbrook/Canadian Rockies International Airport"
+  },
+  "namedetails": {
+   "ref": "YXC",
+   "iata": "YXC",
+   "icao": "CYXC",
+   "name": "Cranbrook/Canadian Rockies International Airport"
+  },
+  "boundingbox": [
+   "49.5964746",
+   "49.6263491",
+   "-115.7899715",
+   "-115.7775537"
+  ]
+ },
+ {
+  "place_id": 374342962,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 647037918,
+  "lat": "51.0375675",
+  "lon": "-114.0972202",
+  "category": "information",
+  "type": "office",
+  "place_rank": 30,
+  "importance": 0.00007414892805366625,
+  "addresstype": "information",
+  "name": "Resorts of the Canadian Rockies",
+  "display_name": "Resorts of the Canadian Rockies, 1505, 17 Avenue SW, Bankview, Calgary, Alberta, T2T 0E2, Canada",
+  "address": {
+   "information": "Resorts of the Canadian Rockies",
+   "house_number": "1505",
+   "road": "17 Avenue SW",
+   "suburb": "Bankview",
+   "city": "Calgary",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T2T 0E2",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "level": "1",
+   "phone": "+1-403-254-7669",
+   "tourism": "information",
+   "building": "office"
+  },
+  "namedetails": {
+   "name": "Resorts of the Canadian Rockies"
+  },
+  "boundingbox": [
+   "51.0375138",
+   "51.0376521",
+   "-114.0974763",
+   "-114.0969337"
+  ]
+ },
+ {
+  "place_id": 377932483,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 836973011,
+  "lat": "51.0913918",
+  "lon": "-115.3519258",
+  "category": "leisure",
+  "type": "resort",
+  "place_rank": 30,
+  "importance": 0.00006006637674520512,
+  "addresstype": "leisure",
+  "name": "Canadian Rockies Chalets",
+  "display_name": "Canadian Rockies Chalets, 1206, Bow Valley Trail, Palliser, Canmore, Town of Canmore, Alberta, T1W 1N6, Canada",
+  "address": {
+   "leisure": "Canadian Rockies Chalets",
+   "house_number": "1206",
+   "road": "Bow Valley Trail",
+   "neighbourhood": "Bow Valley Trail",
+   "suburb": "Palliser",
+   "town": "Canmore",
+   "county": "Town of Canmore",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1W 1N6",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Canadian Rockies Chalets"
+  },
+  "boundingbox": [
+   "51.0907867",
+   "51.0917570",
+   "-115.3524837",
+   "-115.3511198"
+  ]
+ },
+ {
+  "place_id": 376020989,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 360549242,
+  "lat": "51.0876453",
+  "lon": "-115.3605259",
+  "category": "office",
+  "type": "yes",
+  "place_rank": 30,
+  "importance": 0.00006006637674520512,
+  "addresstype": "office",
+  "name": "Canadian Rockies Public Schools Board Office",
+  "display_name": "Canadian Rockies Public Schools Board Office, 618, 7 Avenue, South Canmore, Cairns on the Bow, Spring Creek Mountain Village, Canmore, Town of Canmore, Alberta, T1W 2L4, Canada",
+  "address": {
+   "office": "Canadian Rockies Public Schools Board Office",
+   "house_number": "618",
+   "road": "7 Avenue",
+   "neighbourhood": "South Canmore",
+   "suburb": "Cairns on the Bow",
+   "town": "Canmore",
+   "county": "Town of Canmore",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1W 2L4",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "building": "yes"
+  },
+  "namedetails": {
+   "name": "Canadian Rockies Public Schools Board Office"
+  },
+  "boundingbox": [
+   "51.0875614",
+   "51.0877279",
+   "-115.3606582",
+   "-115.3603934"
+  ]
+ },
+ {
+  "place_id": 377932486,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 7811434212,
+  "lat": "51.0900295",
+  "lon": "-115.3550157",
+  "category": "shop",
+  "type": "outdoor",
+  "place_rank": 30,
+  "importance": 0.00006006637674520512,
+  "addresstype": "shop",
+  "name": "Canadian Rockies Rafting & Adventures",
+  "display_name": "Canadian Rockies Rafting & Adventures, Railway Avenue, Town Centre, Spring Creek Mountain Village, Canmore, Town of Canmore, Alberta, T1W 1P0, Canada",
+  "address": {
+   "shop": "Canadian Rockies Rafting & Adventures",
+   "road": "Railway Avenue",
+   "neighbourhood": "Town Centre",
+   "suburb": "Spring Creek Mountain Village",
+   "town": "Canmore",
+   "county": "Town of Canmore",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1W 1P0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Canadian Rockies Rafting & Adventures"
+  },
+  "boundingbox": [
+   "51.0899795",
+   "51.0900795",
+   "-115.3550657",
+   "-115.3549657"
+  ]
+ }
+]

@@ -1,0 +1,48 @@
+[
+ {
+  "place_id": 295752029,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 3901504169,
+  "lat": "31.0999166",
+  "lon": "-4.0140878",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.16005000152590218,
+  "addresstype": "town",
+  "name": "Merzouga ⵎⴰⵔⵣⵓⴳⴰ مرزوكة",
+  "display_name": "Merzouga ⵎⴰⵔⵣⵓⴳⴰ مرزوكة, Et-taous ⵟⴰⵡⵙ الطاوس, Caïdat de Taouz, Cercle d'Er-Rissani, Province d'Errachidia إقليم الرشيدية, Drâa-Tafilalet ⴷⴰⵔⵄⴰ-ⵜⴰⴼⵉⵍⴰⵍⵜ درعة تافيلالت, Maroc ⵍⵎⵖⵔⵉⴱ المغرب",
+  "address": {
+   "town": "Merzouga ⵎⴰⵔⵣⵓⴳⴰ مرزوكة",
+   "city": "Et-taous ⵟⴰⵡⵙ الطاوس",
+   "municipality": "Caïdat de Taouz",
+   "county": "Cercle d'Er-Rissani",
+   "state_district": "Province d'Errachidia إقليم الرشيدية",
+   "ISO3166-2-lvl5": "MA-ERR",
+   "state": "Drâa-Tafilalet ⴷⴰⵔⵄⴰ-ⵜⴰⴼⵉⵍⴰⵍⵜ درعة تافيلالت",
+   "ISO3166-2-lvl4": "MA-08",
+   "country": "Maroc ⵍⵎⵖⵔⵉⴱ المغرب",
+   "country_code": "ma"
+  },
+  "extratags": {
+   "wikidata": "Q1922278",
+   "wikipedia": "de:Merzouga",
+   "wikimedia_commons": "Category:Merzouga"
+  },
+  "namedetails": {
+   "name": "Merzouga ⵎⴰⵔⵣⵓⴳⴰ مرزوكة",
+   "name:ar": "مرزوكة",
+   "name:de": "Merzouga",
+   "name:en": "Merzouga",
+   "name:fr": "Merzouga",
+   "name:ber": "ⵎⴰⵔⵣⵓⴳⴰ"
+  },
+  "boundingbox": [
+   "31.0599166",
+   "31.1399166",
+   "-4.0540878",
+   "-3.9740878"
+  ]
+ }
+]

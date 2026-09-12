@@ -144,8 +144,16 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
    * bounds, or the compiled region's base point. Null when nothing resolved.
    */
   const selected = intent?.selectedDestination ?? intent?.resolution?.candidates.find((c) => c.id === (intent?.selectedCandidateId ?? intent?.resolution?.unambiguousCandidateId)) ?? intent?.resolution?.candidates[0] ?? null;
+  const semantics = intent?.destinationIntent?.semantics ?? null;
   const geometry = selected?.center
-    ? { name: selected.displayName ?? trip.basics.destinationInput, center: selected.center, bounds: selected.bounds ?? null, featureType: 'entityType' in selected ? selected.entityType : selected.featureType }
+    ? {
+        name: selected.displayName ?? trip.basics.destinationInput,
+        center: selected.center,
+        bounds: selected.bounds ?? null,
+        featureType: 'entityType' in selected ? selected.entityType : selected.featureType,
+        /* V8.1 — frame by the semantic scale and say how the extent was arrived at; gateways are context. */
+        ...(semantics ? { scale: semantics.scale, ...(semantics.extent ? { extentSource: semantics.extent.source } : {}), gateways: semantics.gateways.map((g) => g.label) } : {}),
+      }
     : resolved.ok
       ? { name: resolved.context.region.name, center: resolved.context.region.baseCoordinates, bounds: null }
       : null;

@@ -107,6 +107,8 @@ export function compositionPreferenceSummary(profile: TravelerProfile): Composit
   add('internal_flights', interview.internalFlights === 'fine' ? 'Short internal flights are fine where they save a day' : interview.internalFlights === 'cannot' ? 'No small aircraft' : 'Rather not fly internally');
   add('altitude_comfort', interview.altitudeComfort === 'fine' ? 'Altitude is not a concern' : interview.altitudeComfort === 'avoid_high' ? 'Keep the plan below high altitude' : 'Take altitude slowly: easy first days, sleep low');
   add('hike_appetite', interview.hikeAppetite === 'none' ? 'No real hikes; viewpoints and easy paths' : interview.hikeAppetite === 'short' ? 'Hikes under two hours, gentle' : interview.hikeAppetite === 'full_day' ? 'A full-day hike is welcome' : 'Half-day hikes are fine');
+  add('trail_setting', interview.trailSetting === 'backcountry' ? 'Backcountry welcome: huts, long approaches, real remoteness' : interview.trailSetting === 'frontcountry' ? 'Front-country only: marked trails from a car park, back by dinner' : 'Mostly front-country, with room for one bigger day');
+  add('permit_activities', interview.permitSensitiveActivities === 'build_around' ? 'Build the trip around permit- or booking-bound days and list what to book' : 'Keep the plan flexible; leave out anything that needs a permit or a booking weeks ahead');
   add('stairs_hills', interview.stairsAndHills === 'fine' ? 'Stairs and steep streets are fine' : interview.stairsAndHills === 'cannot' ? 'Level access only' : 'Prefer the lift or the flat route');
 
   // --- taste ----------------------------------------------------------------------------

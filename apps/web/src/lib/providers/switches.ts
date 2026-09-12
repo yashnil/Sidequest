@@ -56,6 +56,24 @@ export function isGlobalRoutesProviderEnabled(): boolean {
 }
 
 /**
+ * V8.1 — THE DESTINATION-CONCEPT INTERPRETER.
+ *
+ * A world-model reading of a phrase the deterministic sources could not
+ * place well enough (a mountain range with no published extent, a name
+ * shared across countries). `anthropic` when a credential exists unless
+ * switched off; `fixture` answers from the recorded corpus; `off` keeps the
+ * product deterministic-only. It classifies and names; it never produces a
+ * coordinate.
+ */
+export function destinationInterpreterChoice(): 'anthropic' | 'fixture' | 'off' {
+  const chosen = process.env.SIDEQUEST_DESTINATION_INTERPRETER?.trim().toLowerCase();
+  if (chosen === 'fixture') return 'fixture';
+  if (chosen === 'off') return 'off';
+  if (chosen === 'anthropic') return (process.env.ANTHROPIC_API_KEY?.trim().length ?? 0) > 0 ? 'anthropic' : 'off';
+  return (process.env.ANTHROPIC_API_KEY?.trim().length ?? 0) > 0 ? 'anthropic' : 'off';
+}
+
+/**
  * Whether a research-model credential exists.
  *
  * Length only. The value is never read, logged, compared or returned — a

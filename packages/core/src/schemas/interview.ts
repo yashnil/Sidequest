@@ -108,6 +108,23 @@ export const ALTITUDE_COMFORTS = ['fine', 'take_it_slow', 'avoid_high'] as const
 export const altitudeComfortSchema = z.enum(ALTITUDE_COMFORTS);
 export type AltitudeComfort = z.infer<typeof altitudeComfortSchema>;
 
+/**
+ * V8.1 — MOUNTAIN AND WILDERNESS REGIONS ASK TWO MORE THINGS.
+ *
+ * Where a trail starts and ends is a different question from how long it is:
+ * a front-country day starts at a car park and ends at dinner; a backcountry
+ * day starts with a long approach and may end in a hut. And in these regions
+ * the best days often need a permit or a booking weeks ahead, which either
+ * shapes the trip or is left out of it — never silently assumed.
+ */
+export const TRAIL_SETTINGS = ['frontcountry', 'mixed', 'backcountry'] as const;
+export const trailSettingSchema = z.enum(TRAIL_SETTINGS);
+export type TrailSetting = z.infer<typeof trailSettingSchema>;
+
+export const PERMIT_STRATEGIES = ['build_around', 'keep_flexible'] as const;
+export const permitStrategySchema = z.enum(PERMIT_STRATEGIES);
+export type PermitStrategy = z.infer<typeof permitStrategySchema>;
+
 export const HIKE_APPETITES = ['none', 'short', 'half_day', 'full_day'] as const;
 export const hikeAppetiteSchema = z.enum(HIKE_APPETITES);
 export type HikeAppetite = z.infer<typeof hikeAppetiteSchema>;

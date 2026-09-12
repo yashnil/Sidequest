@@ -1,0 +1,42 @@
+[
+ {
+  "place_id": 375785955,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 673733022,
+  "lat": "50.9418881",
+  "lon": "-115.9908336",
+  "category": "leisure",
+  "type": "nature_reserve",
+  "place_rank": 24,
+  "importance": 0.5264041530976056,
+  "addresstype": "nature_reserve",
+  "name": "Kootenay National Park",
+  "display_name": "Kootenay National Park, Regional District of East Kootenay, British Columbia, Canada",
+  "address": {
+   "nature_reserve": "Kootenay National Park",
+   "county": "Regional District of East Kootenay",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "website": "https://parks.canada.ca/pn-np/bc/kootenay",
+   "boundary": "national_park",
+   "wikidata": "Q903323",
+   "wikipedia": "ru:Кутеней (национальный парк)",
+   "snowmobile": "no",
+   "protect_class": "2"
+  },
+  "namedetails": {
+   "name": "Kootenay National Park"
+  },
+  "boundingbox": [
+   "50.5759335",
+   "51.3078493",
+   "-116.3607867",
+   "-115.8021707"
+  ]
+ }
+]

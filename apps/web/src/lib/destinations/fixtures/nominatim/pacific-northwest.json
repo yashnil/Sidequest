@@ -1,0 +1,41 @@
+[
+ {
+  "place_id": 318321459,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 6010576,
+  "lat": "32.7975304",
+  "lon": "-117.2198236",
+  "category": "highway",
+  "type": "residential",
+  "place_rank": 26,
+  "importance": 0.05341061341268021,
+  "addresstype": "road",
+  "name": "Northwest",
+  "display_name": "Northwest, Pacific Beach, San Diego, San Diego County, California, 92140, United States",
+  "address": {
+   "road": "Northwest",
+   "suburb": "Pacific Beach",
+   "city": "San Diego",
+   "county": "San Diego County",
+   "state": "California",
+   "ISO3166-2-lvl4": "US-CA",
+   "postcode": "92140",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "access": "private",
+   "abandoned:highway": "residential"
+  },
+  "namedetails": {
+   "name": "Northwest"
+  },
+  "boundingbox": [
+   "32.7974524",
+   "32.7976084",
+   "-117.2202086",
+   "-117.2194386"
+  ]
+ }
+]
