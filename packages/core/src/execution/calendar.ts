@@ -51,16 +51,34 @@ export function escapeIcsText(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 }
 
-/** RFC 5545 §3.1: lines longer than 75 octets fold with a leading space. Folds on characters, conservatively. */
+const OCTETS = new TextEncoder();
+
+/**
+ * RFC 5545 §3.1: a physical line carries at most 75 octets, and a longer one
+ * folds onto continuations that begin with a space.
+ *
+ * V9.1 — the limit is octets, not characters. Folding on UTF-16 code units let
+ * any line holding multi-byte text — the ODbL attribution's `©`, an em dash in
+ * a reason, an accented or non-Latin place name — run to 79 octets, which
+ * Google's parser has been known to drop the whole event over. Iterating the
+ * string by code point also means a surrogate pair is never split across a fold.
+ */
 export function foldIcsLine(line: string): string {
-  if (line.length <= 74) return line;
+  if (OCTETS.encode(line).length <= 75) return line;
   const parts: string[] = [];
-  let rest = line;
-  while (rest.length > 74) {
-    parts.push(rest.slice(0, 74));
-    rest = ` ${rest.slice(74)}`;
+  let current = '';
+  let octets = 0;
+  for (const character of line) {
+    const size = OCTETS.encode(character).length;
+    if (octets + size > 75) {
+      parts.push(current);
+      current = ' ';
+      octets = 1;
+    }
+    current += character;
+    octets += size;
   }
-  parts.push(rest);
+  parts.push(current);
   return parts.join('\r\n');
 }
 

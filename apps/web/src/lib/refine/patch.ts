@@ -55,6 +55,8 @@ export const TRIP_PATCH_OPS = [
   'update_timing',
   'update_trip_thesis',
   'update_preference',
+  /** V9.1 — one structural decision (nights per stay) that Sidequest expands into the operations above. */
+  'restructure',
 ] as const;
 export type TripPatchOp = (typeof TRIP_PATCH_OPS)[number];
 
@@ -78,17 +80,93 @@ export const tripPatchOperationSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('update_timing'), startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), rationale: shortProse(240).optional() }),
   z.object({ op: z.literal('update_trip_thesis'), purpose: shortProse(240).optional(), routeRationale: shortProse(240).optional(), signatures: z.array(shortProse(60)).max(3).optional() }),
   z.object({ op: z.literal('update_preference'), field: z.string().max(60), value: z.string().max(200), note: shortProse(200).optional() }),
+  /**
+   * V9.1 — RESTRUCTURE: THE STRUCTURAL DECISION, NOT ITS CONSEQUENCES.
+   *
+   * "Fewer hotel changes" is a new nights figure per stay; everything else —
+   * which days sleep where, which stays leave, what to tell the traveller —
+   * Sidequest derives. So the wire carries only the decision: the stays whose
+   * nights change (0 drops a stay; an existing stay may be renamed when it
+   * becomes somewhere else), optionally anchors to drop or move by id, and one
+   * reason. `expandRestructure` turns it into the typed operations above before
+   * anything is applied, so locks, invariants, the blast radius, the delta and
+   * undo all see ordinary operations. The nights must still add up to the
+   * trip's nights; a sum that does not is refused, never silently corrected.
+   */
+  z.object({
+    op: z.literal('restructure'),
+    stays: z.array(z.object({ id: z.string().max(120), nights: z.number().int().min(0).max(60), name: shortProse(100).optional(), why: shortProse(140).optional(), lodgingArea: shortProse(80).optional(), overnight: z.enum(OVERNIGHT_KINDS).optional() })).min(1).max(12),
+    drop: z.array(z.object({ id: z.string().max(120), reason: shortProse(160) })).max(12).optional(),
+    move: z.array(z.object({ id: z.string().max(120), toDay: z.number().int().min(1).max(40) })).max(12).optional(),
+    why: shortProse(200),
+  }),
 ]);
 export type TripPatchOperation = z.infer<typeof tripPatchOperationSchema>;
 
 export const tripPatchSchema = z.object({
   version: z.literal(TRIP_PATCH_VERSION).default(TRIP_PATCH_VERSION),
-  /** What Sidequest will tell the traveller it changed, kept, and is rechecking (§44). */
-  changed: z.array(shortProse(200)).max(10),
-  kept: z.array(shortProse(200)).max(10),
+  /**
+   * What the model would tell the traveller it changed and kept. Optional since
+   * V9.1: the proposal and the version record show the deterministic dry-run's
+   * own lines (V6), never these, so a model that spends output on them spends
+   * it on text nobody reads.
+   */
+  changed: z.array(shortProse(200)).max(10).default([]),
+  kept: z.array(shortProse(200)).max(10).default([]),
   operations: z.array(tripPatchOperationSchema).max(40),
 });
 export type TripPatch = z.infer<typeof tripPatchSchema>;
+
+/**
+ * V9.1 — expand every `restructure` into the typed operations it stands for.
+ *
+ * Pure. A stay named that the draft does not have, or nights that no longer add
+ * up to the trip's nights, comes back as a refusal line rather than an
+ * operation, so `applyTripPatch` records it the same way it records a locked
+ * stay. Order is preserved: the expansion sits where the restructure was.
+ */
+export function expandRestructure(patch: TripPatch, draft: TripDraft): { patch: TripPatch; refused: { op: TripPatchOp; ref: string; reason: string }[] } {
+  const refused: { op: TripPatchOp; ref: string; reason: string }[] = [];
+  const operations: TripPatchOperation[] = [];
+  const totalNights = draft.bases.reduce((n, base) => n + base.nights, 0);
+  for (const operation of patch.operations) {
+    if (operation.op !== 'restructure') {
+      operations.push(operation);
+      continue;
+    }
+    const nights = new Map(draft.bases.map((base) => [base.id, base.nights]));
+    let valid = true;
+    for (const stay of operation.stays) {
+      if (!nights.has(stay.id)) {
+        refused.push({ op: 'restructure', ref: stay.id, reason: 'no such stay in this draft' });
+        valid = false;
+      }
+    }
+    if (!valid) continue;
+    for (const stay of operation.stays) nights.set(stay.id, stay.nights);
+    if ([...nights.values()].every((v) => v === 0)) {
+      refused.push({ op: 'restructure', ref: 'nights', reason: 'every stay would be dropped' });
+      continue;
+    }
+    const sum = [...nights.values()].reduce((n, v) => n + v, 0);
+    if (sum !== totalNights) {
+      refused.push({ op: 'restructure', ref: 'nights', reason: `the nights would add up to ${sum}, and the trip has ${totalNights}` });
+      continue;
+    }
+    for (const stay of operation.stays) {
+      const base = draft.bases.find((entry) => entry.id === stay.id)!;
+      const why = stay.why ?? operation.why;
+      if (stay.name && stay.name !== base.name) {
+        operations.push({ op: 'replace_base', id: stay.id, name: stay.name, nights: stay.nights, why, ...(stay.lodgingArea ? { lodgingArea: stay.lodgingArea } : {}), ...(stay.overnight ? { overnight: stay.overnight } : {}) });
+      } else if (stay.nights !== base.nights || stay.lodgingArea || stay.overnight) {
+        operations.push({ op: 'update_base', id: stay.id, nights: stay.nights, ...(stay.nights !== base.nights ? { why } : {}), ...(stay.lodgingArea ? { lodgingArea: stay.lodgingArea } : {}), ...(stay.overnight ? { overnight: stay.overnight } : {}) });
+      }
+    }
+    for (const entry of operation.drop ?? []) operations.push({ op: 'remove_activity', id: entry.id, reason: entry.reason });
+    for (const entry of operation.move ?? []) operations.push({ op: 'move_activity', id: entry.id, toDay: entry.toDay });
+  }
+  return { patch: { ...patch, operations: operations.slice(0, 40) }, refused };
+}
 
 /* ------------------------------------------------------------------ *
  * Application
@@ -126,7 +204,9 @@ export function anchorIndex(draft: TripDraft): Map<string, { dayNumber: number; 
  * "Change days 1, 2, 7, 8?", while the two stays it actually changed were
  * outside the radius and refused.
  */
-export function patchReach(patch: TripPatch, draft: TripDraft): { days: number[]; bases: string[] } {
+export function patchReach(input: TripPatch, draft: TripDraft): { days: number[]; bases: string[] } {
+  /* V9.1 — a restructure reaches what its expansion reaches. */
+  const patch = expandRestructure(input, draft).patch;
   const ids = anchorIndex(draft);
   const days = new Set<number>();
   const bases = new Set<string>();
@@ -210,6 +290,15 @@ function listOfDays(days: readonly number[]): string {
  * quietly overriding it here.
  */
 export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; locked?: readonly string[]; travellerLocked?: readonly string[]; booked?: readonly BookingDependency[]; today?: Date }): PatchApplication {
+  /* V9.1 — a structural decision becomes ordinary operations first; its refusals are recorded like any other. */
+  const expansion = expandRestructure(input.patch, input.draft);
+  if (expansion.refused.length > 0 || expansion.patch !== input.patch) {
+    return applyExpandedPatch({ ...input, patch: expansion.patch }, expansion.refused);
+  }
+  return applyExpandedPatch(input, []);
+}
+
+function applyExpandedPatch(input: { draft: TripDraft; patch: TripPatch; locked?: readonly string[]; travellerLocked?: readonly string[]; booked?: readonly BookingDependency[]; today?: Date }, priorRefusals: PatchApplication['refused']): PatchApplication {
   const draft: TripDraft = structuredClone(input.draft);
   const locked = new Set(input.locked ?? []);
   /*
@@ -221,7 +310,7 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
   const travellerLocked = input.travellerLocked ? new Set(input.travellerLocked) : null;
   const because = (keys: readonly string[], what: string): string => (travellerLocked === null || keys.some((key) => travellerLocked.has(key)) ? `the traveller locked this ${what}` : `this ${what} is outside the scope of this change`);
   const applied: string[] = [];
-  const refused: PatchApplication['refused'] = [];
+  const refused: PatchApplication['refused'] = [...priorRefusals];
   const dayOf = (dayNumber: number) => draft.days.find((day) => day.dayNumber === dayNumber);
 
   /* Ids are resolved against the ORIGINAL draft: an operation list must not be sensitive to its own order. */
@@ -413,17 +502,27 @@ export function applyTripPatch(input: { draft: TripDraft; patch: TripPatch; lock
    */
   const nightsChanged = draft.bases.some((base) => input.draft.bases.find((original) => original.id === base.id)?.nights !== base.nights);
   if (nightsChanged) {
-    const before = dayBaseMap(input.draft.bases, input.draft.days.length);
+    /*
+     * V9.1 — THE SEQUENCE IS THE TRUTH ABOUT WHERE A NIGHT IS SPENT.
+     *
+     * Every day is re-derived from the nights sequence once the nights move.
+     * The V6 rule kept a day the nights "did not reach" on the id the
+     * composition gave it, and the live Iceland draft showed why that cannot
+     * hold: two stays named Reykjavík, and days 1–2 carrying the *return*
+     * stay's id, so the first stay was "a stay no day uses" and every patch
+     * was refused. A day is told it moved only when the *name* of its stay
+     * changes — the same town under a different id is not a move.
+     */
     const after = dayBaseMap(draft.bases, draft.days.length);
     const surviving = new Set(draft.bases.filter((base) => base.nights > 0).map((base) => base.id));
+    const nameOf = (id: string) => draft.bases.find((base) => base.id === id)?.name ?? input.draft.bases.find((base) => base.id === id)?.name ?? id;
     const moved = new Map<string, number[]>();
     draft.days.forEach((day, index) => {
       const target = after[index];
-      if (!target || !surviving.has(target)) return;
-      if (before[index] === target && surviving.has(day.baseId)) return;
-      if (day.baseId === target) return;
+      if (!target || !surviving.has(target) || day.baseId === target) return;
+      const renamed = nameOf(day.baseId) !== nameOf(target);
       day.baseId = target;
-      moved.set(target, [...(moved.get(target) ?? []), day.dayNumber]);
+      if (renamed) moved.set(target, [...(moved.get(target) ?? []), day.dayNumber]);
     });
     draft.bases = draft.bases.filter((base) => base.nights > 0);
     for (const [baseId, days] of moved) {

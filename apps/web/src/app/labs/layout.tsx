@@ -20,12 +20,24 @@ export const dynamic = 'force-dynamic';
  * shows two competitors' output side by side and the whole exercise depends on
  * the reviewer not knowing which is which; a search result naming it would be an
  * odd way for that to leak, and costs one line to prevent.
+ *
+ * V9.1 — `openGraph` is overridden for the same reason the title is. Metadata
+ * merges field by field: the root layout names the product in `og:site_name`
+ * and `og:title` so a pasted link reads well, and those tags render into the
+ * head of every page beneath it, blind screens included. Overriding the whole
+ * object here replaces them rather than adding to them. `e2e/benchmark-blind`
+ * reads the markup, which is where this was found.
  */
 
 export const metadata: Metadata = {
   title: NEUTRAL_COPY.suiteName,
   description: LABS_COPY.shellDescription,
   robots: { index: false, follow: false },
+  openGraph: {
+    siteName: NEUTRAL_COPY.suiteName,
+    title: NEUTRAL_COPY.suiteName,
+    description: LABS_COPY.shellDescription,
+  },
 };
 
 export default function LabsLayout({ children }: { children: React.ReactNode }) {

@@ -8,7 +8,7 @@ import { addBookedItem, clearReadinessProfile, getTravelIntelligence, listBooked
 import { clearBookingResolution, getImport, recordImport, resolveImport, setBookingResolution, type ImportSourceKind } from '@/lib/db/execution-repository';
 import { applyBookedFacts } from '@/lib/intelligence/booked-reconcile';
 import { describeExtraction, prepareImport, type ImportInput } from '@/lib/execution/import';
-import { readConfirmationWithModel } from '@/lib/execution/import-model';
+import { readConfirmationPhotoWithModel, readConfirmationWithModel } from '@/lib/execution/import-model';
 import { BOOKED_TYPE_FOR_KIND } from '@/components/hub/booking-copy';
 import {
   easeDay,
@@ -619,6 +619,12 @@ function tripWindow(tripId: string): { tripStart?: string; tripEnd?: string } {
  * Parse → redact → extract → record. The raw document is never stored; the
  * row holds the redacted extraction and its status. Nothing on the trip
  * changes until the traveller confirms.
+ *
+ * V9.1 §7 — a photo or screenshot: the bytes are sniffed, bounded and stripped
+ * of their metadata, a pending import with `source_kind: 'image'`, an empty
+ * extraction and a "not read yet" note is recorded, and the bytes are dropped
+ * with this call. Only `readImportWithSidequestAction`, on an explicit press,
+ * ever reads the photo.
  */
 export async function importConfirmationAction(tripId: string, input: unknown): Promise<ImportActionResult> {
   const refusal = await tripAccessRefusal(tripId);
@@ -628,6 +634,7 @@ export async function importConfirmationAction(tripId: string, input: unknown): 
   const outcome = await prepareImport(parsed.data as ImportInput, tripWindow(tripId));
   if (!outcome.ok) return { ok: false, error: outcome.error };
   const { prepared } = outcome;
+  /* The row never holds the image: only the extraction is recorded, and `prepared.image` goes out of scope here. */
   const record = recordImport(tripId, { sourceKind: prepared.sourceKind, extracted: prepared.extracted, modelUsed: false });
   revalidatePath(`/trips/${tripId}/itinerary`);
   return { ok: true, importId: record.id, sourceKind: prepared.sourceKind, extracted: prepared.extracted, summary: describeExtraction(prepared.extracted), photo: prepared.sourceKind === 'image', modelUsed: false };
@@ -638,6 +645,10 @@ export async function importConfirmationAction(tripId: string, input: unknown): 
  * sent (the row never held it), redacted again, and only then shown to the
  * model. A reading that comes back replaces the pending row: the earlier
  * extraction is discarded and a new pending import carries `modelUsed`.
+ *
+ * V9.1 §7 — for a photo the stripped bytes and the trip window are the whole
+ * of what the model receives (`readConfirmationPhotoWithModel`); the bytes
+ * are not retained past this call and the new row holds only the reading.
  */
 export async function readImportWithSidequestAction(tripId: string, importId: string, input: unknown): Promise<ImportActionResult> {
   const refusal = await tripAccessRefusal(tripId);
@@ -650,18 +661,20 @@ export async function readImportWithSidequestAction(tripId: string, importId: st
   const outcome = await prepareImport(parsed.data as ImportInput, window);
   if (!outcome.ok) return { ok: false, error: outcome.error };
   const { prepared } = outcome;
-  const reading = await readConfirmationWithModel({
-    redactedText: prepared.redactedText,
-    ...(prepared.image ? { image: prepared.image } : {}),
-    hints: { ...window, ...(prepared.senderDomain ? { senderDomain: prepared.senderDomain } : {}), ...(prepared.subject ? { subject: prepared.subject } : {}) },
-    caller: null,
-    now: new Date(),
-  });
+  const now = new Date();
+  const reading = prepared.image
+    ? await readConfirmationPhotoWithModel({ image: prepared.image, tripWindow: window, caller: null, now })
+    : await readConfirmationWithModel({
+        redactedText: prepared.redactedText,
+        hints: { ...window, ...(prepared.senderDomain ? { senderDomain: prepared.senderDomain } : {}), ...(prepared.subject ? { subject: prepared.subject } : {}) },
+        caller: null,
+        now,
+      });
   if (!reading.ok) return { ok: false, error: reading.error };
   const record = recordImport(tripId, { sourceKind: prepared.sourceKind, extracted: reading.extracted, modelUsed: true });
   resolveImport(tripId, pending.id, { status: 'discarded' });
   revalidatePath(`/trips/${tripId}/itinerary`);
-  return { ok: true, importId: record.id, sourceKind: prepared.sourceKind, extracted: reading.extracted, summary: describeExtraction(reading.extracted), photo: false, modelUsed: true };
+  return { ok: true, importId: record.id, sourceKind: prepared.sourceKind, extracted: reading.extracted, summary: describeExtraction(reading.extracted), photo: prepared.sourceKind === 'image', modelUsed: true };
 }
 
 /** The candidate the review screen holds: a booked fact minus what the server fills in. */

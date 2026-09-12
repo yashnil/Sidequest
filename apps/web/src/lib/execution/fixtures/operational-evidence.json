@@ -1,0 +1,74 @@
+{
+  "_about": "V9.1 §5 — recorded OperationalEvidence readings (the normalised shape from core/intelligence/operational-evidence.ts, never a raw provider payload) for one planned visit: a business venue, Tuesday 2026-09-22, 10:00–11:30. Weekly windows use day 0 = Sunday and minutes of day.",
+  "unchanged_regular": {
+    "provider": "google-places",
+    "providerRef": "places/fixture-museum",
+    "checkedAt": "2026-09-15T09:00:00.000Z",
+    "status": "operational",
+    "hoursBasis": "regular",
+    "weekly": [
+      { "day": 1, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 2, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 3, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 4, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 5, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 6, "openMinute": 600, "closeMinute": 960 }
+    ],
+    "attribution": "Place data © Google"
+  },
+  "closes_earlier": {
+    "provider": "google-places",
+    "providerRef": "places/fixture-museum",
+    "checkedAt": "2026-09-15T09:00:00.000Z",
+    "status": "operational",
+    "hoursBasis": "regular",
+    "weekly": [
+      { "day": 1, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 2, "openMinute": 540, "closeMinute": 660 },
+      { "day": 3, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 4, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 5, "openMinute": 540, "closeMinute": 1020 }
+    ],
+    "attribution": "Place data © Google"
+  },
+  "closed_on_date": {
+    "provider": "google-places",
+    "providerRef": "places/fixture-museum",
+    "checkedAt": "2026-09-15T09:00:00.000Z",
+    "status": "operational",
+    "hoursBasis": "regular",
+    "weekly": [
+      { "day": 1, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 3, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 4, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 5, "openMinute": 540, "closeMinute": 1020 },
+      { "day": 6, "openMinute": 600, "closeMinute": 960 }
+    ],
+    "attribution": "Place data © Google"
+  },
+  "closed_permanently": {
+    "provider": "google-places",
+    "providerRef": "places/fixture-museum",
+    "checkedAt": "2026-09-15T09:00:00.000Z",
+    "status": "closed_permanently",
+    "hoursBasis": "none",
+    "attribution": "Place data © Google"
+  },
+  "closed_temporarily_now": {
+    "provider": "google-places",
+    "providerRef": "places/fixture-museum",
+    "checkedAt": "2026-09-15T09:00:00.000Z",
+    "status": "closed_temporarily",
+    "hoursBasis": "none",
+    "attribution": "Place data © Google"
+  },
+  "provider_failure": {
+    "provider": "google-places",
+    "providerRef": "places/fixture-museum",
+    "checkedAt": "2026-09-15T09:00:00.000Z",
+    "status": "unknown",
+    "hoursBasis": "none",
+    "attribution": "Place data © Google",
+    "unavailableReason": "timeout"
+  }
+}

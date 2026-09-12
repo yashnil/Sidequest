@@ -54,6 +54,19 @@ export default defineConfig({
        */
       '*.test.ts',
     ],
+    /*
+     * V9.1 — the performance measurement runs on its own (`npm run test:perf`),
+     * not inside this parallel pass.
+     *
+     * It is a measurement, not a regression gate: it repeats the heavy
+     * execution paths twenty-plus times and saturates every core, which starved
+     * the workers around it and timed out four unrelated suites that pass
+     * comfortably on their own. Excluding it keeps `npm run test` a true signal
+     * and keeps the numbers reproducible, since a measurement taken while
+     * hundreds of other tests fight for the same cores measures the contention,
+     * not the code.
+     */
+    exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/src/lib/execution/perf-offline.test.ts'],
     environment: 'node',
     passWithNoTests: false,
   },

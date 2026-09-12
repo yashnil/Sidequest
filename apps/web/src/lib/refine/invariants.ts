@@ -103,7 +103,13 @@ export function patchInvariantViolations(input: InvariantInput): string[] {
   }
 
   /* --- multi-day experiences --------------------------------------- */
-  const signatures = new Set((draft.signatures ?? []).map((entry) => entry.trim().toLowerCase()));
+  /*
+   * V9.1 — a day's `partOf` names a signature OR an episode. A multi-day road
+   * trip is written as an episode (V7) and carried on every day it spans, while
+   * the signatures name the individual stops; checking signatures alone refused
+   * every patch on a real trip.
+   */
+  const signatures = new Set([...(draft.signatures ?? []), ...(draft.episodes ?? []).map((episode) => episode.name)].map((entry) => entry.trim().toLowerCase()));
   for (const day of draft.days) {
     if (day.partOf && signatures.size > 0 && !signatures.has(day.partOf.trim().toLowerCase())) {
       violations.push(`day ${day.dayNumber} belongs to "${day.partOf}", which the trip no longer lists`);

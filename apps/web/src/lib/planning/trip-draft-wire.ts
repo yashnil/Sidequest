@@ -734,6 +734,8 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
   const taken = new Set<string>();
   const bases: TripDraft['bases'] = [];
   const baseIdByName = new Map<string, string>();
+  /** V9.1 — every id behind one name, so a town visited twice resolves by the nights sequence rather than to whichever stay was declared last. */
+  const baseIdsByName = new Map<string, string[]>();
   const baseIdByGivenId = new Map<string, string>();
   staysRaw.forEach((entry: unknown, index: number) => {
     const stay = record(entry);
@@ -750,6 +752,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     if (typeof stay.nights === 'string') touched.push(`stays[${index}].nights (string → number)`);
     const id = slug(name, taken);
     baseIdByName.set(normalizeName(name), id);
+    baseIdsByName.set(normalizeName(name), [...(baseIdsByName.get(normalizeName(name)) ?? []), id]);
     if (typeof stay.id === 'string') baseIdByGivenId.set(stay.id, id);
     const whyRaw = stay.why ?? stay.rationale ?? stay.reason;
     const why = capped(whyRaw, DRAFT_SOFT_PROSE_CAPS.baseWhy, `stays[${index}].why`, touched) ?? `Base for this part of the trip.`;
@@ -784,6 +787,27 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     if (typeof given !== 'string' || !given.trim()) return bases.length === 1 ? bases[0]!.id : null;
     if (baseIdByGivenId.has(given)) return baseIdByGivenId.get(given)!;
     const wanted = normalizeName(given);
+    const sameName = baseIdsByName.get(wanted);
+    if (sameName && sameName.length > 1) {
+      /*
+       * Two stays with one name (Reykjavík at both ends of a loop): the day
+       * sleeps at whichever of them the nights sequence puts on its night.
+       * The live Iceland draft mapped days 1–2 to the return stay, leaving
+       * the first stay unused and every later patch refused.
+       */
+      const sequence = bases.filter((b) => b.nights > 0);
+      let covered = 0;
+      let at = sequence[sequence.length - 1]?.id;
+      for (const base of sequence) {
+        if (dayIndex + 1 <= covered + base.nights) {
+          at = base.id;
+          break;
+        }
+        covered += base.nights;
+      }
+      if (at && sameName.includes(at)) return at;
+      return sameName[0]!;
+    }
     if (baseIdByName.has(wanted)) return baseIdByName.get(wanted)!;
     if (bases.some((b) => b.id === given)) return given;
     for (const [name, id] of baseIdByName) if (name.includes(wanted) || wanted.includes(name)) return (touched.push(`days[${dayIndex}].stay (matched "${given}" to ${id})`), id);

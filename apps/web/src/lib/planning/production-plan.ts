@@ -475,6 +475,7 @@ export async function generateSidequestPlanForTrip(
       baseNames: (region?.compiled.bases ?? []).map((b) => displayNameOf(b)),
       // With recorded places responses on hand, the fixture draft names a venue the board does not know, so the places path is exercised end to end.
       unlistedVenue: Boolean(process.env.SIDEQUEST_PLACES_FIXTURE),
+      destinationInput: trip.basics.destinationInput,
     });
   } else {
     const reservation = reserveModelCalls(1, { now, caller: options.caller });

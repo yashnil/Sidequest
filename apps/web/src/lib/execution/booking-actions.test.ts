@@ -278,7 +278,8 @@ Paid with card 4111 1111 1111 1111
     expect(pending[0]!.modelUsed).toBe(true);
   });
 
-  it('a photo is accepted only for the explicit press, and that press says it cannot read a photo yet', async () => {
+  /* V9.1 §7 — the photo is stored unread; only the explicit press reads it. The whole photo path is proven in `photo-import.test.ts`. */
+  it('a photo is accepted as not read yet, and only the explicit press reads it', async () => {
     const trip = await tripWithNeeds();
     const { importConfirmationAction, readImportWithSidequestAction } = await import('@/app/(product)/trips/[id]/itinerary/actions');
     const png = new Uint8Array(64);
@@ -287,10 +288,12 @@ Paid with card 4111 1111 1111 1111
     const imported = await importConfirmationAction(trip.tripId, source);
     expect(imported.ok).toBe(true);
     expect(imported.photo).toBe(true);
+    expect(imported.modelUsed).toBeFalsy();
     const read = await readImportWithSidequestAction(trip.tripId, imported.importId!, source);
-    expect(read.ok).toBe(false);
-    expect(read.error).toMatch(/photo/);
-    expect(read.error).not.toMatch(/model|provider|fixture/i);
+    expect(read.ok, read.error).toBe(true);
+    expect(read.modelUsed).toBe(true);
+    expect(read.photo).toBe(true);
+    expect(read.extracted?.fields.every((f) => f.evidence.length > 0)).toBe(true);
   });
 });
 

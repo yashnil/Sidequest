@@ -1,0 +1,100 @@
+{
+  "key": "flight",
+  "sha256Prefixes": [
+    "e854f49758fb6135"
+  ],
+  "reading": {
+    "type": "flight",
+    "typeConfidence": "high",
+    "title": "FI455 KEF → CDG",
+    "provider": "Icelandair",
+    "date": "2026-08-18",
+    "startTime": "07:35",
+    "endTime": "12:50",
+    "timeZone": "CET",
+    "location": "Keflavík (KEF)",
+    "confirmationRef": "K7PQ2M",
+    "cost": {
+      "amount": 312.4,
+      "currency": "USD"
+    },
+    "travellers": 1,
+    "fields": [
+      {
+        "key": "type",
+        "value": "flight",
+        "confidence": "high",
+        "evidence": "Boarding pass · Icelandair"
+      },
+      {
+        "key": "title",
+        "value": "FI455 KEF → CDG",
+        "confidence": "high",
+        "evidence": "FI 455 KEF → CDG"
+      },
+      {
+        "key": "provider",
+        "value": "Icelandair",
+        "confidence": "high",
+        "evidence": "Icelandair"
+      },
+      {
+        "key": "date",
+        "value": "2026-08-18",
+        "confidence": "high",
+        "evidence": "18 Aug 2026"
+      },
+      {
+        "key": "startTime",
+        "value": "07:35",
+        "confidence": "high",
+        "evidence": "Departs 07:35"
+      },
+      {
+        "key": "endTime",
+        "value": "12:50",
+        "confidence": "medium",
+        "evidence": "arrives 12:50 (CET)"
+      },
+      {
+        "key": "timeZone",
+        "value": "CET",
+        "confidence": "low",
+        "evidence": "(CET)"
+      },
+      {
+        "key": "location",
+        "value": "Keflavík (KEF)",
+        "confidence": "medium",
+        "evidence": "KEF"
+      },
+      {
+        "key": "confirmationRef",
+        "value": "K7PQ2M",
+        "confidence": "high",
+        "evidence": "Record locator: K7PQ2M"
+      },
+      {
+        "key": "cost",
+        "value": "USD 312.40",
+        "confidence": "medium",
+        "evidence": "Total paid: USD 312.40"
+      },
+      {
+        "key": "cancellation",
+        "value": "non_refundable",
+        "confidence": "medium",
+        "evidence": "Non-refundable fare"
+      },
+      {
+        "key": "travellers",
+        "value": "1",
+        "confidence": "medium",
+        "evidence": "Passenger: 1 adult"
+      }
+    ],
+    "gaps": [
+      "The arrival time zone is printed as CET; check it against the destination"
+    ]
+  }
+}

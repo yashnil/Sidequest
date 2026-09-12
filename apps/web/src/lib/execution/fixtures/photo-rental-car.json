@@ -1,0 +1,94 @@
+{
+  "key": "rental-car",
+  "sha256Prefixes": [
+    "d608b49ab9be81e0"
+  ],
+  "reading": {
+    "type": "rental_car",
+    "typeConfidence": "high",
+    "title": "Compact car, Keflavík Airport",
+    "provider": "Hertz",
+    "date": "2026-08-13",
+    "endDate": "2026-08-15",
+    "startTime": "10:00",
+    "endTime": "16:00",
+    "location": "Keflavík Airport (KEF)",
+    "confirmationRef": "H8842219",
+    "cost": {
+      "amount": 62400,
+      "currency": "ISK"
+    },
+    "travellers": 1,
+    "fields": [
+      {
+        "key": "type",
+        "value": "rental_car",
+        "confidence": "high",
+        "evidence": "Rental agreement · Hertz"
+      },
+      {
+        "key": "title",
+        "value": "Compact car, Keflavík Airport",
+        "confidence": "medium",
+        "evidence": "Compact · VW Polo or similar"
+      },
+      {
+        "key": "provider",
+        "value": "Hertz",
+        "confidence": "high",
+        "evidence": "Hertz"
+      },
+      {
+        "key": "date",
+        "value": "2026-08-13",
+        "confidence": "high",
+        "evidence": "Pick-up: 13 Aug 2026 10:00"
+      },
+      {
+        "key": "endDate",
+        "value": "2026-08-15",
+        "confidence": "high",
+        "evidence": "Return: 15 Aug 2026 16:00"
+      },
+      {
+        "key": "startTime",
+        "value": "10:00",
+        "confidence": "high",
+        "evidence": "Pick-up: 13 Aug 2026 10:00"
+      },
+      {
+        "key": "endTime",
+        "value": "16:00",
+        "confidence": "high",
+        "evidence": "Return: 15 Aug 2026 16:00"
+      },
+      {
+        "key": "location",
+        "value": "Keflavík Airport (KEF)",
+        "confidence": "high",
+        "evidence": "Keflavík Airport (KEF), Arrivals hall"
+      },
+      {
+        "key": "confirmationRef",
+        "value": "H8842219",
+        "confidence": "high",
+        "evidence": "Confirmation H8842219"
+      },
+      {
+        "key": "cost",
+        "value": "ISK 62,400",
+        "confidence": "medium",
+        "evidence": "Estimated total ISK 62,400"
+      },
+      {
+        "key": "travellers",
+        "value": "1",
+        "confidence": "low",
+        "evidence": "Driver: 1"
+      }
+    ],
+    "gaps": [
+      "Cancellation terms are not printed"
+    ]
+  }
+}

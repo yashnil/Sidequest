@@ -112,6 +112,13 @@ export interface ItineraryViewModel {
 export async function itineraryViewModel(
   trip: Trip,
   itinerary: Itinerary,
+  /**
+   * V9.1 §2 — `'public'` builds the trip's intelligence without the readiness
+   * profile and the party's own facts, so the personal advisory sentences a
+   * strip cannot un-write are never written. The read-only share passes it;
+   * every product surface leaves it alone. See `loadTripIntelligence`.
+   */
+  options: { audience?: 'owner' | 'public' } = {},
 ): Promise<ItineraryViewModel> {
   /**
    * The preparation list, derived on the server from the plan that is on screen.
@@ -406,7 +413,7 @@ export async function itineraryViewModel(
   /* V9 — a trip with no compiled base zone still has a destination zone; Today and the calendar must not fall to UTC. */
   if (!timeZone) timeZone = destinationTimeZone(trip.id);
   const now = new Date(renderInstant());
-  const loaded = loadTripIntelligence({ trip, itinerary, ...(timeZone ? { timeZone } : {}), ...(countryCode ? { countryCode } : {}), sourcedAreas: lodgingAreas, worthSkipping, now });
+  const loaded = loadTripIntelligence({ trip, itinerary, ...(timeZone ? { timeZone } : {}), ...(countryCode ? { countryCode } : {}), sourcedAreas: lodgingAreas, worthSkipping, now, ...(options.audience ? { audience: options.audience } : {}) });
   /*
    * LIVE WORLD V1 — Today mode and the recheck manifest are derived here, on
    * the server, from the same instant every day on the page judges itself

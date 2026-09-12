@@ -300,6 +300,14 @@ test('a trip beyond the forecast window says so in those words', async ({ page }
   await openHubView(page, 'prepare');
   const prepare = page.locator('#hub-view-prepare');
   await expect(prepare.getByText('Historical pattern', { exact: true }).first()).toBeVisible();
+  /*
+   * V9.1 §10 — on a phone Preflight's "Can wait" bucket starts folded behind a
+   * "Show N" button. The honesty sentence lives in it, so the assertion is that
+   * it is *reachable*: open the fold where there is one, then read it. On a wide
+   * screen the list is always open and there is no button to press.
+   */
+  const showLater = prepare.getByTestId('preflight-later-toggle');
+  if (await showLater.isVisible().catch(() => false)) await showLater.click();
   await expect(prepare.getByText(/too far out for a forecast|not a forecast/i).first()).toBeVisible();
 });
 

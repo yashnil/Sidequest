@@ -102,11 +102,14 @@ export function TodayScreen(props: TodayScreenProps) {
           {today.next ? `${today.next.title} · ${formatMinuteOfDay(today.next.startMinute)}` : 'Nothing more today.'}
         </p>
         {today.leaveBy ? (
+          /* V9.1 §10 — the figure, how far off it is, and its basis in one short sentence beneath, at the operational size. */
           <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-sm text-ink" data-testid="today-leave-by" data-basis={today.leaveBy.basis}>
             <span className="eyebrow">Leave by</span>
             <span className="type-figure text-2xl">{today.leaveBy.time}</span>
             <span className="type-small text-ink-muted">{leaveWord(today.leaveBy.minutesFromNow)}</span>
-            <span className="basis-full type-meta">{today.leaveBy.basisNote}</span>
+            <span className="basis-full type-small text-ink-muted" data-testid="today-leave-by-basis">
+              {today.leaveBy.basisNote}
+            </span>
           </p>
         ) : today.nextTransport ? (
           <p className="mt-3 type-small text-ink-muted" data-testid="today-leg">
@@ -114,8 +117,9 @@ export function TodayScreen(props: TodayScreenProps) {
           </p>
         ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
+          {/* V9.1 §10 — directions are the one accent action on this screen; everything else is ink or outlined. */}
           {props.directions ? (
-            <a href={props.directions.google} target="_blank" rel="noreferrer noopener" className={cx(BIG_LINK, 'bg-ink text-paper')} data-testid="today-directions" data-mode={props.directions.mode}>
+            <a href={props.directions.google} target="_blank" rel="noreferrer noopener" className={cx(BIG_LINK, 'bg-accent text-paper')} data-testid="today-directions" data-mode={props.directions.mode}>
               {props.directions.label}
             </a>
           ) : null}
@@ -177,7 +181,7 @@ export function TodayScreen(props: TodayScreenProps) {
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <button type="button" onClick={change} className={cx(BIG_LINK, 'bg-accent text-paper')} data-testid="today-change">
+        <button type="button" onClick={change} aria-haspopup="dialog" className={cx(BIG_LINK, 'bg-ink text-paper')} data-testid="today-change">
           Change today
         </button>
         {back}
@@ -190,7 +194,7 @@ export function TodayScreen(props: TodayScreenProps) {
         <ol className="mt-3 divide-y divide-rule rounded-[var(--radius-card)] border border-rule bg-paper-raised" data-testid="today-timeline">
           {today.stops.map((stop) => (
             <li key={stop.id} className={cx('flex min-h-12 items-center gap-3 px-4 py-3', stop.done && 'text-ink-faint')} data-testid="today-stop" data-done={stop.done ? 'true' : 'false'}>
-              <span aria-hidden="true" className={cx('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[0.7rem]', stop.done ? 'border-pine bg-pine text-paper' : today.current?.id === stop.id ? 'border-accent bg-accent text-paper' : 'border-ink-faint')}>
+              <span aria-hidden="true" className={cx('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs leading-none', stop.done ? 'border-pine bg-pine text-paper' : today.current?.id === stop.id ? 'border-accent bg-accent text-paper' : 'border-ink-faint')}>
                 {stop.done ? '✓' : ''}
               </span>
               <span className="type-figure w-14 shrink-0 text-sm">{formatMinuteOfDay(stop.startMinute)}</span>

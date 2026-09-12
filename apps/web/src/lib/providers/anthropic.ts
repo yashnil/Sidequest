@@ -569,6 +569,18 @@ export class ResearchModel {
     task: string;
     /** Somebody else's words. JSON-encoded and explicitly labelled. */
     untrusted?: unknown;
+    /**
+     * V9.1 §7 — somebody else's *picture*: a photo or screenshot of a booking
+     * confirmation the traveller explicitly asked Sidequest to read. Each
+     * becomes an `image` content block (`{type: 'image', source: {type:
+     * 'base64', media_type, data}}` — the SDK's `ImageBlockParam` /
+     * `Base64ImageSource`) in the same user turn as the untrusted payload,
+     * ahead of it, so the untrusted policy in the system prompt covers what
+     * is printed on the image exactly as it covers pasted text. The bytes
+     * live in the request for the one call and nowhere else: never in
+     * `callLog`, never logged.
+     */
+    images?: readonly { mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; base64: string }[];
     schema: z.ZodType<T>;
     maxTokens?: number;
     effort?: 'low' | 'medium' | 'high';
@@ -711,21 +723,26 @@ export class ResearchModel {
      */
     const buildParams = (enforcement: 'grammar' | 'prompt') => {
       const content: Anthropic.MessageParam[] = [];
-      if (input.untrusted !== undefined) {
+      const images = input.images ?? [];
+      if (input.untrusted !== undefined || images.length > 0) {
         /**
          * JSON-encoded rather than concatenated, because JSON escaping is an
          * unambiguous delimiter: an attacker cannot close a quote and break
          * out into instruction context the way they can close a tag.
+         *
+         * An image (V9.1 §7) is untrusted content too — the same turn, the
+         * same label — and precedes the text, which is the placement the
+         * provider documents for vision input.
          */
-        content.push({
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ trust: 'untrusted', source: 'retrieved', payload: input.untrusted }),
-            },
-          ],
+        const blocks: Anthropic.ContentBlockParam[] = images.map((image) => ({
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: image.mediaType, data: image.base64 },
+        }));
+        blocks.push({
+          type: 'text',
+          text: JSON.stringify({ trust: 'untrusted', source: images.length > 0 && input.untrusted === undefined ? 'image' : 'retrieved', payload: input.untrusted ?? { attachedImages: images.length } }),
         });
+        content.push({ role: 'user', content: blocks });
       }
       // Our instruction comes after the untrusted block, never inside it.
       content.push({

@@ -1,0 +1,87 @@
+{
+  "key": "tour",
+  "sha256Prefixes": [
+    "89e52a2e4856b313"
+  ],
+  "reading": {
+    "type": "activity",
+    "typeConfidence": "high",
+    "title": "Golden Circle small-group day tour",
+    "provider": "GetYourGuide",
+    "date": "2026-08-14",
+    "startTime": "08:30",
+    "location": "Reykjavík, meeting point: Harpa Concert Hall",
+    "confirmationRef": "GYG9F3K2L",
+    "cost": {
+      "amount": 24800,
+      "currency": "ISK"
+    },
+    "cancellationDeadline": "2026-08-13",
+    "travellers": 2,
+    "fields": [
+      {
+        "key": "type",
+        "value": "activity",
+        "confidence": "high",
+        "evidence": "Your ticket · GetYourGuide"
+      },
+      {
+        "key": "title",
+        "value": "Golden Circle small-group day tour",
+        "confidence": "high",
+        "evidence": "Golden Circle Small-Group Day Tour"
+      },
+      {
+        "key": "provider",
+        "value": "GetYourGuide",
+        "confidence": "high",
+        "evidence": "GetYourGuide"
+      },
+      {
+        "key": "date",
+        "value": "2026-08-14",
+        "confidence": "high",
+        "evidence": "Friday, 14 August 2026"
+      },
+      {
+        "key": "startTime",
+        "value": "08:30",
+        "confidence": "high",
+        "evidence": "08:30 · Meet 15 minutes before"
+      },
+      {
+        "key": "location",
+        "value": "Reykjavík, meeting point: Harpa Concert Hall",
+        "confidence": "medium",
+        "evidence": "Meeting point: Harpa Concert Hall, Reykjavík"
+      },
+      {
+        "key": "confirmationRef",
+        "value": "GYG9F3K2L",
+        "confidence": "high",
+        "evidence": "Booking reference GYG9F3K2L"
+      },
+      {
+        "key": "cost",
+        "value": "ISK 24,800",
+        "confidence": "medium",
+        "evidence": "Total ISK 24,800"
+      },
+      {
+        "key": "cancellationDeadline",
+        "value": "2026-08-13",
+        "confidence": "medium",
+        "evidence": "Free cancellation until 08:30 on 13 Aug 2026"
+      },
+      {
+        "key": "travellers",
+        "value": "2",
+        "confidence": "high",
+        "evidence": "2 adults"
+      }
+    ],
+    "gaps": [
+      "The end time is not printed"
+    ]
+  }
+}

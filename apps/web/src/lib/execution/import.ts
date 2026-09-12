@@ -1,5 +1,6 @@
 import { extractConfirmation, redactSensitive, type ExtractedConfirmation } from '@sidequest/core';
 import type { ImportSourceKind } from '@/lib/db/execution-repository';
+import { prepareConfirmationPhoto, type PreparedPhoto } from './image-prep';
 
 /**
  * V9 §6 — READING A CONFIRMATION THE TRAVELLER HANDED OVER.
@@ -18,8 +19,10 @@ import type { ImportSourceKind } from '@/lib/db/execution-repository';
  *
  * Nothing here persists; the caller stores only the extraction. The raw
  * document is never written to disk or a row. A photo carries no text this
- * module can read: it is accepted only for the explicit "Ask Sidequest to
- * read it" path and is refused here with a sentence.
+ * module can read: it is accepted (V9.1 §7) as an empty reading — sniffed,
+ * bounded and stripped of its metadata by `image-prep.ts` — whose bytes travel
+ * with the result for the explicit "Ask Sidequest to read this photo" press
+ * only, and are never stored.
  */
 export const IMPORT_LIMITS = {
   /** Pasted text and `.eml` files. */
@@ -52,19 +55,20 @@ export interface PreparedImport {
   senderDomain?: string;
   /** How many attachments were read into the text. */
   attachmentsRead: number;
-  /** A photo the traveller chose, held for the explicit model path only; never stored. */
-  image?: { bytes: Uint8Array; mediaType: 'image/png' | 'image/jpeg' };
+  /** A photo the traveller chose — metadata stripped, hashed — held for the explicit model path only; never stored. */
+  image?: PreparedPhoto;
 }
 
 export type PrepareOutcome = { ok: true; prepared: PreparedImport } | { ok: false; error: string };
 
-export type SniffedType = 'pdf' | 'png' | 'jpeg' | 'eml' | 'text' | 'unknown';
+export type SniffedType = 'pdf' | 'png' | 'jpeg' | 'webp' | 'eml' | 'text' | 'unknown';
 
 /** What the bytes are, read from their first bytes and never from a filename. */
 export function sniffBytes(bytes: Uint8Array): SniffedType {
   if (bytes.length >= 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d) return 'pdf';
   if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'png';
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg';
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'webp';
   const head = new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(0, Math.min(bytes.length, 8192)));
   if (looksLikeBinary(head)) return 'unknown';
   return looksLikeRawEmail(head) ? 'eml' : 'text';
@@ -184,8 +188,9 @@ function decodeBase64(value: string): Uint8Array | null {
 
 const TOO_BIG_TEXT = 'That is larger than Sidequest reads (512 KB). Paste just the part with the booking details.';
 const TOO_BIG_PDF = 'That PDF is larger than Sidequest reads (2 MB). Paste the text from it instead.';
-const TOO_BIG_IMAGE = 'That photo is larger than Sidequest reads (4 MB). A smaller photo, or the text itself, works.';
 const NOT_A_DOCUMENT = 'That file is not a confirmation Sidequest can read. Paste the text, or choose a PDF, an e-mail file or a photo.';
+/** The empty reading a photo starts with; only the explicit press fills it. */
+export const PHOTO_NOT_READ_YET = 'Sidequest has not read this photo yet. Ask Sidequest to read it, or paste the text.';
 
 /**
  * Parse, redact and extract. Pure apart from reading the packages; nothing is stored.
@@ -234,23 +239,27 @@ export async function prepareImport(input: ImportInput, hints: { tripStart?: str
       return finish('text', new TextDecoder().decode(bytes), base, hints, 0);
     }
     case 'png':
-    case 'jpeg': {
-      if (bytes.byteLength > IMPORT_LIMITS.imageBytes) return { ok: false, error: TOO_BIG_IMAGE };
+    case 'jpeg':
+    case 'webp': {
       /*
-       * A photo has no text to extract deterministically. It is accepted as an
-       * import whose reading is empty, so the review can offer the one explicit
-       * press that reads it. The bytes travel with the result and are never stored.
+       * V9.1 §7 — a photo has no text to extract deterministically. It is
+       * sniffed, bounded and stripped of its metadata (`image-prep.ts`), then
+       * accepted as an import whose reading is empty, so the review can offer
+       * the one explicit press that reads it. The stripped bytes travel with
+       * the result and are never stored; the row gets only this extraction.
        */
+      const photo = prepareConfirmationPhoto(bytes);
+      if (!photo.ok) return { ok: false, error: photo.error };
       const extracted = extractConfirmation('', { ...hints, ...base });
       return {
         ok: true,
         prepared: {
           sourceKind: 'image',
           redactedText: '',
-          extracted: { ...extracted, gaps: ['Sidequest cannot read a photo on its own. Ask Sidequest to read it, or paste the text.'] },
+          extracted: { ...extracted, gaps: [PHOTO_NOT_READ_YET] },
           ...base,
           attachmentsRead: 0,
-          image: { bytes, mediaType: sniffed === 'png' ? 'image/png' : 'image/jpeg' },
+          image: photo.photo,
         },
       };
     }

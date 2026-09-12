@@ -41,11 +41,14 @@ export function CalendarSubscription({ tripId, feed }: { tripId: string; feed: A
   const [status, setStatus] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
+  /* V9.1 §10 — which press is in flight, so that button alone changes its word. */
+  const [press, setPress] = useState<'create' | 'revoke' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const create = () => {
     setStatus(null);
     setConfirming(false);
+    setPress('create');
     startTransition(async () => {
       const result = await createCalendarFeedAction(tripId);
       if (!result.ok) {
@@ -65,6 +68,7 @@ export function CalendarSubscription({ tripId, feed }: { tripId: string; feed: A
       setStatus(null);
       return;
     }
+    setPress('revoke');
     startTransition(async () => {
       const result = await revokeCalendarFeedAction(tripId);
       setConfirming(false);
@@ -110,14 +114,14 @@ export function CalendarSubscription({ tripId, feed }: { tripId: string; feed: A
         <p className="type-small text-ink-muted">No subscription yet. One address, pasted into your calendar, keeps every device up to date as the plan changes.</p>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2" data-print="never">
-        <button type="button" disabled={pending} onClick={create} className={buttonClass(active ? 'secondary' : 'accent', 'sm')} data-testid="pack-feed-create">
-          {pending ? 'Working…' : active ? 'Make a new address' : 'Create subscription'}
+      <div className="mt-3 flex flex-wrap items-center gap-2" data-print="never" aria-busy={pending}>
+        <button type="button" disabled={pending} aria-busy={pending && press === 'create'} onClick={create} className={buttonClass(active ? 'secondary' : 'accent', 'sm')} data-testid="pack-feed-create">
+          {pending && press === 'create' ? 'Saving…' : active ? 'Make a new address' : 'Create subscription'}
         </button>
         {active ? (
           <>
-            <button type="button" disabled={pending} onClick={revoke} aria-pressed={confirming} className={buttonClass('ghost', 'sm')} data-testid="pack-feed-revoke" data-confirming={confirming ? 'true' : 'false'}>
-              {confirming ? 'Press again to revoke' : 'Revoke subscription'}
+            <button type="button" disabled={pending} aria-busy={pending && press === 'revoke'} onClick={revoke} aria-pressed={confirming} className={buttonClass('ghost', 'sm')} data-testid="pack-feed-revoke" data-confirming={confirming ? 'true' : 'false'}>
+              {pending && press === 'revoke' ? 'Revoking…' : confirming ? 'Press again to revoke' : 'Revoke subscription'}
             </button>
             {confirming ? (
               <button type="button" className={buttonClass('ghost', 'sm')} onClick={() => setConfirming(false)}>
@@ -133,24 +137,26 @@ export function CalendarSubscription({ tripId, feed }: { tripId: string; feed: A
         </p>
       ) : null}
 
-      <dl className="mt-4 grid gap-2 type-small sm:grid-cols-3">
-        <div data-testid="pack-feed-google">
-          <dt className="label">Google Calendar</dt>
-          <dd className="mt-1 text-ink-muted">
-            Settings → Other calendars → <em>+</em> → <em>From URL</em> → paste the <code>https://</code> address. Google refreshes about once a day.
-          </dd>
-        </div>
-        <div data-testid="pack-feed-apple">
-          <dt className="label">Apple Calendar</dt>
-          <dd className="mt-1 text-ink-muted">
-            File → New Calendar Subscription, paste the address, choose iCloud and an hourly refresh. On iPhone, open the <code>webcal://</code> link.
-          </dd>
-        </div>
-        <div data-testid="pack-feed-outlook">
-          <dt className="label">Outlook</dt>
-          <dd className="mt-1 text-ink-muted">Calendar → Add calendar → Subscribe from web → paste the address. Outlook refreshes every few hours.</dd>
-        </div>
-      </dl>
+      {/* V9.1 §10 — three short numbered steps per calendar, and one honest line on how soon it shows. */}
+      <div className="mt-4 grid gap-4 type-small sm:grid-cols-3">
+        <CalendarSteps testId="pack-feed-google" name="Google Calendar" steps={['Open Google Calendar on the web.', 'Other calendars → + → From URL.', 'Paste the https:// address and press Add.']} refresh="Shows within about a day; Google sets the pace." />
+        <CalendarSteps testId="pack-feed-apple" name="Apple Calendar" steps={['File → New Calendar Subscription.', 'Paste the address (on iPhone, open the webcal link).', 'Choose iCloud and an hourly refresh.']} refresh="Shows at the refresh you choose." />
+        <CalendarSteps testId="pack-feed-outlook" name="Outlook" steps={['Calendar → Add calendar.', 'Subscribe from web.', 'Paste the address and press Import.']} refresh="Shows within a few hours." />
+      </div>
+    </div>
+  );
+}
+
+function CalendarSteps({ testId, name, steps, refresh }: { testId: string; name: string; steps: readonly [string, string, string]; refresh: string }) {
+  return (
+    <div data-testid={testId}>
+      <p className="text-sm font-medium text-ink">{name}</p>
+      <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-ink-muted marker:text-ink-faint">
+        {steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+      <p className="mt-1 type-meta">{refresh}</p>
     </div>
   );
 }

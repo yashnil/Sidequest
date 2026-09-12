@@ -54,9 +54,21 @@ function brief(item: ItineraryItem) {
   return { id: item.id, title: item.title, startMinute: item.startMinute, endMinute: item.endMinute, kind: item.kind };
 }
 
-export function buildTodayView(input: { itinerary: Itinerary; booked: readonly BookedPlanItem[]; backups: readonly DayResilience[]; now: Date; timeZone?: string; warnings?: readonly string[] }): TodayView {
-  const { date, minute } = localClock(input.now, input.timeZone);
-  const day: ItineraryDay | undefined = input.itinerary.days.find((d) => d.date === date);
+/**
+ * V9.1 §9 — TODAY ON THE DAY'S OWN CLOCK.
+ *
+ * `timeZone` is the trip's wall clock. `zonesByBaseId`, when given, names
+ * the civil zone of each base, and a day is judged against its own base's
+ * clock: a trip that sleeps in Denver and then Los Angeles is on Denver time
+ * until the night it moves. The day is found by asking, for each day, "is it
+ * this date where that day's base is?" — so a day is never picked under one
+ * zone and clocked under another. Without `zonesByBaseId` the behaviour is
+ * exactly the old one.
+ */
+export function buildTodayView(input: { itinerary: Itinerary; booked: readonly BookedPlanItem[]; backups: readonly DayResilience[]; now: Date; timeZone?: string; zonesByBaseId?: Readonly<Record<string, string>>; warnings?: readonly string[] }): TodayView {
+  const zoneOf = (d: ItineraryDay): string | undefined => input.zonesByBaseId?.[d.baseId] ?? input.timeZone;
+  const day: ItineraryDay | undefined = input.itinerary.days.find((d) => localClock(input.now, zoneOf(d)).date === d.date);
+  const { date, minute } = localClock(input.now, day ? zoneOf(day) : input.timeZone);
   if (!day) return todayViewSchema.parse({ active: false, localDate: date, nowMinute: minute });
   const timed = day.items.filter((i) => i.kind !== 'free_time' && i.kind !== 'rest');
   const current = timed.find((i) => i.startMinute <= minute && i.endMinute > minute);

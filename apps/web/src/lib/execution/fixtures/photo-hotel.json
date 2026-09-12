@@ -1,0 +1,99 @@
+{
+  "key": "hotel",
+  "sha256Prefixes": [
+    "6e6968a67d6f505c"
+  ],
+  "reading": {
+    "type": "lodging",
+    "typeConfidence": "high",
+    "title": "Harbour View Hotel",
+    "provider": "Booking.com",
+    "date": "2026-08-13",
+    "endDate": "2026-08-15",
+    "startTime": "15:00",
+    "endTime": "11:00",
+    "location": "14 Quay Street, Harbour City",
+    "confirmationRef": "4471.882.301",
+    "cost": {
+      "amount": 486,
+      "currency": "EUR"
+    },
+    "cancellationDeadline": "2026-08-10",
+    "travellers": 2,
+    "fields": [
+      {
+        "key": "type",
+        "value": "lodging",
+        "confidence": "high",
+        "evidence": "Your booking is confirmed"
+      },
+      {
+        "key": "title",
+        "value": "Harbour View Hotel",
+        "confidence": "high",
+        "evidence": "Harbour View Hotel"
+      },
+      {
+        "key": "provider",
+        "value": "Booking.com",
+        "confidence": "high",
+        "evidence": "Booking.com"
+      },
+      {
+        "key": "date",
+        "value": "2026-08-13",
+        "confidence": "high",
+        "evidence": "Check-in: Thursday, 13 August 2026 (from 15:00)"
+      },
+      {
+        "key": "endDate",
+        "value": "2026-08-15",
+        "confidence": "high",
+        "evidence": "Check-out: Saturday, 15 August 2026 (until 11:00)"
+      },
+      {
+        "key": "startTime",
+        "value": "15:00",
+        "confidence": "medium",
+        "evidence": "from 15:00"
+      },
+      {
+        "key": "endTime",
+        "value": "11:00",
+        "confidence": "medium",
+        "evidence": "until 11:00"
+      },
+      {
+        "key": "location",
+        "value": "14 Quay Street, Harbour City",
+        "confidence": "high",
+        "evidence": "Address: 14 Quay Street, Harbour City"
+      },
+      {
+        "key": "confirmationRef",
+        "value": "4471.882.301",
+        "confidence": "high",
+        "evidence": "Confirmation number: 4471.882.301"
+      },
+      {
+        "key": "cost",
+        "value": "EUR 486",
+        "confidence": "high",
+        "evidence": "Total price: € 486.00"
+      },
+      {
+        "key": "cancellationDeadline",
+        "value": "2026-08-10",
+        "confidence": "medium",
+        "evidence": "Free cancellation until 10 August 2026 23:59"
+      },
+      {
+        "key": "travellers",
+        "value": "2",
+        "confidence": "medium",
+        "evidence": "1 Double Room, 2 adults"
+      }
+    ],
+    "gaps": []
+  }
+}

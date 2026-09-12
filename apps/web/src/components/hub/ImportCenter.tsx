@@ -21,6 +21,12 @@ import { CONFIDENCE_WORD, IMPORT_FIELD_LABEL, PAID_WORD, REFUNDABLE_WORD } from 
  * The document itself lives only in this component's state for as long as the
  * review is open, so the explicit press can send it again; the row on disk
  * holds the redacted facts and nothing else.
+ *
+ * V9.1 §7 — a photo or screenshot (JPEG, PNG, WebP) is the one import nothing
+ * reads on upload: it is recorded as "not read yet", the review leads with
+ * "Ask Sidequest to read this photo", and the bytes stay in this component's
+ * state until the traveller confirms or discards. The photo-path edits below
+ * are each marked `V9.1 §7 photo`.
  */
 const FIELD = 'mt-1 min-h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine';
 const GHOST = buttonClass('ghost', 'sm');
@@ -68,6 +74,19 @@ function candidateFrom(extracted: ExtractedConfirmation): ImportCandidate {
   };
 }
 
+/* V9.1 §7 photo — is this file a photo? Read from its first bytes (the base64 head), never its name or its declared type. */
+function looksLikePhoto(base64: string): boolean {
+  try {
+    const head = atob(base64.slice(0, 24));
+    if (head.startsWith('\u00ff\u00d8\u00ff')) return true;
+    if (head.startsWith('\u0089PNG')) return true;
+    if (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP') return true;
+  } catch {
+    /* not base64 — then not a photo */
+  }
+  return false;
+}
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -98,6 +117,7 @@ export function ImportCenter({ tripId, tripStart, tripEnd, pendingImports, bases
   function submit() {
     setError(null);
     const source: ImportSource = file ? { kind: 'file', fileBase64: file.base64, filename: file.name } : { kind: 'text', text };
+    /* V9.1 §7 photo — a chosen photo is added as is; nothing reads it until the explicit press on the review. */
     if (source.kind === 'text' && text.trim().length === 0) {
       setError('Paste the confirmation, or choose a file.');
       return;
@@ -132,6 +152,9 @@ export function ImportCenter({ tripId, tripStart, tripEnd, pendingImports, bases
     refresh();
   };
 
+  /* V9.1 §7 photo — the submit button says what will happen: a photo is added, not read. */
+  const photoChosen = file ? looksLikePhoto(file.base64) : false;
+
   return (
     <section className="card mt-8 p-5 print:hidden" aria-labelledby="import-center-heading" data-testid="import-center">
       <h3 id="import-center-heading" className="type-section text-ink">
@@ -153,15 +176,17 @@ export function ImportCenter({ tripId, tripStart, tripEnd, pendingImports, bases
             <textarea name="text" value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={600_000} placeholder="Paste the whole confirmation e-mail here" className={cx(FIELD, 'font-mono text-xs leading-relaxed')} data-testid="import-text" />
           </label>
           <label className="text-sm text-ink">
-            Or a file <span className="text-ink-faint">(.eml, .pdf, or a photo up to 4 MB)</span>
-            <input ref={fileInput} name="file" type="file" accept=".eml,.pdf,.png,.jpg,.jpeg,message/rfc822,application/pdf,image/png,image/jpeg" onChange={(e) => void chooseFile(e.target.files?.[0] ?? null)} className={cx(FIELD, 'py-2 file:mr-3 file:rounded-[var(--radius-control)] file:border-0 file:bg-paper-sunk file:px-3 file:py-1.5 file:text-sm')} data-testid="import-file" />
+            Or a file <span className="text-ink-faint">(.eml, .pdf, or a photo or screenshot up to 4 MB)</span>
+            <input ref={fileInput} name="file" type="file" accept=".eml,.pdf,.png,.jpg,.jpeg,.webp,message/rfc822,application/pdf,image/png,image/jpeg,image/webp" onChange={(e) => void chooseFile(e.target.files?.[0] ?? null)} className={cx(FIELD, 'py-2 file:mr-3 file:rounded-[var(--radius-control)] file:border-0 file:bg-paper-sunk file:px-3 file:py-1.5 file:text-sm')} data-testid="import-file" />
           </label>
           {error ? <ErrorNote>{error}</ErrorNote> : null}
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" disabled={pending} className={buttonClass('primary', 'sm')} data-testid="import-submit">
-              {pending ? 'Reading…' : 'Read this confirmation'}
+              {pending ? (photoChosen ? 'Adding…' : 'Reading…') : photoChosen ? 'Add this photo' : 'Read this confirmation'}
             </button>
             {file ? <span className="text-sm text-ink-muted">{file.name}</span> : null}
+            {/* V9.1 §7 photo — said before the press: a photo is read only when asked. */}
+            {photoChosen ? <span className="basis-full text-xs text-ink-faint" data-testid="import-photo-note">A photo is not read until you ask Sidequest to on the next screen. Its location and camera details are removed first.</span> : null}
           </div>
           {pendingImports.length > 0 ? (
             <div className="mt-2 border-t border-rule pt-3" data-testid="import-pending">
@@ -248,22 +273,58 @@ function ImportReview({ tripId, review, tripStart, tripEnd, bases, onDone, onRep
         setError(result.error ?? 'Sidequest could not read that just now.');
         return;
       }
-      onReplace({ importId: result.importId, extracted: result.extracted, summary: result.summary ?? '', photo: false, modelUsed: true, source: review.source });
+      /* V9.1 §7 photo — the reading replaces the empty one; the bytes stay in state until confirm or discard. */
+      onReplace({ importId: result.importId, extracted: result.extracted, summary: result.summary ?? '', photo: review.photo, modelUsed: true, source: review.source });
     });
   };
 
+  /* V9.1 §7 photo — a photo nobody has read yet: the review leads with the one press that reads it. */
+  const unreadPhoto = review.photo && !review.modelUsed;
+
   return (
-    <div className="mt-4" data-testid="import-review" data-model-used={review.modelUsed ? 'yes' : 'no'}>
-      <p className="text-sm text-ink">{review.summary || 'Check each line before confirming.'}</p>
+    <div className="mt-4" data-testid="import-review" data-model-used={review.modelUsed ? 'yes' : 'no'} data-photo={review.photo ? 'yes' : 'no'}>
+      {unreadPhoto ? (
+        <div className="rounded-[var(--radius-control)] border border-rule bg-paper-sunk p-3" data-testid="import-photo-unread">
+          <p className="text-sm text-ink">Sidequest has not read this photo yet.</p>
+          <p className="mt-1 text-xs text-ink-muted">{review.source ? 'Press the button to have Sidequest read it once — only the photo and your trip dates are sent, with its location and camera details already removed. Or fill in the details below yourself.' : 'Choose the photo again to have Sidequest read it, or fill in the details below yourself.'}</p>
+          {review.source ? (
+            <button type="button" disabled={pending || reading} onClick={askSidequest} className={cx(buttonClass('accent', 'sm'), 'mt-2')} data-testid="import-read-with-sidequest" title="One reading by Sidequest, only when you press this">
+              {reading ? 'Sidequest is reading…' : 'Ask Sidequest to read this photo'}
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <p className="text-sm text-ink">{review.summary || 'Check each line before confirming.'}</p>
+      )}
       {review.extracted.fields.length > 0 ? (
-        <ul className="mt-3 divide-y divide-rule text-sm" data-testid="import-fields">
+        /*
+         * V9.1 §10 — the found facts read as a checklist: a filled pine mark
+         * where Sidequest is sure, a hollow amber or clay one where the
+         * traveller should look, the fact on the line, and the words it came
+         * from a step quieter beneath. Nothing here is a control; the fields
+         * below are where a line is corrected.
+         */
+        <ul className="mt-3 divide-y divide-rule text-sm" data-testid="import-fields" aria-label="What Sidequest found">
           {review.extracted.fields.map((field) => (
-            <li key={`${field.key}:${field.value}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2" data-testid="import-field" data-key={field.key} data-confidence={field.confidence}>
-              <span className="text-ink">
-                <span className="font-medium">{IMPORT_FIELD_LABEL[field.key] ?? field.key}</span> · {field.value}
+            <li key={`${field.key}:${field.value}`} className="flex items-start gap-3 py-2.5" data-testid="import-field" data-key={field.key} data-confidence={field.confidence}>
+              <span
+                aria-hidden="true"
+                className={cx(
+                  'mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border text-xs leading-none',
+                  field.confidence === 'high' ? 'border-pine bg-pine text-paper' : field.confidence === 'medium' ? 'border-amber bg-paper text-amber' : 'border-clay bg-paper text-clay',
+                )}
+              >
+                {field.confidence === 'high' ? '✓' : '?'}
               </span>
-              <span className={cx('text-xs', field.confidence === 'high' ? 'text-pine' : field.confidence === 'medium' ? 'text-amber' : 'text-clay')}>{CONFIDENCE_WORD[field.confidence]}</span>
-              <span className="basis-full type-meta">from “{field.evidence.slice(0, 140)}”</span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                  <span className="text-ink">
+                    <span className="font-medium">{IMPORT_FIELD_LABEL[field.key] ?? field.key}</span> · {field.value}
+                  </span>
+                  <span className={cx('text-xs font-medium', field.confidence === 'high' ? 'text-pine' : field.confidence === 'medium' ? 'text-amber' : 'text-clay')}>{CONFIDENCE_WORD[field.confidence]}</span>
+                </span>
+                <span className="mt-0.5 block type-meta text-ink-faint">from “{field.evidence.slice(0, 140)}”</span>
+              </span>
             </li>
           ))}
         </ul>
@@ -369,18 +430,18 @@ function ImportReview({ tripId, review, tripStart, tripEnd, bases, onDone, onRep
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={pending || reading || !candidate.title || candidate.title.trim().length === 0} onClick={confirm} className={buttonClass('accent', 'sm')} data-testid="import-confirm">
+        <button type="button" disabled={pending || reading || !candidate.title || candidate.title.trim().length === 0} aria-busy={pending} onClick={confirm} className={buttonClass('accent', 'sm')} data-testid="import-confirm">
           {pending ? 'Saving…' : 'Confirm this booking'}
         </button>
-        <button type="button" disabled={pending || reading} onClick={discard} className={GHOST} data-testid="import-discard">
+        <button type="button" disabled={pending || reading} aria-busy={pending} onClick={discard} className={GHOST} data-testid="import-discard">
           Discard
         </button>
-        {review.source && !review.modelUsed ? (
+        {unreadPhoto ? null /* V9.1 §7 photo — the press lives at the top of an unread photo's review */ : review.source && !review.modelUsed ? (
           <button type="button" disabled={pending || reading} onClick={askSidequest} className={buttonClass('secondary', 'sm')} data-testid="import-read-with-sidequest" title="One reading by Sidequest, only when you press this">
-            {reading ? 'Sidequest is reading…' : review.photo ? 'Ask Sidequest to read the photo' : 'Ask Sidequest to read it'}
+            {reading ? 'Sidequest is reading…' : 'Ask Sidequest to read it'}
           </button>
         ) : review.modelUsed ? (
-          <span className="text-sm text-ink-muted">Read by Sidequest.</span>
+          <span className="text-sm text-ink-muted">{review.photo ? 'Read from the photo by Sidequest. Check each line.' : 'Read by Sidequest.'}</span>
         ) : (
           <span className="text-sm text-ink-faint">Paste it again to have Sidequest read it.</span>
         )}

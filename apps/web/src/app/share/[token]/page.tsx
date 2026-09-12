@@ -98,7 +98,8 @@ export default async function SharedTripPage({
     );
   }
 
-  const model = await itineraryViewModel(trip, itinerary);
+  /* V9.1 §2 — a share is built for the public audience: the private inputs never reach the builder. */
+  const model = await itineraryViewModel(trip, itinerary, { audience: 'public' });
   /*
    * V6 §50 — A SHARE IS READ-ONLY AND PUBLIC; IT CARRIES NO PRIVATE FACT.
    *

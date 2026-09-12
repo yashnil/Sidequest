@@ -132,8 +132,8 @@ export function TripCard({ row, onError, controls }: { row: DashboardCardRow; on
               }}
             >
               <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2" aria-label="Trip name" data-testid="trip-rename-input" autoFocus />
-              <button type="submit" className={buttonClass('primary', 'sm')} disabled={pending}>
-                Save
+              <button type="submit" className={buttonClass('primary', 'sm')} disabled={pending} aria-busy={pending}>
+                {pending ? 'Saving…' : 'Save'}
               </button>
               <button type="button" className={buttonClass('ghost', 'sm')} onClick={() => setRenaming(false)}>
                 Cancel
@@ -173,16 +173,23 @@ export function TripCard({ row, onError, controls }: { row: DashboardCardRow; on
           </span>
           <span aria-hidden="true" className="text-ink-faint">·</span>
           {/* V9 §21 — "6 of 8 major items booked" from the engine when the plan needs anything major; the plain count otherwise. */}
-          <span className={meta.booking.booked ? 'text-pine' : 'text-ink-muted'} data-testid="trip-card-booking-state">
+          {/* V9.1 §10 — a booked state carries a filled pine mark as well as the colour; an unbooked one never does. */}
+          <span className={cx('inline-flex items-center gap-1.5', meta.booking.booked ? 'text-pine' : 'text-ink-muted')} data-testid="trip-card-booking-state" data-booked={meta.booking.booked ? 'true' : 'false'}>
+            {meta.booking.booked ? (
+              <span aria-hidden="true" className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-pine text-[0.6rem] leading-none text-paper">
+                ✓
+              </span>
+            ) : null}
             {row.bookingState ?? meta.booking.label}
           </span>
         </p>
 
         {/* V9 §21 — the next best action from the engine, the same one the hub leads with. */}
         {row.next && !quiet ? (
+          /* V9.1 §10 — the kind at the 13 px floor; the title never runs past two lines (the hub has the whole sentence). */
           <p className="flex min-w-0 items-start gap-2 text-sm" data-testid="trip-card-next-action" data-kind={row.next.kind}>
-            <span className="eyebrow mt-0.5 inline-flex h-5 shrink-0 items-center rounded-sm bg-paper-sunk px-1.5 !text-ink-muted">{NEXT_ACTION_KIND_WORD[row.next.kind]}</span>
-            <Link href={row.next.href} className="relative min-w-0 text-ink underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2" title={row.next.why}>
+            <span className="mt-0.5 inline-flex h-5 shrink-0 items-center rounded-sm bg-paper-sunk px-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{NEXT_ACTION_KIND_WORD[row.next.kind]}</span>
+            <Link href={row.next.href} className="relative line-clamp-2 min-w-0 text-ink underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2" title={`${row.next.title} — ${row.next.why}`}>
               {row.next.title}
             </Link>
           </p>
@@ -236,7 +243,7 @@ export function TripCard({ row, onError, controls }: { row: DashboardCardRow; on
                 <MoreGlyph />
               </button>
               {menu ? (
-                <div role="menu" className="slide-down absolute right-0 z-30 mt-1 w-60 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-1.5 shadow-[var(--shadow-float)]" data-testid="trip-card-menu-open">
+                <div role="menu" aria-busy={pending} className="slide-down absolute right-0 z-30 mt-1 w-60 rounded-[var(--radius-panel)] border border-rule bg-paper-raised p-1.5 shadow-[var(--shadow-float)]" data-testid="trip-card-menu-open">
                   <MenuButton onClick={() => { setRenaming(true); closeMenu(); }}>Rename</MenuButton>
                   <MenuButton onClick={() => run(() => duplicateTripAction(row.id), (r) => { if (r.tripId) router.push(`/trips/${r.tripId}/questionnaire`); })}>Duplicate</MenuButton>
                   {row.lifecycle !== 'past' && row.lifecycle !== 'traveling' && row.lifecycle !== 'archived' ? (

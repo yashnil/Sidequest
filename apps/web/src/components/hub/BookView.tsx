@@ -105,9 +105,16 @@ export function BookView(props: BookViewProps) {
               tripId ? (
                 <BookedItemRow key={item.id} tripId={tripId} item={item} />
               ) : (
-                <li key={item.id} className="py-2 text-sm text-ink" data-testid="booked-item">
-                  {item.title}
-                  {item.date ? <span className="text-ink-muted"> · {item.date}</span> : null}
+                <li key={item.id} className="flex items-start gap-2.5 py-2 text-sm text-ink" data-testid="booked-item">
+                  {/* V9.1 §10 — a booked fact looks booked on the shared copy too: a filled pine mark and the word. */}
+                  <span aria-hidden="true" className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-pine text-xs leading-none text-paper">
+                    ✓
+                  </span>
+                  <span className="min-w-0">
+                    <span className="mr-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-pine">Booked</span>
+                    {item.title}
+                    {item.date ? <span className="text-ink-muted"> · {item.date}</span> : null}
+                  </span>
                 </li>
               ),
             )}

@@ -72,7 +72,8 @@ export function NextActionCard({ nextActions, moreHref }: { nextActions: NextAct
                 data-kind={action.kind}
                 className="card lift pressable group flex items-start gap-3.5 px-4 py-3.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
               >
-                <span className={cx('eyebrow mt-0.5 inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 !text-paper', KIND_CLASS[action.kind])}>{NEXT_ACTION_KIND_WORD[action.kind]}</span>
+                {/* V9.1 §10 — the kind of act is operational text, so it sits on the 13 px floor rather than the 12 px eyebrow. */}
+                <span className={cx('mt-0.5 inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-xs font-semibold uppercase tracking-[0.08em]', KIND_CLASS[action.kind])}>{NEXT_ACTION_KIND_WORD[action.kind]}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-display text-lg leading-snug text-ink group-hover:underline group-hover:underline-offset-4">{action.title}</span>
                   <span className="mt-0.5 block type-small text-ink-muted">{action.why}</span>
@@ -87,7 +88,7 @@ export function NextActionCard({ nextActions, moreHref }: { nextActions: NextAct
         </AnimatePresence>
       </ol>
       {remaining > 0 ? (
-        <a href={more} className="mt-3 inline-block type-small text-accent-strong underline underline-offset-4" data-testid="next-action-more">
+        <a href={more} className="mt-2 inline-flex min-h-11 items-center type-small text-accent-strong underline underline-offset-4" data-testid="next-action-more">
           {remaining} more
         </a>
       ) : null}

@@ -30,6 +30,8 @@ export interface FixtureComposerHints {
   baseNames: readonly string[];
   /** Draft `FIXTURE_UNLISTED_VENUE` too — a venue the board does not carry — so a recorded places fixture can answer for it. */
   unlistedVenue?: boolean;
+  /** What the traveller typed, so a fixture token survives destination resolution (the envelope carries the resolved name only). */
+  destinationInput?: string;
 }
 
 export const FIXTURE_UNVERIFIABLE_ANCHOR = 'A Quiet Overlook Nobody Documented';
@@ -55,8 +57,20 @@ export function fixtureDraftFor(context: CompositionContext, hints: FixtureCompo
   const facts = context.planningFacts ?? { carAvailable: true, desiredBaseCount: 1, budgetBand: 'midrange' };
   const nights = brief.tripFacts.nights;
   const dayCount = brief.tripFacts.days;
-  const desiredBases = Math.max(1, Math.min(facts.desiredBaseCount, Math.max(1, hints.baseNames.length), Math.max(1, Math.floor(nights / 2)) || 1));
-  const baseNames = hints.baseNames.length > 0 ? hints.baseNames.slice(0, desiredBases) : [envelope.name];
+  /*
+   * V9.1 — a fixture-only token, like `unbuildable` and `slowbuild`: a
+   * destination containing "multibase" is drafted around several stays even
+   * when no compiled region offers base names, so the browser suite can run a
+   * structural refinement (fewer hotel changes) end to end without a model.
+   * The invented names are plainly fixture names; a real destination never
+   * carries the token.
+   */
+  const multibase = /\bmultibase\b/i.test(`${hints.destinationInput ?? ''} ${envelope.name}`);
+  const invented = multibase ? ['north', 'south', 'east'].map((side) => `${envelope.name.replace(/\bmultibase\b\s*/i, '').trim()} ${side} base`) : [];
+  /* Under the token, a compiled region offering fewer than two names is topped up with the invented ones. */
+  const offered = multibase && hints.baseNames.length < 2 ? [...hints.baseNames, ...invented.filter((n) => !hints.baseNames.includes(n))] : hints.baseNames.length > 0 ? hints.baseNames : invented;
+  const desiredBases = Math.max(1, Math.min(multibase ? Math.max(2, facts.desiredBaseCount) : facts.desiredBaseCount, Math.max(1, offered.length), Math.max(1, Math.floor(nights / 2)) || 1));
+  const baseNames = offered.length > 0 ? offered.slice(0, desiredBases) : [envelope.name];
   const bases = baseNames.map((name, i) => {
     const share = Math.floor(nights / baseNames.length) + (i < nights % baseNames.length ? 1 : 0);
     return {
@@ -200,7 +214,7 @@ export class FixtureComposer implements StructuredModel {
      * `SIDEQUEST_COMPOSER_PROVIDER=fixture` and the suite creates its own trips.
      * A real destination never contains either token.
      */
-    const name = this.context.envelope.name;
+    const name = `${this.hints.destinationInput ?? ''} ${this.context.envelope.name}`;
     if (/\bunbuildable\b/i.test(name)) throw new Error('The fixture composer refused this trip, as asked.');
     if (/\bslowbuild\b/i.test(name)) await new Promise((resolve) => setTimeout(resolve, 8_000));
     const draft = fixtureDraftFor(this.context, this.hints);

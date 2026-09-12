@@ -17,31 +17,66 @@ import { renderInstant } from '@/lib/clock';
  * from the stripped ones, so a day badge cannot quote an observation the
  * page was never given. Exported for the privacy test, which renders the
  * page and asserts none of it reaches the markup.
+ *
+ * V9.1 — the intelligence snapshot carries its own copy of the booked facts,
+ * so the same projection runs over `intelligence.bookings.booked` and the
+ * stripped snapshot is what the derived layers and the render receive. A copy
+ * no branch happens to print today is still a copy the door handed over. The
+ * snapshot's budget carries the same money a second time — what the owner
+ * actually paid, per category and as a total — so the shared budget keeps the
+ * estimate bands and drops every actual. Those fields are optional, and their
+ * absence is exactly the shape of a trip with nothing booked, which every
+ * render already handles.
  */
+function stripBookedFact<F extends ItineraryViewModel['booked'][number]>(fact: F) {
+  const { confirmationRef: _ref, notes: _notes, cost: _cost, url: _url, paid: _paid, refundable: _refundable, bookingItemId: _need, replaces: _replaces, source: _source, ...rest } = fact;
+  void _ref;
+  void _notes;
+  void _cost;
+  void _url;
+  void _paid;
+  void _refundable;
+  void _need;
+  void _replaces;
+  void _source;
+  return rest;
+}
+
+/** The estimate bands stay; every figure derived from what the owner actually paid goes. */
+function stripBudgetActuals<B extends ItineraryViewModel['intelligence']['budget']>(budget: B) {
+  const { booked: _booked, actualTotal: _actualTotal, remainingEstimate: _remaining, ...rest } = budget;
+  void _booked;
+  void _actualTotal;
+  void _remaining;
+  return {
+    ...rest,
+    booked: [],
+    lines: budget.lines.map(({ actual: _actual, ...line }) => {
+      void _actual;
+      return line;
+    }),
+  };
+}
+
 export function stripForShare<M extends ItineraryViewModel>(model: M): M {
   const now = new Date(renderInstant());
-  const booked = model.booked.map(({ confirmationRef: _ref, notes: _notes, cost: _cost, url: _url, paid: _paid, refundable: _refundable, bookingItemId: _need, replaces: _replaces, source: _source, ...rest }) => {
-    void _ref;
-    void _notes;
-    void _cost;
-    void _url;
-    void _paid;
-    void _refundable;
-    void _need;
-    void _replaces;
-    void _source;
-    return rest;
-  });
+  const booked = model.booked.map(stripBookedFact);
+  const intelligence = {
+    ...model.intelligence,
+    bookings: { ...model.intelligence.bookings, booked: model.intelligence.bookings.booked.map(stripBookedFact) },
+    budget: stripBudgetActuals(model.intelligence.budget),
+  };
   const decisions = model.decisions.map((decision) => ({ ...decision, travellerFacts: [], ...(decision.decidedBy === 'traveller' ? { why: '' } : {}) }));
   const resolutions = model.resolutions.map(({ note: _note, ...rest }) => {
     void _note;
     return rest;
   });
-  const graph = buildTripStateGraph({ itinerary: model.appliedItinerary, intelligence: model.intelligence, booked, decisions, resolutions, observations: [], recheck: model.recheck, now });
+  const graph = buildTripStateGraph({ itinerary: model.appliedItinerary, intelligence, booked, decisions, resolutions, observations: [], recheck: model.recheck, now });
   const nextActions = buildNextActions({ graph, lifecycle: model.lifecycle, daysUntilTrip: model.daysUntilTrip, now, today: model.today });
-  const preflight = buildPreflight({ graph, intelligence: model.intelligence, booked, checks: model.checks, daysUntilTrip: model.daysUntilTrip });
+  const preflight = buildPreflight({ graph, intelligence, booked, checks: model.checks, daysUntilTrip: model.daysUntilTrip });
   return {
     ...model,
+    intelligence,
     booked,
     decisions,
     resolutions,

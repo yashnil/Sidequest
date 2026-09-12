@@ -20,6 +20,8 @@ const FIELD = 'mt-1 min-h-11 w-full rounded-[var(--radius-control)] border borde
 const GHOST = buttonClass('ghost', 'sm');
 
 type Mode = 'idle' | 'mark' | 'replace' | 'confirm';
+/** V9.1 §10 — which press is in flight, so that button alone says "Saving…". */
+type Press = 'skip' | 'unskip' | 'form' | null;
 
 export interface BookingActionsProps {
   tripId: string;
@@ -45,13 +47,16 @@ export function BookingActions({ tripId, need, skipped, tripStart, tripEnd }: Bo
   const refresh = useRefresh();
   const [mode, setMode] = useState<Mode>('idle');
   const [pending, startTransition] = useTransition();
+  const [press, setPress] = useState<Press>(null);
   const [error, setError] = useState<string | null>(null);
   const isGroup = Boolean(need.memberIds && need.memberIds.length > 0);
   const open = need.status === 'open' || need.status === 'not_needed';
   const booked = (need.status === 'booked' || need.status === 'soft_hold') && need.bookedItemId;
+  const busy = (which: Press) => pending && press === which;
 
-  const run = (work: () => Promise<{ ok: boolean; error?: string }>) => {
+  const run = (work: () => Promise<{ ok: boolean; error?: string }>, which: Press = 'form') => {
     setError(null);
+    setPress(which);
     startTransition(async () => {
       const result = await work();
       if (!result.ok) {
@@ -64,7 +69,7 @@ export function BookingActions({ tripId, need, skipped, tripStart, tripEnd }: Bo
   };
 
   return (
-    <div className="mt-2 print:hidden" data-testid="booking-actions">
+    <div className="mt-2 print:hidden" data-testid="booking-actions" aria-busy={pending}>
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
         {need.officialSourceUrl ? (
           <a href={need.officialSourceUrl} target="_blank" rel="noreferrer noopener" className={GHOST} data-testid="booking-open-source">
@@ -80,12 +85,12 @@ export function BookingActions({ tripId, need, skipped, tripStart, tripEnd }: Bo
               Booked something else
             </button>
             {skipped ? (
-              <button type="button" disabled={pending} className={GHOST} onClick={() => run(() => unskipBookingAction(tripId, need.id))} data-testid="booking-unskip">
-                Put it back
+              <button type="button" disabled={pending} aria-busy={busy('unskip')} className={GHOST} onClick={() => run(() => unskipBookingAction(tripId, need.id), 'unskip')} data-testid="booking-unskip">
+                {busy('unskip') ? 'Saving…' : 'Put it back'}
               </button>
             ) : (
-              <button type="button" disabled={pending} className={GHOST} onClick={() => run(() => skipBookingAction(tripId, need.id))} data-testid="booking-skip">
-                Skip
+              <button type="button" disabled={pending} aria-busy={busy('skip')} className={GHOST} onClick={() => run(() => skipBookingAction(tripId, need.id), 'skip')} data-testid="booking-skip">
+                {busy('skip') ? 'Saving…' : 'Skip'}
               </button>
             )}
           </>
@@ -95,7 +100,9 @@ export function BookingActions({ tripId, need, skipped, tripStart, tripEnd }: Bo
             Add confirmation
           </button>
         ) : null}
-        {pending ? <span className="text-sm text-ink-faint">Saving…</span> : null}
+        <span className="sr-only" aria-live="polite">
+          {pending ? 'Saving…' : ''}
+        </span>
       </div>
       {error && mode === 'idle' ? <ErrorNote>{error}</ErrorNote> : null}
       {mode === 'mark' || mode === 'replace' ? (
@@ -150,7 +157,7 @@ export function MarkBookedForm({ need, replace, tripStart, tripEnd, pending, err
   }
 
   return (
-    <form action={submit} className="card-raised mt-2 p-4" data-testid="mark-booked-form">
+    <form action={submit} className="card-raised mt-2 p-4" data-testid="mark-booked-form" aria-busy={pending}>
       <p className="eyebrow">{replace ? 'What you booked instead' : 'Mark booked'}</p>
       <p className="mt-1 text-sm text-ink-muted">{replace ? `This replaces "${need.title}" on the plan; Sidequest schedules around what you booked.` : 'Only what you know. The plan reshapes around it at the next look.'}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -205,7 +212,7 @@ export function MarkBookedForm({ need, replace, tripStart, tripEnd, pending, err
       </div>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="submit" disabled={pending} className={buttonClass('primary', 'sm')} data-testid="mark-booked-save">
+        <button type="submit" disabled={pending} aria-busy={pending} className={buttonClass('primary', 'sm')} data-testid="mark-booked-save">
           {pending ? 'Saving…' : replace ? 'Save what you booked' : 'Save as booked'}
         </button>
         <button type="button" onClick={onCancel} className={GHOST}>
@@ -268,7 +275,7 @@ export function ConfirmationForm({ current, pending, error, onCancel, onSubmit }
     });
   }
   return (
-    <form action={submit} className="card-raised mt-2 p-4" data-testid="confirmation-form">
+    <form action={submit} className="card-raised mt-2 p-4" data-testid="confirmation-form" aria-busy={pending}>
       <p className="eyebrow">Your confirmation</p>
       <p className="mt-1 text-sm text-ink-muted">Kept on this trip only; never printed, never on a shared copy.</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -288,7 +295,7 @@ export function ConfirmationForm({ current, pending, error, onCancel, onSubmit }
       </div>
       {error ? <ErrorNote>{error}</ErrorNote> : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="submit" disabled={pending} className={buttonClass('primary', 'sm')} data-testid="confirmation-save">
+        <button type="submit" disabled={pending} aria-busy={pending} className={buttonClass('primary', 'sm')} data-testid="confirmation-save">
           {pending ? 'Saving…' : 'Save confirmation'}
         </button>
         <button type="button" onClick={onCancel} className={GHOST}>

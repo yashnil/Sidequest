@@ -86,7 +86,7 @@ export interface AskSidequestProps {
   dayCount?: number;
   /** The trip's base names in order, for the example prompts. Optional: without them the examples name no place. */
   baseNames?: readonly string[];
-  onAsk(input: { tripId: string; request: string; idempotencyKey: string }): Promise<RefinementReply>;
+  onAsk(input: { tripId: string; request: string; idempotencyKey: string; structural?: boolean }): Promise<RefinementReply>;
   onAnswer(input: { tripId: string; runId: string; answer: string }): Promise<RefinementReply>;
   onUndo(input: { tripId: string }): Promise<RefinementReply>;
 }
@@ -140,7 +140,7 @@ export function AskSidequest(props: AskSidequestProps) {
    * freshness proposal, "Change today"). Held until the sheet is open and the
    * composer is free, then sent as if typed; never sent twice.
    */
-  const [queued, setQueued] = useState<{ text: string; send: boolean } | null>(null);
+  const [queued, setQueued] = useState<{ text: string; send: boolean; structural?: boolean } | null>(null);
   const reduced = useReducedMotion();
   const mounted = useSyncExternalStore(subscribeNever, onClient, onServer);
   const wide = useSyncExternalStore(subscribeWide, readWide, readWideOnServer);
@@ -185,7 +185,7 @@ export function AskSidequest(props: AskSidequestProps) {
     }, 0);
     const onOpen = (event: Event) => {
       openSheet(document.querySelector<HTMLElement>('[data-testid="ask-sidequest-open"]'));
-      const detail = (event as CustomEvent<{ request?: unknown; send?: unknown } | undefined>).detail;
+      const detail = (event as CustomEvent<{ request?: unknown; send?: unknown; structural?: unknown } | undefined>).detail;
       const request = detail?.request;
       /*
        * The default is to pre-fill the composer and wait for the traveller's
@@ -193,7 +193,7 @@ export function AskSidequest(props: AskSidequestProps) {
        * only a dispatcher that says `send: true` — the decision cards'
        * controlled alternatives, which are complete requests — is sent as is.
        */
-      if (typeof request === 'string' && request.trim().length > 0) setQueued({ text: request.trimStart().slice(0, 600), send: detail?.send === true });
+      if (typeof request === 'string' && request.trim().length > 0) setQueued({ text: request.trimStart().slice(0, 600), send: detail?.send === true, structural: detail?.structural === true });
     };
     window.addEventListener(ASK_OPEN_EVENT, onOpen);
     return () => {
@@ -258,7 +258,7 @@ export function AskSidequest(props: AskSidequestProps) {
     setExchanges((previous) => [...previous, { kind: 'error', text: 'Nothing changed.' }]);
   };
 
-  const send = (text: string) => {
+  const send = (text: string, structural = false) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || busy) return;
     setExchanges((previous) => [...previous, { kind: 'request', text: trimmed }]);
@@ -269,7 +269,7 @@ export function AskSidequest(props: AskSidequestProps) {
     const idempotencyKey = `${sessionRef.current || 'pending'}-${submissionCount.current}`;
     startTransition(async () => {
       try {
-        record(await props.onAsk({ tripId: props.tripId, request: trimmed, idempotencyKey }));
+        record(await props.onAsk({ tripId: props.tripId, request: trimmed, idempotencyKey, ...(structural ? { structural: true } : {}) }));
       } finally {
         setBusy(false);
       }
@@ -319,12 +319,12 @@ export function AskSidequest(props: AskSidequestProps) {
   });
   useEffect(() => {
     if (!queued || !open || working || awaiting) return;
-    const { text, send: shouldSend } = queued;
+    const { text, send: shouldSend, structural } = queued;
     // Deferred so the effect never sets state synchronously during a render pass.
     const handle = window.setTimeout(() => {
       setQueued(null);
       if (!props.ready) return;
-      if (shouldSend) sendRef.current(text.trim());
+      if (shouldSend) sendRef.current(text.trim(), structural === true);
       else {
         setRequest(text);
         inputRef.current?.focus();

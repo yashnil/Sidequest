@@ -37,4 +37,18 @@ describe('the fixture composer', () => {
     expect(second.ok).toBe(false);
     if (!second.ok) expect(second.failureKind).toBe('budget_exhausted');
   });
+
+  it('V9.1 — the `multibase` token in what the traveller typed drafts several stays even though the envelope carries only the resolved name', () => {
+    const tenNights: Trip = { ...TRIP, basics: { ...TRIP.basics, destinationInput: 'Multibase Harbour City', startDate: '2026-11-10', endDate: '2026-11-19' } };
+    const ctx = testCompositionContext({ trip: tenNights, envelope: { name: 'Harbour City', countryCode: 'XX', scale: 'city', center: { lat: 1, lng: 2 } } });
+    const draft = fixtureDraftFor(ctx, { placeNames: [], baseNames: [], destinationInput: 'Multibase Harbour City' });
+    expect(tripDraftSchema.safeParse(draft).success).toBe(true);
+    expect(draft.bases.length).toBeGreaterThanOrEqual(2);
+    expect(draft.bases.reduce((s, b) => s + b.nights, 0)).toBe(9);
+    expect(draft.bases.every((b) => !/multibase/i.test(b.name))).toBe(true);
+    /* Without the typed text the same envelope drafts one stay: the token never leaks from a resolved name. */
+    expect(fixtureDraftFor(ctx, { placeNames: [], baseNames: [] }).bases).toHaveLength(1);
+    /* A compiled region that offers one name is topped up rather than capping the trip at one stay. */
+    expect(fixtureDraftFor(ctx, { placeNames: [], baseNames: ['Harbour City'], destinationInput: 'Multibase Harbour City' }).bases.length).toBeGreaterThanOrEqual(2);
+  });
 });

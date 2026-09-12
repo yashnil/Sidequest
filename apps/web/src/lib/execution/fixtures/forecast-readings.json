@@ -1,0 +1,43 @@
+{
+  "_about": "V9.1 §5 — two fresh forecast readings (the DayWeather forecast shape) against a plan day that was built as clear with a high of 18 °C and a 10% chance of rain. One crosses the wet/dry line; one moves the high by more than the ±5 °C band.",
+  "dry_to_wet": {
+    "kind": "forecast",
+    "locationId": "base:b1",
+    "date": "2026-09-22",
+    "condition": "rain",
+    "temperatureMaxC": 17,
+    "temperatureMinC": 9,
+    "precipitationProbabilityPercent": 80,
+    "precipitationMm": 6,
+    "snowfallCm": 0,
+    "windSpeedMaxKph": 25,
+    "windGustMaxKph": 40,
+    "cloudCoverMeanPercent": 90,
+    "hours": [
+      { "startMinute": 780, "condition": "rain", "temperatureC": 15, "precipitationProbabilityPercent": 80, "precipitationMm": 2, "snowfallCm": 0, "windSpeedKph": 20, "windGustKph": 35, "cloudCoverPercent": 95, "visibilityMetres": 5000 },
+      { "startMinute": 840, "condition": "rain", "temperatureC": 15, "precipitationProbabilityPercent": 80, "precipitationMm": 2.5, "snowfallCm": 0, "windSpeedKph": 22, "windGustKph": 38, "cloudCoverPercent": 95, "visibilityMetres": 5000 },
+      { "startMinute": 900, "condition": "rain", "temperatureC": 14, "precipitationProbabilityPercent": 70, "precipitationMm": 1.5, "snowfallCm": 0, "windSpeedKph": 20, "windGustKph": 35, "cloudCoverPercent": 90, "visibilityMetres": 6000 }
+    ],
+    "fetchedAt": "2026-09-20T06:00:00.000Z",
+    "staleAfterMinutes": 360,
+    "attribution": { "provider": "fixture", "notice": "fixture", "url": "https://example.invalid", "dataset": "fixture" }
+  },
+  "warmer_by_six": {
+    "kind": "forecast",
+    "locationId": "base:b1",
+    "date": "2026-09-22",
+    "condition": "clear",
+    "temperatureMaxC": 24,
+    "temperatureMinC": 11,
+    "precipitationProbabilityPercent": 5,
+    "precipitationMm": 0,
+    "snowfallCm": 0,
+    "windSpeedMaxKph": 12,
+    "windGustMaxKph": 20,
+    "cloudCoverMeanPercent": 5,
+    "hours": [],
+    "fetchedAt": "2026-09-20T06:00:00.000Z",
+    "staleAfterMinutes": 360,
+    "attribution": { "provider": "fixture", "notice": "fixture", "url": "https://example.invalid", "dataset": "fixture" }
+  }
+}

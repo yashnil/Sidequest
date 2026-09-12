@@ -91,7 +91,7 @@ export function DecisionCard({ decision, askable = true, className }: { decision
               type="button"
               data-testid="alternative-chip"
               data-alternative={chip.id}
-              onClick={() => window.dispatchEvent(new CustomEvent(ASK_OPEN_EVENT, { detail: { request: chip.request, send: true } }))}
+              onClick={() => window.dispatchEvent(new CustomEvent(ASK_OPEN_EVENT, { detail: { request: chip.request, send: true, structural: chip.touches === 'route' } }))}
               className="pressable inline-flex min-h-11 items-center rounded-full border border-rule bg-paper-raised px-3.5 text-sm font-medium text-ink shadow-[var(--shadow-card)] hover:border-ink-faint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
             >
               {chip.label}

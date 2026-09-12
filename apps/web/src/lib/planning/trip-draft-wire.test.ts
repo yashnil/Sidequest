@@ -290,3 +290,26 @@ describe('an abandoned draft is refused, and a deliberate one is not', () => {
     expect(out.issues.some((issue) => issue.code === 'placeholder')).toBe(true);
   });
 });
+
+describe('V9.1 — two stays with one name', () => {
+  it('resolves each day to the stay the nights sequence puts on its night, never to whichever was declared last', () => {
+    const raw = {
+      ...wireDraft(5),
+      stays: [
+        { name: 'Reykjavík', locality: null, nights: 1, why: 'Arrival', lodgingArea: null, lodgingStyle: null },
+        { name: 'Vík', locality: null, nights: 2, why: 'Coast', lodgingArea: null, lodgingStyle: null },
+        { name: 'Reykjavík', locality: null, nights: 1, why: 'Return', lodgingArea: null, lodgingStyle: null },
+      ],
+      days: Array.from({ length: 5 }, (_, i) => ({ ...wireDraft(5).days[i]!, stay: i < 1 ? 'Reykjavík' : i < 3 ? 'Vík' : 'Reykjavík' })),
+    };
+    const out = normalizeTripDraftWire(raw, { days: 5 });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const [first, vik, last] = out.draft.bases.map((b) => b.id);
+    expect(first).not.toBe(last);
+    expect(out.draft.days.map((d) => d.baseId)).toEqual([first, vik, vik, last, last]);
+    /* Every stay is slept in, so a later patch is not refused for an orphan the composition never had. */
+    const slept = new Set(out.draft.days.map((d) => d.baseId));
+    expect(out.draft.bases.every((b) => slept.has(b.id))).toBe(true);
+  });
+});

@@ -17,7 +17,8 @@ import type { TripDraft } from '../planning/trip-draft';
 import { SqliteRefinementCheckpointer } from './checkpointer';
 import { describeContract, describeRefusal } from './describe';
 import { buildRefinementGraph, resumeWith, type RefinementInterpreter } from './graph';
-import { modelRefinementInterpreter } from './interpreter';
+import { isStructuralRequest, modelRefinementInterpreter } from './interpreter';
+import { tripPatchSchema, type TripPatch } from './patch';
 import { RefinementBusyError, activeRun, beginRun, listRuns, updateRun, type RefinementRun } from './run-repository';
 import { applyTripPatch } from './patch';
 import { StaleTripVersionError, currentVersion, ensureBaselineVersion, getVersion, recordVersion, undoTarget } from './version-repository';
@@ -89,7 +90,15 @@ function interpreterFor(caller: string | null, now: Date): { interpreter: Refine
      */
     return {
       interpreter: {
-        async interpret() {
+        async interpret({ request, draft, structural }) {
+          /*
+           * V9.1 — a structural request gets a deterministic structural answer
+           * offline: the shortest stay folds into its neighbour. That lets the
+           * proposal, the delta, Apply, reverification and Undo run in the
+           * browser suite without a model; everything else is still explained.
+           */
+          const patch = isStructuralRequest(request, structural) ? fixtureRestructure(draft) : null;
+          if (patch) return { intent: 'change_base' as const, patch };
           return { intent: 'explain_decision' as const, explanation: 'Sidequest is running offline against saved fixtures, so it can explain this trip but not change it.' };
         },
       },
@@ -128,7 +137,7 @@ async function draftFor(tripId: string): Promise<TripDraft | null> {
  * One model call. A question comes back as `question` and the run stays open
  * holding the lease; `answerRefinementAction` resumes it.
  */
-export async function refineTripAction(input: { tripId: string; request: string; idempotencyKey?: string }): Promise<RefinementResult> {
+export async function refineTripAction(input: { tripId: string; request: string; idempotencyKey?: string; structural?: boolean }): Promise<RefinementResult> {
   const refusal = await tripAccessRefusal(input.tripId);
   if (refusal) return { ok: false, error: refusal };
   const trip = await ownedTrip(input.tripId);
@@ -211,6 +220,7 @@ async function runGraph(input: {
   baseVersion: number;
   answer?: string;
   locks?: RefinementLock[];
+  structural?: boolean;
 }): Promise<RefinementResult> {
   const { tripId, run, draft, interpreter } = input;
   const graph = buildRefinementGraph({
@@ -281,7 +291,7 @@ async function runGraph(input: {
   try {
     const state = input.answer
       ? await graph.invoke(resumeWith(input.answer), config)
-      : await graph.invoke({ tripId, canonicalTripVersion: input.baseVersion, userRequest: input.request, locks: input.locks ?? [], status: 'classifying' as const }, config);
+      : await graph.invoke({ tripId, canonicalTripVersion: input.baseVersion, userRequest: input.request, locks: input.locks ?? [], status: 'classifying' as const, structural: input.structural === true }, config);
 
     if (state.status === 'awaiting_answer' && state.pendingQuestion) {
       updateRun({ id: run.id, status: 'awaiting_answer', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: state.pendingQuestion });
@@ -482,4 +492,23 @@ export async function refinementReadyAction(input: { tripId: string }): Promise<
   const refusal = await tripAccessRefusal(input.tripId);
   if (refusal) return { ok: false, ready: false };
   return { ok: true, ready: Boolean(getTripDraft(input.tripId) && getItinerary(input.tripId) && getProfile(input.tripId)) };
+}
+
+/**
+ * The fixture's structural answer: fold the shortest stay into the neighbour
+ * that shares its side of the route, keeping the nights total. Null on a
+ * one-base trip, where there is no hotel change to remove.
+ */
+function fixtureRestructure(draft: TripDraft): TripPatch | null {
+  const live = draft.bases.filter((base) => base.nights > 0);
+  if (live.length < 2) return null;
+  const shortest = [...live].sort((a, b) => a.nights - b.nights || draft.bases.indexOf(a) - draft.bases.indexOf(b))[0]!;
+  const index = draft.bases.indexOf(shortest);
+  const neighbour = draft.bases[index - 1] && draft.bases[index - 1]!.nights > 0 ? draft.bases[index - 1]! : draft.bases[index + 1]!;
+  if (!neighbour) return null;
+  return tripPatchSchema.parse({
+    operations: [
+      { op: 'restructure', stays: [{ id: shortest.id, nights: 0 }, { id: neighbour.id, nights: neighbour.nights + shortest.nights }], why: `One hotel change fewer: the ${shortest.nights}-night stay in ${shortest.name} folds into ${neighbour.name}.` },
+    ],
+  });
 }

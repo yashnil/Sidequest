@@ -8,6 +8,8 @@ import {
   type FactObservation,
   type Itinerary,
   type ItineraryDay,
+  type ItineraryItem,
+  type OperationalEvidence,
   type OperationalOutcome,
   type PlaceClass,
   type TravelIntelligence,
@@ -22,6 +24,7 @@ import { loadTripIntelligence } from '@/lib/intelligence/load';
 import { providerRegistry } from '@/lib/providers/registry';
 import { ProviderBudget, ceilingsFor } from '@/lib/providers/cost-budget';
 import { operationalEvidenceSeam } from '@/lib/planning/place-identity';
+import type { ReconcileContext } from '@/lib/planning/reconcile';
 import { fetchWeatherSnapshot, type WeatherFetchTarget } from '@/lib/weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '@/lib/weather/snapshot-repository';
 import { resolveTripRegion } from '@/lib/region';
@@ -246,9 +249,18 @@ export type RecheckOutcome =
   | { ran: false; skipped: 'recent' | 'no_trip' | 'no_plan' | 'nothing_due'; lastCheckedAt: string | null }
   | { ran: true; checkedAt: string; counts: RecheckCounts; observations: FactObservation[] };
 
-/** Seams for the two sources, so a test can hand in a reading without a provider. */
+/** One operational reading for one stop: the same seam the reconciler uses at build time. */
+export type OperationalEvidenceSeam = NonNullable<ReconcileContext['operationalEvidence']>;
+
+/**
+ * Seams for the two sources, so a test can hand in a reading without a
+ * provider. `seam` replaces the registry's operational source outright: when
+ * it is given, hours facts count as answerable and every read goes through
+ * it, so the recheck stays zero-provider under test.
+ */
 export interface RecheckDeps {
   fetchWeather?: (target: WeatherFetchTarget) => Promise<WeatherDataset | null>;
+  seam?: OperationalEvidenceSeam;
   env?: Record<string, string | undefined>;
 }
 
@@ -284,7 +296,7 @@ export async function recheckStaleFacts(tripId: string, options: { now?: Date } 
   const registry = providerRegistry(env);
   const capabilities = {
     forecast: registry.byId['weather.forecast']?.available ?? false,
-    hours: registry.byId['places.hours']?.available ?? false,
+    hours: (registry.byId['places.hours']?.available ?? false) || options.seam !== undefined,
     transit: registry.byId['routing.transit']?.available ?? false,
   };
   const facts = volatileFacts({ itinerary: loaded.itinerary, intelligence: loaded.intelligence, booked: loaded.booked, now, capabilities });
@@ -297,7 +309,7 @@ export async function recheckStaleFacts(tripId: string, options: { now?: Date } 
   const observedAt = now.toISOString();
 
   await recheckForecasts({ tripId, trip, itinerary: loaded.itinerary, intelligence: loaded.intelligence, due, now, counts, observed, observedAt, fetchWeather: options.fetchWeather ?? fetchWeatherThroughSnapshot, env });
-  await recheckHours({ itinerary: loaded.itinerary, due, now, counts, observed, observedAt, env, available: capabilities.hours });
+  await recheckHours({ itinerary: loaded.itinerary, due, now, counts, observed, observedAt, env, available: capabilities.hours, ...(options.seam ? { seam: options.seam } : {}) });
 
   const observations = recordObservations(tripId, observed);
   recordFactCheck(tripId, { ...counts }, now);
@@ -370,11 +382,12 @@ async function recheckHours(input: {
   observedAt: string;
   env: Record<string, string | undefined>;
   available: boolean;
+  seam?: OperationalEvidenceSeam;
 }): Promise<void> {
   const dueHours = input.due.filter((f) => f.kind === 'hours' || f.kind === 'status');
   if (dueHours.length === 0 || !input.available) return;
   const budget = new ProviderBudget(ceilingsFor({ anchors: dueHours.length, days: input.itinerary.days.length, bases: input.itinerary.package?.bases.length ?? 1, mealsNeedingVenue: 0 }));
-  const seam = operationalEvidenceSeam(budget, input.env, input.now);
+  const seam = input.seam ?? operationalEvidenceSeam(budget, input.env, input.now);
   if (!seam) {
     input.counts.notComparable += dueHours.length;
     return;
@@ -393,30 +406,79 @@ async function recheckHours(input: {
       input.counts.notComparable += 1;
       continue;
     }
+    const placeClass = (anchor.identity.placeClass ?? 'unknown') as PlaceClass;
     input.counts.hoursRequests += 1;
     input.counts.checked += 1;
-    const evidence = await seam({ placeId: item.placeId, providerRef: anchor.identity.providerRef, provider: anchor.identity.provider, name: item.title, placeClass: (anchor.identity.placeClass ?? 'unknown') as PlaceClass });
-    if (!evidence || evidence.unavailableReason) {
+    const evidence = await seam({ placeId: item.placeId, providerRef: anchor.identity.providerRef, provider: anchor.identity.provider, name: item.title, placeClass }).catch((): OperationalEvidence | null => null);
+    const comparison = compareHours({ item, day, evidence, placeClass, now: input.now, observedAt: input.observedAt, factId: fact.id, factKind: fact.kind === 'status' ? 'status' : 'hours' });
+    if (!comparison.comparable) {
       input.counts.notComparable += 1;
       continue;
     }
-    const daysUntil = Math.round((Date.parse(`${day.date}T00:00:00Z`) - input.now.getTime()) / 86_400_000);
-    const assessment = assessOperational({ evidence, placeClass: (anchor.identity.placeClass ?? 'unknown') as PlaceClass, date: day.date, startMinute: item.startMinute, endMinute: item.endMinute, daysUntil });
-    const before = item.operational.outcome;
-    const after = assessment.outcome;
-    if (!hoursChangeIsReal(before, after)) continue;
+    if (!comparison.changed) continue;
     input.counts.changed += 1;
-    input.observed.push({
-      factId: fact.id,
-      kind: fact.kind,
+    input.observed.push(comparison.observation);
+  }
+}
+
+/**
+ * V9.1 §5 — ONE FRESH READING AGAINST ONE PLANNED VISIT, AS A PURE FUNCTION.
+ *
+ * What a re-read of a stop's hours says about the plan, with no provider in
+ * the room: the stored disposition (`item.operational.outcome`) is compared
+ * with a fresh assessment of the evidence on the visit's own date and
+ * minutes, through the same `assessOperational` the reconciler used. Three
+ * answers, and only the third writes anything:
+ *
+ *   - **not comparable** — the plan holds no earlier reading, or the source
+ *     did not answer (`unavailableReason`). Nothing is known, so nothing is
+ *     claimed; the caller counts it and moves on. Never "closed".
+ *   - **unchanged** — the fresh reading is the same, or is one the plan has
+ *     already absorbed (`hoursChangeIsReal`).
+ *   - **changed** — an affirmative, different reading, with the sentence a
+ *     traveller reads.
+ *
+ * Nothing passed in is mutated; the observation is a new object.
+ */
+export type HoursComparison =
+  | { comparable: false; reason: 'no_previous_reading' | 'source_unavailable' }
+  | { comparable: true; changed: false; before: OperationalOutcome; after: OperationalOutcome }
+  | { comparable: true; changed: true; before: OperationalOutcome; after: OperationalOutcome; observation: Omit<FactObservation, 'id' | 'acknowledgedAt'> };
+
+export function compareHours(input: {
+  item: Pick<ItineraryItem, 'id' | 'title' | 'startMinute' | 'endMinute' | 'operational'>;
+  day: Pick<ItineraryDay, 'dayNumber' | 'date'>;
+  evidence: OperationalEvidence | null;
+  placeClass: PlaceClass;
+  now: Date;
+  observedAt: string;
+  factId: string;
+  factKind: 'hours' | 'status';
+}): HoursComparison {
+  const { item, day, evidence } = input;
+  if (!item.operational) return { comparable: false, reason: 'no_previous_reading' };
+  if (!evidence || evidence.unavailableReason) return { comparable: false, reason: 'source_unavailable' };
+  const daysUntil = Math.round((Date.parse(`${day.date}T00:00:00Z`) - input.now.getTime()) / 86_400_000);
+  const assessment = assessOperational({ evidence, placeClass: input.placeClass, date: day.date, startMinute: item.startMinute, endMinute: item.endMinute, daysUntil });
+  const before = item.operational.outcome;
+  const after = assessment.outcome;
+  if (!hoursChangeIsReal(before, after)) return { comparable: true, changed: false, before, after };
+  return {
+    comparable: true,
+    changed: true,
+    before,
+    after,
+    observation: {
+      factId: input.factId,
+      kind: input.factKind,
       observedAt: input.observedAt,
       previous: before,
       current: after,
       changed: true,
       dayNumbers: [day.dayNumber],
       summary: `${item.title} on day ${day.dayNumber} is now ${OUTCOME_WORDS[after]}; it was ${OUTCOME_WORDS[before]} when the plan was built.`,
-    });
-  }
+    },
+  };
 }
 
 /**

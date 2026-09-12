@@ -1,0 +1,87 @@
+{
+  "key": "train",
+  "sha256Prefixes": [
+    "6e4a697fbd60f53b"
+  ],
+  "reading": {
+    "type": "train",
+    "typeConfidence": "high",
+    "title": "Eurostar 9014 London St Pancras → Paris Gare du Nord",
+    "provider": "Eurostar",
+    "date": "2026-08-14",
+    "startTime": "09:31",
+    "endTime": "12:47",
+    "location": "London St Pancras International",
+    "confirmationRef": "QWERTZ",
+    "cost": {
+      "amount": 118,
+      "currency": "GBP"
+    },
+    "travellers": 2,
+    "fields": [
+      {
+        "key": "type",
+        "value": "train",
+        "confidence": "high",
+        "evidence": "Eurostar e-ticket"
+      },
+      {
+        "key": "title",
+        "value": "Eurostar 9014 London St Pancras → Paris Gare du Nord",
+        "confidence": "high",
+        "evidence": "Train 9014 · London St Pancras Intl → Paris Gare du Nord"
+      },
+      {
+        "key": "provider",
+        "value": "Eurostar",
+        "confidence": "high",
+        "evidence": "Eurostar"
+      },
+      {
+        "key": "date",
+        "value": "2026-08-14",
+        "confidence": "high",
+        "evidence": "Fri 14 Aug 2026"
+      },
+      {
+        "key": "startTime",
+        "value": "09:31",
+        "confidence": "high",
+        "evidence": "Dep 09:31"
+      },
+      {
+        "key": "endTime",
+        "value": "12:47",
+        "confidence": "high",
+        "evidence": "Arr 12:47"
+      },
+      {
+        "key": "location",
+        "value": "London St Pancras International",
+        "confidence": "high",
+        "evidence": "London St Pancras Intl"
+      },
+      {
+        "key": "confirmationRef",
+        "value": "QWERTZ",
+        "confidence": "high",
+        "evidence": "Booking reference QWERTZ"
+      },
+      {
+        "key": "cost",
+        "value": "GBP 118",
+        "confidence": "medium",
+        "evidence": "Total £118.00"
+      },
+      {
+        "key": "travellers",
+        "value": "2",
+        "confidence": "high",
+        "evidence": "2 passengers · Coach 7, seats 41-42"
+      }
+    ],
+    "gaps": [
+      "Cancellation terms are not printed"
+    ]
+  }
+}

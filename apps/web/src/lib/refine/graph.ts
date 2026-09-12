@@ -91,6 +91,8 @@ const RefinementAnnotation = Annotation.Root({
    * apply or to a quiet end — never back through the model.
    */
   confirm: Annotation<'pending' | 'applied' | 'cancelled' | undefined>({ reducer: (_, next) => next, default: () => undefined }),
+  /** V9.1 — the caller's word that this request is structural (a controlled alternative). */
+  structural: Annotation<boolean>({ reducer: (_, next) => next, default: () => false }),
   errors: Annotation<string[]>({ reducer: (previous, next) => [...previous, ...next], default: () => [] }),
 });
 
@@ -128,6 +130,8 @@ export interface RefinementInterpreter {
     locks: readonly RefinementLock[];
     /** Present on the second call only: what the traveller answered. */
     answer?: string;
+    /** V9.1 — the request is about the shape of the trip (a chip said so); the model is shown the structural index. */
+    structural?: boolean;
   }): Promise<RefinementInterpretation>;
 }
 
@@ -196,7 +200,7 @@ export function buildRefinementGraph(deps: RefinementGraphDeps) {
       const draft = await deps.loadDraft(state.tripId);
       let reading: RefinementInterpretation;
       try {
-        reading = await deps.interpreter.interpret({ request: state.userRequest, draft, locks: state.locks, ...(state.answer ? { answer: state.answer } : {}) });
+        reading = await deps.interpreter.interpret({ request: state.userRequest, draft, locks: state.locks, ...(state.answer ? { answer: state.answer } : {}), ...(state.structural ? { structural: true } : {}) });
       } catch (error) {
         /*
          * §49 — the model or the provider failed. The canonical trip is

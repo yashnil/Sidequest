@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { PREFLIGHT_CATEGORY_LABELS, type Preflight, type PreflightItem } from '@sidequest/core';
 import { setCheckAction } from '@/app/(product)/trips/[id]/itinerary/actions';
-import { cx } from '../ui';
+import { buttonClass, cx } from '../ui';
 
 /**
  * V9 §7 — "AM I READY TO ACTUALLY TAKE THIS TRIP?"
@@ -18,6 +18,12 @@ import { cx } from '../ui';
  * The verdict settles with one short scale on mount and nothing else moves.
  * The `prepare-top` id stays on the header so the earlier "three things that
  * matter" specs keep landing on the thing that replaced it.
+ *
+ * V9.1 §10 — on a phone the three lists stack, and "Can wait" is the one a
+ * traveller scrolls past to reach what is beneath it; it starts folded
+ * there (a count and a "Show" button) and is always open from `lg` up. A
+ * tick acknowledges the press in the same render: the box fills, the button
+ * is busy, and a screen reader hears "Saving…".
  */
 const VERDICT: Record<Preflight['verdict'], { tone: string; dot: string }> = {
   ready: { tone: 'border-pine/40 bg-pine-soft/50', dot: 'bg-pine' },
@@ -62,24 +68,33 @@ export function PreflightView({ preflight, tripId }: { preflight: Preflight; tri
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Bucket id="preflight-attention" title="Needs attention" blurb="Before you leave." items={preflight.attention} bucket="attention" {...(tripId ? { tripId } : {})} />
         <Bucket id="preflight-ready" title="Ready" blurb="Done or confirmed." items={preflight.ready} bucket="ready" {...(tripId ? { tripId } : {})} />
-        <Bucket id="preflight-later" title="Can wait" blurb="Nearer the date." items={preflight.later} bucket="later" {...(tripId ? { tripId } : {})} />
+        <Bucket id="preflight-later" title="Can wait" blurb="Nearer the date." items={preflight.later} bucket="later" collapsible {...(tripId ? { tripId } : {})} />
       </div>
     </section>
   );
 }
 
-function Bucket({ id, title, blurb, items, bucket, tripId }: { id: string; title: string; blurb: string; items: readonly PreflightItem[]; bucket: PreflightItem['bucket']; tripId?: string }) {
+function Bucket({ id, title, blurb, items, bucket, tripId, collapsible = false }: { id: string; title: string; blurb: string; items: readonly PreflightItem[]; bucket: PreflightItem['bucket']; tripId?: string; collapsible?: boolean }) {
+  /* Folded on phones only; `lg:block` on the list keeps it open on a wide screen without a script. */
+  const [expanded, setExpanded] = useState(false);
+  const folded = collapsible && !expanded && items.length > 0;
+  const listId = `${id}-list`;
   return (
-    <div data-testid={id} data-count={items.length}>
-      <div className="flex items-baseline gap-2">
+    <div data-testid={id} data-count={items.length} {...(collapsible ? { 'data-collapsed': folded ? 'true' : 'false' } : {})}>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <h3 className="type-section text-ink">{title}</h3>
         <span className="type-figure text-sm text-ink-faint">{items.length}</span>
+        {collapsible && items.length > 0 ? (
+          <button type="button" className={cx(buttonClass('ghost', 'sm'), 'ml-auto lg:hidden')} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)} data-testid="preflight-later-toggle">
+            {expanded ? 'Hide' : `Show ${items.length}`}
+          </button>
+        ) : null}
       </div>
       <p className="type-meta">{blurb}</p>
       {items.length === 0 ? (
         <p className="mt-3 type-small text-ink-faint">{bucket === 'attention' ? 'Nothing here.' : bucket === 'ready' ? 'Nothing ticked yet.' : 'Nothing waiting.'}</p>
       ) : (
-        <ol className="mt-3 divide-y divide-rule rounded-[var(--radius-card)] border border-rule bg-paper-raised">
+        <ol id={listId} className={cx('mt-3 divide-y divide-rule rounded-[var(--radius-card)] border border-rule bg-paper-raised', folded && 'hidden lg:block')}>
           {items.map((item) => (
             <PreflightRow key={item.id} item={item} bucket={bucket} {...(tripId ? { tripId } : {})} />
           ))}
@@ -100,6 +115,7 @@ function PreflightRow({ item, bucket, tripId }: { item: PreflightItem; bucket: P
           type="button"
           role="checkbox"
           aria-checked={ticked}
+          aria-busy={pending}
           aria-label={`${ticked ? 'Untick' : 'Tick'} ${item.title}`}
           data-testid="preflight-tick"
           disabled={pending}
@@ -113,8 +129,11 @@ function PreflightRow({ item, bucket, tripId }: { item: PreflightItem; bucket: P
           }}
           className={cx('mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine', pending && 'opacity-60')}
         >
-          <span aria-hidden="true" className={cx('inline-flex h-5 w-5 items-center justify-center rounded-[4px] border text-[0.7rem] leading-none', ticked ? 'border-pine bg-pine text-paper' : 'border-ink-faint bg-paper')}>
+          <span aria-hidden="true" className={cx('inline-flex h-5 w-5 items-center justify-center rounded-[4px] border text-xs leading-none', ticked ? 'border-pine bg-pine text-paper' : 'border-ink-faint bg-paper')}>
             {ticked ? '✓' : ''}
+          </span>
+          <span className="sr-only" aria-live="polite">
+            {pending ? 'Saving…' : ''}
           </span>
         </button>
       ) : (
