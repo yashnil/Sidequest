@@ -38,6 +38,13 @@ export interface FictionalWorldOptions {
   roadKmh?: number;
   /** Pairs (by place name) the router affirmatively answers "no route" for, in either direction. */
   noRoadBetween?: readonly [string, string][];
+  /**
+   * V9.1 — pairs the matrix declines to answer for, as the live Valhalla's
+   * `costmatrix` declines long pairs: no measurement, and no statement about
+   * the ground either. Distinct from `noRoadBetween`, which is the router
+   * evaluating the leg and reporting no route.
+   */
+  unmeasuredBetween?: readonly [string, string][];
   /** Provider outage switches. */
   outage?: { geocoder?: boolean; router?: boolean; corridor?: boolean };
   /** Corridor settlements the corridor search may return near a point. */
@@ -107,6 +114,7 @@ export function fictionalWorld(options: FictionalWorldOptions): FictionalWorld {
   for (const place of options.places) coordsById.set(idOf(place), place);
   for (const s of options.settlements ?? []) coordsById.set(idOf(s), s);
   const noRoad = new Set((options.noRoadBetween ?? []).flatMap(([a, b]) => [`${normalize(a)}|${normalize(b)}`, `${normalize(b)}|${normalize(a)}`]));
+  const declined = new Set((options.unmeasuredBetween ?? []).flatMap(([a, b]) => [`${normalize(a)}|${normalize(b)}`, `${normalize(b)}|${normalize(a)}`]));
   const nameOfId = (id: string) => normalize([...options.places, ...(options.settlements ?? [])].find((p) => idOf(p) === id)?.name ?? id);
 
   const geocodeLocality = async (query: string): Promise<readonly GeocodedLocality[]> => {
@@ -127,7 +135,7 @@ export function fictionalWorld(options: FictionalWorldOptions): FictionalWorld {
     calls.matrix += 1;
     if (options.outage?.router) throw new Error('fixture router outage');
     const ids = points.map((p) => p.id);
-    const failedPairs: { fromId: string; toId: string; reason: 'not_found' }[] = [];
+    const failedPairs: { fromId: string; toId: string; reason: 'not_found' | 'insufficient_evidence' }[] = [];
     const minutes = points.map((a) => points.map((b) => (a.id === b.id ? 0 : legFor(a, b).minutes)));
     const km = points.map((a) => points.map((b) => (a.id === b.id ? 0 : legFor(a, b).km)));
     for (const [i, a] of points.entries()) {
@@ -135,6 +143,9 @@ export function fictionalWorld(options: FictionalWorldOptions): FictionalWorld {
         if (i === j) continue;
         if (noRoad.has(`${nameOfId(a.id)}|${nameOfId(b.id)}`)) {
           failedPairs.push({ fromId: a.id, toId: b.id, reason: 'not_found' });
+        } else if (declined.has(`${nameOfId(a.id)}|${nameOfId(b.id)}`)) {
+          /* The matrix said nothing about this pair. Unmeasured, never a verdict. */
+          failedPairs.push({ fromId: a.id, toId: b.id, reason: 'insufficient_evidence' });
         }
       }
     }

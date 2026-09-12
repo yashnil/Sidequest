@@ -52,6 +52,31 @@ describe('what the provider actually enforces', () => {
     expect(intent.description ?? '').toContain('preserve_x_change_y');
   });
 
+  /*
+   * §4 — the fallback, made explicit. The refinement's schema does not compile
+   * into a grammar at all (live: `enforcement: ['grammar','prompt']`), so every
+   * call runs in prompt mode where the provider validates nothing. Zod is
+   * therefore the only gate, and it runs regardless of mode.
+   */
+  it('validates with zod whatever the enforcement mode was, and never treats prompt mode as validated', () => {
+    /* A shape a grammar would have rejected, arriving as prompt-mode output. */
+    const promptModeAnswer = { intent: 'not_a_real_intent', patch: { operations: [] } };
+    expect(wireSchema.safeParse(promptModeAnswer).success).toBe(false);
+    /*
+     * And since the closure the structural operation asks for no arithmetic, so
+     * the enforcement mode cannot cost a night either: whatever the model
+     * writes, it is not a number that has to add up.
+     */
+    const defs = (zodOutputFormat(wireSchema).schema as { $defs: Record<string, { anyOf?: { properties?: Record<string, unknown>; required?: string[] }[] }> }).$defs;
+    const restructure = Object.values(defs)
+      .flatMap((def) => def.anyOf ?? [])
+      .find((entry) => JSON.stringify(entry.properties?.op ?? '').includes('restructure'));
+    expect(restructure).toBeDefined();
+    expect(Object.keys(restructure!.properties ?? {})).toEqual(['op', 'merge', 'rename', 'drop', 'move', 'why']);
+    expect(Object.keys(restructure!.properties ?? {})).not.toContain('nights');
+    expect(restructure!.required).toEqual(['op', 'merge', 'why']);
+  });
+
   /* Which is why the contract itself has to say it, in the prompt the model reads. */
   it('names every legal intent in the output contract the model is given', () => {
     for (const intent of REFINEMENT_INTENTS) expect(REFINEMENT_INSTRUCTION).toContain(intent);
@@ -68,7 +93,7 @@ describe('every legal intent, end to end', () => {
    * vocabulary is only honestly "legal" if every member of it survives the
    * path the wire promises.
    */
-  const patch = { operations: [{ op: 'restructure', stays: [{ id: 'hofn-area', nights: 0 }, { id: 'vik', nights: 4 }], why: 'One hotel change fewer.' }] };
+  const patch = { operations: [{ op: 'restructure', merge: [{ from: 'hofn-area', into: 'vik' }], why: 'One hotel change fewer.' }] };
 
   it.each(REFINEMENT_INTENTS)('%s parses, validates, applies, reaches, persists, reloads and undoes', (intent) => {
     const answer = { intent, patch };
@@ -89,7 +114,7 @@ describe('every legal intent, end to end', () => {
 
     /* Blast radius. */
     const reach = patchReach(validated, draft);
-    expect(reach.bases).toEqual(['hofn-area', 'vik']);
+    expect([...reach.bases].sort()).toEqual(['hofn-area', 'vik']);
     expect(reach.days.length).toBeGreaterThan(0);
 
     /* Persistence shape and reload: the applied draft is itself a valid stored draft, unchanged by the round trip. */
@@ -140,7 +165,7 @@ describe('an illegal intent', () => {
 describe('the deterministic repair', () => {
   it('clips a soft prose field that is purely over its cap, and says which', () => {
     const long = 'x'.repeat(400);
-    const answer = { intent: 'change_route' as const, patch: { operations: [{ op: 'restructure', stays: [{ id: 'vik', nights: 4 }], why: long }] } };
+    const answer = { intent: 'change_route' as const, patch: { operations: [{ op: 'restructure', merge: [{ from: 'hofn-area', into: 'vik' }], why: long }] } };
     expect(wireSchema.safeParse(answer).success).toBe(false);
     const { value, normalizedFields } = normalizeRefinementWire(wireSchema, answer);
     expect(normalizedFields).toEqual(['patch.operations.0.why']);
@@ -151,7 +176,7 @@ describe('the deterministic repair', () => {
   });
 
   it('leaves an answer that already parses exactly as it arrived', () => {
-    const answer = { intent: 'change_route' as const, patch: { operations: [{ op: 'restructure', stays: [{ id: 'vik', nights: 4 }], why: 'Short.' }] } };
+    const answer = { intent: 'change_route' as const, patch: { operations: [{ op: 'restructure', merge: [{ from: 'hofn-area', into: 'vik' }], why: 'Short.' }] } };
     const { value, normalizedFields } = normalizeRefinementWire(wireSchema, answer);
     expect(normalizedFields).toEqual([]);
     expect(value).toBe(answer);

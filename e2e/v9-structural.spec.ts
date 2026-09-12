@@ -28,6 +28,16 @@ test('a structural refinement is proposed with a delta, applied, reflected every
   /* The plan has several stays; one booking marked; Preflight and the Pack are reachable. */
   const basesBefore = await page.getByTestId('route-bases').locator('[data-testid="base-card"]').count();
   expect(basesBefore).toBeGreaterThanOrEqual(2);
+  /*
+   * V9.1 CLOSURE §5 — the trip's length is Sidequest's to keep, not the
+   * model's to restate. A merge moves nights between stays; it must never add
+   * or lose one, so the day rail has exactly as many days after as before.
+   */
+  const dayRail = () => page.getByTestId('day-rail').locator('li');
+  await openHubView(page, 'days');
+  const daysBefore = await dayRail().allTextContents();
+  expect(daysBefore.length).toBeGreaterThan(1);
+  await openHubView(page, 'overview');
   await openHubView(page, 'book');
   const { markBooked } = visibleOpenNeed(page);
   await markBooked.click();
@@ -66,6 +76,10 @@ test('a structural refinement is proposed with a delta, applied, reflected every
   await expect(page.getByTestId('atlas-band')).toBeVisible();
   const basesAfter = await page.getByTestId('route-bases').locator('[data-testid="base-card"]').count();
   expect(basesAfter).toBeLessThan(basesBefore);
+  /* Fewer stays, and not one day fewer: the trip is the same length it always was. */
+  await openHubView(page, 'days');
+  expect((await dayRail().allTextContents()).length).toBe(daysBefore.length);
+  await openHubView(page, 'overview');
   const afterApply = await page.request.get(`/trips/${id}/itinerary/calendar`).then((r) => r.text());
   expect(stable(afterApply)).not.toBe(stable(before));
   const feedAfter = await page.request.get(feedUrl).then((r) => r.text());
@@ -88,6 +102,10 @@ test('a structural refinement is proposed with a delta, applied, reflected every
   await expect(page.getByTestId('atlas-band')).toBeVisible();
   const basesUndone = await page.getByTestId('route-bases').locator('[data-testid="base-card"]').count();
   expect(basesUndone).toBe(basesBefore);
+  /* Undo is exact: the same stays and the same days, read back from the restored version. */
+  await openHubView(page, 'days');
+  expect(await dayRail().allTextContents()).toEqual(daysBefore);
+  await openHubView(page, 'overview');
   const undone = await page.request.get(`/trips/${id}/itinerary/calendar`).then((r) => r.text());
   expect(stable(undone)).toBe(stable(before));
   const feedUndone = await page.request.get(feedUrl).then((r) => r.text());

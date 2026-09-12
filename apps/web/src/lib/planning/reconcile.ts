@@ -1232,7 +1232,28 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     issues.push({ code: 'attraction_closed_on_date', severity: 'warning', message: `${anchor.draft.name} is closed on every day the plan is nearby; taken off rather than left as a false promise.`, dayNumber: anchor.dayNumber, placeId: anchor.place.id, wasResolvedByRemoval: true });
   }
 
-  // --- Routing contradictions: the router answered, and answered "no" ---------
+  /*
+   * --- Routing contradictions: the router answered, and answered "no" --------
+   *
+   * V9.1 — the two conditions below are the whole of it, and both are required.
+   *
+   * A live structural refinement moved a day's base and this loop then removed
+   * a 56-minute drive as unreachable, telling the traveller "a real answer, not
+   * a gap". It was a gap: Valhalla's `costmatrix` had declined the pair while
+   * `/route` solved it, and the null cell was being classified as the
+   * authoritative no-route. That classification is fixed at source
+   * (`providers/valhalla.ts`), so `AUTHORITATIVE_NO_ROUTE` now reaches this
+   * ledger only from the direct route endpoint, which evaluates a path and
+   * reports NO_PATH when there is none.
+   *
+   * The condition is named and checked below rather than left implicit in a
+   * comparison, because the cost of getting it wrong is asymmetric: an
+   * unmeasured leg is a caution the traveller can act on, and a deleted
+   * experience is the reason they were going. It is also the whole of the
+   * protection a defining experience needs — a `core` stop leaves the plan only
+   * when a provider evaluated the leg and reported no route, never because a
+   * measurement failed to arrive. See `V9.1-ROUTING-CONTRADICTION.md`.
+   */
   for (const anchor of anchors) {
     if (!anchor.identity || dispositionOf.get(anchor.id) === 'rejected_contradiction') continue;
     if (!roadRoutable(anchor.draft.transport)) continue;
@@ -1242,7 +1263,15 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     const back = ledgerFailureReason(ledger, anchor.identity.id, base.id);
     const measured = measuredLeg(context.matrix, extraMatrix, base.id, anchor.identity.id) ?? measuredLeg(context.matrix, extraMatrix, anchor.identity.id, base.id);
     if (measured) continue;
-    if (there !== AUTHORITATIVE_NO_ROUTE && back !== AUTHORITATIVE_NO_ROUTE) continue;
+    /*
+     * Condition one: affirmative evidence. Not "no measurement arrived" — a
+     * provider that evaluated these two resolved endpoints on this profile and
+     * reported no route between them. Every other reason in the vocabulary
+     * (`provider_error`, `rate_limited`, `budget_exhausted`,
+     * `insufficient_evidence`, coverage, unreachable) is an absent answer.
+     */
+    const affirmativeNoRoute = there === AUTHORITATIVE_NO_ROUTE || back === AUTHORITATIVE_NO_ROUTE;
+    if (!affirmativeNoRoute) continue;
     dispositionOf.set(anchor.id, 'rejected_contradiction');
     unscheduled.push({
       placeId: anchor.identity.id,

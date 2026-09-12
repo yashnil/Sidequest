@@ -105,9 +105,34 @@ function interpreterFor(caller: string | null, now: Date): { interpreter: Refine
     };
   }
   if (!isCompositionModelConfigured()) return { error: NOT_CONFIGURED };
-  const reservation = reserveModelCalls(1, { now, caller });
-  if (!reservation.allowed) return { error: reservation.message ?? 'Today’s allowance is used up. Try again tomorrow.' };
-  return { interpreter: modelRefinementInterpreter(new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() })) };
+  /*
+   * V9.1 — THE ALLOWANCE IS SPENT WHERE THE CALL IS MADE, NOT WHERE THE SEAM IS
+   * BUILT.
+   *
+   * Both doors build an interpreter before the graph decides what it needs, and
+   * answering a proposal is one of them — but `graph.ts` routes a pending
+   * confirmation "straight to apply or to cancel — never back through the
+   * model", so `interpret` is never called on that path. Reserving eagerly
+   * therefore debited a call for a press that issues no request: one live
+   * refinement made a single Anthropic call and moved `daily_provider_spend` by
+   * two, against the rule that Apply and Cancel cost no model call.
+   *
+   * Deferring the reservation into `interpret` makes the ledger describe what
+   * happened: one reservation per actual interpretation, none for Apply, Cancel,
+   * a reload or an Undo. The ceiling is still checked before any request goes
+   * out, which is the only thing it has to be in front of.
+   */
+  const model = new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() });
+  const underlying = modelRefinementInterpreter(model);
+  return {
+    interpreter: {
+      async interpret(input) {
+        const reservation = reserveModelCalls(1, { now, caller });
+        if (!reservation.allowed) throw new Error(reservation.message ?? 'Today’s allowance is used up. Try again tomorrow.');
+        return underlying.interpret(input);
+      },
+    },
+  };
 }
 
 /**
@@ -506,9 +531,10 @@ function fixtureRestructure(draft: TripDraft): TripPatch | null {
   const index = draft.bases.indexOf(shortest);
   const neighbour = draft.bases[index - 1] && draft.bases[index - 1]!.nights > 0 ? draft.bases[index - 1]! : draft.bases[index + 1]!;
   if (!neighbour) return null;
+  /* V9.1 CLOSURE — topology only: which stay folds into which. Sidequest moves the nights. */
   return tripPatchSchema.parse({
     operations: [
-      { op: 'restructure', stays: [{ id: shortest.id, nights: 0 }, { id: neighbour.id, nights: neighbour.nights + shortest.nights }], why: `One hotel change fewer: the ${shortest.nights}-night stay in ${shortest.name} folds into ${neighbour.name}.` },
+      { op: 'restructure', merge: [{ from: shortest.id, into: neighbour.id }], why: `One hotel change fewer: the ${shortest.nights}-night stay in ${shortest.name} folds into ${neighbour.name}.` },
     ],
   });
 }

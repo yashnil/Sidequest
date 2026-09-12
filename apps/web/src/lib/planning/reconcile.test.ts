@@ -86,6 +86,65 @@ describe('affirmative evidence corrects with the smallest change', () => {
     expect(result.itinerary.days[0]!.items.some((i) => i.title === 'Reachable Falls')).toBe(true);
   });
 
+  /*
+   * V9.1 — A MATRIX THAT DECLINES A PAIR IS NOT A ROUTER THAT SAID NO.
+   *
+   * The live defect: after a structural merge moved a day's base, Valhalla's
+   * `costmatrix` declined the longer leg and returned a null cell. That was
+   * classified as the authoritative no-route, and a 56-minute drive — a named
+   * component of the trip's own signature experience — was removed with the
+   * words "a real answer, not a gap". `V9.1-ROUTING-CONTRADICTION.md` has the
+   * reproduction against the running router.
+   */
+  it('a pair the matrix declines to answer for keeps its stop, whatever its role', async () => {
+    const world = fictionalWorld({
+      name: 'Quietland',
+      center: { lat: 50, lng: 10 },
+      places: [
+        { name: 'Base Town', lat: 50, lng: 10, entityType: 'city' },
+        { name: 'Reachable Falls', lat: 50.1, lng: 10.1 },
+        { name: 'Far Cove', lat: 50.2, lng: 9.8 },
+      ],
+      basics: { startDate: '2026-05-01', endDate: '2026-05-02' },
+      unmeasuredBetween: [['Base Town', 'Far Cove']],
+    });
+    const draft = draftOf({ bases: [{ id: 'b', name: 'Base Town', nights: 1 }], days: [{ base: 'b', anchors: [{ name: 'Reachable Falls', category: 'water' }, { name: 'Far Cove', category: 'beach', role: 'secondary' }] }, { base: 'b', anchors: [] }] });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    /* Nothing is contradicted, and nothing is deleted: the leg is simply not measured. */
+    expect(result.dispositions.find((d) => d.name === 'Far Cove')?.disposition).not.toBe('rejected_contradiction');
+    expect(result.itinerary.unscheduled.some((u) => u.reasonCode === 'route_contradicted')).toBe(false);
+    expect(result.itinerary.days[0]!.items.some((i) => i.title === 'Far Cove')).toBe(true);
+  });
+
+  it('keeps a defining stop when the leg is unmeasured, and still removes one the router evaluated and refused', async () => {
+    const where = (noRoad: boolean) =>
+      fictionalWorld({
+        name: 'Coreland',
+        center: { lat: 50, lng: 10 },
+        places: [
+          { name: 'Base Town', lat: 50, lng: 10, entityType: 'city' },
+          { name: 'Near Falls', lat: 50.1, lng: 10.1 },
+          { name: 'The Whole Point', lat: 50.2, lng: 9.8 },
+        ],
+        basics: { startDate: '2026-05-01', endDate: '2026-05-02' },
+        ...(noRoad ? { noRoadBetween: [['Base Town', 'The Whole Point']] as const } : { unmeasuredBetween: [['Base Town', 'The Whole Point']] as const }),
+      });
+    const draft = draftOf({
+      bases: [{ id: 'b', name: 'Base Town', nights: 1 }],
+      days: [{ base: 'b', anchors: [{ name: 'Near Falls', category: 'water' }, { name: 'The Whole Point', category: 'landmark', role: 'core' }] }, { base: 'b', anchors: [] }],
+    });
+
+    /* Uncertain routing: the reason the traveller is going survives it. */
+    const unmeasured = await reconcileTripDraft({ draft, context: where(false).context });
+    expect(unmeasured.dispositions.find((d) => d.name === 'The Whole Point')?.disposition).not.toBe('rejected_contradiction');
+    expect(unmeasured.itinerary.days[0]!.items.some((i) => i.title === 'The Whole Point')).toBe(true);
+
+    /* Affirmative evidence: the router evaluated the leg and reported no route, and that still counts. */
+    const refused = await reconcileTripDraft({ draft, context: where(true).context });
+    expect(refused.dispositions.find((d) => d.name === 'The Whole Point')?.disposition).toBe('rejected_contradiction');
+    expect(refused.itinerary.unscheduled.some((u) => u.reasonCode === 'route_contradicted')).toBe(true);
+  });
+
   it('measured driving over the ceiling drops the lowest role first and never a core stop', async () => {
     const world = fictionalWorld({
       name: 'Longland',

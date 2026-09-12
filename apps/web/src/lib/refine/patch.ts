@@ -95,7 +95,29 @@ export const tripPatchOperationSchema = z.discriminatedUnion('op', [
    */
   z.object({
     op: z.literal('restructure'),
-    stays: z.array(z.object({ id: z.string().max(120), nights: z.number().int().min(0).max(60), name: shortProse(100).optional(), why: shortProse(140).optional(), lodgingArea: shortProse(80).optional(), overnight: z.enum(OVERNIGHT_KINDS).optional() })).min(1).max(12),
+    /**
+     * V9.1 CLOSURE — TOPOLOGY FROM THE MODEL, ARITHMETIC FROM SIDEQUEST.
+     *
+     * This operation used to carry `stays: [{ id, nights }]` — absolute night
+     * counts the model had to add up itself. A live call returned a
+     * schema-valid patch under a legal intent whose stays totalled eleven
+     * nights on a nine-night trip, and the whole change was refused. The
+     * numbers were never the model's to know: the trip's dates and its day
+     * sequence already fix them, and `dayBaseMap` already derives which day
+     * sleeps where.
+     *
+     * So the model now says only *which stays become one*. A merge folds
+     * `from` into `into` and Sidequest moves the nights, which makes the
+     * invariant hold by construction rather than by the model's addition: the
+     * total cannot change, because nothing is ever written — only moved
+     * between two stays that already exist.
+     *
+     * A merge is legal only between stays that are neighbours in the route, so
+     * the answer cannot silently reorder the trip. Renaming a stay (it has
+     * become somewhere else) carries no number either.
+     */
+    merge: z.array(z.object({ from: z.string().max(120), into: z.string().max(120), why: shortProse(140).optional() })).min(1).max(11),
+    rename: z.array(z.object({ id: z.string().max(120), name: shortProse(100), lodgingArea: shortProse(80).optional(), overnight: z.enum(OVERNIGHT_KINDS).optional(), why: shortProse(140).optional() })).max(12).optional(),
     drop: z.array(z.object({ id: z.string().max(120), reason: shortProse(160) })).max(12).optional(),
     move: z.array(z.object({ id: z.string().max(120), toDay: z.number().int().min(1).max(40) })).max(12).optional(),
     why: shortProse(200),
@@ -134,38 +156,99 @@ export function expandRestructure(patch: TripPatch, draft: TripDraft): { patch: 
       operations.push(operation);
       continue;
     }
+    /*
+     * The route as a sequence, folded one merge at a time. `order` is the
+     * stays in the order they are slept in; `nights` is what each holds now.
+     * Every merge moves nights between two entries of this map and removes
+     * one, so the total is invariant across the whole expansion — there is no
+     * sum to check afterwards, because no addition was ever delegated.
+     */
     const nights = new Map(draft.bases.map((base) => [base.id, base.nights]));
+    let order = draft.bases.map((base) => base.id);
+    const merged = new Set<string>();
     let valid = true;
-    for (const stay of operation.stays) {
-      if (!nights.has(stay.id)) {
-        refused.push({ op: 'restructure', ref: stay.id, reason: 'no such stay in this draft' });
+
+    for (const step of operation.merge) {
+      if (!nights.has(step.from)) {
+        refused.push({ op: 'restructure', ref: step.from, reason: 'no such stay in this draft' });
         valid = false;
+        break;
       }
+      if (!nights.has(step.into)) {
+        refused.push({ op: 'restructure', ref: step.into, reason: 'no such stay in this draft' });
+        valid = false;
+        break;
+      }
+      if (step.from === step.into) {
+        refused.push({ op: 'restructure', ref: step.from, reason: 'a stay cannot be merged into itself' });
+        valid = false;
+        break;
+      }
+      /*
+       * Neighbours only. Two stays with nights between them are two separate
+       * visits — folding them would move the nights of everything in between,
+       * which is a different trip and not what "one hotel change fewer" means.
+       */
+      const occupied = order.filter((id) => (nights.get(id) ?? 0) > 0);
+      const fromAt = occupied.indexOf(step.from);
+      const intoAt = occupied.indexOf(step.into);
+      if (fromAt < 0 || intoAt < 0) {
+        refused.push({ op: 'restructure', ref: step.from, reason: 'that stay has no nights left to merge' });
+        valid = false;
+        break;
+      }
+      if (Math.abs(fromAt - intoAt) !== 1) {
+        refused.push({ op: 'restructure', ref: step.from, reason: `${nameOf(draft, step.from)} and ${nameOf(draft, step.into)} are not next to each other on the route, so merging them would reorder the trip` });
+        valid = false;
+        break;
+      }
+      nights.set(step.into, (nights.get(step.into) ?? 0) + (nights.get(step.from) ?? 0));
+      nights.set(step.from, 0);
+      order = order.filter((id) => id !== step.from);
+      merged.add(step.from);
     }
     if (!valid) continue;
-    for (const stay of operation.stays) nights.set(stay.id, stay.nights);
-    if ([...nights.values()].every((v) => v === 0)) {
-      refused.push({ op: 'restructure', ref: 'nights', reason: 'every stay would be dropped' });
+
+    if ([...nights.values()].every((value) => value === 0)) {
+      refused.push({ op: 'restructure', ref: 'merge', reason: 'every stay would be dropped' });
       continue;
     }
-    const sum = [...nights.values()].reduce((n, v) => n + v, 0);
-    if (sum !== totalNights) {
-      refused.push({ op: 'restructure', ref: 'nights', reason: `the nights would add up to ${sum}, and the trip has ${totalNights}` });
+
+    /*
+     * Derived, never accepted: the night each stay ends up holding is computed
+     * here and written into the ordinary typed operations the rest of the
+     * pipeline already polices. The assertion is a statement about this
+     * function, not about the answer — a merge that changed the total would be
+     * a bug in the fold above.
+     */
+    const derivedTotal = [...nights.values()].reduce((n, value) => n + value, 0);
+    if (derivedTotal !== totalNights) {
+      refused.push({ op: 'restructure', ref: 'merge', reason: `the nights would add up to ${derivedTotal}, and the trip has ${totalNights}` });
       continue;
     }
-    for (const stay of operation.stays) {
-      const base = draft.bases.find((entry) => entry.id === stay.id)!;
-      const why = stay.why ?? operation.why;
-      if (stay.name && stay.name !== base.name) {
-        operations.push({ op: 'replace_base', id: stay.id, name: stay.name, nights: stay.nights, why, ...(stay.lodgingArea ? { lodgingArea: stay.lodgingArea } : {}), ...(stay.overnight ? { overnight: stay.overnight } : {}) });
-      } else if (stay.nights !== base.nights || stay.lodgingArea || stay.overnight) {
-        operations.push({ op: 'update_base', id: stay.id, nights: stay.nights, ...(stay.nights !== base.nights ? { why } : {}), ...(stay.lodgingArea ? { lodgingArea: stay.lodgingArea } : {}), ...(stay.overnight ? { overnight: stay.overnight } : {}) });
+
+    const renames = new Map((operation.rename ?? []).map((entry) => [entry.id, entry]));
+    for (const base of draft.bases) {
+      const after = nights.get(base.id) ?? base.nights;
+      const rename = renames.get(base.id);
+      const why = rename?.why ?? operation.merge.find((step) => step.from === base.id || step.into === base.id)?.why ?? operation.why;
+      if (rename && rename.name !== base.name) {
+        operations.push({ op: 'replace_base', id: base.id, name: rename.name, nights: after, why, ...(rename.lodgingArea ? { lodgingArea: rename.lodgingArea } : {}), ...(rename.overnight ? { overnight: rename.overnight } : {}) });
+      } else if (after !== base.nights || rename?.lodgingArea || rename?.overnight) {
+        operations.push({ op: 'update_base', id: base.id, nights: after, ...(after !== base.nights ? { why } : {}), ...(rename?.lodgingArea ? { lodgingArea: rename.lodgingArea } : {}), ...(rename?.overnight ? { overnight: rename.overnight } : {}) });
       }
+    }
+    for (const entry of operation.rename ?? []) {
+      if (!nights.has(entry.id)) refused.push({ op: 'restructure', ref: entry.id, reason: 'no such stay in this draft' });
     }
     for (const entry of operation.drop ?? []) operations.push({ op: 'remove_activity', id: entry.id, reason: entry.reason });
     for (const entry of operation.move ?? []) operations.push({ op: 'move_activity', id: entry.id, toDay: entry.toDay });
   }
   return { patch: { ...patch, operations: operations.slice(0, 40) }, refused };
+}
+
+function nameOf(draft: TripDraft, id: string): string {
+  return draft.bases.find((base) => base.id === id)?.name ?? id;
 }
 
 /* ------------------------------------------------------------------ *

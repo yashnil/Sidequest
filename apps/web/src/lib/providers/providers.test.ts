@@ -242,7 +242,17 @@ describe('valhalla', () => {
     expect(outcome.failedPairs).toEqual([]);
   });
 
-  it('records a null time as a failed pair rather than as zero', async () => {
+  /*
+   * V9.1 — this used to expect `not_found`, the one reason the architecture
+   * treats as positive evidence. It is not: asked for the same two coordinates
+   * with the same costing, a live Valhalla answers `/route` with a 51 km drive
+   * and `/sources_to_targets` with a null cell, while echoing snapped
+   * coordinates for both endpoints. The `costmatrix` algorithm declines pairs
+   * that `/route` solves, and reading that silence as a verdict removed a
+   * signature experience from a real trip (`V9.1-ROUTING-CONTRADICTION.md`).
+   * The pair is still a failed pair, and still never zero — it is unmeasured.
+   */
+  it('records a null time as an unmeasured pair rather than as zero or as a verdict', async () => {
     const outcome = await computeMatrix(points, 'auto', {
       maxPairs: 100,
       fetchImpl: async () =>
@@ -253,7 +263,7 @@ describe('valhalla', () => {
           { from_index: 1, to_index: 1, time: 0, distance: 0 },
         ]),
     });
-    expect(outcome.failedPairs).toContainEqual({ from: 'a', to: 'b', reason: 'not_found' });
+    expect(outcome.failedPairs).toContainEqual({ from: 'a', to: 'b', reason: 'insufficient_evidence' });
     expect(Number.isNaN(outcome.minutes[0]![1]!)).toBe(true);
   });
 

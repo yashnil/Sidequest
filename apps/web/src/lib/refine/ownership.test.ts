@@ -207,6 +207,36 @@ describe('undo', () => {
     return { original };
   }
 
+  /*
+   * V9.1 — THE ALLOWANCE IS SPENT WHERE THE CALL IS MADE.
+   *
+   * Both refinement doors build an interpreter before the graph decides what it
+   * needs, and `graph.ts` routes an answered proposal "straight to apply or to
+   * cancel — never back through the model". Reserving when the seam was built
+   * therefore debited a call for a press that issues no request: one live
+   * refinement made a single Anthropic call and moved `daily_provider_spend` by
+   * two. The reservation now happens inside `interpret`, so the ledger
+   * describes what actually went out.
+   */
+  it('answering a proposal, undoing and reading cost no model allowance at all', async () => {
+    const { undoRefinementAction, answerRefinementAction, refinementHistoryAction } = await import('./actions');
+    const { dailySpendSoFar } = await import('@/lib/compiler/daily-ceiling');
+    const tripId = await tripOwnedBy('session:mine');
+    asBrowser('session:mine');
+    await seedVersions(tripId);
+    /* Configured, so the model seam is the one that would have reserved. */
+    process.env.ANTHROPIC_API_KEY = 'sk-test-not-used';
+    const now = new Date();
+    const before = dailySpendSoFar('model_calls', now, null);
+
+    /* Apply/Cancel on a run that is not awaiting one is refused before any seam is built. */
+    await answerRefinementAction({ tripId, runId: 'no-such-run', answer: 'Apply' });
+    await undoRefinementAction({ tripId });
+    await refinementHistoryAction({ tripId });
+
+    expect(dailySpendSoFar('model_calls', now, null)).toBe(before);
+  });
+
   it('restores the exact previous version and constructs no model at all', async () => {
     const { undoRefinementAction } = await import('./actions');
     const { currentVersion, getVersion } = await import('./version-repository');

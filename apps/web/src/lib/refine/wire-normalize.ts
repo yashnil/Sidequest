@@ -54,6 +54,38 @@ import { REFINEMENT_INTENTS } from './state';
  * never turn a "no" into a "yes" for anything else, and never a "yes" into a
  * "no": a value that already parses is returned untouched.
  */
+/**
+ * V9.1 CLOSURE §4 — THE GRAMMAR DOES NOT COMPILE, AND NOTHING PRETENDS IT DOES.
+ *
+ * Live diagnostics recorded `enforcement: ['grammar', 'prompt']` with
+ * "grammar-mode request was refused as a structured-output
+ * schema/grammar-compilation problem; retrying once in prompt mode". Every
+ * refinement call has therefore run in **prompt mode**, where the provider
+ * validates nothing at all and the schema travels as text for the model to
+ * follow by hand.
+ *
+ * The behaviour that makes this safe, rather than a silent downgrade:
+ *
+ * - the grammar failure and the prompt-mode fallback are both recorded on
+ *   `ModelCallDiagnostic` (`enforcementAttempted`, `enforcementFallbackReason`)
+ *   and both are logged by the refinement on every exit;
+ * - `refinementWireSchema.safeParse` runs afterwards regardless of mode and is
+ *   the only thing that decides whether an answer is usable — no code path
+ *   treats a prompt-mode response as provider-validated;
+ * - the legal `intent` values are written into the instructions the model
+ *   reads, because nothing else will hold it to them (`wire-contract.test.ts`
+ *   pins both halves: the grammar carries no `enum`, and the prompt does);
+ * - since this closure, the one class of value the model could get wrong
+ *   arithmetically — a night count — is not in the wire at all.
+ *
+ * TODO (separate pass, not V9.1): `zodOutputFormat`'s converter flattens
+ * `enum`, `const`, `maxLength`, `pattern` and `minItems` into a `description`
+ * string, which is both why the grammar carries no real constraint and a
+ * plausible cause of the compilation refusal itself. Fixing the converter
+ * would let the provider enforce the shape for every call site at once. It is
+ * deliberately out of scope here: deterministic validation is complete without
+ * it, so it does not block this pass.
+ */
 const SOFT_PROSE_KEYS = new Set([
   'why',
   'reason',

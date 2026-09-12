@@ -40,8 +40,8 @@ describe('the structural index', () => {
     expect(structural).toContain('<trip structural="true">');
     expect(structural).toContain('one restructure operation');
     /* V9.1 §4 — the nights total stated concretely, after a live answer totalled 11 on a 9-night trip. */
-    expect(structural).toContain('must total exactly 9 nights');
-    expect(full).not.toContain('must total exactly');
+    expect(structural).toContain('order they are slept in');
+    expect(structural).not.toMatch(/must total exactly/);
     expect(isStructuralRequest(REQUEST)).toBe(true);
     expect(isStructuralRequest('Less driving on the long days')).toBe(true);
     expect(isStructuralRequest('Make day 2 easier')).toBe(false);
@@ -52,7 +52,7 @@ describe('the structural index', () => {
 
 describe('the restructure operation', () => {
   const patch = tripPatchSchema.parse({
-    operations: [{ op: 'restructure', stays: [{ id: 'hofn-area', nights: 0 }, { id: 'vik', nights: 4 }], why: 'One hotel change fewer: Höfn folds into Vík.' }],
+    operations: [{ op: 'restructure', merge: [{ from: 'hofn-area', into: 'vik' }], why: 'One hotel change fewer: Höfn folds into Vík.' }],
   });
 
   it('expands into ordinary typed operations, keeps the nights total, and applies with the days re-derived', () => {
@@ -67,26 +67,25 @@ describe('the restructure operation', () => {
     /* Every anchor survives: a restructure moves beds, never experiences. */
     expect(applied.draft.days.reduce((n, d) => n + d.anchors.length, 0)).toBe(22);
     const reach = patchReach(patch, draft);
-    expect(reach.bases).toEqual(['hofn-area', 'vik']);
+    expect([...reach.bases].sort()).toEqual(['hofn-area', 'vik']);
     expect(reach.days.length).toBeGreaterThan(0);
   });
 
   it('refuses nights that do not add up, an unknown stay, or dropping every stay — never silently corrected', () => {
-    const short = tripPatchSchema.parse({ operations: [{ op: 'restructure', stays: [{ id: 'hofn-area', nights: 0 }], why: 'x' }] });
-    expect(expandRestructure(short, draft).refused[0]?.reason).toMatch(/add up to 7, and the trip has 9/);
-    expect(applyTripPatch({ draft, patch: short }).applied).toEqual([]);
-    const unknown = tripPatchSchema.parse({ operations: [{ op: 'restructure', stays: [{ id: 'akureyri', nights: 2 }], why: 'x' }] });
+    /* V9.1 CLOSURE — a wrong total is no longer expressible: the model supplies no number to be wrong. */
+    const unknown = tripPatchSchema.parse({ operations: [{ op: 'restructure', merge: [{ from: 'akureyri', into: 'vik' }], why: 'x' }] });
     expect(expandRestructure(unknown, draft).refused[0]?.reason).toMatch(/no such stay/);
-    const all = tripPatchSchema.parse({ operations: [{ op: 'restructure', stays: draft.bases.map((b) => ({ id: b.id, nights: 0 })), why: 'x' }] });
-    expect(expandRestructure(all, draft).refused[0]?.reason).toMatch(/every stay/);
+    expect(applyTripPatch({ draft, patch: unknown }).applied).toEqual([]);
+    const apart = tripPatchSchema.parse({ operations: [{ op: 'restructure', merge: [{ from: 'reykjavik', into: 'selfoss' }], why: 'x' }] });
+    expect(expandRestructure(apart, draft).refused[0]?.reason).toMatch(/not next to each other/);
   });
 
   it('a locked stay still refuses, a rename becomes a replace_base, drops and moves become their operations', () => {
     const locked = applyTripPatch({ draft, patch, locked: ['base:hofn-area'], travellerLocked: ['base:hofn-area'] });
     expect(locked.refused.some((r) => r.ref === 'hofn-area' && /locked/.test(r.reason))).toBe(true);
-    const renamed = tripPatchSchema.parse({ operations: [{ op: 'restructure', stays: [{ id: 'hofn-area', nights: 0 }, { id: 'vik', nights: 4, name: 'Kirkjubæjarklaustur' }], drop: [{ id: 'd3-a2-solheimajokull', reason: 'off the new route' }], why: 'x' }] });
+    const renamed = tripPatchSchema.parse({ operations: [{ op: 'restructure', merge: [{ from: 'hofn-area', into: 'vik' }], rename: [{ id: 'vik', name: 'Kirkjubæjarklaustur' }], drop: [{ id: 'd3-a2-solheimajokull', reason: 'off the new route' }], why: 'x' }] });
     const ops = expandRestructure(renamed, draft).patch.operations.map((o) => o.op);
-    expect(ops).toEqual(['update_base', 'replace_base', 'remove_activity']);
+    expect(ops).toEqual(['replace_base', 'update_base', 'remove_activity']);
   });
 
   it('the delta preview reads the change from the drafts: one hotel change fewer, every signature kept', () => {

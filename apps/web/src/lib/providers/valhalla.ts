@@ -349,7 +349,7 @@ async function fetchBlock(
    * ladder per child would multiply wall-clock for nothing.
    */
   maxAttempts: number = MAX_ATTEMPTS,
-): Promise<{ minutes: number[][]; km: number[][]; noRoute: boolean[][] }> {
+): Promise<{ minutes: number[][]; km: number[][]; unmeasured: boolean[][] }> {
   if (circuit?.open) {
     throw new RoutingError('request_failed', 'The routing service stopped answering.', { unreachable: true });
   }
@@ -463,7 +463,26 @@ async function fetchBlock(
 
   const minutes = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
   const km = sources.map(() => new Array<number>(targets.length).fill(Number.NaN));
-  const noRoute = sources.map(() => new Array<boolean>(targets.length).fill(false));
+  /**
+   * V9.1 — A NULL MATRIX CELL IS SILENCE, NOT A VERDICT.
+   *
+   * This used to be `noRoute`, and a null `time` set it: the comment below said
+   * "Valhalla saying no route, which is a real answer". It is not. Asked for
+   * the same two Icelandic coordinates with the same `auto` costing, this
+   * instance answers `/route` with 3,330 s over 51 km and answers
+   * `/sources_to_targets` with `time: null` — while echoing *snapped*
+   * coordinates for both endpoints, so it found road network at each. The
+   * `costmatrix` algorithm has its own cutoffs and declines pairs that `/route`
+   * solves.
+   *
+   * Reading that silence as positive evidence cost a traveller a signature
+   * experience: a 56-minute drive was written down as "no route … a real
+   * answer, not a gap" and the stop was removed from the plan
+   * (`V9.1-ROUTING-CONTRADICTION.md`). Affirmative no-route now comes only from
+   * the direct route endpoint, which evaluates a path and reports NO_PATH when
+   * there is none.
+   */
+  const unmeasured = sources.map(() => new Array<boolean>(targets.length).fill(false));
 
   // Valhalla returns either a matrix of rows or one flat list, depending on
   // version. Both are keyed by from_index/to_index, so both are read the same way.
@@ -475,19 +494,18 @@ async function fetchBlock(
     const from = cell.from_index;
     const to = cell.to_index;
     if (minutes[from] === undefined || km[from] === undefined) continue;
-    // A null time is Valhalla saying "no route", which is a real answer and a
-    // different one from zero — and, unlike every other gap this function can
-    // produce, positive evidence rather than an absence of one. Recorded so
-    // the caller can tell "the router said no" from "the router never said".
+    // A null time is this algorithm declining the pair. It is the absence of an
+    // answer, indistinguishable here from a cutoff, so it is recorded as
+    // unmeasured and never as the router having said no.
     if (cell.time === null || cell.time === undefined) {
-      noRoute[from]![to] = true;
+      unmeasured[from]![to] = true;
       continue;
     }
     minutes[from]![to] = Math.round(cell.time / 60);
     km[from]![to] = cell.distance ?? Number.NaN;
   }
 
-  return { minutes, km, noRoute };
+  return { minutes, km, unmeasured };
 }
 
 const routeTripSchema = z.object({
@@ -868,7 +886,8 @@ async function resolveBlock(
         for (let c = 0; c < colIndexes.length; c += 1) {
           const row = rowIndexes[r]!;
           const col = colIndexes[c]!;
-          if (fetched.noRoute[r]?.[c]) reason[row]![col] = 'not_found';
+          /* Silence from the matrix: unmeasured, never the authoritative no-route. */
+          if (fetched.unmeasured[r]?.[c]) reason[row]![col] = 'insufficient_evidence';
           const value = fetched.minutes[r]?.[c];
           const distance = fetched.km[r]?.[c];
           if (value === undefined || !Number.isFinite(value)) continue;

@@ -32,7 +32,7 @@ import type { RefinementInterpretation, RefinementInterpreter } from './graph';
  * form.
  */
 
-export const REFINEMENT_PROMPT_VERSION = 'sidequest-refinement/2026-09-12.3' as const;
+export const REFINEMENT_PROMPT_VERSION = 'sidequest-refinement/2026-09-12.4' as const;
 
 /**
  * HOW MUCH ROOM ONE REFINEMENT GETS.
@@ -120,7 +120,7 @@ operations, in the order they apply:
   update_timing     startDate, endDate, rationale
   update_trip_thesis purpose, routeRationale, signatures
   update_preference field, value, note
-  restructure       stays [{id, nights, name?, why?}], drop? [{id, reason}], move? [{id, toDay}], why
+  restructure       merge [{from, into, why?}], rename? [{id, name, why?}], drop? [{id, reason}], move? [{id, toDay}], why
 
 activity: name; kind; why; and optionally near, role, mins, how, when.
 
@@ -128,7 +128,13 @@ A day holds at most five activities. Keep every string short — one sentence. c
 </output_contract>
 
 <structural_change>
-When the request is about the shape of the trip — fewer hotel changes, less driving, a base removed, a region added, a slower route — return ONE restructure operation and nothing else, unless a named experience must also move or go. Write only the stays whose nights change (a stay with 0 nights leaves the trip; a stay may be renamed when it becomes somewhere else). The nights must still add up to the trip's nights. Sidequest works out which days sleep where, what to tell the traveller and what to re-measure; do not restate days, activities or meals that do not change. Keep every signature experience reachable from the stays you leave; drop one only if the request cannot be met otherwise, and say so in why.
+When the request is about the shape of the trip — fewer hotel changes, less driving, a base removed, a region added, a slower route — return ONE restructure operation and nothing else, unless a named experience must also move or go.
+
+Say which stays become one, never how many nights anything ends up with. A merge entry folds the "from" stay into the "into" stay: the nights move with it, Sidequest does the arithmetic, and the trip keeps exactly the nights it already has. You cannot get the total wrong, because you are not being asked for it.
+
+The stays in the trip index are listed in the order they are slept in, and you may only merge neighbours in that order — two stays with another stay between them are two separate visits, and folding them would reorder the route. Every hotel change you remove is one merge. Use rename when a stay becomes somewhere else.
+
+Sidequest works out which days sleep where, which legs to re-measure and what to tell the traveller; do not restate days, activities or meals that do not change. Keep every signature experience reachable from the stays you leave; drop one only if the request cannot be met otherwise, and say so in why.
 </structural_change>`;
 
 /* ------------------------------------------------------------------ *
@@ -244,18 +250,13 @@ export function buildRefinementTask(input: { draft: TripDraft; locks: readonly R
           '',
           'This is a structural request: answer with one restructure operation (see structural_change). Do not restate days or activities that do not change.',
           /*
-           * V9.1 §4 — the arithmetic, stated rather than implied.
-           *
-           * A live call returned a schema-valid restructure under a legal
-           * intent whose stays totalled eleven nights on a nine-night trip, and
-           * the deterministic guard refused the whole patch. The figures were
-           * already in the index and the contract already said the nights must
-           * still add up; neither made the sum concrete. This does, in the one
-           * line the model is most likely to re-read, and it is the only
-           * honest place to fix it: a night count is a hard field, so Sidequest
-           * may refuse a wrong total but must never quietly correct one.
+           * V9.1 CLOSURE — no arithmetic line, because there is no arithmetic
+           * left to get wrong. An earlier draft of this pass stated the night
+           * total here after a live answer totalled eleven on a nine-night
+           * trip; the better answer was to stop asking for the number at all.
+           * What the model needs instead is the one rule a merge can break.
            */
-          `Arithmetic: every stay you write, plus every stay you leave alone, must total exactly ${input.draft.bases.reduce((nights, base) => nights + base.nights, 0)} nights. Add up your answer before returning it.`,
+          'The stays above are in the order they are slept in. Merge only neighbours in that order.',
         ]
       : []),
     '',
