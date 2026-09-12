@@ -1185,4 +1185,44 @@
   a[href^="https://maps.apple.com"]::after {
     content: "";
   }
+  /*
+   * V9 §14 — THE PAPER APPENDIX.
+   *
+   * Booking status, addresses, coordinates with plain map addresses, the
+   * emergency number and the offline list, printed as text on its own page
+   * at the end of the packet. Two columns for the position list so ten days
+   * of stops take one sheet, not three; long URLs break anywhere rather than
+   * push the column off the page. Never the confirmation reference — the
+   * component does not carry it, and no rule here could put it back.
+   */
+  [data-testid="print-appendix"] {
+    display: block !important;
+    break-before: page;
+    font-size: 0.9em;
+  }
+  [data-testid="print-appendix"] h3 {
+    break-after: avoid;
+  }
+  [data-testid="print-positions"] {
+    columns: 2;
+    column-gap: 1.5rem;
+  }
+  [data-testid="print-positions"] > li,
+  [data-testid="print-positions"] li li {
+    break-inside: avoid;
+  }
+  [data-testid="print-positions"] span,
+  [data-testid="print-offline"] {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+  /* The Trip Pack prints as its own list: links as text, controls gone, one column. */
+  [data-testid="trip-pack"] [data-print="never"],
+  [data-testid="trip-pack"] input {
+    display: none !important;
+  }
+  [data-testid="trip-pack"] section {
+    break-inside: avoid;
+    margin-top: 0.9rem !important;
+  }
 }

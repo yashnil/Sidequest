@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type ReactNode } from 'react';
-import { LIFECYCLE_LABELS, type TripLifecycle } from '@sidequest/core';
+import { LIFECYCLE_LABELS, NEXT_ACTION_KIND_WORD, type TripLifecycle } from '@sidequest/core';
 import { DestinationImage, ImageCredit } from '@/components/DestinationImage';
 import { Badge, buttonClass, cx } from '@/components/ui';
 import type { DashboardRow } from '@/lib/trips/dashboard';
@@ -172,8 +172,21 @@ export function TripCard({ row, onError, controls }: { row: DashboardCardRow; on
             {meta.readiness.label}
           </span>
           <span aria-hidden="true" className="text-ink-faint">·</span>
-          <span className={meta.booking.booked ? 'text-pine' : 'text-ink-muted'}>{meta.booking.label}</span>
+          {/* V9 §21 — "6 of 8 major items booked" from the engine when the plan needs anything major; the plain count otherwise. */}
+          <span className={meta.booking.booked ? 'text-pine' : 'text-ink-muted'} data-testid="trip-card-booking-state">
+            {row.bookingState ?? meta.booking.label}
+          </span>
         </p>
+
+        {/* V9 §21 — the next best action from the engine, the same one the hub leads with. */}
+        {row.next && !quiet ? (
+          <p className="flex min-w-0 items-start gap-2 text-sm" data-testid="trip-card-next-action" data-kind={row.next.kind}>
+            <span className="eyebrow mt-0.5 inline-flex h-5 shrink-0 items-center rounded-sm bg-paper-sunk px-1.5 !text-ink-muted">{NEXT_ACTION_KIND_WORD[row.next.kind]}</span>
+            <Link href={row.next.href} className="relative min-w-0 text-ink underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2" title={row.next.why}>
+              {row.next.title}
+            </Link>
+          </p>
+        ) : null}
 
         {meta.route.names.length > 0 ? (
           <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 type-small text-ink-muted" aria-label="Where you sleep, in order">

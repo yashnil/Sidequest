@@ -10,7 +10,7 @@ const webServer = base.webServer as { command: string } & Record<string, unknown
 
 export default defineConfig({
   ...base,
-  testMatch: ['**/live-world-today.spec.ts'],
+  testMatch: ['**/live-world-today.spec.ts', '**/v9-today.spec.ts'],
   projects: (base.projects ?? []).filter((p) => p.name === 'desktop').map((p) => ({ ...p, testIgnore: [] })),
   webServer: { ...webServer, command: `SIDEQUEST_FIXTURE_NOW=2026-08-13T17:30:00Z ${webServer.command}` },
 });

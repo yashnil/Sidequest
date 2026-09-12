@@ -2,7 +2,7 @@ import 'server-only';
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, REFINEMENT_SCHEMA_SQL, SCHEMA_SQL, SCHEMA_USER_VERSION, V6_SCHEMA_SQL, V6_TABLE_REBUILDS } from './schema';
+import { COLUMN_MIGRATIONS, INDEX_MIGRATIONS, REFINEMENT_SCHEMA_SQL, SCHEMA_SQL, SCHEMA_USER_VERSION, V6_SCHEMA_SQL, V6_TABLE_REBUILDS, V9_SCHEMA_SQL } from './schema';
 
 /**
  * Local persistence driver.
@@ -59,6 +59,8 @@ export function getDb(): Database.Database {
    * migration adds `trips.user_id REFERENCES users(id)`.
    */
   db.exec(V6_SCHEMA_SQL);
+  /* V9 — decisions, resolutions, imports, calendar feeds, observations, dismissals. After V6: `preference_dismissals` references `users`. */
+  db.exec(V9_SCHEMA_SQL);
   applyColumnMigrations(db);
   applyTableRebuilds(db);
   applyIndexMigrations(db);

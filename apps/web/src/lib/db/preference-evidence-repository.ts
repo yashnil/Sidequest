@@ -2,6 +2,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { featureIsLearnable, learnPreferences, learnedHints, type LearnedPreference, type PreferenceEvidenceRow } from '@sidequest/core';
 import { getDb } from './client';
+import { listDismissedFeatures } from './execution-repository';
 
 /**
  * THE PREFERENCE EVIDENCE LEDGER, PERSISTED.
@@ -83,9 +84,32 @@ export function listTripEvidence(tripId: string): PreferenceEvidenceRow[] {
   return (getDb().prepare('SELECT * FROM preference_evidence WHERE trip_id = ? ORDER BY created_at ASC').all(tripId) as Row[]).map(rowToEvidence);
 }
 
-/** What the account has taught Sidequest, as weights and as brief-ready hints. Account-scoped rows only: a trip-local lean does not travel. */
-export function learnedForOwner(owner: { userId: string | null; ownerToken: string | null }, now: Date = new Date()): { learned: LearnedPreference[]; hints: string[] } {
+/**
+ * V9 §18 — every learned leaning, with the account's dismissals beside it.
+ *
+ * The profile page reads this: it shows what Sidequest noticed *and* what
+ * the traveller told it to forget, so a dismissal is reversible from the
+ * same place. Account-scoped rows only, as before. A browser with no account
+ * has nothing to dismiss, so its list is empty.
+ */
+export function learnedWithDismissals(owner: { userId: string | null; ownerToken: string | null }, now: Date = new Date()): { learned: LearnedPreference[]; dismissed: string[] } {
   const rows = listPreferenceEvidence(owner).filter((row) => row.scope === 'account' || row.source === 'post_trip' || row.source === 'explicit');
   const learned = learnPreferences(rows, now);
+  const dismissed = owner.userId ? listDismissedFeatures(owner.userId) : [];
+  return { learned, dismissed };
+}
+
+/**
+ * What the account has taught Sidequest, as weights and as brief-ready hints.
+ * Account-scoped rows only: a trip-local lean does not travel.
+ *
+ * V9 §18 — a dismissed feature never reaches the brief. `production-plan.ts`
+ * reads this before the one model call, so "Dismiss" on the profile is a
+ * promise kept at the only place it could be broken.
+ */
+export function learnedForOwner(owner: { userId: string | null; ownerToken: string | null }, now: Date = new Date()): { learned: LearnedPreference[]; hints: string[] } {
+  const all = learnedWithDismissals(owner, now);
+  const dismissed = new Set(all.dismissed);
+  const learned = all.learned.filter((p) => !dismissed.has(p.feature));
   return { learned, hints: learnedHints(learned) };
 }

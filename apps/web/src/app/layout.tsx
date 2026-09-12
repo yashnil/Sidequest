@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Manrope, Newsreader } from 'next/font/google';
+import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 import './globals.css';
 
 /*
@@ -39,10 +40,30 @@ const uiFont = Manrope({ subsets: ['latin', 'latin-ext'], variable: '--font-manr
  * and marks itself `noindex`.
  */
 
+const DESCRIPTION =
+  'Answer one questionnaire and get a region, not a destination: the famous stops, the quiet ones, and an honest account of what to skip.';
+
+/**
+ * V9 §11 — INSTALLABLE AND SHAREABLE.
+ *
+ * `manifest` links the generated web manifest so a browser offers "Add to
+ * Home Screen"; `openGraph` gives a pasted link a name and a description
+ * (the share page adds its own picture). `metadataBase` makes the picture's
+ * URL absolute when the deployment knows its own address.
+ */
+const baseUrl = process.env.SIDEQUEST_BASE_URL?.trim();
+
 export const metadata: Metadata = {
   title: 'Sidequest — trips built around how you actually travel',
-  description:
-    'Answer one questionnaire and get a region, not a destination: the famous stops, the quiet ones, and an honest account of what to skip.',
+  description: DESCRIPTION,
+  ...(baseUrl ? { metadataBase: new URL(baseUrl) } : {}),
+  manifest: '/manifest.webmanifest',
+  openGraph: {
+    siteName: 'Sidequest',
+    type: 'website',
+    title: 'Sidequest — trips built around how you actually travel',
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {
@@ -64,7 +85,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${displayFont.variable} ${uiFont.variable}`}>
-      <body className="flex min-h-dvh flex-col paper-grain">{children}</body>
+      <body className="flex min-h-dvh flex-col paper-grain">
+        {children}
+        <ServiceWorkerRegistrar />
+      </body>
     </html>
   );
 }

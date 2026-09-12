@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { DASHBOARD_SECTIONS } from '@sidequest/core';
 import { authProviders } from '@/lib/auth/config';
 import { currentUser } from '@/lib/auth/session';
 import { countUnclaimedTrips } from '@/lib/db/auth-repository';
 import { sessionToken } from '@/lib/net/caller';
-import { dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
+import { DASHBOARD_V3_SECTIONS, dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
+import { renderInstant } from '@/lib/clock';
 import { buttonClass } from '@/components/ui';
 import { ClaimBanner } from './ClaimBanner';
 import { TripDashboard, type DashboardCardRow } from './TripDashboard';
@@ -19,8 +19,9 @@ export const metadata: Metadata = {
 /**
  * THE TRIPS HOME.
  *
- * V6 §25. Signed in: every trip on the account, grouped by where it is in
- * its life — up next, booked, planning, ideas, past, archived — as cards with
+ * V6 §25, V9 §21. Signed in: every trip on the account, grouped by where it
+ * is in its life — traveling now, booked / getting ready, planning, ideas,
+ * past, archived — as cards with
  * a picture, the dates or the timing that is still open, who is going, the
  * route, what is booked, what to do next. Signed out: this browser's trips,
  * the same way, with one quiet offer to keep them.
@@ -34,7 +35,8 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const user = await currentUser();
   const token = await sessionToken({ mint: false });
-  const now = new Date();
+  /* V9 — the same instant the hub judges itself against (`lib/clock`), so a card and the trip it opens never disagree about today. */
+  const now = new Date(renderInstant());
   const rows: DashboardCardRow[] = dashboardRowsFor({ userId: user?.id ?? null, ownerToken: token }, now).map((row) => ({
     ...row,
     updatedLabel: lastTouched(row.updatedAt, now),
@@ -73,7 +75,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
         </p>
       ) : null}
 
-      <TripDashboard rows={rows} sections={DASHBOARD_SECTIONS} query={query} sort={sort} filter={filter} signedIn={Boolean(user)} />
+      <TripDashboard rows={rows} sections={DASHBOARD_V3_SECTIONS} query={query} sort={sort} filter={filter} signedIn={Boolean(user)} />
     </div>
   );
 }

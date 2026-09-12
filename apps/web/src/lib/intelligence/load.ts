@@ -1,12 +1,13 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { itineraryStructureFingerprint, type BookedPlanItem, type Itinerary, type TravelIntelligence, type TravelReadinessProfile, type Trip } from '@sidequest/core';
+import { itineraryStructureFingerprint, type BookedPlanItem, type BookingResolution, type Itinerary, type TravelIntelligence, type TravelReadinessProfile, type Trip } from '@sidequest/core';
 import { getProfile } from '@/lib/db/repository';
 import { profileWithPartyDiet } from '@/lib/db/party-repository';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { getDraftHints, getFxRate, getReadinessProfile, getTravelIntelligence, listBookedItems, listChecks, saveTravelIntelligence, type CheckList } from '@/lib/db/intelligence-repository';
 import { defaultProfileFor } from '@/lib/planning/default-profile';
-import { applyBookedFacts } from './booked-reconcile';
+import { applyBookedFacts, type BookedAffectedScope } from './booked-reconcile';
+import { listBookingResolutions } from '@/lib/db/execution-repository';
 import { buildTravelIntelligence, INTELLIGENCE_RULES_VERSION } from './build';
 
 /**
@@ -24,6 +25,9 @@ export interface LoadedIntelligence {
   booked: BookedPlanItem[];
   honored: string[];
   conflicts: string[];
+  /** V9 §5 — which days and bases the booked facts reached, and what was not re-measured. */
+  affected: BookedAffectedScope;
+  resolutions: BookingResolution[];
   checks: Record<CheckList, string[]>;
   readinessProfile: TravelReadinessProfile | null;
 }
@@ -42,6 +46,7 @@ export function loadTripIntelligence(input: {
   const now = input.now ?? new Date();
   const trip = input.trip;
   const booked = listBookedItems(trip.id);
+  const resolutions = listBookingResolutions(trip.id);
   const applied = applyBookedFacts(input.itinerary, booked);
   const intent = getIntent(trip.id);
   const composer = intent?.composer ?? null;
@@ -60,6 +65,7 @@ export function loadTripIntelligence(input: {
     .update(INTELLIGENCE_RULES_VERSION)
     .update(itineraryStructureFingerprint(applied.itinerary))
     .update(JSON.stringify(booked))
+    .update(JSON.stringify(resolutions))
     .update(JSON.stringify(readinessProfile ?? null))
     .update(JSON.stringify(profile.interview))
     .update(profile.budgetStyle)
@@ -94,6 +100,7 @@ export function loadTripIntelligence(input: {
       bookedConflicts: applied.conflicts,
       now,
       fx: getFxRate(trip.id),
+      resolutions,
     });
     /*
      * The fingerprint stored is the inputs hash, not the bare itinerary
@@ -103,5 +110,5 @@ export function loadTripIntelligence(input: {
     intelligence = { ...intelligence, itineraryFingerprint: inputsHash };
     if (input.persist !== false) saveTravelIntelligence(intelligence);
   }
-  return { itinerary: applied.itinerary, intelligence, booked, honored: applied.honored, conflicts: applied.conflicts, checks: listChecks(trip.id), readinessProfile };
+  return { itinerary: applied.itinerary, intelligence, booked, honored: applied.honored, conflicts: applied.conflicts, affected: applied.affected, resolutions, checks: listChecks(trip.id), readinessProfile };
 }

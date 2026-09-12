@@ -1926,6 +1926,97 @@ CREATE TABLE IF NOT EXISTS itinerary_locks (
 `;
 
 /**
+ * V9 — TRIP EXECUTION: THE TRAVELLER'S ACTS AND SIDEQUEST'S OBSERVATIONS.
+ *
+ * Every V9 state (suggested, accepted, needs booking, booked, verified,
+ * changed …) is derived on load; these tables hold only what cannot be
+ * derived — a decision somebody made, a need somebody skipped, a
+ * confirmation somebody imported, a calendar feed somebody minted, a fact a
+ * recheck observed, a learned leaning somebody dismissed. All cascade from
+ * `trips` (or `users`), so deleting a trip deletes its execution record.
+ */
+export const V9_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS trip_decisions (
+  id           TEXT PRIMARY KEY,
+  trip_id      TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  decision_key TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  decided_by   TEXT NOT NULL,
+  decided_at   TEXT NOT NULL,
+  UNIQUE (trip_id, decision_key)
+);
+CREATE INDEX IF NOT EXISTS idx_trip_decisions_trip ON trip_decisions(trip_id);
+
+-- The traveller's word on a booking need nothing was booked for.
+CREATE TABLE IF NOT EXISTS booking_resolutions (
+  trip_id         TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  booking_item_id TEXT NOT NULL,
+  resolution      TEXT NOT NULL,
+  booked_item_id  TEXT,
+  note            TEXT,
+  resolved_at     TEXT NOT NULL,
+  PRIMARY KEY (trip_id, booking_item_id)
+);
+
+-- A confirmation somebody pasted or uploaded: the redacted extraction only,
+-- never the document, and only until it is confirmed or discarded.
+CREATE TABLE IF NOT EXISTS booking_imports (
+  id             TEXT PRIMARY KEY,
+  trip_id        TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  source_kind    TEXT NOT NULL,
+  extracted_json TEXT NOT NULL,
+  status         TEXT NOT NULL,
+  model_used     INTEGER NOT NULL DEFAULT 0,
+  booked_item_id TEXT,
+  created_at     TEXT NOT NULL,
+  resolved_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_booking_imports_trip ON booking_imports(trip_id, created_at);
+
+-- A private calendar subscription. The token is shown once; only its SHA-256 is kept.
+CREATE TABLE IF NOT EXISTS calendar_feeds (
+  id             TEXT PRIMARY KEY,
+  trip_id        TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  token_hash     TEXT NOT NULL UNIQUE,
+  created_at     TEXT NOT NULL,
+  revoked_at     TEXT,
+  last_served_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_feeds_trip ON calendar_feeds(trip_id);
+
+-- What a recheck observed: one volatile fact, before and after.
+CREATE TABLE IF NOT EXISTS trip_fact_observations (
+  id              TEXT PRIMARY KEY,
+  trip_id         TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  fact_id         TEXT NOT NULL,
+  kind            TEXT NOT NULL,
+  observed_at     TEXT NOT NULL,
+  previous_json   TEXT,
+  current_json    TEXT,
+  changed         INTEGER NOT NULL DEFAULT 0,
+  day_numbers     TEXT NOT NULL DEFAULT '[]',
+  summary         TEXT NOT NULL,
+  acknowledged_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_trip_fact_observations_trip ON trip_fact_observations(trip_id, observed_at);
+
+-- When a recheck last ran for a trip, so opening a trip twice in an hour asks once.
+CREATE TABLE IF NOT EXISTS trip_fact_checks (
+  trip_id      TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  checked_at   TEXT NOT NULL,
+  outcome_json TEXT NOT NULL DEFAULT '{}'
+);
+
+-- A learned leaning the traveller told Sidequest to forget.
+CREATE TABLE IF NOT EXISTS preference_dismissals (
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  feature      TEXT NOT NULL,
+  dismissed_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, feature)
+);
+`;
+
+/**
  * V6 — TABLES THAT EXIST WITHOUT THE FOREIGN KEY THEY NEED.
  *
  * SQLite cannot add a constraint to an existing table. Each entry names a
@@ -2010,7 +2101,7 @@ export const V6_TABLE_REBUILDS: readonly { table: string; create: string; column
  * \`PRAGMA user_version\` once every step below has run. A database at or
  * above this number skips the steps; the idempotent DDL above still runs.
  */
-export const SCHEMA_USER_VERSION = 6;
+export const SCHEMA_USER_VERSION = 9;
 
 export const COLUMN_MIGRATIONS: readonly {
   table: string;

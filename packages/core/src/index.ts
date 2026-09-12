@@ -90,6 +90,7 @@ export * from './quality/metrics';
 export * from './interview/sufficiency';
 export * from './interview/conflicts';
 export * from './intelligence';
+export * from './execution';
 
 export * from './time/interval';
 export * from './time/zone';

@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { DIETARY_NEED_LABELS, FUNCTIONAL_NEED_LABELS, dietaryRulesOf, learnedHints } from '@sidequest/core';
 import { currentUser } from '@/lib/auth/session';
 import { listTravelers } from '@/lib/db/party-repository';
+import { learnedWithDismissals } from '@/lib/db/preference-evidence-repository';
 import { sessionToken } from '@/lib/net/caller';
 import { buttonClass } from '@/components/ui';
+import { LearnedPreferences, type LearnedRow } from './LearnedPreferences';
 import { ProfileForm } from './ProfileForm';
 
 export const dynamic = 'force-dynamic';
@@ -25,12 +28,43 @@ export const metadata: Metadata = {
  * V8 — sections are cards, and the people you travel with are person cards:
  * a portrait disc in the display face, the name, and what the planner has to
  * account for — never a diagnosis, only its planning consequence.
+ *
+ * V9 §18 — two more cards. "You told Sidequest" is the hard facts: the usual
+ * preferences above and every travelling companion's rules (a diet, a need),
+ * shown as what they are — the traveller's own words, binding. "Sidequest
+ * noticed" is the other kind of knowledge: leanings learned from what the
+ * account did on earlier trips, medium confidence or better, each with the
+ * sentence the next brief would read and a Dismiss that keeps it out of every
+ * brief from then on.
  */
+const USUAL_LABELS: Record<string, string> = { budgetStyle: 'Usual budget', pace: 'Usual pace', foodNotes: 'Food, in your words', lodgingNotes: 'Where you like to stay' };
+
+function toldRows(usual: Record<string, unknown>, travelers: ReturnType<typeof listTravelers>): { label: string; value: string; kind: 'usual' | 'rule' }[] {
+  const rows: { label: string; value: string; kind: 'usual' | 'rule' }[] = [];
+  for (const [key, label] of Object.entries(USUAL_LABELS)) {
+    const value = usual[key];
+    if (typeof value === 'string' && value.trim()) rows.push({ label, value: value.trim().replace(/_/g, ' '), kind: 'usual' });
+  }
+  if (typeof usual.drives === 'boolean') rows.push({ label: 'Driving', value: usual.drives ? 'Happy to drive' : 'Prefers not to drive', kind: 'usual' });
+  for (const traveler of travelers) {
+    const rules = dietaryRulesOf(traveler.diet, DIETARY_NEED_LABELS);
+    for (const rule of rules) rows.push({ label: traveler.displayName, value: `${rule.label}${rule.strict ? ' — a cannot, not a would-rather-not' : ''}`, kind: 'rule' });
+    for (const need of traveler.needs) rows.push({ label: traveler.displayName, value: FUNCTIONAL_NEED_LABELS[need], kind: 'rule' });
+  }
+  return rows;
+}
+
 export default async function ProfilePage() {
   const user = await currentUser();
   if (!user) redirect('/signin?returnTo=%2Fprofile');
   const travelers = listTravelers({ userId: user.id, ownerToken: await sessionToken({ mint: false }) });
   const usual = (user.profile.usual ?? {}) as { budgetStyle?: string; pace?: string; drives?: boolean; foodNotes?: string; lodgingNotes?: string };
+  const told = toldRows(usual as Record<string, unknown>, travelers);
+  const noticed = learnedWithDismissals({ userId: user.id, ownerToken: null });
+  const dismissed = new Set(noticed.dismissed);
+  const learnedRows: LearnedRow[] = noticed.learned
+    .filter((p): p is typeof p & { band: 'medium' | 'high' } => p.band !== 'low')
+    .map((p) => ({ feature: p.feature, sentence: learnedHints([p], 1)[0] ?? p.feature, band: p.band, weight: p.weight, dismissed: dismissed.has(p.feature) }));
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14" data-testid="profile-page">
@@ -66,6 +100,33 @@ export default async function ProfilePage() {
             })}
           </ul>
         )}
+      </section>
+
+      <section className="card mt-6 rounded-[var(--radius-panel)] p-5 sm:p-6" aria-labelledby="profile-told-heading" data-testid="profile-told">
+        <h2 id="profile-told-heading" className="type-section text-ink">
+          You told Sidequest
+        </h2>
+        <p className="mt-1 type-small text-ink-muted">Your own words. A companion’s rule is the group’s rule, and nothing here is ever guessed.</p>
+        {told.length === 0 ? (
+          <p className="mt-4 type-body text-ink-muted">Nothing on record yet. The usual preferences above and each person’s needs appear here once they are saved.</p>
+        ) : (
+          <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+            {told.map((row, index) => (
+              <div key={`${row.label}-${index}`} className="flex min-w-0 flex-wrap gap-x-2 rounded-[var(--radius-card)] bg-paper-sunk/60 px-3 py-2" data-testid="profile-told-row" data-kind={row.kind}>
+                <dt className="type-small font-medium text-ink">{row.label}</dt>
+                <dd className="type-small text-ink-muted">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </section>
+
+      <section className="card mt-6 rounded-[var(--radius-panel)] p-5 sm:p-6" aria-labelledby="profile-noticed-heading" data-testid="profile-noticed">
+        <h2 id="profile-noticed-heading" className="type-section text-ink">
+          Sidequest noticed
+        </h2>
+        <p className="mt-1 type-small text-ink-muted">Leanings from what you chose and changed on earlier trips. Each one nudges the next plan and can be traded away; dismiss it and it is never read again.</p>
+        <LearnedPreferences rows={learnedRows} />
       </section>
 
       <div className="mt-10">

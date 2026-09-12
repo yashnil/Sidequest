@@ -56,7 +56,7 @@ describe('intelligence persistence', () => {
 
     expect(listBookedItems(t.id).map((b) => [b.id, b.title, b.confirmationRef])).toEqual([[item.id, 'Hotel B', 'ABC123']]);
     expect(getReadinessProfile(t.id)?.citizenship).toBe('US');
-    expect(listChecks(t.id)).toEqual({ packing: ['footwear:boots'], checklist: ['readiness:visa'] });
+    expect(listChecks(t.id)).toEqual({ packing: ['footwear:boots'], checklist: ['readiness:visa'], preflight: [] });
 
     setCheck(t.id, 'packing', 'footwear:boots', false);
     removeBookedItem(t.id, item.id);

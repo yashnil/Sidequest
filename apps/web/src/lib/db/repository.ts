@@ -386,6 +386,31 @@ export function ensureShareToken(tripId: string): string | null {
 }
 
 /**
+ * V9 §24 — REVOKE A SHARE LINK.
+ *
+ * Sets the token back to NULL, which is the state every unshared trip is in:
+ * the old link resolves to nothing from this moment, indistinguishable from a
+ * link that never existed. Returns whether a live link was actually revoked,
+ * so the traveller's button can say what it did rather than what it tried.
+ * Never mints; a later Share mints a fresh token through `ensureShareToken`.
+ */
+export function revokeShareToken(tripId: string): boolean {
+  return getDb().prepare('UPDATE trips SET share_token = NULL WHERE id = ? AND share_token IS NOT NULL').run(tripId).changes > 0;
+}
+
+/**
+ * V9 §24 — ROTATE A SHARE LINK: revoke the old one and mint a new one in a
+ * single statement, so there is no instant in which the trip is both reachable
+ * by the old link and by the new. Null for a trip that does not exist.
+ */
+export function rotateShareToken(tripId: string): string | null {
+  const db = getDb();
+  const token = randomBytes(16).toString('base64url');
+  const changed = db.prepare('UPDATE trips SET share_token = ? WHERE id = ?').run(token, tripId).changes;
+  return changed > 0 ? token : null;
+}
+
+/**
  * The trip a share token opens, or null.
  *
  * Resolution answers to the token *alone*. There is deliberately no id

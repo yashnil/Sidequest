@@ -2,12 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { currentUserId } from '@/lib/auth/session';
-import { listPartyMembers, listTravelers } from '@/lib/db/party-repository';
-import { hasItinerary } from '@/lib/db/repository';
+import { listPartyMembers, listTravelers, partyFactsFor } from '@/lib/db/party-repository';
+import { getItinerary, hasItinerary } from '@/lib/db/repository';
 import { sessionToken } from '@/lib/net/caller';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { buttonClass } from '@/components/ui';
 import { PartyEditor } from './PartyEditor';
+import { SplitSuggestions, type SplitSuggestionDay } from './SplitSuggestions';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,8 @@ export default async function PartyPage({ params }: { params: Promise<{ id: stri
   const members = listPartyMembers(id);
   const available = listTravelers({ userId: await currentUserId(), ownerToken: await sessionToken({ mint: false }) }).filter((t) => !members.some((m) => m.travelerId === t.id));
   const built = hasItinerary(id);
+  /* V9 §17 — a split needs a difference to split over; without one the section does not exist. */
+  const splitDays: SplitSuggestionDay[] = built && partyFactsFor(id)?.differences ? splitSuggestionDays(id) : [];
   const adults = `${trip.basics.adults} adult${trip.basics.adults === 1 ? '' : 's'}`;
   const party = trip.basics.children > 0 ? `${adults}, ${trip.basics.children} child${trip.basics.children === 1 ? '' : 'ren'}` : adults;
 
@@ -44,6 +47,8 @@ export default async function PartyPage({ params }: { params: Promise<{ id: stri
 
       <PartyEditor tripId={id} members={members.map((m) => ({ ...m, traveler: m.traveler }))} available={available.map((t) => ({ id: t.id, displayName: t.displayName, relationship: t.relationship ?? null }))} />
 
+      <SplitSuggestions tripId={id} days={splitDays} />
+
       <div className="sticky bottom-0 z-10 -mx-5 mt-12 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule bg-paper/95 px-5 py-3 backdrop-blur-sm sm:-mx-8 sm:px-8">
         <Link href={built ? `/trips/${id}/itinerary` : `/trips/${id}/questionnaire`} className={buttonClass('primary', 'lg')} data-testid="party-done">
           {built ? 'Back to the trip' : 'Continue to the review'}
@@ -52,4 +57,14 @@ export default async function PartyPage({ params }: { params: Promise<{ id: stri
       </div>
     </div>
   );
+}
+
+/** The built plan's days, for the split links; a plan that will not read is simply no offer. */
+function splitSuggestionDays(tripId: string): SplitSuggestionDay[] {
+  try {
+    const itinerary = getItinerary(tripId);
+    return (itinerary?.days ?? []).map((day) => ({ dayNumber: day.dayNumber, theme: day.theme, date: day.date, alreadySplit: Boolean(day.split) }));
+  } catch {
+    return [];
+  }
 }

@@ -214,7 +214,11 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
 
 const BOOKED_STATUS_LABELS: Record<string, string> = { booked: 'Booked', soft_hold: 'Held', idea: 'Idea' };
 
-export function BookedStatusControl({ tripId, id, status, cost }: { tripId: string; id: string; status: string; cost?: { amount: number; currency: string } }) {
+const PAID_LABELS: Record<string, string> = { paid: 'Paid', deposit: 'Deposit', unpaid: 'Unpaid' };
+const REFUND_LABELS: Record<string, string> = { refundable: 'Refundable', non_refundable: 'Non-refundable' };
+
+/** V9 §5 — status, cost, and now paid / refund terms, each one press that patches the fact. */
+export function BookedStatusControl({ tripId, id, status, cost, paid, refundable }: { tripId: string; id: string; status: string; cost?: { amount: number; currency: string }; paid?: string; refundable?: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -256,6 +260,22 @@ export function BookedStatusControl({ tripId, id, status, cost }: { tripId: stri
         }}
       />
       {cost?.currency ? <span className="text-ink-faint">{cost.currency}</span> : null}
+      <select value={paid ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Paid" data-testid="booked-paid" onChange={(event) => apply(event.target.value ? { paid: event.target.value } : {})}>
+        <option value="">Paid?</option>
+        {Object.entries(PAID_LABELS).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <select value={refundable ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Refund terms" data-testid="booked-refundable" onChange={(event) => apply(event.target.value ? { refundable: event.target.value } : {})}>
+        <option value="">Refundable?</option>
+        {Object.entries(REFUND_LABELS).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
       {error ? (
         <span role="alert" className="text-clay">
           {error}

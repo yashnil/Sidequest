@@ -1,5 +1,6 @@
 import type { TravelIntelligence, TripPackage, VerificationState } from '@sidequest/core';
 import { Badge } from '../ui';
+import { VERIFICATION_WORDS, type HumanTone } from './HumanWords';
 
 /**
  * V6 — CONFIDENCE IN THREE WORDS A TRAVELLER ALREADY OWNS.
@@ -9,9 +10,10 @@ import { Badge } from '../ui';
  * source taxonomies, the names of the services that answered. All of that is
  * true and none of it is a sentence anybody can act on.
  *
- * There are three traveller-facing states and no others:
+ * There are three traveller-facing states and no others (V9 human words,
+ * `HumanWords.ts`):
  *
- *   Verified                a real place, found, at a known position
+ *   Confirmed from source   a real place, found, at a known position
  *   Likely                  the place is real; its hours or access are not confirmed
  *   Check before relying    nothing could be matched to it yet — which is not
  *                           the same as saying it is wrong
@@ -24,11 +26,7 @@ import { Badge } from '../ui';
  * has to read it.
  */
 
-export const CONFIDENCE_WORD: Record<VerificationState, { label: string; tone: 'pine' | 'blue' | 'neutral' | 'amber'; blurb: string }> = {
-  verified: { label: 'Verified', tone: 'pine', blurb: 'A real place at a known position, with evidence for its hours or access.' },
-  partially_verified: { label: 'Likely', tone: 'blue', blurb: 'A real place at this name was confirmed. Its hours and access were not.' },
-  unverified: { label: 'Check before relying', tone: 'neutral', blurb: 'Nothing could be matched to a specific place yet. That is not the same as saying it is wrong.' },
-};
+export const CONFIDENCE_WORD: Record<VerificationState, { label: string; tone: HumanTone; blurb: string }> = VERIFICATION_WORDS;
 
 /** Kept under its old name for the timeline rows that import it. */
 export const VERIFICATION_WORD = CONFIDENCE_WORD;
@@ -76,9 +74,9 @@ export function TripConfidence({ pkg, intel, compact = false }: { pkg: TripPacka
   if (s.named === 0 && s.recheck === 0) return null;
   const transfers = transferLine(s);
   const states: { label: string; count: number }[] = [
-    { label: 'Verified', count: s.verified },
-    { label: 'Likely', count: s.likely },
-    { label: 'Check before relying', count: s.uncertain },
+    { label: VERIFICATION_WORDS.verified.label, count: s.verified },
+    { label: VERIFICATION_WORDS.partially_verified.label, count: s.likely },
+    { label: VERIFICATION_WORDS.unverified.label, count: s.uncertain },
   ].filter((entry) => entry.count > 0);
 
   return (
@@ -107,7 +105,7 @@ export function TripConfidence({ pkg, intel, compact = false }: { pkg: TripPacka
         <summary className="min-h-9 cursor-pointer type-small text-ink-faint hover:text-ink">How this was checked</summary>
         <ul className="mt-2 space-y-1 type-small text-ink-muted">
           <li>
-            {s.named} {s.named === 1 ? 'named place' : 'named places'} on this plan: {s.verified} verified, {s.likely} likely, {s.uncertain} still to check.
+            {s.named} {s.named === 1 ? 'named place' : 'named places'} on this plan: {s.verified} confirmed from source, {s.likely} likely, {s.uncertain} still to check.
           </li>
           {s.legsMeasured > 0 || s.legsEstimated > 0 || s.legsUnmeasured > 0 ? (
             <li>

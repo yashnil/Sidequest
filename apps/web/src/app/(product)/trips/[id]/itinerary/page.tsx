@@ -160,6 +160,8 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       tripId={id}
       {...model}
       itinerary={model.appliedItinerary}
+      /* V9 — the band says the trip is kept on an account only when it is; the shared copy never gets this prop. */
+      savedToAccount={Boolean(trip.userId)}
       destinationName={trip.basics.destinationInput}
       boardAvailable={boardAvailable}
       lockedPlaceIds={getItineraryLocks(id).map((lock) => lock.placeId)}
@@ -170,7 +172,8 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       renderedAt={renderInstant()}
     />
     <p className="mx-auto max-w-4xl px-5 pb-8 sm:px-8">
-      <OfflineSnapshot path={`/trips/${id}/itinerary`} />
+      {/* V9 §11 — the offline copy keeps the plan, Today and the Pack, and records Preflight's "offline" tick when saved. */}
+      <OfflineSnapshot paths={[`/trips/${id}/itinerary`, `/trips/${id}/today`, `/trips/${id}/pack`]} tripId={id} />
     </p>
     {/*
       * PRODUCTION LOCK V5 §43 — Ask Sidequest.

@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { getItinerary, getProfile, tripOwner } from '../db/repository';
 import { recordPreferenceEvidence } from '../db/preference-evidence-repository';
 import { listBookedItems } from '../db/intelligence-repository';
-import { bookedItemBinds, evidenceRowsFromRequest } from '@sidequest/core';
+import { recordDecision } from '../db/execution-repository';
+import { bookedItemBinds, draftDelta, evidenceRowsFromRequest, metricsDelta, type DeltaDraftShape, type DeltaLine, type DraftDelta } from '@sidequest/core';
 import { getTripDraft } from '../db/draft-repository';
 import { FOREIGN_TRIP_REFUSAL, ownedTrip, tripAccessRefusal } from '../net/trip-access';
 import { ResearchModel } from '../providers/anthropic';
@@ -18,7 +19,8 @@ import { describeContract, describeRefusal } from './describe';
 import { buildRefinementGraph, resumeWith, type RefinementInterpreter } from './graph';
 import { modelRefinementInterpreter } from './interpreter';
 import { RefinementBusyError, activeRun, beginRun, listRuns, updateRun, type RefinementRun } from './run-repository';
-import { StaleTripVersionError, currentVersion, ensureBaselineVersion, recordVersion, undoTarget } from './version-repository';
+import { applyTripPatch } from './patch';
+import { StaleTripVersionError, currentVersion, ensureBaselineVersion, getVersion, recordVersion, undoTarget } from './version-repository';
 import { refinementRunThreadId, refinementThreadId } from './threads';
 import { MAX_REFINEMENT_MODEL_CALLS, type ClarifyingQuestion, type RefinementLock } from './state';
 
@@ -54,7 +56,21 @@ export interface RefinementResult {
   /** V6 §30 — ANSWER_ONLY, PROPOSE_CHANGE or APPLY_CHANGE. */
   mode?: 'answer' | 'proposal' | 'applied';
   /** V6 §30 — the preview behind a proposal: its scope and the changes it would make, before anything lands. */
-  proposal?: { scope: string; changes: readonly string[]; days: readonly number[] };
+  proposal?: { scope: string; changes: readonly string[]; days: readonly number[]; delta?: DraftDelta };
+  /** V9 §4 — after an Apply, the measured delta between the version before and the version after. */
+  delta?: DeltaLine[];
+}
+
+/** V9 §4 — a draft as the delta reads it: bases with nights, days with their anchors and transport hints. */
+function draftShapeOf(draft: TripDraft): DeltaDraftShape {
+  return {
+    bases: draft.bases.map((base) => ({ id: base.id, name: base.name, nights: base.nights })),
+    days: draft.days.map((day) => ({
+      dayNumber: day.dayNumber,
+      baseId: day.baseId,
+      anchors: day.anchors.map((anchor) => ({ name: anchor.name, role: anchor.role, kind: anchor.category, ...(anchor.transport ? { transport: anchor.transport } : {}) })),
+    })),
+  };
 }
 
 /** The sentence a traveller sees when refinement is not configured. No environment variable names. */
@@ -271,7 +287,24 @@ async function runGraph(input: {
       updateRun({ id: run.id, status: 'awaiting_answer', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: state.pendingQuestion });
       /* V6 §30 — a proposal carries its preview: the scope, the days, and the changes it would make. */
       if (state.confirm === 'pending' && state.proposedPatch && state.blastRadius) {
-        return { ok: true, runId: run.id, question: state.pendingQuestion, mode: 'proposal', proposal: { scope: state.blastRadius.reason, changes: state.proposedPatch.changed.slice(0, 10), days: state.blastRadius.days } };
+        /*
+         * V9 §4 — THE DETERMINISTIC DELTA, BEFORE APPLY.
+         *
+         * The same application the graph ran on its clone, run again here on
+         * the draft as stored, and the two shapes compared: bases, hotel
+         * changes, stops, signature stops kept, the days that change. From the
+         * drafts themselves — never the model's prose, and no provider has
+         * run, so nothing here is a measured minute.
+         */
+        let delta: DraftDelta | undefined;
+        try {
+          const booked = listBookedItems(tripId).filter((item) => bookedItemBinds(item)).map((item) => ({ title: item.title, date: item.date, endDate: item.endDate, baseId: item.baseId }));
+          const preview = applyTripPatch({ draft, patch: state.proposedPatch, locked: state.contract?.preserve ?? [], travellerLocked: (input.locks ?? state.locks).map((lock) => `${lock.kind}:${lock.ref}`), booked });
+          delta = draftDelta(draftShapeOf(draft), draftShapeOf(preview.draft));
+        } catch (error) {
+          console.warn('Could not compute the proposal delta', { tripId, runId: run.id, message: error instanceof Error ? error.message : 'unknown' });
+        }
+        return { ok: true, runId: run.id, question: state.pendingQuestion, mode: 'proposal', proposal: { scope: state.blastRadius.reason, changes: state.proposedPatch.changed.slice(0, 10), days: state.blastRadius.days, ...(delta ? { delta } : {}) } };
       }
       return { ok: true, runId: run.id, question: state.pendingQuestion };
     }
@@ -291,6 +324,13 @@ async function runGraph(input: {
     }
     if (state.explanation) {
       updateRun({ id: run.id, status: 'done', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, result: { explanation: state.explanation } });
+      /*
+       * V9 §18 — a cancelled proposal that would have moved where the traveller
+       * sleeps is a leaning, not a rule: one quiet, trip-scoped row against
+       * hotel changes. Taste only; never a constraint, never account-wide on
+       * its own.
+       */
+      if (state.confirm === 'cancelled' && (state.blastRadius?.bases.length ?? 0) > 0) recordCancelledBaseChange(tripId);
       return { ok: true, runId: run.id, answer: state.explanation, mode: 'answer' };
     }
     /*
@@ -310,8 +350,28 @@ async function runGraph(input: {
       refused: state.refused.map((entry) => describeRefusal(entry.reason)),
     };
     updateRun({ id: run.id, status: 'done', intent: state.intent ?? null, modelCalls: state.modelCallsThisAction, question: null, result: summary });
+    /*
+     * V9 §3 — an applied refinement is a decision the traveller made, recorded
+     * as one: the request as the chosen option, at `user_explicit`, over the
+     * scope the change reached. Read back by the state graph and the decision
+     * cards; never a second source of truth for the itinerary itself.
+     */
+    try {
+      recordDecision(tripId, {
+        key: `refinement:${state.canonicalTripVersion}`,
+        chosen: input.request,
+        why: state.applied[0] ?? 'A change you asked for.',
+        lock: 'user_explicit',
+        decidedBy: 'traveller',
+        scope: { dayNumbers: state.blastRadius?.days ?? [], baseIds: state.blastRadius?.bases ?? [] },
+      });
+    } catch (error) {
+      console.warn('Could not record the refinement decision', { tripId, runId: run.id, message: error instanceof Error ? error.message : 'unknown' });
+    }
+    /* V9 §4 — the measured delta: the structural metrics of the version before against the version after. */
+    const delta = appliedDelta(tripId, input.baseVersion, state.canonicalTripVersion);
     revalidatePath(`/trips/${tripId}/itinerary`);
-    return { ok: true, runId: run.id, summary, version: state.canonicalTripVersion, mode: 'applied' };
+    return { ok: true, runId: run.id, summary, version: state.canonicalTripVersion, mode: 'applied', ...(delta.length > 0 ? { delta } : {}) };
   } catch (error) {
     /*
      * §49 — the trip is unchanged, and that is the first thing the traveller is
@@ -322,6 +382,46 @@ async function runGraph(input: {
     console.error('A refinement failed', { tripId, runId: run.id, error: error instanceof Error ? error.message : 'unknown' });
     updateRun({ id: run.id, status: 'failed', question: null, error: message });
     return { ok: false, error: message, runId: run.id };
+  }
+}
+
+/** The measured delta between two persisted versions' `package.metrics`; empty when either has none. */
+function appliedDelta(tripId: string, beforeVersion: number, afterVersion: number): DeltaLine[] {
+  try {
+    const before = getVersion(tripId, beforeVersion)?.itinerary;
+    const after = getVersion(tripId, afterVersion)?.itinerary ?? getItinerary(tripId);
+    const previousMetrics = before?.package?.metrics;
+    const nextMetrics = after?.package?.metrics;
+    if (!previousMetrics || !nextMetrics || !after) return [];
+    return metricsDelta(previousMetrics, nextMetrics, after.days.length);
+  } catch (error) {
+    console.warn('Could not compute the applied delta', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+    return [];
+  }
+}
+
+/** V9 §18 — "the traveller cancelled a proposal that moved a base": one trip-scoped, low-strength behaviour row. */
+function recordCancelledBaseChange(tripId: string, now: Date = new Date()): void {
+  try {
+    const owner = tripOwner(tripId);
+    recordPreferenceEvidence([
+      {
+        userId: owner?.userId ?? null,
+        ownerToken: owner?.ownerToken ?? null,
+        travelerId: null,
+        tripId,
+        scope: 'trip',
+        signal: 'place_rejected',
+        feature: 'hotel_changes',
+        polarity: -1,
+        strength: 0.4,
+        source: 'behaviour',
+        context: { reason: 'cancelled_base_proposal' },
+        createdAt: now.toISOString(),
+      },
+    ]);
+  } catch (error) {
+    console.warn('Could not record the cancelled base proposal', { tripId, message: error instanceof Error ? error.message : 'unknown' });
   }
 }
 

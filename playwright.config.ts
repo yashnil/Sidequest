@@ -29,7 +29,7 @@ const MOBILE = viewport('mobile');
  */
 const RESPONSIVE_SPEC = ['**/viewports.spec.ts', '**/benchmark-viewports.spec.ts'];
 /** Today mode needs the fixture clock; `playwright.today.config.ts` runs it and clears this ignore. */
-const TODAY_SPEC = '**/live-world-today.spec.ts';
+const TODAY_SPEC = ['**/live-world-today.spec.ts', '**/v9-today.spec.ts'];
 /**
  * V6 — needs the fixture climate; `playwright.timing.config.ts` runs it on its own server.
  * V8 — the build lifecycle spec needs the same climate (it accepts a window on the review).
@@ -180,12 +180,12 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'light' },
-      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC, ...TIMING_LOCK_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC],
     },
     {
       name: 'desktop-dark',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'dark' },
-      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC, ...TIMING_LOCK_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC],
     },
     {
       // Chromium at an iPhone viewport. This verifies responsive layout and touch
@@ -195,7 +195,7 @@ export default defineConfig({
       // viewport is stated, for the reason above.
       name: 'mobile',
       use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: MOBILE },
-      testIgnore: [...RESPONSIVE_SPEC, TODAY_SPEC, ...TIMING_LOCK_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC],
     },
     /**
      * The tablet width, and only the responsive spec at it.

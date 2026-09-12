@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import type { DeltaLine, DraftDelta } from '@sidequest/core';
 import { buttonClass, cx, FOCUS_RING } from '../ui';
 import { groupByDay, suggestionsFor } from './ask-diff';
+import { ChangesCard } from './ChangesCard';
 import { ASK_OPEN_EVENT } from './HubShell';
 
 /**
@@ -70,7 +72,9 @@ export interface RefinementReply {
    */
   mode?: 'answer' | 'proposal' | 'applied';
   /** The preview behind a proposal: what it would touch, and what it would do. */
-  proposal?: { scope: string; changes: readonly string[]; days: readonly number[] };
+  proposal?: { scope: string; changes: readonly string[]; days: readonly number[]; delta?: DraftDelta };
+  /** V9 §4 — after Apply, the measured delta between the previous version's metrics and the new. */
+  delta?: readonly DeltaLine[];
 }
 
 export interface AskSidequestProps {
@@ -91,8 +95,8 @@ type Exchange =
   | { kind: 'request'; text: string }
   | { kind: 'answer'; text: string }
   | { kind: 'question'; text: string; because?: string; options: string[]; runId: string }
-  | { kind: 'proposal'; text: string; scope: string; changes: readonly string[]; days: readonly number[]; options: string[]; runId: string; answered?: string }
-  | { kind: 'result'; summary: RefinementSummary; undoable: boolean }
+  | { kind: 'proposal'; text: string; scope: string; changes: readonly string[]; days: readonly number[]; options: string[]; runId: string; answered?: string; delta?: DraftDelta }
+  | { kind: 'result'; summary: RefinementSummary; undoable: boolean; delta?: readonly DeltaLine[] }
   | { kind: 'error'; text: string };
 
 /* The one breakpoint the sheet and the trigger placement both turn on: Tailwind's `sm`. */
@@ -131,6 +135,12 @@ export function AskSidequest(props: AskSidequestProps) {
   const [needsFallback, setNeedsFallback] = useState(false);
   /* Whatever opened the sheet — the trigger, the floating button — gets focus back when it closes. */
   const openerRef = useRef<HTMLElement | null>(null);
+  /*
+   * V9 §3 — a request handed in with the open event (an alternative chip, a
+   * freshness proposal, "Change today"). Held until the sheet is open and the
+   * composer is free, then sent as if typed; never sent twice.
+   */
+  const [queued, setQueued] = useState<{ text: string; send: boolean } | null>(null);
   const reduced = useReducedMotion();
   const mounted = useSyncExternalStore(subscribeNever, onClient, onServer);
   const wide = useSyncExternalStore(subscribeWide, readWide, readWideOnServer);
@@ -173,7 +183,18 @@ export function AskSidequest(props: AskSidequestProps) {
       setHubTrigger(trigger);
       setNeedsFallback(trigger === null);
     }, 0);
-    const onOpen = () => openSheet(document.querySelector<HTMLElement>('[data-testid="ask-sidequest-open"]'));
+    const onOpen = (event: Event) => {
+      openSheet(document.querySelector<HTMLElement>('[data-testid="ask-sidequest-open"]'));
+      const detail = (event as CustomEvent<{ request?: unknown; send?: unknown } | undefined>).detail;
+      const request = detail?.request;
+      /*
+       * The default is to pre-fill the composer and wait for the traveller's
+       * own press (a freshness proposal, a split suggestion, "Change today");
+       * only a dispatcher that says `send: true` — the decision cards'
+       * controlled alternatives, which are complete requests — is sent as is.
+       */
+      if (typeof request === 'string' && request.trim().length > 0) setQueued({ text: request.trimStart().slice(0, 600), send: detail?.send === true });
+    };
     window.addEventListener(ASK_OPEN_EVENT, onOpen);
     return () => {
       window.clearTimeout(handle);
@@ -228,12 +249,12 @@ export function AskSidequest(props: AskSidequestProps) {
       const proposal = reply.proposal;
       return setExchanges((previous) => [
         ...previous,
-        { kind: 'proposal', text: reply.question!.question, scope: proposal.scope, changes: proposal.changes, days: proposal.days, options: reply.question!.options, runId: reply.runId! },
+        { kind: 'proposal', text: reply.question!.question, scope: proposal.scope, changes: proposal.changes, days: proposal.days, options: reply.question!.options, runId: reply.runId!, ...(proposal.delta ? { delta: proposal.delta } : {}) },
       ]);
     }
     if (reply.question && reply.runId) return setExchanges((previous) => [...previous, { kind: 'question', text: reply.question!.question, ...(reply.question!.because ? { because: reply.question!.because } : {}), options: reply.question!.options, runId: reply.runId! }]);
     if (reply.answer) return setExchanges((previous) => [...previous, { kind: 'answer', text: reply.answer! }]);
-    if (reply.summary) return setExchanges((previous) => [...previous, { kind: 'result', summary: reply.summary!, undoable: reply.mode === 'applied' }]);
+    if (reply.summary) return setExchanges((previous) => [...previous, { kind: 'result', summary: reply.summary!, undoable: reply.mode === 'applied', ...(reply.delta && reply.delta.length > 0 ? { delta: reply.delta } : {}) }]);
     setExchanges((previous) => [...previous, { kind: 'error', text: 'Nothing changed.' }]);
   };
 
@@ -290,6 +311,27 @@ export function AskSidequest(props: AskSidequestProps) {
   const lastPrompt = [...exchanges].reverse().find((entry) => entry.kind === 'question' || entry.kind === 'proposal');
   const awaiting = lastPrompt !== undefined && exchanges.indexOf(lastPrompt) === exchanges.length - 1;
   const suggestions = suggestionsFor({ ...(props.dayCount ? { dayCount: props.dayCount } : {}), ...(props.baseNames ? { baseNames: props.baseNames } : {}) });
+
+  /* The queued request goes the moment the sheet is open and nothing is in flight or waiting on an answer. */
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  });
+  useEffect(() => {
+    if (!queued || !open || working || awaiting) return;
+    const { text, send: shouldSend } = queued;
+    // Deferred so the effect never sets state synchronously during a render pass.
+    const handle = window.setTimeout(() => {
+      setQueued(null);
+      if (!props.ready) return;
+      if (shouldSend) sendRef.current(text.trim());
+      else {
+        setRequest(text);
+        inputRef.current?.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, [queued, open, working, awaiting, props.ready]);
 
   /* Only a page with no hub trigger at all gets one of its own, and only after mount, so nothing floats on first paint. */
   const fallback = mounted && needsFallback && hubTrigger === null;
@@ -520,6 +562,8 @@ function ProposalCard({ entry, working, reduced, onAnswer }: { entry: Extract<Ex
       <p className={cx('eyebrow', applied ? 'text-pine' : cancelled ? 'text-ink-faint' : 'text-accent-strong')}>{applied ? 'Applied' : cancelled ? 'Cancelled' : 'Proposed change'}</p>
       <h3 className="mt-1 font-display text-xl leading-snug text-ink">{proposalHeading(entry.days, entry.text)}</h3>
       <p className="mt-1 type-small text-ink-muted">{entry.scope}</p>
+      {/* V9 §4 — the deterministic delta, from the drafts themselves. No provider has run yet, so nothing here is a measured minute. */}
+      {entry.delta ? <ChangesCard lines={entry.delta.lines} headline={entry.delta.headline} eyebrow="What this would change" testId="proposal-delta" className="mt-3" /> : null}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <ChangeGroups title="Would change" lines={entry.changes} />
         <div>
@@ -559,6 +603,8 @@ function ResultCard({ entry, working, onUndo }: { entry: Extract<Exchange, { kin
       </div>
       <ChangeGroups title="Rechecking" lines={entry.summary.rechecking} muted className="mt-3" />
       {entry.summary.refused.length > 0 ? <ChangeGroups title="Not changed" lines={entry.summary.refused} muted className="mt-3" /> : null}
+      {/* V9 §4 — the measured delta, from the structural metrics of the version before and the version after. */}
+      {entry.delta ? <ChangesCard lines={entry.delta} eyebrow="Measured" testId="applied-delta" className="mt-3" /> : null}
       {entry.undoable ? (
         <p className="mt-4">
           <button type="button" onClick={onUndo} disabled={working} className={buttonClass('secondary', 'md')} data-testid="ask-sidequest-undo-applied">

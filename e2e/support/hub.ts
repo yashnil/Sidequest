@@ -1,11 +1,12 @@
 import { expect, type Page } from '@playwright/test';
 
 /**
- * PRODUCTION UI V1 — the Trip Hub is five views under one nav (Overview ·
- * Days · Map · Plan · Prepare). A test that asserts on a section first opens
- * the view that holds it; the bottom bar carries the same views on phones.
+ * PRODUCTION UI V1 — the Trip Hub is six views under one nav (Trip · Days ·
+ * Map · Plan · Book · Prepare; V9 added Book). A test that asserts on a
+ * section first opens the view that holds it; the bottom bar carries Days ·
+ * Book · Prepare · Map on phones, and Plan is reached from the desktop nav.
  */
-export type HubView = 'overview' | 'days' | 'map' | 'plan' | 'prepare';
+export type HubView = 'overview' | 'days' | 'map' | 'plan' | 'book' | 'prepare';
 
 /** EXPERIENCE V2 — the plan's own notes, alternatives and what was left out sit behind one disclosure on Prepare. */
 export async function openPrepareNotes(page: Page): Promise<void> {
@@ -17,6 +18,14 @@ export async function openPrepareNotes(page: Page): Promise<void> {
 export async function openHubView(page: Page, view: HubView): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
   // EXPERIENCE V2 — on a phone the bottom bar holds four views; Overview is the band's own title link.
+  // V9 — Plan is not in the phone bar; a phone test reaches it through the address (`#plan`), which the shell honours.
+  if (width < 640 && view === 'plan') {
+    await page.evaluate(() => {
+      window.location.hash = '#plan';
+    });
+    await expect(page.locator('#hub-view-plan')).toBeVisible({ timeout: 10_000 });
+    return;
+  }
   const tab = width < 640 ? (view === 'overview' ? page.getByTestId('hub-overview-link') : page.getByTestId(`hub-bottom-${view}`)) : page.getByTestId(`hub-link-${view}`);
   await expect(tab).toBeVisible({ timeout: 20_000 });
   await tab.click();

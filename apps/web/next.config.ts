@@ -73,6 +73,19 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         headers: securityHeaders({ dev: process.env.NODE_ENV === 'development' }),
       },
+      /*
+       * V9 §11 — the trip service worker. `no-cache` so a browser revalidates
+       * the worker file on every check and a new version actually replaces the
+       * old one; `Service-Worker-Allowed: /` so a worker served from the site
+       * root may control the trip, Today, Pack and share pages.
+       */
+      {
+        source: '/trip-offline-sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Service-Worker-Allowed', value: '/' },
+        ],
+      },
     ];
   },
 };

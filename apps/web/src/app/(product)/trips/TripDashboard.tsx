@@ -13,8 +13,9 @@ export type { DashboardCardRow } from './TripCard';
 /**
  * THE DASHBOARD — A PERSONAL TRAVEL LIBRARY.
  *
- * V6 §25, V8 §9. Trips grouped by where each is in its life — up next,
- * booked, planning, ideas, past, archived — as the shared `TripCard`: picture
+ * V6 §25, V8 §9, V9 §21. Trips grouped by where each is in its life —
+ * traveling now, booked / getting ready, planning, ideas, past, archived —
+ * as the shared `TripCard`: picture
  * or atlas route sketch, the dates as a figure, who is going, where the plan
  * stands, what is booked, the base route, one obvious action. The controls a
  * list needs — search, sort, filter — live in the address bar so a reload
@@ -25,8 +26,9 @@ export type { DashboardCardRow } from './TripCard';
 
 /** What each section is for, said once at the top of it rather than on every card. */
 const SECTION_NOTE: Record<string, string> = {
+  traveling: 'Under way right now. Today is one press away.',
   upcoming: 'Under way right now.',
-  booked: 'A bed or a way there is paid for.',
+  booked: 'A bed or a way there is arranged. Now get ready.',
   planning: 'Days exist. Still yours to change.',
   ideas: 'Somewhere you were thinking about.',
   past: 'Been and gone.',

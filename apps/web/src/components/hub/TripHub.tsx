@@ -18,6 +18,7 @@ import {
   type RecheckManifest,
   type TodayView,
   type BookedPlanItem,
+  type BookingResolution,
   type Itinerary,
   type ReadinessEntry,
   type TravelIntelligence,
@@ -29,6 +30,8 @@ import { Badge, Panel, cx, type BadgeTone } from '../ui';
 import { TripConfidence } from './TripConfidence';
 import { Glyph } from '../interview/glyphs';
 import { BookedItemForm, BookedItemRow, CheckBox, ReadinessProfileForm } from './HubForms';
+import { BookingActions } from './BookingActions';
+import { isSkipped, skipNote } from './booking-copy';
 import { checklistRows } from './checklist-titles';
 import { DiscoverButton } from '@/app/(product)/trips/[id]/itinerary/live-controls';
 
@@ -402,20 +405,38 @@ const BOOKING_GROUP_OF: Record<string, 'Transport' | 'Stays' | 'Experiences' | '
   tour_guide: 'Experiences',
   event: 'Experiences',
   restaurant: 'Meals',
+  cruise: 'Experiences',
+  programme: 'Experiences',
 };
 
-function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['bookings']['items'][number]; members?: readonly TravelIntelligence['bookings']['items'][number][]; elevated?: boolean }) {
+/**
+ * V9 §5 — ONE ROW FOR A NEED, EVERYWHERE IT APPEARS.
+ *
+ * Prepare's Book first, Plan's bookings and the Book view all render this
+ * row. With a `tripId` it carries the traveller's actions (Open official
+ * source · Mark booked · Add confirmation · Replace · Skip); without one — the
+ * shared copy — it is the fact and nothing pressable. A skipped need reads
+ * "Not needed" with the traveller's own note, and its Skip becomes Put it back.
+ * The window, deadline and cancellation terms the evidence carries render
+ * here too; they used to be computed and shown to nobody.
+ */
+export function BookingRow({ b, members, elevated = false, tripId, resolutions = [], tripStart, tripEnd, testId = 'hub-booking' }: { b: TravelIntelligence['bookings']['items'][number]; members?: readonly TravelIntelligence['bookings']['items'][number][]; elevated?: boolean; tripId?: string; resolutions?: readonly BookingResolution[]; tripStart?: string; tripEnd?: string; testId?: string }) {
+  const skipped = isSkipped(b, resolutions);
+  const note = skipNote(b, resolutions);
+  const terms = [b.bookingWindow, b.onSaleDate ? `On sale ${b.onSaleDate}` : undefined, b.deadline ? `Deadline ${b.deadline}` : undefined, b.cancellation].filter((t): t is string => Boolean(t));
   return (
-    <li className={cx('py-3.5 text-sm', elevated && 'pl-3 border-l-2 border-accent')} data-testid="hub-booking" data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status}>
+    <li className={cx('py-3.5 text-sm', elevated && 'pl-3 border-l-2 border-accent')} data-testid={testId} data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status} data-booking-id={b.id}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className={cx('font-medium text-ink', members && 'font-display text-lg font-normal')}>{b.title}</span>
         <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-          <Badge tone={b.status === 'booked' ? 'pine' : b.status === 'soft_hold' ? 'blue' : b.status === 'not_needed' ? 'neutral' : 'amber'}>{b.status === 'booked' ? 'Booked' : b.status === 'soft_hold' ? 'Tentative' : b.status === 'not_needed' ? 'Not needed' : 'Need to book'}</Badge>
+          <Badge tone={b.status === 'booked' ? 'pine' : b.status === 'soft_hold' ? 'blue' : b.status === 'not_needed' ? 'neutral' : 'amber'}>{b.status === 'booked' ? 'Booked' : b.status === 'soft_hold' ? 'Tentative' : b.status === 'not_needed' ? (skipped ? 'Skipped' : 'Not needed') : 'Need to book'}</Badge>
           {b.date ? <span className="type-figure font-medium">{b.date}</span> : null}
           {b.timeLabel ? <span className="type-figure font-medium">{b.timeLabel}</span> : null}
         </span>
       </div>
       <p className="mt-1 text-sm leading-snug text-ink-muted">{b.reason}</p>
+      {terms.length > 0 ? <p className="mt-1 type-meta" data-testid="hub-booking-terms">{terms.join(' · ')}</p> : null}
+      {skipped && note ? <p className="mt-1 text-sm text-ink-muted">You skipped this: {note}</p> : null}
       {/*
         MVP V3, Stage 48 — the fourth question. What, why and when were all
         answered above; this is what happens if it is gone by the time the
@@ -432,18 +453,23 @@ function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['b
           <summary className="min-h-11 cursor-pointer py-2 text-sm text-accent underline underline-offset-4">View bases</summary>
           <ul className="mt-1 divide-y divide-rule">
             {members.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm" data-testid="hub-booking" data-kind={m.kind} data-status={m.status}>
-                <span className="text-ink">{m.title}</span>
-                <span className="text-ink-faint">
-                  {m.status === 'booked' ? 'Booked' : m.status === 'soft_hold' ? 'Tentative' : 'Need to book'}
-                  {m.date ? ` · ${m.date}` : ''}
-                </span>
+              <li key={m.id} className="py-2 text-sm" data-testid="hub-booking" data-kind={m.kind} data-status={m.status} data-booking-id={m.id}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <span className="text-ink">{m.title}</span>
+                  <span className="text-ink-faint">
+                    {m.status === 'booked' ? 'Booked' : m.status === 'soft_hold' ? 'Tentative' : m.status === 'not_needed' ? (isSkipped(m, resolutions) ? 'Skipped' : 'Not needed') : 'Need to book'}
+                    {m.date ? ` · ${m.date}` : ''}
+                  </span>
+                </div>
+                {tripId ? <BookingActions tripId={tripId} need={m} skipped={isSkipped(m, resolutions)} tripStart={tripStart ?? m.date ?? ''} tripEnd={tripEnd ?? m.date ?? ''} /> : null}
               </li>
             ))}
           </ul>
         </details>
       ) : null}
-      {b.officialSourceUrl ? (
+      {tripId ? (
+        <BookingActions tripId={tripId} need={b} skipped={skipped} tripStart={tripStart ?? b.date ?? ''} tripEnd={tripEnd ?? b.date ?? ''} />
+      ) : b.officialSourceUrl ? (
         <a href={b.officialSourceUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-block text-sm text-accent underline underline-offset-4">
           {b.officialSourceName ?? 'Official page'}
         </a>
@@ -452,7 +478,8 @@ function BookingRow({ b, members, elevated = false }: { b: TravelIntelligence['b
   );
 }
 
-export function BookFirstSection({ intel, tripId, booked, itinerary, honored, conflicts, view = 'book-first' }: { intel: TravelIntelligence; tripId?: string; booked: readonly BookedPlanItem[]; itinerary: Itinerary; honored: readonly string[]; conflicts: readonly string[]; view?: 'book-first' | 'bookings' }) {
+export function BookFirstSection({ intel, tripId, booked, itinerary, honored, conflicts, view = 'book-first', resolutions = [] }: { intel: TravelIntelligence; tripId?: string; booked: readonly BookedPlanItem[]; itinerary: Itinerary; honored: readonly string[]; conflicts: readonly string[]; view?: 'book-first' | 'bookings'; resolutions?: readonly BookingResolution[] }) {
+  const rowProps = { ...(tripId ? { tripId } : {}), resolutions, tripStart: itinerary.startDate, tripEnd: itinerary.endDate };
   const items = intel.bookings.items;
   const group = items.find((b) => b.memberIds);
   const members = group ? items.filter((b) => group.memberIds!.includes(b.id)) : [];
@@ -476,7 +503,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
                 <h3 className="font-display text-lg text-ink">{name}</h3>
                 <ul className="mt-1 divide-y divide-rule">
                   {inGroup.map((b) => (
-                    <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} />
+                    <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} {...rowProps} />
                   ))}
                 </ul>
               </div>
@@ -542,7 +569,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
             )}
             <ul className="mt-2 divide-y divide-rule">
               {rows.map((b) => (
-                <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} elevated={priority === 'book_first'} />
+                <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} elevated={priority === 'book_first'} {...rowProps} />
               ))}
             </ul>
           </div>
@@ -564,7 +591,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
       ) : null}
       {done.length > 0 ? <p className="mt-4 type-meta">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
       <p className="mt-3 type-meta">
-        Add what you have booked under <a href="#bookings" className="text-accent underline underline-offset-4">Plan → Bookings</a>; the plan reshapes around it.
+        Mark a need booked here, or add a confirmation under <a href="#book" className="text-accent underline underline-offset-4">Book</a>; the plan reshapes around it.
       </p>
     </section>
   );
@@ -1008,14 +1035,32 @@ export { Glyph as HubGlyph };
  * bookings, the day's weather, the critical warnings and the fallback.
  * Nothing here is fetched; it is the persisted plan read at this instant.
  */
-export function TodaySection({ today, minuteLabel }: { today: TodayView; minuteLabel: (minute: number) => string }) {
+export function TodaySection({ today, minuteLabel, tripId }: { today: TodayView; minuteLabel: (minute: number) => string; tripId?: string }) {
   if (!today.active) return null;
   return (
     <section className="card-raised mt-6 border-pine bg-pine-soft/40 p-5" aria-labelledby="today" data-testid="hub-today">
-      <p className="eyebrow text-pine">Today · day {today.dayNumber}{today.baseName ? ` · based in ${today.baseName}` : ''}</p>
-      <h2 id="today" className="mt-1 font-display text-2xl text-ink">
-        {today.theme ?? 'Today'}
-      </h2>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <p className="eyebrow text-pine">Today · day {today.dayNumber}{today.baseName ? ` · based in ${today.baseName}` : ''}</p>
+          <h2 id="today" className="mt-1 font-display text-2xl text-ink">
+            {today.theme ?? 'Today'}
+          </h2>
+        </div>
+        {/* V9 §8 — the phone-first Today page: big targets, no planner chrome. Owner only. */}
+        {tripId ? (
+          <a href={`/trips/${tripId}/today`} className="pressable inline-flex min-h-11 shrink-0 items-center rounded-full bg-pine px-4 text-sm font-semibold text-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine" data-testid="hub-today-open">
+            Open Today
+          </a>
+        ) : null}
+      </div>
+      {/* V9 §8 — when to leave for the next thing, with the basis named; never invented from an untimed leg. */}
+      {today.leaveBy ? (
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-sm text-ink" data-testid="today-leave-by" data-basis={today.leaveBy.basis}>
+          <span className="eyebrow">Leave by</span>
+          <span className="type-figure text-lg">{today.leaveBy.time}</span>
+          <span className="type-meta">{today.leaveBy.basisNote}</span>
+        </p>
+      ) : null}
       <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="eyebrow">Now</dt>

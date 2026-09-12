@@ -25,6 +25,7 @@ import {
   travelIntelligenceSchema,
   type AccessStateEntry,
   type BookedPlanItem,
+  type BookingResolution,
   type DraftTransportHint,
   type Itinerary,
   type ItineraryItem,
@@ -59,7 +60,7 @@ import {
  * **Bump this whenever a rule in `intelligence/` changes what a traveller
  * reads.** It costs one rebuild per trip and nothing else.
  */
-export const INTELLIGENCE_RULES_VERSION = 'v5.2' as const;
+export const INTELLIGENCE_RULES_VERSION = 'v9.0' as const;
 
 export interface DraftHints {
   days: readonly { anchors: readonly { name: string; transport?: string }[] }[];
@@ -105,6 +106,8 @@ export interface BuildIntelligenceInput {
   /** LIVE WORLD V1 — a reference rate persisted at plan time; null when no FX provider is configured. */
   fx?: FxRate | null;
   displayCurrency?: string;
+  /** V9 §5 — the traveller's word on booking needs nothing was booked for (skipped, replaced, not needed). */
+  resolutions?: readonly BookingResolution[];
 }
 
 function normalise(name: string): string {
@@ -313,7 +316,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   claims.push(...readiness.claims);
 
   // Bookings, budget --------------------------------------------------------------------------------------------
-  const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds, selfDrives: drives, reality });
+  const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds, selfDrives: drives, reality, ...(input.resolutions ? { resolutions: input.resolutions } : {}) });
   const guideDays = new Set(bookings.filter((b) => b.kind === 'tour_guide').map((b) => b.dayNumber)).size;
   const permitCount = bookings.filter((b) => b.kind === 'permit' || b.kind === 'park_entry').length;
   const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(statedDriving ? { driving: statedDriving } : {}), ...(input.fx ? { fx: input.fx } : {}), ...(input.displayCurrency ? { displayCurrency: input.displayCurrency } : {}) });

@@ -1,12 +1,27 @@
 import 'server-only';
-import { countNights, imageryFallbackFor, isAbandoned, readLifecycle, type DestinationImage, type ImageryFallback, type Trip, type TripLifecycle } from '@sidequest/core';
+import { buildBookingProgress, buildNextActions, buildTripStateGraph, countNights, DASHBOARD_SECTIONS, deriveDecisions, imageryFallbackFor, isAbandoned, readLifecycle, type DestinationImage, type ImageryFallback, type NextAction, type Trip, type TripLifecycle } from '@sidequest/core';
 import { adoptedCompiledRegionId, getIntent, getLatestJob } from '../db/compiler-repository';
 import { destinationEntryById } from '../db/destination-index-repository';
+import { listBookingResolutions, listDecisions, listObservations } from '../db/execution-repository';
 import { acceptedImagesFor } from '../db/imagery-repository';
-import { listBookedItems } from '../db/intelligence-repository';
+import { getTravelIntelligence, listBookedItems } from '../db/intelligence-repository';
 import { getItinerary, getProfile, listTripsFor } from '../db/repository';
+import { applyBookedFacts } from '../intelligence/booked-reconcile';
 import { formatDayRange } from '../format/dates';
 import { tripProgress } from '../format/trip-progress';
+import { bookingStateLabel, primaryHrefFor } from './card-metadata';
+
+/**
+ * V9 §21 — THE DASHBOARD'S SECTIONS.
+ *
+ * Traveling now · Booked / Getting ready · Planning · Ideas · Past · Archived.
+ * The core table (`DASHBOARD_SECTIONS`) still names the first section
+ * `upcoming`; the ids the surfaces and the browser suite use are these, so
+ * the mapping lives here and the core stays untouched.
+ */
+export const DASHBOARD_V3_SECTIONS: readonly { id: 'traveling' | 'booked' | 'planning' | 'ideas' | 'past' | 'archived'; title: string; lifecycles: readonly TripLifecycle[] }[] = DASHBOARD_SECTIONS.map((section) =>
+  section.id === 'upcoming' ? { id: 'traveling' as const, title: 'Traveling now', lifecycles: section.lifecycles } : section.id === 'booked' ? { id: 'booked' as const, title: 'Booked · Getting ready', lifecycles: section.lifecycles } : { id: section.id, title: section.title, lifecycles: section.lifecycles },
+);
 
 /**
  * THE DASHBOARD'S ROWS — EVERYTHING A TRIP CARD SAYS, COMPUTED ON THE SERVER
@@ -36,6 +51,14 @@ export interface DashboardRow {
   bookedCount: number;
   nextAction: string;
   href: string;
+  /**
+   * V9 §21 — the next best action from the execution engine, when a plan and
+   * its intelligence exist: what kind of act, what, why, and where in the hub.
+   * Null for a trip with no plan yet, whose next step is the progress action.
+   */
+  next?: { kind: NextAction['kind']; title: string; why: string; href: string } | null;
+  /** "6 of 8 major items booked", or null when the plan needs nothing major. */
+  bookingState?: string | null;
   progressTone: 'neutral' | 'pine' | 'amber' | 'blue' | 'clay';
   /**
    * V8 §9 — where the trip is when no finished plan can speak for it, in
@@ -80,6 +103,8 @@ function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: nu
   const adults = trip.basics.adults;
   const children = trip.basics.children;
   const party = `${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? `, ${children} child${children === 1 ? '' : 'ren'}` : ''}`;
+  const execution = executionFor(trip, itinerary, reading.lifecycle, now);
+  const href = primaryHrefFor({ tripId: trip.id, lifecycle: reading.lifecycle, progressHref: progress.path(trip.id), nextHref: null });
   return {
     id: trip.id,
     title: trip.title ?? trip.basics.destinationInput,
@@ -94,8 +119,10 @@ function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: nu
     itineraryStatus: itinerary?.status ?? null,
     feasibilitySummary: itinerary?.package?.feasibility?.summary ?? null,
     bookedCount: booked.length,
-    nextAction: reading.lifecycle === 'past' ? 'Look back' : reading.lifecycle === 'archived' ? 'Open' : progress.action,
-    href: progress.path(trip.id),
+    nextAction: reading.lifecycle === 'traveling' ? 'Open Today' : reading.lifecycle === 'past' ? 'Look back' : reading.lifecycle === 'archived' ? 'Open' : progress.action,
+    href,
+    next: execution.next,
+    bookingState: execution.bookingState,
     progressTone: progress.tone,
     progressState: progress.state,
     progressLabel: progress.label,
@@ -106,6 +133,33 @@ function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: nu
     fallback: imageryFallbackFor({ kind: 'destination', id: entry?.id ?? trip.id, name: trip.basics.destinationInput, ...(entry?.center ? { coordinates: entry.center } : {}) }),
     claimed: Boolean(trip.userId),
   };
+}
+
+/**
+ * V9 §21 — THE ENGINE'S READING OF A TRIP, FOR ONE CARD.
+ *
+ * The state graph and the next actions are built exactly as the hub builds
+ * them — the applied itinerary, the stored intelligence snapshot, the booked
+ * items, the traveller's decisions and resolutions, what changed — so the
+ * card and the hub cannot name two different next things. Reads only: a
+ * trip with no stored snapshot gets no engine reading rather than a build.
+ */
+function executionFor(trip: Trip, itinerary: ReturnType<typeof getItinerary>, lifecycle: TripLifecycle, now: Date): { next: DashboardRow['next']; bookingState: string | null } {
+  if (!itinerary) return { next: null, bookingState: null };
+  try {
+    const intelligence = getTravelIntelligence(trip.id);
+    const booked = listBookedItems(trip.id);
+    const applied = applyBookedFacts(itinerary, booked).itinerary;
+    const decisions = deriveDecisions({ itinerary: applied, intelligence, persisted: listDecisions(trip.id) });
+    const graph = buildTripStateGraph({ itinerary: applied, intelligence, booked, decisions, resolutions: listBookingResolutions(trip.id), observations: listObservations(trip.id), now });
+    const daysUntilTrip = Math.round((Date.parse(`${trip.basics.startDate}T00:00:00Z`) - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86_400_000);
+    const first = buildNextActions({ graph, lifecycle, daysUntilTrip, now }).actions[0] ?? null;
+    const next = first ? { kind: first.kind, title: first.title, why: first.why, href: primaryHrefFor({ tripId: trip.id, lifecycle, progressHref: `/trips/${trip.id}/itinerary`, nextHref: first.href }) } : null;
+    return { next, bookingState: bookingStateLabel(intelligence ? buildBookingProgress(intelligence.bookings.items) : null) };
+  } catch (error) {
+    console.warn('The dashboard could not read a trip’s execution state', { tripId: trip.id, message: error instanceof Error ? error.message : 'unknown' });
+    return { next: null, bookingState: null };
+  }
 }
 
 /**

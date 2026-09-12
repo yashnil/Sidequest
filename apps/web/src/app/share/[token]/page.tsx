@@ -7,6 +7,7 @@ import { renderInstant } from '@/lib/clock';
 import { formatDateRange } from '@/lib/format';
 import { getItinerary, StaleItineraryError, tripForShareToken } from '@/lib/db/repository';
 import { itineraryViewModel } from '@/app/(product)/trips/[id]/itinerary/view-model';
+import { stripForShare } from './strip';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,10 +39,22 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token } = await params;
   const trip = tripForShareToken(token);
+  const title = trip ? `${trip.basics.destinationInput} — A shared trip — Sidequest` : 'A shared trip — Sidequest';
+  /*
+   * V9 §11 — the link previews as a picture. `opengraph-image.tsx` beside
+   * this page draws the overview card from the token alone: destination,
+   * dates, the bases and a readiness word, never a booking or a name. The
+   * description says only what the title says; a preview fetcher is a
+   * crawler and learns nothing more here than the page would show it.
+   */
   return {
-    title: trip
-      ? `${trip.basics.destinationInput} — A shared trip — Sidequest`
-      : 'A shared trip — Sidequest',
+    title,
+    openGraph: {
+      title,
+      description: trip ? `A ${trip.basics.destinationInput} trip planned with Sidequest.` : 'A trip planned with Sidequest.',
+      type: 'article',
+      images: [{ url: `/share/${encodeURIComponent(token)}/opengraph-image`, width: 1200, height: 630, alt: trip ? `${trip.basics.destinationInput} — a Sidequest trip` : 'A Sidequest trip' }],
+    },
   };
 }
 
@@ -94,17 +107,7 @@ export default async function SharedTripPage({
    * by the render branch. They are stripped here, at the door, so no future
    * edit to a render branch can leak them.
    */
-  const shared = {
-    ...model,
-    booked: model.booked.map(({ confirmationRef: _ref, notes: _notes, cost: _cost, url: _url, ...rest }) => {
-      void _ref;
-      void _notes;
-      void _cost;
-      void _url;
-      return rest;
-    }),
-    readinessProfile: null,
-  };
+  const shared = stripForShare(model);
 
   return (
     <ItineraryView

@@ -39,7 +39,19 @@ export type MapTravelMode = 'driving' | 'walking' | 'transit';
 
 export interface DayRouteLinks {
   google: string;
+  /**
+   * Apple legacy (`?saddr&daddr&dirflg`): the day's last leg only, because the
+   * legacy scheme has no waypoint form. Kept under its historical name so every
+   * existing caller still gets a working link.
+   */
   apple: string;
+  /**
+   * V9 §11 — Apple unified (`/directions?source&destination&waypoint=…&mode=`),
+   * iOS 18.4+ / macOS 15.4+: the whole day, waypoints repeated. Apple publishes
+   * no cap; the same nine-waypoint truncation is applied so the two links
+   * describe the same day.
+   */
+  appleUnified: string;
   /** How many stops the link actually carries. */
   included: number;
   /** Stops left out because the URL cannot hold them. Zero is the normal case. */
@@ -56,7 +68,7 @@ function pair(stop: MapStop): string {
 }
 
 /**
- * Builds the two deep links for one day's ordered stops.
+ * Builds the deep links for one day's ordered stops.
  *
  * Returns `null` for fewer than two stops: a "directions" link from a place to
  * itself is not a route, and a single-stop day is better served by the place
@@ -84,9 +96,9 @@ export function dayRouteLinks(
   google.searchParams.set('travelmode', mode);
 
   /**
-   * Apple's scheme has no multi-waypoint form, so the link carries the day's
-   * last leg rather than pretending to carry the day. Named as such by the
-   * caller — an "open in Apple Maps" that silently drops six stops is worse
+   * Apple's legacy scheme has no multi-waypoint form, so that link carries the
+   * day's last leg rather than pretending to carry the day. Named as such by
+   * the caller — an "open in Apple Maps" that silently drops six stops is worse
    * than one that says it is the final leg.
    */
   const apple = new URL('https://maps.apple.com/');
@@ -94,9 +106,17 @@ export function dayRouteLinks(
   apple.searchParams.set('daddr', pair(destination));
   apple.searchParams.set('dirflg', mode === 'walking' ? 'w' : mode === 'transit' ? 'r' : 'd');
 
+  /* The unified form carries the whole day: `waypoint=` repeated, in order. */
+  const unified = new URL('https://maps.apple.com/directions');
+  unified.searchParams.set('source', pair(origin));
+  unified.searchParams.set('destination', pair(destination));
+  for (const stop of carried) unified.searchParams.append('waypoint', pair(stop));
+  unified.searchParams.set('mode', mode);
+
   return {
     google: google.toString(),
     apple: apple.toString(),
+    appleUnified: unified.toString(),
     included: 1 + carried.length + 1,
     omitted,
   };

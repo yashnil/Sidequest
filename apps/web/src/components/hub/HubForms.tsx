@@ -11,6 +11,8 @@ import {
   setCheckAction,
 } from '@/app/(product)/trips/[id]/itinerary/actions';
 import { BookedStatusControl } from '@/app/(product)/trips/[id]/itinerary/live-controls';
+import { AddConfirmationButton } from './BookingActions';
+import { PAID_WORD, REFUNDABLE_WORD, SOURCE_WORD, formatMoney } from './booking-copy';
 
 /**
  * THE HUB'S THREE INPUTS: A BOOKING, A READINESS PROFILE, A TICK.
@@ -45,6 +47,9 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
       notes: get('notes'),
       status: get('status') ?? 'booked',
       locked: true,
+      ...(get('costAmount') && Number.isFinite(Number(get('costAmount'))) ? { cost: { amount: Number(get('costAmount')), currency: (get('costCurrency') ?? 'USD').toUpperCase().slice(0, 8) } } : {}),
+      ...(get('paid') ? { paid: get('paid') } : {}),
+      ...(get('refundable') ? { refundable: get('refundable') } : {}),
     };
     startTransition(async () => {
       const result = await addBookedItemAction(tripId, payload);
@@ -118,6 +123,30 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
           Confirmation reference <span className="text-ink-muted">(optional, stays on this trip only)</span>
           <input name="confirmationRef" maxLength={80} autoComplete="off" className={inputClass} />
         </label>
+        <label className="text-sm text-ink">
+          Amount <span className="text-ink-faint">(optional)</span>
+          <span className="mt-1 flex gap-2">
+            <input name="costAmount" type="number" min={0} step={1} className={cx(inputClass, 'mt-0')} aria-label="Amount" />
+            <input name="costCurrency" maxLength={8} defaultValue="USD" className={cx(inputClass, 'mt-0 w-24 uppercase')} aria-label="Currency" />
+          </span>
+        </label>
+        <label className="text-sm text-ink">
+          Paid
+          <select name="paid" defaultValue="" className={inputClass}>
+            <option value="">Not recorded</option>
+            <option value="paid">{PAID_WORD.paid}</option>
+            <option value="deposit">{PAID_WORD.deposit}</option>
+            <option value="unpaid">{PAID_WORD.unpaid}</option>
+          </select>
+        </label>
+        <label className="text-sm text-ink">
+          Refund terms
+          <select name="refundable" defaultValue="" className={inputClass}>
+            <option value="">Not recorded</option>
+            <option value="refundable">{REFUNDABLE_WORD.refundable}</option>
+            <option value="non_refundable">{REFUNDABLE_WORD.non_refundable}</option>
+          </select>
+        </label>
         <label className="text-sm text-ink sm:col-span-2">
           Notes
           <input name="notes" maxLength={500} className={inputClass} />
@@ -136,30 +165,99 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
   );
 }
 
+/**
+ * V9 §5 — A BOOKED FACT, WITH ITS CONFIRMATION BEHIND A DISCLOSURE.
+ *
+ * The reference, the link, the amount and the terms are the traveller's own
+ * and stay on this trip: the disclosure is `print:hidden`, never on paper,
+ * and this row is rendered only for the owner (the shared copy lists titles).
+ */
 export function BookedItemRow({ tripId, item }: { tripId: string; item: BookedPlanItem }) {
   const [pending, startTransition] = useTransition();
+  const hasConfirmation = Boolean(item.confirmationRef || item.url || item.cost || item.paid || item.refundable || item.cancellationDeadline || item.provider);
   return (
-    <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3" data-testid="booked-item">
-      <div className="min-w-0">
-        <p className="text-sm text-ink">
-          <span className="font-semibold">{item.title}</span>
-          <span className="text-ink-muted"> · {BOOKED_ITEM_TYPE_LABELS[item.type]}</span>
-          {item.status !== 'booked' ? <span className="text-ink-muted"> · {item.status === 'soft_hold' ? 'held' : 'idea'}</span> : null}
-        </p>
-        <p className="type-figure text-xs font-medium text-ink-muted">
-          {item.date ?? 'No date'}
-          {item.endDate ? ` → ${item.endDate}` : ''}
-          {item.startTime ? ` · ${item.startTime}` : ''}
-          {item.endTime ? `–${item.endTime}` : ''}
-          {item.location ? ` · ${item.location}` : ''}
-        </p>
+    <li className="py-3" data-testid="booked-item" data-source={item.source ?? 'typed'}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <p className="text-sm text-ink">
+            <span className="font-semibold">{item.title}</span>
+            <span className="text-ink-muted"> · {BOOKED_ITEM_TYPE_LABELS[item.type]}</span>
+            {item.status !== 'booked' ? <span className="text-ink-muted"> · {item.status === 'soft_hold' ? 'held' : 'idea'}</span> : null}
+          </p>
+          <p className="type-figure text-xs font-medium text-ink-muted">
+            {item.date ?? 'No date'}
+            {item.endDate ? ` → ${item.endDate}` : ''}
+            {item.startTime ? ` · ${item.startTime}` : ''}
+            {item.endTime ? `–${item.endTime}` : ''}
+            {item.location ? ` · ${item.location}` : ''}
+          </p>
+          {item.replaces ? <p className="mt-0.5 text-xs text-ink-muted">In place of the plan’s “{item.replaces}”.</p> : null}
+        </div>
+        <span className="inline-flex flex-wrap items-center gap-3">
+          <BookedStatusControl tripId={tripId} id={item.id} status={item.status} {...(item.cost ? { cost: item.cost } : {})} {...(item.paid ? { paid: item.paid } : {})} {...(item.refundable ? { refundable: item.refundable } : {})} />
+          <AddConfirmationButton tripId={tripId} item={item} />
+          <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx(buttonClass('ghost', 'sm'), 'hover:text-clay')} data-testid="booked-remove">
+            Remove
+          </button>
+        </span>
       </div>
-      <span className="inline-flex flex-wrap items-center gap-3">
-        <BookedStatusControl tripId={tripId} id={item.id} status={item.status} {...(item.cost ? { cost: item.cost } : {})} />
-        <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx(buttonClass('ghost', 'sm'), 'hover:text-clay')} data-testid="booked-remove">
-          Remove
-        </button>
-      </span>
+      {hasConfirmation ? (
+        <details className="mt-1 print:hidden" data-testid="booked-confirmation">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted">Your confirmation</summary>
+          <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+            {item.confirmationRef ? (
+              <div>
+                <dt className="type-meta">Reference</dt>
+                <dd className="type-figure text-ink" data-testid="booked-reference">{item.confirmationRef}</dd>
+              </div>
+            ) : null}
+            {item.provider ? (
+              <div>
+                <dt className="type-meta">Booked with</dt>
+                <dd className="text-ink">{item.provider}</dd>
+              </div>
+            ) : null}
+            {item.url ? (
+              <div>
+                <dt className="type-meta">Link</dt>
+                <dd>
+                  <a href={item.url} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">Open the booking</a>
+                </dd>
+              </div>
+            ) : null}
+            {item.cost ? (
+              <div>
+                <dt className="type-meta">Amount</dt>
+                <dd className="type-figure text-ink">
+                  {formatMoney(item.cost.amount, item.cost.currency)}
+                  {item.paid ? ` · ${PAID_WORD[item.paid]}` : ''}
+                </dd>
+              </div>
+            ) : item.paid ? (
+              <div>
+                <dt className="type-meta">Paid</dt>
+                <dd className="text-ink">{PAID_WORD[item.paid]}</dd>
+              </div>
+            ) : null}
+            {item.refundable && item.refundable !== 'unknown' ? (
+              <div>
+                <dt className="type-meta">Refund terms</dt>
+                <dd className="text-ink">{REFUNDABLE_WORD[item.refundable]}</dd>
+              </div>
+            ) : null}
+            {item.cancellationDeadline ? (
+              <div>
+                <dt className="type-meta">Free cancellation until</dt>
+                <dd className="type-figure text-ink">{item.cancellationDeadline}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="type-meta">How it got here</dt>
+              <dd className="text-ink-muted">{SOURCE_WORD[item.source ?? 'typed']}</dd>
+            </div>
+          </dl>
+        </details>
+      ) : null}
     </li>
   );
 }

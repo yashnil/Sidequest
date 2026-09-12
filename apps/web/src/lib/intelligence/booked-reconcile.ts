@@ -21,6 +21,43 @@ export interface BookedReconciliation {
   itinerary: Itinerary;
   honored: string[];
   conflicts: string[];
+  /** V9 §5 — the radius the booked facts reached, so a surface can say what did and did not change. */
+  affected: BookedAffectedScope;
+}
+
+/**
+ * V9 §5 — WHAT A BOOKING REACHED.
+ *
+ * A booked hotel renames the base on its nights; a booked table shifts the
+ * stops around it; a booked departure tightens the last day. Everything else
+ * is unchanged, and the legs into a renamed base were not re-measured — a
+ * fact every surface states rather than a number it invents.
+ */
+export interface BookedAffectedScope {
+  dayNumbers: number[];
+  baseIds: string[];
+  /** Days whose base was renamed to a booking. */
+  baseRenamedDays: number[];
+  /** Stops moved later to make room for a booked, timed thing. */
+  shiftedItems: { dayNumber: number; title: string; byMinutes: number }[];
+  /** Stops that no longer fit and are named as conflicts. */
+  displaced: { dayNumber: number; title: string }[];
+  /** Days whose legs were left as measured for the model's base, not the booked one. */
+  notRemeasuredDays: number[];
+  /** The one-line account a review screen shows. */
+  summary: string;
+}
+
+function describeAffected(scope: Omit<BookedAffectedScope, 'summary'>, dayCount: number): string {
+  if (scope.dayNumbers.length === 0) return 'No day changes.';
+  const unchanged = dayCount - scope.dayNumbers.length;
+  const parts: string[] = [];
+  if (scope.baseRenamedDays.length > 0) parts.push(`${scope.baseRenamedDays.length === 1 ? `Day ${scope.baseRenamedDays[0]} sleeps` : `Days ${scope.baseRenamedDays[0]}–${scope.baseRenamedDays[scope.baseRenamedDays.length - 1]} sleep`} at your booking`);
+  for (const shift of scope.shiftedItems.slice(0, 2)) parts.push(`"${shift.title}" on day ${shift.dayNumber} moves ${shift.byMinutes} min later`);
+  if (scope.shiftedItems.length > 2) parts.push(`${scope.shiftedItems.length - 2} more stop${scope.shiftedItems.length - 2 === 1 ? '' : 's'} shift`);
+  for (const d of scope.displaced.slice(0, 2)) parts.push(`"${d.title}" on day ${d.dayNumber} no longer fits`);
+  if (scope.notRemeasuredDays.length > 0) parts.push(`the legs on ${scope.notRemeasuredDays.length === 1 ? `day ${scope.notRemeasuredDays[0]}` : `${scope.notRemeasuredDays.length} days`} were not re-measured`);
+  return `${parts.join('; ')}${unchanged > 0 ? `. ${unchanged} other day${unchanged === 1 ? '' : 's'} unchanged.` : '.'}`;
 }
 
 const BOOKED_ITEM_PREFIX = 'booked:';
@@ -85,6 +122,11 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
   const revisions: Itinerary['diagnostics']['revisions'] = [];
   let itinerary = withoutPriorBookedItems(source);
   const binding = booked.filter(bookedItemBinds);
+  const touchedDays = new Set<number>();
+  const touchedBases = new Set<string>();
+  const baseRenamedDays: number[] = [];
+  const shiftedItems: BookedAffectedScope['shiftedItems'] = [];
+  const displacedItems: BookedAffectedScope['displaced'] = [];
 
   // Lodging locks the base --------------------------------------------------------
   for (const item of binding.filter((b) => b.type === 'lodging' && b.date)) {
@@ -106,6 +148,11 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
     };
     honored.push(`${item.title}: base for ${affected.length === 1 ? `day ${affected[0]!.dayNumber}` : `days ${affected[0]!.dayNumber}–${affected[affected.length - 1]!.dayNumber}`} is locked to your booking.`);
     if (changed.length > 0) revisions.push({ code: 'base_locked_to_booking', description: `Base on ${changed.length === 1 ? 'one day' : `${changed.length} days`} renamed to your booked lodging (${baseName}).` });
+    for (const d of changed) {
+      touchedDays.add(d.dayNumber);
+      touchedBases.add(d.baseId);
+      baseRenamedDays.push(d.dayNumber);
+    }
   }
 
   // Timed things become locked stops ----------------------------------------------------
@@ -133,6 +180,12 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
       conflicts.push(`Booked: ${item.title} at ${item.startTime} on day ${day.dayNumber} is outside the hours you are there (${clock(day.window.startMinute)}–${clock(day.window.endMinute)}). It is kept on the plan; check the time.`);
     }
     const { day: next, displaced } = shiftAround(day, locked);
+    touchedDays.add(day.dayNumber);
+    for (const moved of next.items) {
+      const was = day.items.find((i) => i.id === moved.id);
+      if (was && was.startMinute !== moved.startMinute) shiftedItems.push({ dayNumber: day.dayNumber, title: moved.title, byMinutes: moved.startMinute - was.startMinute });
+    }
+    for (const d of displaced) displacedItems.push({ dayNumber: day.dayNumber, title: d.title });
     for (const d of displaced) conflicts.push(`Booked: ${item.title} on day ${day.dayNumber} leaves no room for "${d.title}"; it was not dropped silently — move it or drop it yourself.`);
     const withWarnings = { ...next, warnings: [...next.warnings, ...displaced.map((d) => `Booked: ${d.title} no longer fits around ${item.title}.`)] };
     itinerary = { ...itinerary, days: itinerary.days.map((d) => (d.dayNumber === day.dayNumber ? withWarnings : d)) };
@@ -170,6 +223,8 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
     });
     if (removed.some((i) => i.kind === 'meal')) revisions.push({ code: 'departure_window_tightened', description: `${removed.filter((i) => i.kind === 'meal').map((i) => i.title).join(', ')} removed: you will have left for the ${kind}.` });
     itinerary = { ...itinerary, days: itinerary.days.map((d) => (d.dayNumber === last.dayNumber ? tightened : d)) };
+    if (leaveBy < last.window.endMinute) touchedDays.add(last.dayNumber);
+    for (const i of late) displacedItems.push({ dayNumber: last.dayNumber, title: i.title });
     honored.push(`Departure ${kind} at ${clock(earliest)} sets the last day’s leave-by time to ${clock(leaveBy)}.`);
     revisions.push({ code: 'departure_window_tightened', description: `Last day ends by ${clock(leaveBy)} for the booked ${kind}.` });
   }
@@ -185,6 +240,7 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
     if (availableFrom > first.window.startMinute) {
       const widened: ItineraryDay = { ...first, window: { ...first.window, startMinute: availableFrom, usableMinutes: Math.max(0, first.window.endMinute - availableFrom), note: `Usable from ${clock(availableFrom)} after your booked arrival.` } };
       itinerary = { ...itinerary, days: itinerary.days.map((d) => (d.dayNumber === first.dayNumber ? widened : d)) };
+      touchedDays.add(first.dayNumber);
       revisions.push({ code: 'arrival_window_tightened', description: `First day starts at ${clock(availableFrom)} after the booked arrival.` });
     }
     honored.push(`Arrival at ${clock(latest)} sets when day one can start.`);
@@ -193,7 +249,9 @@ export function applyBookedFacts(source: Itinerary, booked: readonly BookedPlanI
   if (revisions.length > 0) {
     itinerary = { ...itinerary, diagnostics: { ...itinerary.diagnostics, revisions: [...itinerary.diagnostics.revisions.filter((r) => !String(r.code).startsWith('booked') && !String(r.code).includes('_locked_to_booking') && !String(r.code).includes('window_tightened')), ...revisions] } };
   }
-  return { itinerary, honored, conflicts };
+  const dayNumbers = [...touchedDays].sort((a, b) => a - b);
+  const scope: Omit<BookedAffectedScope, 'summary'> = { dayNumbers, baseIds: [...touchedBases], baseRenamedDays: baseRenamedDays.sort((a, b) => a - b), shiftedItems, displaced: displacedItems, notRemeasuredDays: baseRenamedDays.sort((a, b) => a - b) };
+  return { itinerary, honored, conflicts, affected: { ...scope, summary: describeAffected(scope, itinerary.days.length) } };
 }
 
 function clock(minute: number): string {

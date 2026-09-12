@@ -26,6 +26,21 @@ export interface DeriveBookingsInput {
   selfDrives?: boolean;
   /** V7 §14 — booking lead times compiled for the destination, when known. */
   reality?: TravelReality | null;
+  /**
+   * V9 §5 — the traveller's word on a need nothing was booked for: skipped,
+   * replaced by something else, or simply not needed. A resolved need reads
+   * `not_needed`; it is never dropped, so the list still says it was there.
+   */
+  resolutions?: readonly BookingResolution[];
+}
+
+export const BOOKING_RESOLUTIONS = ['skipped', 'replaced', 'not_needed'] as const;
+export type BookingResolutionKind = (typeof BOOKING_RESOLUTIONS)[number];
+export interface BookingResolution {
+  bookingItemId: string;
+  resolution: BookingResolutionKind;
+  bookedItemId?: string;
+  note?: string;
 }
 
 function matchBooked(booked: readonly BookedPlanItem[], kind: BookingItemKind, opts: { date?: string; baseId?: string; placeId?: string; title?: string }): BookedPlanItem | undefined {
@@ -334,6 +349,34 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
     );
   }
 
+  /*
+   * V9 §5 — THE EXPLICIT LINK WINS.
+   *
+   * A booked fact that names the need it satisfies (`bookingItemId`) settles
+   * that need whatever its title says; the heuristics above only fill in for
+   * facts typed before the link existed. A resolution is the traveller's own
+   * word and outranks a heuristic match too.
+   */
+  const byNeed = new Map<string, BookedPlanItem>();
+  for (const fact of input.booked) if (fact.bookingItemId && fact.status !== 'idea') byNeed.set(fact.bookingItemId, fact);
+  const resolutionFor = new Map((input.resolutions ?? []).map((r) => [r.bookingItemId, r] as const));
+  const linked = items.map((item) => {
+    const fact = byNeed.get(item.id);
+    if (fact) return { ...item, status: fact.status === 'soft_hold' ? ('soft_hold' as const) : ('booked' as const), bookedItemId: fact.id };
+    const resolution = resolutionFor.get(item.id);
+    if (resolution && item.status === 'open') return { ...item, status: 'not_needed' as const, ...(resolution.bookedItemId ? { bookedItemId: resolution.bookedItemId } : {}) };
+    return item;
+  });
+  /* The stays roll-up re-reads its members after the links above. */
+  const group = linked.find((i) => i.memberIds);
+  if (group) {
+    const members = linked.filter((i) => group.memberIds!.includes(i.id));
+    const settled = members.filter((i) => i.status === 'booked' || i.status === 'not_needed').length;
+    const held = members.filter((i) => i.status === 'soft_hold').length;
+    group.status = settled === members.length ? 'booked' : settled + held > 0 ? 'soft_hold' : 'open';
+    group.reason = settled === members.length ? 'Every base has a bed.' : `${members.length - settled} of ${members.length} bases still need a bed; the route depends on all of them.`;
+  }
+
   const order = { book_first: 0, book_soon: 1, can_wait: 2, keep_flexible: 3 } as const;
-  return items.sort((a, b) => order[a.priority] - order[b.priority] || (a.dayNumber ?? 0) - (b.dayNumber ?? 0));
+  return linked.sort((a, b) => order[a.priority] - order[b.priority] || (a.dayNumber ?? 0) - (b.dayNumber ?? 0));
 }

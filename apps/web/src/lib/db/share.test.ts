@@ -69,9 +69,9 @@ describe('minting a share token', () => {
   it('mints once: a second press returns the link already sent', async () => {
     /*
      * Somebody shares a link, then presses Share again next week. Rotating the
-     * token would silently kill the copy their friend already has, and this
-     * phase deliberately ships no revocation — so the second answer must be
-     * the first one.
+     * token would silently kill the copy their friend already has — revoking
+     * and replacing are separate, deliberate presses (below) — so the second
+     * answer must be the first one.
      */
     const { ensureShareToken } = await import('./repository');
     const id = await makeTrip();
@@ -166,5 +166,43 @@ describe('a database from before share links existed', () => {
     const token = ensureShareToken('trip-legacy');
     expect(token).toMatch(/^[A-Za-z0-9_-]{22,}$/);
     expect(tripForShareToken(token!)?.id).toBe('trip-legacy');
+  });
+});
+
+describe('revoking and replacing a share link (V9 §24)', () => {
+  it('a revoked token opens nothing, exactly like a token that never existed', async () => {
+    const { ensureShareToken, revokeShareToken, tripForShareToken } = await import('./repository');
+    const id = await makeTrip();
+    const token = ensureShareToken(id)!;
+    expect(tripForShareToken(token)?.id).toBe(id);
+    expect(revokeShareToken(id)).toBe(true);
+    expect(tripForShareToken(token)).toBeNull();
+    /* Revoking twice is not an error; it is a link that is already gone. */
+    expect(revokeShareToken(id)).toBe(false);
+    /* Sharing again mints a fresh token; the old one stays dead. */
+    const fresh = ensureShareToken(id)!;
+    expect(fresh).not.toBe(token);
+    expect(tripForShareToken(fresh)?.id).toBe(id);
+    expect(tripForShareToken(token)).toBeNull();
+  });
+
+  it('a rotated token opens the trip and the old one does not, with no instant in which both do', async () => {
+    const { ensureShareToken, rotateShareToken, tripForShareToken } = await import('./repository');
+    const id = await makeTrip();
+    const old = ensureShareToken(id)!;
+    const fresh = rotateShareToken(id);
+    expect(fresh).toMatch(/^[A-Za-z0-9_-]{22,}$/);
+    expect(fresh).not.toBe(old);
+    expect(tripForShareToken(fresh!)?.id).toBe(id);
+    expect(tripForShareToken(old)).toBeNull();
+  });
+
+  it('rotating an unshared trip mints its first link; rotating a missing trip mints nothing', async () => {
+    const { rotateShareToken, tripForShareToken } = await import('./repository');
+    const id = await makeTrip();
+    const token = rotateShareToken(id);
+    expect(token).not.toBeNull();
+    expect(tripForShareToken(token!)?.id).toBe(id);
+    expect(rotateShareToken('e2a2f2ce-0000-4000-8000-000000000000')).toBeNull();
   });
 });

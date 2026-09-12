@@ -115,3 +115,24 @@ function restatesTheTrip(facts: Pick<CardFacts, 'bases' | 'title' | 'destination
 function fold(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
+
+/**
+ * V9 §21 — "6 of 8 major items booked", from the booking progress the trip's
+ * intelligence already computes. Null when the plan needs nothing major, so
+ * a card never says "0 of 0". Pure, so the row and a test agree.
+ */
+export function bookingStateLabel(progress: { arranged: number; critical: number } | null | undefined): string | null {
+  if (!progress || progress.critical <= 0) return null;
+  return `${progress.arranged} of ${progress.critical} major item${progress.critical === 1 ? '' : 's'} booked`;
+}
+
+/**
+ * V9 §21 — where a card's primary action goes. A trip under way opens Today;
+ * a hub anchor from the next-action engine opens the hub at that anchor;
+ * otherwise the progress path the row already computed.
+ */
+export function primaryHrefFor(input: { tripId: string; lifecycle: string; progressHref: string; nextHref?: string | null }): string {
+  if (input.lifecycle === 'traveling') return `/trips/${input.tripId}/today`;
+  if (input.nextHref) return input.nextHref.startsWith('#') ? `/trips/${input.tripId}/itinerary${input.nextHref}` : input.nextHref;
+  return input.progressHref;
+}

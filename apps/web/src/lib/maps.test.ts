@@ -46,6 +46,27 @@ describe('dayRouteLinks', () => {
     expect(new URL(dayRouteLinks(stops, 'driving')!.apple).searchParams.get('dirflg')).toBe('d');
   });
 
+  it('carries the whole day in the Apple unified form and the last leg in the legacy one', () => {
+    const stops = [stop('a', 37.6485, -118.9721), stop('b', 37.5936, -118.8228), stop('c', 37.8, -119.1)];
+    const links = dayRouteLinks(stops, 'driving')!;
+    const unified = new URL(links.appleUnified);
+    expect(unified.pathname).toBe('/directions');
+    expect(unified.searchParams.get('source')).toBe('37.6485,-118.9721');
+    expect(unified.searchParams.get('destination')).toBe('37.8,-119.1');
+    expect(unified.searchParams.getAll('waypoint')).toEqual(['37.5936,-118.8228']);
+    expect(unified.searchParams.get('mode')).toBe('driving');
+    // The legacy link is the last leg only, and still says so through its scheme.
+    const legacy = new URL(links.apple);
+    expect(legacy.searchParams.get('daddr')).toBe('37.8,-119.1');
+    expect(legacy.searchParams.has('waypoint')).toBe(false);
+  });
+
+  it('truncates the unified waypoints at the same cap as Google, so both links describe one day', () => {
+    const stops = Array.from({ length: 14 }, (_, index) => stop(`s${index}`, 37 + index / 100, -119));
+    const links = dayRouteLinks(stops)!;
+    expect(new URL(links.appleUnified).searchParams.getAll('waypoint')).toHaveLength(MAX_INTERMEDIATE_WAYPOINTS);
+  });
+
   it('names no place and carries no identifier — coordinates only', () => {
     const links = dayRouteLinks([
       { id: 'devils-postpile', name: 'Devils Postpile', lat: 37.62, lng: -119.08 },
@@ -54,6 +75,7 @@ describe('dayRouteLinks', () => {
     expect(links.google).not.toContain('Devils');
     expect(links.google).not.toContain('postpile');
     expect(links.apple).not.toContain('Rainbow');
+    expect(links.appleUnified).not.toContain('Rainbow');
   });
 });
 

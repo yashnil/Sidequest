@@ -40,7 +40,7 @@ async function expectCanonicalItinerary(page: Page) {
   await expect(page.getByRole('heading', { name: 'A Quiet Overlook Nobody Documented', exact: true })).toBeVisible();
   const days = page.locator('#hub-view-days');
   await expect(days.getByText('Check before relying').first()).toBeVisible();
-  await expect(days.getByText('Verified').first()).toBeVisible();
+  await expect(days.getByText('Confirmed from source').first()).toBeVisible();
   await openHubView(page, 'plan');
   await expect(page.getByTestId('where-to-stay')).toBeVisible();
   await openHubView(page, 'prepare');
@@ -154,5 +154,5 @@ test('Explore experiences first, then the board, verifies against the compiled r
   await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await openHubView(page, 'days');
-  await expect(page.locator('#hub-view-days').getByText('Verified').first()).toBeVisible();
+  await expect(page.locator('#hub-view-days').getByText('Confirmed from source').first()).toBeVisible();
 });

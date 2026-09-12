@@ -31,11 +31,12 @@ test('the hub has every section, calm by default, with urgent items only where t
   // PRODUCTION UI V1 — five views under one nav; each section lives in exactly one of them.
   const nav = page.viewportSize()!.width < 640 ? page.getByTestId('trip-hub-bottom-nav') : page.getByTestId('trip-hub-nav');
   await expect(nav).toBeVisible();
-  for (const id of ['overview', 'days', 'map', 'plan', 'prepare']) {
-    // EXPERIENCE V2 — the phone bar holds four views; Overview is the band's title link.
-    const phone = page.viewportSize()!.width < 640;
-    await expect(phone ? (id === 'overview' ? page.getByTestId('hub-overview-link') : page.getByTestId(`hub-bottom-${id}`)) : page.getByTestId(`hub-link-${id}`)).toBeVisible();
+  // V9 — six views on a desktop; the phone bar holds Days · Book · Prepare · Map, Trip is the band's title link and Plan is reached through `#plan`.
+  const phone = page.viewportSize()!.width < 640;
+  for (const id of phone ? ['days', 'book', 'prepare', 'map'] : ['overview', 'days', 'map', 'plan', 'book', 'prepare']) {
+    await expect(page.getByTestId(phone ? `hub-bottom-${id}` : `hub-link-${id}`)).toBeVisible();
   }
+  if (phone) await expect(page.getByTestId('hub-overview-link')).toBeVisible();
   await expect(page.getByTestId('hub-overview')).toBeVisible();
   await openHubView(page, 'prepare');
   await expect(page.getByTestId('trip-confidence').first()).toBeVisible();
@@ -86,8 +87,8 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
   await page.getByTestId('booked-end-date').fill(AUGUST.end);
   await page.getByTestId('booked-location').fill('Creekside');
   await page.getByTestId('booked-save').click();
-  await expect(page.getByTestId('booked-item')).toHaveCount(1, { timeout: 20_000 });
-  await expect(page.getByTestId('hub-booked-honored')).toContainText(/Hotel B by the creek/);
+  await expect(page.locator('#hub-view-plan').getByTestId('booked-item')).toHaveCount(1, { timeout: 20_000 });
+  await expect(page.locator('#hub-view-plan').getByTestId('hub-booked-honored')).toContainText(/Hotel B by the creek/);
   await expect(page.getByTestId('hub-base-booked').first()).toContainText(/Hotel B/);
   // The day headers now name the booked base.
   await openHubView(page, 'days');
@@ -101,13 +102,13 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
   await page.getByTestId('booked-date').fill(AUGUST.end);
   await page.getByTestId('booked-start').fill('13:00');
   await page.getByTestId('booked-save').click();
-  await expect(page.getByTestId('booked-item')).toHaveCount(2, { timeout: 20_000 });
+  await expect(page.locator('#hub-view-plan').getByTestId('booked-item')).toHaveCount(2, { timeout: 20_000 });
   await expect(page.getByTestId('hub-terminal-leaving')).toContainText(/from your booking/);
-  await expect(page.getByTestId('hub-booked-honored')).toContainText(/Departure flight at 13:00/);
+  await expect(page.locator('#hub-view-plan').getByTestId('hub-booked-honored')).toContainText(/Departure flight at 13:00/);
 
   await page.reload();
   await openHubView(page, 'plan');
-  await expect(page.getByTestId('booked-item')).toHaveCount(2);
+  await expect(page.locator('#hub-view-plan').getByTestId('booked-item')).toHaveCount(2);
   await openHubView(page, 'days');
   await expect(page.getByText(/based in Creekside/).first()).toBeVisible();
 

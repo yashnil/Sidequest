@@ -3,6 +3,12 @@ import { loadTripIntelligence } from '@/lib/intelligence/load';
 import { renderInstant } from '@/lib/clock';
 import { providerRegistry } from '@/lib/providers/registry';
 import { buildRecheckManifest, buildTodayView, type RecheckManifest, type TodayView } from '@sidequest/core';
+import { buildLedger, buildNextActions, buildPreflight, buildTripStateGraph, deriveDecisions, readLifecycle, summariseObservations, volatileFacts, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
+import { listDecisions, listObservations, listPendingImports, type BookingImport } from '@/lib/db/execution-repository';
+import { destinationTimeZone } from '@/lib/execution/destination-zone';
+import { lastRecheckAt } from '@/lib/execution/recheck-status';
+import { partyFactsFor } from '@/lib/db/party-repository';
+import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { CheckList } from '@/lib/db/intelligence-repository';
 import type { BookedPlanItem, TravelIntelligence, TravelReadinessProfile } from '@sidequest/core';
 import type { StopRationale } from '@/components/ItineraryView';
@@ -75,6 +81,32 @@ export interface ItineraryViewModel {
   rationale: Record<string, StopRationale>;
   /** The trip in one sentence, from the traveller's profile; null without one. */
   personality: string | null;
+  /**
+   * V9 — THE EXECUTION LAYER, DERIVED ONCE HERE FOR EVERY SURFACE.
+   *
+   * The state graph is the one vocabulary; next actions, Preflight, the
+   * decisions, the ledger and the freshness list are read off it and off the
+   * same intelligence snapshot. Nothing here is stored and nothing here calls
+   * a provider or a model.
+   */
+  lifecycle: TripLifecycle;
+  daysUntilTrip: number;
+  decisions: TripDecision[];
+  graph: TripStateGraph;
+  nextActions: NextActions;
+  preflight: Preflight;
+  ledger: TripLedger;
+  resolutions: BookingResolution[];
+  observations: FactObservation[];
+  changedHeadline: string | null;
+  volatile: VolatileFact[];
+  affected: BookedAffectedScope;
+  /** Confirmations pasted or uploaded and not yet confirmed or discarded. Never on the shared copy. */
+  pendingImports: BookingImport[];
+  /** V9 §9 — when the last recheck ran, for the freshness banner; null when none has. */
+  lastCheckedAt: string | null;
+  /** V9 §17 — the party has a recorded difference, so a split may be suggested. */
+  partyDifferences: boolean;
 }
 
 export async function itineraryViewModel(
@@ -371,6 +403,8 @@ export async function itineraryViewModel(
     attributions = [licence('ODbL-1.0').attribution];
   }
 
+  /* V9 — a trip with no compiled base zone still has a destination zone; Today and the calendar must not fall to UTC. */
+  if (!timeZone) timeZone = destinationTimeZone(trip.id);
   const now = new Date(renderInstant());
   const loaded = loadTripIntelligence({ trip, itinerary, ...(timeZone ? { timeZone } : {}), ...(countryCode ? { countryCode } : {}), sourcedAreas: lodgingAreas, worthSkipping, now });
   /*
@@ -410,11 +444,44 @@ export async function itineraryViewModel(
     if (base.coordinates && !coordinates.has(base.id)) coordinates.set(base.id, { lat: base.coordinates.lat, lng: base.coordinates.lng });
     if (base.placeId && base.coordinates && !coordinates.has(base.placeId)) coordinates.set(base.placeId, { lat: base.coordinates.lat, lng: base.coordinates.lng });
   }
+  /* V9 — the execution layer. Persisted acts (decisions, resolutions, observations) plus derivation. */
+  const persistedDecisions = listDecisions(trip.id);
+  const observations = listObservations(trip.id);
+  const decisions = deriveDecisions({ itinerary: loaded.itinerary, intelligence: intel, persisted: persistedDecisions, travellerFacts: personality ? [personality] : [] });
+  const graph = buildTripStateGraph({ itinerary: loaded.itinerary, intelligence: intel, booked: loaded.booked, decisions, resolutions: loaded.resolutions, observations, recheck, now });
+  const lifecycle = readLifecycle({ trip, itineraryStatus: loaded.itinerary.status, bookedTypes: loaded.booked.filter((b) => b.status === 'booked').map((b) => b.type), hasProfile: getProfile(trip.id) !== null, now }).lifecycle;
+  const nextActions = buildNextActions({ graph, lifecycle, daysUntilTrip, now, today });
+  const preflight = buildPreflight({ graph, intelligence: intel, booked: loaded.booked, checks: loaded.checks, daysUntilTrip });
+  const ledger = buildLedger({ budget: intel.budget, booked: loaded.booked, openNeeds: intel.bookings.items.filter((b) => b.status === 'open' && !b.memberIds) });
+  const volatile = volatileFacts({ itinerary: loaded.itinerary, intelligence: intel, booked: loaded.booked, now, capabilities: { forecast: registry.byId['weather.forecast']?.available ?? false, hours: registry.byId['places.hours']?.available ?? false, transit: registry.byId['routing.transit']?.available ?? false } });
+  const changedHeadline = summariseObservations(observations).headline;
+  let partyDifferences = false;
+  try {
+    partyDifferences = partyFactsFor(trip.id)?.differences ?? false;
+  } catch {
+    /* No party rows, or an unreadable one: no split is suggested. */
+  }
+
   return {
     appliedItinerary: loaded.itinerary,
     intelligence: loaded.intelligence,
     today,
     recheck,
+    lifecycle,
+    daysUntilTrip,
+    decisions,
+    graph,
+    nextActions,
+    preflight,
+    ledger,
+    resolutions: loaded.resolutions,
+    observations,
+    changedHeadline,
+    volatile,
+    affected: loaded.affected,
+    pendingImports: listPendingImports(trip.id),
+    lastCheckedAt: lastRecheckAt(trip.id),
+    partyDifferences,
     booked: loaded.booked,
     bookedHonored: loaded.honored,
     bookedConflicts: loaded.conflicts,

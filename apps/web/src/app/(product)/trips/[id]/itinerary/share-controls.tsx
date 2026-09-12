@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { buttonClass } from '@/components/ui';
 import { createShareLinkAction } from './actions';
+import { revokeShareLinkAction, rotateShareLinkAction } from './share-actions';
 
 /**
  * THE SHARE AFFORDANCE: ONE BUTTON, THEN THE LINK ITSELF.
@@ -18,13 +19,54 @@ import { createShareLinkAction } from './actions';
  * The path comes back relative and is completed with the browser's own origin,
  * so the link a traveller copies always points at the deployment they are
  * looking at.
+ *
+ * V9 §24 — the link can be taken back. Revoke asks twice (the second press
+ * is the confirmation, on the same button) and then says exactly what
+ * happened: the old link now opens nothing. "Make a new link" replaces the
+ * token in one statement, so the old copy dies the instant the new one lives.
  */
-export function ShareControl({ tripId }: { tripId: string }) {
-  const [url, setUrl] = useState<string | null>(null);
+export function ShareControl({ tripId, initialPath }: { tripId: string; initialPath?: string | null }) {
+  const [url, setUrl] = useState<string | null>(() => (initialPath && typeof window !== 'undefined' ? `${window.location.origin}${initialPath}` : null));
   const [status, setStatus] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [revoked, setRevoked] = useState(false);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  if (revoked) {
+    return (
+      <div className="flex w-full flex-wrap items-center gap-2" data-testid="share-revoked">
+        <p className="w-full type-small text-ink">Link revoked. Anyone with the old link now sees nothing.</p>
+        <button
+          type="button"
+          disabled={pending}
+          className={buttonClass('secondary', 'sm')}
+          data-testid="share-regenerate"
+          onClick={() => {
+            setStatus(null);
+            startTransition(async () => {
+              const result = await rotateShareLinkAction(tripId);
+              if (!result.ok) {
+                setStatus(result.error);
+                return;
+              }
+              setUrl(`${window.location.origin}${result.path}`);
+              setCopied(false);
+              setRevoked(false);
+            });
+          }}
+        >
+          {pending ? 'Making a new link…' : 'Make a new link'}
+        </button>
+        {status ? (
+          <p role="alert" className="w-full text-sm leading-relaxed text-clay">
+            {status}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
 
   if (url === null) {
     return (
@@ -83,6 +125,39 @@ export function ShareControl({ tripId }: { tripId: string }) {
       >
         {copied ? 'Copied' : 'Copy link'}
       </button>
+      <button
+        type="button"
+        disabled={pending}
+        aria-pressed={confirming}
+        className={buttonClass('ghost', 'sm')}
+        data-testid="share-revoke"
+        data-confirming={confirming ? 'true' : 'false'}
+        onClick={() => {
+          if (!confirming) {
+            setConfirming(true);
+            setStatus(null);
+            return;
+          }
+          startTransition(async () => {
+            const result = await revokeShareLinkAction(tripId);
+            setConfirming(false);
+            if (!result.ok) {
+              setStatus(result.error);
+              return;
+            }
+            setUrl(null);
+            setCopied(false);
+            setRevoked(true);
+          });
+        }}
+      >
+        {pending ? 'Revoking…' : confirming ? 'Press again to revoke this link' : 'Revoke link'}
+      </button>
+      {confirming ? (
+        <button type="button" className={buttonClass('ghost', 'sm')} onClick={() => setConfirming(false)} data-testid="share-revoke-cancel">
+          Keep the link
+        </button>
+      ) : null}
       {status ? (
         <p role="alert" className="w-full text-sm leading-relaxed text-clay">
           {status}
@@ -90,7 +165,7 @@ export function ShareControl({ tripId }: { tripId: string }) {
       ) : null}
       <p className="w-full text-xs leading-relaxed text-ink-muted">
         Anyone with this link can read the plan — and only read it. Your board and controls stay
-        yours.
+        yours. Revoke it and the link opens nothing from that moment.
       </p>
     </div>
   );

@@ -76,3 +76,30 @@ describe('composeCardMeta', () => {
     expect(composeCardMeta({ ...BASE, bases: ['Kenya and Tanzania', 'Zanzibar'] }).route).toEqual({ names: ['Kenya and Tanzania', 'Zanzibar'], more: 0 });
   });
 });
+
+/**
+ * V9 §21 — the two facts a card adds: the booking state from the engine's
+ * progress, and where the primary action goes. A trip under way opens Today;
+ * a hub anchor from the next-action engine opens the hub at that anchor.
+ */
+describe('bookingStateLabel', () => {
+  it('says "N of M major items booked" and nothing when the plan needs nothing major', async () => {
+    const { bookingStateLabel } = await import('./card-metadata');
+    expect(bookingStateLabel({ arranged: 6, critical: 8 })).toBe('6 of 8 major items booked');
+    expect(bookingStateLabel({ arranged: 1, critical: 1 })).toBe('1 of 1 major item booked');
+    expect(bookingStateLabel({ arranged: 0, critical: 0 })).toBeNull();
+    expect(bookingStateLabel(null)).toBeNull();
+  });
+});
+
+describe('primaryHrefFor', () => {
+  it('sends a traveling trip to Today, whatever else is open', async () => {
+    const { primaryHrefFor } = await import('./card-metadata');
+    expect(primaryHrefFor({ tripId: 't1', lifecycle: 'traveling', progressHref: '/trips/t1/itinerary', nextHref: '#book-first' })).toBe('/trips/t1/today');
+  });
+  it('opens the hub at the engine’s anchor, and falls back to the progress path', async () => {
+    const { primaryHrefFor } = await import('./card-metadata');
+    expect(primaryHrefFor({ tripId: 't1', lifecycle: 'booked', progressHref: '/trips/t1/itinerary', nextHref: '#book-first' })).toBe('/trips/t1/itinerary#book-first');
+    expect(primaryHrefFor({ tripId: 't1', lifecycle: 'planning', progressHref: '/trips/t1/plan', nextHref: null })).toBe('/trips/t1/plan');
+  });
+});

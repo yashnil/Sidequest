@@ -53,10 +53,14 @@ describe('the security header policy', () => {
   it('is wired onto every route, with the framework banner off', async () => {
     expect(nextConfig.poweredByHeader).toBe(false);
     const rules = await nextConfig.headers!();
-    expect(rules).toHaveLength(1);
+    /* V9 — one policy for every route, and one narrow rule that keeps the trip service worker from being cached. */
+    expect(rules).toHaveLength(2);
     expect(rules[0]!.source).toBe('/:path*');
     const keys = rules[0]!.headers.map((entry) => entry.key);
     expect(keys).toContain('Content-Security-Policy');
     expect(keys).toContain('Strict-Transport-Security');
+    expect(rules[1]!.source).toBe('/trip-offline-sw.js');
+    expect(rules[1]!.headers.find((entry) => entry.key === 'Cache-Control')?.value).toMatch(/no-cache/);
+    expect(rules[1]!.headers.find((entry) => entry.key === 'Service-Worker-Allowed')?.value).toBe('/');
   });
 });

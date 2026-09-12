@@ -2,8 +2,14 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { bookedPlanItemInputSchema, formatCount, rankVenues, travelReadinessProfileSchema, type Itinerary, type VenueFit } from '@sidequest/core';
-import { addBookedItem, clearReadinessProfile, removeBookedItem, saveReadinessProfile, setCheck, updateBookedItem } from '@/lib/db/intelligence-repository';
+import { z } from 'zod';
+import { bookedPlanItemInputSchema, bookedPlanItemSchema, formatCount, rankVenues, travelReadinessProfileSchema, type BookedPlanItem, type ExtractedConfirmation, type Itinerary, type VenueFit } from '@sidequest/core';
+import { addBookedItem, clearReadinessProfile, getTravelIntelligence, listBookedItems, removeBookedItem, saveReadinessProfile, setCheck, updateBookedItem } from '@/lib/db/intelligence-repository';
+import { clearBookingResolution, getImport, recordImport, resolveImport, setBookingResolution, type ImportSourceKind } from '@/lib/db/execution-repository';
+import { applyBookedFacts } from '@/lib/intelligence/booked-reconcile';
+import { describeExtraction, prepareImport, type ImportInput } from '@/lib/execution/import';
+import { readConfirmationWithModel } from '@/lib/execution/import-model';
+import { BOOKED_TYPE_FOR_KIND } from '@/components/hub/booking-copy';
 import {
   easeDay,
   removeStopFromDay,
@@ -332,7 +338,7 @@ export async function clearReadinessProfileAction(tripId: string): Promise<HubAc
   return { ok: true };
 }
 
-export async function setCheckAction(tripId: string, list: 'packing' | 'checklist', itemId: string, checked: boolean): Promise<HubActionResult> {
+export async function setCheckAction(tripId: string, list: 'packing' | 'checklist' | 'preflight', itemId: string, checked: boolean): Promise<HubActionResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
   setCheck(tripId, list, itemId, checked);
@@ -479,4 +485,262 @@ export async function discoverFoodAction(tripId: string, near: { lat: number; ln
   if (refusal) return { ok: false, error: refusal };
   if (!Number.isFinite(near?.lat) || !Number.isFinite(near?.lng)) return { ok: false, error: 'That stop has no verified position to search around.' };
   return forDisplay(await discoverFoodNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }), venueFitFor(tripId));
+}
+
+/* ------------------------------------------------------------------ *
+ * V9 §5 / §6 — bookings that are objects, confirmation import
+ * ------------------------------------------------------------------ */
+
+/**
+ * Every action below is the traveller's own act on a booking need or a booked
+ * fact: marking a need booked, adding the confirmation to a fact, replacing a
+ * suggestion with something else, skipping a need, importing a confirmation.
+ * Each starts with the ownership question, validates its input, writes one
+ * row, and lets the page re-render from disk. None calls a model except the
+ * one explicit "Ask Sidequest to read it" press, which is bounded to one call.
+ */
+const ISSUE_TEXT = (issues: { path: PropertyKey[]; message: string }[]) => issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+
+const bookingNeedIdSchema = z.string().min(1).max(200);
+
+/** What "Mark booked" saves: a booked fact that names the need it satisfies. */
+const markBookedInputSchema = bookedPlanItemInputSchema
+  .pick({ type: true, title: true, date: true, endDate: true, startTime: true, endTime: true, timeZone: true, location: true, placeId: true, baseId: true, provider: true, confirmationRef: true, url: true, notes: true, cancellationDeadline: true, cost: true, status: true, paid: true, refundable: true })
+  .extend({ bookingItemId: bookingNeedIdSchema });
+export type MarkBookedInput = z.input<typeof markBookedInputSchema>;
+
+/** What "Add confirmation" adds to a booked fact. Every field optional; nothing else on the fact is touched. */
+const confirmationInputSchema = bookedPlanItemInputSchema.pick({ confirmationRef: true, url: true, cost: true, paid: true, refundable: true, cancellationDeadline: true, provider: true, notes: true }).partial();
+export type ConfirmationInput = z.input<typeof confirmationInputSchema>;
+
+export interface BookingActionResult extends HubActionResult {
+  /** The booked fact's id, when one was created. */
+  bookedItemId?: string;
+}
+
+/** The need's title from the persisted intelligence snapshot, so "replaces" is the plan's word and not the browser's. */
+function needTitle(tripId: string, bookingItemId: string): string | undefined {
+  return getTravelIntelligence(tripId)?.bookings.items.find((b) => b.id === bookingItemId)?.title;
+}
+
+export async function markBookedAction(tripId: string, input: unknown): Promise<BookingActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = markBookedInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  const item = addBookedItem(tripId, { ...parsed.data, locked: true, source: 'marked' });
+  /* A booking outranks an earlier "skip" on the same need; the skip is the traveller's older word. */
+  clearBookingResolution(tripId, parsed.data.bookingItemId);
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, bookedItemId: item.id };
+}
+
+export async function addConfirmationAction(tripId: string, bookedItemId: string, input: unknown): Promise<HubActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = confirmationInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  const patch = Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined));
+  if (Object.keys(patch).length === 0) return { ok: false, error: 'Add at least one detail — a reference, a link, an amount or the cancellation terms.' };
+  const updated = updateBookedItem(tripId, String(bookedItemId), patch);
+  if (!updated) return { ok: false, error: 'That booking is no longer on the trip.' };
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true };
+}
+
+/** "Replace": something else was booked in place of the plan's suggestion. The fact names both the need and what it displaced. */
+export async function replaceBookingAction(tripId: string, input: unknown): Promise<BookingActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = markBookedInputSchema.extend({ replaces: z.string().min(1).max(160).optional() }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  const { replaces: replacesInput, ...fact } = parsed.data;
+  const replaces = needTitle(tripId, fact.bookingItemId) ?? replacesInput;
+  const item = addBookedItem(tripId, { ...fact, locked: true, source: 'marked', ...(replaces ? { replaces } : {}) });
+  setBookingResolution(tripId, { bookingItemId: fact.bookingItemId, resolution: 'replaced', bookedItemId: item.id });
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, bookedItemId: item.id };
+}
+
+export async function skipBookingAction(tripId: string, bookingItemId: string, note?: string): Promise<HubActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = z.object({ bookingItemId: bookingNeedIdSchema, note: z.string().max(300).optional() }).safeParse({ bookingItemId, ...(note ? { note } : {}) });
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  setBookingResolution(tripId, { bookingItemId: parsed.data.bookingItemId, resolution: 'skipped', ...(parsed.data.note?.trim() ? { note: parsed.data.note.trim() } : {}) });
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true };
+}
+
+export async function unskipBookingAction(tripId: string, bookingItemId: string): Promise<HubActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = bookingNeedIdSchema.safeParse(bookingItemId);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  clearBookingResolution(tripId, parsed.data);
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation import
+// ---------------------------------------------------------------------------
+
+/** Base64 of a 4 MB file is ~5.6 M characters; anything past that is refused before it is decoded. */
+const importInputSchema = z.object({
+  kind: z.enum(['text', 'file']),
+  text: z.string().max(700_000).optional(),
+  fileBase64: z.string().max(6_000_000).optional(),
+  filename: z.string().max(200).optional(),
+  subject: z.string().max(300).optional(),
+  sender: z.string().max(200).optional(),
+});
+
+export interface ImportActionResult {
+  ok: boolean;
+  error?: string;
+  importId?: string;
+  sourceKind?: ImportSourceKind;
+  extracted?: ExtractedConfirmation;
+  /** One sentence for the top of the review. */
+  summary?: string;
+  /** True when the file was a photo: nothing was read, and only the explicit press can read it. */
+  photo?: boolean;
+  /** True when the reading came from the explicit model press. */
+  modelUsed?: boolean;
+}
+
+function tripWindow(tripId: string): { tripStart?: string; tripEnd?: string } {
+  const trip = getTrip(tripId);
+  return trip ? { tripStart: trip.basics.startDate, tripEnd: trip.basics.endDate } : {};
+}
+
+/**
+ * Parse → redact → extract → record. The raw document is never stored; the
+ * row holds the redacted extraction and its status. Nothing on the trip
+ * changes until the traveller confirms.
+ */
+export async function importConfirmationAction(tripId: string, input: unknown): Promise<ImportActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = importInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  const outcome = await prepareImport(parsed.data as ImportInput, tripWindow(tripId));
+  if (!outcome.ok) return { ok: false, error: outcome.error };
+  const { prepared } = outcome;
+  const record = recordImport(tripId, { sourceKind: prepared.sourceKind, extracted: prepared.extracted, modelUsed: false });
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, importId: record.id, sourceKind: prepared.sourceKind, extracted: prepared.extracted, summary: describeExtraction(prepared.extracted), photo: prepared.sourceKind === 'image', modelUsed: false };
+}
+
+/**
+ * The explicit press. The document is read again from what the traveller
+ * sent (the row never held it), redacted again, and only then shown to the
+ * model. A reading that comes back replaces the pending row: the earlier
+ * extraction is discarded and a new pending import carries `modelUsed`.
+ */
+export async function readImportWithSidequestAction(tripId: string, importId: string, input: unknown): Promise<ImportActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = importInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  const pending = getImport(tripId, String(importId));
+  if (!pending || pending.status !== 'pending') return { ok: false, error: 'That import is no longer open.' };
+  const window = tripWindow(tripId);
+  const outcome = await prepareImport(parsed.data as ImportInput, window);
+  if (!outcome.ok) return { ok: false, error: outcome.error };
+  const { prepared } = outcome;
+  const reading = await readConfirmationWithModel({
+    redactedText: prepared.redactedText,
+    ...(prepared.image ? { image: prepared.image } : {}),
+    hints: { ...window, ...(prepared.senderDomain ? { senderDomain: prepared.senderDomain } : {}), ...(prepared.subject ? { subject: prepared.subject } : {}) },
+    caller: null,
+    now: new Date(),
+  });
+  if (!reading.ok) return { ok: false, error: reading.error };
+  const record = recordImport(tripId, { sourceKind: prepared.sourceKind, extracted: reading.extracted, modelUsed: true });
+  resolveImport(tripId, pending.id, { status: 'discarded' });
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, importId: record.id, sourceKind: prepared.sourceKind, extracted: reading.extracted, summary: describeExtraction(reading.extracted), photo: false, modelUsed: true };
+}
+
+/** The candidate the review screen holds: a booked fact minus what the server fills in. */
+const importCandidateSchema = bookedPlanItemInputSchema.pick({ type: true, title: true, date: true, endDate: true, startTime: true, endTime: true, timeZone: true, location: true, baseId: true, placeId: true, provider: true, confirmationRef: true, url: true, cost: true, paid: true, refundable: true, cancellationDeadline: true, notes: true });
+export type ImportCandidate = z.input<typeof importCandidateSchema>;
+
+function candidateAsFact(tripId: string, candidate: z.output<typeof importCandidateSchema>): BookedPlanItem {
+  return bookedPlanItemSchema.parse({ ...candidate, id: 'candidate', tripId, status: 'booked', locked: true, source: 'imported', createdAt: new Date().toISOString() });
+}
+
+export interface ImportPreviewResult extends HubActionResult {
+  /** What confirming would change, in one sentence. */
+  summary?: string;
+  honored?: string[];
+  conflicts?: string[];
+  dayNumbers?: number[];
+}
+
+/**
+ * The affected radius before anything is stored: the booked facts already on
+ * the trip plus this candidate, applied to a copy of the pristine plan.
+ */
+export async function previewImportAction(tripId: string, candidate: unknown): Promise<ImportPreviewResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = importCandidateSchema.safeParse(candidate);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  let itinerary: Itinerary | null;
+  try {
+    itinerary = getItinerary(tripId);
+  } catch {
+    itinerary = null;
+  }
+  if (!itinerary) return { ok: true, summary: 'There is no plan to compare against yet; the booking will be kept and applied once one is built.', honored: [], conflicts: [], dayNumbers: [] };
+  const fact = candidateAsFact(tripId, parsed.data);
+  const applied = applyBookedFacts(itinerary, [...listBookedItems(tripId), fact]);
+  return { ok: true, summary: applied.affected.summary, honored: applied.honored.filter((h) => h.startsWith(fact.title)), conflicts: applied.conflicts.filter((c) => c.includes(fact.title)), dayNumbers: applied.affected.dayNumbers };
+}
+
+/** The open need this fact answers, matched by type, then base, then date — or nothing. Never a guess across kinds. */
+function matchNeed(tripId: string, fact: Pick<BookedPlanItem, 'type' | 'date' | 'baseId' | 'placeId'>): string | undefined {
+  const needs = getTravelIntelligence(tripId)?.bookings.items.filter((b) => b.status === 'open' && !b.memberIds && BOOKED_TYPE_FOR_KIND[b.kind] === fact.type) ?? [];
+  if (needs.length === 0) return undefined;
+  if (fact.baseId) {
+    const byBase = needs.find((n) => n.baseId === fact.baseId);
+    if (byBase) return byBase.id;
+  }
+  if (fact.placeId) {
+    const byPlace = needs.find((n) => n.placeId === fact.placeId);
+    if (byPlace) return byPlace.id;
+  }
+  if (fact.date) {
+    const byDate = needs.filter((n) => n.date === fact.date);
+    if (byDate.length === 1) return byDate[0]!.id;
+  }
+  return undefined;
+}
+
+export async function confirmImportAction(tripId: string, importId: string, candidate: unknown): Promise<BookingActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const parsed = importCandidateSchema.safeParse(candidate);
+  if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  const pending = getImport(tripId, String(importId));
+  if (!pending || pending.status !== 'pending') return { ok: false, error: 'That import is no longer open.' };
+  const bookingItemId = matchNeed(tripId, parsed.data);
+  const item = addBookedItem(tripId, { ...parsed.data, status: 'booked', locked: true, source: 'imported', ...(bookingItemId ? { bookingItemId } : {}) });
+  if (bookingItemId) clearBookingResolution(tripId, bookingItemId);
+  resolveImport(tripId, pending.id, { status: 'confirmed', bookedItemId: item.id });
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, bookedItemId: item.id };
+}
+
+export async function discardImportAction(tripId: string, importId: string): Promise<HubActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const pending = getImport(tripId, String(importId));
+  if (!pending) return { ok: false, error: 'That import is no longer open.' };
+  if (pending.status === 'pending') resolveImport(tripId, pending.id, { status: 'discarded' });
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true };
 }

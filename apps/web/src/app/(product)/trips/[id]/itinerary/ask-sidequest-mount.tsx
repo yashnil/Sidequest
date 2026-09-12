@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AskSidequest, type RefinementReply } from '@/components/hub/AskSidequest';
+import { ASK_OPEN_EVENT } from '@/components/hub/HubShell';
 import { answerRefinementAction, refineTripAction, undoRefinementAction } from '@/lib/refine/actions';
 
 /**
@@ -18,6 +20,28 @@ import { answerRefinementAction, refineTripAction, undoRefinementAction } from '
  */
 export function AskSidequestMount({ tripId, ready, canUndo, dayCount, baseNames }: { tripId: string; ready: boolean; canUndo: boolean; dayCount?: number; baseNames?: readonly string[] }) {
   const router = useRouter();
+  /*
+   * V9 §17 — A REQUEST CARRIED IN THE ADDRESS.
+   *
+   * Another page ("Suggest a split for day N" on the party page) cannot raise
+   * a DOM event into this one, so it links here with `?ask=<request>#day-N`.
+   * Once, after mount, the request is handed to the sheet exactly as a chip
+   * would hand it — pre-filled, never sent on its own — and the parameter is
+   * dropped so a reload does not ask again. The hash is kept: it is the day.
+   */
+  const askedRef = useRef(false);
+  useEffect(() => {
+    if (askedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const request = params.get('ask');
+    if (!request || request.trim().length === 0) return;
+    askedRef.current = true;
+    params.delete('ask');
+    const search = params.toString();
+    router.replace(`${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
+    const handle = window.setTimeout(() => window.dispatchEvent(new CustomEvent(ASK_OPEN_EVENT, { detail: { request: request.trim().slice(0, 600), send: false } })), 0);
+    return () => window.clearTimeout(handle);
+  }, [router]);
   const refreshIfChanged = (reply: RefinementReply): RefinementReply => {
     if (reply.ok && (reply.summary || reply.version !== undefined)) router.refresh();
     return reply;

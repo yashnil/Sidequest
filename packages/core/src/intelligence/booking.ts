@@ -165,6 +165,20 @@ export const bookedPlanItemSchema = z.object({
   provider: z.string().max(80).optional(),
   /** V6 §26 — which party members it covers; empty means everyone. */
   travelerIds: z.array(z.string().min(1)).max(12).optional(),
+  /**
+   * V9 §5 — A BOOKING IS AN OBJECT THAT KNOWS WHAT IT SATISFIES.
+   *
+   * `bookingItemId` links the fact to the need it answers (a `BookingItem`
+   * id), so "Mark booked" on a need settles that need and nothing else has to
+   * guess by title. `paid` and `refundable` are only ever what the traveller
+   * said; absent means unknown, never "unpaid" or "refundable". `source`
+   * records how the fact arrived; `replaces` names the suggestion it displaced.
+   */
+  bookingItemId: z.string().min(1).optional(),
+  paid: z.enum(['paid', 'deposit', 'unpaid']).optional(),
+  refundable: z.enum(['refundable', 'non_refundable', 'unknown']).optional(),
+  source: z.enum(['typed', 'marked', 'imported']).optional(),
+  replaces: z.string().max(160).optional(),
   createdAt: z.string().datetime(),
 });
 export type BookedPlanItem = z.infer<typeof bookedPlanItemSchema>;

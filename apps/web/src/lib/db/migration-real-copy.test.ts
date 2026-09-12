@@ -69,7 +69,13 @@ describe.skipIf(!enabled)('migrating a copy of the real database', () => {
       const keys = db.prepare(`PRAGMA foreign_key_list(${table})`).all() as { table: string; on_delete: string }[];
       expect(keys.some((k) => k.table === 'trips' && k.on_delete === 'CASCADE'), table).toBe(true);
     }
-    expect(db.pragma('user_version', { simple: true })).toBeGreaterThanOrEqual(6);
+    /* V9 — the execution tables exist and cascade; an empty count is a real answer on a database that has never executed a trip. */
+    for (const table of ['trip_decisions', 'booking_resolutions', 'booking_imports', 'calendar_feeds', 'trip_fact_observations', 'trip_fact_checks']) {
+      expect(count(db, table), table).toBeGreaterThanOrEqual(0);
+      const keys = db.prepare(`PRAGMA foreign_key_list(${table})`).all() as { table: string; on_delete: string }[];
+      expect(keys.some((k) => k.table === 'trips' && k.on_delete === 'CASCADE'), table).toBe(true);
+    }
+    expect(db.pragma('user_version', { simple: true })).toBeGreaterThanOrEqual(9);
     expect(db.pragma('integrity_check', { simple: true })).toBe('ok');
     /* Every existing trip still reads through the repository, and none has an owner account yet. */
     const { getTrip } = await import('./repository');

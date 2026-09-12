@@ -56,12 +56,22 @@ import { clock, firstSentence, humanDate, span, travelSpan } from './hub/plan-fo
 import type { MapWorkspaceSheet } from './hub/MapWorkspace';
 import { DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, type DayFocusModel } from './hub/DayFocus';
 import { TripConfidence, CONFIDENCE_WORD as VERIFICATION_CHIP_WORD } from './hub/TripConfidence';
-import { dayPartFor, FEASIBILITY_VERDICT_COPY, type AnchorKind } from '@sidequest/core';
+import { BookView } from './hub/BookView';
+import { FreshnessBanner } from './hub/FreshnessBanner';
+import { SplitPlanCard } from './hub/SplitPlanCard';
+import { NextActionCard } from './hub/NextActionCard';
+import { DecisionCard } from './hub/DecisionCard';
+import { PreflightView } from './hub/PreflightView';
+import { StateBadge } from './hub/StateBadge';
+import { FEASIBILITY_WORDS, humanize } from './hub/HumanWords';
+import { PrintAppendix } from './PrintAppendix';
+import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
+import type { BookingImport } from '@/lib/db/execution-repository';
+import { dayPartFor, dayState, FEASIBILITY_VERDICT_COPY, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
 import { MapWorkspace } from './hub/MapWorkspace';
 import { PlanSubnav } from './hub/PlanSubnav';
-import { PrepareTop, type PrepareTopItem } from './hub/PrepareTop';
 import { PlaceSheetProvider, PlaceSheetTrigger, type PlaceSheetDetail, type PlaceSheetNote } from './hub/PlaceSheet';
 import { SignatureExperiences, type SignatureExperience } from './hub/SignatureExperiences';
 import { BackupsSection, BeforeYouGoSection, BookFirstSection, BookingProgressLine, BudgetSection, CritiquePanel, FoodSection, HubUrgent, PackSection, StaysSection, TodaySection, TransportSection, VerifySection } from './hub/TripHub';
@@ -228,7 +238,49 @@ export function ItineraryView({
   readinessProfile = null,
   printAppendix = false,
   initialView = 'overview',
+  graph = null,
+  nextActions = null,
+  preflight = null,
+  decisions = [],
+  ledger = null,
+  resolutions = [],
+  observations = [],
+  volatile = [],
+  changedHeadline = null,
+  affected = null,
+  pendingImports = [],
+  lastCheckedAt = null,
+  savedToAccount = false,
+  partyDifferences = false,
 }: {
+  /**
+   * V9 — THE EXECUTION LAYER, DERIVED ONCE IN THE VIEW MODEL.
+   *
+   * The state graph, the next actions, Preflight, the decisions, the ledger
+   * and the freshness list all read the same applied itinerary and the same
+   * intelligence snapshot. Every one is optional here so a plan rendered
+   * without them (a test, a legacy caller) is the plan it always was.
+   */
+  graph?: TripStateGraph | null;
+  nextActions?: NextActions | null;
+  preflight?: Preflight | null;
+  decisions?: readonly TripDecision[];
+  ledger?: TripLedger | null;
+  resolutions?: readonly BookingResolution[];
+  observations?: readonly FactObservation[];
+  volatile?: readonly VolatileFact[];
+  changedHeadline?: string | null;
+  lifecycle?: TripLifecycle;
+  daysUntilTrip?: number;
+  affected?: BookedAffectedScope | null;
+  /** Never on the shared copy: the share page passes none. */
+  pendingImports?: readonly BookingImport[];
+  /** When the last recheck ran, for the freshness banner. */
+  lastCheckedAt?: string | null;
+  /** The trip is on an account, so the band can say it is kept. Passed by the owner page only. */
+  savedToAccount?: boolean;
+  /** V9 §17 — the party has a recorded difference, so a split may be suggested. */
+  partyDifferences?: boolean;
   itinerary: Itinerary;
   /** PRODUCTION UI V1 — `?appendix=1`: the evidence appendix prints with the packet. */
   printAppendix?: boolean;
@@ -437,16 +489,22 @@ export function ItineraryView({
       };
     });
   const bookSoon = intelligence ? intelligence.bookings.items.filter((b) => b.priority === 'book_first' && b.status === 'open' && !b.memberIds) : [];
-  /* The three things that matter on Prepare. */
-  const prepareTop: PrepareTopItem[] = [];
-  if (intelligence) {
-    for (const line of intelligence.unresolvedCriticals.slice(0, 2)) prepareTop.push({ id: `critical-${line}`, title: line, href: '#before-you-go', tone: 'decide' });
-    for (const b of bookSoon) prepareTop.push({ id: b.id, title: b.title, ...(b.date ? { detail: `Book by ${b.date}` } : {}), href: '#book-first', tone: 'book' });
-    for (const entry of intelligence.readiness.entries.filter((e) => e.tier !== 'more' && (e.state === 'needs_input' || e.state === 'problem'))) {
-      prepareTop.push({ id: `readiness-${entry.kind}`, title: entry.title, detail: firstSentence(entry.summary), href: '#before-you-go', tone: entry.state === 'problem' ? 'decide' : 'check' });
-    }
-  }
-  const prepareTopItems = prepareTop.slice(0, 3);
+  /*
+   * V9 §9 — WHAT CHANGED SINCE THE PLAN IS THE OWNER'S TO ACT ON.
+   *
+   * A reader with a link gets the plan and where each day stands, never the
+   * observations a recheck wrote (they lead to proposals through Ask, which
+   * the shared copy does not have). The share page strips the observation
+   * rows at its door; the graph and the actions built from them are filtered
+   * here so no sentence from a recheck reaches the shared document either.
+   */
+  const visibleGraph = graph && !tripId ? { ...graph, nodes: graph.nodes.filter((node) => !node.id.startsWith('changed:')) } : graph;
+  const visibleActions = nextActions && !tripId ? { ...nextActions, actions: nextActions.actions.filter((action) => !action.nodeId.startsWith('changed:')) } : nextActions;
+  /* V9 — the Book badge counts every required need still open; Prepare's counts what Preflight says needs attention. */
+  const openRequired = intelligence ? intelligence.bookings.items.filter((b) => b.status === 'open' && !b.memberIds && (b.necessity === 'required' || b.necessity === 'strongly_recommended')).length : 0;
+  const attentionCount = preflight ? preflight.attention.length : openBookFirst;
+  /* V9 §17 — a split day as a structure; the booked things on that date name what needs assigning. */
+  const bookedOn = (date: string) => booked.filter((b) => b.status === 'booked' && (b.date === date || (b.type === 'lodging' && b.date && b.endDate && b.date <= date && date <= b.endDate))).map((b) => b.title);
 
   const days = (
     <PlaceSheetProvider>
@@ -483,6 +541,8 @@ export function ItineraryView({
                     dayCount={itinerary.days.length}
                     anchorRoles={anchorRoles}
                     plannedOff={plannedOffByDayNumber[day.dayNumber] ?? []}
+                    stateBadge={visibleGraph ? <StateBadge dayNumber={day.dayNumber} {...dayState(visibleGraph, day.dayNumber)} /> : null}
+                    split={day.split ? <SplitPlanCard plan={splitPlanFor(day, { bookingsOnDay: bookedOn(day.date) })!} {...(tripId ? { tripId } : {})} {...(partyDifferences ? { canSuggest: true } : {})} /> : null}
                   />
                 </DayFocusTarget>
               </li>
@@ -554,11 +614,27 @@ export function ItineraryView({
    * Nothing here is new information — it is the same facts the audit found in
    * a text wall beside forty per cent of empty paper.
    */
+  const routeDecision = decisions.find((d) => d.key === 'route') ?? null;
+  const transportDecision = decisions.find((d) => d.key === 'transport') ?? null;
+  const timingDecision = decisions.find((d) => d.key === 'timing') ?? null;
   const overview = (
     <div data-testid="hub-overview">
-      {intelligence ? <HubUrgent intel={intelligence} /> : null}
-      {today?.active ? <TodaySection today={today} minuteLabel={(minute) => formatMinuteOfDay(minute)} /> : null}
       <div id="overview" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
+      {/*
+        V9 §2 — THE NEXT BEST ACTION LEADS THE TRIP.
+        One to three things, ranked deterministically, before the argument for
+        the trip. Then what changed since the plan was written (the freshness
+        banner, owner only — it may call the recheck action once). Then the
+        thesis, the route and the bases.
+      */}
+      {visibleActions ? (
+        <div className="mt-6" id="next-action">
+          <NextActionCard nextActions={visibleActions} moreHref={visibleActions.phase === 'book' ? '#book' : '#prepare'} />
+        </div>
+      ) : null}
+      {tripId ? <FreshnessBanner tripId={tripId} observations={observations} volatile={volatile} lastCheckedAt={lastCheckedAt} headline={changedHeadline} now={renderedAt} /> : null}
+      {intelligence ? <HubUrgent intel={intelligence} /> : null}
+      {today?.active ? <TodaySection today={today} minuteLabel={(minute) => formatMinuteOfDay(minute)} {...(tripId ? { tripId } : {})} /> : null}
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(20rem,5fr)] lg:gap-10">
         <div className="min-w-0">
           <section aria-labelledby="trip-thesis" data-testid="trip-thesis">
@@ -597,6 +673,27 @@ export function ItineraryView({
               ) : null}
             </section>
           ) : null}
+          {/*
+            V9 §3 — THE DECISIONS THE DAYS HANG OFF, AS RECORDS.
+            The route, how the trip moves and when it happens: each says what
+            was chosen and, behind "Why this?", why, the facts that drove it,
+            the tradeoffs as figures and what else was on the table. The chips
+            are controlled alternatives through Ask Sidequest — owner only,
+            because the shared copy has no Ask.
+          */}
+          {routeDecision || transportDecision || timingDecision ? (
+            <section className="mt-10" aria-labelledby="decisions-heading" id="decisions" data-testid="decisions">
+              <p className="eyebrow">Why it is shaped this way</p>
+              <h2 id="decisions-heading" className="mt-1 type-section text-ink">
+                The decisions behind the days
+              </h2>
+              <div className="mt-4 grid gap-3">
+                {routeDecision ? <DecisionCard decision={routeDecision} askable={Boolean(tripId)} /> : null}
+                {transportDecision ? <DecisionCard decision={transportDecision} askable={Boolean(tripId)} /> : null}
+                {timingDecision ? <DecisionCard decision={timingDecision} askable={false} /> : null}
+              </div>
+            </section>
+          ) : null}
         </div>
         <div className="min-w-0 space-y-4">
           {overviewModel.markers.length > 0 ? <TripSnapshot itinerary={itinerary} coordinates={coordinates} rationale={rationale} tiles={tiles} /> : null}
@@ -609,7 +706,7 @@ export function ItineraryView({
             <div data-testid="overview-book-first">
               <BookingProgressLine intel={intelligence} />
               {bookSoon.length > 0 ? (
-                <a href="#prepare" className="mt-2 inline-block type-small text-accent-strong underline underline-offset-4">
+                <a href="#book" className="mt-2 inline-block type-small text-accent-strong underline underline-offset-4">
                   Everything to arrange
                 </a>
               ) : null}
@@ -705,9 +802,45 @@ export function ItineraryView({
             </section>
           ),
           budget: intelligence ? <BudgetSection intel={intelligence} /> : <p className="mt-6 type-small text-ink-muted">No budget was estimated for this plan.</p>,
-          bookings: intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} view="bookings" /> : <p className="mt-6 type-small text-ink-muted">Nothing to book was identified for this plan.</p>,
+          bookings: intelligence ? (
+            <div>
+              {/* V9 — arranging the trip lives on Book; this panel keeps the by-kind reading and points there. */}
+              <p className="mt-6 type-small text-ink-muted">
+                Everything to arrange, with what is booked and what it cost, is on{' '}
+                <a href="#book" className="text-accent-strong underline underline-offset-4" data-testid="plan-bookings-to-book">
+                  Book
+                </a>
+                .
+              </p>
+              <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} view="bookings" />
+            </div>
+          ) : (
+            <p className="mt-6 type-small text-ink-muted">Nothing to book was identified for this plan.</p>
+          ),
         }}
       />
+    </div>
+  );
+
+  /*
+   * V9 §5/§6/§16 — BOOK: the needs with their actions, what is booked, the
+   * import centre and the ledger. One view, owned by the bookings work; the
+   * shared copy gets it without a trip id and therefore without a control, a
+   * reference or an import.
+   */
+  const book = (
+    <div className="mx-auto max-w-5xl pt-2">
+      {intelligence && ledger && affected ? (
+        <BookView {...(tripId ? { tripId } : {})} intel={intelligence} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={tripId ? pendingImports : []} />
+      ) : intelligence ? (
+        <section className="pt-6" data-testid="hub-book">
+          <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} view="book-first" />
+        </section>
+      ) : (
+        <section className="pt-6" data-testid="hub-book">
+          <p className="type-body text-ink-muted">Nothing to book was identified for this plan.</p>
+        </section>
+      )}
     </div>
   );
 
@@ -715,7 +848,16 @@ export function ItineraryView({
   const localSetup = intelligence?.readiness.entries.filter((entry) => entry.kind === 'local_setup') ?? [];
   const prepare = (
     <div className="mx-auto max-w-5xl pt-6">
-      <PrepareTop items={prepareTopItems} />
+      {/* V9 §7 — Preflight leads: the verdict, how far away, and ready / needs attention / can wait. */}
+      {preflight ? (
+        <div id="preflight" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]">
+          <PreflightView preflight={preflight} {...(tripId ? { tripId } : {})} />
+        </div>
+      ) : (
+        <div className="card border-pine/40 bg-pine-soft/50 p-5" data-testid="prepare-top">
+          <p className="type-body text-ink">Nothing on this trip needs arranging right now. The sections below are here when you want them.</p>
+        </div>
+      )}
       {localSetup.length > 0 ? (
         <section className="card mt-8 p-5" aria-labelledby="local-setup-heading" data-testid="local-setup">
           <p className="eyebrow">Apps and set-up</p>
@@ -744,7 +886,7 @@ export function ItineraryView({
           </ol>
         </section>
       ) : null}
-      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} view="book-first" /> : null}
+      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} view="book-first" /> : null}
       {intelligence ? <BeforeYouGoSection intel={intelligence} {...(tripId ? { tripId } : {})} readinessProfile={readinessProfile} checks={checks.checklist} /> : null}
       {intelligence ? <PackSection intel={intelligence} {...(tripId ? { tripId } : {})} checks={checks.packing} /> : null}
       <section className="mt-14" aria-labelledby="backups" data-testid="hub-backups-section">
@@ -849,6 +991,8 @@ export function ItineraryView({
           </footer>
         ) : null}
       </details>
+      {/* V9 §14 — the paper packet's last pages: addresses, map links as text, booking status, never a reference. Print only. */}
+      <PrintAppendix itinerary={itinerary} booked={booked} intelligence={intelligence ?? null} coordinates={coordinates} resolutions={tripId ? resolutions : []} {...(tripId ? { tripId } : {})} />
     </div>
   );
 
@@ -872,6 +1016,9 @@ export function ItineraryView({
       {tripId ? null : <>Shared with you · </>}
       {dateLabel} · {itinerary.days.length} days · {stopCount} stops
       {multiBase ? <> · {itinerary.package!.bases.length} bases</> : null}
+      {tripId && savedToAccount ? (
+        <span data-testid="saved-to-account"> · Saved to your Sidequest account</span>
+      ) : null}
     </>
   );
   /*
@@ -899,7 +1046,7 @@ export function ItineraryView({
           : 'neutral';
   const attentionItems = (feasibility?.items ?? [])
     .slice(0, 2)
-    .map((entry) => (entry.dayNumber ? `Day ${entry.dayNumber} — ${entry.detail}` : entry.detail))
+    .map((entry) => (entry.dayNumber ? `Day ${entry.dayNumber} — ${humanize(entry.detail)}` : humanize(entry.detail)))
     .map((line) => line.charAt(0).toUpperCase() + line.slice(1));
 
   /*
@@ -946,9 +1093,17 @@ export function ItineraryView({
         status={{ label: verdict?.label ?? status.label, tone: statusTone }}
         actions={
           <>
+            {tripId && today?.active ? (
+              <Link href={`/trips/${tripId}/today`} className={atlasButtonClass('primary')} data-testid="open-today">
+                Today
+              </Link>
+            ) : null}
             <PrintButton />
             {tripId ? (
               <>
+                <Link href={`/trips/${tripId}/pack`} className={atlasButtonClass()} data-testid="open-pack">
+                  Take it with you
+                </Link>
                 <a href={`/trips/${tripId}/itinerary/calendar`} download className={cx(atlasButtonClass(), 'max-sm:hidden')}>
                   Calendar file (.ics)
                 </a>
@@ -966,6 +1121,9 @@ export function ItineraryView({
                 <details className="relative">
                   <summary className={cx(atlasButtonClass(), 'list-none cursor-pointer [&::-webkit-details-marker]:hidden')}>More</summary>
                   <div className="absolute right-0 z-10 mt-1 flex min-w-60 flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] sm:left-0 sm:right-auto">
+                    <Link href={`/trips/${tripId}/pack`} className={cx(buttonClass('ghost', 'sm'), 'sm:hidden')}>
+                      Take it with you
+                    </Link>
                     <a href={`/trips/${tripId}/itinerary/calendar`} download className={cx(buttonClass('ghost', 'sm'), 'sm:hidden')}>
                       Calendar file (.ics)
                     </a>
@@ -991,8 +1149,8 @@ export function ItineraryView({
       <PrintExpand />
 
       <HubShell
-        views={{ overview, days, map: mapView, plan, prepare }}
-        badges={{ days: itinerary.days.length, ...(openBookFirst > 0 ? { prepare: openBookFirst } : {}) }}
+        views={{ overview, days, map: mapView, plan, book, prepare }}
+        badges={{ days: itinerary.days.length, ...(openRequired > 0 ? { book: openRequired } : {}), ...(attentionCount > 0 ? { prepare: attentionCount } : {}) }}
         printAppendix={printAppendix}
         initialView={initialView}
         askSlot={Boolean(tripId)}
@@ -1754,8 +1912,14 @@ function DayCard({
   anchorRoles = {},
   anchorKinds = {},
   plannedOff = [],
+  stateBadge = null,
+  split = null,
 }: {
   day: ItineraryDay;
+  /** V9 §1 — where the day stands, read off the state graph. Null without a graph. */
+  stateBadge?: React.ReactNode;
+  /** V9 §17 — the day's split as a structure, when the day carries one. */
+  split?: React.ReactNode;
   /** V7 §9 — the cruise, trek or safari this day sits inside, if any. */
   episode?: { name: string; kind: string; dayNumbers: number[]; mode: string } | null;
   renderedAt: number;
@@ -2030,6 +2194,7 @@ function DayCard({
               text underneath.
             */}
             <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid={`day-facts-${day.dayNumber}`}>
+              {stateBadge}
               <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity}</Badge>
               {meaningfulStops > 0 ? <Badge tone="neutral">{meaningfulStops} {meaningfulStops === 1 ? 'stop' : 'stops'}</Badge> : null}
               {/*
@@ -2098,6 +2263,7 @@ function DayCard({
             </figure>
           ) : null}
         </div>
+        {split ? <div className="px-5 pb-5 sm:px-6">{split}</div> : null}
 
         <div className="border-t border-rule bg-paper-sunk/50 px-5 py-3 sm:px-6">
           <DayHours day={day} />
@@ -3027,11 +3193,7 @@ function TimelineRow({
  * Never a count. A plan with nothing outstanding renders nothing, which is the
  * honest empty state and not an achievement worth a badge.
  */
-const SEVERITY_WORD: Record<'blocker' | 'dependency' | 'caution', { word: string; tone: BadgeTone }> = {
-  blocker: { word: 'Settle', tone: 'clay' },
-  dependency: { word: 'Decide', tone: 'amber' },
-  caution: { word: 'Read', tone: 'neutral' },
-};
+const SEVERITY_WORD: Record<'blocker' | 'dependency' | 'caution', { word: string; tone: BadgeTone }> = FEASIBILITY_WORDS;
 
 function CriticalChecks({ feasibility, manifest }: { feasibility: NonNullable<TripPackage['feasibility']> | undefined; manifest: RecheckManifest | null }) {
   const items = feasibility?.items ?? [];
@@ -3050,7 +3212,7 @@ function CriticalChecks({ feasibility, manifest }: { feasibility: NonNullable<Tr
               <Badge tone={SEVERITY_WORD[item.severity].tone}>{SEVERITY_WORD[item.severity].word}</Badge>
               <span className="min-w-0 flex-1 type-small text-ink">
                 {item.dayNumber ? <span className="text-ink-faint">Day {item.dayNumber} · </span> : null}
-                {item.detail}
+                {humanize(item.detail)}
               </span>
             </li>
           ))}
@@ -3108,7 +3270,7 @@ function KeepFlexible({ itinerary }: { itinerary: Itinerary }) {
     <section className="mt-14 border-t border-rule pt-8" data-print="appendix">
       <h2 className="display-md text-ink">Keep these flexible</h2>
       <p className="mt-1 text-sm text-ink-muted">
-        Each of these carries something the plan cannot promise — weather, unverified details, or
+        Each of these carries something the plan cannot promise — weather, details still to confirm, or
         a booking still in your hands. Hold them loosely and the trip bends instead of breaking.
       </p>
       <ul className="mt-4 space-y-2">
@@ -3213,9 +3375,9 @@ function BeforeYouGo({ items, fromPlan = [] }: { items: readonly PreparationItem
  * ------------------------------------------------------------------ */
 
 const VERIFICATION_WORD: Record<VerificationState, string> = {
-  verified: 'verified',
+  verified: 'confirmed from source',
   partially_verified: 'place confirmed',
-  unverified: 'not yet verified',
+  unverified: 'check before relying',
 };
 
 /** Bases and nights, in order — the shape of the trip, before the days. */
@@ -3368,9 +3530,9 @@ export function compactWarnings(warnings: readonly string[]): { badges: { label:
   for (const warning of warnings) {
     const unverified = /^(\d+) stops? on this day (?:has|have) not been fully verified/.exec(warning);
     const unmeasured = /^(\d+) travel legs? on this day (?:is|are) unmeasured/.exec(warning);
-    if (unverified) badges.push({ label: `${unverified[1]} not yet verified`, title: warning });
-    else if (unmeasured) badges.push({ label: `${unmeasured[1]} ${unmeasured[1] === '1' ? 'leg' : 'legs'} unmeasured`, title: warning });
-    else sentences.push(warning);
+    if (unverified) badges.push({ label: `${unverified[1]} to check before relying`, title: humanize(warning) });
+    else if (unmeasured) badges.push({ label: `${unmeasured[1]} ${unmeasured[1] === '1' ? 'leg' : 'legs'} not yet timed`, title: humanize(warning) });
+    else sentences.push(humanize(warning));
   }
   return { badges, sentences };
 }

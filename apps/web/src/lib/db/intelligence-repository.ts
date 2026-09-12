@@ -121,12 +121,13 @@ export function clearReadinessProfile(tripId: string): void {
 // Checks (packing, before-you-go)
 // ---------------------------------------------------------------------------
 
-export type CheckList = 'packing' | 'checklist';
+/** V9 §7 — `preflight` holds the ticks Preflight owns (the offline copy saved, documents checked). */
+export type CheckList = 'packing' | 'checklist' | 'preflight';
 
 export function listChecks(tripId: string): Record<CheckList, string[]> {
   ensureTables();
   const rows = getDb().prepare('SELECT list, item_id FROM trip_checks WHERE trip_id = ?').all(tripId) as { list: CheckList; item_id: string }[];
-  const out: Record<CheckList, string[]> = { packing: [], checklist: [] };
+  const out: Record<CheckList, string[]> = { packing: [], checklist: [], preflight: [] };
   for (const row of rows) (out[row.list] ?? (out[row.list] = [])).push(row.item_id);
   return out;
 }

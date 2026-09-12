@@ -53,7 +53,7 @@ function params(id: string) {
 }
 
 describe('the calendar export', () => {
-  it('emits a standard VCALENDAR with the scheduled days as floating local events', async () => {
+  it('emits a standard VCALENDAR with TZID local times, a VTIMEZONE, SEQUENCE and STATUS on every event', async () => {
     const result = planTrip(buildScenario());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -62,6 +62,7 @@ describe('the calendar export', () => {
     const response = await GET(new Request('http://localhost/x'), params(TRIP));
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('text/calendar');
+    expect(response.headers.get('Content-Disposition')).toContain('.ics');
 
     const body = await response.text();
     expect(body.startsWith('BEGIN:VCALENDAR')).toBe(true);
@@ -76,15 +77,19 @@ describe('the calendar export', () => {
     expect(events.length).toBeGreaterThanOrEqual(activities);
 
     /*
-     * Floating local times: a date-time with no Z and no TZID, which renders
-     * at the traveller's wall clock at the destination. A UTC-anchored stamp
-     * here would shift every event by the viewer's offset.
+     * V9 §10 — every local time names its zone, and the zone is defined in the
+     * file. A floating time renders at the viewer's wall clock; a TZID time
+     * renders at the destination's, which is what a calendar opened at home
+     * before departure needs to say.
      */
-    const starts = body.match(/DTSTART:(\S+)/g) ?? [];
+    const starts = body.match(/DTSTART;TZID=([^:]+):(\S+)/g) ?? [];
     expect(starts.length).toBe(events.length);
-    for (const start of starts) {
-      expect(start).toMatch(/^DTSTART:\d{8}T\d{6}$/);
-    }
+    for (const start of starts) expect(start).toMatch(/^DTSTART;TZID=[A-Za-z_+\-/0-9]+:\d{8}T\d{6}$/);
+    expect(body).toContain('BEGIN:VTIMEZONE');
+    expect(body.match(/^SEQUENCE:0$/gm)?.length).toBe(events.length);
+    expect(body.match(/^STATUS:TENTATIVE$/gm)?.length).toBe(events.length);
+    /* The snapshot is a file, not a subscription: no refresh hint. */
+    expect(body).not.toContain('REFRESH-INTERVAL');
 
     /* Attribution survives the export (§17). */
     expect(body).toContain('OpenStreetMap');

@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cx } from '../ui';
 
 /**
- * PRODUCTION UI V1 — THE TRIP HUB'S FIVE PLACES TO LOOK.
+ * PRODUCTION UI V1 — THE TRIP HUB'S PLACES TO LOOK.
  *
- *   Overview · Days · Map · Plan · Prepare
+ *   Trip · Days · Map · Plan · Book · Prepare
+ *
+ * V9 — Book is its own view: the needs with their actions, what is booked,
+ * the import centre and the ledger. The bottom bar on a phone holds Days ·
+ * Book · Prepare · Map. Every earlier id keeps its testid.
  *
  * One eight-thousand-pixel page became five views under one segmented nav.
  * Every view is server-rendered and present in the document (so a print, a
@@ -24,13 +28,21 @@ import { cx } from '../ui';
  * the chrome rather than floating over the plan.
  */
 export const HUB_VIEWS = [
-  { id: 'overview', label: 'Overview', short: 'Trip' },
+  { id: 'overview', label: 'Trip', short: 'Trip' },
   { id: 'days', label: 'Days', short: 'Days' },
   { id: 'map', label: 'Map', short: 'Map' },
   { id: 'plan', label: 'Plan', short: 'Plan' },
+  { id: 'book', label: 'Book', short: 'Book' },
   { id: 'prepare', label: 'Prepare', short: 'Prepare' },
 ] as const;
 export type HubViewId = (typeof HUB_VIEWS)[number]['id'];
+
+/**
+ * V9 — the phone bar holds the four things a traveller does with a plan on
+ * the move, in the order they do them: Days · Book · Prepare · Map. Trip is
+ * the band's own title link, Plan is reached from the others.
+ */
+export const HUB_BOTTOM_VIEWS: readonly HubViewId[] = ['days', 'book', 'prepare', 'map'];
 
 /** Legacy anchors (`#book-first`, `#day-3`, `#verify`) still land on the view that holds them. */
 const LEGACY_ANCHORS: Record<string, HubViewId> = {
@@ -39,8 +51,15 @@ const LEGACY_ANCHORS: Record<string, HubViewId> = {
   'getting-around': 'plan',
   food: 'plan',
   budget: 'plan',
-  bookings: 'plan',
-  'book-first': 'prepare',
+  /* V9 — everything about arranging the trip lives on Book. */
+  bookings: 'book',
+  'book-first': 'book',
+  booked: 'book',
+  import: 'book',
+  ledger: 'book',
+  'next-action': 'overview',
+  decisions: 'overview',
+  preflight: 'prepare',
   'before-you-go': 'prepare',
   pack: 'prepare',
   backups: 'prepare',
@@ -66,7 +85,7 @@ export function HubShell({
   askSlot = false,
 }: {
   views: Record<HubViewId, ReactNode>;
-  /** Small counts beside a label — open Book-first items on Prepare, days on Days. */
+  /** Small counts beside a label — open required needs on Book, attention items on Prepare, days on Days. */
   badges?: Partial<Record<HubViewId, number>>;
   /** `?appendix=1`: the evidence appendix prints too. */
   printAppendix?: boolean;
@@ -97,6 +116,23 @@ export function HubShell({
     window.addEventListener('popstate', apply);
     return () => window.removeEventListener('popstate', apply);
   }, [printAppendix]);
+
+  /*
+   * V9 §11 — `?print=1` FROM THE TRIP PACK OPENS THE PRINT DIALOG.
+   *
+   * The Pack's "PDF" is the browser's own print of this page. Once, after
+   * hydration, and after `PrintExpand` has had a frame to open the packet's
+   * disclosures on `beforeprint`. Never on a re-render, never on the shared
+   * copy's own address (the Pack is owner-only, and so is the link).
+   */
+  const printedRef = useRef(false);
+  useEffect(() => {
+    if (printedRef.current) return;
+    if (new URLSearchParams(window.location.search).get('print') !== '1') return;
+    printedRef.current = true;
+    const handle = window.setTimeout(() => window.print(), 350);
+    return () => window.clearTimeout(handle);
+  }, []);
 
   useEffect(() => {
     const apply = () => {
@@ -181,16 +217,16 @@ export function HubShell({
       ))}
 
       {/*
-        Phones: four views in a bottom bar, one hand. Overview is not a tab down
-        here — it is the trip's own header, reached from the band's title
-        (`hub-overview-link`) — so the bar holds the four things a traveller
-        does with a plan on the move, plus Ask Sidequest as a fifth cell when
-        the page has it.
+        Phones: four views in a bottom bar, one hand (`HUB_BOTTOM_VIEWS`).
+        Overview is not a tab down here — it is the trip's own header, reached
+        from the band's title (`hub-overview-link`) — and Plan is reached from
+        the others; the bar holds Days · Book · Prepare · Map, plus Ask
+        Sidequest as a fifth cell when the page has it.
       */}
       <nav aria-label="Trip hub" className="fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-paper/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_-16px_rgb(23_24_26/0.35)] backdrop-blur-sm print:hidden sm:hidden" data-testid="trip-hub-bottom-nav">
         <div className={cx('grid', askSlot ? 'grid-cols-5' : 'grid-cols-4')}>
           <div className="col-span-4 grid grid-cols-4" role="tablist" aria-label="Trip hub views">
-            {HUB_VIEWS.filter((entry) => entry.id !== 'overview').map((entry) => {
+            {HUB_BOTTOM_VIEWS.map((id) => HUB_VIEWS.find((entry) => entry.id === id)!).map((entry) => {
               const active = entry.id === view;
               const badge = badges[entry.id];
               return (
