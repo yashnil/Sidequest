@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { waitUntilInteractive, completeQuestionnaire, createTrip } from './support/trip';
-import { openHubView } from './support/hub';
+import { bandAction, openHubView } from './support/hub';
 
 /**
  * THE SHARE LINK, END TO END: MINTED BY THE OWNER, READ BY A STRANGER.
@@ -46,7 +46,8 @@ test('a share link opens the plan, read-only, for a browser that never saw the t
 
   // The owner mints the link. The control is a client leaf, so wait for the
   // app to own it before pressing — see `waitUntilInteractive`.
-  const share = page.getByRole('button', { name: 'Share this plan' });
+  /* V11 §9 — Share sits under the band's More now; `bandAction` reaches it either way. */
+  const share = await bandAction(page, 'Share this plan');
   await waitUntilInteractive(share);
   await share.click();
   const linkField = page.getByLabel('Share link');
@@ -58,7 +59,7 @@ test('a share link opens the plan, read-only, for a browser that never saw the t
 
   // A second press next week hands back the same link, not a replacement.
   await page.reload();
-  const shareAgain = page.getByRole('button', { name: 'Share this plan' });
+  const shareAgain = await bandAction(page, 'Share this plan');
   await waitUntilInteractive(shareAgain);
   await shareAgain.click();
   await expect(page.getByLabel('Share link')).toHaveValue(url);

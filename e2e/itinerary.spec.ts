@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip } from './support/trip';
-import { openHubView } from './support/hub';
+import { bandAction, openHubView, useBandAction } from './support/hub';
 
 /**
  * The slice this proves: a traveller confirms a board, presses Build my trip, and
@@ -127,9 +127,14 @@ test('changing the board and rebuilding produces a different trip', async ({ pag
   const scheduled = await page.getByRole('heading', { level: 3 }).allTextContents();
   expect(scheduled.length).toBeGreaterThan(0);
 
-  // EXPERIENCE V2 — on a phone the band keeps three controls; the board link sits under More.
-  if ((page.viewportSize()?.width ?? 1440) < 640) await page.getByText('More', { exact: true }).first().click();
-  await page.getByRole('link', { name: 'Back to the board' }).first().click();
+  /*
+   * EXPERIENCE V2 said the board link sat under More on a phone only. V11 §9 —
+   * it is under More at every width now, because the band keeps one primary
+   * action and everything else moved into the disclosure that already existed.
+   * `useBandAction` already knows how to reach a control either way, which is
+   * why it exists; hand-rolling the width check here was the bug.
+   */
+  await useBandAction(page, 'Back to the board');
   await expect(page).toHaveURL(/\/discover$/);
 
   // Skip everything currently included, then include one specific place.
@@ -236,8 +241,8 @@ test('the itinerary is reachable and readable by keyboard', async ({ page }, tes
   await page.keyboard.press('Enter');
 
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
-  if ((page.viewportSize()?.width ?? 1440) < 640) await page.getByText('More', { exact: true }).first().click();
-  const back = page.getByRole('link', { name: 'Back to the board' }).first();
+  /* V11 §9 — under More at every width now; see the note on the rebuild test. */
+  const back = await bandAction(page, 'Back to the board');
   await back.focus();
   await expect(back).toBeFocused();
 });

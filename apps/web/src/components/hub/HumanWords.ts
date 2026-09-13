@@ -92,6 +92,26 @@ export function humanize(text: string): string {
   return out;
 }
 
+/**
+ * V11 §8 — WHICH VERIFICATION STATES ARE WORTH A CHIP ON THE ROW.
+ *
+ * The four assurance tiers say plainly which two of them ask nothing of the
+ * traveller: `confirmed` is "Sidequest checked this against a source" and
+ * `planned` is "A good working plan. Nothing here needs your attention." A chip
+ * on either is a badge on the normal case -- on a healthy plan almost every stop
+ * carried "Confirmed" -- and a label that appears on everything conveys nothing
+ * while costing a line on every row. This is the rule already settled for a
+ * measured travel leg, applied to the stop it sits above.
+ *
+ * `check` and `unresolved` stay, because they are the two that mean something is
+ * outstanding. The quiet states are not hidden: the place sheet states the tier
+ * in full with its blurb, and the confidence panel counts all three.
+ */
+export function verificationNeedsChip(state: VerificationState): boolean {
+  const tier = assuranceForVerification(state);
+  return tier === 'check' || tier === 'unresolved';
+}
+
 /** "Confirmed from source" for a state a surface has only as a string. */
 export function verificationWord(state: string | undefined): string | null {
   if (!state) return null;

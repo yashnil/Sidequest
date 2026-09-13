@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { tilesForViewport, type MapBasemap } from './map-adapter';
 import { VectorBasemapLayer, type MapHealth } from './VectorBasemap';
 import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoint, type MapViewport } from './map-projection';
+import { labelBudget, selectLabels } from './map-camera';
 import { cx } from './ui';
 import { LEG_LINE_STYLE, legPath, legendFor } from './hub/route-styles';
 
@@ -323,6 +324,39 @@ export function InteractiveMap({
   const focused = placed.find((entry) => entry.marker.id === focusedId) ?? null;
   /* Names beside the pins when the drawing is sparse enough to read them; a basemap's own labels take over otherwise. */
   const labelAll = markers.filter((m) => m.name).length <= 14 && width >= 400;
+  /*
+   * V11 §12 §15 — WHICH LABELS ARE ACTUALLY DRAWN.
+   *
+   * `labelAll` decided *whether* to label and the flip logic decided whether a
+   * label ran off the right edge. Neither asked the question that produced the
+   * founder's Kyrgyzstan screenshot: whether two labels land on top of each
+   * other. They did — "Osh Bazaar" and "Ala-Too Square" overlapped into one
+   * unreadable smear around Bishkek, and the same thing happens on any day whose
+   * stops sit close together.
+   *
+   * `selectLabels` is the shared decision (`map-camera.ts`, unit-tested without
+   * a browser): priority by kind — a base outranks a stop — a budget that
+   * shrinks on a phone, the focused marker always keeping its label whatever it
+   * overlaps, and a colliding lower-priority label dropped rather than drawn
+   * over. Recomputed only when the positions or the focus change.
+   */
+  const labelledIds = useMemo(() => {
+    if (!labelAll) return new Set<string>();
+    const chosen = selectLabels(
+      placed
+        .filter((entry) => entry.marker.name)
+        .map((entry) => ({
+          id: entry.marker.id,
+          label: entry.marker.name,
+          /* This component's three kinds map onto the shared vocabulary; a "place" is an ordinary stop. */
+          kind: entry.marker.kind === 'base' ? ('base' as const) : entry.marker.kind === 'stop' ? ('signature' as const) : ('stop' as const),
+          x: entry.x,
+          y: entry.y,
+        })),
+      { max: labelBudget({ mode: 'day', widthPx: width }), ...(focusedId ? { selectedId: focusedId } : {}) },
+    );
+    return new Set(chosen.map((entry) => entry.id));
+  }, [placed, labelAll, width, focusedId]);
 
   const ring = useMemo(() => {
     if (!base) return null;
@@ -522,7 +556,7 @@ export function InteractiveMap({
                       {marker.order}
                     </text>
                   ) : null}
-                  {labelAll && marker.name && !isFocused
+                  {labelAll && labelledIds.has(marker.id) && marker.name && !isFocused
                     ? (() => {
                         /*
                          * MVP V3 — A LABEL THAT RUNS OFF THE MAP IS NOT A LABEL.

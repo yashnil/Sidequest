@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip, compileRegion } from './support/trip';
-import { openHubView, openPrepareNotes } from './support/hub';
+import { bandAction, openHubView, openPrepareNotes } from './support/hub';
 
 /**
  * THE CANONICAL GENERATION PATH, PRESSED FROM THE REAL BUTTONS.
@@ -42,13 +42,39 @@ async function expectCanonicalItinerary(page: Page) {
    *
    * V11 §21 — the labels are now the four-word vocabulary. A stop nothing could
    * place reads "Still checking", because it is Sidequest's own unfinished work
-   * rather than a task for the traveller; a placed one reads "Confirmed". The
-   * behaviour under test — kept and labelled, never dropped — is unchanged.
+   * rather than a task for the traveller. The behaviour under test — kept and
+   * labelled, never dropped — is unchanged.
+   *
+   * V11 §8 — a *placed* stop no longer carries a chip on the row. "Confirmed"
+   * and "Planned" ask nothing of the traveller, and on a healthy plan they
+   * appeared on nearly every stop, which is a badge on the normal case. The
+   * promise that a verified stop says so is kept where it can be read in full:
+   * the place sheet the row's name opens. So this asserts both halves — the
+   * chip is gone from the row, and the tier is still stated in the sheet.
+   *
+   * Scoped to `[data-row-kind="activity"]` on purpose: the *day* keeps its own
+   * state chip, which is one per day rather than one per stop and which does
+   * read "Confirmed" on a settled day. That chip is not the thing being removed,
+   * and an unscoped assertion here would have claimed it was.
+   *
+   * The sheet half names no stop. This helper runs for every build in this
+   * file, including one that deliberately skips a place and one that
+   * regenerates, so which stops exist is not fixed — a named stop here made two
+   * unrelated tests fail for a reason that had nothing to do with them. It
+   * opens the first stop the day map draws a number for -- which is a placed,
+   * named stop, so it is the case that carries a tier -- and asserts the sheet
+   * states one of the four words, which is the promise being relocated.
    */
   await expect(page.getByRole('heading', { name: 'A Quiet Overlook Nobody Documented', exact: true })).toBeVisible();
   const days = page.locator('#hub-view-days');
   await expect(days.getByText('Still checking').first()).toBeVisible();
-  await expect(days.getByText('Confirmed').first()).toBeVisible();
+  await expect(days.locator('[data-row-kind="activity"]').getByText('Confirmed')).toHaveCount(0);
+  const placedStop = days.locator('[data-row-kind="activity"]').filter({ has: page.getByTestId('stop-number') }).first();
+  await placedStop.getByTestId('stop-open-sheet').click();
+  /* The sheet sets the tier beside the kind ("Route · Confirmed"), so this matches within the line rather than anchoring it. */
+  await expect(page.getByTestId('place-sheet').getByText(/\b(Confirmed|Planned|Check|Still checking)\b/).first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('place-sheet')).toHaveCount(0);
   await openHubView(page, 'plan');
   await expect(page.getByTestId('where-to-stay')).toBeVisible();
   await openHubView(page, 'prepare');
@@ -123,6 +149,12 @@ test('Regenerate on the itinerary page runs the canonical path again', async ({ 
   await reachMammothBoard(page);
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expectCanonicalItinerary(page);
+  /*
+   * V11 §9 — Regenerate moved into the hero's `More` disclosure with the other
+   * five secondary actions. It is still one press away and still the same
+   * control; the band simply no longer offers seven things of equal weight.
+   */
+  await bandAction(page, 'Regenerate');
   const regenerate = page.getByTestId('regenerate-trip');
   await expect(regenerate).toBeVisible();
   await regenerate.click();
@@ -184,5 +216,6 @@ test('Explore experiences first, then the board, verifies against the compiled r
   await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await openHubView(page, 'days');
-  await expect(page.locator('#hub-view-days').getByText('Confirmed').first()).toBeVisible();
+  /* V11 §8 — the row is quiet for a placed stop; the sheet carries the tier. */
+  await expect(page.locator('#hub-view-days [data-row-kind="activity"]').getByText('Confirmed')).toHaveCount(0);
 });

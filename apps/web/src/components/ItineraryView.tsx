@@ -45,7 +45,7 @@ import type { MapConnector, MapMarker } from './InteractiveMap';
 import { dayMapModel } from './day-map-legs';
 import type { MapBasemap } from './map-adapter';
 import { plannedOffByDay } from '../lib/planning/planned-off';
-import { dayRouteLinks, mapModeFor } from '@/lib/maps';
+import {dayRouteLinks, mapModeFor} from '@/lib/maps';
 import { PrintButton } from './PrintButton';
 import { HubShell, type HubViewId } from './hub/HubShell';
 import { DayRail } from './hub/DayRail';
@@ -63,7 +63,7 @@ import { NextActionCard } from './hub/NextActionCard';
 import { DecisionCard } from './hub/DecisionCard';
 import { PreflightView } from './hub/PreflightView';
 import { StateBadge } from './hub/StateBadge';
-import { FEASIBILITY_WORDS, humanize } from './hub/HumanWords';
+import { FEASIBILITY_WORDS, humanize, verificationNeedsChip } from './hub/HumanWords';
 import { PrintAppendix } from './PrintAppendix';
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
@@ -76,7 +76,7 @@ import { PlaceSheetProvider, PlaceSheetTrigger, type PlaceSheetDetail, type Plac
 import { SignatureExperiences, type SignatureExperience } from './hub/SignatureExperiences';
 import { BackupsSection, BeforeYouGoSection, BookFirstSection, BookingProgressLine, BudgetSection, CritiquePanel, FoodSection, HubUrgent, PackSection, StaysSection, TodaySection, TransportSection, VerifySection } from './hub/TripHub';
 import { AddStopForm, FixDayButton, StopDayControls } from '@/app/(product)/trips/[id]/itinerary/live-controls';
-import { legDirectionsLinks, navModeFor, placeNavigationLinks } from '@/lib/navigation-links';
+import { placeNavigationLinks } from '@/lib/navigation-links';
 import type { BookedPlanItem, TravelIntelligence, TravelReadinessProfile } from '@sidequest/core';
 /*
  * The editing controls live beside the server actions they call, in the
@@ -202,11 +202,6 @@ export interface StopRationale {
   facets?: readonly string[];
 }
 
-const INTENSITY_TONE: Record<ItineraryDay['intensity'], BadgeTone> = {
-  light: 'blue',
-  moderate: 'pine',
-  intense: 'amber',
-};
 
 export function ItineraryView({
   itinerary,
@@ -1042,8 +1037,9 @@ export function ItineraryView({
    * "Ready" used to be a function of the stored itinerary status, which is a
    * function of how much was verified. The deterministic report asks a
    * different question of every day — can it be done — and its four words are
-   * the only ones the band may use when it has one. The first two items are the
-   * things worth reading before committing; the rest are on Prepare.
+   * the only ones the band may use when it has one. V11 §9: the band takes the
+   * verdict's sentence and nothing else -- the items it used to list are on
+   * Prepare, where they can be acted on rather than only read.
    */
   /*
    * V11 §4 §39 — the headline asks whose work is outstanding. "Needs a decision"
@@ -1064,10 +1060,16 @@ export function ItineraryView({
         : itinerary.status === 'needs_decision'
           ? 'blocked'
           : 'neutral';
-  const attentionItems = (feasibility?.items ?? [])
-    .slice(0, 2)
-    .map((entry) => (entry.dayNumber ? `Day ${entry.dayNumber} — ${humanize(entry.detail)}` : humanize(entry.detail)))
-    .map((line) => line.charAt(0).toUpperCase() + line.slice(1));
+  /*
+   * V11 §9 — THE HERO STATES THE TRIP'S CONDITION AND STOPS.
+   *
+   * The band used to list the first two feasibility items in full — a
+   * diagnostic list inside a masthead, which is §9's "do not dump every warning
+   * into the hero" and part of why the baseline measured it at 440 px on a
+   * desktop and 763 px on a 780 px phone. It now carries the verdict's own
+   * sentence and nothing else: the Prepare tab already shows the count as a
+   * badge, and the items themselves are on Prepare, where they can be acted on.
+   */
 
   /*
    * WHO IS GOING, from the one place on this page that counts the party. The
@@ -1109,59 +1111,65 @@ export function ItineraryView({
         route={multiBase ? <BaseSequence bases={baseSequence} variant="atlas" testId="hero-route" /> : undefined}
         facts={heroFacts}
         {...(bandFigure ? { figure: bandFigure } : {})}
-        {...(attentionItems.length > 0 ? { attention: { heading: verdict?.blurb ?? 'Worth reading before you commit', items: attentionItems } } : {})}
+        {...(verdict?.blurb ? { attention: { heading: verdict.blurb, items: [] } } : {})}
         status={{ label: verdict?.label ?? status.label, tone: statusTone }}
         actions={
+          /*
+           * V11 §9 — ONE ACTION IN THE HERO, AND ONE PLACE FOR THE REST.
+           *
+           * The band carried seven buttons of identical weight — Print, Take it
+           * with you, Calendar, Share, Back to the board, Regenerate, More — so
+           * it had no primary action at all, and the baseline walk measured the
+           * hero at 440 px with twenty-one actions above the fold on this page.
+           * A traveller opening a finished plan wants one thing, and which one
+           * depends on whether the trip has started: Today while they are on it,
+           * otherwise the copy they take with them.
+           *
+           * Nothing is removed. The other six move into the `More` menu that
+           * already existed for exactly this purpose — a `<details>`, so the
+           * overflow needs no client state and works before hydration.
+           */
           <>
             {tripId && today?.active ? (
               <Link href={`/trips/${tripId}/today`} className={atlasButtonClass('primary')} data-testid="open-today">
                 Today
               </Link>
+            ) : tripId ? (
+              <Link href={`/trips/${tripId}/pack`} className={atlasButtonClass('primary')} data-testid="open-pack">
+                Take it with you
+              </Link>
             ) : null}
-            <PrintButton />
             {tripId ? (
-              <>
-                <Link href={`/trips/${tripId}/pack`} className={atlasButtonClass()} data-testid="open-pack">
-                  Take it with you
-                </Link>
-                <a href={`/trips/${tripId}/itinerary/calendar`} download className={cx(atlasButtonClass(), 'max-sm:hidden')}>
-                  Calendar file (.ics)
-                </a>
-                <ShareControl tripId={tripId} />
-                {boardAvailable ? (
-                  <Link href={`/trips/${tripId}/discover`} className={cx(atlasButtonClass(), 'max-sm:hidden')}>
-                    Back to the board
-                  </Link>
-                ) : (
-                  <Link href={`/trips/${tripId}/questionnaire`} className={cx(atlasButtonClass(), 'max-sm:hidden')}>
-                    Change my answers
-                  </Link>
-                )}
-                {itinerary.package ? <RegenerateButton tripId={tripId} /> : null}
-                <details className="relative">
-                  <summary className={cx(atlasButtonClass(), 'list-none cursor-pointer [&::-webkit-details-marker]:hidden')}>More</summary>
-                  <div className="absolute right-0 z-10 mt-1 flex min-w-60 flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] sm:left-0 sm:right-auto">
-                    <Link href={`/trips/${tripId}/pack`} className={cx(buttonClass('ghost', 'sm'), 'sm:hidden')}>
+              <details className="relative">
+                <summary className={cx(atlasButtonClass(), 'list-none cursor-pointer [&::-webkit-details-marker]:hidden')}>More</summary>
+                <div className="absolute right-0 z-10 mt-1 flex min-w-60 flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] sm:left-0 sm:right-auto">
+                  {today?.active ? (
+                    <Link href={`/trips/${tripId}/pack`} className={buttonClass('ghost', 'sm')} data-testid="open-pack">
                       Take it with you
                     </Link>
-                    <a href={`/trips/${tripId}/itinerary/calendar`} download className={cx(buttonClass('ghost', 'sm'), 'sm:hidden')}>
-                      Calendar file (.ics)
-                    </a>
-                    {boardAvailable ? (
-                      <Link href={`/trips/${tripId}/discover`} className={cx(buttonClass('ghost', 'sm'), 'sm:hidden')}>
-                        Back to the board
-                      </Link>
-                    ) : null}
-                    <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('ghost', 'sm')}>
-                      Change my answers
+                  ) : null}
+                  <PrintButton />
+                  <a href={`/trips/${tripId}/itinerary/calendar`} download className={buttonClass('ghost', 'sm')}>
+                    Calendar file (.ics)
+                  </a>
+                  <ShareControl tripId={tripId} />
+                  {boardAvailable ? (
+                    <Link href={`/trips/${tripId}/discover`} className={buttonClass('ghost', 'sm')}>
+                      Back to the board
                     </Link>
-                    <a href={`/trips/${tripId}/itinerary?appendix=1`} className={buttonClass('ghost', 'sm')}>
-                      Print with evidence appendix
-                    </a>
-                  </div>
-                </details>
-              </>
-            ) : null}
+                  ) : null}
+                  <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('ghost', 'sm')}>
+                    Change my answers
+                  </Link>
+                  {itinerary.package ? <RegenerateButton tripId={tripId} /> : null}
+                  <a href={`/trips/${tripId}/itinerary?appendix=1`} className={buttonClass('ghost', 'sm')}>
+                    Print with evidence appendix
+                  </a>
+                </div>
+              </details>
+            ) : (
+              <PrintButton />
+            )}
           </>
         }
       />
@@ -1860,7 +1868,18 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
   return (
     <section className="mt-3 rule-top pt-3" aria-label={`Weather on day ${day.dayNumber}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-ink-muted">
-        <Badge tone={weather.evidence === 'forecast' ? 'blue' : 'neutral'}>{weather.evidence === 'forecast' ? 'Forecast' : weather.evidence === 'historical_pattern' ? 'Typical' : 'No weather data'}</Badge>
+        {/*
+          V11 §8 — the basis is a word in the sentence, not a chip.
+
+          Every day carried a "Typical" or "Forecast" pill saying the same thing
+          as every other day, which is a chip that never varies within a trip and
+          therefore carries no decision. It stays visible — a traveller must know
+          whether a temperature is a forecast or a climate record — as the first
+          words of the line it qualifies.
+        */}
+        <span className={cx('text-xs font-medium', weather.evidence === 'forecast' ? 'text-slate-blue' : 'text-ink-faint')}>
+          {weather.evidence === 'forecast' ? 'Forecast' : weather.evidence === 'historical_pattern' ? 'Typical' : 'No weather data'}
+        </span>
         {line ? <span className="numeral">{line}</span> : <span>{weather.summary}</span>}
         {weather.locationLabel && !isMachineWeatherLabel(weather.locationLabel) ? <span className="text-xs text-ink-faint">{weather.locationLabel}</span> : null}
         {stale ? <Badge tone="amber">Read a while ago</Badge> : null}
@@ -2126,7 +2145,7 @@ function DayCard({
             ) : undefined
           }
         />
-        <RowHandoff item={item} coordinates={coordinates} verification={verification[item.id]} baseId={day.baseId} {...(tripId ? { tripId } : {})} dayNumber={day.dayNumber} dayCount={dayCount} role={anchorRoles[item.placeId ?? ''] ?? anchorRoles[item.id]} />
+        <RowHandoff item={item} coordinates={coordinates} verification={verification[item.id]} {...(tripId ? { tripId } : {})} dayNumber={day.dayNumber} dayCount={dayCount} role={anchorRoles[item.placeId ?? ''] ?? anchorRoles[item.id]} />
       </StopFocusHandle>
     </li>
   );
@@ -2208,46 +2227,46 @@ function DayCard({
             </p>
 
             {/*
-              TWO FACTS PROMOTED, THE REST DEMOTED. What a traveller decides on
-              when they look at a day is: how hard is it, and how much of it is
-              spent moving. Those two get chips; everything else is one line of
-              text underneath.
+              V11 §8 — ONE LINE OF FACTS, NOT A CHIP CLUSTER.
+
+              This was up to six chips — state, intensity, stops, travel,
+              weather-sensitive, times-approximate — over a separate totals line,
+              on every day. Five days of that is thirty-six chips before a
+              traveller has read a single thing they will actually do, and the
+              baseline walk counted **72 pills** on this surface.
+
+              Chips are now reserved for the two facts that carry a decision: the
+              day's own state, and a base move nobody could time — which is a
+              blocker, not a nuance, and reads as one. Everything else is the
+              sentence a person would say: "Intense · 2 stops · 1 hr 10 min
+              drive · 3 hr at stops". Nothing is deleted; `title` keeps the
+              precise wording on the two that had one, and the weather and
+              timing detail live in the day's own uncertainty line and behind
+              "How this day moves and eats".
             */}
-            <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid={`day-facts-${day.dayNumber}`}>
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid={`day-facts-${day.dayNumber}`}>
               {stateBadge}
-              <Badge tone={INTENSITY_TONE[day.intensity]}>{day.intensity}</Badge>
-              {meaningfulStops > 0 ? <Badge tone="neutral">{meaningfulStops} {meaningfulStops === 1 ? 'stop' : 'stops'}</Badge> : null}
-              {/*
-                V6 §12 — a relocation day whose main transfer nobody measured or
-                estimated does not get a small number. "≈10 min drive" beside a
-                five-hour move was the live defect; the honest chip says what is
-                missing, and the day reads in parts of the day.
-              */}
               {day.totals.unmeasuredMajorTransfer ? (
                 <Badge tone="amber" title="This day moves base and the main transfer has not been measured, so the day cannot be timed yet">
-                  major transfer not measured
-                </Badge>
-              ) : day.totals.travelMinutes > 0 ? (
-                <Badge tone="blue" title={travelApprox ? 'Worked out from the distance on the map, or time set aside — not a measured journey' : 'Measured against the road, not estimated'}>
-                  {travelApprox ? '≈' : ''}
-                  {travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} {drivingMinutes > 0 ? 'drive' : 'travelling'}
+                  main transfer not timed
                 </Badge>
               ) : null}
-              {weatherSensitive ? <Badge tone="amber">weather-sensitive</Badge> : null}
-              {day.timing?.precision === 'band' ? <Badge tone="neutral" title="A leg on this day could not be timed or estimated, so times read as parts of the day">times approximate</Badge> : null}
-            </div>
-
-            {day.totals.activityMinutes > 0 || day.totals.freeMinutes > 0 ? (
-              <p className="type-figure mt-2 text-sm font-medium text-ink-muted">
+              <p className="type-small text-ink-muted">
                 {[
+                  day.intensity,
+                  meaningfulStops > 0 ? `${meaningfulStops} ${meaningfulStops === 1 ? 'stop' : 'stops'}` : null,
+                  !day.totals.unmeasuredMajorTransfer && day.totals.travelMinutes > 0
+                    ? `${travelApprox ? '≈' : ''}${travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} ${drivingMinutes > 0 ? 'driving' : 'travelling'}`
+                    : null,
                   day.totals.activityMinutes > 0 ? `${span(day.totals.activityMinutes)} at stops` : null,
                   day.totals.freeMinutes > 0 ? `${span(day.totals.freeMinutes)} free` : null,
                   day.totals.walkMinutes >= WALKING_DAY_MINUTES ? `${travelSpan(day.totals.walkMinutes)} on foot` : null,
+                  weatherSensitive ? 'weather matters here' : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
-            ) : null}
+            </div>
 
             {/*
               One honest verb, only on days it can act on. A light day offered
@@ -3081,12 +3100,29 @@ function TimelineRow({
              * leg is gone; the legend on the map says it once.
              */
             <>
-              <h3 className="text-sm text-ink-muted" title={item.reason}>
+              <h3 className="text-sm text-ink-muted" title={travelProvenanceLabel(item.travel) || item.reason}>
                 {travelLine(item)}
               </h3>
-              <Badge tone={travelState(item.travel).tone} title={travelProvenanceLabel(item.travel)}>
-                {travelState(item.travel).word}
-              </Badge>
+              {/*
+                V11 §8 — A GOOD LEG NEEDS NO BADGE.
+
+                Every travel row used to carry a chip, and on a healthy plan
+                almost every one of them said "measured" — a badge on the normal
+                case, repeated twice per day, which is the same thing V11 already
+                settled for `partially_verified`: a label that appears on
+                everything conveys nothing and costs a line on every row.
+
+                The chip now appears only when the timing is *not* the ordinary
+                measured kind — an estimate, an allowance, an operator's own
+                hours, a timetable to confirm — which is exactly when a traveller
+                needs to know. The measured case keeps its precise wording in the
+                row's `title` and in the transfers table on Getting around.
+              */}
+              {travelState(item.travel).word === 'measured' ? null : (
+                <Badge tone={travelState(item.travel).tone} title={travelProvenanceLabel(item.travel)}>
+                  {travelState(item.travel).word}
+                </Badge>
+              )}
             </>
           ) : (
             <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-xl leading-snug sm:text-[1.375rem]' : 'text-base font-medium')}>
@@ -3135,7 +3171,14 @@ function TimelineRow({
           {item.booking ? (
             <Badge tone="amber">{BOOKING_KIND_LABELS[item.booking.kind]}</Badge>
           ) : null}
-          {verification && (anchorKind === undefined || anchorKind === 'named_place') ? (
+          {/*
+            V11 §8 — the chip is for the states that mean something is
+            outstanding. See `verificationNeedsChip`: "Confirmed" and "Planned"
+            are the normal case and appeared on nearly every stop of a healthy
+            plan. The tier is still stated in full, with its blurb, in the place
+            sheet this row's name opens, and counted on the confidence panel.
+          */}
+          {verification && verificationNeedsChip(verification) && (anchorKind === undefined || anchorKind === 'named_place') ? (
             <Badge tone={VERIFICATION_CHIP_WORD[verification].tone} title={VERIFICATION_TITLE[verification]}>
               {VERIFICATION_CHIP_WORD[verification].label}
             </Badge>
@@ -3775,27 +3818,23 @@ function itineraryHasPackage(day: ItineraryDay): boolean {
  * guess. The controls to move, re-time and keep a stop sit beside them, only
  * on the owner's page.
  */
-function RowHandoff({ item, coordinates, verification, baseId, tripId, dayNumber, dayCount, role }: { item: ItineraryItem; coordinates: Record<string, { lat: number; lng: number }>; verification?: VerificationState; baseId: string; tripId?: string; dayNumber: number; dayCount: number; role?: 'core' | 'secondary' | 'optional' | 'flex' }) {
+function RowHandoff({ item, coordinates, verification, tripId, dayNumber, dayCount, role }: { item: ItineraryItem; coordinates: Record<string, { lat: number; lng: number }>; verification?: VerificationState; tripId?: string; dayNumber: number; dayCount: number; role?: 'core' | 'secondary' | 'optional' | 'flex' }) {
   const linkClass = 'inline-flex min-h-9 items-center text-xs text-ink-muted underline underline-offset-4 hover:text-ink';
-  if (item.kind === 'travel' && item.travel) {
-    if (item.travel.provenance !== 'measured') return null;
-    const from = coordinates[item.travel.fromId] ?? coordinates[baseId];
-    const to = coordinates[item.travel.toId];
-    if (!from || !to) return null;
-    const links = legDirectionsLinks(from, to, navModeFor(item.travel.mode));
-    return (
-      <div className="-mt-1 flex flex-wrap items-center gap-x-2 px-5 pb-2 text-xs text-ink-faint print:hidden" data-testid="leg-directions">
-        <span>Directions:</span>
-        <a href={links.google} target="_blank" rel="noreferrer noopener" className={linkClass}>
-          Google Maps
-        </a>
-        <span aria-hidden="true">·</span>
-        <a href={links.apple} target="_blank" rel="noreferrer noopener" className={linkClass}>
-          Apple Maps
-        </a>
-      </div>
-    );
-  }
+  /*
+   * V11 §7 — ONE NAVIGATION AFFORDANCE PER STOP, NOT TWO.
+   *
+   * A measured leg used to carry "Directions: Google Maps · Apple Maps" and the
+   * stop immediately beneath it carried "Open in Google Maps · Apple Maps" —
+   * the same two apps, for the same destination, twice within about a hundred
+   * and fifty pixels, on every leg-and-stop pair of every day. On a five-stop
+   * day that is ten link rows for five places.
+   *
+   * The stop's own links survive because that is where a traveller looks for
+   * them (and `stop-navigation` is what the browser suite checks); the leg's
+   * duplicate is gone. Nothing navigable is lost: every destination the leg
+   * could open is the stop directly below it.
+   */
+  if (item.kind === 'travel') return null;
   if (item.kind !== 'activity') return null;
   const point = item.placeId ? coordinates[item.placeId] : undefined;
   const navigable = point && verification && verification !== 'unverified';

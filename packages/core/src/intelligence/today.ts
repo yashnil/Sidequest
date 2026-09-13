@@ -101,7 +101,22 @@ export function buildTodayView(input: { itinerary: Itinerary; booked: readonly B
     weather: { summary: day.weather.summary, kind: day.weather.evidence, cautions: day.weather.cautions },
     criticalWarnings: [...day.warnings.filter((w) => /booked|leave-by|closed|permit/i.test(w)), ...(input.warnings ?? [])].slice(0, 4),
     flexAlternatives: resilience?.flexItems ?? [],
-    ...(resilience?.fallback ? { fallback: `${resilience.fallback.name} — if ${resilience.fallback.trigger.toLowerCase()}` } : {}),
+    /*
+     * V11 §27 — TWO AUTHORS, ONE LINE, NO ASSERTED GRAMMAR.
+     *
+     * This used to read `${name} — if ${trigger.toLowerCase()}`, and on the
+     * screen that produced "Keep this afternoon flexible. — if anything that
+     * runs late or closes": a dash after a full stop, then a fragment. Both
+     * halves are written independently -- the name is a complete instruction
+     * ending in a stop, and the trigger is a noun phrase from the composing
+     * model, which "if " only fits by luck. Welding them with a conjunction
+     * asserts a grammatical relationship neither side promised.
+     *
+     * So: strip the name's terminal stop and set the condition off with a dash,
+     * which reads whether the trigger arrives as a noun phrase ("anything that
+     * runs late or closes") or as a sentence ("Rain after midday").
+     */
+    ...(resilience?.fallback ? { fallback: `${resilience.fallback.name.replace(/\s*\.\s*$/, '')} — ${resilience.fallback.trigger.replace(/\s*\.\s*$/, '').toLowerCase()}` } : {}),
     stops: day.items.filter((i) => i.kind === 'activity').map((i) => ({ id: i.id, title: i.title, startMinute: i.startMinute, endMinute: i.endMinute, ...(i.placeId ? { placeId: i.placeId } : {}), done: i.endMinute <= minute })),
   });
 }

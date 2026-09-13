@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
-import { openHubView } from './support/hub';
+import { openHubView, useBandAction } from './support/hub';
 
 /**
  * THE TRIP HUB, END TO END, ON FIXTURES.
@@ -145,7 +145,8 @@ test('the readiness profile changes the packet without ever confirming a legal f
 
 test('the shared copy carries the hub read-only: no forms, every section', async ({ page }) => {
   await buildWithDefaults(page);
-  await page.getByRole('button', { name: /Share this plan/ }).click();
+  /* V11 §9 — Share is one of the six actions now under the band's More. */
+  await useBandAction(page, /Share this plan/);
   const link = page.getByLabel('Share link');
   await expect(link).toBeVisible({ timeout: 20_000 });
   const href = await link.inputValue();
