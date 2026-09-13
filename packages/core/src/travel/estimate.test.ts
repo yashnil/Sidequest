@@ -54,7 +54,32 @@ describe('mode plausibility', () => {
   it('a 75 km "walk" becomes a drive for a driver and transit for a car-free trip', () => {
     expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 75, canDrive: true, transitTrip: false })).toEqual({ mode: 'drive', corrected: true });
     expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 75, canDrive: false, transitTrip: true })).toEqual({ mode: 'public_bus', corrected: true });
-    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 75, canDrive: false, transitTrip: false })).toEqual({ mode: 'public_bus', corrected: true });
+    /*
+     * V11 §10 — neither driving nor a transit trip. This used to answer
+     * `public_bus`, which is a service that either exists or does not and which
+     * nothing here has checked; a road leg somebody else drives is the honest
+     * shape with no such claim in it.
+     */
+    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 75, canDrive: false, transitTrip: false })).toEqual({ mode: 'rideshare', corrected: true });
+  });
+
+  /**
+   * V11 §10 — THE CORRECTION READS THE TRIP'S OWN TRANSPORT CONTRACT.
+   *
+   * The founder's Kyrgyzstan trip said, at the top of its own plan, "Private
+   * driver and local guides for all transfers and treks; no self-driving". Its
+   * day 4 then read "Bus to Altyn-Arashan valley", because `canDrive` was false
+   * and the fallback invented a bus. The trip has no bus in it.
+   */
+  it('corrects to the mode the trip actually uses, never to one it does not have', () => {
+    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 22, arrangement: 'driver', canDrive: false, transitTrip: false })).toEqual({ mode: 'private_transfer', corrected: true });
+    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 22, arrangement: 'self_drive', canDrive: true, transitTrip: false })).toEqual({ mode: 'drive', corrected: true });
+    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 22, arrangement: 'operator', canDrive: false, transitTrip: false })).toEqual({ mode: 'shuttle', corrected: true });
+    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 22, arrangement: 'transit', canDrive: false, transitTrip: true })).toEqual({ mode: 'public_bus', corrected: true });
+  });
+
+  it('leaves the hint alone on a trip with no ground mode at all, rather than inventing one', () => {
+    expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 22, arrangement: 'none', canDrive: false, transitTrip: false })).toEqual({ mode: 'walk', corrected: false });
   });
   it('a 1.5 km walk stays a walk; unknown geometry never corrects anything', () => {
     expect(plausibleModeFor({ hinted: 'walk', straightLineKm: 1.5, canDrive: true, transitTrip: false })).toEqual({ mode: 'walk', corrected: false });

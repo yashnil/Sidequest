@@ -8,6 +8,20 @@ import type { RoutingProvider } from '@sidequest/compiler';
 const CASHEL = { lat: 52.52, lng: -7.8906 };
 const CORK = { lat: 51.8979, lng: -8.4748 };
 const REYKJAVIK = { lat: 64.1466, lng: -21.9426 };
+/** A third Irish point, so a three-stop day is a day somebody could drive. */
+const KILLARNEY = { lat: 52.0599, lng: -9.5044 };
+
+/*
+ * V11 §3 — THE FIGURES IN THESE FIXTURES ARE GEOGRAPHIC, AND HAVE TO BE.
+ *
+ * They used to say "30 km, 30 min" for Cashel→Cork, which are 80 km apart. That
+ * cost nothing while nothing checked, and the plausibility gate this seam now
+ * runs — the gate that exists because a founder trip shipped 434 km in 5209
+ * minutes — refuses a road distance shorter than the straight line between its
+ * own endpoints. A fixture that could not happen is not a fixture worth
+ * pinning, so every duration and distance below is one the two points could
+ * really produce.
+ */
 const VIK = { lat: 63.4187, lng: -19.0061 };
 
 /** A documented ORS GeoJSON directions body: duration in seconds, distance in metres, coordinates lon/lat. */
@@ -51,15 +65,16 @@ describe('openrouteservice adapter', () => {
   });
   it('the matrix seam times only consecutive legs and the closing pair — never N²', async () => {
     /* The matrix endpoint answers nothing usable here, so every leg falls through to a direct request. */
-    const http = stub(() => ({ status: 200, body: geojson(1800, 30_000, [[-7.9, 52.5], [-8.4, 51.9]]) }));
+    /* One canned answer is served for all four pairs, so it has to be a figure ALL four could produce: 150 km in 90 minutes. */
+    const http = stub(() => ({ status: 200, body: geojson(5400, 150_000, [[-7.9, 52.5], [-8.4, 51.9]]) }));
     const routing = createOrsRouting({ routeCalls: 0, routePairs: 0 }, { fetchImpl: http.fetchImpl, apiKey: 'k' });
-    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', lat: 51.7, lng: -8.5 }, { id: 'd', lat: 52.0, lng: -9.5 }];
+    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', lat: 51.7, lng: -8.5 }, { id: 'd', ...KILLARNEY }];
     const result = await routing.matrix({ points, mode: 'car', maxElements: 100 });
     /* One matrix attempt, then a→b, b→c, c→d, d→a. Still never N². */
     expect(http.calls).toHaveLength(5);
     expect(http.calls.filter((c) => c.url.includes('/matrix/'))).toHaveLength(1);
-    expect(result.minutes[0]![1]).toBe(30);
-    expect(result.minutes[1]![0]).toBe(30);
+    expect(result.minutes[0]![1]).toBe(90);
+    expect(result.minutes[1]![0]).toBe(90);
     expect(Number.isNaN(result.minutes[0]![2]!)).toBe(true);
     expect(result.failedPairs.filter((p) => p.reason === 'insufficient_evidence').length).toBe(4);
   });
@@ -77,30 +92,31 @@ describe('openrouteservice adapter', () => {
         ? {
             status: 200,
             body: {
+              /* Seconds and metres, all of them figures these four points could really produce. */
               durations: [
-                [0, 1800, 3600, 5400],
-                [1800, 0, null, 7200],
-                [3600, null, 0, 900],
-                [5400, 7200, 900, 0],
+                [0, 5400, 7200, 9000],
+                [5400, 0, null, 6000],
+                [7200, null, 0, 5100],
+                [9000, 6000, 5100, 0],
               ],
               distances: [
-                [0, 30, 60, 90],
-                [30, 0, null, 120],
-                [60, null, 0, 15],
-                [90, 120, 15, 0],
+                [0, 100, 115, 150],
+                [100, 0, null, 88],
+                [115, null, 0, 95],
+                [150, 88, 95, 0],
               ],
             },
           }
-        : { status: 200, body: geojson(2400, 40_000, [[-8.4, 51.9], [-8.5, 51.7]]) },
+        : { status: 200, body: geojson(2400, 30_000, [[-8.4, 51.9], [-8.5, 51.7]]) },
     );
     const routing = createOrsRouting({ routeCalls: 0, routePairs: 0 }, { fetchImpl: http.fetchImpl, apiKey: 'k' });
-    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', lat: 51.7, lng: -8.5 }, { id: 'd', lat: 52.0, lng: -9.5 }];
+    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', lat: 51.7, lng: -8.5 }, { id: 'd', ...KILLARNEY }];
     const result = await routing.matrix({ points, mode: 'car', maxElements: 100 });
     /* One matrix request for four legs, then one direct request for the declined pair. */
     expect(http.calls.filter((c) => c.url.includes('/matrix/'))).toHaveLength(1);
     expect(http.calls.filter((c) => c.url.includes('/directions/'))).toHaveLength(1);
-    expect(result.minutes[0]![1]).toBe(30);
-    expect(result.km[0]![1]).toBe(30);
+    expect(result.minutes[0]![1]).toBe(90);
+    expect(result.km[0]![1]).toBe(100);
     /* The declined pair was measured directly, not refused. */
     expect(result.minutes[1]![2]).toBe(40);
     expect(result.failedPairs.filter((p) => p.reason === 'not_found')).toEqual([]);
@@ -109,16 +125,16 @@ describe('openrouteservice adapter', () => {
   it('V10 §6 — a cached leg costs no request, and the reverse leg shares the key', async () => {
     const store = new Map<string, { minutes: number; km: number }>();
     const cache = { read: (k: string) => store.get(k) ?? null, write: (k: string, v: { minutes: number; km: number }) => void store.set(k, v) };
-    const grid = { durations: [[0, 1800, 3600], [1800, 0, 2700], [3600, 2700, 0]], distances: [[0, 30, 60], [30, 0, 45], [60, 45, 0]] };
+    const grid = { durations: [[0, 5400, 9000], [5400, 0, 6000], [9000, 6000, 0]], distances: [[0, 100, 150], [100, 0, 88], [150, 88, 0]] };
     const http = stub((url) => (url.includes('/matrix/') ? { status: 200, body: grid } : { status: 500, body: {} }));
     const routing = createOrsRouting({ routeCalls: 0, routePairs: 0 }, { fetchImpl: http.fetchImpl, apiKey: 'k', cache });
-    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', ...VIK }];
+    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', ...KILLARNEY }];
     const first = await routing.matrix({ points, mode: 'car', maxElements: 100 });
-    expect(first.minutes[0]![1]).toBe(30);
+    expect(first.minutes[0]![1]).toBe(90);
     expect(http.calls).toHaveLength(1);
     /* Same trip again, and with the points reversed: every leg is a cache hit, so no request at all. */
     const again = await routing.matrix({ points: [points[2]!, points[1]!, points[0]!], mode: 'car', maxElements: 100 });
-    expect(again.minutes[1]![2]).toBe(30);
+    expect(again.minutes[1]![2]).toBe(90);
     expect(http.calls).toHaveLength(1);
     expect(routeCacheKey(CASHEL, CORK, 'driving-car')).toBe(routeCacheKey(CORK, CASHEL, 'driving-car'));
   });

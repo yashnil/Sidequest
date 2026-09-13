@@ -95,6 +95,23 @@ const PERMIT: [number, number] = [5, 60];
 const RAIL_LEG: [number, number] = [15, 120];
 const DRIVER_DAY: Record<Style, [number, number]> = { budget: [40, 90], midrange: [60, 140], premium: [100, 220], luxury: [160, 400] };
 const CRUISE_NIGHT: Record<Style, [number, number]> = { budget: [90, 180], midrange: [150, 320], premium: [260, 520], luxury: [450, 1000] };
+/**
+ * V11 §36 — A SUPPORTED MULTI-DAY EXPERIENCE, PER PERSON PER DAY.
+ *
+ * The founder's Kyrgyzstan trip carried a three-day guided trek with camp
+ * support and a two-day yurt-and-horse expedition, and priced the pair at
+ * **nothing**: the `guides_tours` line said "3 days with a hired car and driver,
+ * 180–420 for the party", and the two operated experiences its own Book-first
+ * page called trip-critical had no cost line at all. A packaged multi-day
+ * experience is a guide, a bed, meals and often animals or a vehicle bought as
+ * one product; it is not a guide day, and it is emphatically not an "activity
+ * entry".
+ *
+ * Wide on purpose, and carried at `precision: 'unknown'` like the cruise band
+ * above, because the spread between a shared group departure and a private one
+ * is genuinely this large and Sidequest has not looked up a single price.
+ */
+const OPERATED_EXPERIENCE_DAY: Record<Style, [number, number]> = { budget: [60, 150], midrange: [110, 280], premium: [220, 520], luxury: [420, 1100] };
 
 const PAID_CATEGORIES = new Set(['museum', 'activity', 'historic', 'geothermal', 'wildlife', 'landmark']);
 
@@ -141,8 +158,48 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
    */
   const cruiseEpisodes = (input.pkg?.episodes ?? []).filter((e) => e.kind === 'cruise' || e.kind === 'expedition_boat');
   const cruiseNights = cruiseEpisodes.reduce((n, e) => n + Math.max(0, e.dayNumbers.length - 1), 0);
-  const hotelNights = Math.max(0, nights - cruiseNights);
-  push('lodging', LODGING_PER_NIGHT[style], hotelNights, false, `${hotelNights} nights at a ${style} band per room or unit${cruiseNights > 0 ? ` (${cruiseNights} on board are priced with the cruise)` : ''}`, ['Room or unit per night'], ['City taxes, resort fees']);
+  /*
+   * V11 §36 — every OTHER operator-run multi-day experience is a bundle too.
+   *
+   * The cruise case above had the reasoning right and the scope too narrow: a
+   * trek with camp support, a yurt-and-horse expedition, a safari and a
+   * hut-to-hut are all one product covering the guide, the bed and usually the
+   * food. Their nights come off the hotel count for the same reason a cabin
+   * does, and they get a line of their own instead of vanishing.
+   */
+  const operatedEpisodes = (input.pkg?.episodes ?? []).filter((e) => e.timing === 'operator' && e.dayNumbers.length >= 2 && e.kind !== 'cruise' && e.kind !== 'expedition_boat');
+  const operatedNights = operatedEpisodes.reduce((n, e) => n + Math.max(0, e.dayNumbers.length - 1), 0);
+  const operatedDays = operatedEpisodes.reduce((n, e) => n + e.dayNumbers.length, 0);
+  const bundledNights = cruiseNights + operatedNights;
+  const hotelNights = Math.max(0, nights - bundledNights);
+  /* A cabin is "on board"; a trek camp is "priced with the experience". Both are bundles; only one of them is a ship. */
+  const bundledNote =
+    bundledNights === 0
+      ? ''
+      : operatedNights === 0
+        ? ` (${cruiseNights} on board ${cruiseNights === 1 ? 'is' : 'are'} priced with the cruise)`
+        : cruiseNights === 0
+          ? ` (${operatedNights} ${operatedNights === 1 ? 'night is' : 'nights are'} priced with the experience ${operatedNights === 1 ? 'that includes it' : 'that includes them'})`
+          : ` (${cruiseNights} on board and ${operatedNights} on the guided experiences are priced with those)`;
+  push('lodging', LODGING_PER_NIGHT[style], hotelNights, false, `${hotelNights} nights at a ${style} band per room or unit${bundledNote}`, ['Room or unit per night'], ['City taxes, resort fees']);
+  if (operatedDays > 0) {
+    const mealsIncluded = operatedEpisodes.every((e) => e.meals === 'included');
+    lines.push(
+      budgetLineSchema.parse({
+        category: 'guides_tours',
+        currency,
+        low: Math.round(OPERATED_EXPERIENCE_DAY[style][0] * operatedDays),
+        high: Math.round(OPERATED_EXPERIENCE_DAY[style][1] * operatedDays),
+        perPerson: true,
+        basis: `${operatedEpisodes.map((e) => `${e.name} (${e.dayNumbers.length} day${e.dayNumbers.length === 1 ? '' : 's'})`).join(', ')}: run by an operator as one booking. Prices vary widely between a shared departure and a private one, and Sidequest has not looked one up.`,
+        includes: ['Guiding', ...(operatedNights > 0 ? ['Nights on the experience'] : []), ...(mealsIncluded ? ['Meals on the experience'] : []), 'Pack animals or vehicles where the experience uses them'],
+        excludes: ['Tips', 'Personal equipment hire', ...(mealsIncluded ? [] : ['Meals the operator does not provide'])],
+        provenance: 'derived_from_plan',
+        precision: 'unknown',
+        bundle: true,
+      }),
+    );
+  }
   if (cruiseNights > 0) {
     lines.push(budgetLineSchema.parse({ category: 'lodging', currency, low: Math.round(CRUISE_NIGHT[style][0] * cruiseNights), high: Math.round(CRUISE_NIGHT[style][1] * cruiseNights), perPerson: true, basis: `${cruiseEpisodes.map((e) => e.name).join(', ')}: ${cruiseNights} night${cruiseNights === 1 ? '' : 's'} on board, cabin, meals and included excursions as one booking; cruise prices vary widely by cabin and operator`, includes: ['Cabin', 'Meals on board', 'Included shore excursions'], excludes: ['Optional excursions, drinks, tips'], provenance: 'derived_from_plan', precision: 'unknown', bundle: true }));
   }

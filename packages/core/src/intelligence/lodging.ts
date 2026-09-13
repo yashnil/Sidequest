@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Itinerary, TripPackage } from '../schemas/itinerary';
 import type { TravelerProfile } from '../schemas/profile';
 import type { BookedPlanItem } from './booking';
+import { normalizeStays } from '../experience/chapters';
 
 /**
  * WHERE TO SLEEP, IN TWO DECISIONS.
@@ -220,8 +221,37 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
     });
   });
   const properties = input.properties ?? [];
-  const moves = Math.max(0, bases.length - 1);
   const tolerance = profile.interview.baseMoveTolerance;
+  /*
+   * V11 §5 — CHURN IS COUNTED ON THE STAY SEQUENCE, NOT THE BASE LIST.
+   *
+   * The founder's Kyrgyzstan trip counted **six** hotel changes in ten nights.
+   * Two of them were nights inside an operated trek — the operator moved the
+   * traveller and there was no second bed to find — and one was Karakol
+   * following Karakol, which is not a move at all. The honest figure is three,
+   * and the difference is not cosmetic: "fast-moving route" triggered an
+   * alternative that read *"Karakol could be a day trip from Ala-Kul trek
+   * (camp)"*, which is a day trip to a town from a tent over a 3,900 m pass.
+   */
+  const structure = normalizeStays({
+    bases: (pkg?.bases ?? []).map((base) => ({
+      id: base.id,
+      name: base.name,
+      nights: base.nights,
+      ...(base.displayName ? { displayName: base.displayName } : {}),
+      ...(base.canonicalName ? { canonicalName: base.canonicalName } : {}),
+      ...(base.locality ? { locality: base.locality } : {}),
+      ...(base.baseKind ? { baseKind: base.baseKind } : {}),
+      ...(base.coordinates ? { coordinates: base.coordinates } : {}),
+      ...(base.episode ? { episode: base.episode } : {}),
+    })),
+    episodes: (pkg?.episodes ?? []).map((episode) => ({ name: episode.name, kind: episode.kind, dayNumbers: episode.dayNumbers, baseIds: episode.baseIds, timing: episode.timing })),
+  });
+  /* A trip with no package bases still has to be counted; fall back to the spans this function already built. */
+  const stays = structure.stays.length > 0 ? structure.stays : bases.map((base) => ({ id: base.baseId, baseIds: [base.baseId], name: base.name, nights: base.nights, countsAsHotelChange: false }));
+  const moves = structure.stays.length > 0 ? structure.hotelChanges : Math.max(0, bases.length - 1);
+  /* Somewhere the traveller has to find a bed themselves — never a night an operator owns. */
+  const ownStays = stays.filter((stay) => !('withinExperience' in stay && stay.withinExperience));
   /*
    * PRODUCT RECOVERY V1 — hotel churn is named, not excused. Six changes in
    * nine nights is a fast-moving route whatever the traveller ticked; the note
@@ -230,11 +260,28 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
    * itself holds one (a one-night base between two longer stays that could
    * be folded — named, never fabricated).
    */
-  const totalNights = bases.reduce((n, b) => n + b.nights, 0);
-  const oneNightStays = bases.filter((b) => b.nights === 1).map((b) => b.name);
-  const averageNightsPerBase = bases.length > 0 ? Math.round((totalNights / bases.length) * 10) / 10 : totalNights;
+  const totalNights = stays.reduce((n, b) => n + b.nights, 0);
+  /* A one-night stay only counts as churn when it is a bed the traveller chose. */
+  const oneNightStays = ownStays.filter((b) => b.nights === 1).map((b) => b.name);
+  const averageNightsPerBase = ownStays.length > 0 ? Math.round((totalNights / ownStays.length) * 10) / 10 : totalNights;
   const churn: 'settled' | 'moderate' | 'aggressive' = moves === 0 ? 'settled' : totalNights > 0 && moves / totalNights >= 0.5 || (oneNightStays.length >= 3 && moves >= 4) ? 'aggressive' : 'moderate';
-  const simplerRoute = churn === 'aggressive' ? bases.filter((b, i) => b.nights === 1 && i > 0 && i < bases.length - 1 && (bases[i - 1]!.nights >= 2 || bases[i + 1]!.nights >= 2)).map((b) => `${b.name} could be a day trip from ${bases[bases.indexOf(b) - 1]!.nights >= 2 ? bases[bases.indexOf(b) - 1]!.name : bases[bases.indexOf(b) + 1]!.name} instead of a one-night stop`) : [];
+  /*
+   * A simpler alternative may only be built out of stays the traveller controls.
+   * Folding a one-night town stop into a *trek camp* is not a simplification,
+   * it is a sentence that cannot be acted on.
+   */
+  const simplerRoute =
+    churn === 'aggressive'
+      ? ownStays
+          .map((stay, i) => {
+            if (stay.nights !== 1 || i === 0 || i === ownStays.length - 1) return null;
+            const before = ownStays[i - 1]!;
+            const after = ownStays[i + 1]!;
+            const host = before.nights >= 2 ? before : after.nights >= 2 ? after : null;
+            return host ? `${stay.name} could be a day trip from ${host.name} instead of a one-night stop` : null;
+          })
+          .filter((line): line is string => line !== null)
+      : [];
   const hotelChangeNote =
     moves === 0
       ? 'One base for the whole trip: unpack once.'
@@ -248,6 +295,6 @@ export function buildLodgingIntelligence(input: LodgingInput): LodgingIntelligen
     shortlist: properties.map((p) => ({ baseId: p.baseId, name: p.name, why: p.why, priceTier: p.priceTier, source: p.source })),
     shortlistBasis: properties.length > 0 ? 'Ranked by fit to this plan, not by review score. Availability and price are not live.' : 'Sidequest recommends the area to stay in rather than a named hotel. Prices and availability are yours to check.',
     hotelChangeNote,
-    churn: { level: churn, hotelChanges: moves, nights: totalNights, baseCount: bases.length, oneNightStays, averageNightsPerBase, simplerRoute },
+    churn: { level: churn, hotelChanges: moves, nights: totalNights, baseCount: ownStays.length, oneNightStays, averageNightsPerBase, simplerRoute },
   });
 }

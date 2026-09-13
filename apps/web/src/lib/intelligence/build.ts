@@ -208,7 +208,13 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   const remoteDayHints = new Set<number>();
   for (const leg of legs) if (leg.dayNumber && (leg.mode === 'boat' || leg.mode === 'guide_transfer' || leg.mode === 'lodge_transfer' || leg.mode === 'four_wheel_drive')) remoteDayHints.add(leg.dayNumber);
   for (const base of lodging.bases) if (base.style === 'lodge' || base.style === 'camp' || base.style === 'hut' || base.style === 'homestay') for (const d of base.dayNumbers) remoteDayHints.add(d);
-  const food = buildFoodIntelligence({ itinerary, profile, categoryByPlace, categoryByItem, remoteDayHints });
+  /*
+   * V11 §38 — the days an operator feeds the traveller, from the episodes' own
+   * `meals` field. Nothing is inferred: an episode that did not say stays silent
+   * and the day gets the advice it always got.
+   */
+  const cateredDayNumbers = new Set((pkg?.episodes ?? []).filter((episode) => episode.meals === 'included').flatMap((episode) => episode.dayNumbers));
+  const food = buildFoodIntelligence({ itinerary, profile, categoryByPlace, categoryByItem, remoteDayHints, cateredDayNumbers });
   /*
    * PRODUCTION LOCK V5 §26 — A BASE IS REMOTE, OR IT IS NOT. A DAY TRIP DOES NOT MAKE IT SO.
    *

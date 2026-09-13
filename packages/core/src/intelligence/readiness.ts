@@ -235,6 +235,24 @@ export type TripReadinessPacket = z.infer<typeof tripReadinessPacketSchema>;
 export interface ReadinessInput {
   destinationCountry?: string;
   destinationName: string;
+  /**
+   * V11 §11 — THE JURISDICTION, WHICH IS NOT THE DESTINATION.
+   *
+   * Every sentence about money, plugs, languages, licences, emergency numbers
+   * and entry rules belongs to a country. The founder's Canadian Rockies trip
+   * printed "canadian rockies uses the CAD", "Emergency number in canadian
+   * rockies: 911" and "Whether canadian rockies accepts your licence…" on five
+   * surfaces, because line 291 below read `destinationName` and called the
+   * variable `country`.
+   *
+   * V10 built `jurisdictionPhrase()` for exactly this and wired it only into an
+   * internal compiler check; the print appendix, which reads the bundled country
+   * facts, was already correct two pages later in the same document. This field
+   * closes the gap. Absent means nobody resolved a country, and the sentences
+   * then fall back to the destination — which is wrong, but is the honest
+   * wrongness of not knowing rather than a claim we could have got right.
+   */
+  jurisdictionName?: string | undefined;
   tripStart: string;
   tripEnd: string;
   profile?: TravelReadinessProfile | null;
@@ -287,8 +305,14 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
   const health = registry.publicHealthFor(citizenship);
   const immigration = registry.immigrationFor(input.destinationCountry);
   const officialLinks = [...(fa ? [{ name: fa.name, url: fa.url }] : []), ...(immigration ? [{ name: immigration.name, url: immigration.url }] : []), { name: iata.name, url: iata.url }];
-  // Prose names the destination as the traveller knows it; the code is for matching, not for sentences.
-  const country = input.destinationName;
+  /*
+   * V11 §11 — prose about a jurisdiction names the jurisdiction. The bundled
+   * country facts are the most authoritative name available (they are the same
+   * row the currency, plugs and emergency number come from, so the subject and
+   * the fact cannot disagree); the resolved jurisdiction phrase is next; the
+   * destination is the last resort and only where neither exists.
+   */
+  const country = input.destinationFacts?.name ?? input.jurisdictionName ?? input.destinationName;
 
   // Passport validity ---------------------------------------------------------
   if (international === 'no') {

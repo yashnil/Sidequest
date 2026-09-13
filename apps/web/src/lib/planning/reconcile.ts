@@ -66,7 +66,10 @@ import {
   lookupPriorityFor,
   mealSlotOf,
   estimateLegMinutes,
+  COLOCATED_KM,
   plausibleModeFor,
+  selectSignatureExperiences,
+  type GroundArrangement,
   unknownLegAllowanceMinutes,
   dayPrecisionOf,
   type AnchorKind,
@@ -348,6 +351,22 @@ const MIN_FREE_BLOCK_MINUTES = 30;
  */
 const LATE_END_TOLERANCE_MINUTES = 30;
 const MAX_MINUTE = 24 * 60;
+
+/**
+ * The traveller's interests, strongest first, as plain keys.
+ *
+ * The signature scorer compares these with the draft's own coarse categories.
+ * V10 already learned that a vocabulary that does not meet is *unknown* rather
+ * than zero — `fitOf` returns 0.5 for a tag it cannot compare — so the ordering
+ * matters more than the coverage.
+ */
+function rankedInterestsOf(profile: ReconcileContext['profile']): string[] {
+  const RANK: Record<string, number> = { core: 0, frequent: 1, occasional: 2 };
+  return (Object.keys(profile.interests) as (keyof typeof profile.interests)[])
+    .filter((key) => RANK[profile.interests[key] ?? 'low'] !== undefined)
+    .sort((a, b) => (RANK[profile.interests[a] ?? 'low'] ?? 9) - (RANK[profile.interests[b] ?? 'low'] ?? 9))
+    .map((key) => String(key));
+}
 
 function transportModeFor(hint: DraftTransport | undefined, matrixMode: TravelTimeMatrix['mode'], profileCanDrive: boolean): TransportMode {
   switch (hint) {
@@ -1713,7 +1732,18 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     const draftDay = draftDayRaw && folds ? { ...draftDayRaw, meals: { ...(draftDayRaw.meals ?? {}), ...folds } } : draftDayRaw;
     const base = baseForDate[d] ?? null;
     const previousBase = d > 0 ? (baseForDate[d - 1] ?? null) : null;
-    const relocation = Boolean(previousBase && base && previousBase !== base);
+    /*
+     * V11 §5 — A RELOCATION IS A CHANGE OF PLACE, NOT A CHANGE OF ROW.
+     *
+     * This was object identity, so two distinct base rows that name the same
+     * town counted as a move. The founder's Kyrgyzstan trip therefore printed
+     * "You move from Karakol to Karakol today", scheduled a base-to-base leg
+     * that measured **0 min**, and spent one of its six hotel changes on a
+     * journey nobody makes. `sameOvernightPlace` asks whether the traveller
+     * actually goes anywhere: the same label, or the same point within the
+     * co-location distance the scheduler already uses for two stops.
+     */
+    const relocation = Boolean(previousBase && base && previousBase !== base && !sameOvernightPlace(previousBase, base));
     const dayAnchors = anchors
       .filter((a) => a.kind !== 'meal' && a.kind !== 'transfer' && a.kind !== 'gateway' && scheduledDayOf.get(a.id) === dayNumber && !String(dispositionOf.get(a.id)).startsWith('rejected'))
       .sort((a, b) => (a.dayNumber === b.dayNumber ? a.index - b.index : a.dayNumber - b.dayNumber));
@@ -1727,6 +1757,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       previousBase,
       relocation,
       anchors: dayAnchors,
+      groundArrangement: groundArrangementFor(draft, context.matrix.mode === 'transit'),
       episode: episodeForDay(episodes, dayNumber),
       episodeEntersToday: episodes.some((e) => e.fromDay === dayNumber),
       isLastDay: d === dates.length - 1,
@@ -1907,6 +1938,47 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     omissions: draft.omissions.map((o) => ({ ...o })),
     unresolved: [...draft.unresolved],
     bookingPriorities: [...(draft.bookingPriorities ?? [])],
+    /*
+     * V11 §7 — CHOSEN HERE, BECAUSE ONLY HERE HAS EVERYTHING IT NEEDS.
+     *
+     * The selection needs the draft's own stated signatures, the traveller's
+     * ranked interests and the episode structure. `ItineraryView` has none of
+     * the three, which is exactly why it used to answer with the first three
+     * core anchors in day order and call a bazaar the point of a trek.
+     */
+    signatures: selectSignatureExperiences({
+      candidates: packageAnchors
+        .filter(
+          (anchor) =>
+            anchor.role === 'core' &&
+            (anchor.disposition.startsWith('preserved') || anchor.disposition === 'retained_unverified' || anchor.disposition.startsWith('moved')) &&
+            anchor.anchorKind !== 'meal' &&
+            anchor.anchorKind !== 'transfer' &&
+            anchor.anchorKind !== 'gateway',
+        )
+        .map((anchor) => {
+          const dayNumber = anchor.scheduledDayNumber ?? anchor.dayNumber;
+          const item = days.find((d) => d.dayNumber === dayNumber)?.items.find((i) => i.id === anchor.id);
+          const episode = episodes.find((e) => dayNumber >= e.fromDay && dayNumber <= e.toDay);
+          return {
+            id: anchor.id,
+            name: anchor.name,
+            dayNumber,
+            category: anchor.category,
+            role: anchor.role,
+            ...(item?.durationMinutes !== undefined ? { minutes: item.durationMinutes } : {}),
+            ...(item?.physicalIntensity ? { physicalIntensity: item.physicalIntensity } : {}),
+            ...(episode ? { withinExperience: episode.name } : {}),
+            routeCritical: placements.some((placement) => placement.name === anchor.name && placement.kind !== 'signature_experience'),
+            verification: anchor.verification,
+            onEdgeDay: dayNumber === 1 || dayNumber === days.length,
+            ...(item?.reason ? { why: item.reason } : {}),
+          };
+        }),
+      ...(draft.signatures ? { statedSignatures: draft.signatures } : {}),
+      travellerInterests: rankedInterestsOf(context.profile),
+      travellerWantsEffort: context.profile.derived.preferredPhysicalIntensity === 'strenuous',
+    }),
     anchors: packageAnchors,
     verification: {
       anchors: anchors.length,
@@ -2088,6 +2160,8 @@ interface DayLayoutInput {
   previousBase: ResolvedBase | null;
   relocation: boolean;
   anchors: readonly ReconciledAnchor[];
+  /** V11 §10 — how the trip's ground travel is arranged, for the mode correction. Undefined when the draft did not say. */
+  groundArrangement?: GroundArrangement | undefined;
   /** V7 §8 — the episode this day sits inside, when it does. */
   episode?: DraftEpisode | null;
   episodeEntersToday?: boolean;
@@ -2274,9 +2348,70 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
   }
 }
 
+/**
+ * V11 §10 — HOW THIS TRIP MOVES ON THE GROUND.
+ *
+ * The draft's own arrangement is the trip's contract: a private-driver trip is
+ * not a self-drive trip whatever the traveller's licence says, and correcting
+ * one of its legs to a bus contradicts the sentence at the top of the
+ * traveller's own plan. Only where the model said nothing is this undefined,
+ * and the correction then falls back to what the profile can do.
+ */
+export function groundArrangementFor(draft: Pick<TripDraft, 'driving' | 'days'>, transitMatrix: boolean): GroundArrangement | undefined {
+  switch (draft.driving) {
+    case 'rental_self_drive':
+    case 'owned_self_drive':
+      return 'self_drive';
+    case 'private_driver':
+      return 'driver';
+    case 'taxi_rideshare':
+      return 'taxi';
+    case 'operator_transfer':
+      return 'operator';
+    case 'none':
+      return transitMatrix ? 'transit' : 'none';
+    default:
+      break;
+  }
+  /*
+   * The model did not state an arrangement, so read the trip's own legs. A plan
+   * whose days say "metro" is a transit trip whatever the field is empty of, and
+   * correcting one of its walks to a hired ride would be the same substitution
+   * in the other direction. Most specific evidence first: a car in the plan
+   * beats transit, because a trip with both is carried by the car.
+   */
+  const hints = new Set(draft.days.flatMap((day) => day.anchors.map((anchor) => anchor.transport).filter(Boolean)));
+  if (hints.has('car') || hints.has('four_wheel_drive')) return 'self_drive';
+  if (hints.has('private_transfer') || hints.has('guide_or_lodge_transfer')) return 'driver';
+  if (hints.has('metro') || hints.has('rail') || hints.has('bus') || hints.has('high_speed_rail')) return 'transit';
+  if (hints.has('taxi')) return 'taxi';
+  return undefined;
+}
+
+/**
+ * Whether two consecutive base rows are the same place to sleep.
+ *
+ * Deliberately narrow, and deliberately only ever asked of NEIGHBOURS. Two
+ * visits to one town with a trek between them are two visits and the route
+ * depends on the difference; two rows in a row are one stay whatever the draft
+ * called them. A shared coordinate settles it where the labels differ (a town
+ * and the guesthouse in it) — `COLOCATED_KM` is the same threshold the day
+ * scheduler already uses to decide two stops are one place, so the two cannot
+ * disagree about what "the same place" means.
+ */
+function sameOvernightPlace(a: ResolvedBase, b: ResolvedBase): boolean {
+  const labels = (base: ResolvedBase) => [base.displayName, base.identity?.name, base.name, base.locality].filter(Boolean).map((label) => normalizeName(label!));
+  const left = labels(a);
+  if (left.some((label) => labels(b).includes(label))) return true;
+  const from = a.identity?.coordinates;
+  const to = b.identity?.coordinates;
+  return Boolean(from && to && haversineKm(from, to) <= COLOCATED_KM);
+}
+
 function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor[]): { day: ItineraryDay; overflowMinutes: number; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
   const { context, window, draftDay, base, previousBase } = input;
   const canDrive = context.profile.transport.willDrive;
+  const groundArrangement = input.groundArrangement;
   const items: ItineraryItem[] = [];
   let clock = window.window.startMinute;
   let legsMeasured = 0;
@@ -2455,7 +2590,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     // Two distinct identities at the same spot (a town and its own harbour walk) are one place: no leg, no minutes.
     if (!measured && straightLineKm !== null && straightLineKm <= 0.15) return;
     const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
-    const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), canDrive, transitTrip: context.matrix.mode === 'transit' });
+    const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
     const mode = plausible.mode;
     const estimate = !measured && routable && fromCoordinates && toCoordinates ? estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode }) : null;
     const noRouteAnswered = ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;

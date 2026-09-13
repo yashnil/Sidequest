@@ -117,9 +117,28 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   if (input.drives && input.international === 'yes') add('essential_documents', 'International Driving Permit if the destination requires one', 'Not verified by Sidequest — check Before you go.');
   if (input.children) add('essential_documents', 'Children’s documents and any consent letters', 'Some borders ask when a child travels without both parents.');
 
+  /*
+   * V11 §37 — A MULTI-DAY TREK IS ITS OWN WEATHER SIGNAL.
+   *
+   * The founder's Kyrgyzstan trip crossed a pass around 3,900 m and slept two
+   * nights at altitude, and its entire clothing list was "Light, breathable
+   * clothing and a sun hat". Not a bug in the rules below: every day's recorded
+   * weather is the *base town's* weather, and the base towns sit near 1,700 m at
+   * 12–22 °C. A trek day is not at the base's altitude, so a base-town
+   * temperature says nothing about it.
+   *
+   * A multi-day trek or hut-to-hut with overnights is exposure by definition, so
+   * the layers are stated from the shape of the trip rather than from a
+   * thermometer that was somewhere else. Never from a place name.
+   */
+  const mountainOvernights = trek && camps;
+
   // Clothing / weather ------------------------------------------------------
   if (minC !== null && minC <= 8) add('clothing', 'Warm layers: fleece or wool mid-layer, warm hat', `Mornings near ${Math.round(minC)} °C on the ${input.weatherBasis === 'forecast' ? 'forecast' : 'climate record'}.`);
+  else if (mountainOvernights) add('clothing', 'Warm layers: fleece or wool mid-layer, warm hat', 'Nights out on a multi-day trek; the temperatures on this plan are the valley’s, not the pass’s.');
   if (minC !== null && minC <= 0) add('clothing', 'Insulated jacket and gloves', `Below freezing on at least one day (${input.weatherBasis}).`);
+  else if (mountainOvernights) add('clothing', 'Insulating layer and gloves', 'A high crossing with camp nights either side; it is cold up there whatever the valley does.');
+  if (mountainOvernights) add('weather', 'Waterproof shell', 'Multi-day trek: weather changes on a pass faster than a forecast can follow it.');
   if (maxC !== null && maxC >= 27) add('clothing', 'Light, breathable clothing and a sun hat', `Afternoons around ${Math.round(maxC)} °C (${input.weatherBasis}).`);
   if (maxC !== null && maxC >= 22) add('weather', 'Sunscreen and sunglasses', 'Warm days on the record, and outdoor time on most of them.');
   if (wet || (input.weatherBasis === 'climate' && hikes)) add('weather', 'Waterproof shell', wet ? 'Wet days on the record.' : 'Hiking days on a climate basis: rain cannot be ruled out.');
@@ -132,7 +151,9 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
     add('footwear', 'Broken-in hiking boots or trail shoes', cats.has('hike') ? `${input.categories.filter((c) => c === 'hike').length} hiking stop${input.categories.filter((c) => c === 'hike').length === 1 ? '' : 's'} on the plan.` : 'Intense outdoor days on the plan.');
     add('outdoor', 'Daypack, water bottle, blister care', 'Half-day and longer walks.');
     add('outdoor', 'Trail snacks', 'Remote sections have nothing on the route.');
-    if (profileHikesLong(input.profile)) add('outdoor', 'Trekking poles', 'Full-day hikes and real elevation.', true);
+    /* §37 — optional on a day hike, not on a multi-day crossing with a descent. */
+    if (trek) add('outdoor', 'Trekking poles', 'A multi-day crossing with a long descent; poles save the knees.');
+    else if (profileHikesLong(input.profile)) add('outdoor', 'Trekking poles', 'Full-day hikes and real elevation.', true);
   } else if (cats.has('nature') || cats.has('viewpoint') || cats.has('scenic_drive')) add('footwear', 'Comfortable walking shoes with grip', 'Viewpoints and short walks on uneven ground.');
   else add('footwear', 'Comfortable walking shoes', 'The days are on foot between stops.');
   if (water) add('activity_specific', 'Swimwear and a quick-dry towel', cats.has('geothermal') ? 'Hot springs or geothermal pools on the plan.' : 'Water and beach stops on the plan.');
@@ -156,12 +177,24 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   if (legs.has('ferry') || legs.has('boat')) add('transport', 'Motion-sickness remedy and a dry bag', 'Ferry or boat legs on the plan.', true);
   if (legs.has('flight')) add('transport', 'Cabin-size bag that fits the internal flights', 'Internal flights on the plan; small carriers have small allowances.');
   if (input.drives) add('transport', 'Offline maps for the whole route', 'Driving through areas with no signal.');
-  if (legs.has('rail') || legs.has('metro') || legs.has('bus')) add('transport', 'Transit pass or contactless card', 'Local transport is the plan.');
+  /*
+   * V11 §37 — A TRANSIT PASS NEEDS THE TRIP TO USE TRANSIT.
+   *
+   * The founder's Kyrgyzstan trip packed one for eleven days of private driver
+   * and guided treks, because a single leg had been *corrected* to a bus by the
+   * V11 §10 defect. The correction is fixed; this is the second lock. Public
+   * transport has to be how the trip moves, not something one leg fell back to.
+   */
+  const primaryMode = input.itinerary.transportStrategy?.primaryMode;
+  const transitIsThePlan = primaryMode === 'public_bus' || primaryMode === 'rail' || (legs.has('metro') && !input.drives);
+  if (transitIsThePlan) add('transport', 'Transit pass or contactless card', 'Local transport is how this trip moves.');
 
   // Remote ------------------------------------------------------------------
   if (remoteOutdoors && trailDays) add('remote_travel', 'Two litres of water per person on trail days', 'Trail sections with no services.');
   if (input.remote) add('remote_travel', 'Downloaded plan, maps and emergency numbers', 'No signal is the assumption out there.');
-  if (trek || camps) add('remote_travel', 'Headtorch', 'Trek days that can end in the dark, and camp nights.', true);
+  /* §37 — a torch is equipment on a trek and a convenience on a lodge night. */
+  if (trek) add('remote_travel', 'Headtorch and spare batteries', 'Trek days that can end in the dark, and camp nights with no light.');
+  else if (camps) add('remote_travel', 'Headtorch', 'Camp nights on the plan.', true);
   if (camps || trek) add('remote_travel', 'Sleeping bag liner, earplugs, quick-dry towel', 'Hut or camp nights on the plan.');
   if (episodes.has('cruise') || episodes.has('expedition_boat')) add('activity_specific', 'A layer for the deck and a small day bag for shore stops', 'Nights on board; excursions leave the ship with what you carry.', true);
   if (input.lodgingKinds.includes('hostel')) add('optional', 'Padlock and earplugs', 'Hostel nights.', true);

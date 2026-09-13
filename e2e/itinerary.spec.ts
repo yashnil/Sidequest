@@ -50,9 +50,17 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
   const firstHeading = await page.getByRole('heading', { name: /^Day 1/ }).textContent();
   expect(firstHeading).toMatch(/^Day 1\s*·/);
 
-  // A plain validation state, never a fabricated score.
-  // V9 — Preflight also says "Ready"; the verdict under test is the band's.
-  await expect(page.getByTestId('atlas-band').getByText(/^(Ready|Ready, with cautions|Needs a decision)$/)).toBeVisible();
+  /*
+   * A plain validation state, never a fabricated score.
+   *
+   * V9 — Preflight also says "Ready"; the verdict under test is the band's.
+   * V11 §4 §39 — "Not ready yet" is the fourth word, and this fixture is
+   * exactly the trip that earns it: no geocoder, no router, so everything
+   * outstanding is Sidequest's own work and none of it is the traveller's to
+   * decide. The old three-word regex is what a trip with nothing measured used
+   * to be squeezed into.
+   */
+  await expect(page.getByTestId('atlas-band').getByText(/^(Ready|Ready, with cautions|Needs a decision|Not ready yet)$/)).toBeVisible();
   await expect(page.getByText(/quality score/i)).toHaveCount(0);
 
   // Real scheduled content: a stop with a time, a meal, and travel between them.
@@ -173,7 +181,8 @@ test('a manual pick that cannot be scheduled is shown as a conflict, not dropped
   await expect(postpile.getByRole('button', { name: 'Include' })).toBeDisabled();
 
   await buildTrip(page);
-  await expect(page.getByTestId('atlas-band').getByText(/Needs a decision|Ready/)).toBeVisible();
+  /* V11 §4 — the fourth word: a fixture with no geocoder and no router is "Not ready yet", and nothing about that is the traveller's to settle. */
+  await expect(page.getByTestId('atlas-band').getByText(/Needs a decision|Ready|Not ready yet/)).toBeVisible();
   // A place that cannot be reached on these dates is never presented as a scheduled stop.
   await expect(page.getByRole('heading', { name: 'Devils Postpile National Monument', exact: true })).toHaveCount(0);
 });

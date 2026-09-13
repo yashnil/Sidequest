@@ -51,6 +51,13 @@ export const tripStateNodeSchema = z.object({
   label: z.string().min(1),
   state: tripNodeStateSchema,
   source: z.enum(['traveller', 'booking', 'sidequest', 'model', 'provider']),
+  /**
+   * V11 §39 — whose move it is. `traveller` is a real preference or choice;
+   * `sidequest` is our own unfinished work, which surfaces as the trip's
+   * confidence and never as something to do. Defaults to `traveller`, so a node
+   * has to opt in to being ours.
+   */
+  owner: z.enum(['traveller', 'sidequest']).optional(),
   confidence: z.enum(['high', 'medium', 'low']),
   impact: z.enum(['trip', 'days', 'day', 'item']),
   scope: z.object({ dayNumbers: z.array(z.number().int().min(1)).default([]), baseIds: z.array(z.string().min(1)).default([]) }),
@@ -131,7 +138,8 @@ export function buildTripStateGraph(input: StateGraphInput): TripStateGraph {
     scope: { dayNumbers: allDays },
   });
 
-  const routeDependency = feasibility.find((f) => f.area === 'bases' && f.severity !== 'caution');
+  /* §39 — a route the traveller has to decide about, not one Sidequest has yet to finish placing. */
+  const routeDependency = feasibility.find((f) => f.area === 'bases' && f.severity !== 'caution' && f.owner !== 'sidequest');
   const route = decisionsByKey.get('route');
   push({
     id: 'route',
@@ -148,7 +156,7 @@ export function buildTripStateGraph(input: StateGraphInput): TripStateGraph {
   });
 
   const gateway = itinerary.issues.find((i) => i.code === 'gateway_unresolved');
-  const transportDependency = feasibility.find((f) => f.area === 'transport' && f.severity === 'dependency' && !f.dayNumber);
+  const transportDependency = feasibility.find((f) => f.area === 'transport' && f.severity === 'dependency' && !f.dayNumber && f.owner !== 'sidequest');
   const transport = decisionsByKey.get('transport');
   push({
     id: 'transport',
@@ -304,7 +312,13 @@ export function buildTripStateGraph(input: StateGraphInput): TripStateGraph {
         href: f.dayNumber ? NODE_HREF.days(f.dayNumber) : NODE_HREF.prepare,
         dependsOn: f.dayNumber ? [`day:${f.dayNumber}`] : ['route'],
         scope: { dayNumbers: f.dayNumber ? [f.dayNumber] : [] },
-        detail: f.severity === 'blocker' ? 'Something you locked is contradicted.' : 'The plan cannot do without this.',
+        /*
+         * V11 §39 — Sidequest's own unfinished work says so, and never claims
+         * the plan is waiting on the traveller. "Still checking this" is the
+         * honest sentence for a geocoder that did not answer.
+         */
+        owner: f.owner ?? 'traveller',
+        detail: f.severity === 'blocker' ? 'Something you locked is contradicted.' : f.owner === 'sidequest' ? 'Sidequest is still working this out; nothing for you to do yet.' : 'The plan cannot do without this.',
       });
     });
   for (const item of input.recheck?.items ?? []) {

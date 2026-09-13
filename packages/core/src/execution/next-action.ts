@@ -59,6 +59,18 @@ const KIND_WORD: Record<NextActionKind, string> = { decide: 'Decide', book: 'Boo
 export const NEXT_ACTION_KIND_WORD = KIND_WORD;
 
 function actionFor(node: TripStateNode, graph: TripStateGraph, input: { now: Date; daysUntilTrip: number }): NextAction | null {
+  /*
+   * V11 §39 — SIDEQUEST'S OWN WORK IS NEVER A TRAVELLER ACTION.
+   *
+   * The founder's Kyrgyzstan trip listed "Sidequest could not find Ala-Kul trek
+   * (camp) on the map" as the traveller's second-most-important thing to do,
+   * under the word DECIDE and the caption "The plan cannot do without this".
+   * There is nothing a traveller can do with a geocoder that did not answer.
+   * These nodes still exist, still lower the trip's confidence, and still show
+   * on the surfaces that describe how complete the plan is — they simply stop
+   * pretending to be a queue somebody can work through.
+   */
+  if (node.owner === 'sidequest') return null;
   let kind: NextActionKind;
   let title: string;
   let why: string;

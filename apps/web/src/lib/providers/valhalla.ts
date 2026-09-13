@@ -2,6 +2,8 @@ import 'server-only';
 import { z } from 'zod';
 import { USER_AGENT } from './nominatim';
 import { requestSignal } from '../net/generation-deadline';
+import { assessLegPlausibility } from '@sidequest/core';
+import type { TransportMode } from '@sidequest/core';
 
 /**
  * VALHALLA — ROUTING AND ROUTE MATRICES.
@@ -1218,34 +1220,25 @@ export function densify(outcome: MatrixOutcome): {
  * undeliverable. Bands are deliberately wide: the job is to catch the absurd,
  * not to second-guess a routing engine that knows about hills.
  */
-const SPEED_BANDS: Record<ValhallaCosting, { minKmh: number; maxKmh: number }> = {
-  pedestrian: { minKmh: 1.5, maxKmh: 9 },
-  bicycle: { minKmh: 4, maxKmh: 40 },
-  auto: { minKmh: 5, maxKmh: 140 },
-  bus: { minKmh: 3, maxKmh: 110 },
-  motor_scooter: { minKmh: 5, maxKmh: 120 },
+/**
+ * V11 §3 — THE GATE IS NOW SHARED, AND ITS FLOOR IS NO LONGER 5 KM/H.
+ *
+ * This used to hold its own `SPEED_BANDS` table with `auto: { minKmh: 5 }`. The
+ * founder's Bishkek→Karakol leg implies exactly 5.0 km/h and would have passed
+ * it — and did pass, on the other router, which had no gate at all. Both now
+ * call one envelope in `@sidequest/core` so the two cannot drift and neither can
+ * be the lenient one.
+ *
+ * The name and signature are kept because `providers.test.ts` pins them.
+ */
+const VALHALLA_SCREENING_MODE: Record<ValhallaCosting, TransportMode> = {
+  auto: 'drive',
+  pedestrian: 'walk',
+  bicycle: 'bicycle',
+  bus: 'public_bus',
+  motor_scooter: 'drive',
 };
 
-/** Straight-line km, to catch a road distance that cannot correspond to it. */
-function straightLineKm(a: RoutePoint, b: RoutePoint): number {
-  const toRad = (deg: number): number => (deg * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371.0088 * Math.asin(Math.sqrt(h));
-}
-
-/**
- * Whether a routed cell is worth believing.
- *
- * Two independent checks, because they catch different lies. The speed band
- * catches a duration that does not match its own distance. The detour ratio
- * catches a distance that cannot correspond to the two points it claims to
- * connect — no real route is fifteen times the straight line, and a router that
- * says so has snapped an endpoint somewhere else entirely.
- */
 export function isPlausibleLeg(input: {
   minutes: number;
   km: number;
@@ -1254,20 +1247,14 @@ export function isPlausibleLeg(input: {
   costing: ValhallaCosting;
 }): boolean {
   if (!Number.isFinite(input.minutes) || input.minutes < 0) return false;
-  if (input.minutes === 0) return true;
-  if (!Number.isFinite(input.km) || input.km < 0) return true; // distance is display-only
-
-  const direct = straightLineKm(input.from, input.to);
-  // Under 300 m, snapping noise dominates and every ratio looks wrong.
-  if (direct > 0.3 && input.km / direct > 15) return false;
-
-  const band = SPEED_BANDS[input.costing];
-  const impliedKmh = input.km / (input.minutes / 60);
-  if (impliedKmh > band.maxKmh) return false;
-  // A very short leg can legitimately imply a slow speed through crossings and
-  // waiting, so the floor only applies once there is real distance in it.
-  if (input.km > 1 && impliedKmh < band.minKmh) return false;
-  return true;
+  return assessLegPlausibility({
+    minutes: input.minutes,
+    /* A non-finite distance is display-only here: pass it as absent rather than as a number. */
+    km: Number.isFinite(input.km) && input.km >= 0 ? input.km : null,
+    from: input.from,
+    to: input.to,
+    mode: VALHALLA_SCREENING_MODE[input.costing],
+  }).ok;
 }
 
 /**

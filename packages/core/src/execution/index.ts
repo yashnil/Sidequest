@@ -8,6 +8,7 @@
  */
 export * from './freshness';
 export * from './decisions';
+export * from './assurance';
 export * from './state-graph';
 export * from './next-action';
 export * from './preflight';

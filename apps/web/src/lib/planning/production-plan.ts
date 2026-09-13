@@ -33,7 +33,7 @@ import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
 import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
-import { buildFeasibilityReport, buildStructuralMetrics, decomposeDestination, itineraryStatusForVerdict, needsDecomposition, routeObjectivesFor } from '@sidequest/core';
+import { buildFeasibilityReport, buildStructuralMetrics, buildTripQualityReport, tripStructureOf, decomposeDestination, itineraryStatusForVerdict, needsDecomposition, routeObjectivesFor } from '@sidequest/core';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -964,7 +964,59 @@ export async function generateSidequestPlanForTrip(
   if (compiled.report.issues.length > 0) {
     console.warn('Quality compiler found V10 issues', { tripId, blockers: compiled.report.issues.filter((i) => i.severity === 'blocker').map((i) => `${i.check}: ${i.detail}`), issues: compiled.report.issues.length });
   }
-  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value, compilerIssues: compiled.report.issues });
+  /*
+   * V11 §4 — HOW COMPLETE THE ROUTE ACTUALLY IS.
+   *
+   * Counted from the plan as it stands, so "Ready" can be gated on the
+   * route-critical set rather than on whether anything happened to fail loudly.
+   * The Canadian Rockies trip called itself "Ready, with cautions" with 12
+   * unplaced names and one of its three signature experiences having no
+   * position at all, because nothing asked this question.
+   */
+  const pkgForCompleteness = applied.itinerary.package;
+  const placedAnchorIds = new Set((pkgForCompleteness?.anchors ?? []).filter((anchor) => anchor.identity).map((anchor) => anchor.id));
+  const baseTransfers = applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel?.role === 'transfer').map((item) => item.travel!));
+  const completeness = {
+    basesPlaced: (pkgForCompleteness?.bases ?? []).filter((base) => base.coordinates).length,
+    basesTotal: (pkgForCompleteness?.bases ?? []).length,
+    routeCriticalPlaced: reconciledRaw.placement.placements.filter((placement) => placement.outcome === 'placed').length,
+    routeCriticalTotal: reconciledRaw.placement.placements.length,
+    /* Operator-timed counts as timed: no router can measure a lodge's 4x4, and demanding one would make every honest expedition unready forever. */
+    baseTransfersTimed: baseTransfers.filter((travel) => travel.minutes !== null).length,
+    baseTransfersTotal: baseTransfers.length,
+    signaturesPlaced: (pkgForCompleteness?.signatures ?? []).filter((signature) => placedAnchorIds.has(signature.id)).length,
+    signaturesTotal: (pkgForCompleteness?.signatures ?? []).length,
+    orderContradictions: compiled.report.issues.filter((issue) => issue.check === 'route_order_coherent' && issue.severity !== 'caution').length,
+    implausibleMeasurements: 0,
+    unrepresentedAccessRequirements: compiled.report.issues.filter((issue) => issue.check === 'access_requirements_represented' && issue.severity === 'blocker').length,
+    legsTimed: applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId)).filter((item) => item.travel!.minutes !== null).length,
+    legsTotal: applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId)).length,
+  };
+  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value, compilerIssues: compiled.report.issues, completeness });
+
+  /*
+   * V11 §2 §5 §6 — THE STRUCTURE AND THE QUALITY REPORT.
+   *
+   * Both are pure functions of the plan as it now stands, so they run after
+   * feasibility and before the package is written. The quality report is the
+   * thing that would have caught both founder trips: a day covering 80% more
+   * ground than its stops require, seven bases where five would do, a bus on a
+   * private-driver plan, and a measurement no journey takes.
+   */
+  const structure = tripStructureOf({ days: applied.itinerary.days, package: { ...applied.itinerary.package, feasibility } } as Parameters<typeof tripStructureOf>[0]);
+  const usedModes = [...new Set(applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel).map((item) => item.travel!.mode)))];
+  const tripQuality = buildTripQualityReport({
+    itinerary: { ...applied.itinerary, package: { ...applied.itinerary.package, feasibility, signatures: applied.itinerary.package?.signatures } } as Parameters<typeof buildTripQualityReport>[0]['itinerary'],
+    stays: structure.stays,
+    chapters: structure.chapters,
+    completeness,
+    /* Judgeable days only: a day nothing could be placed on is not a day that scored zero excess. */
+    dayExcess: reconciledRaw.dayOrders.filter((order) => order.report.verdict !== 'unplaceable').map((order) => ({ dayNumber: order.dayNumber, excessRatio: order.report.excessFraction })),
+    transport: { declared: applied.itinerary.transportStrategy.primaryMode, used: usedModes },
+  });
+  if (tripQuality.weak.length > 0) {
+    console.warn('Trip quality: weak dimensions', { tripId, weak: tripQuality.weak, detail: tripQuality.findings.filter((f) => f.verdict === 'weak').map((f) => `${f.dimension}: ${f.detail}`) });
+  }
   const intelligenceMs = since(intelligenceStartedMs);
 
   /*
@@ -1041,6 +1093,15 @@ export async function generateSidequestPlanForTrip(
           ...(accessConstraints.length > 0 ? { accessConstraints: accessConstraints.slice(0, 60) } : {}),
           ...(experiences.experiences.length > 0 ? { experiences } : {}),
           qualityCompiler: compiled.report,
+          /*
+           * V11 §5 §6 — the stay sequence a traveller actually experiences, and
+           * the chapters it makes. Derived here because it needs the episodes and
+           * the days together, and persisted because the days, the map, the
+           * summary and the PDF must not each re-derive it and disagree.
+           */
+          ...(structure.chapters.length > 0 ? { chapters: structure.chapters } : {}),
+          /* V11 §2 — the internal quality report. Never a score, never shown by default. */
+          tripQuality,
           /*
            * V10 §7 §6 — the two corrections the compiler is allowed to make, both
            * derived from the plan's own geometry: a claim the route contradicts,

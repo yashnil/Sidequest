@@ -132,20 +132,80 @@ export const MAX_PLAUSIBLE_WALK_KM = 3;
 export const MAX_PLAUSIBLE_BICYCLE_KM = 40;
 
 /**
- * The mode that can plausibly carry this leg given the geometry and what the
- * traveller has. A walk hint over 3 km of open country becomes a drive when
- * the traveller drives, transit when they do not; ferries and transfers are
- * never overridden (the router cannot see them and geometry says nothing).
+ * How the trip's ground travel is actually arranged, as the correction below
+ * needs to know it. V11 §10.
+ *
+ * This is the *trip's* contract, not the traveller's licence. A group with a
+ * private driver `canDrive: false` — they are not driving — but their ground
+ * mode is emphatically a car, and answering "bus" for them is a substitution
+ * the trip does not contain.
  */
-export function plausibleModeFor(input: { hinted: TransportMode; straightLineKm: number | null; canDrive: boolean; transitTrip: boolean }): { mode: TransportMode; corrected: boolean } {
+export type GroundArrangement = 'self_drive' | 'driver' | 'taxi' | 'operator' | 'transit' | 'none';
+
+/**
+ * The mode the trip itself uses on the ground, or null when it has no road mode
+ * at all. This is what a corrected leg becomes.
+ */
+export function groundModeFor(arrangement: GroundArrangement): TransportMode | null {
+  switch (arrangement) {
+    case 'self_drive':
+      return 'drive';
+    case 'driver':
+      return 'private_transfer';
+    case 'taxi':
+      return 'rideshare';
+    case 'operator':
+      return 'shuttle';
+    case 'transit':
+      return 'public_bus';
+    case 'none':
+      return null;
+  }
+}
+
+/**
+ * The mode that can plausibly carry this leg given the geometry and how the
+ * trip moves. A walk hint over 3 km of open country becomes the trip's own
+ * ground mode; ferries and transfers are never overridden (the router cannot
+ * see them and geometry says nothing).
+ *
+ * V11 §10 — WHAT THE CORRECTION MAY SUBSTITUTE.
+ *
+ * This used to answer `canDrive ? 'drive' : 'public_bus'`, and on the founder's
+ * Kyrgyzstan trip — private driver and guides for every transfer, explicitly no
+ * self-driving — `canDrive` was false, so a 22 km leg to a trek trailhead was
+ * corrected to **"Bus to Altyn-Arashan valley"**. The trip has no bus in it. A
+ * correction may only ever produce a mode the trip actually uses; where the
+ * trip has no ground mode at all, the hint stands uncorrected and the leg stays
+ * honest about being unmeasurable rather than being handed an invented one.
+ */
+export function plausibleModeFor(input: {
+  hinted: TransportMode;
+  straightLineKm: number | null;
+  /** How the trip's ground travel is arranged. Preferred over `canDrive`, which is only a fallback for callers that have not been given one. */
+  arrangement?: GroundArrangement | undefined;
+  canDrive: boolean;
+  transitTrip: boolean;
+}): { mode: TransportMode; corrected: boolean } {
   const { hinted, straightLineKm } = input;
   if (straightLineKm === null) return { mode: hinted, corrected: false };
-  if (hinted === 'walk' && straightLineKm > MAX_PLAUSIBLE_WALK_KM) {
-    return { mode: input.canDrive ? 'drive' : 'public_bus', corrected: true };
-  }
-  if (hinted === 'bicycle' && straightLineKm > MAX_PLAUSIBLE_BICYCLE_KM) {
-    return { mode: input.canDrive ? 'drive' : 'rail', corrected: true };
-  }
+  const ground =
+    input.arrangement !== undefined
+      ? groundModeFor(input.arrangement)
+      : /*
+         * No arrangement stated. What the traveller can do is the fallback, and
+         * where they neither drive nor are on a transit trip the honest answer
+         * is a road leg somebody else drives — never a bus, which is a service
+         * that either exists or does not and which nothing here has checked.
+         */
+        input.canDrive
+        ? 'drive'
+        : input.transitTrip
+          ? 'public_bus'
+          : 'rideshare';
+  if (ground === null) return { mode: hinted, corrected: false };
+  if (hinted === 'walk' && straightLineKm > MAX_PLAUSIBLE_WALK_KM) return { mode: ground, corrected: true };
+  if (hinted === 'bicycle' && straightLineKm > MAX_PLAUSIBLE_BICYCLE_KM) return { mode: ground, corrected: true };
   return { mode: hinted, corrected: false };
 }
 

@@ -67,7 +67,7 @@ import { FEASIBILITY_WORDS, humanize } from './hub/HumanWords';
 import { PrintAppendix } from './PrintAppendix';
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
-import { dayPartFor, dayState, FEASIBILITY_VERDICT_COPY, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
+import { dayPartFor, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
 import { MapWorkspace } from './hub/MapWorkspace';
@@ -466,6 +466,19 @@ export function ItineraryView({
    */
   const itemsById = new Map<string, { item: ItineraryItem; dayNumber: number }>();
   for (const day of itinerary.days) for (const item of day.items) itemsById.set(item.id, { item, dayNumber: day.dayNumber });
+  /*
+   * V11 §7 — THE CHOICE IS MADE AT BUILD TIME AND READ HERE.
+   *
+   * This used to be `.slice(0, 3)` over the anchors in day order, so "the trip
+   * is built around" meant "whatever happens first" — a bazaar and two markets
+   * on a trek, an arrival-evening riverside walk in the Rockies. The selection
+   * needs the draft, the profile and the episodes, none of which this component
+   * has, so it is scored in the reconciler and persisted on the package.
+   * `signatureOrder` is the fallback for trips built before V11, which have no
+   * `package.signatures` and must keep rendering something.
+   */
+  const chosenSignatures = itinerary.package?.signatures;
+  const signatureOrder = new Map((chosenSignatures ?? []).map((entry, index) => [entry.id, index] as const));
   const signatureExperiences: SignatureExperience[] = (itinerary.package?.anchors ?? [])
     .filter(
       (anchor) =>
@@ -475,6 +488,8 @@ export function ItineraryView({
         anchor.anchorKind !== 'transfer' &&
         anchor.anchorKind !== 'gateway',
     )
+    .filter((anchor) => (chosenSignatures ? signatureOrder.has(anchor.id) : true))
+    .sort((a, b) => (chosenSignatures ? (signatureOrder.get(a.id) ?? 0) - (signatureOrder.get(b.id) ?? 0) : 0))
     .slice(0, 3)
     .map((anchor) => {
       const hit = itemsById.get(anchor.id) ?? (anchor.placeId ? [...itemsById.values()].find((entry) => entry.item.placeId === anchor.placeId) : undefined);
@@ -518,7 +533,7 @@ export function ItineraryView({
       <div className="lg:grid lg:grid-cols-[minmax(0,58fr)_minmax(320px,42fr)] lg:items-stretch lg:gap-8">
         <div className="min-w-0">
           <div id="itinerary" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
-          <DayRail days={itinerary.days} />
+          <DayRail days={itinerary.days} chapters={itinerary.package?.chapters} />
           <ol className="space-y-10">
             {itinerary.days.map((day) => (
               <li key={day.dayNumber} className="break-inside-avoid">
@@ -1030,7 +1045,12 @@ export function ItineraryView({
    * the only ones the band may use when it has one. The first two items are the
    * things worth reading before committing; the rest are on Prepare.
    */
-  const verdict = feasibility ? FEASIBILITY_VERDICT_COPY[feasibility.verdict] : null;
+  /*
+   * V11 §4 §39 — the headline asks whose work is outstanding. "Needs a decision"
+   * is right for a choice and wrong for a geocoder that has not answered, which
+   * is what a founder trip put under that word three times.
+   */
+  const verdict = feasibility ? feasibilityHeadline(feasibility) : null;
   const statusTone: 'ready' | 'caution' | 'blocked' | 'neutral' = feasibility
     ? feasibility.verdict === 'feasible'
       ? 'ready'
@@ -3389,6 +3409,19 @@ function WhereToStay({
   pkg: TripPackage;
   verifiedAreas: readonly { name: string; rationale: string; tradeoffs: readonly string[] }[];
 }) {
+  /*
+   * V11 §5 — THE LIST IS THE STAY SEQUENCE, NOT THE BASE ROWS.
+   *
+   * The founder's Kyrgyzstan trip listed "7 bases, in order" with Karakol twice
+   * in a row for one night each, and a trek camp among them as an ordinary place
+   * to book. `normalizeStays` folds the duplicate and attributes the camp to the
+   * experience that owns it; the row keeps the first constituent base's own
+   * verification and rationale, because those are facts about the place and the
+   * fold does not change them.
+   */
+  const stays = normalizeStays({ bases: pkg.bases, episodes: pkg.episodes })
+    .stays.map((stay) => ({ stay, base: pkg.bases.find((candidate) => candidate.id === stay.id) }))
+    .filter((entry): entry is { stay: (typeof entry)['stay']; base: NonNullable<(typeof entry)['base']> } => entry.base !== undefined);
   return (
     <Panel className="p-5" as="section" testId="where-to-stay">
       <h3 className="font-display text-lg text-ink">Where to stay</h3>
@@ -3396,13 +3429,14 @@ function WhereToStay({
         Areas and styles, not hotels. Nothing here is booked, and no hotel is named as a promise.
       </p>
       <ul className="mt-3 grid gap-3">
-        {pkg.bases.map((base) => (
-          <li key={base.id} className="rounded-lg border border-rule p-3 text-sm">
-            <span className="font-medium text-ink">{base.name}</span>
+        {stays.map(({ stay, base }) => (
+          <li key={stay.id} className="rounded-lg border border-rule p-3 text-sm">
+            <span className="font-medium text-ink">{stay.name}</span>
             <span className="text-ink-faint">
               {' '}
-              · {base.nights} night{base.nights === 1 ? '' : 's'} · {VERIFICATION_WORD[base.verification]}
+              · {stay.nights} night{stay.nights === 1 ? '' : 's'} · {VERIFICATION_WORD[base.verification]}
             </span>
+            {stay.withinExperience ? <span className="mt-0.5 block text-ink-faint">Part of {stay.withinExperience} — the operator arranges these nights.</span> : null}
             <span className="mt-0.5 block text-ink-muted">{base.why}</span>
             {base.area || base.style ? (
               <span className="mt-1 block text-ink-muted">

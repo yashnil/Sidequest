@@ -1,6 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
 import type { RoutingProvider, RouteConfirmationResult, RoutingMatrixResult, ProviderGapReason } from '@sidequest/compiler';
+import { assessLegPlausibility, screeningModeFor } from '@sidequest/core';
 import { USER_AGENT } from './nominatim';
 import { requestSignal } from '../net/generation-deadline';
 
@@ -254,6 +255,25 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
       if (n > 2) wanted.push([n - 1, 0]);
       let calls = 0;
       const outstanding: [number, number][] = [];
+      /*
+       * V11 §3 — EVERY ACCEPTED CELL IS SCREENED, AND A REFUSED ONE IS AN ABSENCE.
+       *
+       * This seam had no plausibility gate at all, which is how a founder trip
+       * printed "Bishkek → Karakol · 434 km · 5209 min" as a *measured* private
+       * transfer — 5 km/h — and built eleven days around it. Valhalla screened
+       * its matrix and this router, the one that answers everywhere Valhalla's
+       * tiles do not reach, screened nothing: the destinations with the least
+       * other evidence had the least protection.
+       *
+       * A refused measurement is `insufficient_evidence`, never `not_found`.
+       * V9.1 settled that distinction for a declined matrix cell and it holds
+       * here for the same reason: distrusting an answer is not the provider
+       * telling us there is no road, so it must never remove a stop.
+       */
+      const screeningMode = screeningModeFor(mode === 'car' ? 'car' : 'foot');
+      const implausible = (i: number, j: number, foundMinutes: number, foundKm: number) =>
+        !assessLegPlausibility({ minutes: foundMinutes, km: foundKm, from: points[i], to: points[j], mode: screeningMode }).ok;
+
       const take = (i: number, j: number, foundMinutes: number, foundKm: number) => {
         minutes[i]![j] = foundMinutes;
         km[i]![j] = foundKm;
@@ -265,7 +285,8 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
       /* Every pair the cache already holds costs nothing. */
       for (const [i, j] of wanted) {
         const cached = http.cache?.read(routeCacheKey(points[i]!, points[j]!, profile));
-        if (cached) take(i, j, cached.minutes, cached.km);
+        /* A cache written before this gate existed holds figures the gate would refuse; re-ask instead of trusting them. */
+        if (cached && !implausible(i, j, cached.minutes, cached.km)) take(i, j, cached.minutes, cached.km);
         else outstanding.push([i, j]);
       }
 
@@ -288,6 +309,11 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
             }
             const foundMinutes = Math.round(seconds / 60);
             const foundKm = Math.round(distanceKm * 10) / 10;
+            if (implausible(i, j, foundMinutes, foundKm)) {
+              /* Not cached: a figure we will not schedule from is not one to remember. */
+              fail(ids[i]!, ids[j]!, 'insufficient_evidence');
+              continue;
+            }
             take(i, j, foundMinutes, foundKm);
             diagnostics.routePairs += 1;
             http.cache?.write(routeCacheKey(points[i]!, points[j]!, profile), { minutes: foundMinutes, km: foundKm });
@@ -308,8 +334,11 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
         diagnostics.routeCalls += 1;
         diagnostics.routePairs += 1;
         if (result.found && result.minutes !== null && result.km !== null) {
-          take(i, j, result.minutes, result.km);
-          http.cache?.write(routeCacheKey(points[i]!, points[j]!, profile), { minutes: result.minutes, km: result.km });
+          if (implausible(i, j, result.minutes, result.km)) fail(ids[i]!, ids[j]!, 'insufficient_evidence');
+          else {
+            take(i, j, result.minutes, result.km);
+            http.cache?.write(routeCacheKey(points[i]!, points[j]!, profile), { minutes: result.minutes, km: result.km });
+          }
         } else {
           fail(ids[i]!, ids[j]!, result.reason ?? 'provider_error');
         }
@@ -333,7 +362,18 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
       const startedAt = performance.now();
       const result = await computeOrsRoute({ from, to, profile }, http);
       diagnostics.routeCalls += 1;
-      return { found: result.found, minutes: result.minutes, km: result.km, ...(result.reason ? { reason: result.reason } : {}), ...(result.geometry ? { geometry: result.geometry } : {}), latencyMs: Math.round(performance.now() - startedAt) };
+      const latencyMs = Math.round(performance.now() - startedAt);
+      /*
+       * V11 §3 — the direct endpoint is screened on the same terms as the matrix.
+       * A refusal here is `insufficient_evidence` and NOT `not_found`, because
+       * `not_found` from this endpoint is the one answer the reconciler is
+       * allowed to read as an affirmative no-route (V9.1). Distrusting a figure
+       * must never be able to say the road does not exist.
+       */
+      if (result.found && !assessLegPlausibility({ minutes: result.minutes, km: result.km, from, to, mode: screeningModeFor(mode === 'car' ? 'car' : 'foot') }).ok) {
+        return { found: false, minutes: null, km: null, reason: 'insufficient_evidence', latencyMs };
+      }
+      return { found: result.found, minutes: result.minutes, km: result.km, ...(result.reason ? { reason: result.reason } : {}), ...(result.geometry ? { geometry: result.geometry } : {}), latencyMs };
     },
   };
 }

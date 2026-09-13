@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CLAIM_KINDS, CONFIRMING_AUTHORITY, applySourcePolicy, claim, freshnessVerdict, mayConfirm, stateFromEvidence } from './claims';
 import { bookingPriorityFor } from './booking';
 import { buildReadinessPacket, OfficialTravelSourceRegistry } from './readiness';
+import { countryFacts } from '../reference/countries';
 import { LEG_MODES, ROAD_ROUTABLE_MODES, durationBasisOf, legFromSegment, trafficStateFor } from './transport';
 import { buildTerminalPlan, TERMINAL_BUFFERS } from './terminal';
 import { buildChecklist } from './checklist';
@@ -129,6 +130,60 @@ describe('booking priority without fake urgency', () => {
 
 describe('country readiness', () => {
   const base = { destinationName: 'Iceland', destinationCountry: 'IS', tripStart: '2026-08-10', tripEnd: '2026-08-20', drives: true, remote: true, strenuous: true, water: true, now: NOW };
+
+  /**
+   * V11 §11 — A REGION MAY NOT SPEAK LIKE A COUNTRY.
+   *
+   * The founder's Canadian Rockies trip printed all six of these sentences with
+   * "canadian rockies" as their subject, on five surfaces, while the print
+   * appendix two pages later said "Emergency number in Canada: 911". Same trip,
+   * same build, two different name sources.
+   */
+  describe('a destination that is a region, not a country', () => {
+    const rockies = {
+      destinationName: 'canadian rockies',
+      destinationCountry: 'CA',
+      tripStart: '2027-08-05',
+      tripEnd: '2027-08-15',
+      drives: true,
+      remote: true,
+      strenuous: true,
+      water: false,
+      now: NOW,
+      destinationFacts: countryFacts('CA'),
+    };
+
+    it('never names the region as the subject of a jurisdiction fact', () => {
+      const { packet } = buildReadinessPacket(rockies);
+      const prose = packet.entries.map((entry) => `${entry.summary} ${entry.action ?? ''}`).join(' \n ');
+      expect(prose).not.toMatch(/canadian rockies/i);
+    });
+
+    it('names Canada in every one of the six sentences the founder trip got wrong', () => {
+      const { packet } = buildReadinessPacket(rockies);
+      const find = (kind: string) => packet.entries.find((entry) => entry.kind === kind)?.summary ?? '';
+      expect(find('currency_payment')).toMatch(/^Canada uses the CAD/);
+      expect(find('electricity')).toMatch(/^Canada uses type/);
+      expect(find('language')).toMatch(/spoken in Canada/);
+      expect(find('emergency')).toMatch(/Emergency number in Canada/);
+      const driving = find('driving_document');
+      expect(driving).toMatch(/Whether Canada accepts your licence/);
+      expect(driving).toMatch(/Traffic drives on the right in Canada/);
+    });
+
+    it('falls back to a resolved jurisdiction name when no bundled facts exist', () => {
+      const { packet } = buildReadinessPacket({ ...rockies, destinationCountry: 'ZZ', destinationFacts: null, jurisdictionName: 'Somewhere' });
+      const visa = packet.entries.find((entry) => entry.kind === 'visa')!;
+      expect(`${visa.summary} ${visa.action ?? ''}`).not.toMatch(/canadian rockies/i);
+    });
+
+    it('still names the destination where the sentence is genuinely about the destination', () => {
+      /* "Sidequest could not resolve which country X is in" is the one place the phrase belongs. */
+      const { packet } = buildReadinessPacket({ ...rockies, destinationCountry: undefined, destinationFacts: null, profile: { citizenship: 'US', transitCountries: [] } });
+      const visa = packet.entries.find((entry) => entry.kind === 'visa')!;
+      expect(visa.summary).toMatch(/canadian rockies/);
+    });
+  });
 
   it('never says "you do not need a visa": an international trip with a known citizenship is unverified with official links', () => {
     const { packet, claims } = buildReadinessPacket({ ...base, profile: { citizenship: 'US', transitCountries: [] } });

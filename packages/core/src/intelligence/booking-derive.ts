@@ -3,6 +3,7 @@ import type { TravelerProfile } from '../schemas/profile';
 import { bookingItemSchema, bookingPriorityFor, type BookedPlanItem, type BookingItem, type BookingItemKind } from './booking';
 import type { TransportLeg } from './transport';
 import { baseDaySpans } from './lodging';
+import { normalizeStays } from '../experience/chapters';
 import type { TravelReality } from '../reality/schema';
 
 /**
@@ -110,15 +111,51 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
 
   // Every base needs a bed ------------------------------------------------------
   const spans = baseDaySpans(itinerary, pkg);
-  const bases = spans.map((span) => {
-    const pkgBase = pkg?.bases.find((b) => b.id === span.baseId);
-    return { id: span.baseId, name: span.name, nights: pkgBase?.nights ?? Math.max(0, span.dayNumbers.length - 1), firstDayNumber: span.dayNumbers[0] };
+  /*
+   * V11 §5 — ONE ROW PER STAY, NOT PER BASE ROW.
+   *
+   * The founder's Kyrgyzstan Book-first page listed "1 night in Karakol" twice
+   * in a row, and "2 nights in Ala-Kul trek (camp)" beside the trek operator
+   * booking that already covers those nights — the same bed asked for twice.
+   * `normalizeStays` is the same derivation the stays list and the churn figure
+   * read, so the three cannot disagree about how many beds this trip needs.
+   */
+  const stayStructure = normalizeStays({
+    bases: (pkg?.bases ?? []).map((base) => ({
+      id: base.id,
+      name: base.name,
+      nights: base.nights,
+      ...(base.displayName ? { displayName: base.displayName } : {}),
+      ...(base.canonicalName ? { canonicalName: base.canonicalName } : {}),
+      ...(base.locality ? { locality: base.locality } : {}),
+      ...(base.baseKind ? { baseKind: base.baseKind } : {}),
+      ...(base.coordinates ? { coordinates: base.coordinates } : {}),
+      ...(base.episode ? { episode: base.episode } : {}),
+    })),
+    episodes: (pkg?.episodes ?? []).map((episode) => ({ name: episode.name, kind: episode.kind, dayNumbers: episode.dayNumbers, baseIds: episode.baseIds, timing: episode.timing })),
   });
+  const stayById = new Map(stayStructure.stays.map((stay) => [stay.id, stay] as const));
+  /* Every base folded INTO another stay; its nights are already counted on the stay that absorbed it. */
+  const foldedBaseIds = new Set(stayStructure.stays.flatMap((stay) => stay.baseIds.slice(1)));
+  const bases = spans
+    .filter((span) => !foldedBaseIds.has(span.baseId))
+    .map((span) => {
+      const pkgBase = pkg?.bases.find((b) => b.id === span.baseId);
+      const stay = stayById.get(span.baseId);
+      return { id: span.baseId, name: stay?.name ?? span.name, nights: stay?.nights ?? pkgBase?.nights ?? Math.max(0, span.dayNumbers.length - 1), firstDayNumber: span.dayNumbers[0] };
+    });
   const vesselBaseIds = new Set((pkg?.bases ?? []).filter((b) => b.baseKind === 'vessel').map((b) => b.id));
   bases.forEach((base, index) => {
     if (base.nights === 0) return;
     /* V7 §8 — a night on a ship or a sleeper is booked as the episode, never as "a bed in the cruise ship". */
     if (vesselBaseIds.has(base.id)) return;
+    /*
+     * V11 §5 — and the same is true of any night an operator-run multi-day
+     * experience owns. The trek camp is bought with the trek; asking for it
+     * again is the same bed twice, and it is the booking beside it that the
+     * traveller actually has to make.
+     */
+    if (stayById.get(base.id)?.withinExperience) return;
     const firstDay = itinerary.days.find((d) => d.dayNumber === base.firstDayNumber);
     const booked = matchBooked(input.booked, 'accommodation', { baseId: base.id, date: firstDay?.date, title: base.name });
     const remote = input.remoteBaseIds.has(base.id);

@@ -1195,6 +1195,11 @@ export const VERIFICATION_STATES = ['verified', 'partially_verified', 'unverifie
 export const verificationStateSchema = z.enum(VERIFICATION_STATES);
 export type VerificationState = z.infer<typeof verificationStateSchema>;
 
+/** The shape of a trip, as the composing model classified it. V11 §4 keys its readiness requirements to this. */
+export const TRIP_ARCHETYPES = ['single_base_urban', 'hub_and_spoke', 'road_trip', 'rail_route', 'island_hopping', 'fly_drive', 'multi_region', 'wilderness_gateway', 'guided_remote', 'lodge_circuit', 'mixed', 'single_base', 'moving_route', 'loop'] as const;
+export const tripArchetypeSchema = z.enum(TRIP_ARCHETYPES);
+export type TripArchetype = z.infer<typeof tripArchetypeSchema>;
+
 export const packageBaseSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1269,7 +1274,7 @@ export const tripPackageSchema = z.object({
   source: z.literal('model_draft'),
   draftVersion: z.number().int().min(1),
   /** The trip shape the model chose. Legacy values (`single_base`, `moving_route`, `loop`) still parse for stored plans. */
-  archetype: z.enum(['single_base_urban', 'hub_and_spoke', 'road_trip', 'rail_route', 'island_hopping', 'fly_drive', 'multi_region', 'wilderness_gateway', 'guided_remote', 'lodge_circuit', 'mixed', 'single_base', 'moving_route', 'loop']),
+  archetype: tripArchetypeSchema,
   purpose: z.string().min(1),
   routeRationale: z.string().min(1),
   /**
@@ -1318,6 +1323,70 @@ export const tripPackageSchema = z.object({
   }),
   /** What to book first, in the model's judgement — lodges, internal flights, timed tickets. */
   bookingPriorities: z.array(z.string().min(1)).default([]),
+  /**
+   * V11 §6 — THE TRIP'S CHAPTERS.
+   *
+   * Derived from geography, experiences and route structure at build time and
+   * persisted, so the days, the map, the summary and the PDF read one record and
+   * cannot disagree about where one part of the trip ends and the next begins.
+   */
+  chapters: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        title: z.string().min(1).max(120),
+        role: z.enum(['arrival', 'exploration', 'expedition', 'transition', 'recovery', 'finale']),
+        dayNumbers: z.array(z.number().int().min(1)).min(1),
+        stayIds: z.array(z.string().min(1)).default([]),
+        nights: z.number().int().min(0),
+        experience: z.string().min(1).max(120).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  /**
+   * V11 §2 — the deterministic trip-quality report. Internal by default: it
+   * exists to catch a bad plan before a traveller sees it, and it is never
+   * collapsed into a score.
+   */
+  tripQuality: z
+    .object({
+      version: z.literal(1),
+      findings: z.array(
+        z.object({
+          dimension: z.string().min(1).max(40),
+          label: z.string().min(1).max(80),
+          verdict: z.enum(['strong', 'adequate', 'weak', 'unknown']),
+          figure: z.string().min(1).max(160).optional(),
+          detail: z.string().min(1).max(400),
+        }),
+      ),
+      weak: z.array(z.string().min(1).max(40)).default([]),
+      unmeasured: z.array(z.string().min(1).max(40)).default([]),
+    })
+    .optional(),
+  /**
+   * V11 §7 — WHAT THE TRIP IS BUILT AROUND, CHOSEN RATHER THAN TAKEN.
+   *
+   * Persisted because the choice needs the draft (which states its own
+   * signatures), the profile (which ranks interests) and the episodes (which
+   * say what the trip's architecture is) — and the surfaces that display it
+   * have only the itinerary. Absent on trips built before V11, where the UI
+   * falls back to what it did then and says so in its own comment.
+   */
+  signatures: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().min(1).max(120),
+        dayNumber: z.number().int().min(1),
+        score: z.number().min(0).max(1),
+        reasons: z.array(z.string().min(1).max(40)).max(8).default([]),
+        why: z.string().min(1).max(400).optional(),
+      }),
+    )
+    .max(3)
+    .optional(),
   /**
    * V7 §8 — THE EPISODES, PERSISTED. One object per multi-day experience:
    * its days, its bases, its movement, its operator timing and its gateways.
@@ -1395,6 +1464,8 @@ export const tripPackageSchema = z.object({
           severity: z.enum(['blocker', 'dependency', 'caution']),
           dayNumber: z.number().int().min(1).optional(),
           detail: z.string().min(1),
+          /** V11 §39 — whose move this is. Absent on trips built before V11, which read as the traveller's. */
+          owner: z.enum(['traveller', 'sidequest']).optional(),
         }),
       ),
       summary: z.string().min(1),

@@ -2,6 +2,7 @@ import type { Itinerary } from '../schemas/itinerary';
 import { modelMayOverride, type TripContract } from '../contract/trip-contract';
 import { STRENUOUS_BLOCKERS, FUNCTIONAL_NEED_LABELS, type FunctionalNeed } from '../party/traveler';
 import { dayStrain } from '../party/strain';
+import { readinessShortfalls, type RouteCompleteness } from './readiness-requirements';
 
 /**
  * THE FEASIBILITY REPORT — DETERMINISTIC, FROM THE PLAN AS IT STANDS.
@@ -39,6 +40,23 @@ export interface FeasibilityItem {
   severity: 'blocker' | 'dependency' | 'caution';
   dayNumber?: number;
   detail: string;
+  /**
+   * V11 §39 — WHOSE WORK THIS IS.
+   *
+   * The founder's Kyrgyzstan trip put three items under the heading **DECIDE**:
+   * *"Sidequest could not find Ala-Kul trek (camp) on the map"*, *"3 moves
+   * between bases have not been timed yet"*, and *"Day 4 moves base and the main
+   * transfer has not been measured"* — each captioned "The plan cannot do
+   * without this". None of the three is a decision. A geocoder that did not
+   * answer and a router that was not asked are Sidequest's state, not the
+   * traveller's choice, and putting them in the traveller's queue asks somebody
+   * to do work they have no way of doing.
+   *
+   * `traveller` (the default) is a real preference or choice: which airport,
+   * which operator, whether to book. `sidequest` is our own unfinished work,
+   * and it belongs in the trip's confidence, never in an action list.
+   */
+  owner?: 'traveller' | 'sidequest';
 }
 
 export interface FeasibilityReport {
@@ -54,6 +72,29 @@ export const FEASIBILITY_VERDICT_COPY: Record<FeasibilityVerdict, { label: strin
   unresolved_major_dependency: { label: 'Needs a decision', blurb: 'One thing the plan depends on is still open. Settle it and the days fall into place.' },
   infeasible: { label: 'Needs a rethink', blurb: 'Something you locked is contradicted by the plan as it stands.' },
 };
+
+/**
+ * V11 §4 §39 — THE HEADLINE, WHICH DEPENDS ON WHOSE WORK IS OUTSTANDING.
+ *
+ * `unresolved_major_dependency` used to be captioned "Needs a decision" in every
+ * case. That is right when the open thing is a choice — which airport, which
+ * operator — and wrong when it is a geocoder that has not answered, which is
+ * what the founder's Kyrgyzstan trip put under that heading three times.
+ *
+ * So the verdict stays as it is (it is a fact about the plan) and the *sentence*
+ * asks one more question: is anything here actually the traveller's move?
+ */
+export function feasibilityHeadline(report: Pick<FeasibilityReport, 'verdict' | 'items'>): { label: string; blurb: string } {
+  const base = FEASIBILITY_VERDICT_COPY[report.verdict];
+  if (report.verdict !== 'unresolved_major_dependency') return base;
+  const open = report.items.filter((item) => item.severity === 'dependency');
+  if (open.length === 0 || open.some((item) => item.owner !== 'sidequest')) return base;
+  const n = open.length;
+  return {
+    label: 'Not ready yet',
+    blurb: `Sidequest is still working out ${n === 1 ? 'one thing' : `${n} things`} the plan depends on. Nothing for you to do yet — the days will firm up as ${n === 1 ? 'it lands' : 'they land'}.`,
+  };
+}
 
 export interface FeasibilityInput {
   itinerary: Itinerary;
@@ -75,6 +116,13 @@ export interface FeasibilityInput {
    * the compiler, so the report adopts its sentence rather than re-deriving one.
    */
   compilerIssues?: readonly { check: string; severity: 'blocker' | 'issue' | 'caution'; dayNumber?: number; detail: string; travellerNote?: string }[];
+  /**
+   * V11 §4 — how complete the route actually is, so "Ready" can be gated on it.
+   *
+   * Absent means the caller did not compute it, and the verdict then behaves
+   * exactly as it did before — an absence is never turned into a shortfall.
+   */
+  completeness?: RouteCompleteness;
 }
 
 /** Which feasibility area a V10 compiler check belongs to. */
@@ -118,7 +166,7 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
 
   // --- bases -----------------------------------------------------------------------------
   const baseConsistency = input.audit?.checks.find((c) => c.id === 'base_consistency');
-  if (baseConsistency && !baseConsistency.ok) items.push({ area: 'bases', severity: 'dependency', detail: `Where you sleep is not continuous: ${baseConsistency.detail}.` });
+  if (baseConsistency && !baseConsistency.ok) items.push({ area: 'bases', severity: 'dependency', detail: `Where you sleep is not continuous: ${baseConsistency.detail}.`, owner: 'sidequest' });
 
   // --- transport -------------------------------------------------------------------------
   const OPERATOR_TIMED = new Set(['flight', 'boat', 'ferry', 'high_speed_rail', 'rail', 'four_wheel_drive', 'guide_or_lodge_transfer', 'private_transfer']);
@@ -135,7 +183,8 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
       if (OPERATOR_TIMED.has(hint) || transfer?.travel?.episodeMode) {
         items.push({ area: 'transport', severity: 'caution', dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} moves base by ${hint.replace(/_/g, ' ') || 'an arranged transfer'}; the operator sets the hours, so confirm them when you book.` });
       } else {
-        items.push({ area: 'transport', severity: 'dependency', dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} moves base and the main transfer has not been measured, so the day cannot be timed yet.` });
+        /* §39 — nobody can *decide* a measurement into existence. This is Sidequest's own unfinished work. */
+        items.push({ area: 'transport', severity: 'dependency', dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} moves base and the main transfer has not been measured, so the day cannot be timed yet.`, owner: 'sidequest' });
       }
     }
   }
@@ -261,6 +310,12 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
    * gateway that does not work, a lake the plan drives to that admits no cars.
    */
   const CANNOT_BE_DONE = new Set(['no_closed_stop', 'gateway_feasible', 'access_requirements_represented']);
+  /*
+   * §39 — the compiler checks that describe *our* incomplete work rather than a
+   * choice somebody has to make. A gateway nobody has chosen between stays with
+   * the traveller; a name the geocoder did not answer for does not.
+   */
+  const SIDEQUEST_OWN_WORK = new Set(['route_critical_placement', 'route_critical_measurement', 'spatial_order', 'day_order_judgeable', 'leg_measurement', 'placement_quality']);
   for (const issue of input.compilerIssues ?? []) {
     /*
      * §19 — this list is what the traveller still has to decide, so a finding
@@ -274,7 +329,21 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
     if (issue.severity !== 'blocker' && !issue.travellerNote) continue;
     const area = COMPILER_AREA[issue.check] ?? 'transport';
     const severity: FeasibilityItem['severity'] = issue.severity === 'blocker' ? (CANNOT_BE_DONE.has(issue.check) ? 'blocker' : 'dependency') : 'caution';
-    items.push({ area, severity, ...(issue.dayNumber ? { dayNumber: issue.dayNumber } : {}), detail: issue.travellerNote ?? issue.detail });
+    items.push({ area, severity, ...(issue.dayNumber ? { dayNumber: issue.dayNumber } : {}), detail: issue.travellerNote ?? issue.detail, ...(SIDEQUEST_OWN_WORK.has(issue.check) ? { owner: 'sidequest' as const } : {}) });
+  }
+
+  /*
+   * --- V11 §4: what Ready requires of THIS archetype ------------------------------------
+   *
+   * Each shortfall is a `dependency`, not a caution, and `owner: 'sidequest'`,
+   * because every one of them is a measurement or a placement rather than a
+   * choice. That combination is the point: the trip stops calling itself Ready,
+   * and the traveller is not handed a queue of work only we can do.
+   */
+  if (input.completeness) {
+    for (const shortfall of readinessShortfalls({ archetype: itinerary.package?.archetype, completeness: input.completeness })) {
+      items.push({ area: shortfall.requirement === 'access_requirements' ? 'transport' : shortfall.requirement === 'bases_placed' ? 'bases' : 'transport', severity: 'dependency', detail: shortfall.detail, owner: 'sidequest' });
+    }
   }
 
   // --- verdict ---------------------------------------------------------------------------

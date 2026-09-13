@@ -98,6 +98,20 @@ export interface FoodInput {
   categoryByItem: ReadonlyMap<string, string>;
   /** Days the transport or lodging already say are remote: lodge, camp, hut, boat or guide legs. */
   remoteDayHints?: ReadonlySet<number>;
+  /**
+   * V11 §38 — DAYS WHERE AN OPERATOR IS FEEDING THE TRAVELLER.
+   *
+   * The founder's Kyrgyzstan trip printed *"Buy lunch and snacks the evening
+   * before or at the first shop of the day"* on eight of eleven days, including
+   * three spent at a trek camp and a yurt camp whose operator provides every
+   * meal, and one that never leaves the camp at all. Repeating one instruction
+   * eight times is not a supply strategy; it is what a rule looks like when it
+   * cannot see the trip.
+   *
+   * From the persisted episodes' own `meals: 'included'`. Absent means nobody
+   * said, and the advice then stands exactly as it did.
+   */
+  cateredDayNumbers?: ReadonlySet<number>;
 }
 
 const SPECIALTY_WORDS = /\b(chowder|seafood|oysters?|lobster|crab|mussels|fish and chips|stew|lamb|cheese|tapas|pintxos|ramen|sushi|kaiseki|pasta|pizza|gelato|paella|tagine|curry|barbecue|bbq|braai|nyama choma|pho|banh mi|dumplings|dim sum|soda bread|black pudding|brown bread|smoked salmon|salmon|langoustine|charcuterie|wine|whiskey|whisky|craft beer|cider|pastry|pastries|bakery)\b/gi;
@@ -152,6 +166,8 @@ export function buildFoodIntelligence(input: FoodInput): FoodIntelligence {
   const days = itinerary.days.map((day) => {
     const categories = day.items.filter((i) => i.kind === 'activity').map((i) => (i.placeId ? input.categoryByPlace.get(i.placeId) : undefined) ?? input.categoryByItem.get(i.id) ?? 'other');
     const remote = isRemote(day, categories) || (input.remoteDayHints?.has(day.dayNumber) ?? false);
+    /* §38 — an operator feeding the traveller is the supply strategy; there is nothing to buy the evening before. */
+    const catered = input.cateredDayNumbers?.has(day.dayNumber) ?? false;
     if (remote) remoteDayNumbers.push(day.dayNumber);
     const relocation = day.totals.driveMinutes >= 120 || day.totals.transitMinutes >= 120;
     const isFirst = day.dayNumber === itinerary.days[0]!.dayNumber;
@@ -192,7 +208,10 @@ export function buildFoodIntelligence(input: FoodInput): FoodIntelligence {
           note = 'At or near where you sleep.';
         }
       } else if (slot === 'lunch') {
-        if (stopKind === 'packed' || (remote && stopKind !== 'venue')) {
+        if (catered && stopKind !== 'venue') {
+          role = 'convenience';
+          note = 'The operator provides meals on this part of the trip.';
+        } else if (stopKind === 'packed' || (remote && stopKind !== 'venue')) {
           role = 'packed_lunch';
           note = 'Carry it. Nothing on this stretch is counted on.';
           provisioning.push('Buy lunch and snacks the evening before or at the first shop of the day.');
@@ -245,7 +264,7 @@ export function buildFoodIntelligence(input: FoodInput): FoodIntelligence {
         note = slot === 'lunch' && isFirst ? 'Not planned: you arrive after lunch.' : 'Not planned for this day.';
       }
       if (role !== 'skip' && intentRole && !(intentRole === 'special_occasion' && specialDay !== day.dayNumber)) {
-        if (intentRole === 'packed_lunch' && role !== 'packed_lunch') provisioning.push('Buy lunch and snacks the evening before or at the first shop of the day.');
+        if (intentRole === 'packed_lunch' && role !== 'packed_lunch' && !catered) provisioning.push('Buy lunch and snacks the evening before or at the first shop of the day.');
         role = intentRole;
         if (intentRole === 'packed_lunch') note = 'Carry it, as the plan says. Nothing on this stretch is counted on.';
         else if (intentRole === 'market') note = 'The plan eats at a market here — a food highlight, not a fallback.';
@@ -269,7 +288,8 @@ export function buildFoodIntelligence(input: FoodInput): FoodIntelligence {
         ...(mealItem ? { aroundMinute: mealItem.startMinute } : {}),
       });
     }
-    if (remote) provisioning.push('Carry water and snacks; refill where you can.');
+    if (catered) provisioning.push('Meals on this day come with the experience; carry water and anything you want between them.');
+    else if (remote) provisioning.push('Carry water and snacks; refill where you can.');
     if (day.food.slots.includes('snack')) provisioning.push('A snack stop is already in the day.');
     const dietaryNote = dietary.length > 0 ? `${strict ? 'Strict' : 'Preferred'}: ${dietary.join(', ')}. Sidequest verified dietary claims only where a venue published them.` : undefined;
     return dayMealStrategySchema.parse({ dayNumber: day.dayNumber, remote, meals, provisioning: [...new Set(provisioning)], ...(dietaryNote ? { dietaryNote } : {}) });

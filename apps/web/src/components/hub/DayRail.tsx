@@ -1,4 +1,4 @@
-import type { ItineraryDay } from '@sidequest/core';
+import type { ItineraryDay, TripPackage } from '@sidequest/core';
 import { DayFocusLink } from './DayFocus';
 import { shortDate } from './plan-format';
 
@@ -19,8 +19,60 @@ import { shortDate } from './plan-format';
  * the date at 13 px, and every chip a 44 px target. Sticky under the hub nav on
  * a phone; a wrapped list on a desktop. Hidden in print, where page numbers do
  * this job.
+ *
+ * V11 §6 — THE RAIL SHOWS THE TRIP'S CHAPTERS.
+ *
+ * Eleven equal chips is a list of days; the same eleven under "ARRIVE ·
+ * ALA-KUL TRAVERSE · RECOVERY · SONG-KOL · FINALE" is a trip. The chapters are
+ * derived at build time and persisted (`package.chapters`), so this reads one
+ * record rather than re-deriving a second opinion. A trip built before V11, or
+ * one whose chapters came out as a single run, renders exactly as it did: one
+ * chapter is not a structure worth a heading.
  */
-export function DayRail({ days }: { days: readonly ItineraryDay[] }) {
+function chapterLabel(role: NonNullable<TripPackage['chapters']>[number]['role'], title: string): string {
+  switch (role) {
+    case 'arrival':
+      return 'Arrive';
+    case 'finale':
+      return 'Finish';
+    case 'recovery':
+      return `Recover · ${title}`;
+    case 'transition':
+      return `On the way · ${title}`;
+    default:
+      return title;
+  }
+}
+
+export function DayRail({ days, chapters }: { days: readonly ItineraryDay[]; chapters?: TripPackage['chapters'] }) {
+  const groups = chapters && chapters.length > 1 ? chapters.map((chapter) => ({ chapter, days: days.filter((day) => chapter.dayNumbers.includes(day.dayNumber)) })).filter((group) => group.days.length > 0) : null;
+  if (groups) {
+    return (
+      <nav aria-label="Jump to a day" className="sticky top-[calc(var(--chrome-height)+3.25rem)] z-10 -mx-5 mb-5 overflow-x-clip border-b border-rule bg-paper/95 px-5 py-2 backdrop-blur-[2px] print:hidden sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:mb-6 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0" data-testid="day-rail">
+        <ol className="no-scrollbar flex gap-4 overflow-x-auto pb-1 lg:flex-wrap lg:gap-x-6 lg:gap-y-4">
+          {groups.map(({ chapter, days: chapterDays }) => (
+            <li key={chapter.id} className="shrink-0" data-testid="day-rail-chapter">
+              <p className="label mb-1.5 text-ink-faint">{chapterLabel(chapter.role, chapter.title)}</p>
+              <ol className="flex gap-2">
+                {chapterDays.map((day) => (
+                  <li key={day.dayNumber} className="shrink-0">
+                    <DayFocusLink dayNumber={day.dayNumber} className="card lift pressable inline-flex min-h-11 items-center gap-2.5 rounded-full px-3.5 py-1.5 text-sm leading-tight text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine">
+                      <span className="sr-only">Day {day.dayNumber} </span>
+                      <span aria-hidden="true" className="type-figure text-current">{String(day.dayNumber).padStart(2, '0')}</span>
+                      <span className="max-w-[12rem] truncate">{day.theme.replace(/\.$/, '')}</span>
+                      <time dateTime={day.date} className="type-figure hidden text-xs font-medium opacity-80 lg:inline">
+                        {shortDate(day.date)}
+                      </time>
+                    </DayFocusLink>
+                  </li>
+                ))}
+              </ol>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    );
+  }
   return (
     <nav aria-label="Jump to a day" className="sticky top-[calc(var(--chrome-height)+3.25rem)] z-10 -mx-5 mb-5 overflow-x-clip border-b border-rule bg-paper/95 px-5 py-2 backdrop-blur-[2px] print:hidden sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:mb-6 lg:border-0 lg:bg-transparent lg:px-0 lg:py-0" data-testid="day-rail">
       <ol className="no-scrollbar flex gap-2 overflow-x-auto pb-1 lg:flex-wrap">

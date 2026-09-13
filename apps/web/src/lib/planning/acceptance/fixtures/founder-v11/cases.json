@@ -1,0 +1,612 @@
+{
+  "rockies": {
+    "tripId": "a14459b9-d774-481f-bdbf-409091490771",
+    "destinationInput": "canadian rockies",
+    "countryCode": "CA",
+    "days": 11,
+    "travellers": 3,
+    "archetype": "road_trip",
+    "declaredStatus": "Ready, with cautions",
+    "bases": [
+      {
+        "id": "banff-1",
+        "name": "Banff",
+        "nights": 3,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 51.1784,
+          "lng": -115.5708
+        }
+      },
+      {
+        "id": "jasper",
+        "name": "Jasper",
+        "nights": 3,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 52.8737,
+          "lng": -118.0814
+        }
+      },
+      {
+        "id": "field",
+        "name": "Field",
+        "nights": 2,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 51.3961,
+          "lng": -116.4892
+        }
+      },
+      {
+        "id": "banff-2",
+        "name": "Banff",
+        "nights": 2,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 51.1784,
+          "lng": -115.5708
+        }
+      }
+    ],
+    "episodes": [],
+    "signatureCandidates": [
+      {
+        "id": "r1",
+        "name": "Bow Falls",
+        "dayNumber": 1,
+        "category": "waterfall",
+        "minutes": 90,
+        "physicalIntensity": "easy",
+        "onEdgeDay": true
+      },
+      {
+        "id": "r2",
+        "name": "Banff Gondola",
+        "dayNumber": 1,
+        "category": "viewpoint",
+        "minutes": 40,
+        "physicalIntensity": "easy",
+        "onEdgeDay": true
+      },
+      {
+        "id": "r3",
+        "name": "Lake Louise",
+        "dayNumber": 2,
+        "category": "lake",
+        "minutes": 90,
+        "physicalIntensity": "easy",
+        "routeCritical": true
+      },
+      {
+        "id": "r4",
+        "name": "Plain of Six Glaciers Trail",
+        "dayNumber": 2,
+        "category": "hiking",
+        "minutes": 300,
+        "physicalIntensity": "strenuous"
+      },
+      {
+        "id": "r5",
+        "name": "Moraine Lake",
+        "dayNumber": 3,
+        "category": "lake",
+        "minutes": 40,
+        "physicalIntensity": "easy",
+        "constrained": true,
+        "routeCritical": true
+      },
+      {
+        "id": "r6",
+        "name": "Johnston Canyon",
+        "dayNumber": 3,
+        "category": "canyon",
+        "minutes": 150,
+        "physicalIntensity": "moderate"
+      },
+      {
+        "id": "r7",
+        "name": "Peyto Lake",
+        "dayNumber": 4,
+        "category": "viewpoint",
+        "minutes": 40,
+        "physicalIntensity": "easy",
+        "routeCritical": true
+      },
+      {
+        "id": "r8",
+        "name": "Athabasca Glacier",
+        "dayNumber": 4,
+        "category": "glacier",
+        "minutes": 90,
+        "physicalIntensity": "moderate",
+        "routeCritical": true
+      },
+      {
+        "id": "r9",
+        "name": "Maligne Lake",
+        "dayNumber": 5,
+        "category": "lake",
+        "minutes": 90,
+        "physicalIntensity": "easy"
+      },
+      {
+        "id": "r10",
+        "name": "Emerald Lake",
+        "dayNumber": 8,
+        "category": "lake",
+        "minutes": 90,
+        "physicalIntensity": "easy"
+      },
+      {
+        "id": "r11",
+        "name": "Sunshine Meadows",
+        "dayNumber": 10,
+        "category": "hiking",
+        "minutes": 240,
+        "physicalIntensity": "strenuous"
+      }
+    ],
+    "travellerInterests": [
+      "hiking",
+      "scenery",
+      "wildlife",
+      "road trips"
+    ],
+    "travellerWantsEffort": true,
+    "shippedSignatures": [
+      "Bow Falls",
+      "Lake Louise",
+      "Moraine Lake"
+    ],
+    "completeness": {
+      "basesPlaced": 4,
+      "basesTotal": 4,
+      "routeCriticalPlaced": 12,
+      "routeCriticalTotal": 24,
+      "baseTransfersTimed": 3,
+      "baseTransfersTotal": 3,
+      "signaturesPlaced": 2,
+      "signaturesTotal": 3,
+      "orderContradictions": 1,
+      "implausibleMeasurements": 0,
+      "unrepresentedAccessRequirements": 1,
+      "legsTimed": 14,
+      "legsTotal": 37
+    },
+    "measurements": [
+      {
+        "label": "Day 7 Jasper \u2192 Field",
+        "minutes": 313,
+        "km": 403,
+        "from": {
+          "lat": 52.8737,
+          "lng": -118.0814
+        },
+        "to": {
+          "lat": 51.3961,
+          "lng": -116.4892
+        },
+        "mode": "drive",
+        "mustBeRefused": false,
+        "note": "77 km/h over a 2.05x detour ratio: an entirely ordinary-looking measurement. It is wrong because the ENDPOINT is wrong, not because the arithmetic is. Recorded here as the documented limit of the plausibility guard (V11-FOUNDER-AUDIT P0-1): what catches this class is placement, not speed."
+      },
+      {
+        "label": "Day 8 Field \u2192 Emerald Lake",
+        "minutes": 155,
+        "km": 208,
+        "from": {
+          "lat": 51.3961,
+          "lng": -116.4892
+        },
+        "to": {
+          "lat": 51.443749,
+          "lng": -116.531658
+        },
+        "mode": "drive",
+        "mustBeRefused": true,
+        "note": "6.1 km apart, reported as 208 km of road. The same mis-placed base, this time producing geometry that cannot be true \u2014 which IS catchable."
+      },
+      {
+        "label": "Day 9 Field \u2192 Banff",
+        "minutes": 85,
+        "km": 119,
+        "from": {
+          "lat": 51.3961,
+          "lng": -116.4892
+        },
+        "to": {
+          "lat": 51.1784,
+          "lng": -115.5708
+        },
+        "mode": "drive",
+        "mustBeRefused": false
+      },
+      {
+        "label": "Day 2 Banff \u2192 Lake Louise",
+        "minutes": 48,
+        "km": 58,
+        "from": {
+          "lat": 51.1784,
+          "lng": -115.5708
+        },
+        "to": {
+          "lat": 51.424967,
+          "lng": -116.177535
+        },
+        "mode": "drive",
+        "mustBeRefused": false
+      }
+    ],
+    "jurisdictionSentencesShipped": [
+      "canadian rockies uses the CAD.",
+      "canadian rockies uses type A/B sockets at 120 V.",
+      "English and French are spoken in canadian rockies",
+      "Emergency number in canadian rockies: 911.",
+      "Whether canadian rockies accepts your licence alone or requires an International Driving Permit",
+      "Traffic drives on the right in canadian rockies."
+    ],
+    "incidentalSignaturesShipped": [
+      "Bow Falls"
+    ],
+    "legitimateSignaturesShipped": [
+      "Lake Louise",
+      "Moraine Lake"
+    ]
+  },
+  "kyrgyzstan": {
+    "tripId": "082fc0ad-1f56-4f4c-aa80-7f6b12c826b1",
+    "destinationInput": "kyrgyzstan",
+    "countryCode": "KG",
+    "days": 11,
+    "travellers": 4,
+    "archetype": "guided_remote",
+    "declaredStatus": "Needs a decision",
+    "driving": "private_driver",
+    "bases": [
+      {
+        "id": "b1",
+        "name": "Bishkek",
+        "nights": 1,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 42.8746,
+          "lng": 74.5698
+        }
+      },
+      {
+        "id": "b2",
+        "name": "Karakol",
+        "nights": 2,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        }
+      },
+      {
+        "id": "b3",
+        "name": "Ala-Kul trek (camp)",
+        "nights": 2,
+        "baseKind": "lodge"
+      },
+      {
+        "id": "b4",
+        "name": "Karakol",
+        "nights": 1,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        }
+      },
+      {
+        "id": "b5",
+        "name": "Karakol",
+        "nights": 1,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        }
+      },
+      {
+        "id": "b6",
+        "name": "Song-Kol",
+        "nights": 2,
+        "baseKind": "camp",
+        "coordinates": {
+          "lat": 41.8386,
+          "lng": 75.1361
+        }
+      },
+      {
+        "id": "b7",
+        "name": "Bishkek",
+        "nights": 1,
+        "baseKind": "locality",
+        "coordinates": {
+          "lat": 42.8746,
+          "lng": 74.5698
+        }
+      }
+    ],
+    "episodes": [
+      {
+        "name": "Ala-Kul & Altyn-Arashan trek",
+        "kind": "trek",
+        "dayNumbers": [
+          4,
+          5,
+          6
+        ],
+        "baseIds": [
+          "b3"
+        ],
+        "mode": "walk",
+        "timing": "operator",
+        "meals": "included",
+        "entryLeg": "present",
+        "exitLeg": "present"
+      },
+      {
+        "name": "Song-Kol yurt stay",
+        "kind": "guided_overland",
+        "dayNumbers": [
+          8,
+          9
+        ],
+        "baseIds": [
+          "b6"
+        ],
+        "mode": "horse",
+        "timing": "operator",
+        "meals": "included",
+        "entryLeg": "present",
+        "exitLeg": "present"
+      }
+    ],
+    "signatureCandidates": [
+      {
+        "id": "a1",
+        "name": "Ala-Too Square",
+        "dayNumber": 1,
+        "category": "landmark",
+        "minutes": 75,
+        "physicalIntensity": "easy",
+        "onEdgeDay": true
+      },
+      {
+        "id": "a2",
+        "name": "Osh Bazaar",
+        "dayNumber": 1,
+        "category": "market",
+        "minutes": 75,
+        "physicalIntensity": "easy",
+        "onEdgeDay": true
+      },
+      {
+        "id": "a3",
+        "name": "Issyk-Kul north shore",
+        "dayNumber": 2,
+        "category": "viewpoint",
+        "minutes": 0,
+        "physicalIntensity": "easy"
+      },
+      {
+        "id": "a4",
+        "name": "Karakol Sunday/daily market",
+        "dayNumber": 3,
+        "category": "market",
+        "minutes": 75,
+        "physicalIntensity": "easy"
+      },
+      {
+        "id": "a5",
+        "name": "Przhevalsky Museum area walk",
+        "dayNumber": 3,
+        "category": "museum",
+        "minutes": 40,
+        "physicalIntensity": "easy"
+      },
+      {
+        "id": "a6",
+        "name": "Altyn-Arashan valley",
+        "dayNumber": 4,
+        "category": "hiking",
+        "minutes": 180,
+        "physicalIntensity": "moderate",
+        "withinExperience": "Ala-Kul & Altyn-Arashan trek"
+      },
+      {
+        "id": "a7",
+        "name": "Ala-Kul Pass",
+        "dayNumber": 5,
+        "category": "hiking",
+        "minutes": 180,
+        "physicalIntensity": "strenuous",
+        "withinExperience": "Ala-Kul & Altyn-Arashan trek",
+        "routeCritical": true
+      },
+      {
+        "id": "a8",
+        "name": "Ala-Kul Lake",
+        "dayNumber": 5,
+        "category": "lake",
+        "minutes": 90,
+        "physicalIntensity": "strenuous",
+        "withinExperience": "Ala-Kul & Altyn-Arashan trek"
+      },
+      {
+        "id": "a9",
+        "name": "Karakol valley descent",
+        "dayNumber": 6,
+        "category": "hiking",
+        "minutes": 180,
+        "physicalIntensity": "strenuous",
+        "withinExperience": "Ala-Kul & Altyn-Arashan trek"
+      },
+      {
+        "id": "a10",
+        "name": "Jeti-Oguz canyon",
+        "dayNumber": 7,
+        "category": "scenery",
+        "minutes": 90,
+        "physicalIntensity": "easy"
+      },
+      {
+        "id": "a11",
+        "name": "Song-Kol Lake",
+        "dayNumber": 8,
+        "category": "lake",
+        "minutes": 90,
+        "physicalIntensity": "moderate",
+        "withinExperience": "Song-Kol yurt stay",
+        "routeCritical": true
+      },
+      {
+        "id": "a12",
+        "name": "Jailoo horseback ride",
+        "dayNumber": 8,
+        "category": "wildlife",
+        "minutes": 150,
+        "physicalIntensity": "moderate",
+        "withinExperience": "Song-Kol yurt stay"
+      },
+      {
+        "id": "a13",
+        "name": "Sunrise over Song-Kol",
+        "dayNumber": 9,
+        "category": "viewpoint",
+        "minutes": 40,
+        "physicalIntensity": "easy",
+        "withinExperience": "Song-Kol yurt stay"
+      },
+      {
+        "id": "a14",
+        "name": "Skazka Canyon (Fairy Tale Canyon)",
+        "dayNumber": 10,
+        "category": "scenery",
+        "minutes": 180,
+        "physicalIntensity": "moderate"
+      }
+    ],
+    "statedSignatures": [
+      "Ala-Kul Pass",
+      "Song-Kol yurt stay and jailoo riding",
+      "Altyn-Arashan"
+    ],
+    "travellerInterests": [
+      "hiking",
+      "scenery",
+      "wildlife",
+      "photography"
+    ],
+    "travellerWantsEffort": true,
+    "shippedSignatures": [
+      "Osh Bazaar",
+      "Issyk-Kul north shore",
+      "Karakol Sunday/daily market"
+    ],
+    "shippedHotelChanges": 6,
+    "shippedBaseCount": 7,
+    "completeness": {
+      "basesPlaced": 5,
+      "basesTotal": 7,
+      "routeCriticalPlaced": 11,
+      "routeCriticalTotal": 17,
+      "baseTransfersTimed": 3,
+      "baseTransfersTotal": 6,
+      "signaturesPlaced": 3,
+      "signaturesTotal": 3,
+      "orderContradictions": 0,
+      "implausibleMeasurements": 0,
+      "unrepresentedAccessRequirements": 0,
+      "legsTimed": 7,
+      "legsTotal": 29
+    },
+    "measurements": [
+      {
+        "label": "Day 2 Bishkek \u2192 Karakol",
+        "minutes": 5209,
+        "km": 434,
+        "from": {
+          "lat": 42.8746,
+          "lng": 74.5698
+        },
+        "to": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        },
+        "mode": "private_transfer",
+        "mustBeRefused": true
+      },
+      {
+        "label": "Day 4 Bus to Altyn-Arashan valley",
+        "minutes": 270,
+        "km": 22,
+        "from": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        },
+        "to": {
+          "lat": 42.40874,
+          "lng": 78.578412
+        },
+        "mode": "public_bus",
+        "mustBeRefused": true
+      },
+      {
+        "label": "Day 3 Bus to Karakol market",
+        "minutes": 85,
+        "km": 7,
+        "from": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        },
+        "to": {
+          "lat": 42.537446,
+          "lng": 78.378632
+        },
+        "mode": "public_bus",
+        "mustBeRefused": false
+      },
+      {
+        "label": "Day 7 Karakol \u2192 Karakol base to base",
+        "minutes": 0,
+        "km": 0,
+        "from": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        },
+        "to": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        },
+        "mode": "walk",
+        "mustBeRefused": false
+      },
+      {
+        "label": "A real Bishkek \u2192 Karakol drive",
+        "minutes": 380,
+        "km": 434,
+        "from": {
+          "lat": 42.8746,
+          "lng": 74.5698
+        },
+        "to": {
+          "lat": 42.4907,
+          "lng": 78.3936
+        },
+        "mode": "private_transfer",
+        "mustBeRefused": false
+      }
+    ],
+    "incidentalSignaturesShipped": [
+      "Osh Bazaar",
+      "Issyk-Kul north shore",
+      "Karakol Sunday/daily market"
+    ],
+    "legitimateSignaturesShipped": []
+  }
+}

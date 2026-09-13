@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { compileRegion, deriveScope } from '@sidequest/compiler';
 import { SYNTHETIC_WORLDS, packBackedProviders, syntheticCandidate } from '@sidequest/compiler/testing';
-import { DESTINATION_RESOLUTION_VERSION, autoSelect, countTripDays } from '@sidequest/core';
+import { DESTINATION_RESOLUTION_VERSION, autoSelect, countTripDays, feasibilityHeadline } from '@sidequest/core';
 import { getDb } from '@/lib/db/client';
 import { createTrip, getItinerary, getReadiness, getSelections, replaceAutoSelections } from '@/lib/db/repository';
 import { completeJob, markJobRunning, saveDestinationQuery, saveResolution, saveScope, startJob } from '@/lib/db/compiler-repository';
@@ -139,7 +139,17 @@ describe('Quick Plan, through the canonical orchestrator', () => {
     // No evidence anywhere: verification is honestly zero, content is untouched.
     expect(itinerary.package!.verification.verified).toBe(0);
     expect(itinerary.package!.verification.scheduled).toBe(itinerary.package!.verification.anchors);
-    expect(itinerary.status).toBe('ready_with_cautions');
+    /*
+     * V11 §4 — this used to assert `ready_with_cautions`, and that assertion was
+     * the defect in miniature: a trip where no place was located and no journey
+     * was timed called itself Ready. It is not ready, and the headline says so
+     * without pretending the traveller can do anything about it (§39).
+     */
+    expect(itinerary.status).toBe('needs_decision');
+    const open = itinerary.package!.feasibility!.items.filter((item) => item.severity === 'dependency');
+    expect(open.length).toBeGreaterThan(0);
+    expect(open.every((item) => item.owner === 'sidequest')).toBe(true);
+    expect(feasibilityHeadline(itinerary.package!.feasibility!).label).toBe('Not ready yet');
   }, ORCHESTRATOR_TIMEOUT_MS);
 });
 
