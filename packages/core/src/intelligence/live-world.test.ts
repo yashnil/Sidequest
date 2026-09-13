@@ -84,6 +84,47 @@ describe('LIVE WORLD V1 — temporal honesty', () => {
     const off = buildTodayView({ itinerary, booked: [], backups: [], now: new Date('2026-09-01T10:00:00Z'), timeZone: 'Pacific/Auckland' });
     expect(off.active).toBe(false);
   });
+
+  /*
+   * V11 §3 — THE HEADLINE AND THE CHECKLIST ANSWER FROM THE SAME DAY.
+   *
+   * Today headlined "NEXT — Lunch, 11:46" while the list beneath it, "The day",
+   * ran from the morning stop straight to the afternoon one with no lunch row:
+   * `next` admitted an activity or a meal and `stops` admitted only an
+   * activity. Two answers to "what is coming" on one screen, and every
+   * assertion about Today passed while they disagreed, because none of them
+   * asked the two to agree.
+   */
+  it('a meal the headline promotes is in the day’s own list', () => {
+    const itinerary = {
+      days: [
+        {
+          dayNumber: 1,
+          date: '2026-08-14',
+          theme: 'A day with a meal in it',
+          baseName: 'Base',
+          items: [
+            { id: 'a', kind: 'activity', title: 'Morning walk', startMinute: 540, endMinute: 660, durationMinutes: 120, placeId: 'p1', reason: 'x', weatherSensitive: false },
+            { id: 'm', kind: 'meal', title: 'Lunch', startMinute: 700, endMinute: 760, durationMinutes: 60, placeId: 'p2', reason: 'x', weatherSensitive: false },
+            { id: 'b', kind: 'activity', title: 'Afternoon viewpoint', startMinute: 800, endMinute: 900, durationMinutes: 100, placeId: 'p3', reason: 'x', weatherSensitive: false },
+            { id: 'f', kind: 'free_time', title: 'Free time', startMinute: 900, endMinute: 960, durationMinutes: 60, reason: 'x', weatherSensitive: false },
+          ],
+          weather: { summary: 'Fine', evidence: 'forecast' },
+          warnings: [],
+        },
+      ],
+    } as never;
+    /* 10:30 local: the walk is under way and lunch is what comes next. */
+    const view = buildTodayView({ itinerary, booked: [], backups: [], now: new Date('2026-08-14T10:30:00Z'), timeZone: 'UTC' });
+    expect(view.active).toBe(true);
+    expect(view.next?.title).toBe('Lunch');
+    const titles = view.stops.map((s) => s.title);
+    expect(titles).toContain('Lunch');
+    /* The general rule, not just this fixture: whatever the headline promotes is in the list. */
+    expect(titles).toContain(view.next!.title);
+    /* And the list is stops, not gaps. */
+    expect(titles).not.toContain('Free time');
+  });
 });
 
 describe('LIVE WORLD V1 — currency', () => {

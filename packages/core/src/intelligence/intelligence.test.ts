@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CLAIM_KINDS, CONFIRMING_AUTHORITY, applySourcePolicy, claim, freshnessVerdict, mayConfirm, stateFromEvidence } from './claims';
-import { bookingPriorityFor } from './booking';
+import { bookingItemSchema, bookingPriorityFor } from './booking';
 import { buildReadinessPacket, OfficialTravelSourceRegistry } from './readiness';
 import { countryFacts } from '../reference/countries';
 import { LEG_MODES, ROAD_ROUTABLE_MODES, durationBasisOf, legFromSegment, trafficStateFor } from './transport';
 import { buildTerminalPlan, TERMINAL_BUFFERS } from './terminal';
-import { buildChecklist } from './checklist';
+import { buildChecklist, readinessChecklistItems } from './checklist';
 import { accessStateFor } from './weather-access';
 import type { ItineraryDay, ItineraryItem } from '../schemas/itinerary';
 
@@ -302,14 +302,47 @@ describe('access states', () => {
 describe('checklist phases fit the calendar', () => {
   const packet = buildReadinessPacket({ destinationName: 'X', destinationCountry: 'FR', tripStart: '2026-06-05', tripEnd: '2026-06-10', profile: { citizenship: 'US', transitCountries: [] }, drives: false, remote: false, strenuous: false, water: false, now: NOW }).packet;
   const packing = { items: [], basis: 'unknown' as const, basisNote: 'n', modelSuggestions: [] };
+  /*
+   * V11 §2 — driven by a booking rather than by the readiness entries.
+   *
+   * These used to be fed by `readiness.entries`, which `buildChecklist` copied
+   * into checklist items — the third rendering of Prepare's readiness list.
+   * Prepare's canonical list carries the timing now, so the checklist holds
+   * only what genuinely has a sequence and is not a readiness entry. The
+   * behaviour under test is unchanged and is the reason the phases exist at
+   * all: a phase appears only when the calendar leaves room for it.
+   */
+  const soon = bookingItemSchema.parse({
+    id: 'b1',
+    title: 'A timed entry',
+    kind: 'timed_entry',
+    necessity: 'required',
+    priority: 'book_soon',
+    reason: 'Capacity is limited and the date is fixed.',
+    travelerAction: 'Book the timed entry',
+    authority: 'official_current',
+  });
   it('a trip in four days has no "one month out" or "one week out" phase', () => {
-    const list = buildChecklist({ readiness: packet, bookings: [], packing, recheck: [], daysUntilTrip: 4 });
+    const list = buildChecklist({ readiness: packet, bookings: [soon], packing, recheck: [], daysUntilTrip: 4 });
     expect(list.phases.map((p) => p.phase)).not.toContain('one_month_out');
     expect(list.phases.map((p) => p.phase)).not.toContain('one_week_out');
     expect(list.phases[0]!.phase).toBe('do_now');
   });
   it('a trip in ninety days keeps the long-range phases', () => {
-    const list = buildChecklist({ readiness: packet, bookings: [], packing, recheck: [], daysUntilTrip: 90 });
+    const list = buildChecklist({ readiness: packet, bookings: [soon], packing, recheck: [], daysUntilTrip: 90 });
     expect(list.phases.map((p) => p.phase)).toContain('one_month_out');
+  });
+  it('a readiness entry is not copied into the checklist', () => {
+    /*
+     * The duplication, as an assertion. `packet` has real entries; none of them
+     * may reach the checklist, because Prepare renders that list once.
+     */
+    expect(packet.entries.length).toBeGreaterThan(0);
+    const list = buildChecklist({ readiness: packet, bookings: [soon], packing, recheck: [], daysUntilTrip: 90 });
+    const items = list.phases.flatMap((p) => p.items);
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.some((i) => i.kind === 'readiness')).toBe(false);
+    /* And the flat form the print packet asks for explicitly still exists. */
+    expect(readinessChecklistItems(packet).length).toBeGreaterThan(0);
   });
 });

@@ -73,7 +73,14 @@ export function AtlasBand({
           ) : null}
         </div>
         <h1 className={cx('display-atlas mt-1.5 max-w-[18ch] text-[var(--color-atlas-ink)]', Boolean(figure) && 'lg:max-w-[13ch]')}>{title}</h1>
-        {subline ? <p className={cx('mt-2.5 max-w-2xl type-body atlas-muted', Boolean(figure) && 'lg:max-w-[46ch]')}>{subline}</p> : null}
+        {/*
+          V11 §9 — the subline is supporting text, so it is set as supporting
+          text. It was `type-body` above a `type-small` facts line, which made
+          the route sentence the second-loudest thing in the band and ran to
+          three lines on a phone. The title carries the weight in a masthead;
+          this says where the trip sleeps and how it moves.
+        */}
+        {subline ? <p className={cx('mt-2 max-w-2xl type-small atlas-muted', Boolean(figure) && 'lg:max-w-[46ch]')}>{subline}</p> : null}
         {/*
           V11 §9 — THE FACTS ARE A LINE, NOT A GRID.
 
@@ -103,7 +110,16 @@ export function AtlasBand({
           can be acted on. A masthead is not a place to read a list.
         */}
         {attention ? (
-          <div className={cx('mt-4 rounded-[var(--radius-card)] border border-white/15 bg-white/[0.06] px-4 py-2.5', Boolean(figure) && 'lg:max-w-[58%]')} data-testid="atlas-attention">
+          /*
+            V11 §8 §9 — A BOX INSIDE A BAND IS A BOX TOO MANY.
+
+            The verdict sat in a bordered, tinted, padded card inside a band that
+            is already one distinct surface: a nested box, and about twenty
+            vertical pixels of chrome, to hold one sentence. The band's own
+            ground separates it from the page; a rule above the sentence is
+            enough to separate it from the title.
+          */
+          <div className={cx('mt-4 border-t border-white/12 pt-3', Boolean(figure) && 'lg:max-w-[58%]')} data-testid="atlas-attention">
             {/*
               A sentence, in sentence case. The verdict's blurb is prose —
               "The plan works. A few things are worth reading before you

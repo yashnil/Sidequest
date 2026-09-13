@@ -410,7 +410,8 @@ export function InteractiveMap({
   }
 
   return (
-    <div className={cx('min-w-0', className)}>
+    /* `group` so the keyboard hint below can appear exactly when the map region has focus. */
+    <div className={cx('group min-w-0', className)}>
       <figure className="m-0" data-testid={testId}>
         <div className="relative overflow-hidden rounded-[var(--radius-card)] border border-rule bg-paper-sunk">
           {vector ? <VectorBasemapLayer source={vector} centre={centreGeo} scale={view.scale} width={width} height={height} onHealth={setBasemapHealth} /> : null}
@@ -643,7 +644,21 @@ export function InteractiveMap({
             ))}
           </ol>
         ) : null}
-        <figcaption className={cx('mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs leading-snug text-ink-faint', chromeless && 'sr-only')} data-testid={`${testId}-legend`}>
+        {/*
+          V11 §3 — THE KEY IS ONE LINE ON A PHONE.
+
+          At 360 px every entry took a line of its own, and the key, the
+          attribution and the sentence explaining the arrow keys came to roughly
+          230 px under a map not much taller than that: the caption was bigger
+          than the picture it captioned.
+
+          The key now scrolls sideways in one row below `sm` and wraps as before
+          from `sm` up. Nothing is removed and nothing is behind a press — a key
+          a traveller cannot read is worse than a tall one. The attribution is
+          deliberately *not* in that row: it is a licence obligation, so it sits
+          on its own line where it can never be scrolled out of sight.
+        */}
+        <figcaption className={cx('mt-2 flex items-center gap-x-3 gap-y-1.5 overflow-x-auto text-xs leading-snug text-ink-faint sm:flex-wrap sm:overflow-visible [&>*]:shrink-0 sm:[&>*]:shrink', chromeless && 'sr-only')} data-testid={`${testId}-legend`}>
           {base ? (
             <span className="flex items-center gap-1.5">
               <span aria-hidden="true" className="inline-block h-2 w-2 rounded-[2px] bg-ink" />
@@ -676,13 +691,16 @@ export function InteractiveMap({
           ))}
           {hasRouteShape ? <span>Curved lines follow the measured road.</span> : null}
           {caption}
+        </figcaption>
+        {/* Its own line, never in the scrolling row: attribution is a licence obligation. */}
+        <p className={cx('mt-1 text-xs leading-snug text-ink-faint', chromeless && 'sr-only')} data-testid={`${testId}-attribution`}>
           {basemapDrawn || placedTiles.length > 0 ? (
-            <span>{tiles!.attribution}</span>
+            tiles!.attribution
           ) : vector && basemapHealth === 'loading' ? null : (
             /* Said only once it is true: a basemap still arriving is not an absent one. */
-            <span>No basemap here — the marks and lines are what is known.</span>
+            <>No basemap here — the marks and lines are what is known.</>
           )}
-        </figcaption>
+        </p>
       </figure>
       {/* The attribution stays visible even chromeless: it is a licence obligation, not chrome. */}
       {chromeless ? <p className="mt-1.5 text-xs leading-snug text-ink-faint">{basemapDrawn || placedTiles.length > 0 ? tiles!.attribution : null}</p> : null}
@@ -696,7 +714,15 @@ export function InteractiveMap({
         <MapButton label="Fit the map to every place" onClick={() => animateTo(fitted)}>
           Fit
         </MapButton>
-        <span className="text-xs text-ink-faint">Drag to pan · arrow keys pan, + and − zoom when the map has focus</span>
+        {/*
+          V11 §3 — the hint applies exactly when the map has focus, so that is
+          when it is shown. Permanently printing a keyboard instruction under
+          every map cost two lines on a phone and told a touch user nothing. It
+          stays in the accessibility tree at all times (`sr-only`), so a screen
+          reader still hears it, and becomes visible for a sighted keyboard user
+          the moment anything in the map region takes focus.
+        */}
+        <span className="sr-only text-xs text-ink-faint group-focus-within:not-sr-only">Drag to pan · arrow keys pan, + and − zoom when the map has focus</span>
       </div>
     </div>
   );

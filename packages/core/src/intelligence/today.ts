@@ -65,6 +65,11 @@ function brief(item: ItineraryItem) {
  * zone and clocked under another. Without `zonesByBaseId` the behaviour is
  * exactly the old one.
  */
+/** Somewhere the traveller goes, as opposed to how they get there or a gap between. */
+function isStop(item: ItineraryItem): boolean {
+  return item.kind === 'activity' || item.kind === 'meal';
+}
+
 export function buildTodayView(input: { itinerary: Itinerary; booked: readonly BookedPlanItem[]; backups: readonly DayResilience[]; now: Date; timeZone?: string; zonesByBaseId?: Readonly<Record<string, string>>; warnings?: readonly string[] }): TodayView {
   const zoneOf = (d: ItineraryDay): string | undefined => input.zonesByBaseId?.[d.baseId] ?? input.timeZone;
   const day: ItineraryDay | undefined = input.itinerary.days.find((d) => localClock(input.now, zoneOf(d)).date === d.date);
@@ -72,7 +77,19 @@ export function buildTodayView(input: { itinerary: Itinerary; booked: readonly B
   if (!day) return todayViewSchema.parse({ active: false, localDate: date, nowMinute: minute });
   const timed = day.items.filter((i) => i.kind !== 'free_time' && i.kind !== 'rest');
   const current = timed.find((i) => i.startMinute <= minute && i.endMinute > minute);
-  const next = timed.find((i) => i.startMinute > minute && (i.kind === 'activity' || i.kind === 'meal'));
+  /*
+   * V11 §3 — ONE DEFINITION OF "A STOP", FOR THE HEADLINE AND THE CHECKLIST.
+   *
+   * `next` admitted an activity or a meal; `stops` — the list under "The day" —
+   * admitted only an activity. So the screen could headline **NEXT · Lunch,
+   * 11:46** while the list beneath it ran 09:55 → 12:31 with no lunch in it:
+   * two answers to what is coming, on one screen, from one day.
+   *
+   * A stop is somewhere the traveller goes. Travel is how they get between
+   * them, and free time and rest are the gaps — none of those are stops. A meal
+   * is one, which is why `next` was already right to promote it.
+   */
+  const next = timed.find((i) => i.startMinute > minute && isStop(i));
   const nextTravel = day.items.find((i) => i.kind === 'travel' && i.travel && i.startMinute >= minute);
   const resilience = input.backups.find((b) => b.dayNumber === day.dayNumber);
   /* The leg that reaches the next item: the last travel item before it, when it was timed. */
@@ -117,6 +134,6 @@ export function buildTodayView(input: { itinerary: Itinerary; booked: readonly B
      * runs late or closes") or as a sentence ("Rain after midday").
      */
     ...(resilience?.fallback ? { fallback: `${resilience.fallback.name.replace(/\s*\.\s*$/, '')} — ${resilience.fallback.trigger.replace(/\s*\.\s*$/, '').toLowerCase()}` } : {}),
-    stops: day.items.filter((i) => i.kind === 'activity').map((i) => ({ id: i.id, title: i.title, startMinute: i.startMinute, endMinute: i.endMinute, ...(i.placeId ? { placeId: i.placeId } : {}), done: i.endMinute <= minute })),
+    stops: day.items.filter(isStop).map((i) => ({ id: i.id, title: i.title, startMinute: i.startMinute, endMinute: i.endMinute, ...(i.placeId ? { placeId: i.placeId } : {}), done: i.endMinute <= minute })),
   });
 }

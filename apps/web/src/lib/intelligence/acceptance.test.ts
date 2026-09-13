@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { intelligenceDiagnostics, travelIntelligenceSchema, type BookedPlanItem, type TravelIntelligence, type TravelReadinessProfile } from '@sidequest/core';
+import { intelligenceDiagnostics, readinessChecklistItems, travelIntelligenceSchema, type BookedPlanItem, type TravelIntelligence, type TravelReadinessProfile } from '@sidequest/core';
 import { reconcileTripDraft } from '../planning/reconcile';
 import { draftOf, fictionalWorld, type DayShape, type FictionalPlace, type FictionalWorldOptions } from '../planning/acceptance/harness';
 import { applyBookedFacts, bookedLeaveByMinute } from './booked-reconcile';
@@ -279,7 +279,18 @@ const SHAPES: Shape[] = [
       expect(passport.state).toBe('unverified');
       expect(intel.readiness.entries.find((e) => e.kind === 'visa')!.state).toBe('unverified');
       expect(intel.readiness.entries.find((e) => e.kind === 'visa')!.links.some((l) => /travel\.gc\.ca/.test(l.url))).toBe(true);
-      expect(intel.checklist.phases.some((p) => p.items.some((i) => /visa|entry rule/i.test(i.title) || /visa/i.test(i.why)))).toBe(true);
+      /*
+       * V11 §2 — the visa requirement reaches the traveller through the
+       * readiness entry above, which is now the only place Prepare renders it.
+       * It used to be asserted here on the checklist as well, because
+       * `buildChecklist` copied every readiness entry into a checklist item —
+       * which is what made Prepare state the same sentence three times. The
+       * checklist now holds only what has a sequence and is not a readiness
+       * entry, and the flat form the print packet asks for explicitly still
+       * carries it.
+       */
+      expect(intel.checklist.phases.some((p) => p.items.some((i) => i.kind === 'readiness'))).toBe(false);
+      expect(readinessChecklistItems(intel.readiness).some((i) => /visa|entry rule/i.test(i.title) || /visa/i.test(i.why))).toBe(true);
       expect(intel.packing.items.some((i) => /plug adapter/i.test(i.label))).toBe(true);
       expect(intel.freshness.recheckBeforeDeparture.length).toBeGreaterThan(0);
     },

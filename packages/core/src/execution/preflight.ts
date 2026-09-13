@@ -40,6 +40,27 @@ export const preflightItemSchema = z.object({
   readAt: z.string().optional(),
   /** When set, a tick in `trip_checks(list='preflight')` marks this ready. */
   checkId: z.string().optional(),
+  /*
+   * V11 §2 — WHERE THIS ITEM CAME FROM, SO PREPARE CAN STOP SAYING IT THREE TIMES.
+   *
+   * A readiness entry used to be rendered three times on one page: here as a
+   * bucket card, again in the "Before you go" topic grid with its full body and
+   * source link, and a third time under "In order" with the full body again —
+   * because `buildChecklist` turns every entry into a checklist item too. Three
+   * derived structures over one fact, each restating it rather than indexing it.
+   *
+   * Preflight is the one of the three that already knows the traveller's ticks
+   * and the entry's state, so it owns the list. These two fields are what the
+   * other two renderers needed and it lacked: the entry's own kind and state,
+   * so the rendered row can still be addressed as that readiness entry, and the
+   * phase, so "before you leave" can be told from "closer to the trip" without
+   * a second list to hold the timing.
+   */
+  readinessKind: z.string().min(1).optional(),
+  readinessState: z.string().min(1).optional(),
+  phase: z.string().min(1).optional(),
+  /** The entry's official links, so the canonical row carries them rather than pointing at a copy. */
+  links: z.array(z.object({ name: z.string().min(1), url: z.string().min(1) })).optional(),
 });
 export type PreflightItem = z.infer<typeof preflightItemSchema>;
 
@@ -50,6 +71,47 @@ export interface Preflight {
   ready: PreflightItem[];
   attention: PreflightItem[];
   later: PreflightItem[];
+}
+
+/**
+ * V11 §2 — THE FOUR GROUPS PREPARE SHOWS, AS A PURE FUNCTION OF ONE ITEM.
+ *
+ * Grouping is a *view* over the canonical list, not a second list. Three
+ * buckets said what state a thing was in and nothing about when it is due, so
+ * the timing lived in a separate "In order" section that restated every entry
+ * to carry it. Splitting `attention` by the entry's own phase puts the timing
+ * on the row that already exists.
+ *
+ * `needs_attention` is what is due now or blocks a booking; `before_you_leave`
+ * is the rest of what must happen before departure; `closer_to_the_trip` is
+ * what genuinely waits; `ready` is done or confirmed. An item with no phase —
+ * a booking, a weather day — is due before departure, which is the honest
+ * reading of "we could not say when".
+ */
+export const PREPARE_GROUPS = ['needs_attention', 'before_you_leave', 'closer_to_the_trip', 'ready'] as const;
+export type PrepareGroup = (typeof PREPARE_GROUPS)[number];
+
+export const PREPARE_GROUP_LABELS: Record<PrepareGroup, { title: string; blurb: string }> = {
+  needs_attention: { title: 'Needs attention', blurb: 'Now, or before you book.' },
+  before_you_leave: { title: 'Before you leave', blurb: 'Ahead of the trip.' },
+  closer_to_the_trip: { title: 'Closer to the trip', blurb: 'Nearer the date.' },
+  ready: { title: 'Ready', blurb: 'Done or confirmed.' },
+};
+
+/** Phases that mean "this is the thing in front of you", rather than something later. */
+const NOW_PHASES = new Set(['do_now', 'do_before_booking', 'book_first']);
+
+export function prepareGroupOf(item: Pick<PreflightItem, 'bucket' | 'phase'>): PrepareGroup {
+  if (item.bucket === 'ready') return 'ready';
+  if (item.bucket === 'later') return 'closer_to_the_trip';
+  return item.phase === undefined || NOW_PHASES.has(item.phase) ? 'needs_attention' : 'before_you_leave';
+}
+
+/** The canonical list, grouped once. Every item appears in exactly one group. */
+export function groupPreflight(preflight: Pick<Preflight, 'ready' | 'attention' | 'later'>): Record<PrepareGroup, PreflightItem[]> {
+  const out: Record<PrepareGroup, PreflightItem[]> = { needs_attention: [], before_you_leave: [], closer_to_the_trip: [], ready: [] };
+  for (const item of [...preflight.attention, ...preflight.later, ...preflight.ready]) out[prepareGroupOf(item)].push(item);
+  return out;
 }
 
 export function buildPreflight(input: {
@@ -112,6 +174,10 @@ export function buildPreflight(input: {
         ...(link ? { sourceName: link.name } : {}),
         ...(entry.facts?.find((f) => /compiled|as of|read on|checked/i.test(f)) ? { readAt: entry.facts.find((f) => /compiled|as of|read on|checked/i.test(f))! } : {}),
         checkId: `readiness:${entry.kind}`,
+        readinessKind: entry.kind,
+        readinessState: entry.state,
+        phase: entry.phase,
+        links: entry.links.map((l) => ({ name: l.name, url: l.url })),
       },
       done || input.checks.checklist.includes(`readiness:${entry.kind}`),
       entry.tier === 'more' && !entry.blocking && entry.state !== 'problem',

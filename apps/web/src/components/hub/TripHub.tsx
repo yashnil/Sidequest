@@ -20,7 +20,6 @@ import {
   type BookedPlanItem,
   type BookingResolution,
   type Itinerary,
-  type ReadinessEntry,
   type TravelIntelligence,
   type TravelReadinessProfile,
   type TripPackage,
@@ -82,9 +81,6 @@ function SectionHeader({ id, title, blurb, testId }: { id: string; title: string
   );
 }
 
-const STATE_TONE: Record<ReadinessEntry['state'], BadgeTone> = { confirmed: 'pine', unverified: 'neutral', not_applicable: 'neutral', needs_input: 'amber', problem: 'clay' };
-const STATE_WORD: Record<ReadinessEntry['state'], string> = { confirmed: 'Confirmed', unverified: 'Check', not_applicable: 'Not needed', needs_input: 'Tell us', problem: 'Problem' };
-
 /**
  * WHAT NEEDS THE TRAVELLER'S ATTENTION, AT THE TOP, IN A FEW LINES.
  *
@@ -136,26 +132,28 @@ export function BookingProgressLine({ intel }: { intel: TravelIntelligence }) {
       ) : (
         <p className="mt-3 type-small text-pine">Everything this trip depends on is arranged.</p>
       )}
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+      {/*
+        V11 §3 — A TALLY COUNTS; IT DOES NOT RE-LIST.
+
+        This card used to print every booking need as a tick row, and the
+        Book-first section directly beneath it listed the same needs again with
+        their dates, their dependency sentences and the three actions that act
+        on them. Two renderings of the same two or three rows about two hundred
+        pixels apart, and only one of them could be acted on.
+
+        The needs belong to `BookFirstSection`, which owns the actions. What is
+        genuinely this card's own is the shape of the whole: how much of what
+        could break the trip is settled, and what to do next. So the groups keep
+        their counts — a count of a list is not a copy of it — and the rows are
+        gone.
+      */}
+      <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5">
         {progress.groups.map((group) => (
-          <div key={group.id} data-testid={`booking-progress-${group.id}`}>
-            <p className="eyebrow">
-              {group.title} · <span className="type-figure">{group.done}/{group.total}</span>
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {group.items.map((item) => (
-                <li key={item.id} className={cx('flex items-start gap-2 text-sm', item.done ? 'text-ink-muted' : 'text-ink')}>
-                  <span aria-hidden="true" className={cx('mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-[0.6rem] leading-none', item.done ? 'border-pine bg-pine text-paper' : 'border-ink-faint bg-paper')}>
-                    {item.done ? '✓' : ''}
-                  </span>
-                  <span className={item.done ? 'line-through' : ''}>{item.title}</span>
-                  <span className="sr-only">{item.done ? 'arranged' : 'not yet arranged'}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <li key={group.id} className="type-small text-ink-muted" data-testid={`booking-progress-${group.id}`} data-done={group.done} data-total={group.total}>
+            {group.title} <span className="type-figure text-ink">{group.done}/{group.total}</span>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
@@ -610,58 +608,26 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
         </div>
       ) : null}
       {/*
-        PRODUCTION UI V1 — THE PRIMARY LIST IS 3–7 THINGS FOR THIS TRIP.
-        Tiered by the readiness layer: what this traveller on this trip needs
-        (documents, driving, money where the currency differs, the emergency
-        number, insurance abroad, weather) leads; the generic international
-        checklist stays complete behind "More travel checks".
+        V11 §2 — THE ENTRIES ARE NOT LISTED AGAIN HERE.
+
+        PRODUCTION UI V1 put the primary readiness entries in a two-column grid
+        on this section, tiered primary/more. It was the second of three
+        renderings of the same list on one page: the Preflight buckets above,
+        this grid, and "In order" below, each carrying the entry's full body.
+
+        Preflight owns the list now (see `PreflightView`), because it is the one
+        that knows the traveller's ticks and the entry's state, and it gained
+        the two things this grid had that it lacked — the entry's kind and state
+        as addressable attributes, and the official links.
+
+        What stays here is what is genuinely this section's own: the profile
+        form, which is an input rather than a restatement, and the coverage note,
+        which is a statement about the list as a whole rather than about any
+        entry in it. The section anchors stay too — they are how the deep links
+        in `HubShell` and the print packet find this part of the page.
       */}
-      {(() => {
-        const primary = r.entries.filter((e) => e.state !== 'not_applicable' && (e.tier ?? 'primary') === 'primary');
-        const more = r.entries.filter((e) => !primary.includes(e));
-        const Entry = ({ e }: { e: ReadinessEntry }) => (
-          <li className="rule-top py-3.5" data-testid="hub-readiness-entry" data-kind={e.kind} data-state={e.state} data-tier={e.tier ?? 'primary'}>
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span className="text-sm font-semibold text-ink">{e.title}</span>
-              <Badge tone={STATE_TONE[e.state]}>{STATE_WORD[e.state]}</Badge>
-            </div>
-            <p className="mt-1 text-sm leading-snug text-ink-muted">{e.action ? <span className="text-ink">{e.action} </span> : null}{e.summary}</p>
-            {e.links.length > 0 ? (
-              <p className="mt-1.5 flex flex-wrap gap-x-3 text-sm">
-                {e.links.map((l) => (
-                  <a key={l.url} href={l.url} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">
-                    {l.name}
-                  </a>
-                ))}
-              </p>
-            ) : null}
-          </li>
-        );
-        return (
-          <>
-            <ul className="mt-5 grid gap-x-10 sm:grid-cols-2" data-testid="hub-readiness-primary">
-              {primary.map((e) => (
-                <Entry key={e.kind} e={e} />
-              ))}
-            </ul>
-            {/* The section anchors the browser tests know, kept as invisible groupings of every entry. */}
-            {READINESS_SECTIONS.map((section) => (r.entries.some((e) => READINESS_SECTION_OF[e.kind] === section) ? <span key={section} className="sr-only" data-testid={`hub-readiness-${section}`}>{READINESS_SECTION_LABELS[section]}</span> : null))}
-            {more.length > 0 ? (
-              <details className="mt-4" data-testid="hub-readiness-more">
-                <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted hover:text-ink">More travel checks ({more.length})</summary>
-                <ul className="mt-1 grid gap-x-10 sm:grid-cols-2">
-                  {more.map((e) => (
-                    <Entry key={e.kind} e={e} />
-                  ))}
-                </ul>
-                <p className="mt-3 type-meta">{r.coverageNote}</p>
-              </details>
-            ) : (
-              <p className="mt-3 type-meta">{r.coverageNote}</p>
-            )}
-          </>
-        );
-      })()}
+      {READINESS_SECTIONS.map((section) => (r.entries.some((e) => READINESS_SECTION_OF[e.kind] === section) ? <span key={section} className="sr-only" data-testid={`hub-readiness-${section}`}>{READINESS_SECTION_LABELS[section]}</span> : null))}
+      <p className="mt-4 type-meta">{r.coverageNote}</p>
 
       {/*
         V6 — this is Book first re-grouped with tick boxes, and the packet

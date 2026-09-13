@@ -861,7 +861,8 @@ export function ItineraryView({
       {/* V9 §7 — Preflight leads: the verdict, how far away, and ready / needs attention / can wait. */}
       {preflight ? (
         <div id="preflight" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]">
-          <PreflightView preflight={preflight} {...(tripId ? { tripId } : {})} />
+          {/* Book first is rendered below on this view, with the actions; see `bookingsListedBelow`. */}
+          <PreflightView preflight={preflight} bookingsListedBelow {...(tripId ? { tripId } : {})} />
         </div>
       ) : (
         <div className="card border-pine/40 bg-pine-soft/50 p-5" data-testid="prepare-top">

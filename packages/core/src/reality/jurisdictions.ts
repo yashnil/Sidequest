@@ -246,6 +246,65 @@ export const JURISDICTIONS: readonly Jurisdiction[] = [
     ],
   },
   {
+    /*
+     * V11 §1 — CANADA HAD OPERATIONAL KNOWLEDGE AND NO JURISDICTION.
+     *
+     * `providers/fixtures/access/ca.json` carries the Moraine Lake shuttle —
+     * restricted, reservation required, dated, `official_current`, sourced to
+     * Parks Canada — which is exactly the fact a Rockies plan turns on. But
+     * there was no `CA` row here, so `buildTravelReality` filtered it to
+     * nothing and returned `coverage: 'none'`: no modes, no setup, no crowd
+     * periods. Sidequest could know a Canadian access rule while not knowing
+     * that Canada is a driving country.
+     *
+     * The degradation was honest, which is why no test caught it — `unknown ≠
+     * false` was working. The gap was in the data, and this closes it at the
+     * jurisdiction level, where it belongs. The destination stays the
+     * destination: "Canadian Rockies" is a mountain region; Canada, Alberta and
+     * British Columbia are its jurisdictional context, and the subnational refs
+     * come from the geocoder ("CA-AB", "CA-BC") rather than from a table here.
+     *
+     * Currency, driving side, emergency number, plugs and languages are NOT
+     * repeated here — `reference/countries.ts` has carried Canada all along and
+     * is the one place those live.
+     */
+    code: 'CA',
+    asOf: '2026-09',
+    facts: [
+      F('ca-drive', 'driving', 'Most foreign licences are accepted for short visits and an International Driving Permit serves as a translation; outside the largest cities a car is how the country is travelled, and distances between towns are long.', { freshness: 'regulatory_volatile' }),
+      F('ca-winter-tyres', 'seasonal_access', 'Mountain highways post winter-tyre or chain requirements for part of the year, and the posted season runs well past the first snow; a rental booked for the mountains has to be equipped for them.', { freshness: 'regulatory_volatile', sourceName: 'Provincial highway authorities (BC and Alberta)' }),
+      F('ca-parks', 'permits', 'National parks charge entry and several of the busiest sites run shuttles, timed entry or vehicle bans in the summer season; the park’s own page is the only current word on which.', { freshness: 'regulatory_volatile', sourceName: 'Parks Canada', sourceUrl: 'https://parks.canada.ca/' }),
+      F('ca-transit', 'transit', 'Usable city transit is limited to Toronto, Montreal, Vancouver, Calgary, Ottawa and Edmonton; between cities and in the mountains there is effectively none.'),
+      F('ca-pay', 'payment', 'Cards and phone payment are accepted almost everywhere, including in the parks; tipping of 15–20% at restaurants and for drivers is expected.'),
+      F('ca-language', 'language', 'English is used nationally and French is co-official; in Québec French comes first in signage and service.', { freshness: 'stable' }),
+      F('ca-holidays', 'holidays', 'July and August are the mountain-park season; Canada Day (1 July), the August civic holiday and Thanksgiving in mid-October are the busiest weekends.', { freshness: 'stable' }),
+      F('ca-wildlife', 'safety_context', 'Bear country is ordinary in the mountain parks: food storage rules are enforced at campgrounds and trailheads, and some trails carry seasonal group-size minimums or closures.', { freshness: 'regulatory_volatile', sourceName: 'Parks Canada', sourceUrl: 'https://parks.canada.ca/' }),
+    ],
+    modes: [
+      { mode: 'self_drive', status: 'recommended', scope: 'regional', reason: 'The distances between places are driving distances, and the mountain routes are the trip.', facts: ['ca-drive'] },
+      { mode: 'rental_car', status: 'recommended', scope: 'regional', reason: 'Normal and expected outside the big cities; book winter-capable for the mountains out of season.', facts: ['ca-drive', 'ca-winter-tyres'] },
+      { mode: 'shuttle', status: 'viable', scope: 'regional', reason: 'Some park sites can only be reached by the park’s own shuttle in season.', facts: ['ca-parks'] },
+      { mode: 'rideshare', status: 'viable', scope: 'urban', reason: 'Available in the cities, effectively absent in the parks.' },
+      { mode: 'metro', status: 'viable', scope: 'urban', reason: 'Good in a handful of cities, thin elsewhere.', facts: ['ca-transit'] },
+      { mode: 'walking', status: 'viable', scope: 'urban', reason: 'The city centres walk well; nothing between them does.' },
+      { mode: 'intercity_train', status: 'friction', scope: 'regional', reason: 'A scenic service on a few routes rather than a way to get somewhere on a schedule.' },
+      { mode: 'flight', status: 'viable', scope: 'regional', reason: 'The country is wide enough that flying between regions is normal.' },
+    ],
+    setup: [
+      { id: 'ca-setup-parks', title: 'Check park entry, shuttles and timed entry for every national park on the plan', why: 'The busiest sites turn private cars away in season, and some need a reservation made well ahead.', when: 'before_you_fly', relevance: 'essential', topic: 'permits', onlyWhen: 'remote', facts: ['ca-parks'] },
+      { id: 'ca-setup-winter', title: 'Confirm the hire car is equipped for the mountain highways', why: 'Winter-tyre requirements are posted by season, not by weather on the day.', when: 'before_you_fly', relevance: 'essential', topic: 'seasonal_access', onlyWhen: 'self_drive', facts: ['ca-winter-tyres'] },
+      { id: 'ca-setup-wildlife', title: 'Read the park’s bear-safety and food-storage rules', why: 'They are enforced, and some trails close or set a group-size minimum at short notice.', when: 'before_you_fly', relevance: 'useful', topic: 'safety_context', onlyWhen: 'remote', facts: ['ca-wildlife'] },
+    ],
+    crowdPeriods: [
+      { name: 'Mountain-park summer', ranges: [{ from: '06-25', to: '09-05' }], effect: 'very_busy', note: 'Lodging in and around the parks books out months ahead and the shuttle systems run at capacity.', factId: 'ca-holidays' },
+      { name: 'Canada Day weekend', ranges: [{ from: '06-29', to: '07-03' }], effect: 'busy', note: 'A national holiday in the middle of the park season.', factId: 'ca-holidays' },
+    ],
+    bookingLeads: [
+      { kind: 'permit', leadDays: 90, note: 'Park reservations and timed entry open months ahead and go quickly for the best-known sites.' },
+      { kind: 'lodging_peak', leadDays: 120, note: 'Rooms inside and beside the mountain parks are the scarcest thing on a summer trip.' },
+    ],
+  },
+  {
     code: 'US',
     asOf: '2026-09',
     facts: [

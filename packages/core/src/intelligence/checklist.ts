@@ -64,11 +64,26 @@ export function buildChecklist(input: { readiness: TripReadinessPacket; bookings
     groups.set(target, list);
   };
 
-  for (const entry of input.readiness.entries) {
-    if (entry.state === 'not_applicable') continue;
-    const link = entry.links[0];
-    put(entry.phase as ChecklistPhaseCode, checklistItemSchema.parse({ id: `readiness:${entry.kind}`, title: entry.action ?? entry.title, why: entry.summary, when: CHECKLIST_PHASE_LABELS[entry.phase as ChecklistPhaseCode], ...(link ? { sourceName: link.name, sourceUrl: link.url } : {}), blocking: entry.blocking, kind: 'readiness' }));
-  }
+  /*
+   * V11 §2 — READINESS ENTRIES ARE NOT COPIED INTO THE CHECKLIST.
+   *
+   * Every entry used to be turned into a checklist item here, with
+   * `title: entry.action ?? entry.title` and `why: entry.summary` — the entry's
+   * own words. On screen that was the third rendering of the same sentence on
+   * one Prepare page: the Preflight buckets, the "Before you go" grid, and "In
+   * order" below them, all reading `readiness.entries`.
+   *
+   * Prepare's canonical list (`PreflightView`) now carries the timing that was
+   * the only reason to restate an entry here: its four groups are derived from
+   * the entry's own `phase`, so "before you leave" and "closer to the trip" are
+   * a view over the one list rather than a second list holding the order.
+   *
+   * What remains below is what genuinely has a sequence and is not a readiness
+   * entry: what to book and when, the volatile facts to re-check, packing, and
+   * the offline copy. `readinessChecklistItems` is kept as the explicit way to
+   * get them where a *flat* list is the point rather than a page — the print
+   * packet's appendix, which has no Preflight buckets to read from.
+   */
   for (const booking of input.bookings) {
     if (booking.status !== 'open') continue;
     const phase: ChecklistPhaseCode = booking.priority === 'book_first' ? 'book_first' : booking.priority === 'book_soon' ? 'one_month_out' : booking.priority === 'can_wait' ? 'one_week_out' : 'day_before';
@@ -83,4 +98,31 @@ export function buildChecklist(input: { readiness: TripReadinessPacket; bookings
 
   const phases = CHECKLIST_PHASES.filter((p) => groups.has(p)).map((p) => checklistPhaseGroupSchema.parse({ phase: p, title: CHECKLIST_PHASE_LABELS[p], items: groups.get(p)! }));
   return checklistIntelligenceSchema.parse({ phases, daysUntilTrip: d });
+}
+
+/**
+ * The readiness entries as checklist items, for a consumer that needs one flat
+ * ordered list rather than a page — the print appendix. Not part of
+ * `buildChecklist` on purpose: on screen the readiness list has one owner, and
+ * a second copy that only the printer wants should be asked for by the printer.
+ */
+export function readinessChecklistItems(readiness: TripReadinessPacket): ChecklistItem[] {
+  const out: ChecklistItem[] = [];
+  for (const entry of readiness.entries) {
+    if (entry.state === 'not_applicable') continue;
+    const link = entry.links[0];
+    const phase = entry.phase as ChecklistPhaseCode;
+    out.push(
+      checklistItemSchema.parse({
+        id: `readiness:${entry.kind}`,
+        title: entry.action ?? entry.title,
+        why: entry.summary,
+        when: CHECKLIST_PHASE_LABELS[phase],
+        ...(link ? { sourceName: link.name, sourceUrl: link.url } : {}),
+        blocking: entry.blocking,
+        kind: 'readiness',
+      }),
+    );
+  }
+  return out;
 }

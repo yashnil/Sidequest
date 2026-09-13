@@ -64,8 +64,27 @@ test('the hub has every section, calm by default, with urgent items only where t
   await expect(page.getByTestId('hub-before-you-go')).toBeVisible();
   await expect(page.getByTestId('hub-readiness-entry_documents')).toBeVisible();
   // Nobody said their citizenship, so the visa layer needs input — never a guess.
-  await expect(page.locator('[data-testid="hub-readiness-entry"][data-kind="visa"]')).toHaveAttribute('data-state', 'needs_input');
+  await expect(page.locator('[data-testid="preflight-item"][data-kind="visa"]')).toHaveAttribute('data-state', 'needs_input');
   await expect(page.getByTestId('hub-checklist')).toBeVisible();
+
+  /*
+   * V11 §2 — ONE READINESS ITEM RENDERS ONCE.
+   *
+   * Prepare used to render every readiness entry three times: the Preflight
+   * buckets, the "Before you go" topic grid, and "In order", which
+   * `buildChecklist` filled from the same entries. The same sentence appeared
+   * three times with its full body, and the page ran to about eleven thousand
+   * pixels.
+   *
+   * This is the assertion that stops it coming back, and it is deliberately
+   * about identity rather than about text: every rendered readiness row is
+   * counted by its `data-kind`, and no kind may appear more than once anywhere
+   * in the Prepare view. Counting words would pass the moment somebody
+   * paraphrased one of the copies.
+   */
+  const kinds = await page.locator('#hub-view-prepare [data-testid="preflight-item"][data-kind]').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-kind')));
+  expect(kinds.length, 'the readiness list should render').toBeGreaterThan(0);
+  expect(new Set(kinds).size, `a readiness kind is rendered more than once: ${kinds.sort().join(', ')}`).toBe(kinds.length);
   await expect(page.getByTestId('hub-pack')).toBeVisible();
   await expect(page.getByTestId('hub-packing-list')).toBeVisible();
   await expect(page.getByTestId('hub-backups')).toBeVisible();
@@ -128,12 +147,12 @@ test('the readiness profile changes the packet without ever confirming a legal f
   await page.getByTestId('readiness-citizenship').fill('GB');
   await page.getByTestId('readiness-passport').fill('2028-06');
   await page.getByTestId('readiness-save').click();
-  const visa = page.locator('[data-testid="hub-readiness-entry"][data-kind="visa"]');
+  const visa = page.locator('[data-testid="preflight-item"][data-kind="visa"]');
   await expect(visa).toHaveAttribute('data-state', 'unverified', { timeout: 20_000 });
   await expect(visa).toContainText(/not independently verified/);
   await expect(visa).not.toContainText(/do not need/i);
   await expect(visa.getByRole('link', { name: /Foreign travel advice/ })).toBeVisible();
-  await expect(page.locator('[data-testid="hub-readiness-entry"][data-kind="passport_validity"]')).toHaveAttribute('data-state', 'unverified');
+  await expect(page.locator('[data-testid="preflight-item"][data-kind="passport_validity"]')).toHaveAttribute('data-state', 'unverified');
 
   const first = page.getByTestId('hub-packing-list').getByRole('checkbox').first();
   await first.check();
