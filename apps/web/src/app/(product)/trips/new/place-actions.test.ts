@@ -67,6 +67,33 @@ describe('placing a typed destination with no index and no geocoder', () => {
     }
   });
 
+  it('V10 §15 — frames a composite whose parts placed, and defers only when the concept itself has a stand-in centre', async () => {
+    const { placeDestinationAction } = await import('./place-actions');
+    /*
+     * The distinction a first draft of the framing guard got wrong, and the
+     * browser suite caught: the graph's envelope centre and the concept's own
+     * centre are two different claims, and `centerBasis` describes only the
+     * second. A phrase whose parts placed has a real centre arrived at honestly,
+     * and asking `framingIsUnsafe` about it deferred a map that should have been
+     * drawn — which stalled the whole setup flow behind an unplaced destination.
+     */
+    const composite = await placeDestinationAction({ text: 'Kenya and Tanzania' });
+    expect(composite.placed, 'a composite whose country parts placed must be framed').not.toBeNull();
+    expect(composite.placed!.center).toBeDefined();
+
+    /*
+     * And the case it exists for: a mountain region nobody placed, whose only
+     * centre is the country a demonym implied. Nothing is drawn, and the screen is
+     * told what it is still looking for.
+     */
+    const deferred = await placeDestinationAction({ text: 'the Canadian Rockies' });
+    expect(deferred.placed).toBeNull();
+    if (deferred.placed !== null) throw new Error('unreachable');
+    expect(deferred.reason).toBe('locating');
+    expect(deferred.locating?.kindLabel).toBe('a mountain region');
+    expect(deferred.locating?.label).toBe('the Canadian Rockies');
+  });
+
   it('refuses a keystroke rather than resolving it', async () => {
     const { placeDestinationAction } = await import('./place-actions');
     const result = await placeDestinationAction({ text: 'J' });

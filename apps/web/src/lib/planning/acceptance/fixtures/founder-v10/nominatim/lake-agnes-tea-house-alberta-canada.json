@@ -1,0 +1,41 @@
+[
+ {
+  "place_id": 376844143,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 263569994,
+  "lat": "51.4164212",
+  "lon": "-116.2442208",
+  "category": "amenity",
+  "type": "cafe",
+  "place_rank": 30,
+  "importance": 0.3552828743550627,
+  "addresstype": "amenity",
+  "name": "Lake Agnes Tea House",
+  "display_name": "Lake Agnes Tea House, Big Beehive Trail, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "amenity": "Lake Agnes Tea House",
+   "road": "Big Beehive Trail",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "ele": "2135",
+   "building": "yes",
+   "wikidata": "Q6474685",
+   "internet_access": "no"
+  },
+  "namedetails": {
+   "name": "Lake Agnes Tea House"
+  },
+  "boundingbox": [
+   "51.4163388",
+   "51.4164750",
+   "-116.2443057",
+   "-116.2441167"
+  ]
+ }
+]

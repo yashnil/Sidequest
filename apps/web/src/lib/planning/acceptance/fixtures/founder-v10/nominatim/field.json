@@ -1,0 +1,190 @@
+[
+ {
+  "place_id": 375086693,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 3554329,
+  "lat": "44.9168278",
+  "lon": "-93.2684148",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 20,
+  "importance": 0.3151525238377993,
+  "addresstype": "neighbourhood",
+  "name": "Field",
+  "display_name": "Field, Nokomis, Minneapolis, Hennepin County, Minnesota, United States",
+  "address": {
+   "neighbourhood": "Field",
+   "suburb": "Nokomis",
+   "city": "Minneapolis",
+   "county": "Hennepin County",
+   "state": "Minnesota",
+   "ISO3166-2-lvl4": "US-MN",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "wikidata": "Q5446859",
+   "wikipedia": "en:Field, Minneapolis",
+   "linked_place": "neighbourhood",
+   "admin_level": "10"
+  },
+  "namedetails": {
+   "name": "Field",
+   "name:en": "Field"
+  },
+  "boundingbox": [
+   "44.9092720",
+   "44.9197320",
+   "-93.2748115",
+   "-93.2625841"
+  ]
+ },
+ {
+  "place_id": 341299188,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 154360128,
+  "lat": "36.8928650",
+  "lon": "-83.6021372",
+  "category": "place",
+  "type": "hamlet",
+  "place_rank": 20,
+  "importance": 0.2946949388609965,
+  "addresstype": "hamlet",
+  "name": "Field",
+  "display_name": "Field, Bell County, Kentucky, United States",
+  "address": {
+   "hamlet": "Field",
+   "county": "Bell County",
+   "state": "Kentucky",
+   "ISO3166-2-lvl4": "US-KY",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "407",
+   "wikidata": "Q14690390"
+  },
+  "namedetails": {
+   "name": "Field"
+  },
+  "boundingbox": [
+   "36.8728650",
+   "36.9128650",
+   "-83.6221372",
+   "-83.5821372"
+  ]
+ },
+ {
+  "place_id": 18809336,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 7066776,
+  "lat": "-35.7936155",
+  "lon": "139.6437378",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 18,
+  "importance": 0.23648094285300414,
+  "addresstype": "city_district",
+  "name": "Field",
+  "display_name": "Field, South Australia, Australia",
+  "address": {
+   "city_district": "Field",
+   "state": "South Australia",
+   "ISO3166-2-lvl4": "AU-SA",
+   "country": "Australia",
+   "country_code": "au"
+  },
+  "extratags": {
+   "wikidata": "Q48799549",
+   "ref:psma:loc_pid": "loc3b099ae68193",
+   "ref:dpti:suburb_num": "526502",
+   "admin_level": "9"
+  },
+  "namedetails": {
+   "name": "Field"
+  },
+  "boundingbox": [
+   "-35.9029573",
+   "-35.6953211",
+   "139.5070923",
+   "139.8360943"
+  ]
+ },
+ {
+  "place_id": 368994724,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 5863840243,
+  "lat": "46.5206969",
+  "lon": "-80.0273257",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.21822785325192331,
+  "addresstype": "town",
+  "name": "Field",
+  "display_name": "Field, West Nipissing, Nipissing District, Northeastern Ontario, Ontario, Canada",
+  "address": {
+   "town": "Field",
+   "village": "West Nipissing",
+   "county": "Nipissing District",
+   "state_district": "Northeastern Ontario",
+   "state": "Ontario",
+   "ISO3166-2-lvl4": "CA-ON",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "wikidata": "Q115174220",
+   "wikipedia": "en:Field, Ontario"
+  },
+  "namedetails": {
+   "name": "Field"
+  },
+  "boundingbox": [
+   "46.4806969",
+   "46.5606969",
+   "-80.0673257",
+   "-79.9873257"
+  ]
+ },
+ {
+  "place_id": 25418523,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 7259806123,
+  "lat": "-40.8564398",
+  "lon": "175.1103943",
+  "category": "natural",
+  "type": "peak",
+  "place_rank": 18,
+  "importance": 0.1600424361028458,
+  "addresstype": "peak",
+  "name": "Field",
+  "display_name": "Field, Waikanae, Kāpiti Coast District, Wellington, New Zealand / Aotearoa",
+  "address": {
+   "peak": "Field",
+   "town": "Waikanae",
+   "county": "Kāpiti Coast District",
+   "state": "Wellington",
+   "ISO3166-2-lvl4": "NZ-WGN",
+   "country": "New Zealand / Aotearoa",
+   "country_code": "nz"
+  },
+  "extratags": {
+   "ele": "611"
+  },
+  "namedetails": {
+   "name": "Field"
+  },
+  "boundingbox": [
+   "-40.8564898",
+   "-40.8563898",
+   "175.1103443",
+   "175.1104443"
+  ]
+ }
+]

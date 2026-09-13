@@ -1,0 +1,90 @@
+[
+ {
+  "place_id": 378031107,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 4726596,
+  "lat": "51.4181692",
+  "lon": "-116.1540755",
+  "category": "highway",
+  "type": "secondary",
+  "place_rank": 26,
+  "importance": 0.053390834668497714,
+  "addresstype": "road",
+  "name": "Bow Valley Parkway",
+  "display_name": "Bow Valley Parkway, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "road": "Bow Valley Parkway",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "toll": "yes",
+   "lanes": "2",
+   "surface": "asphalt",
+   "maxspeed": "60",
+   "smoothness": "good"
+  },
+  "namedetails": {
+   "ref": "1A",
+   "name": "Bow Valley Parkway",
+   "name:en": "Bow Valley Parkway",
+   "name:fr": "Promenade de la Vallée-de-la-Bow"
+  },
+  "boundingbox": [
+   "51.4139541",
+   "51.4248342",
+   "-116.1611624",
+   "-116.1453596"
+  ]
+ },
+ {
+  "place_id": 376778407,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 4412027,
+  "lat": "51.4257039",
+  "lon": "-116.1670627",
+  "category": "highway",
+  "type": "secondary",
+  "place_rank": 26,
+  "importance": 0.053390834668497714,
+  "addresstype": "road",
+  "name": "Bow Valley Parkway",
+  "display_name": "Bow Valley Parkway, Lake Louise, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "road": "Bow Valley Parkway",
+   "hamlet": "Lake Louise",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "lanes": "2",
+   "surface": "asphalt",
+   "maxspeed": "60",
+   "smoothness": "good",
+   "cycleway:both": "no"
+  },
+  "namedetails": {
+   "ref": "1A",
+   "name": "Bow Valley Parkway",
+   "name:en": "Bow Valley Parkway",
+   "name:fr": "Promenade de la Vallée-de-la-Bow",
+   "alt_name": "Whitehorn Road",
+   "alt_name:en": "Whitehorn Road",
+   "alt_name:fr": "Chemin Whitehorn"
+  },
+  "boundingbox": [
+   "51.4250623",
+   "51.4264355",
+   "-116.1710313",
+   "-116.1631196"
+  ]
+ }
+]

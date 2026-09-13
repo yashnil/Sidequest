@@ -1,0 +1,76 @@
+[
+ {
+  "place_id": 274465713,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 249085731,
+  "lat": "64.2532647",
+  "lon": "-15.2080441",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.4419798675817451,
+  "addresstype": "town",
+  "name": "Höfn",
+  "display_name": "Höfn, Sveitarfélagið Hornafjörður, Suðurland, 780, Ísland",
+  "address": {
+   "town": "Höfn",
+   "county": "Sveitarfélagið Hornafjörður",
+   "ISO3166-2-lvl6": "IS-SHF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "780",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "is_in": "Iceland",
+   "wikidata": "Q817118",
+   "wikipedia": "is:Höfn í Hornafirði",
+   "population": "1813",
+   "population:date": "2026"
+  },
+  "namedetails": {
+   "name": "Höfn",
+   "name:is": "Höfn",
+   "name:ru": "Хёбн",
+   "alt_name": "Höfn í Hornafirði"
+  },
+  "boundingbox": [
+   "64.2132647",
+   "64.2932647",
+   "-15.2480441",
+   "-15.1680441"
+  ]
+ },
+ {
+  "place_id": 273051982,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 7992571,
+  "lat": "65.3575695",
+  "lon": "-22.2522207",
+  "category": "place",
+  "type": "islet",
+  "place_rank": 20,
+  "importance": 0.1333433333333333,
+  "addresstype": "islet",
+  "name": "Höfn",
+  "display_name": "Höfn, Ísland",
+  "address": {
+   "islet": "Höfn",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Höfn"
+  },
+  "boundingbox": [
+   "65.3550420",
+   "65.3601238",
+   "-22.2568309",
+   "-22.2456300"
+  ]
+ }
+]

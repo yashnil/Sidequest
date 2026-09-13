@@ -1,0 +1,76 @@
+[
+ {
+  "place_id": 373097399,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 1677700364,
+  "lat": "52.9197820",
+  "lon": "-118.0101606",
+  "category": "place",
+  "type": "locality",
+  "place_rank": 25,
+  "importance": 0.1679799034751623,
+  "addresstype": "locality",
+  "name": "Maligne Canyon",
+  "display_name": "Maligne Canyon, Municipality of Jasper, Alberta, T0E 0A8, Canada",
+  "address": {
+   "locality": "Maligne Canyon",
+   "town": "Municipality of Jasper",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T0E 0A8",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "wikidata": "Q6743519",
+   "wikipedia": "en:Maligne Canyon"
+  },
+  "namedetails": {
+   "name": "Maligne Canyon"
+  },
+  "boundingbox": [
+   "52.9097820",
+   "52.9297820",
+   "-118.0201606",
+   "-118.0001606"
+  ]
+ },
+ {
+  "place_id": 375490305,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 4336201795,
+  "lat": "52.9206826",
+  "lon": "-118.0007125",
+  "category": "information",
+  "type": "board",
+  "place_rank": 30,
+  "importance": 0.00005592507820244171,
+  "addresstype": "information",
+  "name": "Maligne canyon",
+  "display_name": "Maligne canyon, Maligne Canyon Trail, Municipality of Jasper, Alberta, T0E 1E0, Canada",
+  "address": {
+   "information": "Maligne canyon",
+   "road": "Maligne Canyon Trail",
+   "town": "Municipality of Jasper",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T0E 1E0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "tourism": "information"
+  },
+  "namedetails": {
+   "name": "Maligne canyon"
+  },
+  "boundingbox": [
+   "52.9206326",
+   "52.9207326",
+   "-118.0007625",
+   "-118.0006625"
+  ]
+ }
+]

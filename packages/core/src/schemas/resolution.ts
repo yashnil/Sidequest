@@ -74,6 +74,12 @@ export const destinationCandidateSchema = z.object({
    * code can refuse, and this is where a code lives.
    */
   regionCode: z.string().min(1).optional(),
+  /**
+   * V10 §2 — the published name of that first-level division ("Alberta"), so a
+   * subnational jurisdiction can be named without guessing at a code. Paired
+   * with `regionCode`; absent when the source published neither.
+   */
+  regionName: z.string().min(1).max(80).optional(),
   /** Other published spellings of this same entity, in any script. */
   aliases: z.array(z.string().min(1)).default([]),
   /** Coarse-to-fine: ["Indonesia", "Bali"]. Used to detect hierarchy agreement. */

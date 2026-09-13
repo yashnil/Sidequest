@@ -587,7 +587,20 @@ export type SkeletonDeviationKind =
    * so the final itinerary can say plainly that this specific measurement
    * came from a real route response, not a matrix cell.
    */
-  | 'relocation_confirmed_via_direct_route';
+  | 'relocation_confirmed_via_direct_route'
+  /**
+   * V10 §7 — a day whose stops were reordered before layout because the order
+   * as composed doubled back on ground it had already covered, and every stop
+   * that moved was free to move. Recorded so a reordering is never silent.
+   */
+  | 'day_order_corrected'
+  /**
+   * V10 §5 — a route-critical name (a base, a gateway) that the placement
+   * ladder could not put on the map after asking with every context it had.
+   * Distinct from `base_unresolved`, which predates the ladder: this one
+   * carries what was asked.
+   */
+  | 'route_critical_unplaced';
 
 export interface SkeletonDeviation {
   kind: SkeletonDeviationKind;
@@ -1332,6 +1345,13 @@ export async function resolveSkeletonBase(
     SkeletonPlanningContext,
     'candidates' | 'compiledBases' | 'region' | 'geocodeLocality' | 'destinationScope' | 'subregionGeometries'
   >,
+  /**
+   * V10 §5 — the exact string to ask the geocoder, when the caller is walking a
+   * placement ladder and has already decided what context the name needs.
+   * Absent keeps the historical behaviour: the base's name with the
+   * destination's own label appended.
+   */
+  options?: { geocodeQuery?: string },
 ): Promise<BaseResolutionOutcome> {
   const evidencePlace = base.placeIndex !== null ? packet.places.find((p) => p.index === base.placeIndex) : undefined;
   const packetBaseCandidate = packet.baseCandidates.find((b) => b.name === base.name);
@@ -1401,7 +1421,7 @@ export async function resolveSkeletonBase(
   if (context.geocodeLocality) {
     let results: readonly GeocodedLocality[];
     try {
-      results = await context.geocodeLocality(`${base.name}, ${context.region.name}`);
+      results = await context.geocodeLocality(options?.geocodeQuery ?? `${base.name}, ${context.region.name}`);
     } catch {
       return { ...UNRESOLVED, geographicScopeOutcome: 'geocoder_unavailable' };
     }

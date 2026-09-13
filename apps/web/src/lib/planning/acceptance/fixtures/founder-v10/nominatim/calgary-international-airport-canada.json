@@ -1,0 +1,86 @@
+[
+ {
+  "place_id": 376339616,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 234496840,
+  "lat": "51.1222604",
+  "lon": "-114.0135410",
+  "category": "aeroway",
+  "type": "aerodrome",
+  "place_rank": 30,
+  "importance": 0.552887730708444,
+  "addresstype": "aeroway",
+  "name": "Calgary International Airport",
+  "display_name": "Calgary International Airport, 2000, Airport Road NE, Calgary International Airport, Calgary, Alberta, T2E 6W5, Canada",
+  "address": {
+   "aeroway": "Calgary International Airport",
+   "house_number": "2000",
+   "road": "Airport Road NE",
+   "suburb": "Calgary International Airport",
+   "city": "Calgary",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T2E 6W5",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "ele": "1099",
+   "operator": "Calgary Airport Authority",
+   "wikidata": "Q1160343",
+   "aerodrome": "international",
+   "wikipedia": "en:Calgary International Airport",
+   "passengers": "15261108",
+   "port_of_entry": "all",
+   "aerodrome:type": "international"
+  },
+  "namedetails": {
+   "ref": "YYC",
+   "iata": "YYC",
+   "icao": "CYYC",
+   "name": "Calgary International Airport"
+  },
+  "boundingbox": [
+   "51.0930394",
+   "51.1540197",
+   "-114.0424778",
+   "-113.9865157"
+  ]
+ },
+ {
+  "place_id": 378034851,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 18462019,
+  "lat": "51.1215999",
+  "lon": "-114.0107540",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 20,
+  "importance": 0.13340748226138702,
+  "addresstype": "suburb",
+  "name": "Calgary International Airport",
+  "display_name": "Calgary International Airport, Calgary, Alberta, Canada",
+  "address": {
+   "suburb": "Calgary International Airport",
+   "city": "Calgary",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "admin_level": "10"
+  },
+  "namedetails": {
+   "name": "Calgary International Airport"
+  },
+  "boundingbox": [
+   "51.0927957",
+   "51.1543114",
+   "-114.0431929",
+   "-113.9816473"
+  ]
+ }
+]

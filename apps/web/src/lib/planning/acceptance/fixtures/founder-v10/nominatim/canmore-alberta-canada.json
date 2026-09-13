@@ -1,0 +1,78 @@
+[
+ {
+  "place_id": 375939925,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 1644583266,
+  "lat": "51.0866897",
+  "lon": "-115.3481135",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.5583563420724067,
+  "addresstype": "town",
+  "name": "Canmore",
+  "display_name": "Canmore, Town of Canmore, Alberta, T1W 2H4, Canada",
+  "address": {
+   "town": "Canmore",
+   "county": "Town of Canmore",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1W 2H4",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "website": "https://www.canmore.ca/",
+   "wikidata": "Q991515",
+   "wikipedia": "en:Canmore, Alberta",
+   "population": "13992"
+  },
+  "namedetails": {
+   "name": "Canmore",
+   "name:en": "Canmore",
+   "name:ru": "Канмор"
+  },
+  "boundingbox": [
+   "51.0466897",
+   "51.1266897",
+   "-115.3881135",
+   "-115.3081135"
+  ]
+ },
+ {
+  "place_id": 376236929,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 6645014231,
+  "lat": "51.0564753",
+  "lon": "-115.3378033",
+  "category": "place",
+  "type": "county",
+  "place_rank": 12,
+  "importance": 0.24006006637674523,
+  "addresstype": "county",
+  "name": "Canmore (town)",
+  "display_name": "Canmore (town), Alberta, T1W 3M6, Canada",
+  "address": {
+   "county": "Canmore (town)",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1W 3M6",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "is_in": "Alberta,Alta.,AB,Canada"
+  },
+  "namedetails": {
+   "name": "Canmore (town)"
+  },
+  "boundingbox": [
+   "50.3564753",
+   "51.7564753",
+   "-116.0378033",
+   "-114.6378033"
+  ]
+ }
+]

@@ -7,6 +7,8 @@ import { routingCoverageFromEnv } from '../providers/routing-coverage';
 import { createCompositeRouting } from '../providers/routing-composite';
 import { createOrsRouting } from '../providers/openrouteservice';
 import { loadRecordedRoutes, recordedRoutesFetch } from '../providers/openrouteservice-fixture';
+import { CACHE_TTL_MS, cacheKeyFor } from '../providers/cache-policy';
+import { readProviderCache, writeProviderCache } from '../db/compiler-repository';
 
 /**
  * WHAT THE CANONICAL BUILD MAY REACH TO VERIFY A DRAFT — NEVER THE RESEARCH MODEL.
@@ -43,8 +45,22 @@ export function verificationProviders(candidateId?: string): VerificationProvide
    */
   const local = isRoutesProviderEnabled() ? createOpenRouting(diagnostics) : null;
   const recorded = process.env.SIDEQUEST_ROUTES_FIXTURE;
+  /*
+   * V10 §6 — the durable static-route cache. A road leg does not change week to
+   * week (`CACHE_TTL_MS.static_route`), so a rebuild of the same trip measures
+   * nothing twice, and a regional trip whose legs were partly measured last time
+   * starts with those already in hand. Injected here so the adapter never
+   * reaches for a database itself.
+   */
+  const routeCache = {
+    read: (key: string) => readProviderCache<{ minutes: number; km: number }>(cacheKeyFor('static_route', [key]), new Date()),
+    write: (key: string, value: { minutes: number; km: number }) => {
+      const at = new Date();
+      writeProviderCache(cacheKeyFor('static_route', [key]), 'openrouteservice', value, CACHE_TTL_MS.static_route, at);
+    },
+  };
   const global = isGlobalRoutesProviderEnabled()
-    ? createOrsRouting(diagnostics, recorded ? { fetchImpl: recordedRoutesFetch(loadRecordedRoutes(recorded)), apiKey: 'recorded-fixture' } : {})
+    ? createOrsRouting(diagnostics, recorded ? { fetchImpl: recordedRoutesFetch(loadRecordedRoutes(recorded)), apiKey: 'recorded-fixture' } : { cache: routeCache })
     : null;
   return {
     resolver: isGeocoderEnabled() ? createOpenResolver({ diagnostics }) : null,

@@ -1,5 +1,5 @@
 import 'server-only';
-import { destinationConceptSchema, normalizeDestinationQuery, type DestinationConcept, type DestinationIntentGraph } from '@sidequest/core';
+import { interpretedConceptSchema, normalizeDestinationQuery, type InterpretedConcept, type DestinationIntentGraph } from '@sidequest/core';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { destinationInterpreterChoice } from '@/lib/providers/switches';
@@ -32,7 +32,7 @@ export const INTERPRETATION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const INTERPRETATION_PROMPT_VERSION = 'interpret-destination-concept/2026-09-11.1';
 
 export interface InterpretationOutcome {
-  concept: DestinationConcept | null;
+  concept: InterpretedConcept | null;
   /** Which tier answered, for diagnostics and the evidence trail. */
   source: 'cache' | 'anthropic' | 'fixture' | 'off' | 'declined' | 'failed';
   modelCalls: number;
@@ -71,7 +71,7 @@ export function fixtureInterpreter(table: Record<string, unknown> = fixtureConce
     async interpret({ text }) {
       const entry = table[normalizeDestinationQuery(text)];
       if (!entry) return { concept: null, source: 'fixture', modelCalls: 0 };
-      const parsed = destinationConceptSchema.safeParse(entry);
+      const parsed = interpretedConceptSchema.safeParse(entry);
       return { concept: parsed.success ? parsed.data : null, source: 'fixture', modelCalls: 0 };
     },
   };
@@ -106,7 +106,7 @@ async function anthropicInterpreter(): Promise<DestinationInterpreter> {
             `The phrase's shape reads as: ${graph.children.map((c) => `${c.kind}${c.countryCode ? ` in ${c.countryCode}` : ''}`).join(' + ')}.`,
             evidence.length > 0 ? `What a geocoder returned for it, none of which could stand for the destination: ${evidence.slice(0, 5).join('; ')}.` : 'A geocoder returned nothing usable for it.',
           ].join(' '),
-          schema: destinationConceptSchema,
+          schema: interpretedConceptSchema,
           effort: 'low',
           maxTokens: 1024,
           timeoutMs: 20_000,
@@ -141,8 +141,8 @@ export async function interpretDestinationConcept(input: { text: string; graph: 
   if (interpreter.name !== 'anthropic') return interpreter.interpret({ text: input.text, graph: input.graph, evidence: input.evidence });
   const key = cacheKey(input.text);
   try {
-    const cached = readProviderCache<{ concept: DestinationConcept | null }>(key, new Date());
-    if (cached) return { concept: cached.concept ? destinationConceptSchema.parse(cached.concept) : null, source: 'cache', modelCalls: 0 };
+    const cached = readProviderCache<{ concept: InterpretedConcept | null }>(key, new Date());
+    if (cached) return { concept: cached.concept ? interpretedConceptSchema.parse(cached.concept) : null, source: 'cache', modelCalls: 0 };
   } catch {
     /* A cache that cannot be read is a cache miss. */
   }

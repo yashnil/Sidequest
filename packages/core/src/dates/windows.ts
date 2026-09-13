@@ -50,6 +50,16 @@ export interface DateWindow {
   };
   /** The sentence that must travel with any rendering of the numbers above. */
   evidenceNote: string;
+  /**
+   * V10 §10 — THE OBJECTIVES, SEPARATELY.
+   *
+   * A single winning month is an opaque answer to a question that has several
+   * answers: the best month for access is often not the best month for crowds or
+   * for the aurora. Every objective travels with its own 0–1 value and its own
+   * weight so a screen can show the shape of the tradeoff rather than one number
+   * and a paragraph.
+   */
+  objectives: readonly { signal: keyof WindowFeatures; label: string; value: number; weight: number }[];
 }
 
 export interface DateRecommendation {
@@ -149,6 +159,28 @@ export interface WindowFeatures {
   heat: number;
   /** V7 §7 — 1 when no known busy period or closure touches the month, lower as more of it is covered. */
   crowds: number;
+  /**
+   * V10 §10 — HOW LIKELY THE THINGS A TRAVELLER CAME FOR ARE TO BE OPEN AND
+   * WORKING.
+   *
+   * Freeze days and snow days close seasonal roads, trailheads, passes and lifts.
+   * This is a **historical likelihood and nothing else**: §10 forbids stating
+   * "trails are still open before snow" as a certainty, so the narration for
+   * this feature always says "historically" and never "will", and an
+   * effective-dated access constraint always outranks it.
+   */
+  activityAccess: number;
+  /** V10 §10 — 1 when the month is historically clear of the extremes that ruin or endanger a day; lower with heat, freeze and heavy rain together. */
+  severeWeather: number;
+  /**
+   * V10 §10 — seasonal phenomena a traveller travels *for*: aurora needs dark
+   * nights, a migration or a wildflower season needs its own weeks, whale or
+   * bird seasons need theirs. Supplied per month by the caller from the
+   * destination's compiled reality; 0.5 when nothing is known, never 1.
+   */
+  phenomena: number;
+  /** V10 §10 — scenic value: long light, clear air and snow *on the tops* rather than on the road. */
+  scenic: number;
 }
 
 /**
@@ -193,7 +225,53 @@ export function crowdScore(month: number, periods: readonly CrowdPeriodForDates[
   return { score: clamp01(1 - Math.min(31, covered) / 31), touching };
 }
 
-export function windowFeatures(normal: ClimateNormal, answers?: TripComposerAnswers, crowdPeriods: readonly CrowdPeriodForDates[] = []): WindowFeatures {
+/**
+ * V10 §10 — how likely seasonal access is, historically.
+ *
+ * Freeze and snow are what shut a mountain road or a trailhead, and heavy rain
+ * is what shuts a track. Deliberately conservative at the shoulders: a month
+ * with a handful of freeze days is *not* "open", it is "probably open", which is
+ * a different sentence and the one §10 requires.
+ */
+export function activityAccessScore(normal: ClimateNormal, answers?: TripComposerAnswers): number {
+  /* The same reading `snowScore` uses: a strenuous mountain trip wants the snow. */
+  const wantsSnow = Boolean(answers?.themes.includes('mountains') && answers.outdoorIntensity === 'strenuous');
+  if (wantsSnow) return clamp01(normal.snowDays / 10);
+  const snowPenalty = Math.min(1, normal.snowDays / 8) * 0.6;
+  const freezePenalty = Math.min(1, normal.freezeDays / 20) * 0.3;
+  const wetPenalty = Math.min(1, Math.max(0, normal.wetDays - 16) / 12) * 0.2;
+  return clamp01(1 - snowPenalty - freezePenalty - wetPenalty);
+}
+
+/** V10 §10 — extremes that ruin or endanger a day, taken together rather than one at a time. */
+export function severeWeatherScore(normal: ClimateNormal): number {
+  const heat = Math.min(1, normal.hotDays / 14) * 0.4;
+  const freeze = Math.min(1, normal.freezeDays / 22) * 0.3;
+  const deluge = Math.min(1, Math.max(0, normal.precipitationMm - 150) / 250) * 0.3;
+  return clamp01(1 - heat - freeze - deluge);
+}
+
+/**
+ * V10 §10 — long light, clear air and snow on the tops.
+ *
+ * Snow is scenic at a distance and a problem underfoot, so a few snow days read
+ * as scenery and many read as a closed road — which is why this is a separate
+ * feature from `activityAccess` rather than the same number twice.
+ */
+export function scenicScore(normal: ClimateNormal): number {
+  const light = clamp01((normal.daylightHours - 8) / 7) * 0.45;
+  const clarity = clamp01(1 - normal.wetDays / 22) * 0.35;
+  const tops = clamp01(normal.snowDays <= 8 ? normal.snowDays / 8 : Math.max(0, 1 - (normal.snowDays - 8) / 12)) * 0.2;
+  return clamp01(light + clarity + tops);
+}
+
+export function windowFeatures(
+  normal: ClimateNormal,
+  answers?: TripComposerAnswers,
+  crowdPeriods: readonly CrowdPeriodForDates[] = [],
+  /** V10 §10 — per-month phenomena scores, 0–1, from the destination's compiled reality. Absent months score 0.5: unknown, never best. */
+  phenomenaByMonth?: ReadonlyMap<number, number>,
+): WindowFeatures {
   return {
     temperature: temperatureScore(normal, answers),
     dryness: drynessScore(normal, answers),
@@ -201,16 +279,25 @@ export function windowFeatures(normal: ClimateNormal, answers?: TripComposerAnsw
     snow: snowScore(normal, answers),
     heat: heatScore(normal),
     crowds: crowdScore(normal.month, crowdPeriods).score,
+    activityAccess: activityAccessScore(normal, answers),
+    severeWeather: severeWeatherScore(normal),
+    phenomena: phenomenaByMonth?.get(normal.month) ?? 0.5,
+    scenic: scenicScore(normal),
   };
 }
 
 const WEIGHTS: Record<keyof WindowFeatures, number> = {
-  temperature: 0.3,
-  dryness: 0.22,
-  daylight: 0.18,
-  snow: 0.12,
-  heat: 0.08,
-  crowds: 0.1,
+  temperature: 0.2,
+  dryness: 0.14,
+  daylight: 0.1,
+  snow: 0.06,
+  heat: 0.04,
+  crowds: 0.08,
+  /* V10 §10 — access is the heaviest single objective: a month you cannot reach the thing in is not a good month however pleasant it is. */
+  activityAccess: 0.18,
+  severeWeather: 0.08,
+  phenomena: 0.06,
+  scenic: 0.06,
 };
 
 /**
@@ -346,7 +433,50 @@ function narrate(
     tradeoffs.push(`Freezing overnight on about ${Math.round(normal.freezeDays)} nights.`);
   }
 
+  /*
+   * V10 §10 — ACCESS, AS A LIKELIHOOD AND NEVER AS A PROMISE.
+   *
+   * "Trails are still open before the snow" is the sentence §10 forbids: the
+   * evidence is twenty years of monthly normals, which supports "historically
+   * ... in most years" and supports nothing stronger. Whether a trail is open on
+   * the traveller's dates is an operational question answered by an
+   * effective-dated access constraint, and that always outranks this.
+   */
+  if (features.activityAccess >= 0.85) {
+    reasons.push(`Historically the month is clear of the snow and freeze that shut seasonal roads and trailheads — a likelihood from past years, not a statement about your dates.`);
+  } else if (features.activityAccess <= 0.5) {
+    tradeoffs.push(`Seasonal roads, trailheads and lifts are often shut this month (snow on about ${Math.round(normal.snowDays)} days, freezing on about ${Math.round(normal.freezeDays)} nights); check each one before relying on it.`);
+  }
+  if (features.severeWeather <= 0.55) {
+    tradeoffs.push(`The month carries real weather risk historically, not just discomfort.`);
+  }
+  if (features.scenic >= 0.8) reasons.push('Long light and historically clear air, which is what the scenery needs.');
+  else if (features.scenic <= 0.4) tradeoffs.push('Short light and frequent cloud historically, which flattens the scenery.');
+  if (features.phenomena >= 0.8) reasons.push('This is the season for what this destination is known for at this time of year.');
+  else if (features.phenomena <= 0.25) tradeoffs.push('The seasonal things this destination is known for are out of season this month.');
+
   return { reasons, tradeoffs };
+}
+
+/** V10 §10 — what each objective is called on screen. */
+export const WINDOW_OBJECTIVE_LABELS: Record<keyof WindowFeatures, string> = {
+  activityAccess: 'Getting to things',
+  temperature: 'Comfort',
+  severeWeather: 'Weather risk',
+  daylight: 'Daylight',
+  crowds: 'Crowds',
+  phenomena: 'Seasonal highlights',
+  scenic: 'Scenery',
+  dryness: 'Dryness',
+  snow: 'Snow',
+  heat: 'Heat',
+};
+
+/** The objectives of one window, heaviest weight first. */
+export function objectivesOf(features: WindowFeatures, weights: Record<keyof WindowFeatures, number>): DateWindow['objectives'] {
+  return (Object.keys(WINDOW_OBJECTIVE_LABELS) as (keyof WindowFeatures)[])
+    .map((signal) => ({ signal, label: WINDOW_OBJECTIVE_LABELS[signal], value: Math.round(features[signal] * 100) / 100, weight: weights[signal] }))
+    .sort((a, b) => b.weight - a.weight);
 }
 
 /**
@@ -364,6 +494,8 @@ const STANDING_UNKNOWNS = [
 
 export interface RecommendDatesInput {
   profile: ClimateProfile | null;
+  /** V10 §10 — per-month seasonal-phenomena scores, 0–1, from the destination's compiled reality. Absent months score 0.5. */
+  phenomenaByMonth?: ReadonlyMap<number, number>;
   /** Nights on the ground, when known. Only used to phrase, never to score. */
   nights?: number | null;
   answers?: TripComposerAnswers;
@@ -415,8 +547,9 @@ export function recommendDateWindows(input: RecommendDatesInput): DateGuidance {
   const windows: DateWindow[] = [];
   for (const normal of input.profile.months) {
     if (!allowed.has(normal.month)) continue;
-    const features = windowFeatures(normal, input.answers, input.crowdPeriods ?? []);
+    const features = windowFeatures(normal, input.answers, input.crowdPeriods ?? [], input.phenomenaByMonth);
     const score = scoreWindow(features, input.answers, input.interests ?? [], input.crowdTolerance);
+    const { weights } = experienceWeights(input.answers, input.interests ?? [], input.crowdTolerance);
     const { reasons, tradeoffs } = narrate(normal, features, input.crowdPeriods ?? []);
     const year = input.year > currentYear || normal.month >= currentMonth ? input.year : input.year + 1;
 
@@ -435,6 +568,7 @@ export function recommendDateWindows(input: RecommendDatesInput): DateGuidance {
         snowDays: normal.snowDays,
       },
       evidenceNote: CLIMATE_EVIDENCE_NOTE,
+      objectives: objectivesOf(features, weights),
     });
   }
 

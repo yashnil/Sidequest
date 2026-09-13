@@ -33,7 +33,7 @@ import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
 import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
-import { buildFeasibilityReport, buildStructuralMetrics, itineraryStatusForVerdict } from '@sidequest/core';
+import { buildFeasibilityReport, buildStructuralMetrics, decomposeDestination, itineraryStatusForVerdict, needsDecomposition, routeObjectivesFor } from '@sidequest/core';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -57,6 +57,9 @@ import { operationalEvidenceSeam, persistedIdentitiesFor, placesIdentitySeam } f
 import { ProviderBudget, ceilingsFor } from '../providers/cost-budget';
 import { buildPreservationReport, describePreservation, type DraftPreservationReport } from './preservation';
 import { auditItinerary, type QualityAudit } from './quality-audit';
+import { compileQualitySafely } from './quality-compiler';
+import { deriveExperienceGraph } from './experience-graph';
+import { accessConstraintsFor } from '../providers/access-constraints';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
 import { beginGeneration, finishGeneration, markGenerationDraftSaved, markGenerationModelInvoked, markGenerationStage, noteGenerationCounters, noteGenerationPlaced, type GenerationCounters } from '../db/generation-progress-repository';
@@ -369,6 +372,68 @@ export async function generateSidequestPlanForTrip(
    * existed — the old derivation stands unchanged.
    */
   const storedIntent = intent?.destinationIntent ?? null;
+  /*
+   * V10 §2 — THE ONE CANONICAL DESTINATION OBJECT.
+   *
+   * Setup resolved it, the questionnaire read it, and from here it is what
+   * composition, the placement ladder, the quality compiler and the jurisdiction
+   * language all read. Nothing downstream derives its own second account of the
+   * destination, which is how a mountain region became a country on one screen
+   * and a currency sentence on another.
+   */
+  const concept = storedIntent?.semantics ?? null;
+  const conceptCountries = concept?.countries ?? (candidate?.countryCode ? [candidate.countryCode] : []);
+  const divisions = (concept?.jurisdictions ?? []).filter((j) => j.level === 'subnational').map((j) => j.name);
+  /*
+   * V10 §8 — the gateways, in order of authority.
+   *
+   * The traveller's own scope first, because a gateway they named (`fixed`) is a
+   * fact and not a suggestion; then the rest of the scope's gateways; then the
+   * ones the semantic layer inferred for the destination, already placed and
+   * gated. Context, never the destination — the plan's edges are built around
+   * them, and no gateway is ever a place to spend the trip.
+   */
+  const scopeGateways = [...(intent?.scope?.gateways ?? [])].sort((a, b) => Number(b.fixed) - Number(a.fixed));
+  const conceptGateways = [
+    ...scopeGateways.map((g) => ({ label: g.name, ...(g.coordinates ? { coordinates: g.coordinates } : {}) })),
+    ...(concept?.gateways ?? []).map((g) => ({ label: g.label, ...(g.center ? { coordinates: g.center } : {}) })),
+  ].filter((g, index, all) => all.findIndex((other) => other.label.toLowerCase() === g.label.toLowerCase()) === index);
+  /*
+   * V10 §3 — the coverage graph, derived from what already placed. A broad
+   * natural or cultural region is decomposed before composition; a city is one
+   * zone; a destination nobody has placed is no zones and a sentence saying so.
+   * Pure and free: no provider call, no model call, no destination name in the
+   * code that produces it.
+   */
+  const decomposition =
+    concept && needsDecomposition(concept)
+      ? decomposeDestination({
+          concept,
+          ...(region ? { signatureExperiences: region.compiled.subregions.slice(0, 6).map((s) => ({ name: s.name, ...(s.center ? { near: s.center } : {}) })) } : {}),
+        })
+      : null;
+  /*
+   * V10 §9 §11 — the operational facts that shape the plan, in the composition's
+   * hands rather than corrected out of it afterwards. A closure the model never
+   * proposes needs no correction; a shuttle-only lake designed for as a shuttle
+   * day is a better day than one turned into a warning.
+   */
+  const accessFacts = accessConstraintsFor(conceptCountries)
+    .filter((c) => c.status !== 'unknown' && c.status !== 'open')
+    .filter((c) => {
+      const from = c.validFrom ?? '0000-01-01';
+      const until = c.validUntil ?? '9999-12-31';
+      return trip.basics.endDate >= from && trip.basics.startDate <= until;
+    })
+    .slice(0, 10)
+    .map((c) => `${c.travellerNote} (${c.sourceName})`);
+  /* V10 §11 — the route's objectives, derived from the traveller's own answers and the destination's own shape. */
+  const routeObjectives = routeObjectivesFor({
+    concept,
+    profile,
+    nights: countNights(trip.basics.startDate, trip.basics.endDate),
+    ...(decomposition ? { coreZones: decomposition.zones.filter((z) => z.role === 'core').length } : {}),
+  });
   const resolvedName = candidate?.displayName ?? region?.region.name ?? trip.basics.destinationInput;
   const rawDestinationPhrase = (storedIntent?.rawText || intent?.destinationQuery || composer?.destinationQuery || trip.basics.destinationInput || '').trim();
   const destinationName = storedIntent?.interpretedLabel || resolvedName;
@@ -400,6 +465,28 @@ export async function generateSidequestPlanForTrip(
       ? { anchorName: storedIntent.anchor.label }
       : {}),
     ...(rawDestinationPhrase && normalizePhrase(rawDestinationPhrase) !== normalizePhrase(destinationName) ? { travellerPhrase: rawDestinationPhrase } : {}),
+    /*
+     * V10 §3 §11 — THE SEMANTIC ENVELOPE THE COMPOSITION CALL DESERVES.
+     *
+     * Before V10 a broad region reached the one call as a name, a scale word and
+     * a centre, and was asked to invent both the geography and the trip. It now
+     * arrives with its coverage graph (the areas a trip here can be built from,
+     * their roles and their distances), its jurisdictions kept separate from
+     * itself, its gateways, the operational facts that would otherwise have to be
+     * corrected afterwards, and what the route is for. Every one of those is
+     * derived from evidence Sidequest already holds — nothing here is a new
+     * provider call, and nothing is an allow-list.
+     */
+    ...(decomposition && decomposition.zones.length > 0
+      ? {
+          coverage: decomposition.zones.map((zone) => ({ label: zone.label, role: zone.role, kmFromCentre: zone.kmFromCentre, signatureExperiences: zone.signatureExperiences })),
+          coverageNote: decomposition.note,
+        }
+      : {}),
+    ...(concept && concept.jurisdictions.length > 0 ? { jurisdictions: concept.jurisdictions.map((j) => ({ level: j.level, name: j.name })) } : {}),
+    ...(conceptGateways.length > 0 ? { gateways: conceptGateways.map((g) => g.label) } : {}),
+    ...(accessFacts.length > 0 ? { accessFacts } : {}),
+    ...(routeObjectives.length > 0 ? { routeObjectives } : {}),
   };
 
   const boardSignals = mode === 'full' && board ? boardSignalsFor(board.candidates, getSelections(tripId)) : undefined;
@@ -747,6 +834,16 @@ export async function generateSidequestPlanForTrip(
       : undefined;
 
   const leaveBy = bookedLeaveByMinute(booked, trip.basics.endDate);
+  /*
+   * V10 §5 — the context the placement ladder needs. A bare town name is the
+   * worst way to ask a geocoder; the country's published name and the
+   * destination's own provinces are what disambiguate it.
+   */
+  const placementContext = {
+    ...(envelope.countryName ? { destinationCountryName: envelope.countryName } : conceptCountries[0] && countryFacts(conceptCountries[0])?.name ? { destinationCountryName: countryFacts(conceptCountries[0])!.name } : {}),
+    ...(divisions.length > 0 ? { destinationDivisions: divisions } : {}),
+    ...(conceptGateways.length > 0 ? { destinationGateways: conceptGateways } : {}),
+  };
   const reconcileContext: ReconcileContext = region
     ? {
         tripId,
@@ -774,6 +871,7 @@ export async function generateSidequestPlanForTrip(
         subregionGeometries: productionSubregionGeometries(region.compiled),
         deadlineReached,
         mustIncludeNames,
+        ...placementContext,
         ...timedSeams,
         ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
       }
@@ -781,6 +879,7 @@ export async function generateSidequestPlanForTrip(
         ...contextWithoutRegion({ trip, profile: verifyingProfile, candidate, envelope, now, deadlineReached, mustIncludeNames, geocoder: timedGeocoder, nearby: timedNearby, routing, weather: (await regionlessWeather) ?? undefined }),
         ...(routing ? { routeMatrix: routeMatrixFor(profile.transport.willDrive ? 'car' : 'foot')!, confirmRoute: confirmRouteFor(profile.transport.willDrive ? 'car' : 'foot')! } : {}),
         weatherForBases,
+        ...placementContext,
         ...timedSeams,
         ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
       };
@@ -827,7 +926,45 @@ export async function generateSidequestPlanForTrip(
    * depends on an airport nobody has chosen, reads "Needs a decision" rather
    * than "Ready, with cautions".
    */
-  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value });
+  /*
+   * V10 §9 §16 — THE QUALITY COMPILER, AND THE OPERATIONAL FACTS IT NEEDS.
+   *
+   * Access claims are loaded as data for the countries the destination spans;
+   * a country with no recorded claims contributes nothing, which is honest. The
+   * compiler then asks the questions V10 added — order coherence, route
+   * completeness, jurisdiction language, gateway feasibility, closures, required
+   * modes, double-counted experiences, transport semantics, signature quality —
+   * corrects only what is safely derivable, and names the rest precisely.
+   */
+  const accessConstraints = accessConstraintsFor(conceptCountries);
+  /*
+   * V10 §4 §13 — the experience graph, derived from the draft's own statements
+   * and from the official access constraints. Conservative on purpose: a
+   * hierarchy invented by proximity would refuse to draw a real walk between two
+   * real stops, which is a new defect in place of an old one.
+   */
+  const experiences = deriveExperienceGraph({
+    draft,
+    datesByDay: new Map(applied.itinerary.days.map((day) => [day.dayNumber, day.date])),
+    accessConstraints,
+    placeIdByAnchor: new Map((applied.itinerary.package?.anchors ?? []).filter((a) => a.placeId).map((a) => [a.id, a.placeId!])),
+  });
+  const compiled = compileQualitySafely({
+    itinerary: applied.itinerary,
+    draft,
+    trip,
+    profile: verifyingProfile,
+    ...(concept ? { concept } : {}),
+    placement: reconciledRaw.placement,
+    dayOrders: reconciledRaw.dayOrders,
+    gateway: reconciledRaw.gateway,
+    accessConstraints,
+    experiences,
+  });
+  if (compiled.report.issues.length > 0) {
+    console.warn('Quality compiler found V10 issues', { tripId, blockers: compiled.report.issues.filter((i) => i.severity === 'blocker').map((i) => `${i.check}: ${i.detail}`), issues: compiled.report.issues.length });
+  }
+  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value, compilerIssues: compiled.report.issues });
   const intelligenceMs = since(intelligenceStartedMs);
 
   /*
@@ -888,6 +1025,28 @@ export async function generateSidequestPlanForTrip(
           },
           quality: { version: 1 as const, passed: quality.passed, errors: quality.errors, warnings: quality.warnings, checks: quality.checks.map((c) => ({ ...c })) },
           contract: contractEnforcementRecord(contract, contractConflicts),
+          /* V10 §5 §7 §8 §9 §16 — the new audits, persisted beside the ones that came before them. */
+          placement: reconciledRaw.placement,
+          dayOrders: reconciledRaw.dayOrders.map(({ dayNumber, report, corrected }) => ({
+            dayNumber,
+            verdict: report.verdict,
+            corrected,
+            plannedKm: Math.round(report.plannedKm * 10) / 10,
+            bestKm: Math.round(report.bestKm * 10) / 10,
+            excessFraction: Math.round(report.excessFraction * 1000) / 1000,
+            violations: report.violations.map((v) => ({ kind: v.kind, ...(v.stopName ? { stopName: v.stopName } : {}), detail: v.detail })),
+            unplaced: [...report.unplaced],
+          })),
+          ...(reconciledRaw.gateway ? { gateway: reconciledRaw.gateway } : {}),
+          ...(accessConstraints.length > 0 ? { accessConstraints: accessConstraints.slice(0, 60) } : {}),
+          ...(experiences.experiences.length > 0 ? { experiences } : {}),
+          qualityCompiler: compiled.report,
+          /*
+           * V10 §7 §6 — the two corrections the compiler is allowed to make, both
+           * derived from the plan's own geometry: a claim the route contradicts,
+           * and a disclosure that states what the travel figures rest on.
+           */
+          ...(compiled.corrections.routeRationale ? { routeRationale: compiled.corrections.routeRationale } : {}),
           metrics: Object.fromEntries(Object.entries(buildStructuralMetrics({ itinerary: { ...applied.itinerary, package: { ...applied.itinerary.package, feasibility } }, contract, audit: quality, booked: { total: applied.honored.length + applied.conflicts.length, honoured: applied.honored.length }, silentAnchorLoss: preservation.silentLoss })).filter(([key]) => key !== 'version')) as Record<string, number | null>,
           /*
            * The persisted record is numbers only (`tripPackageSchema.timings`),
@@ -904,7 +1063,15 @@ export async function generateSidequestPlanForTrip(
         },
       }
     : applied.itinerary;
-  const reconciled = { ...reconciledRaw, itinerary };
+  /*
+   * V10 §6 — "No 'Travel per day 3h44m' style precision may be shown when the
+   * underlying route is predominantly unmeasured." The figures stay; the
+   * sentence under them is replaced with one that says what they rest on.
+   */
+  const disclosed = compiled.corrections.transportDisclosure
+    ? { ...itinerary, transportStrategy: { ...itinerary.transportStrategy, dataDisclosure: compiled.corrections.transportDisclosure } }
+    : itinerary;
+  const reconciled = { ...reconciledRaw, itinerary: disclosed };
   saveItinerary(reconciled.itinerary);
   saveReadiness(tripId, reconciled.readiness, now);
   const persistenceMs = since(persistenceStartedMs);

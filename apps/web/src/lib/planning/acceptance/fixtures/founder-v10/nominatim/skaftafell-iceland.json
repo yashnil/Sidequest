@@ -1,0 +1,75 @@
+[
+ {
+  "place_id": 273285557,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 463917557,
+  "lat": "64.0164548",
+  "lon": "-16.9664580",
+  "category": "place",
+  "type": "locality",
+  "place_rank": 25,
+  "importance": 0.37526729549138227,
+  "addresstype": "locality",
+  "name": "Skaftafell",
+  "display_name": "Skaftafell, Sveitarfélagið Hornafjörður, Suðurland, Ísland",
+  "address": {
+   "locality": "Skaftafell",
+   "county": "Sveitarfélagið Hornafjörður",
+   "ISO3166-2-lvl6": "IS-SHF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "wikidata": "Q1133116",
+   "wikipedia": "is:Skaftafell"
+  },
+  "namedetails": {
+   "name": "Skaftafell"
+  },
+  "boundingbox": [
+   "64.0064548",
+   "64.0264548",
+   "-16.9764580",
+   "-16.9564580"
+  ]
+ },
+ {
+  "place_id": 286614206,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 679854258,
+  "lat": "63.9923030",
+  "lon": "-16.8976718",
+  "category": "highway",
+  "type": "service",
+  "place_rank": 27,
+  "importance": 0.04000999999999999,
+  "addresstype": "road",
+  "name": "Skaftafell",
+  "display_name": "Skaftafell, Sveitarfélagið Hornafjörður, Suðurland, Ísland",
+  "address": {
+   "road": "Skaftafell",
+   "county": "Sveitarfélagið Hornafjörður",
+   "ISO3166-2-lvl6": "IS-SHF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "service": "driveway"
+  },
+  "namedetails": {
+   "name": "Skaftafell"
+  },
+  "boundingbox": [
+   "63.9920651",
+   "63.9926455",
+   "-16.8982214",
+   "-16.8971959"
+  ]
+ }
+]

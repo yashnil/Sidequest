@@ -1,0 +1,212 @@
+[
+ {
+  "place_id": 285254903,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 59864601,
+  "lat": "63.9368093",
+  "lon": "-21.0035319",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.46416898776941257,
+  "addresstype": "town",
+  "name": "Selfoss",
+  "display_name": "Selfoss, Sveitarfélagið Árborg, Suðurland, 800, Ísland",
+  "address": {
+   "town": "Selfoss",
+   "county": "Sveitarfélagið Árborg",
+   "ISO3166-2-lvl6": "IS-SFA",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "800",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "is_in": "Iceland",
+   "wikidata": "Q192898",
+   "wikipedia": "is:Selfoss",
+   "population": "11000",
+   "population:date": "2026"
+  },
+  "namedetails": {
+   "name": "Selfoss",
+   "name:ar": "سيلفوس",
+   "name:be": "Сельфас",
+   "name:bg": "Селфос",
+   "name:bn": "সেলফস",
+   "name:ca": "Selfoss",
+   "name:da": "Selfoss",
+   "name:el": "Σέλφος",
+   "name:en": "Selfoss",
+   "name:eu": "Selfoss",
+   "name:fa": "سلفوس",
+   "name:he": "סלפוס",
+   "name:is": "Selfoss",
+   "name:it": "Selfoss",
+   "name:ja": "セールフォス",
+   "name:kk": "Сельфосс",
+   "name:ko": "셀포스",
+   "name:lt": "Selfosas",
+   "name:mk": "Селфос",
+   "name:nl": "Selfoss",
+   "name:os": "Сельфосс",
+   "name:pl": "Selfoss",
+   "name:ru": "Сельфосс",
+   "name:sr": "Селфос",
+   "name:sv": "Selfoss",
+   "name:uk": "Сельфосс",
+   "name:ur": "سیلفوس",
+   "name:zh": "塞尔福斯"
+  },
+  "boundingbox": [
+   "63.8968093",
+   "63.9768093",
+   "-21.0435319",
+   "-20.9635319"
+  ]
+ },
+ {
+  "place_id": 271693251,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 600148687,
+  "lat": "65.8047621",
+  "lon": "-16.3864685",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.348606766793213,
+  "addresstype": "waterfall",
+  "name": "Selfoss",
+  "display_name": "Selfoss, Norðurþing, Norðurland eystra, Ísland",
+  "address": {
+   "waterfall": "Selfoss",
+   "county": "Norðurþing",
+   "ISO3166-2-lvl6": "IS-NOR",
+   "state_district": "Norðurland eystra",
+   "ISO3166-2-lvl5": "IS-6",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "height": "10",
+   "tourism": "attraction",
+   "wikidata": "Q1429734",
+   "wikipedia": "en:Selfoss (waterfall)"
+  },
+  "namedetails": {
+   "name": "Selfoss"
+  },
+  "boundingbox": [
+   "65.8047121",
+   "65.8048121",
+   "-16.3865185",
+   "-16.3864185"
+  ]
+ },
+ {
+  "place_id": 271605137,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 11670283065,
+  "lat": "64.1158685",
+  "lon": "-21.8201662",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.1334051949340047,
+  "addresstype": "waterfall",
+  "name": "Selfoss",
+  "display_name": "Selfoss, Reykjavíkurborg, Höfuðborgarsvæðið, 111, Ísland",
+  "address": {
+   "waterfall": "Selfoss",
+   "city": "Reykjavíkurborg",
+   "ISO3166-2-lvl6": "IS-RKV",
+   "state_district": "Höfuðborgarsvæðið",
+   "ISO3166-2-lvl5": "IS-1",
+   "postcode": "111",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Selfoss"
+  },
+  "boundingbox": [
+   "64.1158185",
+   "64.1159185",
+   "-21.8202162",
+   "-21.8201162"
+  ]
+ },
+ {
+  "place_id": 273754701,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 5304816221,
+  "lat": "64.5160872",
+  "lon": "-21.1515007",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.1333433333333333,
+  "addresstype": "waterfall",
+  "name": "Selfoss",
+  "display_name": "Selfoss, Borgarbyggð, Vesturland, Ísland",
+  "address": {
+   "waterfall": "Selfoss",
+   "town": "Borgarbyggð",
+   "ISO3166-2-lvl6": "IS-BOG",
+   "state_district": "Vesturland",
+   "ISO3166-2-lvl5": "IS-3",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Selfoss"
+  },
+  "boundingbox": [
+   "64.5160372",
+   "64.5161372",
+   "-21.1515507",
+   "-21.1514507"
+  ]
+ },
+ {
+  "place_id": 273220219,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 2576324948,
+  "lat": "65.4004763",
+  "lon": "-13.7362324",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.1333433333333333,
+  "addresstype": "waterfall",
+  "name": "Selfoss",
+  "display_name": "Selfoss, Múlaþing, Austurland, Ísland",
+  "address": {
+   "waterfall": "Selfoss",
+   "county": "Múlaþing",
+   "ISO3166-2-lvl6": "IS-MUL",
+   "state_district": "Austurland",
+   "ISO3166-2-lvl5": "IS-7",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Selfoss"
+  },
+  "boundingbox": [
+   "65.4004263",
+   "65.4005263",
+   "-13.7362824",
+   "-13.7361824"
+  ]
+ }
+]

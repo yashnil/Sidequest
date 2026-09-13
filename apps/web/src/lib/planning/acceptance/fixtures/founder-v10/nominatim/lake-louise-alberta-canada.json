@@ -1,0 +1,79 @@
+[
+ {
+  "place_id": 374084466,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 2665400241,
+  "lat": "51.4249668",
+  "lon": "-116.1775350",
+  "category": "place",
+  "type": "hamlet",
+  "place_rank": 20,
+  "importance": 0.5200563866485242,
+  "addresstype": "hamlet",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "hamlet": "Lake Louise",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "ele": "1600",
+   "website": "https://www.discoverlakelouise.com/",
+   "wikidata": "Q12826048",
+   "wikipedia": "en:Lake Louise, Alberta",
+   "population": "1041"
+  },
+  "namedetails": {
+   "name": "Lake Louise"
+  },
+  "boundingbox": [
+   "51.4049668",
+   "51.4449668",
+   "-116.1975350",
+   "-116.1575350"
+  ]
+ },
+ {
+  "place_id": 377565202,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 18238904,
+  "lat": "51.4114893",
+  "lon": "-116.2289907",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.45833613469028417,
+  "addresstype": "lake",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "lake": "Lake Louise",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "natural": "water",
+   "wikidata": "Q1367398",
+   "wikipedia": "en:Lake Louise (Alberta)"
+  },
+  "namedetails": {
+   "name": "Lake Louise",
+   "alt_name": "Ho-run-num-nay"
+  },
+  "boundingbox": [
+   "51.4056679",
+   "51.4174028",
+   "-116.2397665",
+   "-116.2162046"
+  ]
+ }
+]

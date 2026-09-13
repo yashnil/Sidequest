@@ -1,0 +1,87 @@
+[
+ {
+  "place_id": 376602631,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 759263076,
+  "lat": "51.4446372",
+  "lon": "-116.2081576",
+  "category": "highway",
+  "type": "primary",
+  "place_rank": 26,
+  "importance": 0.053390834668497714,
+  "addresstype": "road",
+  "name": "Icefields Parkway",
+  "display_name": "Icefields Parkway, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "road": "Icefields Parkway",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "toll": "yes",
+   "lanes": "1",
+   "oneway": "yes",
+   "surface": "asphalt",
+   "maxspeed": "50"
+  },
+  "namedetails": {
+   "ref": "93",
+   "name": "Icefields Parkway",
+   "name:en": "Icefields Parkway",
+   "name:fr": "Promenade des Glaciers"
+  },
+  "boundingbox": [
+   "51.4440981",
+   "51.4449038",
+   "-116.2108527",
+   "-116.2054780"
+  ]
+ },
+ {
+  "place_id": 375614706,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 584697471,
+  "lat": "52.8148390",
+  "lon": "-118.0507486",
+  "category": "highway",
+  "type": "primary",
+  "place_rank": 26,
+  "importance": 0.05338925841153579,
+  "addresstype": "road",
+  "name": "Icefields Parkway",
+  "display_name": "Icefields Parkway, Municipality of Jasper, Alberta, T0E 1E0, Canada",
+  "address": {
+   "road": "Icefields Parkway",
+   "town": "Municipality of Jasper",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T0E 1E0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "toll": "yes",
+   "surface": "asphalt",
+   "maxspeed": "70",
+   "lanes:forward": "1",
+   "lanes:backward": "2",
+   "turn:lanes:backward": "through|right"
+  },
+  "namedetails": {
+   "ref": "93",
+   "name": "Icefields Parkway",
+   "reg_name": "Highway 93"
+  },
+  "boundingbox": [
+   "52.8141875",
+   "52.8154905",
+   "-118.0510898",
+   "-118.0504075"
+  ]
+ }
+]

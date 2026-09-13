@@ -1,0 +1,38 @@
+[
+ {
+  "place_id": 375763139,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 13383749352,
+  "lat": "52.5323369",
+  "lon": "-117.6446338",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.4171682178165082,
+  "addresstype": "waterfall",
+  "name": "Sunwapta Falls",
+  "display_name": "Sunwapta Falls, Improvement District No. 12, Alberta, Canada",
+  "address": {
+   "waterfall": "Sunwapta Falls",
+   "county": "Improvement District No. 12",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "tourism": "attraction",
+   "wikidata": "Q937311"
+  },
+  "namedetails": {
+   "name": "Sunwapta Falls"
+  },
+  "boundingbox": [
+   "52.5322869",
+   "52.5323869",
+   "-117.6446838",
+   "-117.6445838"
+  ]
+ }
+]

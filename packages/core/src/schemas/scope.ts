@@ -20,7 +20,8 @@ import {
  * failure the traveller cannot see afterwards.
  */
 
-export const GATEWAY_KINDS = ['airport', 'rail_station', 'ferry_port', 'road_entry', 'other'] as const;
+/** V10 §8 — widened: a bus station, a land border and a cruise port are gateways travellers actually arrive through. */
+export const GATEWAY_KINDS = ['airport', 'rail_station', 'ferry_port', 'bus_station', 'land_border', 'cruise_port', 'road_entry', 'other'] as const;
 export const gatewayKindSchema = z.enum(GATEWAY_KINDS);
 export type GatewayKind = z.infer<typeof gatewayKindSchema>;
 

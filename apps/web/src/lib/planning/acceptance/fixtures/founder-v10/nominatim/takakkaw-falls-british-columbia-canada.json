@@ -1,0 +1,41 @@
+[
+ {
+  "place_id": 374323851,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 4293962861,
+  "lat": "51.5002232",
+  "lon": "-116.4734605",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.26124069590558274,
+  "addresstype": "waterfall",
+  "name": "Takakkaw Falls",
+  "display_name": "Takakkaw Falls, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, T0L 0C0, Canada",
+  "address": {
+   "waterfall": "Takakkaw Falls",
+   "city": "Area A (Kicking Horse/Kinbasket Lake)",
+   "county": "Columbia-Shuswap Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "postcode": "T0L 0C0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "tourism": "attraction",
+   "wikidata": "Q572771",
+   "wikipedia": "en:Takakkaw Falls"
+  },
+  "namedetails": {
+   "name": "Takakkaw Falls"
+  },
+  "boundingbox": [
+   "51.5001732",
+   "51.5002732",
+   "-116.4735105",
+   "-116.4734105"
+  ]
+ }
+]

@@ -1,0 +1,146 @@
+[
+ {
+  "place_id": 377872880,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 429418878,
+  "lat": "51.4437488",
+  "lon": "-116.5316579",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.36341195681131827,
+  "addresstype": "lake",
+  "name": "Emerald Lake",
+  "display_name": "Emerald Lake, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, Canada",
+  "address": {
+   "lake": "Emerald Lake",
+   "city": "Area A (Kicking Horse/Kinbasket Lake)",
+   "county": "Columbia-Shuswap Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "natural": "water",
+   "wikidata": "Q316177",
+   "wikipedia": "en:Emerald Lake (British Columbia)"
+  },
+  "namedetails": {
+   "name": "Emerald Lake"
+  },
+  "boundingbox": [
+   "51.4371135",
+   "51.4503701",
+   "-116.5423760",
+   "-116.5240699"
+  ]
+ },
+ {
+  "place_id": 377981445,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 102875968,
+  "lat": "54.4260648",
+  "lon": "-122.6088996",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.13337833447775996,
+  "addresstype": "lake",
+  "name": "Emerald Lake",
+  "display_name": "Emerald Lake, Area G (Crooked River/Parsnip), Regional District of Fraser-Fort George, British Columbia, Canada",
+  "address": {
+   "lake": "Emerald Lake",
+   "city": "Area G (Crooked River/Parsnip)",
+   "county": "Regional District of Fraser-Fort George",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "natural": "water"
+  },
+  "namedetails": {
+   "name": "Emerald Lake"
+  },
+  "boundingbox": [
+   "54.4242597",
+   "54.4278576",
+   "-122.6137307",
+   "-122.6041549"
+  ]
+ },
+ {
+  "place_id": 378152028,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 1580798,
+  "lat": "53.1671517",
+  "lon": "-122.9376422",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.13337833447775996,
+  "addresstype": "lake",
+  "name": "Emerald Lake",
+  "display_name": "Emerald Lake, Area I (West Fraser/Nazko), Cariboo Regional District, British Columbia, Canada",
+  "address": {
+   "lake": "Emerald Lake",
+   "city": "Area I (West Fraser/Nazko)",
+   "county": "Cariboo Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "natural": "water"
+  },
+  "namedetails": {
+   "name": "Emerald Lake"
+  },
+  "boundingbox": [
+   "53.1645910",
+   "53.1695444",
+   "-122.9398191",
+   "-122.9330874"
+  ]
+ },
+ {
+  "place_id": 376733860,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 17302287,
+  "lat": "51.7107929",
+  "lon": "-121.9314172",
+  "category": "natural",
+  "type": "water",
+  "place_rank": 22,
+  "importance": 0.10671166781109329,
+  "addresstype": "water",
+  "name": "Emerald Lake",
+  "display_name": "Emerald Lake, Area G (Lac La Hache/108 Mile Ranch), Cariboo Regional District, British Columbia, Canada",
+  "address": {
+   "water": "Emerald Lake",
+   "city": "Area G (Lac La Hache/108 Mile Ranch)",
+   "county": "Cariboo Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Emerald Lake"
+  },
+  "boundingbox": [
+   "51.7059983",
+   "51.7155519",
+   "-121.9368435",
+   "-121.9254814"
+  ]
+ }
+]

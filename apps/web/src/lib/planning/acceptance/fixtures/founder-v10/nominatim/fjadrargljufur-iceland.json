@@ -1,0 +1,121 @@
+[
+ {
+  "place_id": 286621067,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 3726212118,
+  "lat": "63.7711975",
+  "lon": "-18.1714427",
+  "category": "information",
+  "type": "board",
+  "place_rank": 30,
+  "importance": 0.00003000152590214416,
+  "addresstype": "information",
+  "name": "Fjaðrárgljúfur",
+  "display_name": "Fjaðrárgljúfur, Fjaðrárgljúfursvegur, Skaftárhreppur, Suðurland, 881, Ísland",
+  "address": {
+   "information": "Fjaðrárgljúfur",
+   "road": "Fjaðrárgljúfursvegur",
+   "county": "Skaftárhreppur",
+   "ISO3166-2-lvl6": "IS-SKF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "881",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "tourism": "information",
+   "board_type": "geology",
+   "check_date": "2023-09-13"
+  },
+  "namedetails": {
+   "name": "Fjaðrárgljúfur"
+  },
+  "boundingbox": [
+   "63.7711475",
+   "63.7712475",
+   "-18.1714927",
+   "-18.1713927"
+  ]
+ },
+ {
+  "place_id": 285218232,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 1784678783,
+  "lat": "63.7725995",
+  "lon": "-18.1737214",
+  "category": "tourism",
+  "type": "attraction",
+  "place_rank": 30,
+  "importance": 0.00003000152590214416,
+  "addresstype": "tourism",
+  "name": "Fjaðrárgljúfur",
+  "display_name": "Fjaðrárgljúfur, Holt, Skaftárhreppur, Suðurland, 881, Ísland",
+  "address": {
+   "tourism": "Fjaðrárgljúfur",
+   "road": "Holt",
+   "county": "Skaftárhreppur",
+   "ISO3166-2-lvl6": "IS-SKF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "881",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Fjaðrárgljúfur",
+   "name:is": "Fjaðrárgljúfur",
+   "name:zh": "羽毛河大峽谷"
+  },
+  "boundingbox": [
+   "63.7725495",
+   "63.7726495",
+   "-18.1737714",
+   "-18.1736714"
+  ]
+ },
+ {
+  "place_id": 285388523,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 12123282709,
+  "lat": "63.7713420",
+  "lon": "-18.1718653",
+  "category": "information",
+  "type": "board",
+  "place_rank": 30,
+  "importance": 0.00003000152590214416,
+  "addresstype": "information",
+  "name": "Fjaðrárgljúfur Náttúruverndarsvæđi",
+  "display_name": "Fjaðrárgljúfur Náttúruverndarsvæđi, Holt, Skaftárhreppur, Suðurland, 881, Ísland",
+  "address": {
+   "information": "Fjaðrárgljúfur Náttúruverndarsvæđi",
+   "road": "Holt",
+   "county": "Skaftárhreppur",
+   "ISO3166-2-lvl6": "IS-SKF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "881",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "tourism": "information",
+   "board_type": "sight"
+  },
+  "namedetails": {
+   "name": "Fjaðrárgljúfur Náttúruverndarsvæđi",
+   "name:en": "Fjaðrárgljúfur nature conversation area",
+   "name:is": "Fjaðrárgljúfur Náttúruverndarsvæđi"
+  },
+  "boundingbox": [
+   "63.7712920",
+   "63.7713920",
+   "-18.1719153",
+   "-18.1718153"
+  ]
+ }
+]

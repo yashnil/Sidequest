@@ -1,10 +1,11 @@
 'use server';
 
-import { countryFromText, foldForMatch, parseDestinationIntent, sanitizePlaceText, type DestinationIndexEntry, type IntentNodeKind } from '@sidequest/core';
+import { GEOGRAPHIC_SEMANTIC_TYPE_LABELS, countryFromText, foldForMatch, framingIsUnsafe, parseDestinationIntent, sanitizePlaceText, type DestinationIndexEntry, type IntentNodeKind } from '@sidequest/core';
 import { entriesByPrefix } from '@/lib/db/destination-index-repository';
 import { verificationProviders } from '@/lib/planning/verification-providers';
 import { guardAction } from '@/lib/net/caller';
 import { resolveDestinationPhrase, type GraphResolutionOutcome } from '@/lib/destinations/intent-resolution';
+import { destinationConceptCache } from '@/lib/destinations/concept-cache';
 
 /**
  * WHERE THE TYPED WORDS ARE, BEFORE ANY TRIP EXISTS.
@@ -75,7 +76,24 @@ export interface PlacedDestination {
 
 export type PlaceResult =
   | { ok: true; placed: PlacedDestination }
-  | { ok: true; placed: null; reason: 'too_short' | 'unresolved' | 'no_resolver' | 'provider_failed' | 'rate_limited' };
+  | {
+      ok: true;
+      placed: null;
+      reason: 'too_short' | 'unresolved' | 'no_resolver' | 'provider_failed' | 'rate_limited' | 'locating';
+      /**
+       * V10 §15 — WHAT TO SAY INSTEAD OF DRAWING THE WRONG MAP.
+       *
+       * The founder's setup screen rendered eastern Canada for "the Canadian
+       * Rockies" because the only thing that had placed the phrase was the
+       * country's published point, and a point plus a scale is enough to frame a
+       * box. It was the wrong box around the wrong place, at high confidence.
+       *
+       * When the centre is only a stand-in and nothing published an extent, the
+       * honest screen says what kind of thing it is looking for and that it has
+       * not found it yet. Present only with `reason: 'locating'`.
+       */
+      locating?: { label: string; kindLabel: string };
+    };
 
 /** Long enough to be a name rather than a keystroke, short enough not to be a paragraph. */
 const MAX_QUERY = 120;
@@ -150,7 +168,14 @@ export async function placeDestinationAction(raw: { text: string }): Promise<Pla
     return placedFrom(query, offline.outcome, 'rate_limited');
   }
   try {
-    const { outcome } = await resolveDestinationPhrase({ text: query, resolver, now: new Date() });
+    const started = Date.now();
+    const { outcome } = await resolveDestinationPhrase({ text: query, resolver, now: new Date(), cache: destinationConceptCache() });
+    /*
+     * V10 §15 — where the setup screen's wait went, recorded on every resolution
+     * rather than guessed at afterwards. A cache hit is the interesting case:
+     * nothing was asked and nothing was waited for.
+     */
+    console.warn('destination placement timings', { ms: Date.now() - started, cacheHit: outcome.timings.cacheHit, geocoderMs: outcome.timings.geocoderMs, geocoderCalls: outcome.timings.geocoderCalls, interpreterMs: outcome.timings.interpreterMs, type: outcome.semantics.type, scale: outcome.semantics.scale, centerBasis: outcome.semantics.centerBasis });
     return placedFrom(query, outcome, 'unresolved');
   } catch (error) {
     /*
@@ -166,8 +191,25 @@ export async function placeDestinationAction(raw: { text: string }): Promise<Pla
 function placedFrom(query: string, outcome: GraphResolutionOutcome, reason: 'unresolved' | 'no_resolver' | 'rate_limited'): PlaceResult {
   const { graph, semantics } = outcome;
   const only = graph.children.length === 1 ? graph.children[0]! : null;
-  const centre = semantics.center ?? graph.envelope?.center ?? null;
+  /*
+   * The concept's own centre and the graph's envelope are two different claims,
+   * and only the first is what `centerBasis` describes. A composite phrase places
+   * its parts and gets an envelope centre while the concept itself has none —
+   * which is a real location, arrived at honestly, and must be framed.
+   */
+  const conceptCentre = semantics.center ?? null;
+  const centre = conceptCentre ?? graph.envelope?.center ?? null;
   if (!centre) return { ok: true, placed: null, reason };
+  /*
+   * V10 §15 — a stand-in centre with no published extent is not a location, and
+   * drawing it is worse than drawing nothing. The screen gets a "still locating
+   * this mountain region" state instead of a country-wide box around a capital.
+   * Only ever asked of the concept's own centre: an envelope centre is evidence
+   * from the parts that placed, and `centerBasis` says nothing about it.
+   */
+  if (conceptCentre && framingIsUnsafe(semantics)) {
+    return { ok: true, placed: null, reason: 'locating', locating: { label: semantics.label, kindLabel: GEOGRAPHIC_SEMANTIC_TYPE_LABELS[semantics.type].toLowerCase() } };
+  }
   const parts = graph.children.map((c) => ({ label: c.label, kind: c.kind, placed: Boolean(c.resolution) }));
   const featureType = only?.resolution?.featureType ?? (graph.crossBorder ? 'multi_country' : 'composite');
   return {

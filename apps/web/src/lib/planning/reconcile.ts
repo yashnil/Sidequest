@@ -3,7 +3,16 @@ import { buildDailyWindows, buildPlannerReadiness, resolveConfig, PLANNER_VERSIO
 import type { TravelTimeMatrix } from '@sidequest/geo';
 import {
   DIETARY_NEED_LABELS,
+  ASSUMED_GATEWAY_TRANSFER_MINUTES,
+  buildGatewayPlan,
+  compileSpatialOrder,
   describeEdgeTime,
+  describeUnplaced,
+  gatewayNodeSchema,
+  isGatewayName,
+  LADDER_LIMITS,
+  placementQueries,
+  placementReportSchema,
   MEDICAL_OR_OBSERVANT_NEEDS,
   PRICE_BAND_ORDER,
   displayNameOf,
@@ -27,7 +36,15 @@ import {
   type PackageAnchor,
   type Place,
   type PlaceClass,
+  type GatewayNode,
+  type GatewayPlan,
+  type GatewayTransfer,
+  type OrderedStop,
+  type PlacementAttempt,
+  type PlacementReport,
   type PlannerReadiness,
+  type RouteCriticalPlacement,
+  type SpatialOrderReport,
   type RevisionAction,
   type TransportMode,
   type TravelSegment,
@@ -83,7 +100,7 @@ import {
   type UnresolvedRelocation,
 } from './skeleton-adapter';
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
-import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRoad, episodesOf, type AnchorRole, type DraftAnchor, type DraftEpisode, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving } from './trip-draft';
+import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRoad, episodesOf, type AnchorRole, type DraftAnchor, type DraftEpisode, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving, timeOfDayIsBinding, timeOfDayIsHard } from './trip-draft';
 
 /**
  * THE RECONCILER — MODEL DRAFT + VERIFICATION OVERLAY + MINIMAL DETERMINISTIC
@@ -183,6 +200,21 @@ export interface ReconcileContext extends SkeletonPlanningContext {
   lastDayLeaveByMinute?: number;
   /** Names the traveller explicitly asked for (board must-includes, free-text must-dos); losing one is a decision, not a caution. */
   mustIncludeNames?: readonly string[];
+  /**
+   * V10 §5 — the published name of the destination's country, and the
+   * first-level divisions it sits in, for the placement ladder. A bare town name
+   * is the worst way to ask a geocoder; these are the context that disambiguates
+   * it. Absent degrades the ladder to the destination's own label, which is
+   * exactly the behaviour before V10.
+   */
+  destinationCountryName?: string;
+  destinationDivisions?: readonly string[];
+  /**
+   * V10 §8 — the destination's own gateways, already placed and gated by the
+   * semantic layer. Context, never the destination: the trip enters through one
+   * of these and the gateway is not a place the trip is about.
+   */
+  destinationGateways?: readonly { label: string; coordinates?: { lat: number; lng: number } }[];
 }
 
 export interface ReconciledAnchor {
@@ -213,6 +245,12 @@ export interface ReconcileResult {
   deviations: readonly SkeletonDeviation[];
   dispositions: readonly PackageAnchor[];
   unresolvedRelocations: readonly UnresolvedRelocation[];
+  /** V10 §5 — every route-critical name's fate, with the queries that were tried. */
+  placement: PlacementReport;
+  /** V10 §7 — one spatial-order verdict per day, and whether the order was corrected. */
+  dayOrders: readonly { dayNumber: number; report: SpatialOrderReport; corrected: boolean }[];
+  /** V10 §8 — the gateway plan, when the plan names a gateway at all. */
+  gateway: GatewayPlan | null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -483,26 +521,48 @@ async function resolveDraftAnchor(
     }
   }
   if (!context.geocodeLocality) return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
-  const query = anchor.locality ? `${anchor.name}, ${anchor.locality}` : `${anchor.name}, ${context.region.name}`;
-  let results: readonly GeocodedLocality[];
-  try {
-    results = await context.geocodeLocality(query);
-  } catch {
-    notes.push(`The place lookup for "${anchor.name}" failed; it is kept as unverified.`);
-    return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+  /*
+   * V10 §5 — A ROUTE-DEFINING STOP GETS THE SAME LADDER A BASE GETS.
+   *
+   * One query per anchor was the V9 behaviour, and it fails for the same reason a
+   * base's single query failed: a bare or thinly-qualified name is ambiguous
+   * (three counties share it, two provinces have one each), and a hedge or a
+   * containment locality the draft wrote for a *different* purpose is not a
+   * geocoder qualifier. The ladder asks with the locality, the province and the
+   * country, most-qualified first, and stops at the first accepted answer — so a
+   * stop that places on the first query costs exactly what it always did.
+   */
+  const ladder = placementQueries({
+    name: anchor.name,
+    ...(anchor.locality ? { locality: anchor.locality } : {}),
+    regionName: context.region.name,
+    ...(context.destinationCountryName ? { countryName: context.destinationCountryName } : {}),
+    ...(context.destinationDivisions ? { divisions: context.destinationDivisions } : {}),
+  });
+  let winner: ReturnType<typeof pickAnchorGeocoderWinner> = null;
+  for (const [index, query] of ladder.slice(0, LADDER_LIMITS.route_defining_stop).entries()) {
+    if (index > 0 && context.deadlineReached?.()) break;
+    let results: readonly GeocodedLocality[];
+    try {
+      results = await context.geocodeLocality(query);
+    } catch {
+      notes.push(`The place lookup for "${anchor.name}" failed; it is kept as unverified.`);
+      return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+    }
+    const assessed = results.map((r) => ({
+      result: r,
+      ...assessGeographicScope({
+        point: r,
+        countryCode: r.countryCode,
+        region: context.region,
+        scope: context.destinationScope,
+        subregions: context.subregionGeometries,
+        evidenceCandidates: context.candidates,
+      }),
+    }));
+    winner = pickAnchorGeocoderWinner(assessed.filter((a) => a.accepted));
+    if (winner) break;
   }
-  const assessed = results.map((r) => ({
-    result: r,
-    ...assessGeographicScope({
-      point: r,
-      countryCode: r.countryCode,
-      region: context.region,
-      scope: context.destinationScope,
-      subregions: context.subregionGeometries,
-      evidenceCandidates: context.candidates,
-    }),
-  }));
-  const winner = pickAnchorGeocoderWinner(assessed.filter((a) => a.accepted));
   if (!winner) return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
   return {
     verification: 'partially_verified',
@@ -511,6 +571,227 @@ async function resolveDraftAnchor(
     candidate: null,
     method: 'geocoder',
   };
+}
+
+/**
+ * V10 §8 — RESOLVE AND TIME BOTH GATEWAYS.
+ *
+ * The names come from the draft first — a gateway written as a stop is the
+ * traveller's or the model's own statement about where the trip enters — and from
+ * the destination's own gateway list second. Both are placed through the same
+ * ladder the bases use, both transfers are measured through the same memo the
+ * base moves use, and an unresolved "X or Y airport" is carried as unresolved
+ * rather than collapsed to one of them.
+ */
+async function resolveGateways(input: {
+  draft: TripDraft;
+  context: ReconcileContext;
+  bases: readonly ResolvedBase[];
+  ledger: ReturnType<typeof emptyLedger>;
+  confirmationMemo: ConfirmationMemo;
+  placements: RouteCriticalPlacement[];
+  deviations: SkeletonDeviation[];
+  deadline: () => boolean;
+  onCalls: (n: number) => void;
+}): Promise<GatewayPlan | null> {
+  const { draft, context, bases } = input;
+  const firstBase = bases[0] ?? null;
+  const finalBase = bases[bases.length - 1] ?? null;
+  const lastDay = draft.days[draft.days.length - 1];
+
+  /** A gateway name the draft wrote on a given day, if any. */
+  const namedOn = (day: TripDraft['days'][number] | undefined): string | null => {
+    for (const anchor of day?.anchors ?? []) if (anchorKindOf(anchor) === 'gateway') return anchor.name;
+    const move = day?.move;
+    if (move?.via && isGatewayName(move.via)) return move.via;
+    return null;
+  };
+  const arrivalName = namedOn(draft.days[0]) ?? context.destinationGateways?.[0]?.label ?? null;
+  const departureName = namedOn(lastDay) ?? arrivalName;
+  /*
+   * V10 §8 — A TRIP HAS EDGES EVEN WHEN NOBODY NAMED A TERMINAL.
+   *
+   * A country typed as a bare name resolves no gateway — the interpreter is not
+   * asked about a country and the draft may name none — and before this that
+   * meant the whole of §8 produced nothing. The founder's last day is exactly
+   * that: breakfast at 09:00 against an 11:00 flight, with no arithmetic anywhere
+   * because there was no airport to do arithmetic about. With no terminal there
+   * is still a departure time and a final base, which is enough for a
+   * conservative window and never enough for a measurement.
+   */
+  if (!arrivalName && !departureName) {
+    if (!finalBase && !firstBase) return null;
+    return buildGatewayPlan({
+      ...(firstBase ? { firstBase: { id: firstBase.skeletonBaseId, name: firstBase.displayName ?? firstBase.name } } : {}),
+      ...(finalBase ? { finalBase: { id: finalBase.skeletonBaseId, name: finalBase.displayName ?? finalBase.name } } : {}),
+      arrivalMinute: minutesOfClock(context.basics.arrivalTime),
+      departureMinute: minutesOfClock(context.basics.departureTime),
+      arrivalStated: context.basics.arrivalPrecision === 'exact',
+      departureStated: context.basics.departurePrecision === 'exact',
+      selfDrive: context.profile.transport.willDrive,
+      assumedTransferMinutes: ASSUMED_GATEWAY_TRANSFER_MINUTES,
+    });
+  }
+
+  const placeGateway = async (name: string, role: 'arrival' | 'departure' | 'both'): Promise<GatewayNode | null> => {
+    const unresolved = gatewayIsUnresolved(name);
+    const id = `gateway:${normalizeName(name).replace(/\s+/g, '-') || role}`;
+    const known = context.destinationGateways?.find((g) => normalizeName(g.label) === normalizeName(name));
+    let coordinates = known?.coordinates ?? null;
+    const attempts: PlacementAttempt[] = [];
+    if (!coordinates && !unresolved && context.geocodeLocality && !input.deadline()) {
+      const ladder = placementQueries({
+        name,
+        regionName: context.region.name,
+        ...(context.destinationCountryName ? { countryName: context.destinationCountryName } : {}),
+        ...(context.destinationDivisions ? { divisions: context.destinationDivisions } : {}),
+      });
+      for (const query of ladder.slice(0, LADDER_LIMITS.gateway)) {
+        let rows: readonly GeocodedLocality[];
+        try {
+          rows = await context.geocodeLocality(query);
+        } catch {
+          attempts.push({ query, outcome: 'provider_unavailable' });
+          break;
+        }
+        input.onCalls(1);
+        const accepted = rows.filter((r) => assessGeographicScope({ point: r, countryCode: r.countryCode, region: context.region, scope: context.destinationScope, subregions: context.subregionGeometries, evidenceCandidates: context.candidates }).accepted);
+        attempts.push({ query, outcome: accepted.length > 0 ? 'placed' : 'no_acceptable_candidate', candidates: rows.length });
+        const hit = accepted[0];
+        if (hit) {
+          coordinates = { lat: hit.lat, lng: hit.lng };
+          break;
+        }
+      }
+    }
+    const placement: RouteCriticalPlacement = {
+      id,
+      name,
+      kind: 'gateway',
+      outcome: coordinates ? 'placed' : unresolved ? 'ambiguous' : !context.geocodeLocality ? 'no_provider' : attempts.length === 0 ? 'not_attempted' : (attempts[attempts.length - 1]!.outcome === 'provider_unavailable' ? 'provider_unavailable' : 'no_acceptable_candidate'),
+      ...(coordinates ? { coordinates } : {}),
+      attempts: attempts.slice(0, 8),
+    };
+    const note = placement.outcome === 'placed' ? undefined : describeUnplaced(placement);
+    input.placements.push(note ? { ...placement, travellerNote: note } : placement);
+    if (placement.outcome !== 'placed') {
+      input.deviations.push({ kind: 'route_critical_unplaced', detail: `"${name}" is the trip's ${role} gateway and could not be placed. Asked: ${attempts.map((a) => `"${a.query}" (${a.outcome.replace(/_/g, ' ')})`).join('; ') || 'nothing'}.` });
+    }
+    return gatewayNodeSchema.parse({
+      id,
+      name,
+      kind: gatewayKindFor(name),
+      role,
+      ...(coordinates ? { coordinates } : {}),
+      fixed: false,
+      travellerStated: false,
+      unresolved,
+    });
+  };
+
+  const sameGateway = arrivalName !== null && departureName !== null && normalizeName(arrivalName) === normalizeName(departureName);
+  const arrival = arrivalName ? await placeGateway(arrivalName, sameGateway ? 'both' : 'arrival') : null;
+  const departure = sameGateway ? arrival : departureName ? await placeGateway(departureName, 'departure') : null;
+
+  /* Both transfers, measured through the same memo the base moves use. */
+  const measure = async (from: { id: string; coordinates: { lat: number; lng: number } } | null, to: { id: string; coordinates: { lat: number; lng: number } } | null): Promise<GatewayTransfer> => {
+    if (!from || !to) return { basis: 'unmeasured' };
+    const memo = input.confirmationMemo.get(`${from.id}=>${to.id}`) ?? input.confirmationMemo.get(`${to.id}=>${from.id}`);
+    if (memo?.minutes !== undefined && memo.minutes !== null) return { minutes: Math.round(memo.minutes), ...(memo.km !== undefined && memo.km !== null ? { km: Math.round(memo.km) } : {}), basis: 'measured' };
+    if (!context.confirmRoute || input.deadline()) return { basis: 'unmeasured' };
+    const leg = await confirmMandatoryLeg(input.ledger, input.confirmationMemo, context.confirmRoute, { id: from.id, name: from.id, coordinates: from.coordinates }, { id: to.id, name: to.id, coordinates: to.coordinates });
+    if (leg?.minutes !== undefined && leg.minutes !== null) return { minutes: Math.round(leg.minutes), ...(leg.km !== undefined && leg.km !== null ? { km: Math.round(leg.km) } : {}), basis: 'measured' };
+    return { basis: 'unmeasured' };
+  };
+  const asPoint = (node: GatewayNode | null) => (node?.coordinates ? { id: node.id, coordinates: node.coordinates } : null);
+  const basePoint = (base: ResolvedBase | null) => (base?.identity ? { id: base.identity.id, coordinates: base.identity.coordinates } : null);
+  const arrivalTransfer = await measure(asPoint(arrival), basePoint(firstBase));
+  const departureTransfer = sameGateway && firstBase === finalBase ? arrivalTransfer : await measure(basePoint(finalBase), asPoint(departure));
+
+  return buildGatewayPlan({
+    ...(arrival ? { arrival } : {}),
+    ...(departure ? { departure } : {}),
+    ...(firstBase ? { firstBase: { id: firstBase.skeletonBaseId, name: firstBase.displayName ?? firstBase.name } } : {}),
+    ...(finalBase ? { finalBase: { id: finalBase.skeletonBaseId, name: finalBase.displayName ?? finalBase.name } } : {}),
+    arrivalTransfer,
+    departureTransfer,
+    arrivalMinute: minutesOfClock(context.basics.arrivalTime),
+    departureMinute: minutesOfClock(context.basics.departureTime),
+    /* `exact` is the traveller stating a time; every other precision is Sidequest assuming one, which §8 requires a conservative window for. */
+    arrivalStated: context.basics.arrivalPrecision === 'exact',
+    departureStated: context.basics.departurePrecision === 'exact',
+    selfDrive: context.profile.transport.willDrive,
+  });
+}
+
+/** What kind of terminal a name reads as. Generic words only; never a place name. */
+function gatewayKindFor(name: string): GatewayNode['kind'] {
+  const text = name.toLowerCase();
+  if (/\b(airport|international|airfield|aerodrome)\b/.test(text)) return 'airport';
+  if (/\b(station|hbf|termini|centraal|gare)\b/.test(text)) return 'rail_station';
+  if (/\b(ferry|harbour|harbor|port|pier|quay)\b/.test(text)) return 'ferry_port';
+  if (/\b(bus terminal|coach station|bus station)\b/.test(text)) return 'bus_station';
+  if (/\b(border|crossing|frontier)\b/.test(text)) return 'land_border';
+  if (/\bcruise\b/.test(text)) return 'cruise_port';
+  return 'airport';
+}
+
+/** `HH:MM` as a minute of the day, or null when the string is not a clock. */
+function minutesOfClock(value: string | undefined): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((value ?? '').trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const mins = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(mins) || hours > 23 || mins > 59) return null;
+  return hours * 60 + mins;
+}
+
+/**
+ * V10 §5 — one route-critical placement row for one base, and the deviation that
+ * goes with it when nothing placed it.
+ *
+ * The `base_unresolved` deviation already existed and said "kept by name, legs
+ * unmeasured". What it never said was *what was asked*, which is why three
+ * ordinary town names could fail on a live trip and leave no trace anybody could
+ * act on. This row carries every query.
+ */
+function recordBasePlacement(input: {
+  base: { id: string; name: string };
+  identity: ResolvedBaseIdentity | null;
+  attempts: readonly PlacementAttempt[];
+  ambiguous: boolean;
+  unavailable: boolean;
+  placements: RouteCriticalPlacement[];
+  deviations: SkeletonDeviation[];
+  hasProvider: boolean;
+}): void {
+  const outcome: RouteCriticalPlacement['outcome'] = input.identity
+    ? 'placed'
+    : input.unavailable
+      ? 'provider_unavailable'
+      : input.ambiguous
+        ? 'ambiguous'
+        : !input.hasProvider
+          ? 'no_provider'
+          : input.attempts.length === 0
+            ? 'not_attempted'
+            : 'no_acceptable_candidate';
+  const placement: RouteCriticalPlacement = {
+    id: `base:${input.base.id}`,
+    name: input.base.name,
+    kind: 'base',
+    outcome,
+    ...(input.identity ? { coordinates: input.identity.coordinates } : {}),
+    attempts: input.attempts.slice(0, 8),
+  };
+  const note = outcome === 'placed' ? undefined : describeUnplaced(placement);
+  input.placements.push(note ? { ...placement, travellerNote: note } : placement);
+  if (outcome !== 'placed') {
+    input.deviations.push({
+      kind: 'route_critical_unplaced',
+      detail: `"${input.base.name}" is a base and could not be placed on the map. Asked: ${input.attempts.map((a) => `"${a.query}" (${a.outcome.replace(/_/g, ' ')})`).join('; ') || 'nothing — no lookup was attempted'}.`,
+    });
+  }
 }
 
 /** See the call site: resolves the "ambiguous" cases that are really one place, never a genuine tie between two towns. */
@@ -533,6 +814,31 @@ function settleAmbiguousBase(candidates: readonly { sourceId: string; name: stri
   const second = ranked[1]!;
   if (typeof top.importance === 'number' && typeof second.importance === 'number' && top.importance - second.importance >= 0.05) return top;
   return null;
+}
+
+/**
+ * V10 §5 — THE TOWN A BASE NAMES, NOT THE PROVINCE IT SITS IN.
+ *
+ * `base.locality` has always been the traveller-facing display name for a base,
+ * because a draft may name the hotel and put the town in the locality
+ * ("Harbour View Inn" / "Reykjavík"). For a region spanning two provinces a draft
+ * writes the locality the other way round — "Jasper" / "Alberta, Canada" — and the
+ * base then displayed, and was routed under, the name of a province. A province is
+ * not somewhere anybody sleeps.
+ *
+ * So a locality is a display name only while it is at least as specific as the
+ * base's own name. A locality that is one of the destination's own jurisdictions —
+ * a country or a first-level division — is context, and the base keeps its name.
+ */
+function baseLocalityName(base: { name: string; locality?: string }, jurisdictions: readonly string[]): string {
+  const locality = base.locality?.trim();
+  if (!locality) return base.name;
+  const parts = locality.split(',').map((part) => normalizeName(part)).filter(Boolean);
+  if (parts.length === 0) return base.name;
+  const known = new Set(jurisdictions.map((name) => normalizeName(name)).filter(Boolean));
+  /* Every part of the locality is a jurisdiction ("Alberta, Canada"): it locates the base, it does not name it. */
+  if (parts.every((part) => known.has(part))) return base.name;
+  return locality;
 }
 
 /** What kind of place the draft says the traveller sleeps in. Lodges and camps keep their own names; towns are localities. */
@@ -651,6 +957,8 @@ function weatherSummaryFor(dataset: WeatherDataset, date: string, point: { lat: 
 
 export async function reconcileTripDraft(input: { draft: TripDraft; context: ReconcileContext }): Promise<ReconcileResult> {
   const { draft, context } = input;
+  /** V10 §15 — wall clock for the placement pass, reported rather than guessed at. */
+  const reconcileStartedMs = Date.now();
   const deviations: SkeletonDeviation[] = [];
   const providerNotes: string[] = [];
   const revisions: RevisionAction[] = [];
@@ -749,6 +1057,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
    * locality (or the lodge/camp the draft meant), never the record's label.
    */
   const episodes = episodesOf(draft);
+  /** V10 §5 — the destination's own jurisdiction names, so a base's locality cannot be mistaken for its name. */
+  const jurisdictionNames = [...(context.destinationDivisions ?? []), ...(context.destinationCountryName ? [context.destinationCountryName] : [])];
   const baseResolutions = await mapConcurrent(draft.bases, BASE_RESOLUTION_CONCURRENCY, async (base) => {
     if (draftBaseKind(base) === 'vessel') {
       /* V7 §8 — a ship or a sleeper is placed by its route, never by a geocoder. */
@@ -758,9 +1068,52 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       providerNotes.push(`Base "${base.name}" was not looked up: the verification deadline had passed.`);
       return { base, outcome: null, settled: null, landmarkFallback: false, secondLookup: null as { name: string; sourceId: string; coordinates: { lat: number; lng: number } } | null };
     }
-    const localityName = base.locality ?? base.name;
+    const localityName = baseLocalityName(base, jurisdictionNames);
     const query = base.locality && normalizeName(base.locality) !== normalizeName(base.name) ? `${base.name}, ${base.locality}` : base.name;
-    const outcome = await resolveSkeletonBase({ id: base.id, placeIndex: null, name: query, nights: base.nights, why: base.why }, EMPTY_PACKET, context);
+    /*
+     * V10 §5 — THE PLACEMENT LADDER, FOR THE ONE ANCHOR CLASS THAT DECIDES THE
+     * ROUTE.
+     *
+     * A base is where the traveller sleeps, and an unplaced base takes its
+     * transfers, its day's order check and the trip's feasibility verdict with
+     * it. So it is asked with every context there is — its locality, its
+     * province, its country — and with the draft's own hedge words stripped,
+     * stopping at the first answer the geographic screen accepts. The ladder
+     * spends at most one extra request per base beyond what V9 spent, because
+     * the first tier is the *most* qualified query rather than the least.
+     */
+    const ladder = placementQueries({
+      name: base.name,
+      ...(base.locality && normalizeName(base.locality) !== normalizeName(base.name) ? { locality: base.locality } : {}),
+      regionName: context.region.name,
+      ...(context.destinationCountryName ? { countryName: context.destinationCountryName } : {}),
+      ...(context.destinationDivisions ? { divisions: context.destinationDivisions } : {}),
+    });
+    const attempts: PlacementAttempt[] = [];
+    let outcome: Awaited<ReturnType<typeof resolveSkeletonBase>> | null = null;
+    for (const [index, geocodeQuery] of ladder.slice(0, LADDER_LIMITS.base).entries()) {
+      if (index > 0 && deadline()) break;
+      const attempt = await resolveSkeletonBase({ id: base.id, placeIndex: null, name: query, nights: base.nights, why: base.why }, EMPTY_PACKET, context, { geocodeQuery });
+      /*
+       * "Several matches, all the same settlement" is not an ambiguity — the
+       * settler resolves it — so the attempt records what actually happened
+       * rather than the raw verdict. Otherwise the ladder's own diagnostics say a
+       * base was ambiguous when it was placed.
+       */
+      const settledHere = attempt.ambiguous && attempt.candidates ? settleAmbiguousBase(attempt.candidates) : null;
+      const placed = Boolean((attempt.identity && !attempt.ambiguous) || settledHere);
+      attempts.push({
+        query: geocodeQuery,
+        outcome: placed ? 'placed' : attempt.ambiguous ? 'ambiguous' : attempt.geographicScopeOutcome === 'geocoder_unavailable' ? 'provider_unavailable' : 'no_acceptable_candidate',
+        ...(attempt.candidates ? { candidates: attempt.candidates.length } : {}),
+      });
+      outcome = attempt;
+      /* An identity, or an ambiguity the settler can resolve, ends the ladder: asking again would only add noise. */
+      if (placed) break;
+      /* A provider that is down will be down for the next query too. */
+      if (attempt.geographicScopeOutcome === 'geocoder_unavailable') break;
+    }
+    if (!outcome) outcome = await resolveSkeletonBase({ id: base.id, placeIndex: null, name: query, nights: base.nights, why: base.why }, EMPTY_PACKET, context);
     const settled = outcome.ambiguous && outcome.candidates ? settleAmbiguousBase(outcome.candidates) : null;
     const identity = settled ? { id: settled.sourceId, name: settled.name, coordinates: settled.coordinates } : outcome.identity && !outcome.ambiguous ? outcome.identity : null;
     const hitIsLocality = settled ? settled.isLocality : outcome.candidates?.find((c) => c.sourceId === identity?.id)?.isLocality ?? (outcome.method && outcome.method !== 'geocoder' ? true : undefined);
@@ -783,19 +1136,25 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
         landmarkFallback = true;
       }
     }
-    return { base, outcome, settled, landmarkFallback, secondLookup };
+    return { base, outcome, settled, landmarkFallback, secondLookup, attempts };
   });
   let bases: ResolvedBase[] = [];
+  /** V10 §5 — every route-critical placement, placed or not, with what was asked. */
+  const placements: RouteCriticalPlacement[] = [];
+  let placementCalls = 0;
   for (const resolution of baseResolutions) {
     const { base, outcome, settled, secondLookup, landmarkFallback } = resolution;
+    const attempts: PlacementAttempt[] = ('attempts' in resolution ? resolution.attempts : undefined) ?? [];
+    placementCalls += attempts.length;
     const kind = draftBaseKind(base);
-    const localityName = base.locality ?? base.name;
+    const localityName = baseLocalityName(base, jurisdictionNames);
     if (!outcome) {
       if ('vessel' in resolution && resolution.vessel) {
         const episode = episodes.find((e) => draft.days.some((d) => d.baseId === base.id && d.dayNumber >= e.fromDay && d.dayNumber <= e.toDay));
         bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null, displayName: base.name, locality: localityName, baseKind: 'vessel', ...(episode ? { episode: episode.name } : {}) });
         continue;
       }
+      recordBasePlacement({ base, identity: null, attempts, ambiguous: false, unavailable: false, placements, deviations, hasProvider: Boolean(context.geocodeLocality) });
       bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity: null, displayName: kind === 'lodge' || kind === 'camp' || kind === 'vessel' || kind === 'trail_camp' ? base.name : localityName, locality: localityName, baseKind: kind });
       continue;
     }
@@ -827,6 +1186,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     }
     const canonicalName = identity?.name;
     const displayName = baseDisplayName({ kind, draftName: base.name, localityName, canonicalName, landmark: landmarkFallback || (identity !== null && !secondLookup && (settled ? !settled.isLocality : outcome.candidates?.find((c) => c.sourceId === identity?.id)?.isLocality === false)) });
+    recordBasePlacement({ base, identity, attempts, ambiguous: Boolean(outcome.ambiguous && !settled), unavailable: outcome.geographicScopeOutcome === 'geocoder_unavailable', placements, deviations, hasProvider: Boolean(context.geocodeLocality) });
     bases.push({ skeletonBaseId: base.id, name: base.name, nights: base.nights, identity, displayName, ...(canonicalName ? { canonicalName } : {}), locality: localityName, baseKind: kind });
   }
   // Consecutive same-identity stays merge; a loop's return is not a duplicate.
@@ -940,7 +1300,34 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       await confirmMandatoryLeg(ledger, confirmationMemo, context.confirmRoute, from, to);
     }
   }
+  /*
+   * V10 §8 — THE GATEWAYS, PLACED AND TIMED LIKE ANY OTHER ROUTE-CRITICAL LEG.
+   *
+   * Before V10 the arrival airport was folded into the terminal plan and then
+   * never existed again: no coordinate, no transfer, no allowance. The founder's
+   * trip therefore opened with a six-minute drive to its first stop against a
+   * 15:00 landing, and closed with breakfast at 09:00 against an 11:00 flight.
+   *
+   * Both gateways are resolved through the same placement ladder the bases use,
+   * and both transfers are measured through the same confirmation memo the base
+   * moves use — so a gateway leg is as real as a base transfer, and an unmeasured
+   * one is as honestly absent.
+   */
+  const gatewayPlan = await resolveGateways({
+    draft,
+    context,
+    bases,
+    ledger,
+    confirmationMemo,
+    placements,
+    deviations,
+    deadline,
+    onCalls: (n) => {
+      placementCalls += n;
+    },
+  });
   extraMatrix = ledgerSnapshot(ledger);
+
   const closure = await assessDepartureClosure(bases, context.matrix, context.profile, extraMatrix, routeAttempted, ledger, deadline() ? undefined : context.confirmRoute, confirmationMemo);
   if (closure.deviation) deviations.push(closure.deviation);
   if (!closure.ok) providerNotes.push(closure.detail);
@@ -1042,6 +1429,27 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   lookupOrder.forEach(({ jobIndex }, i) => {
     resolvedAnchors[jobIndex] = lookedUp[i]!;
   });
+  /*
+   * V10 §5 — a `core` named place the route is built around is route-critical
+   * too. Not every stop: a decorative viewpoint may degrade, and an experience
+   * with no specific place was never a lookup. What is recorded here is the
+   * class that decides a day's geography.
+   */
+  for (const [jobIndex, job] of anchorJobs.entries()) {
+    if (job.kind !== 'named_place' || job.anchor.role !== 'core') continue;
+    const resolved = resolvedAnchors[jobIndex]!;
+    const placement: RouteCriticalPlacement = {
+      id: `${draftAnchorId(job.day.dayNumber, job.index, job.anchor.name)}`,
+      name: job.anchor.name,
+      kind: 'route_defining_stop',
+      outcome: resolved.identity ? 'placed' : context.deadlineReached?.() ? 'not_attempted' : !context.geocodeLocality && !context.resolvePlaceIdentity ? 'no_provider' : 'no_acceptable_candidate',
+      ...(resolved.identity ? { coordinates: resolved.identity.coordinates } : {}),
+      attempts: [],
+    };
+    const note = placement.outcome === 'placed' ? undefined : describeUnplaced(placement);
+    placements.push(note ? { ...placement, travellerNote: note } : placement);
+  }
+
   const anchors: ReconciledAnchor[] = [];
   const mealFolds = new Map<number, Partial<Record<'breakfast' | 'lunch' | 'dinner', string>>>();
   const mealFoldNotes = new Map<string, string>();
@@ -1289,6 +1697,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const hardCeiling = context.matrix.mode === 'car' ? context.profile.transport.maxDailyDriveMinutes : context.profile.transport.maxDailyTransportMinutes;
   const permitted = permittedModesFor(context.profile);
   const days: ItineraryDay[] = [];
+  /** V10 §7 — one spatial-order verdict per day. */
+  const orderReports: { dayNumber: number; report: SpatialOrderReport; corrected: boolean }[] = [];
   let legsMeasured = 0;
   let legsUnmeasured = 0;
   let legsEstimated = 0;
@@ -1348,6 +1758,13 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     legsMeasured += laid.legsMeasured;
     legsUnmeasured += laid.legsUnmeasured;
     legsEstimated += laid.legsEstimated;
+    /* V10 §7 — the order verdict for every day, corrected or not, so nothing about ordering is invisible. */
+    orderReports.push({ dayNumber, report: laid.order, corrected: laid.orderCorrected });
+    if (laid.orderCorrected) {
+      const sentence = laid.order.violations[0]?.detail ?? 'the order as composed doubled back';
+      const softened = laid.softened.length > 0 ? ` ${laid.softened.join(', ')} moved from the part of the day the plan suggested, because holding ${laid.softened.length === 1 ? 'it' : 'them'} there doubled back on the road.` : '';
+      deviations.push({ kind: 'day_order_corrected', detail: `Day ${dayNumber}'s stops were reordered to follow the road: ${sentence}${softened}`, skeletonDayNumber: dayNumber });
+    }
     days.push(laid.day);
   }
 
@@ -1645,7 +2062,17 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     usableDaysWithActivity: days.filter((day, i) => windows[i]!.capacityMinutes > 0 && day.items.some((item) => item.kind === 'activity')).length,
   });
 
-  return { ok: true, itinerary, readiness, deviations, dispositions: packageAnchors, unresolvedRelocations };
+  return {
+    ok: true,
+    itinerary,
+    readiness,
+    deviations,
+    dispositions: packageAnchors,
+    unresolvedRelocations,
+    placement: placementReportSchema.parse({ version: 1, placements: placements.slice(0, 120), providerCalls: placementCalls, elapsedMs: Math.max(0, Math.round(Date.now() - reconcileStartedMs)) }),
+    dayOrders: orderReports,
+    gateway: gatewayPlan,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1693,9 +2120,99 @@ interface Point {
   locality?: string;
 }
 
-function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: DroppedAnchor[]; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
+/**
+ * PRODUCTION LOCK V5 §13 — A DAY RUNS IN THE ORDER ITS HOURS DO.
+ *
+ * Floors alone were not enough. A live build put a Sunday-morning livestock
+ * market, marked `morning`, second on its day behind a stop with no stated hour,
+ * and it landed at 12:45. A floor can hold a stop back; it cannot bring one
+ * forward.
+ *
+ * So a day is stably sorted by the hour its stops asked for. Stops with no
+ * intent keep their authored order and sit between the morning ones and the
+ * midday-or-later ones, which is where filler belongs. Stable, so two stops with
+ * the same intent — or none — stay in the sequence the model chose them in, and
+ * the geography it sequenced them for survives.
+ *
+ * V10 §7 — extracted from `attemptLayout` so the spatial-order compiler judges
+ * the order the day is actually *driven* in. It used to judge the authored order
+ * and then this sort moved a sunset stop to the end behind its back, which meant
+ * the check and the plan disagreed about what the day was.
+ */
+function orderByStatedHour(anchors: readonly ReconciledAnchor[]): ReconciledAnchor[] {
+  const ORDER: Record<string, number> = { sunrise: 0, morning: 1, midday: 3, afternoon: 4, sunset: 5, evening: 6, night: 7 };
+  const rankOf = (anchor: ReconciledAnchor) => ORDER[anchor.draft.timeOfDay ?? ''] ?? 2;
+  return anchors
+    .map((anchor, index) => ({ anchor, index }))
+    .sort((a, b) => rankOf(a.anchor) - rankOf(b.anchor) || a.index - b.index)
+    .map((entry) => entry.anchor);
+}
+
+/**
+ * V10 §7 — THE DAY'S ORDER, CHECKED AND, WHERE IT IS SAFE, CORRECTED.
+ *
+ * The order arrives from the composition, and the composition cannot see the
+ * map: the founder's trip drove past a roadside waterfall, went 30 km on,
+ * doubled back 28 minutes for it and went east again. Nothing checked.
+ *
+ * This runs *before* the layout rather than after it, which is the whole reason
+ * it can correct anything: the legs have not been built yet, so a reordering
+ * costs nothing and the matrix goes on to measure the pairs the day actually
+ * drives. Correcting after layout would mean carrying measured durations for
+ * pairs the plan no longer visits.
+ *
+ * What may move: a stop with no binding time-of-day intent, on a day where every
+ * stop and both endpoints are placed, where the reordering strictly shortens the
+ * chain past the tolerance. Everything else is left exactly as composed and
+ * reported instead — §7 forbids optimising blindly, and a sunset viewpoint, an
+ * opening window or a deliberate scenic sequence outranks distance.
+ */
+function correctDayOrder(input: DayLayoutInput): { anchors: readonly ReconciledAnchor[]; report: SpatialOrderReport; corrected: boolean; softened: readonly string[] } {
+  const pointOf = (b: ResolvedBase | null, fallbackId: string): { id: string; name: string; coordinates: { lat: number; lng: number } | null } =>
+    b ? { id: b.identity?.id ?? `base:${b.skeletonBaseId}`, name: b.displayName ?? b.name, coordinates: b.identity?.coordinates ?? null } : { id: fallbackId, name: 'your base', coordinates: null };
+  const origin = input.relocation && input.previousBase ? pointOf(input.previousBase, 'base:previous') : pointOf(input.base, 'base:start');
+  const destination = pointOf(input.base, 'base:end');
+  const authored = orderByStatedHour(input.anchors);
+  const stops: OrderedStop[] = authored.map((anchor) => ({
+    id: anchor.id,
+    name: anchor.draft.name,
+    coordinates: anchor.identity?.coordinates ?? null,
+    /*
+     * Pinned for a stated reason, never by default: a binding part of the day,
+     * a multi-day episode's own sequence, or a stop whose hours the reconciler
+     * has already read. A pinned stop holds its index and the search moves
+     * around it.
+     */
+    ...(timeOfDayIsHard(anchor.draft.timeOfDay)
+      ? { pinned: true as const, pinnedReason: `the plan puts this at ${anchor.draft.timeOfDay}` }
+      : episodeIsOffRoad(input.episode ?? null)
+        ? /*
+           * An off-road episode's sequence belongs to the operator: a gorge on a
+           * river cruise, a checkpoint on a trek, a station on a sleeper are
+           * reached in the order the vessel, the trail or the timetable reaches
+           * them, and no amount of geometry may reorder that. A `road_trip_segment`
+           * is not that — it is a label for a stretch of days on a road, and its
+           * stops are as free as any other day's.
+           */
+          { pinned: true as const, pinnedReason: `it sits inside ${input.episode!.name}` }
+        : {}),
+  }));
+  const report = compileSpatialOrder({ origin, destination, stops });
+  if (report.verdict !== 'violation' || report.bestOrder.length !== authored.length) return { anchors: authored, report, corrected: false, softened: [] };
+  const byId = new Map(authored.map((a) => [a.id, a]));
+  const reordered = report.bestOrder.map((id) => byId.get(id)).filter((a): a is ReconciledAnchor => a !== undefined);
+  if (reordered.length !== authored.length) return { anchors: authored, report, corrected: false, softened: [] };
+  /* A soft part-of-day hint that the reordering moved. Recorded, never silent. */
+  const softened = reordered
+    .filter((anchor, index) => timeOfDayIsBinding(anchor.draft.timeOfDay) && !timeOfDayIsHard(anchor.draft.timeOfDay) && authored[index]?.id !== anchor.id)
+    .map((anchor) => `${anchor.draft.name} (${anchor.draft.timeOfDay})`);
+  return { anchors: reordered, report, corrected: true, softened };
+}
+
+function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: DroppedAnchor[]; legsMeasured: number; legsUnmeasured: number; legsEstimated: number; order: SpatialOrderReport; orderCorrected: boolean; softened: readonly string[] } {
   const dropped: DroppedAnchor[] = [];
-  let kept = [...input.anchors];
+  const order = correctDayOrder(input);
+  let kept = [...order.anchors];
   const ceiling = input.hardCeiling;
 
   // Hard constraint: measured driving on an ordinary day over the traveller's own ceiling.
@@ -1729,18 +2246,18 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
       const day = attempt.overflowMinutes > 0
         ? { ...attempt.day, warnings: [...attempt.day.warnings, attempt.overflowMinutes > tolerance ? `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end on estimated travel times; nothing was taken off, because an estimate is not evidence.` : `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end.`] }
         : attempt.day;
-      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
+      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated, order: order.report, orderCorrected: order.corrected, softened: order.softened };
     }
     const victim = [...kept].sort((a, b) => ROLE_RANK[b.draft.role] - ROLE_RANK[a.draft.role] || b.index - a.index)[0];
-    if (!victim) return { day: attempt.day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
+    if (!victim) return { day: attempt.day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated, order: order.report, orderCorrected: order.corrected, softened: order.softened };
     if (victim.draft.role === 'core' && overDrive === false && !hardEnd) {
       // Core-only overflow on an ordinary day is kept as a long day and said so; core anchors are never dropped for room.
       const day = { ...attempt.day, warnings: [...attempt.day.warnings, `This day runs about ${Math.round(attempt.overflowMinutes)} minutes past your usual end; every stop on it was marked essential, so nothing was taken off.`] };
-      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
+      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated, order: order.report, orderCorrected: order.corrected, softened: order.softened };
     }
     if (victim.draft.role === 'core' && overDrive && kept.length === 1) {
       const day = { ...attempt.day, warnings: [...attempt.day.warnings, `Measured travel on this day (${measuredInMotion} min) exceeds your ${ceiling}-minute limit and the only stop is essential; kept, flagged for your decision.`] };
-      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated };
+      return { day, dropped, legsMeasured: attempt.legsMeasured, legsUnmeasured: attempt.legsUnmeasured, legsEstimated: attempt.legsEstimated, order: order.report, orderCorrected: order.corrected, softened: order.softened };
     }
     kept = kept.filter((a) => a.id !== victim.id);
     dropped.push({
@@ -2037,12 +2554,13 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
    * with the same intent — or none — stay in the sequence the model chose them
    * in, and the geography it sequenced them for survives.
    */
-  const ORDER: Record<string, number> = { sunrise: 0, morning: 1, midday: 3, afternoon: 4, sunset: 5, evening: 6, night: 7 };
-  const rankOf = (anchor: (typeof anchors)[number]) => ORDER[anchor.draft.timeOfDay ?? ''] ?? 2;
-  const scheduledOrder = anchors
-    .map((anchor, index) => ({ anchor, index }))
-    .sort((a, b) => rankOf(a.anchor) - rankOf(b.anchor) || a.index - b.index)
-    .map((entry) => entry.anchor);
+  /*
+   * V10 §7 — the order is already settled: `layoutDay` applied the stated-hour
+   * sort and then the spatial-order compiler to it. Re-sorting here would undo
+   * the correction, which is exactly the bug that put a "morning" waterfall 30 km
+   * past the one that was on the way to it.
+   */
+  const scheduledOrder = anchors;
 
   let cursor = startPoint;
   /*
@@ -2458,29 +2976,82 @@ function backupTokens(text: string): string[] {
     .filter((t) => t.length >= 4 && !BACKUP_STOPWORDS.has(t));
 }
 
+/**
+ * V10 §14 — A BACKUP BELONGS TO WHAT IT DEPENDS ON.
+ *
+ * The founder saw a photography fallback for one peninsula repeated across
+ * unrelated capital days and a mountain-lake fallback across unrelated days in
+ * another park. The cause is in two parts, and the first is the embarrassing one:
+ *
+ * 1. **The model already says which day each backup is for** (`backups[].day`,
+ *    added for PRODUCTION LOCK V5 §25) and this function did not read it. It
+ *    re-derived every attribution by word overlap and threw the authored answer
+ *    away.
+ * 2. The word overlap then attached a backup to every day scoring at least half
+ *    the best score, which for a common word ("waterfall", "lake", "harbour") is
+ *    most of the trip.
+ *
+ * So the order is now: the day the model named; else the days that actually hold
+ * the experiences the backup names; else the days at the base it names — capped,
+ * because a backup for three separate days is not a backup for anything.
+ */
+const MAX_BACKUP_DAYS = 3;
+
 function matchBackupsToDays(
-  backups: readonly { trigger: string; alternative: string }[],
+  backups: readonly { trigger: string; alternative: string; day?: number }[],
   days: readonly ItineraryDay[],
   anchors: readonly ReconciledAnchor[],
   baseForDate: readonly (ResolvedBase | null)[],
 ): TripPackage['backups'] {
-  const dayText = days.map((day, i) => {
+  const dayNumbers = new Set(days.map((d) => d.dayNumber));
+  /** Every anchor name on each day, and the base words for each day, kept apart: a stop is a dependency, a base is only a neighbourhood. */
+  const anchorNamesByDay = new Map<number, string[]>();
+  for (const anchor of anchors) {
+    const list = anchorNamesByDay.get(anchor.dayNumber) ?? [];
+    list.push(normalizeName(anchor.draft.name));
+    anchorNamesByDay.set(anchor.dayNumber, list);
+  }
+  const baseTokensByDay = days.map((day, i) => {
     const base = baseForDate[i];
-    const own = anchors.filter((a) => a.dayNumber === day.dayNumber);
-    return new Set(
-      backupTokens(
-        [day.theme, day.baseName, base?.locality ?? '', base?.name ?? '', ...own.map((a) => `${a.draft.name} ${a.draft.locality ?? ''}`)].join(' '),
-      ),
-    );
+    return new Set(backupTokens([day.theme, day.baseName, base?.locality ?? '', base?.name ?? ''].join(' ')));
   });
+
   return backups.map((backup) => {
+    const text = normalizeName(`${backup.trigger} ${backup.alternative}`);
+
+    /* 1 — the day the model named, when the trip has it. */
+    if (backup.day !== undefined && dayNumbers.has(backup.day)) {
+      return { trigger: backup.trigger, alternative: backup.alternative, dayNumbers: [backup.day], match: 'authored' as const };
+    }
+
+    /*
+     * 2 — the days that hold the experiences this backup is about. A backup
+     * names a stop, and that stop's day is the day the backup covers: a
+     * dependency, not a word in common.
+     */
+    const byExperience = days
+      .map((day) => day.dayNumber)
+      .filter((dayNumber) => (anchorNamesByDay.get(dayNumber) ?? []).some((name) => name.length >= 4 && text.includes(name)));
+    if (byExperience.length > 0) {
+      return { trigger: backup.trigger, alternative: backup.alternative, dayNumbers: byExperience.slice(0, MAX_BACKUP_DAYS), match: 'authored' as const };
+    }
+
+    /*
+     * 3 — the base it names, which is a weaker claim and is treated as one: only
+     * the days that score strictly best, and never more than three of them.
+     */
     const tokens = backupTokens(`${backup.trigger} ${backup.alternative}`);
     const scored = days
-      .map((day, i) => ({ dayNumber: day.dayNumber, hits: tokens.filter((t) => dayText[i]!.has(t)).length }))
+      .map((day, i) => ({ dayNumber: day.dayNumber, hits: tokens.filter((t) => baseTokensByDay[i]!.has(t)).length }))
       .filter((d) => d.hits > 0)
       .sort((a, b) => b.hits - a.hits);
     const best = scored[0]?.hits ?? 0;
-    const dayNumbers = scored.filter((d) => d.hits >= Math.max(1, Math.ceil(best / 2))).map((d) => d.dayNumber);
-    return { trigger: backup.trigger, alternative: backup.alternative, dayNumbers, match: dayNumbers.length > 0 ? ('geographic' as const) : ('none' as const) };
+    const geographic = scored.filter((d) => d.hits === best).map((d) => d.dayNumber);
+    return {
+      trigger: backup.trigger,
+      alternative: backup.alternative,
+      dayNumbers: geographic.slice(0, MAX_BACKUP_DAYS),
+      match: geographic.length > 0 ? ('geographic' as const) : ('none' as const),
+    };
   });
 }

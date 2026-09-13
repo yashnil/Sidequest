@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "asOf": "2026-09-12",
+  "constraints": [
+    {
+      "id": "ca-moraine-lake-shuttle",
+      "placeName": "Moraine Lake",
+      "status": "restricted",
+      "requiredMode": "shuttle",
+      "reservationRequired": true,
+      "validFrom": "2026-05-15",
+      "validUntil": "2026-10-15",
+      "authority": "official_current",
+      "sourceName": "Parks Canada — Banff National Park, Lake Louise and Moraine Lake access",
+      "sourceUrl": "https://parks.canada.ca/pn-np/ab/banff/visit/parkbus",
+      "checkedAt": "2026-09-12",
+      "travellerNote": "Personal vehicles are not admitted on the Moraine Lake road in season; the way in is the Parks Canada shuttle, a commercial operator or a licensed taxi, and shuttle seats are reserved ahead.",
+      "alternative": "Lake Louise itself is reachable by the same shuttle system, and the Icefields Parkway viewpoints need no reservation."
+    },
+    {
+      "id": "ca-lake-louise-lakeshore-shuttle",
+      "placeName": "Lake Louise lakeshore",
+      "status": "reservation_required",
+      "requiredMode": "shuttle",
+      "reservationRequired": true,
+      "validFrom": "2026-05-15",
+      "validUntil": "2026-10-15",
+      "authority": "official_current",
+      "sourceName": "Parks Canada — Banff National Park shuttle reservations",
+      "sourceUrl": "https://parks.canada.ca/pn-np/ab/banff/visit/parkbus",
+      "checkedAt": "2026-09-12",
+      "travellerNote": "Lakeshore parking at Lake Louise fills before dawn in season; the shuttle from the park-and-ride is the reliable way in and is booked in advance."
+    },
+    {
+      "id": "ca-maligne-canyon-2026",
+      "placeName": "Maligne Canyon",
+      "status": "seasonal_closure",
+      "reservationRequired": false,
+      "validFrom": "2026-04-01",
+      "validUntil": "2026-11-30",
+      "authority": "official_current",
+      "sourceName": "Parks Canada — Jasper National Park important bulletins",
+      "sourceUrl": "https://parks.canada.ca/pn-np/ab/jasper/visit/avis-notices",
+      "checkedAt": "2026-09-12",
+      "travellerNote": "Maligne Canyon is closed for the 2026 season while the trail and its bridges are rebuilt.",
+      "alternative": "Sunwapta Falls and Athabasca Falls are open and give the same canyon-and-water day on the way south."
+    },
+    {
+      "id": "ca-parks-pass",
+      "placeName": "Banff National Park",
+      "status": "restricted",
+      "requiredMode": "permit",
+      "reservationRequired": false,
+      "authority": "official_current",
+      "sourceName": "Parks Canada — park entry fees and passes",
+      "sourceUrl": "https://parks.canada.ca/voyage-travel/admission",
+      "checkedAt": "2026-09-12",
+      "travellerNote": "A Parks Canada day or annual pass has to be displayed in the windscreen anywhere inside the mountain parks."
+    }
+  ]
+}

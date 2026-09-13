@@ -70,18 +70,40 @@ test('Build my trip runs the canonical path and renders the reconciled itinerary
 test('Build my trip works with nothing picked on the board', async ({ page }) => {
   await reachMammothBoard(page);
   const included = page.getByRole('button', { name: 'Include', pressed: true });
-  let remaining = await included.count();
+  /*
+   * The pressed state is optimistic and the summary count is server-rendered, so
+   * they are two different facts and the loop has to wait for the second one.
+   *
+   * It used to poll only the pressed count, which flips on the click: twenty-three
+   * clicks could finish with several writes still in flight, and the summary
+   * assertion then raced a revalidation — passing alone and failing behind a busy
+   * suite ("4 chosen · 23 on the board", five seconds after the last click). The
+   * loop now advances on what the server says, which is the thing the assertion
+   * below is about.
+   */
+  const chosenCount = async () => Number(/^(\d+) chosen/.exec((await page.getByTestId('board-summary').textContent()) ?? '')?.[1] ?? -1);
+  /*
+   * The loop advances on the count, not on the buttons — which is the whole of a
+   * fix worth restating.
+   *
+   * It used to run `while (pressed Include count > 0)`, and a click re-renders the
+   * board: for an instant during that re-render no button matches, the condition
+   * reads zero and the loop leaves. Whatever was still included then stayed
+   * included, and the assertion below reported it ("4 chosen · 23 on the board")
+   * five seconds later. Reproduced on `main` at 2 failures in 6 repeats, and on
+   * this branch at 1 in 6 — a pre-existing race, not a change in behaviour.
+   *
+   * Driving on the count cannot leave early: a card that is still chosen will
+   * render a pressed button again on the next turn, and the loop clicks it.
+   */
   let guard = 0;
-  while (remaining > 0 && guard < 60) {
-    const before = remaining;
-    await included.first().click();
-    // A click is a round trip to the server; wait for the count to actually move.
-    await expect
-      .poll(async () => page.getByRole('button', { name: 'Include', pressed: true }).count(), { timeout: 10_000 })
-      .toBeLessThan(before);
-    remaining = await page.getByRole('button', { name: 'Include', pressed: true }).count();
+  while ((await chosenCount()) > 0 && guard < 90) {
+    const button = included.first();
+    if ((await button.count()) > 0) await button.click({ timeout: 5_000 }).catch(() => undefined);
+    else await page.waitForTimeout(150);
     guard += 1;
   }
+  await expect.poll(chosenCount, { timeout: 15_000 }).toBe(0);
   await expect(page.getByTestId('board-summary')).toContainText(/^0 chosen/);
   const build = page.getByRole('button', { name: /Build my trip/ });
   await expect(build).toBeEnabled();

@@ -7,6 +7,11 @@ import {
   physicalIntensitySchema,
 } from './common';
 import { dayFoodSummarySchema, foodPlanSchema, scheduledFoodSchema } from './food';
+import { placementReportSchema } from '../route/critical';
+import { gatewayPlanSchema } from '../gateway/plan';
+import { experienceGraphSchema } from '../experience/graph';
+import { accessConstraintSchema } from '../access/constraints';
+import { qualityCompilerReportSchema } from '../quality/compiler-report';
 
 export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay } from './common';
 
@@ -1425,6 +1430,40 @@ export const tripPackageSchema = z.object({
         .default([]),
     })
     .optional(),
+  /**
+   * V10 §5 — every route-critical name's placement, with the queries the ladder
+   * tried. Persisted because the founder's trip failed to place three ordinary
+   * town names and left no trace anybody could act on.
+   */
+  placement: placementReportSchema.optional(),
+  /**
+   * V10 §7 — one spatial-order verdict per day. `corrected` says the stops were
+   * reordered before the legs were built; `unplaceable` says the day could not
+   * be judged and names what is missing, which is the state that hid the
+   * founder's own reversal.
+   */
+  dayOrders: z
+    .array(
+      z.object({
+        dayNumber: z.number().int().min(1),
+        verdict: z.enum(['coherent', 'violation', 'unplaceable', 'trivial']),
+        corrected: z.boolean(),
+        plannedKm: z.number().nonnegative(),
+        bestKm: z.number().nonnegative(),
+        excessFraction: z.number(),
+        violations: z.array(z.object({ kind: z.string().min(1), stopName: z.string().min(1).optional(), detail: z.string().min(1) })).default([]),
+        unplaced: z.array(z.string().min(1)).default([]),
+      }),
+    )
+    .optional(),
+  /** V10 §8 — the arrival and departure gateway plan, with its allowances and its feasibility. */
+  gateway: gatewayPlanSchema.optional(),
+  /** V10 §4 — the hierarchical experience graph: components and access legs. */
+  experiences: experienceGraphSchema.optional(),
+  /** V10 §9 — the access constraints that shaped this plan, with their sources and dates. */
+  accessConstraints: z.array(accessConstraintSchema).max(60).optional(),
+  /** V10 §16 — the quality compiler's issues, after any safe deterministic correction. */
+  qualityCompiler: qualityCompilerReportSchema.optional(),
 });
 export type TripPackage = z.infer<typeof tripPackageSchema>;
 

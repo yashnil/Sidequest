@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORS_BASE, computeOrsRoute, createOrsRouting } from './openrouteservice';
+import { ORS_BASE, computeOrsRoute, createOrsRouting, routeCacheKey } from './openrouteservice';
 import { recordedRouteKey, recordedRoutesFetch } from './openrouteservice-fixture';
 import { parseRoutingCoverage } from './routing-coverage';
 import { createCompositeRouting } from './routing-composite';
@@ -50,15 +50,77 @@ describe('openrouteservice adapter', () => {
     expect((await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { fetchImpl: thrown })).reason).toBe('provider_error');
   });
   it('the matrix seam times only consecutive legs and the closing pair — never N²', async () => {
+    /* The matrix endpoint answers nothing usable here, so every leg falls through to a direct request. */
     const http = stub(() => ({ status: 200, body: geojson(1800, 30_000, [[-7.9, 52.5], [-8.4, 51.9]]) }));
     const routing = createOrsRouting({ routeCalls: 0, routePairs: 0 }, { fetchImpl: http.fetchImpl, apiKey: 'k' });
     const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', lat: 51.7, lng: -8.5 }, { id: 'd', lat: 52.0, lng: -9.5 }];
     const result = await routing.matrix({ points, mode: 'car', maxElements: 100 });
-    expect(http.calls).toHaveLength(4); // a→b, b→c, c→d, d→a
+    /* One matrix attempt, then a→b, b→c, c→d, d→a. Still never N². */
+    expect(http.calls).toHaveLength(5);
+    expect(http.calls.filter((c) => c.url.includes('/matrix/'))).toHaveLength(1);
     expect(result.minutes[0]![1]).toBe(30);
     expect(result.minutes[1]![0]).toBe(30);
     expect(Number.isNaN(result.minutes[0]![2]!)).toBe(true);
     expect(result.failedPairs.filter((p) => p.reason === 'insufficient_evidence').length).toBe(4);
+  });
+
+  it('V10 §6 — one matrix request measures the whole day, and a declined cell is an absence rather than a verdict', async () => {
+    /*
+     * `b→c` comes back null. Valhalla's own `costmatrix` returns a null time for
+     * pairs its `/route` solves, and reading that as "no road" removed a
+     * 56-minute drive from a real trip (`V9.1-ROUTING-CONTRADICTION.md`). So the
+     * null falls through to the direct endpoint, and only that endpoint's 2009
+     * may ever mean no route.
+     */
+    const http = stub((url) =>
+      url.includes('/matrix/')
+        ? {
+            status: 200,
+            body: {
+              durations: [
+                [0, 1800, 3600, 5400],
+                [1800, 0, null, 7200],
+                [3600, null, 0, 900],
+                [5400, 7200, 900, 0],
+              ],
+              distances: [
+                [0, 30, 60, 90],
+                [30, 0, null, 120],
+                [60, null, 0, 15],
+                [90, 120, 15, 0],
+              ],
+            },
+          }
+        : { status: 200, body: geojson(2400, 40_000, [[-8.4, 51.9], [-8.5, 51.7]]) },
+    );
+    const routing = createOrsRouting({ routeCalls: 0, routePairs: 0 }, { fetchImpl: http.fetchImpl, apiKey: 'k' });
+    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', lat: 51.7, lng: -8.5 }, { id: 'd', lat: 52.0, lng: -9.5 }];
+    const result = await routing.matrix({ points, mode: 'car', maxElements: 100 });
+    /* One matrix request for four legs, then one direct request for the declined pair. */
+    expect(http.calls.filter((c) => c.url.includes('/matrix/'))).toHaveLength(1);
+    expect(http.calls.filter((c) => c.url.includes('/directions/'))).toHaveLength(1);
+    expect(result.minutes[0]![1]).toBe(30);
+    expect(result.km[0]![1]).toBe(30);
+    /* The declined pair was measured directly, not refused. */
+    expect(result.minutes[1]![2]).toBe(40);
+    expect(result.failedPairs.filter((p) => p.reason === 'not_found')).toEqual([]);
+  });
+
+  it('V10 §6 — a cached leg costs no request, and the reverse leg shares the key', async () => {
+    const store = new Map<string, { minutes: number; km: number }>();
+    const cache = { read: (k: string) => store.get(k) ?? null, write: (k: string, v: { minutes: number; km: number }) => void store.set(k, v) };
+    const grid = { durations: [[0, 1800, 3600], [1800, 0, 2700], [3600, 2700, 0]], distances: [[0, 30, 60], [30, 0, 45], [60, 45, 0]] };
+    const http = stub((url) => (url.includes('/matrix/') ? { status: 200, body: grid } : { status: 500, body: {} }));
+    const routing = createOrsRouting({ routeCalls: 0, routePairs: 0 }, { fetchImpl: http.fetchImpl, apiKey: 'k', cache });
+    const points = [{ id: 'a', ...CASHEL }, { id: 'b', ...CORK }, { id: 'c', ...VIK }];
+    const first = await routing.matrix({ points, mode: 'car', maxElements: 100 });
+    expect(first.minutes[0]![1]).toBe(30);
+    expect(http.calls).toHaveLength(1);
+    /* Same trip again, and with the points reversed: every leg is a cache hit, so no request at all. */
+    const again = await routing.matrix({ points: [points[2]!, points[1]!, points[0]!], mode: 'car', maxElements: 100 });
+    expect(again.minutes[1]![2]).toBe(30);
+    expect(http.calls).toHaveLength(1);
+    expect(routeCacheKey(CASHEL, CORK, 'driving-car')).toBe(routeCacheKey(CORK, CASHEL, 'driving-car'));
   });
   it('a recorded fixture answers the real adapter offline, and an unrecorded pair is a snapping gap, never a route', async () => {
     const key = recordedRouteKey('driving-car', CASHEL, CORK);

@@ -1,0 +1,42 @@
+[
+ {
+  "place_id": 379484347,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 356877446,
+  "lat": "51.3215664",
+  "lon": "-116.1859853",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.4091876652127391,
+  "addresstype": "lake",
+  "name": "Moraine Lake",
+  "display_name": "Moraine Lake, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "lake": "Moraine Lake",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "ele": "1884",
+   "natural": "water",
+   "tourism": "attraction",
+   "wikidata": "Q1072342",
+   "wikipedia": "en:Moraine Lake"
+  },
+  "namedetails": {
+   "name": "Moraine Lake",
+   "name:ru": "Морейн"
+  },
+  "boundingbox": [
+   "51.3156908",
+   "51.3276753",
+   "-116.1912596",
+   "-116.1785445"
+  ]
+ }
+]

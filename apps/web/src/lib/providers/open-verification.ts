@@ -80,6 +80,17 @@ function isExactNameMatch(query: string, place: NominatimPlace): boolean {
   return wanted === got;
 }
 
+/**
+ * V10 §2 — the published name of the first-level division a row sits in.
+ *
+ * Nominatim tags it `state` almost everywhere and `province` in a handful of
+ * countries; both are the same tier. Read only to *name* a jurisdiction — never
+ * to locate anything, and never as the destination.
+ */
+function firstLevelDivisionName(place: NominatimPlace): string | null {
+  return place.address?.['state'] ?? place.address?.['province'] ?? null;
+}
+
 export function toCandidate(place: NominatimPlace, query: string): DestinationCandidate | null {
   const lat = Number(place.lat);
   const lng = Number(place.lon);
@@ -115,6 +126,7 @@ export function toCandidate(place: NominatimPlace, query: string): DestinationCa
     ...(countryCode && countryCode.length === 2 ? { countryCode } : {}),
     ...(country ? { countryName: country } : {}),
     ...(place.address?.['ISO3166-2-lvl4'] ? { regionCode: place.address['ISO3166-2-lvl4']! } : {}),
+    ...(firstLevelDivisionName(place) ? { regionName: firstLevelDivisionName(place)! } : {}),
     aliases: candidatesFromNominatim(place).map((entry) => entry.value),
     administrativeAreas: Object.entries(place.address ?? {})
       .filter(([key]) => ['country', 'state', 'region', 'county', 'city', 'town'].includes(key))

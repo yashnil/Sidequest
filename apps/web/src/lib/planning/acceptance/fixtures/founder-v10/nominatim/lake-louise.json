@@ -1,0 +1,194 @@
+[
+ {
+  "place_id": 376364365,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 2665400241,
+  "lat": "51.4249668",
+  "lon": "-116.1775350",
+  "category": "place",
+  "type": "hamlet",
+  "place_rank": 20,
+  "importance": 0.5200563866485242,
+  "addresstype": "hamlet",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "hamlet": "Lake Louise",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "ele": "1600",
+   "website": "https://www.discoverlakelouise.com/",
+   "wikidata": "Q12826048",
+   "wikipedia": "en:Lake Louise, Alberta",
+   "population": "1041"
+  },
+  "namedetails": {
+   "name": "Lake Louise"
+  },
+  "boundingbox": [
+   "51.4049668",
+   "51.4449668",
+   "-116.1975350",
+   "-116.1575350"
+  ]
+ },
+ {
+  "place_id": 376878670,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 18238904,
+  "lat": "51.4114893",
+  "lon": "-116.2289907",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.45833613469028417,
+  "addresstype": "lake",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "lake": "Lake Louise",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "natural": "water",
+   "wikidata": "Q1367398",
+   "wikipedia": "en:Lake Louise (Alberta)"
+  },
+  "namedetails": {
+   "name": "Lake Louise",
+   "alt_name": "Ho-run-num-nay"
+  },
+  "boundingbox": [
+   "51.4056679",
+   "51.4174028",
+   "-116.2397665",
+   "-116.2162046"
+  ]
+ },
+ {
+  "place_id": 378591736,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 33037284,
+  "lat": "62.3271918",
+  "lon": "-146.5601893",
+  "category": "place",
+  "type": "locality",
+  "place_rank": 25,
+  "importance": 0.3701845356649174,
+  "addresstype": "locality",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Matanuska-Susitna Borough, Alaska, United States",
+  "address": {
+   "locality": "Lake Louise",
+   "county": "Matanuska-Susitna Borough",
+   "state": "Alaska",
+   "ISO3166-2-lvl4": "US-AK",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "boundary": "census",
+   "wikidata": "Q1343275",
+   "wikipedia": "en:Lake Louise, Alaska"
+  },
+  "namedetails": {
+   "name": "Lake Louise"
+  },
+  "boundingbox": [
+   "62.2467433",
+   "62.4076383",
+   "-146.7214990",
+   "-146.4257110"
+  ]
+ },
+ {
+  "place_id": 378503751,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 2601607,
+  "lat": "62.3287899",
+  "lon": "-146.5376187",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.3701845356649174,
+  "addresstype": "lake",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Matanuska-Susitna Borough, Alaska, United States",
+  "address": {
+   "lake": "Lake Louise",
+   "county": "Matanuska-Susitna Borough",
+   "state": "Alaska",
+   "ISO3166-2-lvl4": "US-AK",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "ele": "720",
+   "salt": "no",
+   "tidal": "no",
+   "fishing": "yes",
+   "natural": "water",
+   "wikidata": "Q1343275",
+   "wikipedia": "en:Lake Louise, Alaska",
+   "intermittent": "no"
+  },
+  "namedetails": {
+   "name": "Lake Louise"
+  },
+  "boundingbox": [
+   "62.2761892",
+   "62.3816767",
+   "-146.6344048",
+   "-146.4586544"
+  ]
+ },
+ {
+  "place_id": 424493262,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 52046973,
+  "lat": "41.8619001",
+  "lon": "-72.7793038",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.1334029060807202,
+  "addresstype": "lake",
+  "name": "Lake Louise",
+  "display_name": "Lake Louise, Bloomfield, Capitol Planning Region, Connecticut, United States",
+  "address": {
+   "lake": "Lake Louise",
+   "town": "Bloomfield",
+   "county": "Capitol Planning Region",
+   "state": "Connecticut",
+   "ISO3166-2-lvl4": "US-CT",
+   "country": "United States",
+   "country_code": "us"
+  },
+  "extratags": {
+   "natural": "water"
+  },
+  "namedetails": {
+   "name": "Lake Louise"
+  },
+  "boundingbox": [
+   "41.8612303",
+   "41.8623640",
+   "-72.7798265",
+   "-72.7788918"
+  ]
+ }
+]

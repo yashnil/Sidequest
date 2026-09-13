@@ -200,6 +200,30 @@ export function timeOfDayIsBinding(value: DraftTimeOfDay | undefined): boolean {
 }
 
 /**
+ * V10 §7 — WHICH STATED HOURS GEOGRAPHY MAY NOT OVERRIDE.
+ *
+ * `sunrise`, `sunset` and `night` are facts about the sky: a stop written for
+ * sunset cannot be visited at eleven in the morning whatever the driving says,
+ * and a reordering that moves one is a reordering that destroys the reason it is
+ * on the plan. Those are hard.
+ *
+ * `morning`, `midday`, `afternoon` and `evening` are preferences about *where in
+ * the day* a stop sits, and they were being enforced as though they were hard.
+ * The founder's day 3 is exactly what that costs: the model composed three
+ * roadside stops correctly, west to east along one road; the *second* of them
+ * carried `morning` and the first carried nothing, so the hour sort (PRODUCTION
+ * LOCK V5 §13) moved it in front and the day drove 30 km past the first stop,
+ * doubled back 28 minutes for it, and went east again. A 49 km detour bought by a
+ * word that only ever meant "earlier rather than later".
+ *
+ * So a soft hint still orders a day that geography has nothing to say about, and
+ * yields when it does — and the yielding is recorded, never silent.
+ */
+export function timeOfDayIsHard(value: DraftTimeOfDay | undefined): boolean {
+  return value === 'sunrise' || value === 'sunset' || value === 'night';
+}
+
+/**
  * The values the model is offered. `any` is absent from it deliberately: an
  * omitted field already means "whenever the day suits", so offering a word for
  * it buys nothing and invites it to be written on every activity. The canonical
@@ -561,6 +585,17 @@ export const tripDraftSchema = z.object({
    * is visible as the generic checklist it is.
    */
   signatures: z.array(prose(60)).max(3).optional(),
+  /**
+   * V10 §11 — ONE MEANINGFUL ROUTE ALTERNATIVE, IN A SENTENCE.
+   *
+   * Not a second itinerary — §11 is explicit that asking for several full plans
+   * is the wrong shape and the wrong cost. What is asked for is the *decision*:
+   * the other route this destination plausibly supports for this traveller, and
+   * why this one was chosen over it. A trip that spends nine days on Iceland's
+   * south and west instead of driving the whole Ring Road needs a defensible
+   * reason, and this is where the reason lives.
+   */
+  routeAlternative: prose(DRAFT_SOFT_PROSE_CAPS.routeRationale).optional(),
   /** §14 — how the road travel is arranged. `none` for a trip with no vehicle the traveller is responsible for. */
   driving: z.enum(DRAFT_DRIVING_ARRANGEMENTS).optional(),
   /** V7 §8 — the multi-day experiences this trip contains, each owning its days and its transport regime. */

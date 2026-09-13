@@ -16,11 +16,30 @@ import { requestSignal } from '../net/generation-deadline';
  * `api.openrouteservice.org` host was deprecated on 2026-04-28 and is not used.
  * Auth is the plain `Authorization: <api key>` header the service documents.
  *
- * Only DIRECT legs are requested — the product needs the legs a day actually
- * walks or drives, never an N² matrix — and the `matrix()` seam below fulfils
- * the compiler's interface by timing consecutive pairs (and the return to the
- * first point) one request at a time, bounded by `maxElements`. Never
- * mandatory: absent key ⇒ the capability is off and nothing here is called.
+ * ## V10 §6 — one request for the whole day, and a cache behind it
+ *
+ * Until V10 the `matrix()` seam timed consecutive pairs **one direct request at a
+ * time**. That is correct and it does not finish: a Canadian Rockies trip needs
+ * ~38 legs, each request has a 12-second ceiling, and the verification remainder
+ * is a fraction of a minute — which is how a self-drive trip shipped with 0 of 38
+ * legs measured while a perfectly healthy router sat behind it.
+ *
+ * So the seam now asks openrouteservice's own `/matrix/{profile}` endpoint for
+ * the pairs a day actually drives, in **one** request (`metrics=duration,distance`,
+ * `sources`/`destinations` bounded well inside the hosted plan's routed-pair
+ * allowance), and falls back to the direct endpoint only for what the matrix
+ * declined. Answers are cached for the `static_route` TTL against rounded
+ * coordinates, so a rebuild of the same trip measures nothing twice.
+ *
+ * **A declined matrix cell is an absence, never a verdict** (V9.1's
+ * `.claude-private/V9.1-ROUTING-CONTRADICTION.md`): Valhalla's `costmatrix`
+ * returns a null time for pairs its own `/route` solves, and reading that as
+ * positive evidence removed a 56-minute drive from a real trip as unreachable.
+ * ORS behaves the same way, so a `null` here is `insufficient_evidence` and the
+ * direct endpoint is asked instead. Only the direct endpoint's documented 2009
+ * ever means "no route".
+ *
+ * Never mandatory: absent key ⇒ the capability is off and nothing here is called.
  *
  * Error vocabulary (documented ORS codes): 2009 "Route could not be found"
  * is the one positive "no route" answer ⇒ `not_found`; 2010 "could not find
@@ -53,6 +72,26 @@ export interface OrsHttp {
   fetchImpl?: typeof fetch;
   apiKey?: string;
   counter?: { calls: number; failures: number };
+  /**
+   * V10 §6 — a durable static-route cache, injected rather than constructed here
+   * so this adapter never reaches for a database. A hit costs nothing and a
+   * rebuild of the same trip measures nothing twice.
+   */
+  cache?: { read(key: string): { minutes: number; km: number } | null; write(key: string, value: { minutes: number; km: number }): void };
+}
+
+/**
+ * A cache key for one road leg: the two endpoints rounded to about eleven metres,
+ * and the profile. Rounded because a coordinate that moved by a metre is the same
+ * leg, and unrounded keys would never hit.
+ */
+export function routeCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }, profile: OrsProfile): string {
+  const r = (n: number) => n.toFixed(4);
+  const a = `${r(from.lat)},${r(from.lng)}`;
+  const b = `${r(to.lat)},${r(to.lng)}`;
+  /* Symmetric: the reverse leg carries the same figure, so it shares the key. */
+  const [lo, hi] = a <= b ? [a, b] : [b, a];
+  return `ors|${profile}|${lo}|${hi}`;
 }
 
 const orsResponseSchema = z.object({
@@ -67,6 +106,59 @@ const orsResponseSchema = z.object({
 });
 
 const orsErrorSchema = z.object({ error: z.object({ code: z.number().optional(), message: z.string().optional() }).optional() });
+
+/**
+ * V10 §6 — the matrix response. `durations` and `distances` are arrays of
+ * arrays; a cell may be `null`, which means the service declined that pair and
+ * says **nothing** about whether a road exists.
+ */
+const orsMatrixSchema = z.object({
+  durations: z.array(z.array(z.number().nullable())).optional(),
+  distances: z.array(z.array(z.number().nullable())).optional(),
+});
+
+/** Routed pairs a single hosted matrix request may ask for. Well inside the plan's allowance. */
+export const ORS_MATRIX_MAX_PAIRS = 400;
+
+/**
+ * One matrix request for a set of points. Returns `null` when the request itself
+ * failed, so the caller falls through to direct legs rather than treating a
+ * failure as an absence of roads.
+ */
+export async function computeOrsMatrix(
+  input: { points: readonly { lat: number; lng: number }[]; profile: OrsProfile },
+  http: OrsHttp = {},
+): Promise<{ durations: (number | null)[][]; distances: (number | null)[][] } | null> {
+  const apiKey = http.apiKey ?? process.env[ORS_KEY_ENV];
+  if (!apiKey) return null;
+  const fetchImpl = http.fetchImpl ?? fetch;
+  const body = JSON.stringify({
+    locations: input.points.map((p) => [p.lng, p.lat]),
+    metrics: ['duration', 'distance'],
+    units: 'km',
+  });
+  try {
+    const response = await fetchImpl(`${ORS_BASE}/matrix/${input.profile}`, {
+      method: 'POST',
+      headers: { authorization: apiKey, 'content-type': 'application/json', accept: 'application/json', 'user-agent': USER_AGENT },
+      body,
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
+    });
+    if (http.counter) http.counter.calls += 1;
+    if (!response.ok) {
+      if (http.counter) http.counter.failures += 1;
+      return null;
+    }
+    const parsed = orsMatrixSchema.safeParse(await response.json());
+    if (!parsed.success || !parsed.data.durations) return null;
+    const durations = parsed.data.durations;
+    const distances = parsed.data.distances ?? durations.map((row) => row.map(() => null));
+    return { durations, distances };
+  } catch {
+    if (http.counter) http.counter.failures += 1;
+    return null;
+  }
+}
 
 export interface OrsRouteResult {
   found: boolean;
@@ -161,7 +253,52 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
       for (let i = 0; i + 1 < n; i += 1) wanted.push([i, i + 1]);
       if (n > 2) wanted.push([n - 1, 0]);
       let calls = 0;
+      const outstanding: [number, number][] = [];
+      const take = (i: number, j: number, foundMinutes: number, foundKm: number) => {
+        minutes[i]![j] = foundMinutes;
+        km[i]![j] = foundKm;
+        /* A road is not one-way at this scale; the reverse cell carries the same figure so the return leg reads the same. */
+        minutes[j]![i] = foundMinutes;
+        km[j]![i] = foundKm;
+      };
+
+      /* Every pair the cache already holds costs nothing. */
       for (const [i, j] of wanted) {
+        const cached = http.cache?.read(routeCacheKey(points[i]!, points[j]!, profile));
+        if (cached) take(i, j, cached.minutes, cached.km);
+        else outstanding.push([i, j]);
+      }
+
+      /*
+       * V10 §6 — one matrix request for everything still outstanding. A declined
+       * cell falls through to the direct endpoint; it is never read as "no road".
+       */
+      if (outstanding.length > 1 && n * n <= ORS_MATRIX_MAX_PAIRS && calls < maxElements) {
+        const grid = await computeOrsMatrix({ points, profile }, http);
+        calls += 1;
+        diagnostics.routeCalls += 1;
+        if (grid) {
+          const remaining: [number, number][] = [];
+          for (const [i, j] of outstanding) {
+            const seconds = grid.durations[i]?.[j] ?? null;
+            const distanceKm = grid.distances[i]?.[j] ?? null;
+            if (seconds === null || !Number.isFinite(seconds) || distanceKm === null || !Number.isFinite(distanceKm)) {
+              remaining.push([i, j]);
+              continue;
+            }
+            const foundMinutes = Math.round(seconds / 60);
+            const foundKm = Math.round(distanceKm * 10) / 10;
+            take(i, j, foundMinutes, foundKm);
+            diagnostics.routePairs += 1;
+            http.cache?.write(routeCacheKey(points[i]!, points[j]!, profile), { minutes: foundMinutes, km: foundKm });
+          }
+          outstanding.length = 0;
+          outstanding.push(...remaining);
+        }
+      }
+
+      /* Whatever is left, one direct request each, inside the element budget. */
+      for (const [i, j] of outstanding) {
         if (calls >= maxElements) {
           fail(ids[i]!, ids[j]!, 'budget_exhausted');
           continue;
@@ -171,11 +308,8 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
         diagnostics.routeCalls += 1;
         diagnostics.routePairs += 1;
         if (result.found && result.minutes !== null && result.km !== null) {
-          minutes[i]![j] = result.minutes;
-          km[i]![j] = result.km;
-          // A road is not one-way at this scale; the reverse cell carries the same figure so the return leg reads the same.
-          minutes[j]![i] = result.minutes;
-          km[j]![i] = result.km;
+          take(i, j, result.minutes, result.km);
+          http.cache?.write(routeCacheKey(points[i]!, points[j]!, profile), { minutes: result.minutes, km: result.km });
         } else {
           fail(ids[i]!, ids[j]!, result.reason ?? 'provider_error');
         }

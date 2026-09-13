@@ -206,6 +206,8 @@ export const compactTripDraftWireSchema = z.object({
   route: str(),
   /** §9 — the one to three experiences this trip is built around, by name. */
   signatures: z.array(str()).optional(),
+  /** V10 §11 — the other route this destination supports, and why this one won. One sentence, never a second itinerary. */
+  routeAlternative: str().optional(),
   /** §5/§6 — the window the model chose, only when the traveller asked it to choose. */
   window: z.object({ start: str(), end: str() }).optional(),
   /** What this season opens and closes for this trip. */
@@ -1030,6 +1032,11 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
     archetype: archetype.value,
     purpose: capped(root.purpose ?? root.travelerFit ?? root.summary, DRAFT_SOFT_PROSE_CAPS.purpose, 'purpose', touched) ?? capped(root.routeRationale, DRAFT_SOFT_PROSE_CAPS.purpose, 'purpose', touched) ?? 'A trip composed for this traveller.',
     routeRationale: capped(root.routeRationale ?? root.route, DRAFT_SOFT_PROSE_CAPS.routeRationale, 'routeRationale', touched) ?? capped(root.purpose, DRAFT_SOFT_PROSE_CAPS.routeRationale, 'routeRationale', touched) ?? 'Bases follow the direction of travel.',
+    /* V10 §11 — the other route this destination supports, when the model named one. Soft prose: clipped, never a refusal. */
+    ...(() => {
+      const alternative = capped(root.routeAlternative ?? root.alternativeRoute, DRAFT_SOFT_PROSE_CAPS.routeRationale, 'routeAlternative', touched);
+      return alternative ? { routeAlternative: alternative } : {};
+    })(),
     /*
      * The field that rejected a complete live draft for being sixteen
      * characters long. Trimmed like every other capped sentence now.

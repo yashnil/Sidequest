@@ -1,0 +1,182 @@
+[
+ {
+  "place_id": 377389928,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 1137488348,
+  "lat": "51.2536117",
+  "lon": "-115.8379548",
+  "category": "natural",
+  "type": "gorge",
+  "place_rank": 22,
+  "importance": 0.10667666666666664,
+  "addresstype": "gorge",
+  "name": "Johnston Canyon",
+  "display_name": "Johnston Canyon, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "gorge": "Johnston Canyon",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Johnston Canyon"
+  },
+  "boundingbox": [
+   "51.2464473",
+   "51.2590245",
+   "-115.8408040",
+   "-115.8344686"
+  ]
+ },
+ {
+  "place_id": 373525388,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 1115997891,
+  "lat": "51.2429289",
+  "lon": "-115.8390404",
+  "category": "amenity",
+  "type": "parking",
+  "place_rank": 30,
+  "importance": 0.00000999999999995449,
+  "addresstype": "amenity",
+  "name": "Johnston Canyon",
+  "display_name": "Johnston Canyon, Bow Valley Parkway, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "amenity": "Johnston Canyon",
+   "road": "Bow Valley Parkway",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "internet_access": "no"
+  },
+  "namedetails": {
+   "name": "Johnston Canyon"
+  },
+  "boundingbox": [
+   "51.2419933",
+   "51.2438152",
+   "-115.8399532",
+   "-115.8370512"
+  ]
+ },
+ {
+  "place_id": 373848867,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 11938089927,
+  "lat": "51.2458656",
+  "lon": "-115.8402372",
+  "category": "information",
+  "type": "board",
+  "place_rank": 30,
+  "importance": 0.00000999999999995449,
+  "addresstype": "information",
+  "name": "Johnston Canyon",
+  "display_name": "Johnston Canyon, Bow Valley Parkway, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "information": "Johnston Canyon",
+   "road": "Bow Valley Parkway",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "tourism": "information",
+   "board_type": "nature"
+  },
+  "namedetails": {
+   "name": "Johnston Canyon"
+  },
+  "boundingbox": [
+   "51.2458156",
+   "51.2459156",
+   "-115.8402872",
+   "-115.8401872"
+  ]
+ },
+ {
+  "place_id": 373555401,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 4110275069,
+  "lat": "51.2458626",
+  "lon": "-115.8407467",
+  "category": "tourism",
+  "type": "attraction",
+  "place_rank": 30,
+  "importance": 0.00000999999999995449,
+  "addresstype": "tourism",
+  "name": "Johnston canyon",
+  "display_name": "Johnston canyon, Bow Valley Parkway, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "tourism": "Johnston canyon",
+   "road": "Bow Valley Parkway",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "historic": "yes"
+  },
+  "namedetails": {
+   "name": "Johnston canyon"
+  },
+  "boundingbox": [
+   "51.2458126",
+   "51.2459126",
+   "-115.8407967",
+   "-115.8406967"
+  ]
+ },
+ {
+  "place_id": 375109725,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 4345129768,
+  "lat": "51.2468004",
+  "lon": "-115.8404148",
+  "category": "information",
+  "type": "board",
+  "place_rank": 30,
+  "importance": 0.00000999999999995449,
+  "addresstype": "information",
+  "name": "Johnston canyon",
+  "display_name": "Johnston canyon, Johnston Canyon Trail, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "information": "Johnston canyon",
+   "road": "Johnston Canyon Trail",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "tourism": "information",
+   "board_type": "history",
+   "check_date": "2022-09-01"
+  },
+  "namedetails": {
+   "name": "Johnston canyon"
+  },
+  "boundingbox": [
+   "51.2467504",
+   "51.2468504",
+   "-115.8404648",
+   "-115.8403648"
+  ]
+ }
+]

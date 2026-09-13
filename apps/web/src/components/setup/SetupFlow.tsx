@@ -221,6 +221,15 @@ export function SetupFlow({
    */
   const [placing, setPlacing] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  /**
+   * V10 §15 — what the canvas says when it will not draw.
+   *
+   * A destination whose only centre is its country's published point is not
+   * located, and framing it drew eastern Canada for a mountain region. The server
+   * says `reason: 'locating'` for exactly that case, and the caption then names
+   * the kind of thing it is still looking for instead of pretending.
+   */
+  const [locating, setLocating] = useState<string | null>(null);
   const placedFor = useRef<string | null>(null);
 
   const place = useCallback((text: string) => {
@@ -231,6 +240,7 @@ export function SetupFlow({
     void placeDestinationAction({ text: query })
       .then((result) => {
         if (placedFor.current !== query) return;
+        setLocating(!result.placed && result.reason === 'locating' && result.locating ? result.locating.kindLabel : null);
         if (result.placed) {
           const placed = result.placed;
           setDraft((current) =>
@@ -395,7 +405,7 @@ export function SetupFlow({
         </div>
 
         <aside className="min-w-0">
-          <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} scope={scope} />
+          <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} locating={locating} scope={scope} />
           {/*
             V8 — THE TRIP PORTRAIT. The same object the review later opens on:
             a compact set of facts the traveller has actually given, each

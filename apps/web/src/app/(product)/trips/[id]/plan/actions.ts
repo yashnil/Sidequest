@@ -62,6 +62,7 @@ import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { getProfile, getTrip, updateTripDates } from '@/lib/db/repository';
 import { destinationDivisionIds } from '@/lib/destinations/identity';
 import { resolveDestinationPhrase } from '@/lib/destinations/intent-resolution';
+import { destinationConceptCache } from '@/lib/destinations/concept-cache';
 import { runPreflight } from '@/lib/destinations/preflight';
 import { getProvisionalBoard } from '@/lib/db/provisional-repository';
 import { estimateRemainingForRun, runBucket } from '@/lib/db/timing-repository';
@@ -167,7 +168,9 @@ export async function resolveDestinationAction(tripId: string): Promise<ActionRe
      * the union of its parts, and a described part of a country ("rural
      * Japan") anchors on the country. Nothing here can answer "not a place".
      */
-    const { outcome, resolution, semantics } = await resolveDestinationPhrase({ text: query, resolver, now: new Date() });
+    const started = Date.now();
+    const { outcome, resolution, semantics } = await resolveDestinationPhrase({ text: query, resolver, now: new Date(), cache: destinationConceptCache() });
+    console.warn('destination placement timings (planning door)', { ms: Date.now() - started, cacheHit: outcome.timings.cacheHit, geocoderMs: outcome.timings.geocoderMs, geocoderCalls: outcome.timings.geocoderCalls, interpreterMs: outcome.timings.interpreterMs, type: semantics.type, scale: semantics.scale, centerBasis: semantics.centerBasis });
     saveResolution(tripId, resolution, outcome.graph, semantics);
 
     /**

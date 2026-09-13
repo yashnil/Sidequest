@@ -1,0 +1,38 @@
+[
+ {
+  "place_id": 375792809,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 1588913033,
+  "lat": "52.6644194",
+  "lon": "-117.8835156",
+  "category": "waterway",
+  "type": "waterfall",
+  "place_rank": 20,
+  "importance": 0.42234121106503436,
+  "addresstype": "waterfall",
+  "name": "Athabasca Falls",
+  "display_name": "Athabasca Falls, Improvement District No. 12, Alberta, Canada",
+  "address": {
+   "waterfall": "Athabasca Falls",
+   "county": "Improvement District No. 12",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "wikidata": "Q739181",
+   "wikipedia": "en:Athabasca Falls"
+  },
+  "namedetails": {
+   "name": "Athabasca Falls"
+  },
+  "boundingbox": [
+   "52.6643694",
+   "52.6644694",
+   "-117.8835656",
+   "-117.8834656"
+  ]
+ }
+]

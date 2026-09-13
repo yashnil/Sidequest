@@ -35,6 +35,16 @@ const TODAY_SPEC = ['**/live-world-today.spec.ts', '**/v9-today.spec.ts'];
  * V8 — the build lifecycle spec needs the same climate (it accepts a window on the review).
  */
 const TIMING_LOCK_SPEC = ['**/timing-lock.spec.ts', '**/build-lifecycle.spec.ts', '**/v8-experience.spec.ts', '**/destination-semantics.spec.ts'];
+/**
+ * V10 §20 — THE ONE SPEC THAT MAY SPEND MONEY, EXCLUDED FROM EVERY ORDINARY RUN.
+ *
+ * `v10-live.spec.ts` exists to be run *deliberately*, once, from
+ * `playwright.v10-live.config.ts` with the composer switched to a real provider.
+ * Every other configuration in this repository pins the composer to `fixture`, so
+ * running it here would cost nothing — and relying on that is exactly the shape
+ * of accident this list exists to prevent. Named, not trusted.
+ */
+const LIVE_SPEC = ['**/v10-live.spec.ts'];
 
 /**
  * The port is not defined here. `config.port` in the root package.json is the one
@@ -180,12 +190,12 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'light' },
-      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC],
     },
     {
       name: 'desktop-dark',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'dark' },
-      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC],
     },
     {
       // Chromium at an iPhone viewport. This verifies responsive layout and touch
@@ -195,7 +205,7 @@ export default defineConfig({
       // viewport is stated, for the reason above.
       name: 'mobile',
       use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: MOBILE },
-      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC],
     },
     /**
      * The tablet width, and only the responsive spec at it.

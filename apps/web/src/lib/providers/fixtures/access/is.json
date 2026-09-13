@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "asOf": "2026-09-12",
+  "constraints": [
+    {
+      "id": "is-f-roads-season",
+      "placeName": "Landmannalaugar",
+      "status": "restricted",
+      "requiredMode": "four_wheel_drive",
+      "reservationRequired": false,
+      "validFrom": "2026-06-20",
+      "validUntil": "2026-09-20",
+      "authority": "official_current",
+      "sourceName": "Vegagerðin (Icelandic Road and Coastal Administration) — highland road opening dates",
+      "sourceUrl": "https://www.road.is/travel-info/road-conditions-and-weather/",
+      "checkedAt": "2026-09-12",
+      "travellerNote": "The highland roads in are unsurfaced F-roads with river fords, open only in high summer and only to a high-clearance four-wheel drive; a hire car's insurance usually excludes them.",
+      "alternative": "A highland day-tour bus from the south coast reaches the same place without driving an F-road."
+    },
+    {
+      "id": "is-heimaey-ferry",
+      "placeName": "Heimaey",
+      "status": "restricted",
+      "requiredMode": "ferry",
+      "reservationRequired": true,
+      "authority": "operator",
+      "sourceName": "Herjólfur ferry timetable and booking",
+      "sourceUrl": "https://www.herjolfur.is/en",
+      "checkedAt": "2026-09-12",
+      "travellerNote": "The island is reached by the Landeyjahöfn ferry, and a car space has to be booked ahead in summer."
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+[
+ {
+  "place_id": 376819525,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 51970759,
+  "lat": "51.3961113",
+  "lon": "-116.4891525",
+  "category": "place",
+  "type": "village",
+  "place_rank": 19,
+  "importance": 0.1467181300068665,
+  "addresstype": "village",
+  "name": "Field",
+  "display_name": "Field, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, V0A 1G0, Canada",
+  "address": {
+   "village": "Field",
+   "city": "Area A (Kicking Horse/Kinbasket Lake)",
+   "county": "Columbia-Shuswap Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "postcode": "V0A 1G0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "wikidata": "Q3071515",
+   "wikipedia": "en:Field, British Columbia"
+  },
+  "namedetails": {
+   "name": "Field"
+  },
+  "boundingbox": [
+   "51.3761113",
+   "51.4161113",
+   "-116.5091525",
+   "-116.4691525"
+  ]
+ },
+ {
+  "place_id": 376779043,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 269762966,
+  "lat": "51.3953601",
+  "lon": "-116.4895833",
+  "category": "amenity",
+  "type": "post_office",
+  "place_rank": 30,
+  "importance": 0.000051463340199847675,
+  "addresstype": "amenity",
+  "name": "Field",
+  "display_name": "Field, 312, Wall Street, Field, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, V0A 1G0, Canada",
+  "address": {
+   "amenity": "Field",
+   "house_number": "312",
+   "road": "Wall Street",
+   "village": "Field",
+   "city": "Area A (Kicking Horse/Kinbasket Lake)",
+   "county": "Columbia-Shuswap Regional District",
+   "state": "British Columbia",
+   "ISO3166-2-lvl4": "CA-BC",
+   "postcode": "V0A 1G0",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "building": "public",
+   "operator": "Canada Post",
+   "opening_hours": "09:30-13:30",
+   "brand:wikidata": "Q1032001",
+   "brand:wikipedia": "en:Canada Post",
+   "operator:wikidata": "Q1032001"
+  },
+  "namedetails": {
+   "name": "Field",
+   "brand": "Canada Post"
+  },
+  "boundingbox": [
+   "51.3953088",
+   "51.3954113",
+   "-116.4896795",
+   "-116.4894871"
+  ]
+ }
+]

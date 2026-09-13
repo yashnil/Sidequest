@@ -66,7 +66,35 @@ export interface FeasibilityInput {
   requiredUnbooked?: readonly string[];
   /** The traveller's own driving ceiling, minutes, when they gave one. */
   maxDailyDriveMinutes?: number | null;
+  /**
+   * V10 §5 §16 — the quality compiler's blockers.
+   *
+   * A route-critical base nobody placed, a day that doubles back, a closed
+   * attraction on the plan, a gateway that does not work: each is a thing the
+   * plan cannot be called ready with, and each is already stated precisely by
+   * the compiler, so the report adopts its sentence rather than re-deriving one.
+   */
+  compilerIssues?: readonly { check: string; severity: 'blocker' | 'issue' | 'caution'; dayNumber?: number; detail: string; travellerNote?: string }[];
 }
+
+/** Which feasibility area a V10 compiler check belongs to. */
+const COMPILER_AREA: Record<string, FeasibilityArea> = {
+  route_order_coherent: 'transport',
+  route_completeness: 'transport',
+  route_critical_placed: 'bases',
+  destination_not_country: 'bases',
+  gateway_feasible: 'transport',
+  no_closed_stop: 'booking',
+  access_requirements_represented: 'booking',
+  jurisdiction_language: 'dates',
+  time_of_day_respected: 'time',
+  seasonal_feasibility: 'season',
+  no_duplicate_experience: 'time',
+  day_duration_plausible: 'time',
+  no_backtracking_claim: 'transport',
+  transport_semantics: 'transport',
+  signature_quality: 'bases',
+};
 
 const HARD_FAIL_NEED_LABELS = new Set<string>(STRENUOUS_BLOCKERS.map((need) => FUNCTIONAL_NEED_LABELS[need]));
 const HARD_FAIL_NEED_KEYS = new Set<string>(STRENUOUS_BLOCKERS);
@@ -220,6 +248,33 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
   if (input.contract && input.contract.party.dietaryHard.length > 0) {
     const daysWithoutNamedVenue = itinerary.days.filter((d) => d.items.some((i) => i.kind === 'meal') && !d.items.some((i) => i.kind === 'meal' && i.food?.stopKind === 'venue')).length;
     if (daysWithoutNamedVenue > 0) items.push({ area: 'food', severity: 'caution', detail: `Your dietary rules are absolute and ${daysWithoutNamedVenue} day(s) have no named venue yet; check kitchens before relying on them.` });
+  }
+
+  /*
+   * --- V10 §5 §16: the quality compiler's findings -------------------------------------
+   *
+   * A compiler blocker is not automatically `infeasible`. `infeasible` means
+   * "something you locked is contradicted", and an unplaced base or an unmeasured
+   * transfer contradicts nothing — it is a measurement the plan cannot do
+   * without, which is exactly `unresolved_major_dependency`. What *is* a blocker
+   * is a plan that cannot be carried out as written: a stop that is closed, a
+   * gateway that does not work, a lake the plan drives to that admits no cars.
+   */
+  const CANNOT_BE_DONE = new Set(['no_closed_stop', 'gateway_feasible', 'access_requirements_represented']);
+  for (const issue of input.compilerIssues ?? []) {
+    /*
+     * §19 — this list is what the traveller still has to decide, so a finding
+     * reaches it only when it was written for them. A compiler issue with no
+     * traveller note is an operator diagnostic ("Day 7's order could not be
+     * judged: three names unplaced") and belongs in the log and on
+     * `package.qualityCompiler`, not under "Ready". A blocker always comes
+     * through, because a plan that cannot be carried out has to say so whether or
+     * not anybody wrote a sentence for it.
+     */
+    if (issue.severity !== 'blocker' && !issue.travellerNote) continue;
+    const area = COMPILER_AREA[issue.check] ?? 'transport';
+    const severity: FeasibilityItem['severity'] = issue.severity === 'blocker' ? (CANNOT_BE_DONE.has(issue.check) ? 'blocker' : 'dependency') : 'caution';
+    items.push({ area, severity, ...(issue.dayNumber ? { dayNumber: issue.dayNumber } : {}), detail: issue.travellerNote ?? issue.detail });
   }
 
   // --- verdict ---------------------------------------------------------------------------

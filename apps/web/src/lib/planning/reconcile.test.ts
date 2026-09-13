@@ -235,13 +235,29 @@ describe('published hours on verified places', () => {
 });
 
 describe('the day itself', () => {
-  it('keeps the draft order, places meals at their hours, fills free time, and totals agree with the items', async () => {
+  /*
+   * V10 §7 — this test used to assert that the draft's order is kept verbatim.
+   * Orderland's four places are collinear outward from the base, so
+   * Base → Gamma → Alpha → Beta → Base drives to the far end, comes most of the
+   * way back, goes out again and returns: 51 km to cover 38 km of ground, a 34%
+   * detour. The order compiler now corrects exactly that before the legs are
+   * built, and records the reordering as a deviation. The "order is kept" case it
+   * used to cover is the test immediately below.
+   */
+  it('reorders a day whose draft order doubles back, and says it did', async () => {
     const world = fictionalWorld({ name: 'Orderland', center: { lat: 50, lng: 10 }, places: [{ name: 'Base Town', lat: 50, lng: 10, entityType: 'city' }, { name: 'Alpha', lat: 50.05, lng: 10.05 }, { name: 'Beta', lat: 50.1, lng: 10.1 }, { name: 'Gamma', lat: 50.15, lng: 10.15 }], basics: { startDate: '2026-05-01', endDate: '2026-05-03' } });
     const draft = draftOf({ bases: [{ id: 'b', name: 'Base Town', nights: 2 }], days: [{ base: 'b', anchors: [] }, { base: 'b', anchors: [{ name: 'Gamma', minutes: 60 }, { name: 'Alpha', minutes: 60, role: 'secondary' }, { name: 'Beta', minutes: 60, role: 'optional' }], meals: { breakfast: 'at the hotel', lunch: 'in Alpha', dinner: 'back in town' } }, { base: 'b', anchors: [] }] });
     const result = await reconcileTripDraft({ draft, context: world.context });
     const day = result.itinerary.days[1]!;
     const activities = day.items.filter((i) => i.kind === 'activity').map((i) => i.title);
-    expect(activities).toEqual(['Gamma', 'Alpha', 'Beta']);
+    /*
+     * Either monotonic chain is correct and both cover the same 39 km: out to the
+     * far end and back down, or up from the near end. What may not stand is the
+     * draft's Gamma → Alpha → Beta, which covers 51.
+     */
+    expect([['Alpha', 'Beta', 'Gamma'], ['Gamma', 'Beta', 'Alpha']]).toContainEqual(activities);
+    expect(result.deviations.some((d) => d.kind === 'day_order_corrected' && d.skeletonDayNumber === 2)).toBe(true);
+    expect(result.dayOrders.find((o) => o.dayNumber === 2)?.corrected).toBe(true);
     const meals = day.items.filter((i) => i.kind === 'meal');
     expect(meals.map((m) => m.title)).toEqual(['Breakfast — at the hotel', 'Lunch — in Alpha', 'Dinner — back in town']);
     expect(meals[1]!.startMinute).toBeGreaterThanOrEqual(11 * 60 + 30);
@@ -251,6 +267,28 @@ describe('the day itself', () => {
     expect(day.totals.activityMinutes).toBe(180);
     expect(day.totals.freeMinutes).toBe(day.items.filter((i) => i.kind === 'free_time').reduce((s, i) => s + i.durationMinutes, 0));
     expect(anchorCount(draft)).toBe(result.dispositions.length);
+  });
+
+  it('leaves a coherent draft order exactly as composed, and pins a stop with a stated hour', async () => {
+    const world = fictionalWorld({ name: 'Orderland', center: { lat: 50, lng: 10 }, places: [{ name: 'Base Town', lat: 50, lng: 10, entityType: 'city' }, { name: 'Alpha', lat: 50.05, lng: 10.05 }, { name: 'Beta', lat: 50.1, lng: 10.1 }, { name: 'Gamma', lat: 50.15, lng: 10.15 }], basics: { startDate: '2026-05-01', endDate: '2026-05-03' } });
+    const coherent = draftOf({ bases: [{ id: 'b', name: 'Base Town', nights: 2 }], days: [{ base: 'b', anchors: [] }, { base: 'b', anchors: [{ name: 'Alpha', minutes: 60 }, { name: 'Beta', minutes: 60 }, { name: 'Gamma', minutes: 60 }] }, { base: 'b', anchors: [] }] });
+    const kept = await reconcileTripDraft({ draft: coherent, context: world.context });
+    expect(kept.itinerary.days[1]!.items.filter((i) => i.kind === 'activity').map((i) => i.title)).toEqual(['Alpha', 'Beta', 'Gamma']);
+    expect(kept.deviations.some((d) => d.kind === 'day_order_corrected')).toBe(false);
+    expect(kept.dayOrders.find((o) => o.dayNumber === 2)?.report.verdict).toBe('coherent');
+
+    /*
+     * V10 §7 — and a deliberate decision outranks distance.
+     *
+     * Gamma is the farthest stop and is written for sunrise, so it goes first —
+     * both because the hour sort puts it there and because the order compiler
+     * then holds it there. The shortest chain that visits these three places
+     * ends at Gamma rather than starting there, and the compiler does not take
+     * it: it reorders only the two stops with no stated hour, around the pin.
+     */
+    const pinned = draftOf({ bases: [{ id: 'b', name: 'Base Town', nights: 2 }], days: [{ base: 'b', anchors: [] }, { base: 'b', anchors: [{ name: 'Alpha', minutes: 60 }, { name: 'Beta', minutes: 60 }, { name: 'Gamma', minutes: 60, timeOfDay: 'sunrise' }] }, { base: 'b', anchors: [] }] });
+    const held = await reconcileTripDraft({ draft: pinned, context: world.context });
+    expect(held.itinerary.days[1]!.items.filter((i) => i.kind === 'activity').map((i) => i.title)).toEqual(['Gamma', 'Beta', 'Alpha']);
   });
 
   it('a relocation day carries the transfer as a real leg to the new base and says so', async () => {

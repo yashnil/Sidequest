@@ -1,0 +1,110 @@
+[
+ {
+  "place_id": 286740190,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 59861511,
+  "lat": "63.4188166",
+  "lon": "-19.0054737",
+  "category": "place",
+  "type": "village",
+  "place_rank": 19,
+  "importance": 0.41904740004053065,
+  "addresstype": "village",
+  "name": "Vík",
+  "display_name": "Vík, Mýrdalshreppur, Suðurland, 870, Ísland",
+  "address": {
+   "village": "Vík",
+   "county": "Mýrdalshreppur",
+   "ISO3166-2-lvl6": "IS-MYR",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "870",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "is_in": "Iceland",
+   "wikidata": "Q685369",
+   "wikipedia": "is:Vík í Mýrdal",
+   "population": "740",
+   "population:date": "2026"
+  },
+  "namedetails": {
+   "name": "Vík",
+   "name:ar": "فيك أي ميردال",
+   "name:be": "Вік",
+   "name:ca": "Vík í Mýrdal",
+   "name:cs": "Vík í Mýrdal",
+   "name:cy": "Vík í Mýrdal",
+   "name:da": "Vík í Mýrdal",
+   "name:de": "Vík í Mýrdal",
+   "name:en": "Vik",
+   "name:es": "Vík í Mýrdal",
+   "name:eu": "Vík í Mýrdal",
+   "name:fr": "Vík í Mýrdal",
+   "name:ha": "Rayuwa a cikin Mýrdal",
+   "name:hu": "Vík í Mýrdal",
+   "name:hy": "Վիք",
+   "name:id": "Vikí Mýrdal",
+   "name:is": "Vík",
+   "name:it": "Vík í Mýrdal",
+   "name:ja": "ヴィーク",
+   "name:ko": "비크이뮈르달",
+   "name:lb": "Vík í Mýrdal",
+   "name:lt": "Vikas",
+   "name:nb": "Vík í Mýrdal",
+   "name:nl": "Vík í Mýrdal",
+   "name:os": "Вик",
+   "name:pl": "Vík í Mýrdal",
+   "name:pt": "Vík",
+   "name:ru": "Вик",
+   "name:sv": "Vík í Mýrdal",
+   "name:tr": "Vík í Mýrdal",
+   "name:uk": "Вік",
+   "name:vo": "Vík í Mýrdal",
+   "name:zh": "维克",
+   "alt_name": "Vík í Mýrdal"
+  },
+  "boundingbox": [
+   "63.3988166",
+   "63.4388166",
+   "-19.0254737",
+   "-18.9854737"
+  ]
+ },
+ {
+  "place_id": 274241956,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 507596390,
+  "lat": "65.6704990",
+  "lon": "-19.5939598",
+  "category": "landuse",
+  "type": "farmyard",
+  "place_rank": 24,
+  "importance": 0.08000999999999997,
+  "addresstype": "farmyard",
+  "name": "Vík",
+  "display_name": "Vík, Skagafjörður, Norðurland vestra, Ísland",
+  "address": {
+   "farmyard": "Vík",
+   "county": "Skagafjörður",
+   "ISO3166-2-lvl6": "IS-SKR",
+   "state_district": "Norðurland vestra",
+   "ISO3166-2-lvl5": "IS-5",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Vík"
+  },
+  "boundingbox": [
+   "65.6701476",
+   "65.6708990",
+   "-19.5949799",
+   "-19.5929843"
+  ]
+ }
+]

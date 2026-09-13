@@ -1,0 +1,76 @@
+[
+ {
+  "place_id": 285808668,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 11157738,
+  "lat": "63.5660204",
+  "lon": "-19.2955016",
+  "category": "natural",
+  "type": "glacier",
+  "place_rank": 22,
+  "importance": 0.2733828520337679,
+  "addresstype": "glacier",
+  "name": "Sólheimajökull",
+  "display_name": "Sólheimajökull, Mýrdalshreppur, Suðurland, Ísland",
+  "address": {
+   "glacier": "Sólheimajökull",
+   "county": "Mýrdalshreppur",
+   "ISO3166-2-lvl6": "IS-MYR",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "wikidata": "Q1405353",
+   "wikipedia": "de:Sólheimajökull"
+  },
+  "namedetails": {
+   "name": "Sólheimajökull"
+  },
+  "boundingbox": [
+   "63.5348916",
+   "63.5975790",
+   "-19.3569838",
+   "-19.2588442"
+  ]
+ },
+ {
+  "place_id": 285794029,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 4547791197,
+  "lat": "63.5374884",
+  "lon": "-19.3584396",
+  "category": "tourism",
+  "type": "attraction",
+  "place_rank": 30,
+  "importance": 0.00000999999999995449,
+  "addresstype": "tourism",
+  "name": "Solheimajökull",
+  "display_name": "Solheimajökull, Sólheimajökulsvegur, Mýrdalshreppur, Suðurland, Ísland",
+  "address": {
+   "tourism": "Solheimajökull",
+   "road": "Sólheimajökulsvegur",
+   "county": "Mýrdalshreppur",
+   "ISO3166-2-lvl6": "IS-MYR",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "tourism": "attraction"
+  },
+  "namedetails": {
+   "name": "Solheimajökull"
+  },
+  "boundingbox": [
+   "63.5374384",
+   "63.5375384",
+   "-19.3584896",
+   "-19.3583896"
+  ]
+ }
+]

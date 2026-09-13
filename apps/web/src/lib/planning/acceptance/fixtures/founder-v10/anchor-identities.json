@@ -1,0 +1,273 @@
+[
+ {
+  "name": "Hallgrímskirkja",
+  "placeId": "relation/6184378",
+  "provider": "geocoder",
+  "providerRef": "relation/6184378",
+  "method": "geocoder",
+  "coordinates": {
+   "lat": 64.1417951,
+   "lng": -21.9267103
+  }
+ },
+ {
+  "name": "National Museum of Iceland",
+  "placeId": "google-places:ChIJr6HBrjEL1kgRlTxmCyjm_tg",
+  "provider": "google-places",
+  "providerRef": "ChIJr6HBrjEL1kgRlTxmCyjm_tg",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.14161469999999,
+   "lng": -21.948577999999998
+  },
+  "placeClass": "business_venue",
+  "confidence": "exact"
+ },
+ {
+  "name": "Sky Lagoon",
+  "placeId": "google-places:ChIJpyUozoYL1kgREGm6RWPXuio",
+  "provider": "google-places",
+  "providerRef": "ChIJpyUozoYL1kgREGm6RWPXuio",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.1164891,
+   "lng": -21.9462908
+  },
+  "placeClass": "area",
+  "confidence": "exact"
+ },
+ {
+  "name": "Seljalandsfoss",
+  "placeId": "google-places:ChIJFSTv6K0e10gRjRcJUiDmAa4",
+  "provider": "google-places",
+  "providerRef": "ChIJFSTv6K0e10gRjRcJUiDmAa4",
+  "method": "places",
+  "coordinates": {
+   "lat": 63.61562319999999,
+   "lng": -19.988568800000003
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Skógafoss",
+  "placeId": "google-places:ChIJFYylOXY710gRSHn-zR_HYA8",
+  "provider": "google-places",
+  "providerRef": "ChIJFYylOXY710gRSHn-zR_HYA8",
+  "method": "places",
+  "coordinates": {
+   "lat": 63.5320523,
+   "lng": -19.5113706
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Sólheimajökull",
+  "placeId": "google-places:ChIJ-2hECPcw10gRFZCR8fWgs48",
+  "provider": "google-places",
+  "providerRef": "ChIJ-2hECPcw10gRFZCR8fWgs48",
+  "method": "places",
+  "coordinates": {
+   "lat": 63.5569444,
+   "lng": -19.302777799999998
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Reynisfjara black sand beach",
+  "placeId": "google-places:ChIJeWH3JQBJ10gRVb72hFNrboQ",
+  "provider": "google-places",
+  "providerRef": "ChIJeWH3JQBJ10gRVb72hFNrboQ",
+  "method": "places",
+  "coordinates": {
+   "lat": 63.404273399999994,
+   "lng": -19.045125
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Dyrhólaey",
+  "placeId": "google-places:ChIJmdOPSLJJ10gRcudiVCXKJSc",
+  "provider": "google-places",
+  "providerRef": "ChIJmdOPSLJJ10gRcudiVCXKJSc",
+  "method": "places",
+  "coordinates": {
+   "lat": 63.4046799,
+   "lng": -19.1185522
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Fjaðrárgljúfur canyon",
+  "placeId": "google-places:ChIJ3ZFCWfDl0EgRvbVlccHsIKQ",
+  "provider": "google-places",
+  "providerRef": "ChIJ3ZFCWfDl0EgRvbVlccHsIKQ",
+  "method": "places",
+  "coordinates": {
+   "lat": 63.771279,
+   "lng": -18.1718159
+  },
+  "placeClass": "open_ground",
+  "confidence": "probable"
+ },
+ {
+  "name": "Diamond Beach",
+  "placeId": "google-places:ChIJ8wb7pBnXz0gRWoQH-WXoAkI",
+  "provider": "google-places",
+  "providerRef": "ChIJ8wb7pBnXz0gRWoQH-WXoAkI",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.04433399999999,
+   "lng": -16.177662200000004
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Jökulsárlón glacier lagoon",
+  "placeId": "google-places:ChIJGTg61-zWz0gRqUYB4VnJBc0",
+  "provider": "google-places",
+  "providerRef": "ChIJGTg61-zWz0gRqUYB4VnJBc0",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.0784458,
+   "lng": -16.2305536
+  },
+  "placeClass": "open_ground",
+  "confidence": "probable"
+ },
+ {
+  "name": "Vestrahorn",
+  "placeId": "google-places:ChIJ3T8ZQouqz0gR7ONHAE2AO2o",
+  "provider": "google-places",
+  "providerRef": "ChIJ3T8ZQouqz0gR7ONHAE2AO2o",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.27333329999999,
+   "lng": -15.0086111
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Höfn harbour",
+  "placeId": "google-places:ChIJ2XODklqsz0gRTOfALQlsXSc",
+  "provider": "google-places",
+  "providerRef": "ChIJ2XODklqsz0gRTOfALQlsXSc",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.2486579,
+   "lng": -15.2045182
+  },
+  "placeClass": "area",
+  "confidence": "probable"
+ },
+ {
+  "name": "Skaftafell",
+  "placeId": "google-places:ChIJW9FfGd010EgR0DTMMAji6no",
+  "provider": "google-places",
+  "providerRef": "ChIJW9FfGd010EgR0DTMMAji6no",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.070414,
+   "lng": -16.9751755
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Kerið crater",
+  "placeId": "google-places:ChIJV_L2VbeL1kgRB9kuweBEWlE",
+  "provider": "google-places",
+  "providerRef": "ChIJV_L2VbeL1kgRB9kuweBEWlE",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.04127849999999,
+   "lng": -20.8851466
+  },
+  "placeClass": "open_ground",
+  "confidence": "exact"
+ },
+ {
+  "name": "Þingvellir National Park",
+  "placeId": "google-places:ChIJe2kT-x-B1kgR8mKSB4tsdWs",
+  "provider": "google-places",
+  "providerRef": "ChIJe2kT-x-B1kgR8mKSB4tsdWs",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.2821725,
+   "lng": -21.076449099999998
+  },
+  "placeClass": "business_venue",
+  "confidence": "probable"
+ },
+ {
+  "name": "Geysir geothermal area",
+  "placeId": "google-places:ChIJB58RLpqj1kgR9RH8tN5V0qQ",
+  "provider": "google-places",
+  "providerRef": "ChIJB58RLpqj1kgR9RH8tN5V0qQ",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.316681,
+   "lng": -20.299899999999997
+  },
+  "placeClass": "controlled_site",
+  "confidence": "probable"
+ },
+ {
+  "name": "Gullfoss",
+  "placeId": "google-places:ChIJybZFr3Sl1kgRARZBC9tHYyw",
+  "provider": "google-places",
+  "providerRef": "ChIJybZFr3Sl1kgRARZBC9tHYyw",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.3270716,
+   "lng": -20.1199478
+  },
+  "placeClass": "open_ground",
+  "confidence": "probable"
+ },
+ {
+  "name": "Hveragerði geothermal park",
+  "placeId": "google-places:ChIJq0DHA8pm1kgRy1kG7UI84LM",
+  "provider": "google-places",
+  "providerRef": "ChIJq0DHA8pm1kgRy1kG7UI84LM",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.00099349999999,
+   "lng": -21.187104299999998
+  },
+  "placeClass": "controlled_site",
+  "confidence": "probable"
+ },
+ {
+  "name": "Sun Voyager sculpture",
+  "placeId": "google-places:ChIJz-YMCc501kgRqKacmXs6e9g",
+  "provider": "google-places",
+  "providerRef": "ChIJz-YMCc501kgRqKacmXs6e9g",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.1476306,
+   "lng": -21.9222847
+  },
+  "placeClass": "business_venue",
+  "confidence": "probable"
+ },
+ {
+  "name": "Grandi harbour district",
+  "placeId": "google-places:ChIJex3KjtkL1kgRrqg6Owa33RA",
+  "provider": "google-places",
+  "providerRef": "ChIJex3KjtkL1kgRrqg6Owa33RA",
+  "method": "places",
+  "coordinates": {
+   "lat": 64.15455299999999,
+   "lng": -21.94408
+  },
+  "placeClass": "area",
+  "confidence": "probable"
+ }
+]

@@ -1,0 +1,38 @@
+[
+ {
+  "place_id": 376787904,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 356861148,
+  "lat": "51.4149473",
+  "lon": "-116.2482224",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.4073897729372878,
+  "addresstype": "lake",
+  "name": "Lake Agnes",
+  "display_name": "Lake Agnes, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "lake": "Lake Agnes",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "natural": "water",
+   "wikidata": "Q581838"
+  },
+  "namedetails": {
+   "name": "Lake Agnes"
+  },
+  "boundingbox": [
+   "51.4134759",
+   "51.4163250",
+   "-116.2511752",
+   "-116.2442526"
+  ]
+ }
+]

@@ -7,7 +7,8 @@ import {
   countryFacts,
   countryPointFor,
   describeIntentGraph,
-  destinationSemanticsSchema,
+  centreIsStandIn,
+  destinationConceptSchema,
   diagonalKm,
   evidenceSufficient,
   extentOfParts,
@@ -21,7 +22,10 @@ import {
   semanticTypeOfKind,
   type ConfidenceSignal,
   type DestinationCandidate,
+  type CenterBasis,
   type DestinationConcept,
+  type InterpretedConcept,
+  type JurisdictionRef,
   type DestinationIntentGraph,
   type DestinationResolution,
   type DestinationSemantics,
@@ -80,7 +84,19 @@ export interface GraphResolutionOutcome {
   semantics: DestinationSemantics;
   /** V8.1 — the gate-approved rows per part, best first (empty when nothing was compatible). */
   approved: Map<string, RankedCandidate[]>;
-  interpretation: { concept: DestinationConcept | null; source: string; modelCalls: number } | null;
+  interpretation: { concept: InterpretedConcept | null; source: string; modelCalls: number } | null;
+  /**
+   * V10 §15 — WHERE THE SETUP SCREEN'S WAIT WENT.
+   *
+   * The founder's Canadian Rockies setup rendered eastern Canada while it
+   * waited, and nothing anywhere recorded how long it waited or on what. These
+   * are wall-clock milliseconds, attributed to the two things that can take
+   * time: geocoder round trips and the one bounded interpreter call. Overlapping
+   * awaits count their own wall time, so `geocoderMs` is the time the *slowest*
+   * parallel wave took rather than the sum — which is the figure a screen budget
+   * is actually set against.
+   */
+  timings: { totalMs: number; geocoderMs: number; interpreterMs: number; geocoderCalls: number; cacheHit: boolean };
 }
 
 const MAX_GEOCODER_CALLS = 3;
@@ -99,6 +115,19 @@ function resolutionFromCandidate(candidate: DestinationCandidate, source: Intent
     candidateId: candidate.id,
     ...(candidate.timeZones[0] ? { timeZone: candidate.timeZones[0] } : {}),
   };
+}
+
+/**
+ * Did the traveller write the country's own name, rather than a demonym
+ * Sidequest inferred one from? Generic: it compares the phrase with the
+ * country's published name and its aliases, and knows no place specifically.
+ */
+function countryNamedInPhrase(rawText: string, countryCode: string | undefined): boolean {
+  if (!countryCode) return false;
+  const facts = countryFacts(countryCode);
+  if (!facts) return false;
+  const names = [facts.name, ...((facts as { aliases?: readonly string[] }).aliases ?? [])];
+  return names.some((name) => name.length > 2 && new RegExp(`(^|[^\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu').test(rawText));
 }
 
 /** The reference answer for a country child: its published point, no box. */
@@ -177,6 +206,12 @@ export async function resolveIntentGraph(input: {
   const partResolutions = new Map<string, DestinationResolution>();
   const approved = new Map<string, RankedCandidate[]>();
   const refused: DestinationSemantics['refused'] = [];
+  /** V10 §2 — first-level divisions a provider published for something that placed, by ISO 3166-2 code. */
+  const subnational = new Map<string, { name: string; countryCode: string }>();
+  const noteDivision = (candidate: DestinationCandidate): void => {
+    if (!candidate.regionCode || !candidate.regionName || !candidate.countryCode) return;
+    if (!subnational.has(candidate.regionCode)) subnational.set(candidate.regionCode, { name: candidate.regionName, countryCode: candidate.countryCode });
+  };
   let calls = 0;
   const budget = input.maxGeocoderCalls ?? MAX_GEOCODER_CALLS;
 
@@ -185,14 +220,20 @@ export async function resolveIntentGraph(input: {
     if (reference && child.kind === 'country') resolutions.set(child.id, reference);
   }
 
+  /** V10 §15 — the wall time the slowest outstanding geocoder wave took, and the interpreter's own. */
+  const clock = { geocoderMs: 0, interpreterMs: 0 };
+  const startedMs = Date.now();
   const ask = async (query: string): Promise<DestinationResolution | null> => {
     if (!input.resolver) return null;
     calls += 1;
+    const from = Date.now();
     try {
       return await input.resolver.resolve({ query, now: input.now });
     } catch {
       /* A provider that failed is not a place that does not exist; the part stays as it was. */
       return null;
+    } finally {
+      clock.geocoderMs = Math.max(clock.geocoderMs, Date.now() - from);
     }
   };
 
@@ -236,18 +277,23 @@ export async function resolveIntentGraph(input: {
       ranked.filter((r) => r.assessment.verdict !== 'incompatible'),
     );
     leads.set(child.id, chosen);
-    if (chosen && (evidenceSufficient(child, chosen) || chosen.assessment.verdict === 'compatible')) resolutions.set(child.id, resolutionFromCandidate(chosen.candidate));
+    if (chosen && (evidenceSufficient(child, chosen) || chosen.assessment.verdict === 'compatible')) {
+      resolutions.set(child.id, resolutionFromCandidate(chosen.candidate));
+      noteDivision(chosen.candidate);
+    }
   }
 
   /* --- the world-model tier, for one region-like part the evidence could not settle --------------- */
   let interpretation: GraphResolutionOutcome['interpretation'] = null;
   const conceptParts: SemanticPart[] = [];
   const conceptGateways: SemanticGateway[] = [];
-  let concept: DestinationConcept | null = null;
+  let concept: InterpretedConcept | null = null;
   const only = input.graph.children.length === 1 ? input.graph.children[0]! : null;
   if (only && input.interpreter !== null && interpretationWorthwhile(only, partResolutions.get(only.id), leads.get(only.id) ?? null)) {
     const evidence = (partResolutions.get(only.id)?.candidates ?? []).slice(0, 5).map((c) => `${c.displayName} (${c.providerClass?.category ?? c.entityType}${c.countryCode ? `, ${c.countryCode}` : ''})`);
+    const interpreterStartedMs = Date.now();
     const outcome = await interpretDestinationConcept({ text: input.graph.rawText, graph: input.graph, evidence, ...(input.interpreter !== undefined ? { interpreter: input.interpreter } : {}) });
+    clock.interpreterMs = Date.now() - interpreterStartedMs;
     interpretation = { concept: outcome.concept, source: outcome.source, modelCalls: outcome.modelCalls };
     concept = outcome.concept && outcome.concept.isPlace ? outcome.concept : null;
     if (concept) {
@@ -256,27 +302,41 @@ export async function resolveIntentGraph(input: {
       const own = partResolutions.get(only.id);
       const reRanked = own ? rankCandidates(only, own.candidates, expectation) : [];
       const settled = reRanked.find((r) => r.assessment.verdict === 'compatible' && evidenceSufficient(only, r)) ?? null;
-      if (settled) resolutions.set(only.id, resolutionFromCandidate(settled.candidate));
+      if (settled) {
+        resolutions.set(only.id, resolutionFromCandidate(settled.candidate));
+        noteDivision(settled.candidate);
+      }
       approved.set(only.id, reRanked.filter((r) => r.assessment.verdict !== 'incompatible'));
 
-      /* Names → evidence: each area and gateway is geocoded and gated. */
+      /*
+       * Names → evidence: each area and gateway is geocoded and gated.
+       *
+       * V10 §15 — IN PARALLEL. These are six independent questions about six
+       * different names, and asking them one `await` at a time made the setup
+       * screen wait for the sum of six round trips before it could frame a map.
+       * Nothing here depends on anything else here; the only shared state is the
+       * call budget, which is allocated before the requests rather than counted
+       * during them.
+       */
       const single = concept.countries.length === 1 ? countryFacts(concept.countries[0]!) : null;
       const qualify = (name: string) => (single && !new RegExp(`\\b${single.name}\\b`, 'i').test(name) ? `${name}, ${single.name}` : name);
-      let extra = 0;
-      for (const area of concept.representativeAreas.slice(0, 4)) {
-        if (!input.resolver || extra >= MAX_INTERPRETATION_CALLS - 2) break;
-        extra += 1;
-        const answer = await ask(qualify(area));
+      const areaNames = input.resolver ? concept.representativeAreas.slice(0, MAX_INTERPRETATION_CALLS - 2) : [];
+      const gatewayNames = input.resolver ? concept.gateways.slice(0, 2) : [];
+      const [areaAnswers, gatewayAnswers] = await Promise.all([
+        Promise.all(areaNames.map((area) => ask(qualify(area)))),
+        Promise.all(gatewayNames.map((gateway) => ask(gateway))),
+      ]);
+      for (const [index, area] of areaNames.entries()) {
+        const answer = areaAnswers[index];
         if (!answer) continue;
         const ranked = rankCandidates({ kind: 'named_place', label: area, ...(single ? { countryCode: single.code } : {}) }, answer.candidates, { countries: concept.countries });
         const hit = ranked.find((r) => r.assessment.verdict !== 'incompatible' && !r.assessment.semantics.pointLike);
         if (!hit) continue;
+        noteDivision(hit.candidate);
         conceptParts.push({ label: hit.candidate.displayName, center: hit.candidate.center, ...(hit.candidate.bounds && hit.assessment.semantics.hasExtent ? { bounds: hit.candidate.bounds } : {}), source: 'geocoder', featureType: hit.candidate.entityType, ...(hit.candidate.countryCode ? { countryCode: hit.candidate.countryCode } : {}) });
       }
-      for (const gateway of concept.gateways.slice(0, 2)) {
-        if (!input.resolver || extra >= MAX_INTERPRETATION_CALLS) break;
-        extra += 1;
-        const answer = await ask(gateway);
+      for (const [index, gateway] of gatewayNames.entries()) {
+        const answer = gatewayAnswers[index];
         const ranked = answer ? rankCandidates({ kind: 'city', label: gateway }, answer.candidates, { countries: concept.countries.length > 0 ? concept.countries : undefined }) : [];
         const hit = ranked.find((r) => r.assessment.verdict === 'compatible' && r.assessment.semantics.type === 'settlement');
         conceptGateways.push(hit ? { label: hit.candidate.displayName, center: hit.candidate.center, ...(hit.candidate.countryCode ? { countryCode: hit.candidate.countryCode } : {}), source: 'geocoder' } : { label: gateway, source: 'interpretation' });
@@ -309,10 +369,39 @@ export async function resolveIntentGraph(input: {
     }
   }
 
+  /*
+   * V10 §2 — THE COUNTRY REFERENCE IS A STAND-IN, NOT AN IDENTITY.
+   *
+   * Filling an unresolved part from its containing country is right for a
+   * *country* part and catastrophic for a *region* part: "the Canadian
+   * Rockies" came out of here as Canada, typed `country` at `country` scale
+   * with `high` confidence, centred on Canada's published point in the east.
+   * The point may still stand in — something has to anchor a weather lookup —
+   * but which parts are standing in is recorded, so the concept keeps the
+   * phrase's own meaning and every consumer can read the centre for what it is.
+   */
+  const standIns = new Set<string>();
   for (const child of input.graph.children) {
     if (resolutions.has(child.id)) continue;
     const reference = referenceResolution(child);
-    if (reference) resolutions.set(child.id, reference);
+    if (!reference) continue;
+    resolutions.set(child.id, reference);
+    /*
+     * V10 §2 — WHOSE COUNTRY IS IT?
+     *
+     * Filling a part from its containing country is honest exactly when the
+     * traveller *named* that country. "rural Japan", "northern Italy" and "the
+     * steppes of Kyrgyzstan" all put the country in the phrase: nobody publishes
+     * an extent for any of them, the country is the frame the traveller asked
+     * for, and the country's point is its own anchor.
+     *
+     * "the Canadian Rockies" and "the Scottish Highlands" do not. Their country
+     * came from a demonym Sidequest read, and adopting its point produced a
+     * country-wide map centred on a city a thousand miles from the destination.
+     * That is a stand-in, and it is recorded as one.
+     */
+    if (child.kind === 'country' || countryNamedInPhrase(input.graph.rawText, child.countryCode)) continue;
+    standIns.add(child.id);
   }
   let graph = attachIntentResolutions(input.graph, resolutions);
   if (concept && concept.countries.length > 0 && only) {
@@ -320,8 +409,16 @@ export async function resolveIntentGraph(input: {
     const countries = [...new Set([...graph.countries, ...concept.countries])];
     graph = { ...graph, countries, crossBorder: countries.length > 1 };
   }
-  const semantics = semanticsFor({ graph, leads, concept, parts: conceptParts, gateways: conceptGateways, refused, interpretationSource: interpretation?.source ?? null });
-  return { graph, partResolutions, geocoderCalls: calls, semantics, approved, interpretation };
+  const semantics = semanticsFor({ graph, leads, concept, parts: conceptParts, gateways: conceptGateways, refused, interpretationSource: interpretation?.source ?? null, standIns, subnational });
+  return {
+    graph,
+    partResolutions,
+    geocoderCalls: calls,
+    semantics,
+    approved,
+    interpretation,
+    timings: { totalMs: Date.now() - startedMs, geocoderMs: clock.geocoderMs, interpreterMs: clock.interpreterMs, geocoderCalls: calls, cacheHit: false },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -381,11 +478,15 @@ function breadthOfScale(scale: GeographicScale, countries: number): DestinationC
 function semanticsFor(input: {
   graph: DestinationIntentGraph;
   leads: Map<string, RankedCandidate | null>;
-  concept: DestinationConcept | null;
+  concept: InterpretedConcept | null;
   parts: SemanticPart[];
   gateways: SemanticGateway[];
   refused: DestinationSemantics['refused'];
   interpretationSource: string | null;
+  /** V10 §2 — child ids whose only resolution is the containing country's point, standing in. */
+  standIns: ReadonlySet<string>;
+  /** V10 §2 — first-level divisions a provider named, by ISO 3166-2 code. */
+  subnational: Map<string, { name: string; countryCode: string }>;
 }): DestinationSemantics {
   const { graph, concept } = input;
   const only = graph.children.length === 1 ? graph.children[0]! : null;
@@ -397,6 +498,7 @@ function semanticsFor(input: {
   let type: GeographicSemanticType;
   let scale: GeographicScale;
   let center: DestinationSemantics['center'];
+  let centerBasis: CenterBasis = 'none';
   let extent: DestinationSemantics['extent'];
   let confidence: DestinationSemantics['confidence'];
   let parts: SemanticPart[] = [];
@@ -407,6 +509,7 @@ function semanticsFor(input: {
     parts = resolvedParts;
     const box = graph.envelope;
     center = box?.center;
+    centerBasis = center ? 'union_of_parts' : 'none';
     extent = box?.bounds ? { bounds: box.bounds, source: 'union_of_parts' } : undefined;
     scale = extent ? scaleOfDiagonalKm(diagonalKm(extent.bounds)) : graph.crossBorder ? 'country' : 'region';
     confidence = graph.confidence;
@@ -415,6 +518,7 @@ function semanticsFor(input: {
     type = concept.type;
     scale = concept.scale;
     center = only.resolution.center;
+    centerBasis = 'interpreted_parts';
     extent = only.resolution.bounds ? { bounds: only.resolution.bounds, source: 'interpreted_parts' } : undefined;
     parts = input.parts;
     confidence = parts.length >= 2 ? 'medium' : 'low';
@@ -423,20 +527,61 @@ function semanticsFor(input: {
   } else if (only.resolution) {
     const lead = input.leads.get(only.id) ?? null;
     const sem = lead?.assessment.semantics;
-    type = concept?.type ?? (only.kind === 'vague_region' ? 'informal_region' : only.resolution.source === 'reference' ? 'country' : sem?.type ?? semanticTypeOfKind(only.kind));
+    /*
+     * V10 §2 — A COUNTRY STAND-IN IS NOT A COUNTRY DESTINATION.
+     *
+     * `standIn` means nothing placed this part and the loop above filled it
+     * from the containing country's published point. Before V10 that made the
+     * concept a country at country scale with `high` confidence, so "the
+     * Canadian Rockies" became Canada centred in Ontario and the canvas framed
+     * 800 km around it. The point may still anchor a climate lookup, but the
+     * *identity* stays the phrase's own — and the confidence and the centre's
+     * basis both say plainly that nobody has placed this yet.
+     */
+    const standIn = input.standIns.has(only.id);
+    const phraseType = only.kind === 'vague_region' ? 'informal_region' : semanticTypeOfKind(only.kind);
+    /*
+     * A part answered only by the country reference keeps the phrase's own
+     * meaning unless the phrase *is* a country. "the steppes of Kyrgyzstan" is
+     * steppe, anchored at Kyrgyzstan; it is not Kyrgyzstan. Whether the country
+     * was named or inferred changes the confidence and the centre's basis — not
+     * what kind of thing the traveller asked for.
+     */
+    const referenceOnly = only.resolution.source === 'reference' && only.kind !== 'country';
+    type = concept?.type ?? (standIn || referenceOnly ? phraseType : only.resolution.source === 'reference' ? 'country' : sem?.type ?? semanticTypeOfKind(only.kind));
     /* The phrase's own shape wins over a row's class for the kind of thing: a mountain range answered by a region row is still mountain country. */
     if (isRegionKind(only.kind) && only.kind !== 'admin_region' && only.kind !== 'country' && (type === 'admin_area' || type === 'protected_area' || type === 'natural_region') && semanticTypeOfKind(only.kind) !== 'informal_region') type = semanticTypeOfKind(only.kind);
     const km = only.resolution.bounds ? diagonalKm(only.resolution.bounds) : null;
-    scale = only.kind === 'vague_region' ? 'region' : only.resolution.source === 'reference' ? 'country' : sem?.hasExtent && km !== null ? scaleOfDiagonalKm(km) : concept?.scale ?? (sem?.scale ?? 'settlement');
+    scale =
+      standIn || referenceOnly
+        ? scaleOfPhrase(only.kind, concept?.scale)
+        : only.resolution.source === 'reference'
+          ? 'country'
+          : sem?.hasExtent && km !== null
+            ? scaleOfDiagonalKm(km)
+            : concept?.scale ?? (sem?.scale ?? 'settlement');
     center = only.resolution.center;
-    extent = only.resolution.bounds && (sem?.hasExtent ?? true) ? { bounds: only.resolution.bounds, source: 'published' } : undefined;
-    parts = resolvedParts;
-    confidence = only.resolution.source === 'reference' ? 'high' : lead?.assessment.verdict === 'compatible' ? (lead.candidate.confidence.level === 'high' ? 'high' : 'medium') : 'low';
-    evidence.push({ source: only.resolution.source === 'reference' ? 'reference' : 'geocoder', note: `${only.resolution.label}${only.resolution.featureType ? ` (${only.resolution.featureType.replace(/_/g, ' ')})` : ''}${extent ? ', with a published extent' : ''}.` });
+    centerBasis = standIn
+      ? 'country_reference'
+      : only.resolution.source === 'reference'
+        ? 'country_qualified'
+        : only.resolution.bounds && (sem?.hasExtent ?? true)
+          ? 'published'
+          : 'lead_row';
+    extent = !standIn && only.resolution.bounds && (sem?.hasExtent ?? true) ? { bounds: only.resolution.bounds, source: 'published' } : undefined;
+    parts = standIn ? [] : resolvedParts;
+    confidence = standIn ? 'low' : only.resolution.source === 'reference' ? 'high' : lead?.assessment.verdict === 'compatible' ? (lead.candidate.confidence.level === 'high' ? 'high' : 'medium') : 'low';
+    if (standIn) {
+      const countryName = only.countryCode ? countryFacts(only.countryCode)?.name ?? null : null;
+      evidence.push({ source: 'traveller', note: `Nothing has placed ${graph.travellerLabel} yet${countryName ? `; the plan is anchored loosely in ${countryName} until something does` : ''}.` });
+    } else {
+      evidence.push({ source: only.resolution.source === 'reference' ? 'reference' : 'geocoder', note: `${only.resolution.label}${only.resolution.featureType ? ` (${only.resolution.featureType.replace(/_/g, ' ')})` : ''}${extent ? ', with a published extent' : ''}.` });
+    }
     if (concept) evidence.push({ source: 'interpretation', note: concept.note || `Read as ${concept.type.replace(/_/g, ' ')}.` });
   } else {
     type = concept?.type ?? semanticTypeOfKind(only.kind);
     scale = concept?.scale ?? (isRegionKind(only.kind) ? 'region' : 'settlement');
+    /* `centerBasis` is already `none`: nothing placed this, so there is no centre to describe. */
     confidence = 'low';
     if (concept) evidence.push({ source: 'interpretation', note: concept.note || `Read as ${concept.type.replace(/_/g, ' ')}; nothing placed it yet.` });
     else evidence.push({ source: 'traveller', note: 'Nothing has placed this yet; the plan starts from your words.' });
@@ -444,7 +589,7 @@ function semanticsFor(input: {
 
   const countries = concept && concept.countries.length > 0 ? [...new Set([...graph.countries, ...concept.countries])] : graph.countries;
   const label = only?.resolution && only.resolution.source !== 'interpretation' && only.resolution.source !== 'reference' && !isRegionKind(only.kind) ? only.resolution.label : graph.travellerLabel;
-  return destinationSemanticsSchema.parse({
+  return destinationConceptSchema.parse({
     version: DESTINATION_SEMANTICS_VERSION,
     rawText: graph.rawText,
     label,
@@ -454,6 +599,7 @@ function semanticsFor(input: {
     regions: concept?.regions ?? [],
     ...(only?.landscape || concept?.landscape ? { landscape: only?.landscape ?? concept?.landscape } : {}),
     ...(center ? { center } : {}),
+    centerBasis,
     ...(extent ? { extent } : {}),
     confidence,
     evidence,
@@ -461,7 +607,45 @@ function semanticsFor(input: {
     parts,
     gateways: input.gateways,
     refused: input.refused.slice(0, 8),
+    jurisdictions: jurisdictionsFor(countries, input.subnational),
   });
+}
+
+/**
+ * The scale a phrase implies when nothing has placed it. Deliberately never
+ * `country` for a part that is not a country: a mountain region nobody located
+ * is still a region, and `country` here is what framed a whole nation.
+ */
+function scaleOfPhrase(kind: IntentNode['kind'], interpreted: GeographicScale | undefined): GeographicScale {
+  if (interpreted && interpreted !== 'country' && interpreted !== 'continental') return interpreted;
+  if (kind === 'city' || kind === 'named_place') return 'settlement';
+  if (kind === 'municipality') return 'district';
+  return 'region';
+}
+
+/**
+ * V10 §2 — the jurisdictions, assembled independently of the destination.
+ *
+ * Country rows come from the countries the phrase resolved to; subnational rows
+ * only from ISO 3166-2 codes a provider actually published for something that
+ * placed. Nothing is inferred: a region with no provider row contributes no
+ * province, and the product then says nothing about provinces rather than
+ * guessing at one.
+ */
+function jurisdictionsFor(countries: readonly string[], subnational: Map<string, { name: string; countryCode: string }>): JurisdictionRef[] {
+  const rows: JurisdictionRef[] = [];
+  for (const code of countries) {
+    const facts = countryFacts(code);
+    rows.push({ level: 'country', code, name: facts?.name ?? code, countryCode: code });
+  }
+  const seen = new Set(rows.map((r) => r.code));
+  for (const [code, row] of subnational) {
+    if (seen.has(code)) continue;
+    if (countries.length > 0 && !countries.includes(row.countryCode)) continue;
+    seen.add(code);
+    rows.push({ level: 'subnational', code, name: row.name, countryCode: row.countryCode });
+  }
+  return rows.slice(0, 12);
 }
 
 // ---------------------------------------------------------------------------
@@ -603,9 +787,75 @@ export function resolutionForGraph(outcome: GraphResolutionOutcome, query: strin
 }
 
 /** Parse and resolve in one call — what both doors need. */
-export async function resolveDestinationPhrase(input: { text: string; resolver: DestinationResolver | null; now: Date; maxGeocoderCalls?: number; interpreter?: DestinationInterpreter | null }): Promise<{ outcome: GraphResolutionOutcome; resolution: DestinationResolution; semantics: DestinationSemantics }> {
+/**
+ * V10 §15 — THE CANONICAL CONCEPT, CACHED.
+ *
+ * Resolving a phrase costs up to nine geocoder round trips and, for a
+ * region-like phrase, one bounded interpreter call. The *answer* is a fact about
+ * a phrase and does not change week to week, so it is cached for the coordinate
+ * TTL and a second traveller typing the same words gets it for nothing.
+ *
+ * Injected as a seam rather than reached for, so this module stays free of the
+ * database and the corpus can run without one. A cache miss is silent; a cached
+ * concept that no longer parses is ignored rather than trusted.
+ */
+export interface CachedConcept {
+  concept: DestinationConcept;
+  /**
+   * The `DestinationResolution` the same pass produced.
+   *
+   * Cached *with* the concept rather than rebuilt from it, and that is the whole
+   * point: the two doors do different things with the resolution — the plan door
+   * reads `unambiguousCandidateId` to record the traveller's selected destination
+   * — and a resolution reconstructed from the concept alone has no candidates, so
+   * a cache hit silently stopped a destination from being selected and the flow
+   * stalled on the screen before the interview. Restoring both is the only
+   * faithful hit.
+   */
+  resolution: DestinationResolution;
+}
+
+export interface ConceptCache {
+  read(key: string): CachedConcept | null;
+  write(key: string, value: CachedConcept): void;
+}
+
+/** The cache key: the phrase, normalised, plus the resolution and semantics versions so a shape change invalidates everything. */
+export function conceptCacheKeyFor(text: string): string {
+  return `destination-concept|v${DESTINATION_SEMANTICS_VERSION}.${DESTINATION_RESOLUTION_VERSION}|${normalizeDestinationQuery(text)}`;
+}
+
+export async function resolveDestinationPhrase(input: { text: string; resolver: DestinationResolver | null; now: Date; maxGeocoderCalls?: number; interpreter?: DestinationInterpreter | null; cache?: ConceptCache }): Promise<{ outcome: GraphResolutionOutcome; resolution: DestinationResolution; semantics: DestinationSemantics }> {
   const graph = parseDestinationIntent(input.text);
+  const cacheKey = conceptCacheKeyFor(input.text);
+  const cached = input.cache?.read(cacheKey) ?? null;
+  if (cached) {
+    /*
+     * A hit restores the concept *and* the resolution the same pass produced. The
+     * graph is re-parsed (pure and instant) so every consumer still gets the same
+     * shape; nothing is asked of a provider.
+     */
+    const concept = cached.concept;
+    const outcome: GraphResolutionOutcome = {
+      graph: { ...graph, countries: concept.countries.length > 0 ? concept.countries : graph.countries, crossBorder: concept.countries.length > 1 },
+      partResolutions: new Map(),
+      geocoderCalls: 0,
+      semantics: concept,
+      approved: new Map(),
+      interpretation: null,
+      timings: { totalMs: 0, geocoderMs: 0, interpreterMs: 0, geocoderCalls: 0, cacheHit: true },
+    };
+    return { outcome, resolution: cached.resolution, semantics: concept };
+  }
   const outcome = await resolveIntentGraph({ graph, resolver: input.resolver, now: input.now, ...(input.maxGeocoderCalls !== undefined ? { maxGeocoderCalls: input.maxGeocoderCalls } : {}), ...(input.interpreter !== undefined ? { interpreter: input.interpreter } : {}) });
+  /*
+   * Only a concept worth keeping is kept. A `low` confidence answer, or one whose
+   * centre is only the containing country's point standing in, is exactly the
+   * answer a retry might improve — caching it for thirty days would freeze the
+   * failure the V10 audit found.
+   */
   const consulted = [...new Set([...(outcome.geocoderCalls > 0 && input.resolver ? [input.resolver.name] : []), ...(outcome.graph.countries.length > 0 ? ['country-reference'] : []), ...(outcome.interpretation && (outcome.interpretation.source === 'anthropic' || outcome.interpretation.source === 'cache' || outcome.interpretation.source === 'fixture') ? ['destination-interpreter'] : [])])];
-  return { outcome, resolution: resolutionForGraph(outcome, input.text, input.now, consulted), semantics: outcome.semantics };
+  const resolution = resolutionForGraph(outcome, input.text, input.now, consulted);
+  if (input.cache && outcome.semantics.confidence !== 'low' && !centreIsStandIn(outcome.semantics.centerBasis)) input.cache.write(cacheKey, { concept: outcome.semantics, resolution });
+  return { outcome, resolution, semantics: outcome.semantics };
 }

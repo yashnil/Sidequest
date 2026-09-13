@@ -1,0 +1,49 @@
+[
+ {
+  "place_id": 274679714,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 9044202,
+  "lat": "64.0783208",
+  "lon": "-16.2274213",
+  "category": "water",
+  "type": "lagoon",
+  "place_rank": 22,
+  "importance": 0.3951100392087533,
+  "addresstype": "lagoon",
+  "name": "Jökulsárlón",
+  "display_name": "Jökulsárlón, Sveitarfélagið Hornafjörður, Suðurland, Ísland",
+  "address": {
+   "lagoon": "Jökulsárlón",
+   "county": "Sveitarfélagið Hornafjörður",
+   "ISO3166-2-lvl6": "IS-SHF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "depth": "248",
+   "wikidata": "Q511933",
+   "wikipedia": "is:Jökulsárlón"
+  },
+  "namedetails": {
+   "name": "Jökulsárlón",
+   "name:de": "Gletscher-Lagune",
+   "name:en": "Glacier Lagoon",
+   "name:fr": "Lac glaciaire",
+   "name:is": "Jökulsárlón",
+   "name:ru": "Ёкюльсаурлоун",
+   "name:uk": "Лагуна з айзбергом",
+   "name:zh": "杰古沙龙冰河湖",
+   "alt_name:de": "Gletscherfluss-Lagune",
+   "alt_name:en": "Ice Lagoon"
+  },
+  "boundingbox": [
+   "64.0429965",
+   "64.1138669",
+   "-16.3015103",
+   "-16.1472737"
+  ]
+ }
+]

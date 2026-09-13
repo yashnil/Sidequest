@@ -1,0 +1,122 @@
+[
+ {
+  "place_id": 375564513,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 24306232,
+  "lat": "51.1461650",
+  "lon": "-115.5653225",
+  "category": "aerialway",
+  "type": "gondola",
+  "place_rank": 30,
+  "importance": 0.000026000610360830357,
+  "addresstype": "aerialway",
+  "name": "Banff Gondola",
+  "display_name": "Banff Gondola, Sulphur Moutain Trail, Sulphur Mountain District, Improvement District No. 9, Alberta, T1L 1K2, Canada",
+  "address": {
+   "aerialway": "Banff Gondola",
+   "road": "Sulphur Moutain Trail",
+   "neighbourhood": "Sulphur Mountain District",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1L 1K2",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Banff Gondola"
+  },
+  "boundingbox": [
+   "51.1444810",
+   "51.1478489",
+   "-115.5750245",
+   "-115.5556205"
+  ]
+ },
+ {
+  "place_id": 372248664,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 24306324,
+  "lat": "51.1486645",
+  "lon": "-115.5567293",
+  "category": "amenity",
+  "type": "parking",
+  "place_rank": 30,
+  "importance": 0.000026000610360830357,
+  "addresstype": "amenity",
+  "name": "Banff Gondola",
+  "display_name": "Banff Gondola, Lower Sulphur Mountain Trail, Sulphur Mountain District, Improvement District No. 9, Alberta, T1L 1K2, Canada",
+  "address": {
+   "amenity": "Banff Gondola",
+   "road": "Lower Sulphur Mountain Trail",
+   "neighbourhood": "Sulphur Mountain District",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1L 1K2",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "fee": "yes",
+   "charge": "17.50 CAD/day"
+  },
+  "namedetails": {
+   "name": "Banff Gondola",
+   "name:zh": "班夫贡多拉停车场"
+  },
+  "boundingbox": [
+   "51.1479744",
+   "51.1491984",
+   "-115.5578134",
+   "-115.5554778"
+  ]
+ },
+ {
+  "place_id": 376512848,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 2446133711,
+  "lat": "51.1481068",
+  "lon": "-115.5562831",
+  "category": "highway",
+  "type": "bus_stop",
+  "place_rank": 30,
+  "importance": 0.000026000610360830357,
+  "addresstype": "highway",
+  "name": "Banff Gondola",
+  "display_name": "Banff Gondola, Lower Sulphur Mountain Trail, Sulphur Mountain District, Improvement District No. 9, Alberta, T1L 1K2, Canada",
+  "address": {
+   "highway": "Banff Gondola",
+   "road": "Lower Sulphur Mountain Trail",
+   "neighbourhood": "Sulphur Mountain District",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "postcode": "T1L 1K2",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "bus": "yes",
+   "bench": "yes",
+   "network": "ROAM",
+   "shelter": "yes",
+   "network:wikidata": "Q7339725",
+   "public_transport": "platform"
+  },
+  "namedetails": {
+   "ref": "12|62",
+   "name": "Banff Gondola"
+  },
+  "boundingbox": [
+   "51.1480568",
+   "51.1481568",
+   "-115.5563331",
+   "-115.5562331"
+  ]
+ }
+]

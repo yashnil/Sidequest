@@ -327,7 +327,7 @@ export interface SemanticExpectation {
   countries?: readonly string[];
 }
 
-const REGION_TYPES: ReadonlySet<GeographicSemanticType> = new Set<GeographicSemanticType>(['admin_area', 'country', 'multi_country', 'mountain_region', 'natural_region', 'coast', 'island_group', 'protected_area', 'informal_region', 'city_region']);
+export const REGION_SEMANTIC_TYPES: ReadonlySet<GeographicSemanticType> = new Set<GeographicSemanticType>(['admin_area', 'country', 'multi_country', 'mountain_region', 'natural_region', 'coast', 'island_group', 'protected_area', 'informal_region', 'city_region']);
 
 /** Whether a provider row of one semantic type may stand for an intent of another. */
 function typesAgree(wanted: GeographicSemanticType, got: GeographicSemanticType): 'yes' | 'weak' | 'no' {
@@ -347,7 +347,7 @@ function typesAgree(wanted: GeographicSemanticType, got: GeographicSemanticType)
     case 'admin_area':
       return got === 'city_region' || got === 'natural_region' || got === 'mountain_region' || got === 'informal_region' ? 'yes' : got === 'settlement' || got === 'country' ? 'weak' : 'no';
     case 'informal_region':
-      return REGION_TYPES.has(got) ? 'yes' : got === 'settlement' ? 'weak' : 'no';
+      return REGION_SEMANTIC_TYPES.has(got) ? 'yes' : got === 'settlement' ? 'weak' : 'no';
     case 'settlement':
       return got === 'city_region' || got === 'admin_area' ? 'yes' : got === 'island' || got === 'landmark' || got === 'protected_area' ? 'weak' : 'no';
     case 'city_region':
@@ -383,7 +383,7 @@ export function assessCompatibility(node: Pick<IntentNode, 'kind' | 'label' | 'c
   if (expectation.countries && expectation.countries.length > 0 && countryCode && !expectation.countries.map((c) => c.toUpperCase()).includes(countryCode)) return refuse('country_mismatch');
 
   const wanted = expectation.type ?? semanticTypeOfKind(node.kind);
-  const regionWanted = REGION_TYPES.has(wanted) || isRegionKind(node.kind);
+  const regionWanted = REGION_SEMANTIC_TYPES.has(wanted) || isRegionKind(node.kind);
 
   /* A thing in a place is not the place. */
   if (semantics.pointLike) {
@@ -409,7 +409,7 @@ export function assessCompatibility(node: Pick<IntentNode, 'kind' | 'label' | 'c
   }
   if (agreement === 'weak') {
     /* An interpreter that read the phrase as a region has ruled out a same-named town. */
-    if (expectation.type && REGION_TYPES.has(expectation.type) && semantics.type === 'settlement') return refuse('settlement_for_interpreted_region');
+    if (expectation.type && REGION_SEMANTIC_TYPES.has(expectation.type) && semantics.type === 'settlement') return refuse('settlement_for_interpreted_region');
     reasons.push(`type_weak:${semantics.type}`);
   }
   if (name === 'part') reasons.push('name_part');
@@ -426,7 +426,7 @@ export interface RankedCandidate {
 
 /** Every candidate through the gate, best first; the incompatible ones are returned too, so a caller can explain a refusal. */
 export function rankCandidates(node: Pick<IntentNode, 'kind' | 'label' | 'countryCode'>, candidates: readonly DestinationCandidate[], expectation: SemanticExpectation = {}): RankedCandidate[] {
-  const regionWanted = REGION_TYPES.has(expectation.type ?? semanticTypeOfKind(node.kind)) || isRegionKind(node.kind);
+  const regionWanted = REGION_SEMANTIC_TYPES.has(expectation.type ?? semanticTypeOfKind(node.kind)) || isRegionKind(node.kind);
   const ranked = candidates.map((candidate) => {
     const assessment = assessCompatibility(node, candidate, expectation);
     const s = assessment.semantics;
@@ -452,7 +452,7 @@ export function evidenceSufficient(node: Pick<IntentNode, 'kind' | 'label' | 'co
   if (!chosen || chosen.assessment.verdict !== 'compatible') return false;
   const s = chosen.assessment.semantics;
   /* An area — by the phrase's shape or by the row's own class — needs a real extent; a point on a map is not a region. */
-  if (isRegionKind(node.kind) || (REGION_TYPES.has(s.type) && s.type !== 'city_region')) return s.hasExtent && SCALE_RANK[s.scale] >= SCALE_RANK.district;
+  if (isRegionKind(node.kind) || (REGION_SEMANTIC_TYPES.has(s.type) && s.type !== 'city_region')) return s.hasExtent && SCALE_RANK[s.scale] >= SCALE_RANK.district;
   return true;
 }
 
@@ -474,7 +474,7 @@ export const INTERPRETATION_AMBIGUITIES = ['none', 'shared_name', 'vague'] as co
 export const LANDSCAPE_WORDS = ['mountains', 'desert', 'delta', 'valley', 'lake_region', 'plateau', 'jungle', 'savanna', 'wetland', 'glacier', 'fjords', 'coast', 'islands', 'steppe', 'tundra', 'outback', 'forest', 'volcano', 'canyon', 'peninsula', 'bush'] as const;
 export const landscapeWordSchema = z.enum(LANDSCAPE_WORDS);
 
-export const destinationConceptSchema = z.object({
+export const interpretedConceptSchema = z.object({
   /** False when the words describe a kind of trip rather than anywhere. */
   isPlace: z.boolean(),
   type: geographicSemanticTypeSchema,
@@ -490,10 +490,16 @@ export const destinationConceptSchema = z.object({
   ambiguity: z.enum(INTERPRETATION_AMBIGUITIES).default('none'),
   /** For a natural region: which kind of landscape, as a generic word. */
   landscape: landscapeWordSchema.optional(),
+  /**
+   * V10 §3 — experiences a traveller would plan the trip around, by name.
+   * Names only, each geocoded and gated like a representative area; never a
+   * coordinate, never a claim that the experience is open or bookable.
+   */
+  signatureExperiences: z.array(placeName).max(8).default([]),
   /** One line, traveller-readable. */
   note: z.string().max(240).default(''),
 });
-export type DestinationConcept = z.infer<typeof destinationConceptSchema>;
+export type InterpretedConcept = z.infer<typeof interpretedConceptSchema>;
 
 // ---------------------------------------------------------------------------
 // The record every consumer reads
@@ -534,6 +540,158 @@ export const semanticGatewaySchema = z.object({
 });
 export type SemanticGateway = z.infer<typeof semanticGatewaySchema>;
 
+/**
+ * V10 §2 — HOW THE REPRESENTATIVE CENTRE WAS ARRIVED AT.
+ *
+ * A coordinate is not a claim on its own. The difference between "the centroid
+ * of four placed areas inside the Canadian Rockies" and "Canada's published
+ * point, because nothing else answered" is the difference between framing a
+ * map and lying about where the traveller is going — and the second is what
+ * put eastern Canada on the setup screen. So the basis travels with the point,
+ * and `country_reference` is a stand-in every consumer is required to read as
+ * one.
+ */
+export const CENTER_BASES = [
+  /** The centroid of a boundary published for the thing itself. */
+  'published',
+  /** The centroid of several resolved parts of the phrase. */
+  'union_of_parts',
+  /** The centroid of representative areas an interpreter named and a geocoder placed. */
+  'interpreted_parts',
+  /** One geocoder row that was a lead but not enough to settle the part. */
+  'lead_row',
+  /**
+   * The containing country's published point, because nothing placed the
+   * destination itself. Never a location for the destination: a stand-in, to be
+   * rendered as "still locating" and never framed at country scale.
+   */
+  'country_reference',
+  /**
+   * The containing country's published point, and that is the honest answer:
+   * the phrase *qualifies* a country ("rural Japan", "northern Italy") rather
+   * than naming something inside it that a gazetteer could bound. Nobody
+   * publishes an extent for "rural Japan" and nobody should; the country is the
+   * right frame and the scale says how wide to think inside it.
+   *
+   * Distinct from `country_reference` precisely so a screen can tell "this is
+   * anchored at the country on purpose" from "nothing has placed this yet".
+   */
+  'country_qualified',
+  'none',
+] as const;
+export const centerBasisSchema = z.enum(CENTER_BASES);
+export type CenterBasis = z.infer<typeof centerBasisSchema>;
+
+/** True when the centre is only the containing country's point standing in for a destination nobody placed. */
+export function centreIsStandIn(basis: CenterBasis): boolean {
+  return basis === 'country_reference' || basis === 'none';
+}
+
+/**
+ * V10 §2 — JURISDICTION IS NOT THE DESTINATION.
+ *
+ * "Canadian Rockies uses CAD" is invalid product language: the currency
+ * belongs to **Canada**, and the destination merely sits inside it. A
+ * jurisdiction reference is therefore a separate, explicitly-levelled thing,
+ * and every sentence about money, driving, entry or health is phrased about
+ * the jurisdiction it actually belongs to. Subnational rows exist so that
+ * Alberta and British Columbia can be named where they matter (park passes,
+ * provincial rules) without either of them standing for the destination.
+ */
+export const JURISDICTION_LEVELS = ['country', 'subnational'] as const;
+export const jurisdictionLevelSchema = z.enum(JURISDICTION_LEVELS);
+export type JurisdictionLevel = z.infer<typeof jurisdictionLevelSchema>;
+
+export const jurisdictionRefSchema = z.object({
+  level: jurisdictionLevelSchema,
+  /** ISO 3166-1 alpha-2 for a country; ISO 3166-2 ("CA-AB") for a subnational row when the provider gave one. */
+  code: z.string().min(2).max(6),
+  name: z.string().min(1).max(80),
+  /** The country a subnational row belongs to. Equal to `code` for a country row. */
+  countryCode: z.string().length(2),
+});
+export type JurisdictionRef = z.infer<typeof jurisdictionRefSchema>;
+
+/**
+ * The sentence a jurisdiction fact is introduced with. Reads the jurisdiction,
+ * never the destination label, so a region can never be said to have a
+ * currency, a visa policy or a driving rule of its own.
+ */
+export function jurisdictionPhrase(jurisdictions: readonly JurisdictionRef[]): string {
+  const countries = jurisdictions.filter((j) => j.level === 'country');
+  if (countries.length === 0) return 'this country';
+  if (countries.length === 1) return countries[0]!.name;
+  return `${countries.slice(0, -1).map((c) => c.name).join(', ')} and ${countries[countries.length - 1]!.name}`;
+}
+
+// ---------------------------------------------------------------------------
+// V10 §3 — Regional decomposition: the coverage graph
+// ---------------------------------------------------------------------------
+
+/**
+ * A broad region has to be broken into places a trip can actually be built
+ * from *before* composition, or the model is asked to invent both the
+ * geography and the plan. This is that decomposition, and it is generic: a
+ * zone is a named area that a geocoder placed, its role is derived from where
+ * it sits relative to the destination's own extent, and drive relationships
+ * are measured or honestly absent. Nothing here is keyed to a destination
+ * name.
+ */
+export const COVERAGE_ROLES = [
+  /** Inside the destination and central to it: a trip that skips every core zone is not this trip. */
+  'core',
+  /** Inside the destination but reachable only at a cost the route may decline to pay. */
+  'optional',
+  /** Outside the destination; travellers arrive and leave through it. Context, never the destination. */
+  'gateway',
+] as const;
+export const coverageRoleSchema = z.enum(COVERAGE_ROLES);
+export type CoverageRole = z.infer<typeof coverageRoleSchema>;
+
+export const coverageZoneSchema = z.object({
+  /** Stable within one decomposition; derived from the label, never a provider id. */
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(120),
+  role: coverageRoleSchema,
+  center: coordinatesSchema,
+  bounds: geoBoundsSchema.optional(),
+  countryCode: z.string().length(2).optional(),
+  source: semanticEvidenceSourceSchema,
+  /** The provider's own class for the zone, when it published one. */
+  featureType: z.string().min(1).optional(),
+  /** Kilometres from the destination's representative centre. Derived. */
+  kmFromCentre: z.number().nonnegative(),
+  /** Experiences named for this zone. Names only; each is placed and gated separately. */
+  signatureExperiences: z.array(z.string().min(1).max(120)).max(8).default([]),
+});
+export type CoverageZone = z.infer<typeof coverageZoneSchema>;
+
+export const zoneRelationSchema = z.object({
+  fromId: z.string().min(1),
+  toId: z.string().min(1),
+  /** Straight-line kilometres: always available, never presented as a road distance. */
+  km: z.number().nonnegative(),
+  /** Measured road minutes, when a router answered for this pair. */
+  minutes: z.number().nonnegative().optional(),
+  basis: z.enum(['measured', 'unmeasured']),
+});
+export type ZoneRelation = z.infer<typeof zoneRelationSchema>;
+
+export const DESTINATION_DECOMPOSITION_VERSION = 1 as const;
+
+export const destinationDecompositionSchema = z.object({
+  version: z.literal(DESTINATION_DECOMPOSITION_VERSION),
+  zones: z.array(coverageZoneSchema).max(16).default([]),
+  relations: z.array(zoneRelationSchema).max(120).default([]),
+  /**
+   * Why the decomposition is as thin as it is, when it is thin. An honest
+   * "nobody named areas inside this and nothing placed" beats a fabricated
+   * zone list.
+   */
+  note: z.string().max(240).default(''),
+});
+export type DestinationDecomposition = z.infer<typeof destinationDecompositionSchema>;
+
 export const destinationSemanticsSchema = z.object({
   version: z.literal(DESTINATION_SEMANTICS_VERSION),
   /** Exactly what was typed. */
@@ -548,6 +706,8 @@ export const destinationSemanticsSchema = z.object({
   landscape: z.string().min(1).optional(),
   /** A representative centre for calculations. Never a claim that the destination is a point. */
   center: coordinatesSchema.optional(),
+  /** V10 §2 — how that centre was arrived at. `country_reference` is a stand-in, not a location. */
+  centerBasis: centerBasisSchema.default('none'),
   extent: z.object({ bounds: geoBoundsSchema, source: extentSourceSchema }).optional(),
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: z.array(z.object({ source: semanticEvidenceSourceSchema, note: z.string().min(1) })).default([]),
@@ -558,8 +718,30 @@ export const destinationSemanticsSchema = z.object({
   gateways: z.array(semanticGatewaySchema).default([]),
   /** Rows the gate refused, by name and why, so a screen can say what was not accepted. */
   refused: z.array(z.object({ label: z.string().min(1), reason: z.string().min(1) })).max(8).default([]),
+  /**
+   * V10 §2 — the jurisdictions the destination sits inside, separate from the
+   * destination itself. Country rows first; subnational rows only where a
+   * provider actually named one.
+   */
+  jurisdictions: z.array(jurisdictionRefSchema).max(12).default([]),
+  /** V10 §3 — the coverage graph, when one could be derived. */
+  decomposition: destinationDecompositionSchema.optional(),
 });
 export type DestinationSemantics = z.infer<typeof destinationSemanticsSchema>;
+
+/**
+ * V10 §2 — THE ONE CANONICAL DESTINATION OBJECT.
+ *
+ * `DestinationConcept` is the name the product uses for this record from setup
+ * through the questionnaire, composition and the itinerary: the raw phrase, the
+ * semantic identity, the type and scale, the evidence-qualified centre and
+ * extent, the countries and provinces, the gateways, the resolved parts, the
+ * candidate subregions (`decomposition`) and the jurisdictions — one object, one
+ * name, one source of truth. `DestinationSemantics` remains as the V8.1 alias
+ * so persisted rows and existing consumers keep reading the same thing.
+ */
+export const destinationConceptSchema = destinationSemanticsSchema;
+export type DestinationConcept = DestinationSemantics;
 
 /** The box that holds every part's own box or point, and its centroid. */
 export function extentOfParts(parts: readonly { center: Coordinates; bounds?: GeoBounds | undefined }[]): { center: Coordinates; bounds: GeoBounds } | null {
@@ -581,9 +763,68 @@ export function extentOfParts(parts: readonly { center: Coordinates; bounds?: Ge
   return { center: { lat, lng }, bounds: { southWest: { lat: south, lng: west }, northEast: { lat: north, lng: east } } };
 }
 
+/**
+ * V10 §2 — WHAT THE PHRASE ITSELF MEANS, BEFORE ANY EVIDENCE.
+ *
+ * The one derivation every consumer shares, so the degradation check and the
+ * quality compiler cannot disagree about what was asked for. A composite of
+ * country parts is several countries; a composite of anything else is a travel
+ * region; one part is whatever its own shape says.
+ */
+export function phraseSemanticType(children: readonly Pick<IntentNode, 'kind'>[]): GeographicSemanticType {
+  if (children.length === 0) return 'unknown';
+  if (children.length === 1) return semanticTypeOfKind(children[0]!.kind);
+  return children.every((child) => child.kind === 'country') ? 'multi_country' : 'informal_region';
+}
+
+/**
+ * V10 §22 — A DESTINATION REGION MAY NOT BECOME ITS CONTAINING COUNTRY.
+ *
+ * True when the phrase means an area smaller than a country and the concept
+ * nevertheless came out as the country. The check is on the *phrase's* meaning,
+ * not on any provider row, because the failure it catches is precisely a
+ * provider having nothing to say: "the Canadian Rockies" fell through to
+ * Canada's published point and was then typed `country` at `country` scale with
+ * `high` confidence. A caller that sees this is holding a defect, never a
+ * fallback.
+ */
+export function degradedToCountry(input: {
+  phraseType: GeographicSemanticType;
+  type: GeographicSemanticType;
+  scale: GeographicScale;
+  /** When given, a country-or-wider *scale* only counts as degradation on a stand-in centre. */
+  centerBasis?: CenterBasis;
+}): boolean {
+  if (input.phraseType === 'country' || input.phraseType === 'multi_country') return false;
+  /* The type collapsing is always the defect: a mountain region is not a country. */
+  if (input.type === 'country' || input.type === 'multi_country') return true;
+  /*
+   * A country-or-wider *scale* is not automatically wrong — the Alps and the
+   * Sahara genuinely are that big, and saying otherwise would be a second, more
+   * subtle lie. It is wrong in exactly one case: the destination's only anchor is
+   * its containing country's published point, so the width is the country's and
+   * not the destination's. A concept with no centre at all is mis-framing nothing,
+   * because there is nothing to frame.
+   */
+  if (input.centerBasis !== undefined && input.centerBasis !== 'country_reference') return false;
+  return input.scale === 'country' || input.scale === 'continental';
+}
+
+/**
+ * V10 §15 — should a map refuse to frame this yet?
+ *
+ * A stand-in centre with no extent is not a location. Framing it draws a box
+ * around a country's reference point, which is how a mountain-region trip
+ * rendered eastern Canada. The honest answer is a "still locating" state.
+ */
+export function framingIsUnsafe(concept: Pick<DestinationConcept, 'type' | 'centerBasis' | 'extent'>): boolean {
+  if (concept.extent) return false;
+  return centreIsStandIn(concept.centerBasis) && isAreaType(concept.type);
+}
+
 /** Whether a semantic type is an area a trip moves around in rather than a place it stays put in. */
 export function isAreaType(type: GeographicSemanticType): boolean {
-  return REGION_TYPES.has(type) || type === 'island_group';
+  return REGION_SEMANTIC_TYPES.has(type) || type === 'island_group';
 }
 
 /** One sentence for a canvas caption: what kind of thing, at what scale, and how the extent was arrived at. */

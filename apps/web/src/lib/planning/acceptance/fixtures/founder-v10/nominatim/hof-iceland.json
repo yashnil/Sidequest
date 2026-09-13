@@ -1,0 +1,181 @@
+[
+ {
+  "place_id": 285431755,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 13233244516,
+  "lat": "63.9068699",
+  "lon": "-16.7071387",
+  "category": "place",
+  "type": "hamlet",
+  "place_rank": 20,
+  "importance": 0.13336333485923552,
+  "addresstype": "hamlet",
+  "name": "Hof",
+  "display_name": "Hof, Sveitarfélagið Hornafjörður, Suðurland, 785, Ísland",
+  "address": {
+   "hamlet": "Hof",
+   "county": "Sveitarfélagið Hornafjörður",
+   "ISO3166-2-lvl6": "IS-SHF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "785",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "population": "68",
+   "population:date": "2026"
+  },
+  "namedetails": {
+   "name": "Hof"
+  },
+  "boundingbox": [
+   "63.8868699",
+   "63.9268699",
+   "-16.7271387",
+   "-16.6871387"
+  ]
+ },
+ {
+  "place_id": 273137855,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 2802061690,
+  "lat": "65.1806073",
+  "lon": "-14.6380887",
+  "category": "place",
+  "type": "farm",
+  "place_rank": 22,
+  "importance": 0.10669666819256883,
+  "addresstype": "farm",
+  "name": "Hof",
+  "display_name": "Hof, Múlaþing, Austurland, Ísland",
+  "address": {
+   "farm": "Hof",
+   "county": "Múlaþing",
+   "ISO3166-2-lvl6": "IS-MUL",
+   "state_district": "Austurland",
+   "ISO3166-2-lvl5": "IS-7",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Hof"
+  },
+  "boundingbox": [
+   "65.1706073",
+   "65.1906073",
+   "-14.6480887",
+   "-14.6280887"
+  ]
+ },
+ {
+  "place_id": 273476603,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 291733604,
+  "lat": "65.2086711",
+  "lon": "-13.7331124",
+  "category": "place",
+  "type": "farm",
+  "place_rank": 22,
+  "importance": 0.10669666819256883,
+  "addresstype": "farm",
+  "name": "Hof",
+  "display_name": "Hof, Fjarðabyggð, Austurland, 715, Ísland",
+  "address": {
+   "farm": "Hof",
+   "county": "Fjarðabyggð",
+   "ISO3166-2-lvl6": "IS-FJD",
+   "state_district": "Austurland",
+   "ISO3166-2-lvl5": "IS-7",
+   "postcode": "715",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Hof"
+  },
+  "boundingbox": [
+   "65.1986711",
+   "65.2186711",
+   "-13.7431124",
+   "-13.7231124"
+  ]
+ },
+ {
+  "place_id": 285215645,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 6321456893,
+  "lat": "63.9061911",
+  "lon": "-16.7048239",
+  "category": "place",
+  "type": "farm",
+  "place_rank": 22,
+  "importance": 0.10669666819256883,
+  "addresstype": "farm",
+  "name": "Hof",
+  "display_name": "Hof, Sveitarfélagið Hornafjörður, Suðurland, 785, Ísland",
+  "address": {
+   "farm": "Hof",
+   "hamlet": "Hof",
+   "county": "Sveitarfélagið Hornafjörður",
+   "ISO3166-2-lvl6": "IS-SHF",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "785",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Hof"
+  },
+  "boundingbox": [
+   "63.8961911",
+   "63.9161911",
+   "-16.7148239",
+   "-16.6948239"
+  ]
+ },
+ {
+  "place_id": 273148063,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 600797134,
+  "lat": "64.2402731",
+  "lon": "-21.8478848",
+  "category": "landuse",
+  "type": "farmyard",
+  "place_rank": 24,
+  "importance": 0.08007186160067137,
+  "addresstype": "farmyard",
+  "name": "Hof",
+  "display_name": "Hof, Kjalarnes, Reykjavíkurborg, Höfuðborgarsvæðið, 162, Ísland",
+  "address": {
+   "farmyard": "Hof",
+   "suburb": "Kjalarnes",
+   "city": "Reykjavíkurborg",
+   "ISO3166-2-lvl6": "IS-RKV",
+   "state_district": "Höfuðborgarsvæðið",
+   "ISO3166-2-lvl5": "IS-1",
+   "postcode": "162",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": null,
+  "namedetails": {
+   "name": "Hof"
+  },
+  "boundingbox": [
+   "64.2399881",
+   "64.2404894",
+   "-21.8483713",
+   "-21.8473647"
+  ]
+ }
+]

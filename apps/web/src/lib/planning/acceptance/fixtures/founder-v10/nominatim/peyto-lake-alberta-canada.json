@@ -1,0 +1,41 @@
+[
+ {
+  "place_id": 373605745,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 18099392,
+  "lat": "51.7251873",
+  "lon": "-116.5222962",
+  "category": "water",
+  "type": "lake",
+  "place_rank": 20,
+  "importance": 0.415002101916886,
+  "addresstype": "lake",
+  "name": "Peyto Lake",
+  "display_name": "Peyto Lake, Improvement District No. 9, Alberta, Canada",
+  "address": {
+   "lake": "Peyto Lake",
+   "county": "Improvement District No. 9",
+   "state": "Alberta",
+   "ISO3166-2-lvl4": "CA-AB",
+   "country": "Canada",
+   "country_code": "ca"
+  },
+  "extratags": {
+   "image": "http://farm8.staticflickr.com/7200/6932313906_7df4b48bf1_b.jpg",
+   "natural": "water",
+   "tourism": "attraction",
+   "wikidata": "Q1362681",
+   "wikipedia": "de:Peyto Lake"
+  },
+  "namedetails": {
+   "name": "Peyto Lake"
+  },
+  "boundingbox": [
+   "51.7130820",
+   "51.7372478",
+   "-116.5300003",
+   "-116.5143603"
+  ]
+ }
+]

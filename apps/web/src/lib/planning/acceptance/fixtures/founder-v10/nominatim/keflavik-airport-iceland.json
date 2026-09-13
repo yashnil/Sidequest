@@ -1,0 +1,61 @@
+[
+ {
+  "place_id": 419927451,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "way",
+  "osm_id": 420778620,
+  "lat": "63.9950427",
+  "lon": "-22.6238642",
+  "category": "aeroway",
+  "type": "terminal",
+  "place_rank": 30,
+  "importance": 0.5023099079558085,
+  "addresstype": "aeroway",
+  "name": "Keflavík Airport (KEF)",
+  "display_name": "Keflavík Airport (KEF), 1A, Kjóavöllur, Suðurnesjabær, Suðurnes, 235, Ísland",
+  "address": {
+   "aeroway": "Keflavík Airport (KEF)",
+   "house_number": "1A",
+   "road": "Kjóavöllur",
+   "municipality": "Suðurnesjabær",
+   "ISO3166-2-lvl6": "IS-SDN",
+   "state_district": "Suðurnes",
+   "ISO3166-2-lvl5": "IS-2",
+   "postcode": "235",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "phone": "+354 424 4000",
+   "website": "https://www.kefairport.is/",
+   "building": "transportation",
+   "operator": "Isavia",
+   "wikidata": "Q139921",
+   "wikipedia": "is:Keflavíkurflugvöllur",
+   "start_date": "1986-2023",
+   "wheelchair": "yes",
+   "contact:phone": "+354 424 4000",
+   "contact:website": "https://www.kefairport.is/",
+   "contact:youtube": "https://www.youtube.com/@keflavik_airport",
+   "contact:facebook": "https://www.facebook.com/kefairport/",
+   "contact:instagram": "https://www.instagram.com/kef_airport/"
+  },
+  "namedetails": {
+   "name": "Keflavík Airport (KEF)",
+   "name:en": "Keflavik Airport",
+   "name:is": "Keflavíkurflugvöllur",
+   "alt_name": "Keflavík Airport",
+   "alt_name_1": "FLE",
+   "alt_name_2": "Keflavíkurflugvöllur",
+   "alt_name_3": "Leifsstöð",
+   "alt_name:is": "Leifsstöð",
+   "addr:housename": "Flugstöð Leifs Eiríkssonar"
+  },
+  "boundingbox": [
+   "63.9931044",
+   "63.9969346",
+   "-22.6274846",
+   "-22.6196294"
+  ]
+ }
+]

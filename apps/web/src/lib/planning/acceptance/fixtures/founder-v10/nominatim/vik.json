@@ -1,0 +1,168 @@
+[
+ {
+  "place_id": 286740190,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 59861511,
+  "lat": "63.4188166",
+  "lon": "-19.0054737",
+  "category": "place",
+  "type": "village",
+  "place_rank": 19,
+  "importance": 0.41904740004053065,
+  "addresstype": "village",
+  "name": "Vík",
+  "display_name": "Vík, Mýrdalshreppur, Suðurland, 870, Ísland",
+  "address": {
+   "village": "Vík",
+   "county": "Mýrdalshreppur",
+   "ISO3166-2-lvl6": "IS-MYR",
+   "state_district": "Suðurland",
+   "ISO3166-2-lvl5": "IS-8",
+   "postcode": "870",
+   "country": "Ísland",
+   "country_code": "is"
+  },
+  "extratags": {
+   "is_in": "Iceland",
+   "wikidata": "Q685369",
+   "wikipedia": "is:Vík í Mýrdal",
+   "population": "740",
+   "population:date": "2026"
+  },
+  "namedetails": {
+   "name": "Vík",
+   "name:ar": "فيك أي ميردال",
+   "name:be": "Вік",
+   "name:ca": "Vík í Mýrdal",
+   "name:cs": "Vík í Mýrdal",
+   "name:cy": "Vík í Mýrdal",
+   "name:da": "Vík í Mýrdal",
+   "name:de": "Vík í Mýrdal",
+   "name:en": "Vik",
+   "name:es": "Vík í Mýrdal",
+   "name:eu": "Vík í Mýrdal",
+   "name:fr": "Vík í Mýrdal",
+   "name:ha": "Rayuwa a cikin Mýrdal",
+   "name:hu": "Vík í Mýrdal",
+   "name:hy": "Վիք",
+   "name:id": "Vikí Mýrdal",
+   "name:is": "Vík",
+   "name:it": "Vík í Mýrdal",
+   "name:ja": "ヴィーク",
+   "name:ko": "비크이뮈르달",
+   "name:lb": "Vík í Mýrdal",
+   "name:lt": "Vikas",
+   "name:nb": "Vík í Mýrdal",
+   "name:nl": "Vík í Mýrdal",
+   "name:os": "Вик",
+   "name:pl": "Vík í Mýrdal",
+   "name:pt": "Vík",
+   "name:ru": "Вик",
+   "name:sv": "Vík í Mýrdal",
+   "name:tr": "Vík í Mýrdal",
+   "name:uk": "Вік",
+   "name:vo": "Vík í Mýrdal",
+   "name:zh": "维克",
+   "alt_name": "Vík í Mýrdal"
+  },
+  "boundingbox": [
+   "63.3988166",
+   "63.4388166",
+   "-19.0254737",
+   "-18.9854737"
+  ]
+ },
+ {
+  "place_id": 274446512,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "node",
+  "osm_id": 10320273,
+  "lat": "58.4425516",
+  "lon": "-3.0915827",
+  "category": "place",
+  "type": "town",
+  "place_rank": 18,
+  "importance": 0.4865244101122988,
+  "addresstype": "town",
+  "name": "Wick",
+  "display_name": "Wick, Highland, Alba / Scotland, KW1 4NB, United Kingdom",
+  "address": {
+   "town": "Wick",
+   "county": "Highland",
+   "ISO3166-2-lvl6": "GB-HLD",
+   "state": "Alba / Scotland",
+   "ISO3166-2-lvl4": "GB-SCT",
+   "postcode": "KW1 4NB",
+   "country": "United Kingdom",
+   "country_code": "gb"
+  },
+  "extratags": {
+   "wikidata": "Q1012502",
+   "wikipedia": "en:Wick, Caithness",
+   "population": "6820"
+  },
+  "namedetails": {
+   "name": "Wick",
+   "name:cy": "Wick",
+   "name:en": "Wick",
+   "name:ga": "Inbhir Úige",
+   "name:gd": "Inbhir Ùige",
+   "name:gv": "Yn Ooig",
+   "name:ja": "ウィック",
+   "name:ko": "윅",
+   "name:lt": "Vikas",
+   "name:ru": "Уик",
+   "name:zh": "維克",
+   "name:non": "Vík",
+   "name:sco": "Week",
+   "alt_name:sco": "Weik"
+  },
+  "boundingbox": [
+   "58.4025516",
+   "58.4825516",
+   "-3.1315827",
+   "-3.0515827"
+  ]
+ },
+ {
+  "place_id": 160328764,
+  "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+  "osm_type": "relation",
+  "osm_id": 409074,
+  "lat": "61.0349664",
+  "lon": "6.5941051",
+  "category": "boundary",
+  "type": "administrative",
+  "place_rank": 14,
+  "importance": 0.4741000554236934,
+  "addresstype": "municipality",
+  "name": "Vik",
+  "display_name": "Vik, Vestland, Norge",
+  "address": {
+   "municipality": "Vik",
+   "county": "Vestland",
+   "ISO3166-2-lvl4": "NO-46",
+   "country": "Norge",
+   "country_code": "no"
+  },
+  "extratags": {
+   "place": "municipality",
+   "wikidata": "Q303521",
+   "population": "2550",
+   "population:date": "2025-01-01",
+   "admin_level": "7"
+  },
+  "namedetails": {
+   "ref": "4639",
+   "name": "Vik",
+   "old_ref": "1417"
+  },
+  "boundingbox": [
+   "60.8807347",
+   "61.1907149",
+   "6.1358077",
+   "7.0300821"
+  ]
+ }
+]
