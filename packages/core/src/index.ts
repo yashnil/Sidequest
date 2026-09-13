@@ -143,6 +143,8 @@ export * from './evidence/freshness';
 export * from './dates/windows';
 export * from './dates/duration';
 export * from './scope/portfolio';
+export * from './recommend/distance';
+export * from './recommend/proposal';
 export * from './recommend/rank';
 export * from './recommend/shortlist';
 export * from './routing/plan';

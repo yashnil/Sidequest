@@ -81,7 +81,7 @@ export function TripConfidence({ pkg, intel, compact = false }: { pkg: TripPacka
 
   return (
     <div className={compact ? '' : 'rule-top pt-5'} data-testid="trip-confidence">
-      {!compact ? <h2 className="type-section text-ink">Trip confidence</h2> : null}
+      {!compact ? <h2 className="type-section text-ink">How solid this plan is</h2> : null}
       {states.length > 0 ? (
         <dl className="mt-1 flex flex-wrap gap-x-8 gap-y-3">
           {states.map((state) => (

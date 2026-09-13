@@ -315,7 +315,8 @@ export function TransportSection({ intel }: { intel: TravelIntelligence }) {
 
 /** The four words for what a leg's minutes are, shared with the Days view and the map legend. */
 function legDurationState(basis: string, unmeasuredReason?: string): { word: string; tone: BadgeTone } {
-  if (basis === 'unmeasured') return unmeasuredReason === 'mode_not_road_routable' ? { word: 'operator-timed, not road-routed', tone: 'blue' } : { word: 'allowance — not timed', tone: 'amber' };
+  if (basis === 'unmeasured') return unmeasuredReason === 'mode_not_road_routable' ? /* V11 §20 — the operator sets these hours; "road-routed" is our plumbing, not their concern. */
+    { word: 'the operator sets this time', tone: 'blue' } : { word: 'time set aside — not timed yet', tone: 'amber' };
   if (basis === 'estimated' || basis === 'geo_estimate') return { word: 'estimated', tone: 'blue' };
   if (basis === 'scheduled') return { word: 'timetable', tone: 'pine' };
   if (basis === 'traffic_aware' || basis === 'static' || basis === 'measured') return { word: 'measured', tone: 'pine' };
@@ -874,7 +875,7 @@ export function VerifySection({ intel, manifest, pkg }: { intel: TravelIntellige
   const access = intel.access.filter((a) => a.verifyBeforeTravel);
   return (
     <section className="mt-14" aria-labelledby="verify" data-testid="hub-verify">
-      <SectionHeader id="verify" title="Trip confidence" blurb="What Sidequest could check, what to look at again nearer the date, and what is still uncertain." />
+      <SectionHeader id="verify" title="How solid this plan is" blurb="What Sidequest checked, what to look at again nearer the date, and what it is still working out." />
       {/*
         * PRODUCTION LOCK V5 §27 — ONE CONFIDENCE, ONE SET OF NUMBERS.
         *

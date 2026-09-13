@@ -141,6 +141,23 @@ export const RANK_DIMENSIONS = [
   'themeFit',
   /** Does it work with how they intend to get around? */
   'transportFit',
+  /*
+   * V11 §3 — the six the recommender needs and a destination *ranker* alone did
+   * not. Each is computable from something already here, and none is a proxy
+   * for fame: the prominence rule above holds for every one of them.
+   */
+  /** How much of the trip is spent getting there, from the traveller's own tolerance. */
+  'flightBurden',
+  /** Does how busy this gets suit how busy they will accept? */
+  'crowdFit',
+  /** How much paperwork stands between them and the ground. Only where an authority publishes it. */
+  'entryFriction',
+  /** Is this somewhere new to them, given what they have already seen? */
+  'noveltyFit',
+  /** Can they sleep the way they want to sleep here, at the money they have? */
+  'comfortFit',
+  /** Warm, mild or cold — what they asked for, against what the place is. */
+  'climatePreferenceFit',
 ] as const;
 export const rankDimensionSchema = z.enum(RANK_DIMENSIONS);
 export type RankDimension = z.infer<typeof rankDimensionSchema>;
@@ -154,6 +171,12 @@ export const RANK_DIMENSION_LABELS: Record<RankDimension, string> = {
   varietyFit: 'Variety',
   themeFit: 'Matches what you came for',
   transportFit: 'Getting around',
+  flightBurden: 'Getting there',
+  crowdFit: 'How busy it gets',
+  entryFriction: 'Entry and paperwork',
+  noveltyFit: 'New to you',
+  comfortFit: 'Somewhere to sleep',
+  climatePreferenceFit: 'Warm or cold',
 };
 
 /**
@@ -164,14 +187,31 @@ export const RANK_DIMENSION_LABELS: Record<RankDimension, string> = {
  * would report a coverage nobody could interpret.
  */
 export const RANK_WEIGHTS: Record<RankDimension, number> = {
-  climateFit: 0.24,
-  daylightFit: 0.08,
-  durationFit: 0.18,
-  structureFit: 0.1,
-  supplyFit: 0.16,
-  varietyFit: 0.08,
-  themeFit: 0.12,
-  transportFit: 0.04,
+  /*
+   * V11 §3 — rebalanced, not appended to.
+   *
+   * The table has to sum to one, because `coverage` is measured weight over
+   * nominal weight and a table that did not sum to one would report a coverage
+   * nobody could interpret. The eight original weights keep their *relative*
+   * order exactly — climate still leads, transport still trails, `themeFit`
+   * still outranks `structureFit` — and are scaled to make room for the six the
+   * recommender adds. `flightBurden` is the largest newcomer because a trip
+   * where four of twelve days are spent in transit is a different trip.
+   */
+  climateFit: 0.1704,
+  daylightFit: 0.0568,
+  durationFit: 0.1278,
+  structureFit: 0.071,
+  supplyFit: 0.1136,
+  varietyFit: 0.0568,
+  themeFit: 0.0852,
+  transportFit: 0.0284,
+  flightBurden: 0.09,
+  crowdFit: 0.05,
+  entryFriction: 0.03,
+  noveltyFit: 0.04,
+  comfortFit: 0.03,
+  climatePreferenceFit: 0.05,
 };
 
 export const rankFactorSchema = z.object({
@@ -211,6 +251,15 @@ export const EXCLUSION_CODES = [
   'far_too_short_for_this_ground',
   /** They named it in what they wanted to avoid, on an exact match. */
   'traveller_ruled_it_out',
+  /*
+   * V11 §3 — hard disqualifiers are separated from soft preferences, and these
+   * two are hard because they describe a trip the traveller said they will not
+   * take, not one they would enjoy less.
+   */
+  /** They said domestic only, or international only, and this is the other one. */
+  'outside_stated_trip_scope',
+  /** Reaching it costs more time in the air than they said they would spend. */
+  'beyond_flight_tolerance',
 ] as const;
 export const exclusionCodeSchema = z.enum(EXCLUSION_CODES);
 export type ExclusionCode = z.infer<typeof exclusionCodeSchema>;

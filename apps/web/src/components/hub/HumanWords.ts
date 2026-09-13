@@ -1,4 +1,4 @@
-import type { TripNodeState, VerificationState } from '@sidequest/core';
+import { ASSURANCE_COPY, assuranceForVerification, type TripNodeState, type VerificationState } from '@sidequest/core';
 
 /**
  * V9 — HUMAN WORDS FOR FORENSIC ONES.
@@ -15,21 +15,45 @@ import type { TripNodeState, VerificationState } from '@sidequest/core';
  */
 export type HumanTone = 'pine' | 'blue' | 'neutral' | 'amber' | 'clay';
 
+/**
+ * V11 §20 §21 — THE FOUR WORDS, WITH THE PRECISE STATE BEHIND THEM.
+ *
+ * These labels are now derived from `ASSURANCE_COPY` rather than written here,
+ * so the table and the four-tier vocabulary cannot drift. The blurbs stay
+ * specific to what each evidence state actually means, because that is the
+ * sentence a traveller reads on disclosure and it is the honest one.
+ *
+ * Two changes a reader will notice. `partially_verified` is **Planned**, not a
+ * badge of its own: "a real place at this name was confirmed, its hours were
+ * not" is true of nearly every stop on nearly every trip, and a badge that
+ * appears on everything says nothing while costing a line on every row. And
+ * `unverified` is **Still checking** rather than "Check before relying" —
+ * because it is our own unfinished work, not a task for the traveller, which is
+ * the same distinction §39 draws everywhere else.
+ */
 export const VERIFICATION_WORDS: Record<VerificationState, { label: string; tone: HumanTone; blurb: string }> = {
-  verified: { label: 'Confirmed from source', tone: 'pine', blurb: 'A real place at a known position, with evidence for its hours or access.' },
-  partially_verified: { label: 'Likely', tone: 'blue', blurb: 'A real place at this name was confirmed. Its hours and access were not.' },
-  unverified: { label: 'Check before relying', tone: 'neutral', blurb: 'Nothing could be matched to a specific place yet. That is not the same as saying it is wrong.' },
+  verified: { label: ASSURANCE_COPY[assuranceForVerification('verified')].label, tone: 'pine', blurb: 'A real place at a known position, and we checked its hours or access.' },
+  partially_verified: { label: ASSURANCE_COPY[assuranceForVerification('partially_verified')].label, tone: 'neutral', blurb: 'A real place at this name. We have not checked its hours or access.' },
+  unverified: { label: ASSURANCE_COPY[assuranceForVerification('unverified')].label, tone: 'clay', blurb: 'We have not matched this to a specific place yet. That is not the same as saying it is wrong.' },
 };
 
 /** The state graph's own copy, re-exported under the human-words roof so surfaces import one table. */
+/**
+ * V11 §21 — the graph's states, in the same four words.
+ *
+ * A few keep a more specific label where the specific word is genuinely more
+ * useful than the tier ("Booked" tells a traveller more than "Confirmed", and
+ * "Needs booking" more than "Check"). Everything vaguer than its tier now reads
+ * as the tier.
+ */
 export const STATE_WORDS: Record<TripNodeState, { label: string; tone: HumanTone }> = {
-  suggested: { label: 'Suggested', tone: 'neutral' },
+  suggested: { label: 'Planned', tone: 'neutral' },
   accepted: { label: 'Decided', tone: 'pine' },
-  needs_decision: { label: 'We still need this', tone: 'clay' },
+  needs_decision: { label: 'Your call', tone: 'amber' },
   needs_booking: { label: 'Needs booking', tone: 'amber' },
   booked: { label: 'Booked', tone: 'pine' },
-  needs_verification: { label: 'Check before relying', tone: 'amber' },
-  verified: { label: 'Confirmed from source', tone: 'pine' },
+  needs_verification: { label: 'Check', tone: 'amber' },
+  verified: { label: 'Confirmed', tone: 'pine' },
   changed: { label: 'Changed since planned', tone: 'clay' },
   unavailable: { label: 'Not available', tone: 'clay' },
   cancelled: { label: 'Skipped', tone: 'neutral' },
@@ -55,7 +79,7 @@ const PHRASES: readonly [RegExp, string][] = [
   [/\bnot fully verified\b/gi, 'still to confirm'],
   [/\bunverified\b/gi, 'not yet confirmed'],
   [/\bnot verified\b/gi, 'not yet confirmed'],
-  [/\bprovider evidence (?:is )?absent\b/gi, 'check before relying'],
+  [/\bprovider evidence (?:is )?absent\b/gi, 'we could not confirm this'],
   [/\bno provider evidence\b/gi, 'nothing could confirm this yet'],
   [/\bunmeasured\b/gi, 'not yet timed'],
   [/\bblast radius\b/gi, 'what this would change'],

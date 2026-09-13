@@ -142,6 +142,18 @@ function answers(overrides: Partial<TripComposerAnswers> = {}): TripComposerAnsw
     shape: 'two_bases',
     transport: 'drive',
     themes: ['outdoors'],
+    /*
+     * V11 §3 — the recommender's own inputs, answered in the fixture so that the
+     * dimensions under test stay the only askable ones. A dimension nobody
+     * answered is `traveller_did_not_say`, and leaving these blank would make
+     * every "which question do we ask next" assertion below about the new
+     * fields rather than about the sort they were written to prove.
+     */
+    flightTolerance: 'moderate',
+    climatePreference: 'mild',
+    lodgingComfort: 'comfortable',
+    crowdTolerance: 'tolerate',
+    surpriseAppetite: 'open',
     ...overrides,
   };
 }
@@ -155,6 +167,11 @@ function candidate(overrides: Partial<CandidateEvidence> = {}): CandidateEvidenc
     duration: duration(),
     supply: supply(),
     indexFeatureCount: 120,
+    /* V11 §3 — the evidence the six new dimensions read. Present here so they measure rather than abstain. */
+    originDistanceKm: 1_200,
+    crowdPressure: 0.4,
+    lodgingComfortAvailable: ['simple', 'comfortable'],
+    entryRequirement: { kind: 'none', sourceName: 'a national immigration authority' },
     ...overrides,
   };
 }
@@ -609,9 +626,17 @@ describe('a shortlist says whether its own order is an order', () => {
 
   it('refuses to call a list ranked when any adjacent pair ties', () => {
     const picks = tied(3);
-    // A leader, then two that tie with each other: the shape the live index
-    // actually produces, and the one the old band test called "ranked".
-    picks[0] = { ...picks[0]!, score: 91 };
+    /*
+     * A leader, then two that tie with each other: the shape the live index
+     * actually produces, and the one the old band test called "ranked".
+     *
+     * The leader's score is derived from the tied one rather than written as a
+     * literal. It used to be `91`, and when V11 rebalanced `RANK_WEIGHTS` the
+     * fixture's own score happened to become 91 too — so the "leader" tied with
+     * the field and the test failed for a reason that had nothing to do with
+     * what it checks. A relative figure cannot collide.
+     */
+    picks[0] = { ...picks[0]!, score: Math.min(100, picks[1]!.score + 3) };
     const verdict = shortlistSeparation(picks);
     expect(verdict.undifferentiated).toBe(false);
     expect(verdict.tiedAtTop).toBe(1);
@@ -837,5 +862,105 @@ describe('a shortlist that cannot rank still leads with one', () => {
     ];
     const lead = shortlistLead(picks, shortlistSeparation(picks));
     expect(lead?.nextQuestion).toBeUndefined();
+  });
+});
+
+
+/**
+ * V11 §3 — HARD DISQUALIFIERS ARE HARD, AND SILENCE DISQUALIFIES NOTHING.
+ *
+ * The distinction §3 asks for: a hard disqualifier describes a trip the
+ * traveller said they will not take. Everything else is a tradeoff with a
+ * sentence, and a tradeoff must never quietly become an exclusion.
+ */
+describe('the two V11 hard disqualifiers', () => {
+  const near = () => candidate({ originDistanceKm: 900, entry: entry({ countryCode: 'US' }) });
+  const far = () => candidate({ originDistanceKm: 9_000, entry: entry({ countryCode: 'NZ' }) });
+
+  it('excludes a destination further than the traveller said they would fly', () => {
+    const codes = exclusionsFor({ candidate: far(), answers: answers({ flightTolerance: 'short' }), candidateMonths: [7] }).map((e) => e.code);
+    expect(codes).toContain('beyond_flight_tolerance');
+  });
+
+  it('excludes nothing when the traveller said "any"', () => {
+    const codes = exclusionsFor({ candidate: far(), answers: answers({ flightTolerance: 'any' }), candidateMonths: [7] }).map((e) => e.code);
+    expect(codes).not.toContain('beyond_flight_tolerance');
+  });
+
+  it('excludes nothing when the traveller has not said', () => {
+    const codes = exclusionsFor({ candidate: far(), answers: answers({ flightTolerance: undefined }), candidateMonths: [7] }).map((e) => e.code);
+    expect(codes).not.toContain('beyond_flight_tolerance');
+  });
+
+  it('excludes nothing when we could not work out how far away it is', () => {
+    const noDistance = candidate({ originDistanceKm: undefined });
+    const codes = exclusionsFor({ candidate: noDistance, answers: answers({ flightTolerance: 'short' }), candidateMonths: [7] }).map((e) => e.code);
+    expect(codes).not.toContain('beyond_flight_tolerance');
+  });
+
+  it('honours "domestic only" in both directions, and only when the origin country is known', () => {
+    const domesticOnly = { tripScope: 'domestic' as const, originCountry: 'US' };
+    expect(exclusionsFor({ candidate: far(), answers: answers(domesticOnly), candidateMonths: [7] }).map((e) => e.code)).toContain('outside_stated_trip_scope');
+    expect(exclusionsFor({ candidate: near(), answers: answers(domesticOnly), candidateMonths: [7] }).map((e) => e.code)).not.toContain('outside_stated_trip_scope');
+    expect(exclusionsFor({ candidate: far(), answers: answers({ tripScope: 'domestic' }), candidateMonths: [7] }).map((e) => e.code)).not.toContain('outside_stated_trip_scope');
+  });
+
+  it('honours "international only" too', () => {
+    const abroad = { tripScope: 'international' as const, originCountry: 'US' };
+    expect(exclusionsFor({ candidate: near(), answers: answers(abroad), candidateMonths: [7] }).map((e) => e.code)).toContain('outside_stated_trip_scope');
+    expect(exclusionsFor({ candidate: far(), answers: answers(abroad), candidateMonths: [7] }).map((e) => e.code)).not.toContain('outside_stated_trip_scope');
+  });
+
+  it('treats "either" as no constraint at all', () => {
+    const either = { tripScope: 'either' as const, originCountry: 'US' };
+    expect(exclusionsFor({ candidate: far(), answers: answers(either), candidateMonths: [7] }).map((e) => e.code)).not.toContain('outside_stated_trip_scope');
+  });
+});
+
+/**
+ * V11 §3 — the six new dimensions abstain rather than guess, which is what
+ * keeps `coverage` meaningful.
+ */
+describe('the six V11 dimensions', () => {
+  const dimensionsOf = (input: Parameters<typeof rankDestination>[0]) => new Map(rankDestination(input).factors.map((f) => [f.id, f.measure] as const));
+
+  it('measures every one of them when the evidence and the answer are both there', () => {
+    const measures = dimensionsOf({ candidate: candidate(), answers: answers(), candidateMonths: [7] });
+    for (const id of ['flightBurden', 'crowdFit', 'entryFriction', 'noveltyFit', 'comfortFit', 'climatePreferenceFit'] as const) {
+      expect(measures.get(id)?.kind, id).toBe('measured');
+    }
+  });
+
+  it('abstains on entry friction when no authority publishes it — never "no visa needed"', () => {
+    const measures = dimensionsOf({ candidate: candidate({ entryRequirement: undefined }), answers: answers(), candidateMonths: [7] });
+    expect(measures.get('entryFriction')).toEqual({ kind: 'unknown', reason: 'not_sourced' });
+  });
+
+  it('abstains on crowds when nobody sources them', () => {
+    const measures = dimensionsOf({ candidate: candidate({ crowdPressure: undefined }), answers: answers(), candidateMonths: [7] });
+    expect(measures.get('crowdFit')?.kind).toBe('unknown');
+  });
+
+  it('abstains on the traveller-stated ones when the traveller has not stated them', () => {
+    const silent = answers({ flightTolerance: undefined, climatePreference: undefined, lodgingComfort: undefined, crowdTolerance: undefined, surpriseAppetite: undefined, visited: [] });
+    const measures = dimensionsOf({ candidate: candidate(), answers: silent, candidateMonths: [7] });
+    for (const id of ['crowdFit', 'noveltyFit', 'comfortFit', 'climatePreferenceFit'] as const) {
+      expect(measures.get(id)?.kind, id).toBe('unknown');
+    }
+  });
+
+  it('lowers novelty for somewhere already visited, and never excludes it', () => {
+    const been = answers({ visited: ['Iceland'], surpriseAppetite: 'open' });
+    const iceland = candidate({ entry: entry({ displayName: 'Iceland' }) });
+    const measure = dimensionsOf({ candidate: iceland, answers: been, candidateMonths: [7] }).get('noveltyFit');
+    expect(measure).toMatchObject({ kind: 'measured' });
+    expect(measure?.kind === 'measured' ? measure.value : 1).toBeLessThan(0.5);
+    expect(exclusionsFor({ candidate: iceland, answers: been, candidateMonths: [7] })).toEqual([]);
+  });
+
+  it('welcomes somewhere already visited when the traveller said they want the familiar', () => {
+    const been = answers({ visited: ['Iceland'], surpriseAppetite: 'familiar' });
+    const measure = dimensionsOf({ candidate: candidate({ entry: entry({ displayName: 'Iceland' }) }), answers: been, candidateMonths: [7] }).get('noveltyFit');
+    expect(measure?.kind === 'measured' ? measure.value : 0).toBe(1);
   });
 });

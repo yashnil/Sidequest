@@ -30,6 +30,40 @@ export const MINUTES_PER_DAY = 24 * 60;
 
 export const minuteOfDaySchema = z.number().int().min(0).max(MINUTES_PER_DAY);
 
+/**
+ * V11 §1 — A POSITION ON A DAY'S TIMELINE, WHICH MAY RUN PAST MIDNIGHT.
+ *
+ * A minute *of day* is a clock reading and is bounded at 24:00: opening hours,
+ * sunset and a departure time are all that, and widening them would be a lie
+ * about what those fields mean.
+ *
+ * An itinerary item's position is a different thing. A day that overruns puts
+ * real stops past midnight, and the scheduler used to clamp them — which did
+ * not merely misplace them, it **destroyed their durations**, because an item's
+ * duration is derived as `endMinute - startMinute` and both ends clamped to the
+ * same 24:00. That is how a real journey shipped to a traveller as
+ * "0 min Walk to Karakol · base to base measured".
+ *
+ * So a timeline minute may run into the following day. Two days of range is
+ * deliberate: it is enough for any overrun a scheduler should ever produce and
+ * still refuses a value that is simply wrong.
+ */
+export const TIMELINE_MINUTE_LIMIT = MINUTES_PER_DAY * 2;
+export const timelineMinuteSchema = z.number().int().min(0).max(TIMELINE_MINUTE_LIMIT);
+
+/**
+ * A timeline minute as a traveller reads it, and whether it has crossed into
+ * the next day. The clock wraps; the fact that it wrapped is returned rather
+ * than hidden, because "01:30" on day 4 with no further signal is a worse lie
+ * than the clamp was.
+ */
+export function formatTimelineMinute(minute: number): { text: string; nextDay: boolean } {
+  const rounded = Math.max(0, Math.round(minute));
+  const nextDay = rounded >= MINUTES_PER_DAY;
+  const within = rounded % MINUTES_PER_DAY;
+  return { text: `${String(Math.floor(within / 60)).padStart(2, '0')}:${String(within % 60).padStart(2, '0')}`, nextDay };
+}
+
 export function formatMinuteOfDay(minute: number): string {
   const clamped = Math.max(0, Math.min(MINUTES_PER_DAY, Math.round(minute)));
   const hours = Math.floor(clamped / 60) % 24;

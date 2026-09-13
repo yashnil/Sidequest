@@ -107,7 +107,28 @@ export interface InteractiveMapProps {
 }
 
 const INSETS = { top: 18, right: 18, bottom: 18, left: 18 };
+/**
+ * The smallest ground span a frame of SEVERAL points may represent.
+ *
+ * 1.5 km is right for a cluster of stops in one town and wrong for anything
+ * else, which is the whole of the founder's "Banff townsite orientation" frame:
+ * that day had one placed point, so the fit collapsed to a degenerate extent and
+ * this floor filled the screen with the nearest creek.
+ */
 const MIN_SPAN_KM = 1.5;
+/**
+ * V11 §11 — and the smallest span a frame of ONE point may represent.
+ *
+ * A single pin needs the town it is in and the valley it sits in or it is a pin
+ * on nothing. Applied here rather than at each call site so every map — day,
+ * overview, generation, share — gets it without being asked, and so a caller
+ * that forgets cannot reintroduce the defect. `cameraFrameFor` in
+ * `map-camera.ts` decides the same thing at a higher level, for callers that can
+ * say which mode they are in; this is the floor under all of them.
+ */
+const SINGLE_POINT_SPAN_KM = 12;
+/** Two points closer than this are one place as far as framing is concerned. */
+const DISTINCT_POINT_DEGREES = 0.002;
 const ZOOM_STEP = 1.6;
 const PAN_STEP_PX = 48;
 const NUDGE_STEP_PX = 7;
@@ -121,7 +142,16 @@ interface View {
 }
 
 function fitView(points: readonly GeoPoint[], width: number, height: number): View {
-  const viewport = fitMercator({ points, width, height, insets: INSETS, minSpanKm: MIN_SPAN_KM });
+  /*
+   * V11 §11 — how much ground the floor should cover depends on how many places
+   * are actually in the frame. Counted on distinct positions rather than on the
+   * array length, because a day whose base and only stop resolved to the same
+   * point is a one-place day however many entries it has.
+   */
+  const distinct = new Set(points.map((point) => `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`));
+  const spread = points.length > 1 && (Math.max(...points.map((p) => p.lat)) - Math.min(...points.map((p) => p.lat)) > DISTINCT_POINT_DEGREES || Math.max(...points.map((p) => p.lng)) - Math.min(...points.map((p) => p.lng)) > DISTINCT_POINT_DEGREES);
+  const minSpanKm = distinct.size > 1 && spread ? MIN_SPAN_KM : SINGLE_POINT_SPAN_KM;
+  const viewport = fitMercator({ points, width, height, insets: INSETS, minSpanKm });
   return { cx: viewport.centre.x, cy: viewport.centre.y, scale: viewport.scale };
 }
 

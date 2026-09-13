@@ -5,8 +5,13 @@ import { useRouter } from 'next/navigation';
 import {
   MEASURE_BAND_LABELS,
   RANK_BAND_LABELS,
+  RERANK_CONTROLS,
+  RERANK_LABELS,
   UNKNOWN_REASON_COPY,
+  compareDestinations,
   croppable,
+  proposeDestinations,
+  rerankBy,
   imageryFallbackFor,
   measureBand,
   shortlistLead,
@@ -15,6 +20,7 @@ import {
   type DestinationShortlist,
   type RankDimension,
   type RankedDestination,
+  type RerankControl,
   type ShortlistLead,
   type UnknownReason,
 } from '@sidequest/core';
@@ -114,6 +120,17 @@ export function ShortlistView({
    * destination while the page argued for another.
    */
   const [selected, setSelected] = useState<string | null>(null);
+  /*
+   * V11 §3 — RERANKING AND COMPARISON ARE CLIENT WORK, BECAUSE THEY HAVE TO BE.
+   *
+   * "Warmer", "closer", "less touristy" re-weight dimensions the ranker has
+   * already measured and stored on every pick, so pressing one needs no server
+   * round trip, no model and no new evidence — it re-asks the same question with
+   * the traveller's new emphasis. A control that had to go and fetch something
+   * would be a control that pretends to know more afterwards than it did before.
+   */
+  const [leaning, setLeaning] = useState<RerankControl[]>([]);
+  const [comparingTo, setComparingTo] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   /*
@@ -209,7 +226,30 @@ export function ShortlistView({
         ]
       : shortlist.picks;
 
-  const current = ordered.find((pick) => pick.entryId === selected) ?? ordered[0];
+  /*
+   * V11 §3 — the answer is three and a wildcard, not a list of eight.
+   *
+   * Five to eight is the right size for a shortlist and the wrong size for an
+   * answer. `proposeDestinations` takes the best three and then chooses the
+   * *most different* remaining candidate that still scores respectably — a
+   * fourth-place near-twin of the third teaches nobody anything.
+   */
+  const leaned = leaning.length > 0 ? rerankBy(ordered, leaning) : ordered;
+  const proposals = proposeDestinations({ picks: leaned });
+  /*
+   * The featured set is three and a wildcard; the rest are **demoted, never
+   * hidden**. That distinction is the screen's own long-standing principle and
+   * it is right: a traveller who disagrees with our three has to be able to see
+   * the fourth, and a list that silently drops half of what was scored is a
+   * verdict wearing the clothes of a choice. So the emphasis changes and the
+   * reachability does not — the featured four are labelled and come first, and
+   * everything else follows in the order the ranking produced.
+   */
+  const roleOf = new Map(proposals.map((proposal) => [proposal.destination.entryId, proposal] as const));
+  const shown = [...proposals.map((proposal) => proposal.destination), ...leaned.filter((pick) => !roleOf.has(pick.entryId))];
+
+  const current = shown.find((pick) => pick.entryId === selected) ?? shown[0] ?? ordered[0];
+  const comparison = comparingTo && current ? compareDestinations(current, shown.find((pick) => pick.entryId === comparingTo) ?? current) : null;
 
   if (shortlist.picks.length === 0) {
     return (
@@ -279,11 +319,107 @@ export function ShortlistView({
             />
           ) : null}
 
+          {/*
+            * V11 §3 — the reranking controls.
+            *
+            * Each one re-weights dimensions already measured on every pick, so
+            * the list reorders instantly and nothing is fetched. Pressed state
+            * is a toggle, and several can be on at once — "cheaper" and "closer"
+            * is a real thing to want.
+            */}
+          <section aria-labelledby="shortlist-lean" className="rule-top pt-6">
+            <h2 id="shortlist-lean" className="eyebrow">
+              Lean the list
+            </h2>
+            <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
+              These re-sort what we already worked out. Nothing new is looked up, and nothing is added to the list.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {RERANK_CONTROLS.map((control) => {
+                const on = leaning.includes(control);
+                return (
+                  <button
+                    key={control}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setLeaning((previous) => (previous.includes(control) ? previous.filter((entry) => entry !== control) : [...previous, control]))}
+                    className={cx(buttonClass(on ? 'primary' : 'secondary', 'sm'), 'rounded-full')}
+                  >
+                    {RERANK_LABELS[control]}
+                  </button>
+                );
+              })}
+              {leaning.length > 0 ? (
+                <button type="button" onClick={() => setLeaning([])} className={cx(buttonClass('ghost', 'sm'), 'rounded-full')}>
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          {/*
+            * V11 §3 — "Why this over that?".
+            *
+            * Only the dimensions where the two genuinely differ, widest first,
+            * with the ties reported as a count. A table where most rows say "the
+            * same" buries the two that do not.
+            */}
+          {current && shown.length > 1 ? (
+            <section aria-labelledby="shortlist-compare" className="rule-top pt-6">
+              <h2 id="shortlist-compare" className="eyebrow">
+                Why {current.displayName} over…
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {shown
+                  .filter((pick) => pick.entryId !== current.entryId)
+                  .map((pick) => (
+                    <button
+                      key={pick.entryId}
+                      type="button"
+                      aria-pressed={comparingTo === pick.entryId}
+                      onClick={() => setComparingTo((previous) => (previous === pick.entryId ? null : pick.entryId))}
+                      className={cx(buttonClass(comparingTo === pick.entryId ? 'primary' : 'secondary', 'sm'), 'rounded-full')}
+                    >
+                      {pick.displayName}
+                    </button>
+                  ))}
+              </div>
+              {comparison ? (
+                <div className="mt-4">
+                  {comparison.differences.length === 0 ? (
+                    <p className="measure text-sm leading-relaxed text-ink-muted">
+                      On everything we could measure, these two came out the same. The choice is yours to make on something we did not weigh.
+                    </p>
+                  ) : (
+                    <ul className="grid gap-2">
+                      {comparison.differences.slice(0, 5).map((difference) => (
+                        <li key={difference.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                          <span className="label w-44 shrink-0 text-ink-faint">{difference.label}</span>
+                          <span className={difference.delta > 0 ? 'text-pine' : 'text-ink-muted'}>
+                            {difference.delta > 0 ? comparison.left.displayName : comparison.right.displayName}
+                          </span>
+                          <span className="text-ink-muted">
+                            {(difference.delta > 0 ? difference.left : difference.right)?.basis ?? 'we could not measure this on the other one'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {comparison.tied.length > 0 ? (
+                    <p className="mt-3 text-xs text-ink-faint">
+                      They came out level on {comparison.tied.length} other {comparison.tied.length === 1 ? 'thing' : 'things'}.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           <section aria-labelledby="shortlist-others">
             <h2 id="shortlist-others" className="eyebrow">
-              {ordered.length === 1
+              {shown.length === 1
                 ? 'The one place we found'
-                : `The other ${ordered.length - 1}, and how they compare`}
+                : `The other ${shown.length - 1}, and how they compare`}
             </h2>
             <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
               {separation.undifferentiated
@@ -294,10 +430,18 @@ export function ShortlistView({
               className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
               aria-label="Suggested destinations"
             >
-              {ordered.map((pick) => {
+              {shown.map((pick) => {
                 const image = images[pick.entryId] ?? null;
+                const proposal = roleOf.get(pick.entryId);
                 return (
                   <li key={pick.entryId}>
+                    {/* V11 §3 — the wildcard says what it is, or it reads as a fourth recommendation nobody asked for. */}
+                    {proposal?.role === 'wildcard' ? (
+                      <p className="label mb-1.5 text-accent">
+                        Wildcard
+                        {proposal.wildcardReason ? <span className="ml-2 font-normal normal-case tracking-normal text-ink-faint">{proposal.wildcardReason}</span> : null}
+                      </p>
+                    ) : null}
                     {/*
                       THESE CARDS CARRY THE PICTURES, AND THAT IS A LICENCE
                       DECISION AS MUCH AS A DESIGN ONE.
@@ -839,9 +983,10 @@ function fallbackFor(pick: RankedDestination) {
  * and "measured on 62% of the evidence" invites a comparison between two
  * percentages that were never meant to be subtracted.
  */
+/* V11 §20 — "evidenced" is our word for our own process. What a traveller wants to know is how much of this we were actually able to check. */
 function coverageWord(coverage: number): string {
-  if (coverage >= 0.85) return 'Well evidenced';
-  if (coverage >= 0.7) return 'Reasonably evidenced';
-  if (coverage >= 0.5) return 'Partly evidenced';
-  return 'Thin evidence';
+  if (coverage >= 0.85) return 'We checked most of this';
+  if (coverage >= 0.7) return 'We checked a good deal of this';
+  if (coverage >= 0.5) return 'We checked some of this';
+  return 'We could not check much of this';
 }

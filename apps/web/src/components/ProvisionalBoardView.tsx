@@ -369,7 +369,7 @@ export function ProvisionalBoardView({
           {stillRunning
             ? `We are checking the strongest of these now${pinnedCount > 0 ? `, starting with the ${pinnedCount} you marked` : ''}. You can close this page — it carries on without you.`
             : finishedBoardReady
-              ? 'Checking has finished. The finished board has what survived — checked travel times, opening evidence and all.'
+              ? 'Checking has finished. What is left is what held up — travel times and opening hours included.'
               : 'Checking stopped before it finished. The progress page has what happened, and the way to start it again.'}
         </p>
         <div className="mt-4 flex flex-wrap gap-3">

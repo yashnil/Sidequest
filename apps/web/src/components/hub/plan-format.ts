@@ -1,4 +1,4 @@
-import { formatMinuteOfDay } from '@sidequest/core';
+import { formatMinuteOfDay, formatTimelineMinute } from '@sidequest/core';
 import { formatMinutes } from '@/lib/format';
 import { roundedDuration, roundedMinuteOfDay, roundedTravel, type ClockEdge } from '../plan-language';
 
@@ -14,6 +14,21 @@ import { roundedDuration, roundedMinuteOfDay, roundedTravel, type ClockEdge } fr
 /** A clock time as this page prints it: five-minute precision, in the direction that cannot make a claim false. */
 export function clock(minute: number, edge: ClockEdge): string {
   return formatMinuteOfDay(roundedMinuteOfDay(minute, edge));
+}
+
+/**
+ * V11 §1 — A TIME ON A DAY THAT HAS RUN PAST MIDNIGHT.
+ *
+ * Itinerary items carry a *timeline* minute, which may exceed 24:00 on a day
+ * that overruns. Printing 01:30 with nothing else would move a stop twenty-two
+ * hours earlier on the page — a worse lie than the clamp that used to destroy
+ * its duration. The "+1" is small, unmissable and only ever appears where the
+ * day genuinely spills over.
+ */
+export function timelineClock(minute: number, edge: ClockEdge): string {
+  const rounded = roundedMinuteOfDay(minute % (24 * 60), edge);
+  const { text, nextDay } = formatTimelineMinute(minute >= 24 * 60 ? 24 * 60 + rounded : rounded);
+  return nextDay ? `${text} +1` : text;
 }
 
 /** A span as this page prints it: rounded down, so it never overstates. */

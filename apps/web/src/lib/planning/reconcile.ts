@@ -67,6 +67,7 @@ import {
   mealSlotOf,
   estimateLegMinutes,
   COLOCATED_KM,
+  TIMELINE_MINUTE_LIMIT,
   plausibleModeFor,
   selectSignatureExperiences,
   type GroundArrangement,
@@ -350,7 +351,6 @@ const MIN_FREE_BLOCK_MINUTES = 30;
  * hard back-by hour, get no tolerance at all — see `layoutDay`.
  */
 const LATE_END_TOLERANCE_MINUTES = 30;
-const MAX_MINUTE = 24 * 60;
 
 /**
  * The traveller's interests, strongest first, as plain keys.
@@ -2468,9 +2468,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       id: `d${input.dayNumber}-${slot}`,
       kind: 'meal',
       title,
-      startMinute: clamp(clock),
-      endMinute: clamp(clock + minutes),
-      durationMinutes: clamp(clock + minutes) - clamp(clock),
+      ...span(clock, minutes),
       reason: intent ? 'What to look for and where, from the plan. Nothing here is booked.' : `A ${slot} slot in the day; the plan did not say where.`,
       weatherSensitive: false,
     });
@@ -2536,9 +2534,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
         id: `d${input.dayNumber}-leg-${items.length}`,
         kind: 'travel',
         title: `${episodeLegLabel(episode)} ${to.name}`,
-        startMinute: clamp(clock),
-        endMinute: clamp(clock + duration),
-        durationMinutes: clamp(clock + duration) - clamp(clock),
+        ...span(clock, duration),
         travel,
         reason: estimate
           ? `About ${estimate.minutes} min on foot, estimated from map distance (roughly ${estimate.approxKm} km) — part of ${episode.name}.`
@@ -2630,9 +2626,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       id: `d${input.dayNumber}-leg-${items.length}`,
       kind: 'travel',
       title: `${measured || estimate ? `${labelFor(mode)} to` : 'Travel to'} ${to.name}`,
-      startMinute: clamp(clock),
-      endMinute: clamp(clock + duration),
-      durationMinutes: clamp(clock + duration) - clamp(clock),
+      ...span(clock, duration),
       travel,
       reason: measured
         ? `${measured.minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
@@ -2782,9 +2776,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       id: anchor.id,
       kind: 'activity',
       title: anchor.draft.name,
-      startMinute: clamp(start),
-      endMinute: clamp(end),
-      durationMinutes: clamp(end) - clamp(start),
+      ...span(start, end - start),
       ...(anchor.identity ? { placeId: anchor.identity.id } : {}),
       reason: anchor.draft.why,
       note: `${anchor.draft.role} · ${anchor.draft.category.replace(/_/g, ' ')} · ${anchor.durationBasis === 'model_estimate' ? "your plan's own time estimate" : anchor.durationBasis === 'place_record' ? 'typical visit length on record' : 'a typical visit length for this kind of place'}`,
@@ -2798,7 +2790,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     if (hours && end > hours.closeMinute) {
       items[items.length - 1] = { ...items[items.length - 1]!, note: `${items[items.length - 1]!.note} · may run past the published closing time (${formatClock(hours.closeMinute)}); check hours` };
     }
-    totals.activityMinutes += clamp(end) - clamp(start);
+    totals.activityMinutes += Math.max(0, Math.round(end - start));
     clock = end;
     cursor = target;
   }
@@ -2950,9 +2942,41 @@ function labelFor(mode: TransportMode): string {
   }
 }
 
-function clamp(minute: number): number {
-  return Math.max(0, Math.min(MAX_MINUTE, Math.round(minute)));
+/**
+ * V11 §1 — PLACING AN ITEM ON THE DAY'S TIMELINE.
+ *
+ * This used to be `clamp`, bounded at 24:00, and every item's duration was
+ * derived from two clamped ends. Once a day overran midnight both ends landed on
+ * the same value and the item's duration became **zero** — which is how a real
+ * measured journey reached a traveller as "0 min Walk to Karakol · base to base
+ * measured", and how the last stops of an overrunning day silently lost their
+ * time.
+ *
+ * Position and duration are now separate facts. `place()` bounds a position to
+ * the representable timeline (two days, `TIMELINE_MINUTE_LIMIT`), which is
+ * generous enough that no real overrun reaches it; `span()` derives the pair so
+ * that `duration === end - start` holds by construction, because the schema
+ * refines exactly that. A duration is never computed by subtracting two
+ * independently-bounded numbers again.
+ */
+function place(minute: number): number {
+  return Math.max(0, Math.min(TIMELINE_MINUTE_LIMIT, Math.round(minute)));
 }
+
+/**
+ * The three time fields of an item, from a start and a duration.
+ *
+ * The duration is the fact; the end follows from it. Both ends are bounded only
+ * by the timeline limit, so an overrun moves an item later rather than
+ * shortening it. The one case that legitimately produces zero is a duration that
+ * really is zero — two points at the same place — and that stays expressible.
+ */
+function span(startMinute: number, durationMinutes: number): { startMinute: number; endMinute: number; durationMinutes: number } {
+  const start = place(startMinute);
+  const duration = Math.max(0, Math.round(durationMinutes));
+  return { startMinute: start, endMinute: place(start + duration), durationMinutes: Math.min(duration, TIMELINE_MINUTE_LIMIT - start) };
+}
+
 
 function formatClock(minute: number): string {
   const h = Math.floor(minute / 60);

@@ -4,6 +4,7 @@ import {
   isoDateSchema,
   httpUrlSchema,
   minuteOfDaySchema,
+  timelineMinuteSchema,
   physicalIntensitySchema,
 } from './common';
 import { dayFoodSummarySchema, foodPlanSchema, scheduledFoodSchema } from './food';
@@ -13,7 +14,7 @@ import { experienceGraphSchema } from '../experience/graph';
 import { accessConstraintSchema } from '../access/constraints';
 import { qualityCompilerReportSchema } from '../quality/compiler-report';
 
-export { MINUTES_PER_DAY, formatMinuteOfDay, minuteOfDaySchema, parseMinuteOfDay } from './common';
+export { MINUTES_PER_DAY, TIMELINE_MINUTE_LIMIT, formatMinuteOfDay, formatTimelineMinute, minuteOfDaySchema, parseMinuteOfDay, timelineMinuteSchema } from './common';
 
 /**
  * The scheduled output of the planner — the fourth and last of the four kinds of
@@ -342,8 +343,21 @@ export const itineraryItemSchema = z
     id: z.string().min(1),
     kind: itineraryItemKindSchema,
     title: z.string().min(1),
-    startMinute: minuteOfDaySchema,
-    endMinute: minuteOfDaySchema,
+    /**
+     * V11 §1 — WHERE THE ITEM SITS, WHICH MAY BE PAST MIDNIGHT.
+     *
+     * A `timelineMinute`, not a minute of day. A day that overruns puts real
+     * stops after 24:00, and bounding them there did not misplace them so much
+     * as **delete their durations**: `durationMinutes` is `endMinute -
+     * startMinute` by the refinement below, so two ends clamped to the same
+     * 24:00 make a real journey take no time. That is the mechanism behind
+     * "0 min Walk to Karakol · base to base measured" in a production plan.
+     *
+     * Render with `formatTimelineMinute`, which wraps the clock and says that
+     * it wrapped.
+     */
+    startMinute: timelineMinuteSchema,
+    endMinute: timelineMinuteSchema,
     durationMinutes: z.number().int().min(0),
     /**
      * The attraction this item is about. Present on `activity` items and on the

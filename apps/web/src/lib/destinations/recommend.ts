@@ -16,8 +16,9 @@ import {
   type DestinationShortlist,
   type SupplyFunnel,
   type TripComposerAnswers,
+  separationKm,
 } from '@sidequest/core';
-import { destinationIndexRelease, entriesInCountry, recommendationUniverse } from '../db/destination-index-repository';
+import { destinationIndexRelease, entriesByPrefix, entriesInCountry, recommendationUniverse } from '../db/destination-index-repository';
 import { climateFor, isClimateEnabled } from './preflight';
 import { capabilityRegistry } from '../capabilities';
 
@@ -307,9 +308,26 @@ export async function recommendDestinations(input: RecommendInput): Promise<Dest
 
   // ---- Stage 1: free, local ------------------------------------------------
   const byCountry = new Map<string, DestinationIndexEntry[]>();
-  const free = universe.map((entry) =>
-    freeEvidence(entry, input.answers, releaseId, input.now, byCountry),
-  );
+  /*
+   * V11 §3 — WHERE THE TRAVELLER IS STARTING FROM, IF THE INDEX ALREADY KNOWS.
+   *
+   * `flightBurden` needs a distance, and a distance needs a point. The composer
+   * holds the origin as free text, so this resolves it against the index we
+   * already have in memory — a prefix lookup, no network, no provider call, no
+   * cost. When it does not resolve, `originDistanceKm` stays absent and the
+   * dimension **abstains**: an unmeasured dimension drops out of the denominator
+   * and is named in `unknowns`, which is exactly right and is emphatically not
+   * the same as scoring every destination as if it were next door.
+   *
+   * A fare is never derived from this, here or anywhere. §3 forbids inventing
+   * airfare and the product has no source for it; distance is a fact about the
+   * world and is labelled as one.
+   */
+  const originPoint = originPointFor(input.answers.origin);
+  const free = universe.map((entry) => {
+    const evidence = freeEvidence(entry, input.answers, releaseId, input.now, byCountry);
+    return originPoint ? { ...evidence, originDistanceKm: Math.round(separationKm(originPoint, entry.center)) } : evidence;
+  });
 
   /*
    * Rank once on the free signals alone, purely to choose who is worth a climate
@@ -369,4 +387,23 @@ export async function recommendDestinations(input: RecommendInput): Promise<Dest
     ...(input.limit ? { limit: input.limit } : {}),
     blindSpots,
   });
+}
+
+/**
+ * The traveller's stated origin as a point, from the index alone.
+ *
+ * Deliberately strict about what counts as a match: the first index row whose
+ * display name the origin text actually names, preferring a settlement, and
+ * nothing at all when the text is ambiguous or unknown. A wrong origin would
+ * silently mis-rank the whole list on `flightBurden`, and no distance is far
+ * better than a confident wrong one.
+ */
+function originPointFor(origin: string | undefined): { lat: number; lng: number } | null {
+  const text = origin?.trim();
+  if (!text || text.length < 3) return null;
+  const rows = entriesByPrefix(text.slice(0, 24).toLowerCase(), 12);
+  const needle = text.toLowerCase();
+  const exact = rows.find((row: DestinationIndexEntry) => row.displayName.toLowerCase() === needle);
+  const named = exact ?? rows.find((row: DestinationIndexEntry) => needle.startsWith(row.displayName.toLowerCase()) || needle.includes(row.displayName.toLowerCase()));
+  return named ? named.center : null;
 }

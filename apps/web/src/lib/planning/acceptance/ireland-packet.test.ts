@@ -72,7 +72,7 @@ describe('the Ireland traveller packet', () => {
     expect(html).toMatch(/data-testid="hub-sources" data-print="appendix"/); // …but never in the packet by default
     // The founder's repeated caveat paragraph is gone from the rows; the chip carries the state.
     expect((html.match(/could not be independently confirmed as a specific place/g) ?? []).length).toBe(0);
-    expect((html.match(/Check before relying/g) ?? []).length).toBeGreaterThan(0); // V6: the traveller-facing state word
+    expect((html.match(/Still checking/g) ?? []).length).toBeGreaterThan(0); // V6 state word, in V11 §21's four-word vocabulary
     // No zero-minute travel row, no "0 km".
     expect(html).not.toMatch(/>0 min</);
     expect(html).not.toMatch(/about 0 km/);

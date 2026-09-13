@@ -60,6 +60,21 @@ import {
 export interface CandidateEvidence {
   entry: DestinationIndexEntry;
   releaseId: string;
+  /**
+   * V11 §3 — great-circle km from the traveller's origin, when one was resolved.
+   *
+   * Distance, never a fare and never a flight time: Sidequest has no airfare
+   * source and inventing one would be the exact thing §3 forbids. A band of
+   * distance is an honest proxy for "how much of the trip is spent getting
+   * there" and is labelled as such wherever it is shown.
+   */
+  originDistanceKm?: number;
+  /** Published entry requirements for this country from the traveller's, when an authority states them. */
+  entryRequirement?: { kind: 'none' | 'authorisation' | 'visa_on_arrival' | 'visa_in_advance'; sourceName: string };
+  /** How busy this destination is in the months under consideration, 0 (empty) to 1 (peak crush), when sourced. */
+  crowdPressure?: number;
+  /** Whether beds of the traveller's stated comfort exist here at all, from the index. */
+  lodgingComfortAvailable?: readonly ('simple' | 'comfortable' | 'refined')[];
   /** Absent when it was never requested, which is a budget fact and is stated. */
   climate?: ClimateProfile;
   /** Why climate is absent, when the caller knows. */
@@ -346,6 +361,110 @@ function transportMeasure(input: RankInput): Measure {
   );
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * V11 §3 — the six the recommender adds
+ * ---------------------------------------------------------------------------
+ *
+ * Every one returns `unknown` rather than a middling number when the evidence
+ * is absent, because `unknown` drops the weight out of the denominator and a
+ * guess does not. That is the same rule the eight above already follow, and it
+ * is what makes `coverage` mean something.
+ */
+
+/** How far the traveller will fly, in great-circle kilometres. Distance, never a fare. */
+const FLIGHT_TOLERANCE_KM: Record<'short' | 'moderate' | 'long' | 'any', number> = {
+  short: 1_500,
+  moderate: 5_000,
+  long: 12_000,
+  any: 20_000,
+};
+
+function flightBurdenMeasure(input: RankInput): Measure {
+  const km = input.candidate.originDistanceKm;
+  if (km === undefined) return unknown('traveller_did_not_say');
+  const tolerance = input.answers.flightTolerance ?? 'any';
+  const ceiling = FLIGHT_TOLERANCE_KM[tolerance];
+  /*
+   * A trip well inside the tolerance scores full marks; one at the ceiling
+   * scores poorly but is not excluded — that is `beyond_flight_tolerance`'s job,
+   * and it only fires past the ceiling. Linear in distance rather than in some
+   * modelled hours, because hours would be a fabricated schedule.
+   */
+  return measured(clamp01(1 - km / ceiling), `about ${Math.round(km / 100) * 100} km from where you are starting, against a ${tolerance} appetite for flying`);
+}
+
+function crowdFitMeasure(input: RankInput): Measure {
+  const pressure = input.candidate.crowdPressure;
+  if (pressure === undefined) return unknown('not_sourced');
+  const tolerance = input.answers.crowdTolerance;
+  if (!tolerance) return unknown('traveller_did_not_say');
+  /* Somebody who is unbothered gets no penalty at all; somebody avoiding crowds gets the inverse. */
+  const value = tolerance === 'unbothered' ? 1 : tolerance === 'tolerate' ? clamp01(1 - pressure * 0.5) : clamp01(1 - pressure);
+  return measured(value, `${Math.round(pressure * 100)}% of its peak busyness in the months you can go`);
+}
+
+function entryFrictionMeasure(input: RankInput): Measure {
+  const requirement = input.candidate.entryRequirement;
+  /*
+   * Absent means no authority publishes it for this pairing, which is a gap in
+   * us and never "no visa needed". Only `official_current`-grade sources reach
+   * this field; the readiness layer holds the same line.
+   */
+  if (!requirement) return unknown('not_sourced');
+  const value = requirement.kind === 'none' ? 1 : requirement.kind === 'authorisation' ? 0.8 : requirement.kind === 'visa_on_arrival' ? 0.6 : 0.25;
+  return measured(value, `${requirement.kind.replace(/_/g, ' ')}, per ${requirement.sourceName}`);
+}
+
+function noveltyFitMeasure(input: RankInput): Measure {
+  const visited = input.answers.visited ?? [];
+  const appetite = input.answers.surpriseAppetite;
+  if (visited.length === 0 && !appetite) return unknown('traveller_did_not_say');
+  const name = `${input.candidate.entry.displayName} ${input.candidate.entry.countryCode ?? ''}`.toLowerCase();
+  /*
+   * "Already visited" is matched on the traveller's own words against the
+   * destination's own name, and it LOWERS the score rather than excluding —
+   * plenty of people go back somewhere on purpose, and §3 says similarity is a
+   * soft preference.
+   */
+  const seen = visited.some((place) => {
+    const needle = place.trim().toLowerCase();
+    return needle.length > 2 && (name.includes(needle) || needle.includes(input.candidate.entry.displayName.toLowerCase()));
+  });
+  const base = seen ? 0.2 : 1;
+  if (appetite === 'familiar') return measured(seen ? 1 : 0.6, seen ? 'somewhere you already know, which you said you would welcome' : 'new to you');
+  if (appetite === 'surprise_me') return measured(seen ? 0.05 : 1, seen ? 'you have already been here' : 'new to you, which is what you asked for');
+  return measured(base, seen ? 'you have already been here' : 'new to you');
+}
+
+function comfortFitMeasure(input: RankInput): Measure {
+  const wanted = input.answers.lodgingComfort;
+  const available = input.candidate.lodgingComfortAvailable;
+  if (!wanted) return unknown('traveller_did_not_say');
+  if (!available || available.length === 0) return unknown('no_index_coverage');
+  if (available.includes(wanted)) return measured(1, `${wanted} places to stay exist here`);
+  /* Simpler than asked for is a compromise; grander than asked for is not a problem. */
+  const RANK = { simple: 0, comfortable: 1, refined: 2 } as const;
+  const best = Math.max(...available.map((kind) => RANK[kind]));
+  return measured(best > RANK[wanted] ? 0.8 : 0.35, best > RANK[wanted] ? `nothing ${wanted} on record, but grander places exist` : `only simpler places than ${wanted} on record`);
+}
+
+function climatePreferenceMeasure(input: RankInput): Measure {
+  const wanted = input.answers.climatePreference;
+  if (!wanted || wanted === 'any') return unknown('traveller_did_not_say');
+  const climate = input.candidate.climate;
+  if (!climate) return unknown(input.candidate.climateAbsence ?? 'no_climate_record');
+  const months = input.candidateMonths.length > 0 ? input.candidateMonths : [];
+  if (months.length === 0) return unknown('traveller_did_not_say');
+  const highs = months.map((month) => monthNormal(climate, month)?.temperature.high).filter((value): value is number => typeof value === 'number');
+  if (highs.length === 0) return unknown('no_climate_record');
+  const mean = highs.reduce((total, value) => total + value, 0) / highs.length;
+  /* Bands, not a curve: "warm" is a thing people mean, and 24 °C is the middle of it. */
+  const target = wanted === 'warm' ? 26 : wanted === 'mild' ? 18 : 4;
+  const value = clamp01(1 - Math.abs(mean - target) / 18);
+  return measured(value, `daytime highs average ${Math.round(mean)} °C in the months you can go`);
+}
+
 const MEASURERS: Record<RankDimension, (input: RankInput) => Measure> = {
   climateFit: climateMeasure,
   daylightFit: daylightMeasure,
@@ -355,6 +474,12 @@ const MEASURERS: Record<RankDimension, (input: RankInput) => Measure> = {
   varietyFit: varietyMeasure,
   themeFit: themeMeasure,
   transportFit: transportMeasure,
+  flightBurden: flightBurdenMeasure,
+  crowdFit: crowdFitMeasure,
+  entryFriction: entryFrictionMeasure,
+  noveltyFit: noveltyFitMeasure,
+  comfortFit: comfortFitMeasure,
+  climatePreferenceFit: climatePreferenceMeasure,
 };
 
 // ---------------------------------------------------------------------------
@@ -397,6 +522,39 @@ export function exclusionsFor(input: RankInput): Exclusion[] {
       code: 'nowhere_to_stay',
       message: 'We could not find anywhere inside this we could sensibly base you.',
     });
+  }
+
+  /*
+   * V11 §3 — HARD DISQUALIFIERS, SEPARATED FROM SOFT PREFERENCES.
+   *
+   * Both of these describe a trip the traveller said they will not take, rather
+   * than one they would enjoy less. Both require the traveller to have said so
+   * explicitly and the evidence to exist: silence excludes nowhere, and a
+   * distance we could not compute excludes nowhere either. `'any'` is a real
+   * answer meaning "no limit" and must never disqualify anything.
+   */
+  const scope = answers.tripScope;
+  const origin = answers.originCountry;
+  const destinationCountry = candidate.entry.countryCode;
+  if (scope && scope !== 'either' && origin && destinationCountry) {
+    const domestic = origin.toUpperCase() === destinationCountry.toUpperCase();
+    if (scope === 'domestic' && !domestic) {
+      found.push({ code: 'outside_stated_trip_scope', message: 'You asked to stay inside your own country, and this is not.' });
+    } else if (scope === 'international' && domestic) {
+      found.push({ code: 'outside_stated_trip_scope', message: 'You asked to leave the country, and this is inside it.' });
+    }
+  }
+
+  const tolerance = answers.flightTolerance;
+  const distanceKm = candidate.originDistanceKm;
+  if (tolerance && tolerance !== 'any' && distanceKm !== undefined) {
+    const ceiling = FLIGHT_TOLERANCE_KM[tolerance];
+    if (distanceKm > ceiling) {
+      found.push({
+        code: 'beyond_flight_tolerance',
+        message: `About ${Math.round(distanceKm / 100) * 100} km away, and you said you would rather not fly further than a ${tolerance} hop.`,
+      });
+    }
   }
 
   const nights = nightsFrom(answers);

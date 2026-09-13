@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { TransportMode } from '../schemas/access';
+import { timelineMinuteSchema } from '../schemas/common';
 import type { TravelSegment } from '../schemas/itinerary';
 
 /**
@@ -83,8 +84,17 @@ export const transportLegSchema = z.object({
   originName: z.string().min(1),
   destinationId: z.string().min(1),
   destinationName: z.string().min(1),
-  departMinute: z.number().int().min(0).max(1440).optional(),
-  arriveMinute: z.number().int().min(0).max(1440).optional(),
+  /*
+   * V11 §1 — timeline minutes, not minutes of day.
+   *
+   * A leg on a day that overruns genuinely departs and arrives after midnight,
+   * and bounding these at 24:00 is the same mistake that used to destroy the
+   * leg's duration: it makes a real journey unrepresentable and then throws
+   * rather than saying so. They are derived from the item's own times, which
+   * are timeline minutes, so they carry the same range.
+   */
+  departMinute: timelineMinuteSchema.optional(),
+  arriveMinute: timelineMinuteSchema.optional(),
   durationMinutes: z.number().int().min(0).nullable(),
   km: z.number().min(0).nullable(),
   durationBasis: durationBasisSchema,

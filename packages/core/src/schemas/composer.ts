@@ -403,6 +403,41 @@ export const tripComposerAnswersSchema = z.object({
    */
   mustDoDecisions: z.array(mustDoDecisionSchema).max(24).default([]),
 
+  /**
+   * V11 §3 — WHAT "WHERE SHOULD I GO?" NEEDS AND A KNOWN DESTINATION DOES NOT.
+   *
+   * Added here rather than in a record of their own, and additively at the same
+   * `schemaVersion`, exactly as `interpretation` and `mustDoDecisions` were. The
+   * reason is the product requirement: a traveller who accepts a recommendation
+   * must not re-enter anything, so the recommender has to write into the same
+   * record trip setup reads. A stored composer written before this existed
+   * parses with every field absent, which reads correctly as "nobody asked".
+   *
+   * Every one of these changes the ranking. Nothing is collected for its own
+   * sake: which question is worth asking next is decided by
+   * `shortlistSeparation`, which reports the dimensions no candidate could be
+   * measured on because the traveller has not said — heaviest weight first — so
+   * the intake asks for the answer that would actually break the tie.
+   */
+  /** How far the traveller will fly to get there. */
+  flightTolerance: z.enum(['short', 'moderate', 'long', 'any']).optional(),
+  /** Warm, mild or cold — a preference about the destination, not a forecast. */
+  climatePreference: z.enum(['warm', 'mild', 'cold', 'any']).optional(),
+  /** How comfortable the beds have to be. Separate from budget: money and fussiness are different. */
+  lodgingComfort: z.enum(['simple', 'comfortable', 'refined']).optional(),
+  /** Whether crossing a border is wanted, tolerated or ruled out. */
+  tripScope: z.enum(['domestic', 'international', 'either']).optional(),
+  /** How far from the familiar the traveller wants to be taken. */
+  surpriseAppetite: z.enum(['familiar', 'open', 'surprise_me']).optional(),
+  /** Places already visited, as the traveller named them. Lowers similarity, never excludes. */
+  /* `.optional()` rather than `.default([])`: a default makes the field REQUIRED on the output type, so every existing literal that builds a composer record would stop compiling — which is not what "additive" means. Read as `?? []`. */
+  visited: z.array(z.string().min(1).max(120)).max(40).optional(),
+  /** Budget per person, and whether the figure is meant to include getting there. */
+  budgetPerPerson: z.number().int().min(0).max(1_000_000).optional(),
+  budgetIncludesFlights: z.boolean().optional(),
+  /** The country the traveller is departing from, ISO 3166-1 alpha-2, when known. Decides what "domestic" means. */
+  originCountry: z.string().length(2).optional(),
+
   /** Which questions have been shown and dismissed, so they are not re-asked. */
   skipped: z.array(z.string().min(1)).default([]),
   updatedAt: z.string().min(1),

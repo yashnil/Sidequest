@@ -76,7 +76,7 @@ const PROOF: [string, string][] = [
   ['Logistics', 'Travel timed where it can be, and said where it cannot.'],
   ['Timing', 'What your dates open, close and crowd.'],
   ['Reality', 'Every named place checked against the map.'],
-  ['Group constraints', 'One person’s hard rule is the group’s.'],
+  ['Travelling as a group', 'One person’s hard rule is the group’s.'],
   ['Preparation', 'What to book, pack and keep a fallback for.'],
 ];
 

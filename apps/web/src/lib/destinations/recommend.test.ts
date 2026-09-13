@@ -60,12 +60,18 @@ function answers(): TripComposerAnswers {
   };
 }
 
-async function rank(seedPath: string) {
+async function rank(seedPath: string, overrides: Partial<TripComposerAnswers> = {}) {
   process.env.SIDEQUEST_DESTINATION_INDEX_SEED = seedPath;
   const { seedDestinationIndexIfRequested } = await import('./seed');
   seedDestinationIndexIfRequested();
   const { recommendDestinations } = await import('./recommend');
-  return recommendDestinations({ answers: answers(), now: NOW });
+  return recommendDestinations({ answers: { ...answers(), ...overrides }, now: NOW });
+}
+
+/** The names the seeded five-country index actually holds, for the origin test below. */
+async function seededNames(seedPath: string): Promise<string[]> {
+  const shortlist = await rank(seedPath);
+  return shortlist.picks.map((pick) => pick.displayName);
 }
 
 describe('the shortlist states what the index could not supply', () => {
@@ -122,5 +128,44 @@ describe('the shortlist states what the index could not supply', () => {
 
     const shortlist = await rank(seeded);
     expect(shortlist.blindSpots.join(' ')).not.toContain('administrative region or county');
+  });
+});
+
+
+/**
+ * V11 §3 — WHERE THE TRAVELLER IS STARTING FROM, AND WHAT HAPPENS WHEN WE DO NOT KNOW.
+ *
+ * `flightBurden` needs a distance. The composer holds the origin as free text,
+ * so it is resolved against the index already in memory — a prefix lookup, no
+ * network, no provider call. The half that matters more is the other one: when
+ * the text resolves to nothing, the dimension **abstains** rather than scoring
+ * every destination as if it were next door.
+ */
+describe('the origin, when the index can place it', () => {
+  it('abstains from flight burden when no origin was given', async () => {
+    const shortlist = await rank(SEED_PATH);
+    const factor = shortlist.picks[0]?.factors.find((entry) => entry.id === 'flightBurden');
+    expect(factor?.measure.kind).toBe('unknown');
+  });
+
+  it('abstains when the origin is text the index cannot place', async () => {
+    const shortlist = await rank(SEED_PATH, { origin: 'somewhere nobody has heard of' });
+    const factor = shortlist.picks[0]?.factors.find((entry) => entry.id === 'flightBurden');
+    expect(factor?.measure.kind).toBe('unknown');
+  });
+
+  it('measures it when the origin names somewhere the index holds', async () => {
+    const names = await seededNames(SEED_PATH);
+    expect(names.length, 'the seeded index must return something for this to prove anything').toBeGreaterThan(0);
+    const shortlist = await rank(SEED_PATH, { origin: names[0]! });
+    const measured = shortlist.picks.filter((pick) => pick.factors.find((entry) => entry.id === 'flightBurden')?.measure.kind === 'measured');
+    expect(measured.length).toBeGreaterThan(0);
+  });
+
+  it('never turns a distance into a fare', async () => {
+    const names = await seededNames(SEED_PATH);
+    const shortlist = await rank(SEED_PATH, { origin: names[0]! });
+    const prose = JSON.stringify(shortlist).toLowerCase();
+    for (const forbidden of ['airfare', 'flight price', 'ticket price', '$']) expect(prose).not.toContain(forbidden);
   });
 });

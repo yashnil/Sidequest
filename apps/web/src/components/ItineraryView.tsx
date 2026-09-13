@@ -52,7 +52,7 @@ import { DayRail } from './hub/DayRail';
 import { BaseCards, CautionsCard, CONVENIENCE_LABELS, CONVENIENCE_TONE, STRESS_LABELS, STRESS_TONE, TimingCard, TransportCard } from './hub/OverviewCards';
 import { fixNumberArticles, sameSentence } from './hub/article';
 import { DAY_PART_LABEL, groupByDayPart, partsAreMeaningful } from './hub/day-parts';
-import { clock, firstSentence, humanDate, span, travelSpan } from './hub/plan-format';
+import { clock, firstSentence, humanDate, span, timelineClock, travelSpan } from './hub/plan-format';
 import type { MapWorkspaceSheet } from './hub/MapWorkspace';
 import { DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, type DayFocusModel } from './hub/DayFocus';
 import { TripConfidence, CONFIDENCE_WORD as VERIFICATION_CHIP_WORD } from './hub/TripConfidence';
@@ -67,7 +67,7 @@ import { FEASIBILITY_WORDS, humanize } from './hub/HumanWords';
 import { PrintAppendix } from './PrintAppendix';
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
-import { dayPartFor, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
+import { assuranceSummary, dayPartFor, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
 import { MapWorkspace } from './hub/MapWorkspace';
@@ -1310,7 +1310,7 @@ function WeatherPlan({ itinerary, timeZone }: { itinerary: Itinerary; timeZone?:
   const decisions = days.flatMap((day) => day.weather.decisions);
   const label =
     kinds.length > 1
-      ? 'Mixed evidence'
+      ? /* V11 §20 */ 'Some checked, some not'
       : kinds[0] === 'forecast'
         ? 'Forecast'
         : kinds[0] === 'historical_pattern'
@@ -2228,7 +2228,7 @@ function DayCard({
                   major transfer not measured
                 </Badge>
               ) : day.totals.travelMinutes > 0 ? (
-                <Badge tone="blue" title={travelApprox ? 'Estimated from map distance or held as an allowance, not measured' : 'Timed against the road, not estimated'}>
+                <Badge tone="blue" title={travelApprox ? 'Worked out from the distance on the map, or time set aside — not a measured journey' : 'Measured against the road, not estimated'}>
                   {travelApprox ? '≈' : ''}
                   {travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} {drivingMinutes > 0 ? 'drive' : 'travelling'}
                 </Badge>
@@ -2881,7 +2881,7 @@ function buildPlaceSheet({
         : undefined;
 
   const facts: { label: string; value: string }[] = [];
-  if (dayLabel) facts.push({ label: 'When', value: `${dayLabel} · ${precision === 'band' ? dayPartFor(item.startMinute) : `${precision === 'estimated' ? '≈' : ''}${clock(item.startMinute, 'later')}`}` });
+  if (dayLabel) facts.push({ label: 'When', value: `${dayLabel} · ${precision === 'band' ? dayPartFor(item.startMinute) : `${precision === 'estimated' ? '≈' : ''}${timelineClock(item.startMinute, 'later')}`}` });
   if (item.durationMinutes > 0) facts.push({ label: 'How long', value: span(item.durationMinutes) });
   if (item.physicalIntensity && item.physicalIntensity !== 'none') facts.push({ label: 'Effort', value: item.physicalIntensity });
   if (item.weather && item.weather.suitability !== 'workable' && WEATHER_BADGE[item.weather.suitability]) {
@@ -3041,7 +3041,8 @@ function TimelineRow({
           </span>
         ) : (
           <time className={cx('type-figure block text-sm text-ink', precision === 'estimated' && 'approx')} title={precision === 'estimated' ? 'Estimated: the leg before this stop was estimated from map distance' : precision === 'fixed' ? 'Fixed by a booking or timetable' : undefined}>
-            {clock(item.startMinute, 'later')}
+            {/* V11 §1 — an item may sit past midnight on a day that overruns; the clock says so rather than reading as morning. */}
+            {timelineClock(item.startMinute, 'later')}
           </time>
         )}
         {item.kind !== 'travel' ? <span className="type-figure mt-0.5 block text-xs font-medium text-ink-faint">{span(item.durationMinutes)}</span> : null}
@@ -3394,10 +3395,11 @@ function BeforeYouGo({ items, fromPlan = [] }: { items: readonly PreparationItem
  * NOT A TIMELINE ROW. Rendered only when the plan carries one.
  * ------------------------------------------------------------------ */
 
+/* V11 §21 — the four-word vocabulary, lower-cased for use mid-sentence. */
 const VERIFICATION_WORD: Record<VerificationState, string> = {
-  verified: 'confirmed from source',
-  partially_verified: 'place confirmed',
-  unverified: 'check before relying',
+  verified: 'confirmed',
+  partially_verified: 'planned',
+  unverified: 'still being checked',
 };
 
 /** Bases and nights, in order — the shape of the trip, before the days. */
@@ -3525,7 +3527,7 @@ function ConsideredPanel({ pkg }: { pkg: TripPackage }) {
                     {' '}
                     — proposed for day {anchor.dayNumber},{' '}
                     {anchor.disposition === 'rejected_contradiction'
-                      ? 'taken off because the evidence contradicted it'
+                      ? /* V11 §20 */ 'taken off because what we found contradicted it'
                       : anchor.disposition === 'rejected_hard_constraint'
                         ? 'taken off to respect a limit you set'
                         : 'left off for room'}
@@ -3561,13 +3563,32 @@ function ConsideredPanel({ pkg }: { pkg: TripPackage }) {
 export function compactWarnings(warnings: readonly string[]): { badges: { label: string; title: string }[]; sentences: string[] } {
   const badges: { label: string; title: string }[] = [];
   const sentences: string[] = [];
+  let unresolvedPlaces = 0;
+  let unresolvedLegs = 0;
+  const titles: string[] = [];
   for (const warning of warnings) {
     const unverified = /^(\d+) stops? on this day (?:has|have) not been fully verified/.exec(warning);
     const unmeasured = /^(\d+) travel legs? on this day (?:is|are) unmeasured/.exec(warning);
-    if (unverified) badges.push({ label: `${unverified[1]} to check before relying`, title: humanize(warning) });
-    else if (unmeasured) badges.push({ label: `${unmeasured[1]} ${unmeasured[1] === '1' ? 'leg' : 'legs'} not yet timed`, title: humanize(warning) });
-    else sentences.push(humanize(warning));
+    if (unverified) {
+      unresolvedPlaces += Number(unverified[1]);
+      titles.push(humanize(warning));
+    } else if (unmeasured) {
+      unresolvedLegs += Number(unmeasured[1]);
+      titles.push(humanize(warning));
+    } else sentences.push(humanize(warning));
   }
+  /*
+   * V11 §21 — ONE SENTENCE FOR THE DAY, NOT A BADGE PER KIND.
+   *
+   * Two chips saying "3 still being checked" and "2 legs not yet timed" are two
+   * things to read about the same fact: Sidequest has not finished. The whole
+   * of `assuranceSummary` is that it composes them into the sentence a person
+   * would say, and returns nothing at all when there is nothing to say — which
+   * is the common case, and the reason a good day now carries no chip at all
+   * where it used to carry two.
+   */
+  const summary = assuranceSummary({ unresolvedLegs, unresolvedPlaces, toCheck: 0 });
+  if (summary) badges.push({ label: summary, title: titles.join(' ') });
   return { badges, sentences };
 }
 

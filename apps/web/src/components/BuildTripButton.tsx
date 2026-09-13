@@ -317,5 +317,6 @@ const BLOCKER_LABELS: Record<string, string> = {
   hours_do_not_fit: 'never open long enough for a visit',
   weather_incompatible: 'ruled out by the weather on every possible day',
   route_contradicted: 'the router answered that no route reaches them',
-  model_proposal_unintegrated: 'proposed by your plan but not confirmed by our evidence',
+  /* V11 §20 — "our evidence" is a sentence about our machinery; a traveller wants to know what it means for them. */
+  model_proposal_unintegrated: 'suggested by your plan, and we could not confirm it',
 };
