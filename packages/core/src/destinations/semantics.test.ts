@@ -5,6 +5,9 @@ import { parseDestinationIntent } from './intent-graph';
 import {
   assessCompatibility,
   candidateSemantics,
+  countryInProse,
+  countryPossessive,
+  jurisdictionPhrase,
   describeSemantics,
   interpretedConceptSchema,
   evidenceSufficient,
@@ -124,5 +127,33 @@ describe('extents and captions', () => {
     const sentence = describeSemantics({ type: 'mountain_region', scale: 'region', extent: { bounds: extent!.bounds, source: 'interpreted_parts' }, parts: [{ label: 'a', center: { lat: 0, lng: 0 }, source: 'geocoder' }, { label: 'b', center: { lat: 0, lng: 0 }, source: 'geocoder' }], gateways: [{ label: 'Calgary', source: 'geocoder' }], countries: ['CA'] }, () => 'Canada');
     expect(sentence).toBe('A mountain region in Canada, framed around 2 areas inside it. Gateways: Calgary.');
     expect(semanticTypeOfKind('mountain_range')).toBe('mountain_region');
+  });
+});
+
+describe('V11 §N — a country name goes into a sentence with the article English gives it', () => {
+  it('adds "the" where the name\'s head is a common noun, and leaves it off where it is not', () => {
+    expect(countryInProse('United States')).toBe('the United States');
+    expect(countryInProse('United Kingdom')).toBe('the United Kingdom');
+    expect(countryInProse('United Arab Emirates')).toBe('the United Arab Emirates');
+    expect(countryInProse('Czech Republic')).toBe('the Czech Republic');
+    expect(countryInProse('Marshall Islands')).toBe('the Marshall Islands');
+    expect(countryInProse('Netherlands')).toBe('the Netherlands');
+    expect(countryInProse('Japan')).toBe('Japan');
+    expect(countryInProse('Kyrgyzstan')).toBe('Kyrgyzstan');
+    expect(countryInProse('Canada')).toBe('Canada');
+    /* Ends in s and still takes no article: the rule is the head noun, not the letter. */
+    expect(countryInProse('Belarus')).toBe('Belarus');
+    expect(countryInProse('Cyprus')).toBe('Cyprus');
+  });
+
+  it('possesses with a bare apostrophe after a plural, and with ’s otherwise', () => {
+    expect(countryPossessive('United States')).toBe('the United States’');
+    expect(countryPossessive('Japan')).toBe('Japan’s');
+  });
+
+  it('reads the jurisdiction phrase the same way, one country or several', () => {
+    const ref = (code: string, name: string) => ({ level: 'country' as const, code, name, countryCode: code });
+    expect(jurisdictionPhrase([ref('US', 'United States')])).toBe('the United States');
+    expect(jurisdictionPhrase([ref('KG', 'Kyrgyzstan'), ref('NL', 'Netherlands')])).toBe('Kyrgyzstan and the Netherlands');
   });
 });

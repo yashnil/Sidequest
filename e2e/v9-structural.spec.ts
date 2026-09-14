@@ -33,7 +33,15 @@ test('a structural refinement is proposed with a delta, applied, reflected every
    * model's to restate. A merge moves nights between stays; it must never add
    * or lose one, so the day rail has exactly as many days after as before.
    */
-  const dayRail = () => page.getByTestId('day-rail').locator('li');
+  /*
+   * The day chips, not the chapter wrappers around them.
+   *
+   * V11 §6 groups the rail under its chapters, so a bare `li` count is days
+   * *plus* chapter headings. The assertion below is "not one day fewer", and a
+   * refinement that merges two bases legitimately removes a chapter heading —
+   * which read as a lost day and failed in all three projects at once.
+   */
+  const dayRail = () => page.getByTestId('day-rail').locator('li:not([data-testid="day-rail-chapter"])');
   await openHubView(page, 'days');
   const daysBefore = await dayRail().allTextContents();
   expect(daysBefore.length).toBeGreaterThan(1);

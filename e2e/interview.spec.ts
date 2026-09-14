@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView, openPrepareNotes } from './support/hub';
+import { openDayChecks, openHubView, openPrepareNotes } from './support/hub';
 import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope, waitUntilInteractive, openReviewLedger } from './support/trip';
 
 /**
@@ -194,6 +194,14 @@ test('the itinerary carries the overview map, day maps with honest legs, compact
   await expect(overviewMap).not.toContainText(/not routes/);
   await openHubView(page, 'days');
   const desktop = (page.viewportSize()?.width ?? 1440) >= 1024;
+  /*
+   * V11 §D — below `lg` the day's own drawing sits inside "Timing & checks",
+   * with the hours, the weather read and the food, because that band used to be
+   * most of the 659 words a traveller read before the first thing they would do.
+   * It is one press away, and this opens it rather than asserting on a closed
+   * disclosure.
+   */
+  if (!desktop) await openDayChecks(page);
   const dayMaps = desktop ? page.getByTestId('day-focus-map') : page.getByTestId('day-map');
   await expect(dayMaps.first()).toBeVisible();
   // Recurring uncertainty is a chip on the stop, not a paragraph per day: a day's warning box

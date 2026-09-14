@@ -89,6 +89,8 @@ export interface CreateTripOptions {
   pickSuggestion?: boolean | RegExp;
   /** `?have=plan` — the homepage's third door. */
   havePlan?: boolean;
+  /** Which party shape to pick. Defaults to the couple every existing spec assumes. */
+  party?: 'solo' | 'couple' | 'friends' | 'family' | 'other';
 }
 
 export async function createTrip(
@@ -120,8 +122,9 @@ export async function createTrip(
   await continueButton(page).click();
 
   // Two exact dates answer "how many nights", so that screen is skipped.
-  await expect(page.getByTestId('party-couple')).toBeVisible();
-  await page.getByTestId('party-couple').click();
+  const party = options.party ?? 'couple';
+  await expect(page.getByTestId(`party-${party}`)).toBeVisible();
+  await page.getByTestId(`party-${party}`).click();
   await continueButton(page).click();
 
   // Anything already fixed: nothing, unless this spec is about something that is.
@@ -330,6 +333,30 @@ export interface InterviewChoices {
   answers?: Readonly<Record<string, string>>;
   /** Question ids to answer with "No preference" rather than "Decide this for me". */
   noPreference?: readonly string[];
+  /**
+   * V12 §2 — THE ROLE MATRIX, WHICH THE RADIO BRANCH CANNOT ANSWER.
+   *
+   * `priority_roles` is one screen with a row per chosen interest and four roles
+   * across (`once · couple · most_days · build_around`). It is not a single
+   * radio group, so the walker's ordinary branch could not touch it and every
+   * scenario fell through to "Decide this for me" — which takes the smart
+   * default, first pick `most_days` and the rest `couple`.
+   *
+   * That silently made every walked trip the same shape at the exact point V12
+   * is about: a scenario that says "build the trip around the trek" arrived as
+   * "most days have a walk". Keyed by interest id, values from the four roles.
+   */
+  interestRoles?: Readonly<Record<string, string>>;
+  /**
+   * Fail loudly when a named answer is not among the options offered.
+   *
+   * Off by default, because most specs are indifferent to which option they get.
+   * A live acceptance is not: an unoffered value falls through to "Sidequest
+   * decides", and a run that costs a model call would then be measuring a
+   * different scenario from the one it claims to. With this on, the walker says
+   * which question, which value, and what was actually on offer.
+   */
+  strict?: boolean;
 }
 
 export const DEFAULT_INTERVIEW: Required<InterviewChoices> = {
@@ -404,6 +431,18 @@ export async function completeQuestionnaire(page: Page, choices: InterviewChoice
       await advanceInterview(page, id);
       continue;
     }
+    if (id === 'priority_roles' && choices.interestRoles) {
+      for (const [interest, role] of Object.entries(choices.interestRoles)) {
+        const cell = screen.locator(`input[type=radio][name="priority_roles:${interest}"][value="${role}"]`);
+        if ((await cell.count()) === 0) {
+          if (choices.strict) throw new Error(`priority_roles has no row "${interest}" with role "${role}" — the interest may not have been chosen on the priorities screen.`);
+          continue;
+        }
+        await cell.first().check();
+      }
+      await advanceInterview(page, id);
+      continue;
+    }
     const wanted = answers[id];
     if (wanted !== undefined) {
       const radio = screen.locator(`input[type=radio][value="${wanted}"]`);
@@ -411,6 +450,10 @@ export async function completeQuestionnaire(page: Page, choices: InterviewChoice
         await radio.first().check();
         await advanceInterview(page, id);
         continue;
+      }
+      if (choices.strict) {
+        const offered = await screen.locator('input[type=radio]').evaluateAll((nodes) => [...new Set(nodes.map((node) => (node as HTMLInputElement).value))]);
+        throw new Error(`"${id}" was asked but does not offer "${wanted}". It offered: ${offered.join(', ') || '(no radio options)'}.`);
       }
     }
     if (noPreference.has(id)) {

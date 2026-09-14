@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
-import { openHubView, useBandAction } from './support/hub';
+import { openHubView, openPrepareReference, useBandAction } from './support/hub';
 
 /**
  * THE TRIP HUB, END TO END, ON FIXTURES.
@@ -39,6 +39,7 @@ test('the hub has every section, calm by default, with urgent items only where t
   if (phone) await expect(page.getByTestId('hub-overview-link')).toBeVisible();
   await expect(page.getByTestId('hub-overview')).toBeVisible();
   await openHubView(page, 'prepare');
+  await openPrepareReference(page);
   await expect(page.getByTestId('trip-confidence').first()).toBeVisible();
   await openHubView(page, 'plan');
   await expect(page.getByTestId('hub-stays')).toBeVisible();
@@ -187,6 +188,7 @@ test('optimise my existing plan: the traveller’s places are checked and the pl
   await defaults.click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 90_000 });
   await openHubView(page, 'prepare');
+  await openPrepareReference(page);
   const critique = page.getByTestId('hub-critique');
   await expect(critique).toBeVisible();
   await expect(critique).toContainText(/Your plan, checked/);

@@ -2,6 +2,7 @@ import type { BookedPlanItem, BookingItem, BookingResolution, Itinerary, TravelI
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
 import { BookedItemForm, BookedItemRow } from './HubForms';
+import { buildBookingProgress } from '@sidequest/core';
 import { BookingProgressLine, BookingRow } from './TripHub';
 import { ImportCenter } from './ImportCenter';
 import { LedgerCard } from './LedgerCard';
@@ -45,6 +46,22 @@ export function BookView(props: BookViewProps) {
   const settled = [...members, ...standalone].filter((b) => b.status === 'booked' || b.status === 'soft_hold');
   const openCount = PRIORITY_GROUPS.reduce((n, g) => n + rowsFor(g.priority).length, 0);
   const rowProps = { ...(tripId ? { tripId } : {}), resolutions, tripStart: itinerary.startDate, tripEnd: itinerary.endDate, testId: 'booking-row' };
+
+  /*
+   * V11 §I — ONE DEFINITION OF "NEXT", AND IT IS NOT THIS FILE'S.
+   *
+   * The first version of this block chose the next thing itself, by walking the
+   * priority groups in order. `buildBookingProgress` already chooses one — more
+   * carefully, because it drops the stays *summary* row that stands for several
+   * beds and counts the beds instead. The two disagreed on screen: the headline
+   * said "Stays: 1 base, 4 nights" and the progress card two hundred pixels
+   * below said "Next: book the car". Two next actions is worse than none.
+   *
+   * So there is one, it is the progress model's, and the progress card stops
+   * restating it while this block is on screen.
+   */
+  const progress = buildBookingProgress(items);
+  const next = progress.nextAction;
   const bases = (itinerary.package?.bases ?? []).map((b) => ({ id: b.id, name: b.name }));
 
   return (
@@ -54,8 +71,31 @@ export function BookView(props: BookViewProps) {
       </h2>
       <p className="mt-1 text-sm text-ink-muted">What this trip depends on somebody arranging, what you have arranged, and where the money stands. Priorities come from dependency, fixed times and lead times, never invented scarcity.</p>
 
+      {/*
+        V11 §I — BOOK NEXT: ONE THING, AND WHY IT IS THAT ONE.
+
+        The page opened on a progress card — a count, a bar and four group
+        tallies — above four grouped lists. All of it true, and none of it an
+        answer to the question somebody opens this page with, which is "what do I
+        do now". §I asks for one item and its reason, first.
+
+        The item is not chosen here: it is the first row of the first non-empty
+        priority group, which is the order `PRIORITY_GROUPS` already imposes and
+        the same order the lists below render in. So the thing named here and the
+        first thing in the list below are the same thing by construction — and it
+        is named once, in this block, because the list below is where it is
+        *acted on*. A count of a list is not a copy of it.
+      */}
+      {next ? (
+        <div className="mt-5 rounded-[var(--radius-panel)] border-l-4 border-l-accent bg-accent-soft p-5" data-testid="book-next">
+          <p className="eyebrow text-accent-strong">Book next</p>
+          <p className="mt-1.5 font-display text-2xl leading-tight text-ink">{next.travelerAction}</p>
+          <p className="measure mt-2 type-small text-ink-muted">{next.why}</p>
+        </div>
+      ) : null}
+
       <div className="mt-5">
-        <BookingProgressLine intel={intel} />
+        <BookingProgressLine intel={intel} nextStatedAbove={next !== null} />
       </div>
 
       {PRIORITY_GROUPS.map((groupCopy) => {

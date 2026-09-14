@@ -90,7 +90,10 @@ test('a share link opens the plan, read-only, for a browser that never saw the t
     ).toBeVisible();
   }
   await expect(reader.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
-  await expect(reader.locator('#hub-view-days').getByRole('heading', { level: 3, name: /\d+ km|estimate|timing to confirm|timing not/ }).first()).toBeVisible();
+  /* V11 §D — a travel leg is a connector, not a heading. See the note in `itinerary.spec.ts`. */
+  await expect(
+    reader.locator('#hub-view-days [data-row-kind="travel"]').filter({ hasText: /\d+ km|estimate|timing to confirm|timing not/ }).first(),
+  ).toBeVisible();
   await openHubView(reader, 'prepare');
   await expect(reader.getByTestId('packing-list')).toBeVisible();
   // The licence notice survives into the shared copy; the data obligation

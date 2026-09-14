@@ -233,7 +233,7 @@ export function easternSierraTravelMatrix(ids?: readonly string[]): TravelTimeMa
     ),
     provenance: {
       kind: 'modelled',
-      note: 'Modelled from an authored US-395 corridor-and-spur topology, not measured road data. Replace with a routing provider before relying on exact times.',
+      note: 'Modelled from an authored US-395 corridor-and-spur topology, not measured road data. Replace with measured road data before relying on exact times.',
       source: 'packages/core/src/data/travel-times.ts',
     },
   };

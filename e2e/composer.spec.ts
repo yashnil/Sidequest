@@ -34,8 +34,8 @@ test('the landing page sells a worldwide product, not one valley', async ({ page
    * both are on the front page, and the assertion is that neither has quietly
    * disappeared.
    */
-  await expect(page.getByRole('link', { name: 'I know where I am going' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Help me decide' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'I know where I want to go' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Help me choose' })).toBeVisible();
   await expect(page.getByRole('link', { name: /Plan a Mammoth Lakes trip/i })).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).not.toContainText(/mammoth/i);
 });

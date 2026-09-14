@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
-import { openHubView } from './support/hub';
+import { openHubView, openPrepareReference } from './support/hub';
 
 /** The hub nav that exists at this viewport: the segmented bar on desktop, the bottom bar on phones. */
 function hubNav(page: Page) {
@@ -68,6 +68,7 @@ test('a booking can change status and cost; the Verify section says when to look
   await expect(page.getByTestId('booked-item').first()).toContainText(/idea/);
 
   await openHubView(page, 'prepare');
+  await openPrepareReference(page);
   await expect(page.getByTestId('hub-recheck')).toBeVisible();
   await expect(page.locator('[data-testid="hub-recheck"] li').first()).toHaveAttribute('data-window', /.+/);
 

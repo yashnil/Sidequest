@@ -108,3 +108,48 @@ describe('V11 §4 — "Ready" has to mean something', () => {
     expect(readinessShortfalls({ archetype: 'road_trip', completeness: iceland })).toEqual([]);
   });
 });
+
+describe('V12 §21 §35 — readiness reads the operating model, and intent can fail a routed trip', () => {
+  const completeness = {
+    basesTotal: 3,
+    basesPlaced: 3,
+    routeCriticalTotal: 3,
+    routeCriticalPlaced: 3,
+    signaturesTotal: 2,
+    signaturesPlaced: 2,
+    baseTransfersTotal: 2,
+    baseTransfersTimed: 0,
+    orderContradictions: 0,
+    implausibleMeasurements: 0,
+    unrepresentedAccessRequirements: 0,
+    legsTotal: 8,
+    legsTimed: 8,
+  };
+
+  it('asks a self-driven route for timed transfers and an operator-led one not to', () => {
+    /* The same untimed transfers, judged by how much this kind of trip depends on them. */
+    const roadTrip = readinessShortfalls({ archetype: undefined, completeness, transportCertaintyRequirement: 0.85 });
+    const trek = readinessShortfalls({ archetype: undefined, completeness, transportCertaintyRequirement: 0.4 });
+    expect(roadTrip.map((entry) => entry.requirement)).toContain('base_transfers_timed');
+    expect(trek.map((entry) => entry.requirement)).not.toContain('base_transfers_timed');
+  });
+
+  it('keeps the V11 behaviour exactly when no operating model is supplied', () => {
+    expect(readinessShortfalls({ archetype: 'road_trip', completeness }).map((entry) => entry.requirement)).toContain('base_transfers_timed');
+    expect(readinessShortfalls({ archetype: 'guided_remote', completeness }).map((entry) => entry.requirement)).not.toContain('base_transfers_timed');
+  });
+
+  it('fails a trip that routes perfectly and misses the reason it exists', () => {
+    const perfect = { ...completeness, baseTransfersTimed: 2 };
+    expect(readinessShortfalls({ archetype: 'road_trip', completeness: perfect })).toHaveLength(0);
+    const missingThePoint = readinessShortfalls({
+      archetype: 'road_trip',
+      completeness: perfect,
+      unmetPrimaryGoals: ['Hiking: 1 day, where 2 would make it real.'],
+    });
+    expect(missingThePoint).toHaveLength(1);
+    expect(missingThePoint[0]?.requirement).toBe('primary_intent');
+    /* And it reads as the plan's failure, not as something the traveller must wait for. */
+    expect(missingThePoint[0]?.detail).toMatch(/meant to be built around/);
+  });
+});

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sameIdentity } from '../naming/aliases';
 import { coordinatesSchema } from '../schemas/common';
 
 /**
@@ -254,6 +255,15 @@ export interface PlacementQueryInput {
   countryName?: string | undefined;
   /** First-level divisions the destination sits in, for the province tier. */
   divisions?: readonly string[] | undefined;
+  /**
+   * V11 §K — other spellings of the same name, from the traveller or the plan.
+   *
+   * Never generated: a romanisation this product invented is a query for a place
+   * that may not exist under it. These are spellings somebody actually wrote —
+   * the traveller's own words for a must-do, the draft's name for the same stop
+   * — and they are asked in order after the name as written.
+   */
+  aliases?: readonly string[] | undefined;
 }
 
 function contains(haystack: string, needle: string): boolean {
@@ -290,11 +300,23 @@ export function placementQueries(input: PlacementQueryInput): string[] {
    * strip costs one request and never a wrong answer.
    */
   const forms: string[] = [];
+  /*
+   * V11 §K — DEDUPLICATED BY IDENTITY, NOT BY STRING.
+   *
+   * `Song-Köl` and `Song-Kul` are the same question asked twice. A case-folded
+   * string comparison cannot see that — they differ by a letter, not by a mark —
+   * so the ladder spent two of its eight queries on one name, and on a trip with
+   * several such names it spent them all before reaching the qualified forms
+   * that actually resolve. `sameIdentity` reduces both to one, which is a cheaper
+   * *and* better-qualified ladder.
+   */
   const addForm = (value: string | null | undefined) => {
     const trimmed = value?.trim();
-    if (trimmed && !forms.some((f) => f.toLowerCase() === trimmed.toLowerCase())) forms.push(trimmed);
+    if (trimmed && !forms.some((existing) => sameIdentity(existing, trimmed))) forms.push(trimmed);
   };
   addForm(raw);
+  /* Spellings the traveller or the plan used for the same place; never invented here. */
+  for (const alias of input.aliases ?? []) addForm(alias);
   const stripped = stripHedgeWords(raw);
   addForm(stripped);
   for (const alternative of splitAlternatives(stripped ?? raw)) {
@@ -305,7 +327,7 @@ export function placementQueries(input: PlacementQueryInput): string[] {
   const out: string[] = [];
   const push = (query: string) => {
     const trimmed = query.trim().replace(/\s*,\s*/g, ', ').replace(/(,\s*)+$/, '');
-    if (trimmed && !out.some((q) => q.toLowerCase() === trimmed.toLowerCase())) out.push(trimmed);
+    if (trimmed && !out.some((q) => sameIdentity(q, trimmed))) out.push(trimmed);
   };
   /* The qualifiers, coarsest last. Each is skipped when the name already carries it. */
   const qualifierTiers: string[][] = [];

@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { InteractiveMap, type MapConnector, type MapMarker } from '../InteractiveMap';
 import type { MapBasemap } from '../map-adapter';
 import type { GeoPoint } from '../map-projection';
+import { cameraFrameFor, type MapMode } from '../map-camera';
 import { cx } from '../ui';
 import { usePlaceSheet, type PlaceSheetDetail } from './PlaceSheet';
 
@@ -62,27 +63,102 @@ export function MapWorkspace({
   /** A picture of a place by id, for the sheet; never rendered on the map itself. */
   frames?: Record<string, ReactNode>;
 }) {
-  const [day, setDay] = useState<number | 'all'>('all');
+  /*
+   * V11 §F — THREE MODES, NOT ONE MAP WITH A DAY FILTER.
+   *
+   * "Whole trip" and "a day" were the same drawing with a different subset, at
+   * the same density, framed by the same rule. They answer different questions
+   * and the brief names all three:
+   *
+   *   overview  — where you arrive, where you sleep, what the trip is built
+   *               around, and the route between them. Ordinary stops are
+   *               *suppressed*: eleven days of coffee stops is the cloud that
+   *               makes an overview useless.
+   *   day       — today's base, today's stops, today's route, with the rest of
+   *               the trip drawn faintly behind so today has somewhere to be.
+   *   explore   — everything, at full density, with filters. The only mode
+   *               where density is what somebody came for.
+   */
+  const [view, setView] = useState<{ mode: MapMode; day: number | null }>({ mode: 'overview', day: null });
+  const day = view.mode === 'day' && view.day !== null ? view.day : 'all';
+  const [kindFilter, setKindFilter] = useState<'all' | 'signature' | 'base'>('all');
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const sheet = usePlaceSheet();
   const drawn = useMemo(() => {
-    if (day === 'all') {
+    const tripConnectors = [
+      ...connectors,
+      ...days.flatMap((d) => d.connectors.filter((c) => c.style !== 'unmeasured' && c.style !== 'sightline').map((c) => ({ ...c, id: `d${d.dayNumber}-${c.id}` }))),
+    ];
+
+    if (view.mode === 'overview') {
+      /*
+       * The spine only. A marker that is an ordinary stop is dropped here
+       * rather than dimmed — an overview crowded with faint dots is still
+       * crowded, and the day mode is one press away for anybody who wants them.
+       */
+      const spine = markers.filter((marker) => marker.kind !== 'place' && marker.kind !== 'stop');
       return {
-        markers,
-        connectors: [...connectors, ...days.flatMap((d) => d.connectors.filter((c) => c.style !== 'unmeasured' && c.style !== 'sightline').map((c) => ({ ...c, id: `d${d.dayNumber}-${c.id}` })))],
+        markers: spine.length > 0 ? spine : markers,
+        connectors: tripConnectors,
         base: primaryBase,
-        summary,
+        faded: [] as readonly MapMarker[],
+        summary: `${spine.length} of the trip's key places — where you arrive, where you sleep and what it is built around.`,
       };
     }
-    const model = days.find((d) => d.dayNumber === day);
-    if (!model) return { markers, connectors, base: primaryBase, summary };
+
+    if (view.mode === 'explore') {
+      const shown =
+        kindFilter === 'all'
+          ? markers
+          : kindFilter === 'base'
+            ? markers.filter((marker) => marker.kind === 'base' || marker.kind === 'gateway')
+            : markers.filter((marker) => marker.kind === 'signature' || marker.kind === 'overnight_experience');
+      return {
+        markers: shown,
+        connectors: tripConnectors,
+        base: primaryBase,
+        faded: [] as readonly MapMarker[],
+        summary: `${shown.length} ${shown.length === 1 ? 'place' : 'places'} on this trip.`,
+      };
+    }
+
+    const model = days.find((d) => d.dayNumber === view.day);
+    if (!model) return { markers, connectors, base: primaryBase, faded: [] as readonly MapMarker[], summary };
+    const todayIds = new Set(model.markers.map((marker) => marker.id));
     return {
       markers: model.markers,
       connectors: model.connectors,
       base: model.base ? { name: model.baseName, coordinates: model.base } : null,
+      /* V11 §F2 — the rest of the trip, faded: context that never moves the frame. */
+      faded: markers.filter((marker) => !todayIds.has(marker.id)),
       summary: `${model.markers.length} ${model.markers.length === 1 ? 'stop' : 'stops'} on day ${model.dayNumber}, numbered in order.`,
     };
-  }, [day, markers, connectors, primaryBase, days, summary]);
+  }, [view, kindFilter, markers, connectors, primaryBase, days, summary]);
+
+  /*
+   * V11 §F5 — THE FRAME IS DECIDED IN ONE PLACE, WITH A STATED BASIS.
+   *
+   * `cameraFrameFor` existed and nothing called it, so each surface still fit
+   * whatever points it happened to hold — which is how a day with one placed
+   * stop framed a creek. Its answer arrives here as the points to include and
+   * the smallest ground the frame may cover, and its `basis` is put on the
+   * element so a bad frame can be diagnosed from a screenshot's DOM.
+   */
+  const frame = useMemo(
+    () =>
+      cameraFrameFor({
+        mode: view.mode,
+        markers: markers.map((marker) => ({
+          id: marker.id,
+          label: marker.name,
+          kind: marker.kind === 'place' ? 'stop' : marker.kind,
+          point: marker.coordinates,
+          dayNumber: marker.dayNumber,
+        })),
+        ...(view.day === null ? {} : { dayNumber: view.day }),
+      }),
+    [view, markers],
+  );
 
   if (markers.length === 0) {
     return (
@@ -122,21 +198,58 @@ export function MapWorkspace({
   };
 
   return (
-    <div className="relative" data-testid="map-workspace" data-day={String(day)}>
-      <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0" role="tablist" aria-label="Which day to draw">
-        <button type="button" role="tab" aria-selected={day === 'all'} onClick={() => setDay('all')} className={chip(day === 'all')} data-testid="map-day-all">
-          Whole trip
+    <div className="relative" data-testid="map-workspace" data-day={String(day)} data-map-mode={view.mode} data-camera-basis={frame.ok ? frame.basis : 'nothing_placed'}>
+      <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0" role="tablist" aria-label="What to draw">
+        <button type="button" role="tab" aria-selected={view.mode === 'overview'} onClick={() => setView({ mode: 'overview', day: null })} className={chip(view.mode === 'overview')} data-testid="map-day-all">
+          Overview
+        </button>
+        <button type="button" role="tab" aria-selected={view.mode === 'explore'} onClick={() => setView({ mode: 'explore', day: null })} className={chip(view.mode === 'explore')} data-testid="map-mode-explore">
+          Explore
         </button>
         {days.map((d) => (
-          <button key={d.dayNumber} type="button" role="tab" aria-selected={day === d.dayNumber} onClick={() => setDay(d.dayNumber)} className={chip(day === d.dayNumber)} data-testid={`map-day-${d.dayNumber}`} title={d.theme}>
+          <button key={d.dayNumber} type="button" role="tab" aria-selected={view.mode === 'day' && view.day === d.dayNumber} onClick={() => setView({ mode: 'day', day: d.dayNumber })} className={chip(view.mode === 'day' && view.day === d.dayNumber)} data-testid={`map-day-${d.dayNumber}`} title={d.theme}>
             <span className="type-figure">{String(d.dayNumber).padStart(2, '0')}</span>
             <span className="hidden sm:inline">{shortTheme(d.theme)}</span>
           </button>
         ))}
       </div>
+
+      {/*
+        V11 §F3 — filters belong to Explore and nowhere else.
+
+        An overview with filters is an overview somebody has to configure before
+        it answers anything, and a day has too few marks for a filter to do
+        work. Three, because the classification only supports three honest
+        questions.
+      */}
+      {view.mode === 'explore' ? (
+        <div className="flex flex-wrap gap-2 pb-3" role="group" aria-label="Filter what is drawn">
+          {(
+            [
+              ['all', 'Everything'],
+              ['signature', 'What it is built around'],
+              ['base', 'Where you sleep and arrive'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={kindFilter === value}
+              onClick={() => setKindFilter(value)}
+              className={chip(kindFilter === value)}
+              data-testid={`map-filter-${value}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <InteractiveMap
         testId="trip-overview-map"
+        mode={view.mode}
         markers={drawn.markers}
+        faded={drawn.faded}
         connectors={drawn.connectors}
         base={drawn.base}
         focusedId={focusedId}
@@ -144,10 +257,24 @@ export function MapWorkspace({
         tiles={tiles}
         width={1120}
         height={640}
-        fitPoints={drawn.connectors.flatMap((c) => [c.from, c.to])}
+        /*
+         * The camera's own answer, not this component's. `fitPoints` are the
+         * points the frame has to contain and `minSpanKm` is how much ground it
+         * must cover — the two halves of the founder's bad frame.
+         */
+        fitPoints={frame.ok ? frame.points : []}
+        {...(frame.ok ? { minSpanKm: frame.minSpanKm } : {})}
         summary={drawn.summary}
         pinLabel={(marker) => `${marker.name}${'dayNumber' in marker ? `, day ${(marker as MapMarker & { dayNumber?: number }).dayNumber}` : ''}`}
-        caption={<span>{day === 'all' ? 'Every base and stop; press a stop for its details.' : `Day ${day}: stops numbered in order; press one for its details.`}</span>}
+        caption={
+          <span>
+            {view.mode === 'overview'
+              ? 'Where you arrive, where you sleep and what the trip is built around.'
+              : view.mode === 'explore'
+                ? 'Everything on this trip; press a place for its details.'
+                : `Day ${day}: stops numbered in order; press one for its details.`}
+          </span>
+        }
       />
     </div>
   );

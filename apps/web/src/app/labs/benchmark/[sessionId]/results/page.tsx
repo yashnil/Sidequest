@@ -232,7 +232,7 @@ export default async function SessionResultsPage({
                   {LABS_COPY.diagnosticsHeading}
                 </summary>
                 <p className="mt-1 text-xs text-ink-muted">{LABS_COPY.diagnosticsHint}</p>
-                <pre className="mt-2 max-h-80 overflow-auto rounded-lg bg-paper-sunk p-3 text-[11px] leading-relaxed text-ink-muted">
+                <pre className="mt-2 max-h-80 overflow-auto rounded-[var(--radius-card)] bg-paper-sunk p-3 text-[11px] leading-relaxed text-ink-muted">
                   {column.diagnostics}
                 </pre>
               </details>
@@ -306,7 +306,7 @@ export default async function SessionResultsPage({
               name="suspectedIdentityBecause"
               rows={3}
               defaultValue={post?.suspectedIdentityBecause ?? ''}
-              className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+              className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
             />
           </div>
           <div>
@@ -480,7 +480,7 @@ function Findings({ report }: { report: ReportColumn['report'] }) {
         outright, and a screen reader then stops pairing the terms with their
         values and reads six unrelated fragments in a row.
       */}
-      <div className="mt-4 rounded-lg bg-paper-sunk p-3">
+      <div className="mt-4 rounded-[var(--radius-card)] bg-paper-sunk p-3">
         <p className="text-xs font-medium text-ink">{LABS_COPY.verifiabilityHeading}</p>
         <p className="measure mt-1 text-xs leading-relaxed text-ink-muted">
           {LABS_COPY.verifiabilityBody}
@@ -611,7 +611,7 @@ function PostSelect({
         id={name}
         name={name}
         defaultValue={current ?? ''}
-        className="mt-2 min-h-11 w-full max-w-xs rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+        className="mt-2 min-h-11 w-full max-w-xs rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
       >
         <option value="">{NEUTRAL_COPY.notStated}</option>
         {options.map((option) => (

@@ -71,23 +71,95 @@ async function main(): Promise<void> {
    * nothing it did satisfied the form. Naming them is what `decide.spec` does,
    * and a failure then says which field is missing.
    */
-  await page.getByRole('radio', { name: 'Some time in a month' }).check();
-  await page.getByLabel('Which month?').selectOption('4');
-  await page.getByLabel('How many nights?').fill('5');
-  for (const interest of ['Eating well', 'History, museums and architecture', 'City life']) {
-    await page
-      .getByRole('checkbox', { name: interest })
-      .check()
-      .catch(() => undefined);
+  /*
+   * V11 §A1 §T — THE INTAKE ASKS ONE QUESTION AT A TIME.
+   *
+   * The question on screen is addressable (`[data-intake-question]`), so this
+   * answers whichever one is in front of it and presses on, rather than assuming
+   * a form with every field visible at once. The ladder decides the order; this
+   * only has to answer.
+   *
+   * The scenario is §T's: San Francisco, 18 Dec – 3 Jan, 8–12 nights, four
+   * active young friends, $2,500 a head **before flights** (recorded either
+   * way), hiking, wildlife, scenery, unusual experiences, high pace, simple
+   * lodging, a long haul is fine.
+   */
+  const answerCurrentQuestion = async (): Promise<string | null> => {
+    const id = await page.locator('[data-intake-question]').getAttribute('data-intake-question').catch(() => null);
+    if (!id) return null;
+    const pick = async (role: 'radio' | 'checkbox', name: string) => {
+      await page.getByRole(role, { name, exact: false }).first().check().catch(() => undefined);
+    };
+    switch (id) {
+      case 'when':
+        await pick('radio', 'A window I know');
+        await page.getByLabel('Free from').fill('2026-12-18').catch(() => undefined);
+        await page.getByLabel('Free until').fill('2027-01-03').catch(() => undefined);
+        break;
+      case 'priorities':
+        for (const theme of ['Hiking and being outside', 'Wildlife', 'Mountains and high country', 'Quiet places with nobody in them']) {
+          await pick('checkbox', theme);
+        }
+        break;
+      case 'length':
+        await page.getByRole('spinbutton', { name: 'Fewest nights' }).fill('8').catch(() => undefined);
+        await page.getByRole('spinbutton', { name: 'Most nights' }).fill('12').catch(() => undefined);
+        break;
+      case 'origin':
+        await page.getByLabel('City or airport').fill('San Francisco').catch(() => undefined);
+        await page.getByLabel('Country').fill('US').catch(() => undefined);
+        break;
+      case 'budget':
+        await page.getByLabel('Per person').fill('2500').catch(() => undefined);
+        await pick('radio', 'Before flights');
+        break;
+      case 'party':
+        await page.getByLabel('Adults').fill('4').catch(() => undefined);
+        break;
+      case 'intensity':
+        await pick('radio', 'Strenuous');
+        break;
+      case 'climate':
+        await pick('radio', 'Does not matter');
+        break;
+      case 'flight':
+        await pick('radio', 'A long haul is fine');
+        break;
+      case 'scope':
+        await pick('radio', 'Either is fine');
+        break;
+      case 'crowds':
+        await pick('radio', 'Away from the crowds');
+        break;
+      case 'lodging':
+        await pick('radio', 'Simple is fine');
+        break;
+      case 'surprise':
+        await pick('radio', 'Surprise me');
+        break;
+      default:
+        /* Anything the ladder adds later is skipped rather than answered wrongly. */
+        break;
+    }
+    return id;
+  };
+
+  const answered: string[] = [];
+  for (let step = 0; step < 20; step += 1) {
+    const id = await answerCurrentQuestion();
+    if (!id) break;
+    answered.push(id);
+    const go = page.getByRole('button', { name: 'Show me where to go' });
+    const more = page.getByRole('button', { name: 'One more question' });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    /* Nine answers is well past the floor; take the door as soon as the ladder opens it. */
+    if (answered.length >= 9 && (await go.isVisible().catch(() => false))) break;
+    if (await more.isVisible().catch(() => false)) await more.click();
+    else if (await next.isVisible().catch(() => false)) await next.click();
+    else break;
+    await page.waitForTimeout(250);
   }
-  await page
-    .getByRole('radio', { name: 'Stay in one place' })
-    .check()
-    .catch(() => undefined);
-  await page
-    .getByRole('radio', { name: 'Trains, buses and transfers', exact: true })
-    .check()
-    .catch(() => undefined);
+  measurements.intakeQuestionsAnswered = measured(answered);
   await page.screenshot({ path: `${OUT}/${slug}-answers.png`, fullPage: true });
   await page.getByRole('button', { name: 'Show me where to go' }).click();
   await page.waitForURL(/\/decide\/[0-9a-f-]{8,}/, { timeout: 60_000 });
@@ -109,8 +181,13 @@ async function main(): Promise<void> {
    * long the product took; and `.catch(() => 0)` still turned a failed count into
    * a shortlist of nothing. Both now say plainly that they did not measure.
    */
-  const list = page.getByRole('list', { name: 'Suggested destinations' });
-  const items = list.getByRole('listitem');
+  /*
+   * V11 §A2 — the answer is three and a wildcard, in one featured section, with
+   * everything else demoted below it. The old locator named a list that the
+   * screen no longer renders.
+   */
+  const list = page.getByTestId('shortlist-featured');
+  const items = page.getByTestId('shortlist-featured-card');
   const appeared = await items
     .first()
     .waitFor({ timeout: 120_000 })

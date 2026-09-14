@@ -283,7 +283,7 @@ export function RegenerateButton({ tripId }: { tripId: string }) {
             router.refresh();
           });
         }}
-        className="rounded-md border border-rule bg-paper px-3 py-1.5 text-sm text-ink transition-colors hover:border-ink disabled:opacity-50"
+        className="rounded-[var(--radius-control)] border border-rule bg-paper px-3 py-1.5 text-sm text-ink transition-colors hover:border-ink disabled:opacity-50"
       >
         {pending ? 'Regenerating…' : 'Regenerate'}
       </button>

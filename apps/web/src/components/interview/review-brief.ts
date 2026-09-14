@@ -9,7 +9,7 @@
  */
 
 export interface BriefFact {
-  id: 'length' | 'party' | 'timing' | 'shape';
+  id: 'length' | 'party' | 'timing' | 'shape' | 'pace' | 'priorities';
   label: string;
   value: string;
   /** Sidequest's read rather than the traveller's own statement. */
@@ -30,6 +30,18 @@ export function reviewFacts(input: {
   shapeLabel: string;
   shapeOpen: boolean;
   shapeAssumed: boolean;
+  /*
+   * V11 §H — the two facts the band was missing.
+   *
+   * §H names seven things "Sidequest understands" has to state, and pace and
+   * priorities were both a scroll further down, inside cards that also carried
+   * four other answers. They come in as already-rendered ledger values rather
+   * than being derived here, because the ledger is the one place an answer is
+   * turned into a sentence and a second rendering is a second thing to keep
+   * true. Absent when the interview never asked.
+   */
+  pace?: { value: string; assumed: boolean } | null;
+  priorities?: { value: string; assumed: boolean } | null;
 }): BriefFact[] {
   const nights = `${input.nights} ${input.nights === 1 ? 'night' : 'nights'}`;
   const adults = `${input.adults} ${input.adults === 1 ? 'adult' : 'adults'}`;
@@ -40,6 +52,8 @@ export function reviewFacts(input: {
     { id: 'party', label: 'Who', value: party, assumed: false, figure: true },
     { id: 'timing', label: 'When', value: timing.value, assumed: timing.assumed, figure: /\d/.test(timing.value) },
     { id: 'shape', label: 'Shape', value: input.shapeOpen ? 'Not decided yet' : input.shapeLabel, assumed: input.shapeAssumed || input.shapeOpen, figure: false },
+    ...(input.pace ? [{ id: 'pace' as const, label: 'Pace', value: input.pace.value, assumed: input.pace.assumed, figure: false }] : []),
+    ...(input.priorities ? [{ id: 'priorities' as const, label: 'Going for', value: input.priorities.value, assumed: input.priorities.assumed, figure: false }] : []),
   ];
 }
 

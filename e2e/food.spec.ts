@@ -78,9 +78,9 @@ test('a built trip names real places, and says where the facts came from', async
   await expect(eating).not.toContainText('$');
   await expect(eating.getByText(/have not checked today/i)).toBeVisible();
 
-  // At least one meal names somewhere, with a reason that talks about the route (on its day).
+  // At least one meal names somewhere, with a reason that says where it is relative to the day (on its day).
   await openHubView(page, 'days');
-  await expect(page.getByText(/on the way|right on the route|off the route/i).first()).toBeVisible();
+  await expect(page.getByText(/near your base|beside your last stop|km from your last stop/i).first()).toBeVisible();
 });
 
 test('a meal never claims a booking exists', async ({ page }) => {

@@ -31,8 +31,8 @@ import { formatElapsed, projectPlaced } from '@/lib/build-progress/placed-projec
  * V8 §14 — THE BUILD AS ONE COMPOSITION. The dark atlas world, alive under a
  * slow grid drift. Left (top on a phone): the stage rail drawn as a vertical
  * route whose stops light as they are reached, the current stage named large,
- * its one-line detail, and the milestone sentences — real counters, in words —
- * rising in as they arrive. Right (below on a phone): the destination's own
+ * and one live fact — a real counter, in words — replacing itself as the next
+ * arrives. Right (below on a phone): the destination's own
  * map, its frame easing in, with every locality the build has actually placed
  * so far marked on it and joined in placement order; with no geometry, the
  * atlas graticule with the destination's name, never an empty dark rectangle.
@@ -120,7 +120,6 @@ export function GenerationScreen({
   const reached = progress?.reached ?? [];
   const currentIndex = progress ? Math.max(0, stages.findIndex((stage) => stage.id === progress.stage)) : 0;
   const label = progress?.label ?? 'Reading your trip';
-  const detail = progress?.detail ?? 'Your answers, your dates and anything already booked.';
   const seconds = progress?.elapsedSeconds ?? elapsed;
   const placed = progress?.placed ?? [];
 
@@ -164,7 +163,13 @@ export function GenerationScreen({
       data-stage={progress?.stage ?? 'understanding'}
       data-state={state}
     >
-      <div className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:items-center lg:gap-12">
+      {/*
+        V11 §G — the map is the main visual, so it takes two thirds of the
+        composition rather than a little over half of it. The column beside it
+        carries six stage names, one heading and one live fact; it does not need
+        the room it had.
+      */}
+      <div className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-8 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:content-center lg:items-center lg:gap-12">
         <div className="min-w-0">
           {failed ? (
             <BuildFailure destination={destination} tripId={tripId} view={progress} retrying={retrying} retryError={retryError} onRetry={retry} />
@@ -186,8 +191,6 @@ export function GenerationScreen({
                   </motion.h2>
                 </AnimatePresence>
               </div>
-              <p className="mt-3 max-w-[46ch] type-body atlas-muted">{detail}</p>
-
               {/* THE STAGE RAIL AS A ROUTE: a vertical line with a stop per stage, each lighting as the server reaches it. */}
               <ol className="relative mt-8" aria-label="Stages">
                 {stages.map((stage, index) => {
@@ -238,30 +241,43 @@ export function GenerationScreen({
                 })}
               </ol>
 
-              {/* V7 §16 — what has actually been counted so far. Sentences from real counters; never a percentage, never a provider name. */}
+              {/*
+                V11 §G — ONE LIVE FACT, NOT A GROWING LIST.
+
+                Every milestone is true and every milestone is a real counter —
+                that part was right and is unchanged. What was wrong was the
+                shape: by the fifth stage the column held six sentences, the
+                stage rail, a detail paragraph and two footnotes, and a screen
+                whose whole job is to hold attention for ninety seconds was
+                asking somebody to read it.
+
+                So the *latest* one is shown, large enough to read at a glance,
+                and it replaces itself as the next arrives. Nothing is invented
+                and nothing is rounded: `milestones` is still the same list from
+                the same counters, and the one on screen is the newest of them.
+                The rest are not hidden behind a control — they are simply not
+                the thing a person waiting wants.
+              */}
               {progress && progress.milestones.length > 0 ? (
-                <ul className="mt-7 space-y-1.5 text-sm text-[var(--color-atlas-ink)]" aria-label="Progress so far" data-testid="generation-milestones">
-                  <AnimatePresence initial={false}>
-                    {progress.milestones.map((line) => (
-                      <motion.li
-                        key={line}
-                        initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: reduceMotion ? 0 : 0.26, ease: EASE_OUT }}
-                        className="flex gap-2.5"
-                      >
-                        <span aria-hidden="true" className="text-[var(--color-route-bright)]">—</span>
-                        <span>{line}</span>
-                      </motion.li>
-                    ))}
+                <div className="mt-7 min-h-[1.5em]" aria-live="polite" data-testid="generation-milestones">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.p
+                      key={progress.milestones[progress.milestones.length - 1]}
+                      initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: reduceMotion ? 0 : -6 }}
+                      transition={{ duration: reduceMotion ? 0 : 0.26, ease: EASE_OUT }}
+                      className="text-sm text-[var(--color-atlas-ink)]"
+                    >
+                      {progress.milestones[progress.milestones.length - 1]}
+                    </motion.p>
                   </AnimatePresence>
-                </ul>
+                </div>
               ) : null}
 
               <p className="mt-8 type-small atlas-muted" data-testid="generation-elapsed">
-                <span className="type-figure text-base text-[var(--color-atlas-ink)]">{formatElapsed(seconds)}</span> elapsed · usually under two minutes.
+                <span className="type-figure text-base text-[var(--color-atlas-ink)]">{formatElapsed(seconds)}</span> elapsed · usually under two minutes. Your answers are saved either way.
               </p>
-              <p className="mt-1 type-small atlas-muted">Your answers are saved either way.</p>
             </>
           )}
         </div>

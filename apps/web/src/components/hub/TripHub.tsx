@@ -102,7 +102,7 @@ export function HubUrgent({ intel }: { intel: TravelIntelligence }) {
 }
 
 /** V6 §27 — "6 of 8 critical items arranged", with the groups and the next thing to do. */
-export function BookingProgressLine({ intel }: { intel: TravelIntelligence }) {
+export function BookingProgressLine({ intel, nextStatedAbove = false }: { intel: TravelIntelligence; /** V11 §I — true where a "Book next" block on the same page already names it. */ nextStatedAbove?: boolean }) {
   const progress = buildBookingProgress(intel.bookings.items);
   if (progress.critical === 0) return null;
   const share = progress.critical > 0 ? Math.round((progress.arranged / progress.critical) * 100) : 0;
@@ -126,9 +126,11 @@ export function BookingProgressLine({ intel }: { intel: TravelIntelligence }) {
         <div className="h-full rounded-full bg-pine transition-[width] duration-[var(--motion-page)]" style={{ width: `${share}%` }} />
       </div>
       {progress.nextAction ? (
-        <p className="mt-3 type-small text-ink-muted">
-          Next: <span className="font-medium text-ink">{progress.nextAction.travelerAction}</span>
-        </p>
+        nextStatedAbove ? null : (
+          <p className="mt-3 type-small text-ink-muted">
+            Next: <span className="font-medium text-ink">{progress.nextAction.travelerAction}</span>
+          </p>
+        )
       ) : (
         <p className="mt-3 type-small text-pine">Everything this trip depends on is arranged.</p>
       )}
@@ -596,9 +598,14 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
   );
 }
 
-export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: { intel: TravelIntelligence; tripId?: string; readinessProfile: TravelReadinessProfile | null; checks: readonly string[] }) {
+export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks, bookingsListedAbove = false }: { intel: TravelIntelligence; tripId?: string; readinessProfile: TravelReadinessProfile | null; checks: readonly string[]; /** True where Book first renders on this page with the actions that act on these needs. */ bookingsListedAbove?: boolean }) {
   const r = intel.readiness;
   const checked = new Set(checks);
+  const phases = bookingsListedAbove
+    ? intel.checklist.phases
+        .map((phase) => ({ ...phase, items: phase.items.filter((item) => item.kind !== 'booking') }))
+        .filter((phase) => phase.items.length > 0)
+    : intel.checklist.phases;
   return (
     <section className="mt-14" aria-labelledby="before-you-go" data-testid="hub-before-you-go">
       <SectionHeader id="before-you-go" title="Before you go" blurb={r.international === 'no' ? 'A domestic trip on what you told us. The practical layer still applies.' : r.international === 'yes' ? `An international trip. Sidequest names the questions and where the official answers live; it does not answer them from memory.` : 'Whether this trip crosses a border depends on your citizenship, which Sidequest never guesses.'} />
@@ -635,10 +642,37 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks }: 
         the point, and behind the appendix on paper, where it was a page and a
         third of the same items.
       */}
-      <h3 className="mt-10 type-section text-ink" data-print="appendix">In order</h3>
-      <p className="mt-1 type-small text-ink-muted" data-print="appendix">What to do now, what to book first, and what waits for the month, the week and the day before.</p>
+      {/*
+        V11 §I — ONE NEED ONCE, FOR THE THIRD AND LAST PLACE IT WAS TWICE.
+
+        V11 §3 fixed Preflight-against-Book-first and this component's own
+        readiness grid. What it left is the one the comment above this section
+        admits to in its own words — "this is Book first re-grouped with tick
+        boxes" — rendered on Prepare **directly below Book first**, which carries
+        the same needs with the three actions that act on them.
+
+        The booking rows are therefore dropped here when Book first is on the
+        same page, exactly as `PreflightView` drops them and for the same reason:
+        the rendering that can be *pressed* wins. What stays is what genuinely
+        has a sequence and is not a booking — the re-check, the packing, the
+        offline copy — which is what gives this section a reason to exist at all.
+
+        A prop rather than an assumption: a component that silently omits data
+        because of what it guesses its neighbour is doing is worse than one that
+        is told.
+      */}
+      {phases.length > 0 ? (
+        <>
+          <h3 className="mt-10 type-section text-ink" data-print="appendix">In order</h3>
+          <p className="mt-1 type-small text-ink-muted" data-print="appendix">
+            {bookingsListedAbove
+              ? 'What waits for the week and the day before, once the booking above is done.'
+              : 'What to do now, what to book first, and what waits for the month, the week and the day before.'}
+          </p>
+        </>
+      ) : null}
       <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="hub-checklist" data-print="appendix">
-        {intel.checklist.phases.map((phase, phaseIndex) => (
+        {phases.map((phase, phaseIndex) => (
           <div key={phase.phase} className="card p-5" data-testid={`hub-phase-${phase.phase}`}>
             <p className="flex items-baseline gap-2">
               <span className="type-figure text-xs text-accent">{String(phaseIndex + 1).padStart(2, '0')}</span>

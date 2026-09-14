@@ -685,7 +685,7 @@ export function DiscoveryBoardView({
         the only thing shouting.
       */}
       {shared.notes.length > 0 ? (
-        <details className="mb-6 rounded-md bg-paper-sunk px-3" data-testid="board-weather-note">
+        <details className="mb-6 rounded-[var(--radius-control)] bg-paper-sunk px-3" data-testid="board-weather-note">
           <summary
             className={cx(
               MIN_TARGET_SUMMARY,
@@ -1225,17 +1225,17 @@ function PlaceCard({
           with the whole board says nothing, because the board has said it.
         */}
         {operating.status === 'closed_throughout' ? (
-          <p className="mt-3 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <p className="mt-3 rounded-[var(--radius-control)] bg-clay-soft p-2.5 text-xs leading-relaxed text-ink-muted">
             Shut on every day of your trip.
           </p>
         ) : operating.status === 'open_some_days' ? (
-          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <p className="mt-3 rounded-[var(--radius-control)] bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
             Open on {operating.openDates.length} of your {operating.byDate.length} days
             {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''} — we will only put it on
             one of those.
           </p>
         ) : access.status === 'partial' ? (
-          <p className="mt-3 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <p className="mt-3 rounded-[var(--radius-control)] bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
             Reachable on {access.usableDates.length} of your {access.byDate.length} days — we will
             only put it on one of those.
           </p>
@@ -1272,7 +1272,7 @@ function PlaceCard({
             ) : null}
 
             {fit.blockers.length > 1 ? (
-              <ul className="rounded-lg bg-clay-soft p-3 text-xs leading-relaxed text-ink-muted">
+              <ul className="rounded-[var(--radius-card)] bg-clay-soft p-3 text-xs leading-relaxed text-ink-muted">
                 {fit.blockers.slice(1).map((blocker) => (
                   <li key={blocker.code}>{blocker.message}</li>
                 ))}
@@ -1280,7 +1280,7 @@ function PlaceCard({
             ) : null}
 
             {fit.reasons.length > 1 ? (
-              <ul className="space-y-1 rounded-lg bg-paper-sunk p-3 text-xs leading-relaxed text-ink-muted">
+              <ul className="space-y-1 rounded-[var(--radius-card)] bg-paper-sunk p-3 text-xs leading-relaxed text-ink-muted">
                 {fit.reasons.slice(1).map((reason) => (
                   <li key={reason}>{reason}</li>
                 ))}
@@ -1341,7 +1341,7 @@ function PlaceCard({
             and hide the one fact they need in order to change their mind.
           */}
           {blocked && status === 'included' ? (
-            <p className="mb-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
+            <p className="mb-2 rounded-[var(--radius-control)] bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
               You picked this, and it no longer works on these dates. We have kept your choice —
               change your dates, your transport answers, or skip it.
             </p>
@@ -1364,7 +1364,7 @@ function PlaceCard({
                     type="button"
                     onClick={() => onPass(reason.id)}
                     className={cx(
-                      'rounded-md border border-rule px-2.5 text-xs text-ink-muted transition-colors hover:border-clay hover:text-clay',
+                      'rounded-[var(--radius-control)] border border-rule px-2.5 text-xs text-ink-muted transition-colors hover:border-clay hover:text-clay',
                       MIN_TARGET,
                     )}
                   >
@@ -1568,7 +1568,7 @@ function WeatherBackups({
       </p>
 
       {usable.length === 0 ? (
-        <p className="mt-4 max-w-2xl rounded-md bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
+        <p className="mt-4 max-w-2xl rounded-[var(--radius-control)] bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
           {/*
             No landform, in a sentence whose whole point is not inventing one.
             This used to end "would open up the sheltered stops down the valley"
@@ -1585,7 +1585,7 @@ function WeatherBackups({
           {usable.map((backup) => (
             <li
               key={backup.placeId}
-              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-md border border-rule p-3"
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-[var(--radius-control)] border border-rule p-3"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{backup.name}</p>
@@ -1766,7 +1766,7 @@ function SkipRow({
         ) : null}
 
         {blocked && status === 'included' ? (
-          <p className="mt-2 rounded-md bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
+          <p className="mt-2 rounded-[var(--radius-control)] bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
             You picked this, and it no longer works on these dates. We have kept your choice —
             change your dates, your transport answers, or skip it.
           </p>
@@ -1826,7 +1826,7 @@ function SkipRow({
               aria-pressed={status === option}
               title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
               className={cx(
-                'flex items-center justify-center rounded-md border px-3 text-xs font-medium whitespace-nowrap transition-colors max-sm:flex-1',
+                'flex items-center justify-center rounded-[var(--radius-control)] border px-3 text-xs font-medium whitespace-nowrap transition-colors max-sm:flex-1',
                 MIN_TARGET,
                 unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
                 !unavailable && status === option
@@ -1898,7 +1898,7 @@ function EvidencePanel({ candidate }: { candidate: DiscoveryCandidate }) {
       ) : null}
 
       {cautions.length > 0 ? (
-        <p className="rounded-md bg-amber-soft p-2.5 leading-relaxed text-ink-muted">
+        <p className="rounded-[var(--radius-control)] bg-amber-soft p-2.5 leading-relaxed text-ink-muted">
           <span className="font-medium text-ink">Worth knowing.</span> {cautions[0]!.statement}
           {/*
             Why it is being shown rather than acted on, where it is not acted on.

@@ -144,12 +144,15 @@ export * from './dates/windows';
 export * from './dates/duration';
 export * from './scope/portfolio';
 export * from './recommend/distance';
+export * from './recommend/intake';
+export * from './recommend/presentation';
 export * from './recommend/proposal';
 export * from './recommend/rank';
 export * from './recommend/shortlist';
 export * from './routing/plan';
 export * from './routing/portfolio';
 
+export * from './naming/aliases';
 export * from './naming/display-name';
 
 export * from './pricing/model-rates';
@@ -157,6 +160,15 @@ export * from './pricing/model-rates';
 export * from './destinations/intent';
 export * from './destinations/intent-graph';
 export * from './destinations/semantics';
+/* V12 — what a place affords, what the traveller intends, and how the trip should work. */
+export * from './destinations/affordances';
+export * from './intent/roles';
+export * from './intent/traveler-intent';
+export * from './operating/model';
+export * from './operating/mode-consistency';
+export * from './operating/chapter-model';
+export * from './satisfaction/intent-satisfaction';
+export * from './calendar/trip-calendar';
 export * from './destinations/decomposition';
 export * from './route/spatial-order';
 export * from './route/critical';

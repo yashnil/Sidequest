@@ -296,7 +296,7 @@ export function DestinationCombobox({
           className={
             size === 'hero'
               ? 'w-full rounded-none border-0 border-b-2 border-ink bg-transparent px-0 py-3 font-display text-2xl leading-tight text-ink outline-none placeholder:text-ink-faint/70 focus-visible:border-accent sm:text-5xl'
-              : 'w-full rounded-lg border border-rule bg-paper-raised px-3.5 py-3 text-base text-ink placeholder:text-ink-faint focus-visible:border-pine'
+              : 'w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3.5 py-3 text-base text-ink placeholder:text-ink-faint focus-visible:border-pine'
           }
         />
         {state.kind === 'loading' ? (

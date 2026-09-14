@@ -216,3 +216,77 @@ describe('V11 §5 — a relocation is a change of place, not a change of row', (
     expect(hotelChanges).toBe(2);
   });
 });
+
+describe('V11 §N — what the live Kyrgyzstan and Rockies builds showed', () => {
+  /*
+   * Both defects below were invisible to every offline fixture and appeared on
+   * the first real build, because they live in the seam between two layers that
+   * the fixtures happened to key identically.
+   */
+
+  it('joins a day to its stay when the day names the base by the ref it resolved to', () => {
+    /*
+     * The live shape: a package base keyed by the draft's slug, a day keyed by
+     * the provider ref the place resolved to. Not one of eleven days matched,
+     * so every chapter held zero stays — the titles fell back to "This part of
+     * the trip" and the geographic cut compared null to null and never fired.
+     */
+    const bases: StayInput[] = [
+      { id: 'canmore', placeId: 'relation/111', name: 'Canmore', nights: 2, coordinates: { lat: 51.09, lng: -115.36 } },
+      { id: 'lake-louise', placeId: 'relation/222', name: 'Lake Louise', nights: 2, coordinates: { lat: 51.43, lng: -116.18 } },
+      { id: 'jasper', placeId: 'relation/333', name: 'Jasper', nights: 3, coordinates: { lat: 52.87, lng: -118.08 } },
+    ];
+    const { stays } = normalizeStays({ bases });
+    const chapters = deriveChapters({
+      days: [
+        day(1, 'relation/111', 'light'),
+        day(2, 'relation/111', 'moderate'),
+        day(3, 'relation/222', 'moderate'),
+        day(4, 'relation/222', 'moderate'),
+        day(5, 'relation/333', 'moderate'),
+        day(6, 'relation/333', 'light'),
+      ],
+      stays,
+    });
+    expect(chapters.map((chapter) => chapter.title)).toEqual(['Canmore', 'Lake Louise', 'Jasper']);
+    expect(chapters.every((chapter) => chapter.stayIds.length > 0)).toBe(true);
+    /* And no chapter is left with the fallback title. */
+    expect(chapters.some((chapter) => chapter.title === 'This part of the trip')).toBe(false);
+  });
+
+  it('falls back to the day\'s base name when no id matches at all', () => {
+    const bases: StayInput[] = [{ id: 'karakol', name: 'Karakol', nights: 2 }];
+    const { stays } = normalizeStays({ bases });
+    const chapters = deriveChapters({ days: [{ ...day(1, 'nothing-matches', 'light'), baseName: 'Karakol' }], stays });
+    expect(chapters[0]?.title).toBe('Karakol');
+  });
+
+  it('collapses a night an experience owns into the night beside it in the same town', () => {
+    /*
+     * The trek ends with a night in Karakol the operator books; the recovery
+     * night after it, in the same town, the traveller books. Two consecutive
+     * nights, one bed — shown as two bases both called "Karakol" until now.
+     */
+    const bases: StayInput[] = [
+      { id: 'ala-kul-trek', name: 'Ala-Kul trek', nights: 2 },
+      { id: 'karakol-2', name: 'Karakol', nights: 1 },
+      { id: 'karakol#2', name: 'Karakol', nights: 1 },
+    ];
+    const episodes: EpisodeInput[] = [
+      { name: 'Ala-Kul crossing', kind: 'trek', dayNumbers: [6, 7, 8], baseIds: ['ala-kul-trek', 'karakol-2'], timing: 'operator' },
+    ];
+    const { stays, collapsed } = normalizeStays({ bases, episodes });
+    expect(stays.map((stay) => `${stay.name}:${stay.nights}`)).toEqual(['Ala-Kul trek:2', 'Karakol:2']);
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]?.foldedBaseIds).toEqual(['karakol#2']);
+  });
+
+  it('still refuses to merge two stated experiences that differ', () => {
+    const bases: StayInput[] = [
+      { id: 'camp-a', name: 'High camp', nights: 1, episode: 'Traverse' },
+      { id: 'camp-b', name: 'High camp', nights: 1, episode: 'Second trek' },
+    ];
+    const { stays } = normalizeStays({ bases });
+    expect(stays).toHaveLength(2);
+  });
+});

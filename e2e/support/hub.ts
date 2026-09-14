@@ -15,6 +15,55 @@ export async function openPrepareNotes(page: Page): Promise<void> {
   await expect(page.getByTestId('prepare')).toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * V11 §I — Prepare's reference material sits behind one "Good to know" disclosure.
+ *
+ * Apps and set-up, the day backups, the weather plan, what to re-check and the
+ * evidence behind it are reference rather than action, so they are folded under
+ * the four things the traveller has to *do*. Nothing is removed and nothing is
+ * more than one press away — which is exactly what a test that asserts on them
+ * has to do first. Idempotent: a disclosure already open is left open.
+ */
+export async function openPrepareReference(page: Page): Promise<void> {
+  const disclosure = page.getByTestId('prepare-reference');
+  await expect(disclosure).toBeAttached({ timeout: 10_000 });
+  /* `:scope > summary`: the disclosure holds nested ones, and a bare descendant match is three elements. */
+  if ((await disclosure.getAttribute('open')) === null) await disclosure.locator(':scope > summary').click();
+}
+
+/**
+ * V11 §D — a day's timing and checks sit under its timeline, behind one disclosure.
+ *
+ * Opening hours, the weather read, the window note and how the day moves and eats
+ * were a band *between* the day's heading and its first timed row — most of the
+ * 659 words a traveller read before the first thing they would actually do. They
+ * are the same four blocks, in the same order, under the timeline, folded into
+ * one disclosure that the packet prints open.
+ *
+ * A test that asserts on any of them opens it first. Idempotent, and scoped to
+ * the day, because a plan has one of these per day.
+ */
+export async function openDayChecks(page: Page, dayNumber?: number): Promise<void> {
+  if (dayNumber !== undefined) {
+    const disclosure = page.getByTestId(`day-notes-${dayNumber}`);
+    await expect(disclosure).toBeAttached({ timeout: 15_000 });
+    if ((await disclosure.getAttribute('open')) === null) await disclosure.locator(':scope > summary').click();
+    return;
+  }
+  /*
+   * Every day, when no day is named. A stop with published hours lands on
+   * whichever day the composition put it on, so a test that opened day one and
+   * then asserted on "the stop that sets the shape of a day" was asserting
+   * against the wrong disclosure whenever the plan changed.
+   */
+  const all = page.locator('[data-testid^="day-notes-"]');
+  await expect(all.first()).toBeAttached({ timeout: 15_000 });
+  for (let index = 0; index < (await all.count()); index += 1) {
+    const disclosure = all.nth(index);
+    if ((await disclosure.getAttribute('open')) === null) await disclosure.locator(':scope > summary').click();
+  }
+}
+
 export async function openHubView(page: Page, view: HubView): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
   // EXPERIENCE V2 — on a phone the bottom bar holds four views; Overview is the band's own title link.
@@ -80,7 +129,24 @@ export async function bandAction(page: Page, name: string | RegExp) {
    */
   await expect(direct.or(more).first()).toBeVisible({ timeout: 30_000 });
   if (await direct.isVisible().catch(() => false)) return direct;
-  await more.click();
+  /*
+   * AND THE SAMPLE AFTER THE RACE IS ITSELF A SAMPLE.
+   *
+   * The race above ends as soon as either control is on screen; the
+   * `isVisible()` below it is taken a moment later, and in that moment the band
+   * can finish painting and swap which of the two is there. Under a
+   * single-worker run of the whole project that is not a rare interleaving: the
+   * race was satisfied by the direct control, the sample missed it, and the
+   * fallback then waited sixty seconds to click a "More" that this width never
+   * renders.
+   *
+   * So the overflow menu is opened only if it is actually there, and either way
+   * the wait that matters is for the control we were asked for. Nothing here
+   * shortens a wait or accepts a missing control — it stops the helper from
+   * committing to one branch on the strength of a single sample.
+   */
+  if (await more.isVisible().catch(() => false)) await more.click();
+  await expect(direct).toBeVisible({ timeout: 30_000 });
   return direct;
 }
 

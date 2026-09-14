@@ -113,7 +113,7 @@ export function RequestComposer({
               id="freeText"
               name="freeText"
               rows={3}
-              className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+              className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
             />
           </Panel>
 
@@ -137,7 +137,7 @@ export function RequestComposer({
                 id="caseId"
                 name="caseId"
                 data-testid="case-select"
-                className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+                className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
               >
                 {cases.map((entry) => (
                   <option key={entry.caseId} value={entry.caseId}>
@@ -176,7 +176,7 @@ function Toggle({
       onClick={onSelect}
       aria-pressed={active}
       className={cx(
-        'min-h-11 rounded-lg border px-4 text-sm font-medium transition-colors motion-reduce:transition-none',
+        'min-h-11 rounded-[var(--radius-card)] border px-4 text-sm font-medium transition-colors motion-reduce:transition-none',
         active ? 'border-pine bg-pine-soft text-pine' : 'border-rule bg-paper-raised text-ink',
       )}
     >
@@ -216,7 +216,7 @@ function Text({
         required={required}
         defaultValue={defaultValue}
         {...(hintId ? { 'aria-describedby': hintId } : {})}
-        className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+        className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
       />
     </div>
   );
@@ -240,7 +240,7 @@ function Select({
         id={name}
         name={name}
         defaultValue={defaultValue}
-        className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+        className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

@@ -104,7 +104,7 @@ export const PLANNER_REMEDY_LABELS: Record<PlannerRemedy, string> = {
   retry: 'Try building again',
   adjust_scope: 'Change the region or where you are based',
   adjust_transport: 'Change your travel limits',
-  refresh_evidence: 'Rebuild the region to look for more evidence',
+  refresh_evidence: 'Look again, and more widely, for what is here',
   choose_manually: 'Pick the stops yourself',
   more_days: 'Give the trip more days',
 };

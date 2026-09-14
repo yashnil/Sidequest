@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { languageName, sharesLanguage, type CountryFacts } from '../reference/countries';
 import { claim, type SourceClaim } from './claims';
+import { countryInProse, countryPossessive } from '../destinations/semantics';
 import type { TravelReality } from '../reality/schema';
 
 /**
@@ -312,7 +313,15 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
    * the fact cannot disagree); the resolved jurisdiction phrase is next; the
    * destination is the last resort and only where neither exists.
    */
-  const country = input.destinationFacts?.name ?? input.jurisdictionName ?? input.destinationName;
+  const countryName = input.destinationFacts?.name ?? input.jurisdictionName ?? input.destinationName;
+  /*
+   * V11 §N — the name as it goes into a sentence, and as it goes into a
+   * possessive. "in United States" and "United States’s requirements" were both
+   * on the Prepare screen; the article is grammar, decided once here so every
+   * sentence below inherits it rather than each one remembering.
+   */
+  const country = countryInProse(countryName);
+  const countryOwns = countryPossessive(countryName);
 
   // Passport validity ---------------------------------------------------------
   if (international === 'no') {
@@ -343,7 +352,7 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
       state: expiresBeforeReturn ? 'problem' : 'unverified',
       summary: expiresBeforeReturn
         ? `Your passport expires ${profile.passportExpiry}, before this trip ends. Renew it before anything else.`
-        : `Your passport runs about ${Math.floor(monthsAfterReturn)} months past your return. Many destinations require three or six months; confirm ${country}’s rule at the official source.`,
+        : `Your passport runs about ${Math.floor(monthsAfterReturn)} months past your return. Many destinations require three or six months; confirm ${countryOwns} rule at the official source.`,
       action: expiresBeforeReturn ? 'Renew your passport now.' : 'Confirm the validity rule for your destination.',
       links: officialLinks,
       blocking: expiresBeforeReturn,
@@ -360,7 +369,7 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
     entries.push({ kind: 'visa', title: 'Visa or entry permission', state: 'needs_input', summary: destinationUnknown ? `Sidequest could not resolve which country ${input.destinationName} is in, so it cannot tell whether this trip crosses a border. Check the official source for your citizenship directly.` : 'Whether you need a visa, an electronic travel authorisation or nothing depends on your citizenship. Sidequest never guesses it.', action: destinationUnknown ? 'Check the entry rule at the official source.' : 'Add your citizenship, or check the official source directly.', links: officialLinks, blocking: false, phase: 'do_now' });
   } else {
     const id = 'claim:entry-visa';
-    claims.push(claim({ id, kind: 'entry_visa', subject: country, claim: `Entry requirements for ${country} for a ${citizenship} passport holder have not been independently verified by Sidequest.`, authority: 'model_proposal', sourceName: 'Sidequest', state: 'unverified', checkedAt, blocking: false, notes: ['Only an official current source may confirm entry rules.'] }));
+    claims.push(claim({ id, kind: 'entry_visa', subject: countryName, claim: `Entry requirements for ${country} for a ${citizenship} passport holder have not been independently verified by Sidequest.`, authority: 'model_proposal', sourceName: 'Sidequest', state: 'unverified', checkedAt, blocking: false, notes: ['Only an official current source may confirm entry rules.'] }));
     entries.push({
       kind: 'visa',
       title: 'Visa or entry permission',
@@ -382,8 +391,8 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
   // Health documents ----------------------------------------------------------
   if (international !== 'no') {
     const id = 'claim:health-document';
-    claims.push(claim({ id, kind: 'health_document', subject: country, claim: `Vaccination or health-document requirements for ${country} are not verified by Sidequest.`, authority: 'model_proposal', sourceName: 'Sidequest', state: 'unverified', checkedAt }));
-    entries.push({ kind: 'health_document', title: 'Vaccinations and health documents', state: 'unverified', summary: `Some destinations require proof of vaccination or health declarations. Sidequest has not verified ${country}’s requirements.`, action: 'Check the official travel-health source for your destination, ideally six weeks before you go.', links: [{ name: health.name, url: health.url }], blocking: false, phase: 'one_month_out', claimId: id, tier: 'more' });
+    claims.push(claim({ id, kind: 'health_document', subject: countryName, claim: `Vaccination or health-document requirements for ${country} are not verified by Sidequest.`, authority: 'model_proposal', sourceName: 'Sidequest', state: 'unverified', checkedAt }));
+    entries.push({ kind: 'health_document', title: 'Vaccinations and health documents', state: 'unverified', summary: `Some destinations require proof of vaccination or health declarations. Sidequest has not verified ${countryOwns} requirements.`, action: 'Check the official travel-health source for your destination, ideally six weeks before you go.', links: [{ name: health.name, url: health.url }], blocking: false, phase: 'one_month_out', claimId: id, tier: 'more' });
   }
 
   // Driving documents ---------------------------------------------------------
@@ -393,7 +402,7 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
     const facts = input.destinationFacts ?? null;
     const home = input.homeFacts ?? null;
     const sideDiffers = facts && home ? facts.drivingSide !== home.drivingSide : null;
-    const sideFact = facts ? `Traffic drives on the ${facts.drivingSide} in ${country}${sideDiffers === true ? ` — the opposite side from ${home!.name}` : sideDiffers === false ? ', the same side as at home' : ''}.` : null;
+    const sideFact = facts ? `Traffic drives on the ${facts.drivingSide} in ${country}${sideDiffers === true ? ` — the opposite side from ${countryInProse(home!.name)}` : sideDiffers === false ? ', the same side as at home' : ''}.` : null;
     /*
      * V7 §3 — what the compiled reality knows about driving here, labelled as a
      * reference and never as an official confirmation. A jurisdiction where a
@@ -536,7 +545,7 @@ export function buildReadinessPacket(input: ReadinessInput): { packet: TripReadi
         kind: 'electricity',
         title: 'Plugs and voltage',
         state: facts ? 'confirmed' : 'unverified',
-        summary: facts ? `${country} uses type ${facts.plugs.join('/')} sockets at ${facts.voltage} V${plugDiffers === true ? ` — different from ${home!.name}; bring an adapter${Math.abs(facts.voltage - home!.voltage) > 30 ? ' and check your chargers accept the voltage' : ''}.` : plugDiffers === false ? '; your plugs fit.' : '.'}` : 'Check the plug type and voltage for your destination.',
+        summary: facts ? `${country} uses type ${facts.plugs.join('/')} sockets at ${facts.voltage} V${plugDiffers === true ? ` — different from ${countryInProse(home!.name)}; bring an adapter${Math.abs(facts.voltage - home!.voltage) > 30 ? ' and check your chargers accept the voltage' : ''}.` : plugDiffers === false ? '; your plugs fit.' : '.'}` : 'Check the plug type and voltage for your destination.',
         links: [],
         blocking: false,
         phase: 'day_before',

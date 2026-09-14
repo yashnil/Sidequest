@@ -74,8 +74,18 @@ export default function DesignLabPage() {
           <div className="grid gap-3">
             <p className="display-hero text-ink">Display</p>
             <p className="display-lg text-ink">Page title</p>
+            {/*
+              V11 §C — IN THE ORDER THEY ACTUALLY RENDER.
+
+              These two were listed the other way up and labelled "Section
+              heading" and "Card heading" — and `type-title` is the larger of the
+              two in `globals.css`. A styleguide that contradicts the stylesheet
+              is worse than no styleguide: the Trip Pack was built from this list
+              and came out with its sub-headings bigger than the sections holding
+              them.
+            */}
+            <p className="type-title text-ink">View heading</p>
             <p className="type-section text-ink">Section heading</p>
-            <p className="type-title text-ink">Card heading</p>
             <p className="type-body text-ink">Body — the size a traveller reads a sentence at.</p>
             <p className="type-small text-ink-muted">Supporting — a second line under a heading.</p>
             <p className="type-meta text-ink-faint">Caption — the floor, 13px.</p>

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip, compileRegion } from './support/trip';
-import { bandAction, openHubView, openPrepareNotes } from './support/hub';
+import { bandAction, openHubView, openPrepareNotes, openPrepareReference } from './support/hub';
 
 /**
  * THE CANONICAL GENERATION PATH, PRESSED FROM THE REAL BUTTONS.
@@ -82,6 +82,7 @@ async function expectCanonicalItinerary(page: Page) {
   await openPrepareNotes(page);
   await expect(page.getByTestId('before-you-go')).toBeVisible();
   await expect(page.getByTestId('before-you-go')).toContainText(/entry requirements/i);
+  await openPrepareReference(page);
   await expect(page.getByTestId('backups')).toBeVisible();
   await expect(page.getByTestId('considered-and-left-out')).toBeVisible();
   await openHubView(page, 'overview');

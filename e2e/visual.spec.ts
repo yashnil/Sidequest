@@ -54,7 +54,7 @@ test('captures the journey and stays free of console errors and overflow', async
    * longer plans one. The destination is typed into the composer instead, which
    * is also what makes this walkthrough work for any destination.
    */
-  await page.getByRole('link', { name: 'I know where I am going' }).click();
+  await page.getByRole('link', { name: 'I know where I want to go' }).click();
   await page.getByTestId('destination-input').fill('Mammoth Lakes');
   await shot('02-setup-where');
 

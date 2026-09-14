@@ -246,6 +246,44 @@ function overlapping(a: string, b: string): boolean {
   return shared / second.length > 0.6;
 }
 
+/**
+ * V11 §H — WHAT WILL SHAPE THE ROUTE, AND WHAT WAS MERELY DECIDED.
+ *
+ * The review screen showed every glance group as an equal card, so a traveller
+ * about to press the one button the whole interview exists for read seven cards
+ * of which three were Sidequest's own defaults for questions they never saw. §H
+ * asks for "only genuinely consequential decisions", and the honest
+ * discrimination is not about the *topic* — food matters enormously on some
+ * trips — it is about who decided.
+ *
+ * A group with at least one answer the traveller actually gave is consequential:
+ * they said it, it binds the plan, and it belongs on the screen where they check
+ * it. A group where every line is our own read is still true, still reachable in
+ * the ledger below, and is reported as a **count** rather than as a card —
+ * "Sidequest also decided 3 things you did not answer" — which is the one
+ * sentence that makes them worth opening.
+ *
+ * Deliberately not a hand-written list of "important" groups: that would be a
+ * claim about what matters to a traveller we have never met, and it would go
+ * stale the moment a question is added.
+ */
+export interface ReviewShapers {
+  /** Groups carrying at least one answer the traveller gave. */
+  groups: ReviewGlanceGroup[];
+  /** Group titles where every line is Sidequest's own read. Counted, never carded. */
+  decidedForYou: string[];
+}
+
+export function reviewShapers(ledger: ReviewLedger): ReviewShapers {
+  const groups: ReviewGlanceGroup[] = [];
+  const decidedForYou: string[] = [];
+  for (const group of reviewGlance(ledger)) {
+    if (group.lines.some((line) => !line.assumed)) groups.push(group);
+    else decidedForYou.push(group.title);
+  }
+  return { groups, decidedForYou };
+}
+
 export function reviewGlance(ledger: ReviewLedger): ReviewGlanceGroup[] {
   const byId = new Map<string, ReviewEntry>();
   for (const entry of [...ledger.told, ...ledger.assumed]) byId.set(entry.questionId, entry);

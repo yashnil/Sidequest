@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView } from './support/hub';
+import { openDayChecks, openHubView, openPrepareReference } from './support/hub';
 import { completeQuestionnaire, createTrip } from './support/trip';
 import { openBoardBackstage } from './support/trip';
 
@@ -194,12 +194,15 @@ test('an itinerary is built against a forecast, and says so', async ({ page }) =
   await include(card(page, 'Minaret Vista'));
   await build(page);
 
+  await openDayChecks(page);
   const weather = page.getByRole('region', { name: 'Weather on day 1' }).first();
   await expect(weather).toBeVisible();
   await expect(weather.getByText('Forecast', { exact: true })).toBeVisible();
 
   // The point it was taken at, and the attribution the licence requires (the trip-wide weather panel lives under Prepare).
   await openHubView(page, 'prepare');
+  /* V11 §I — the weather plan is reference material, under Prepare's "Good to know" disclosure. */
+  await openPrepareReference(page);
   const prepare = page.locator('#hub-view-prepare');
   await expect(prepare.getByText(/Taken at (one point|\d+ separate points)/)).toBeVisible();
   await expect(prepare.getByText(/have not checked today/i).first()).toBeVisible();
@@ -238,6 +241,7 @@ test('the weather behind a plan survives a refresh unchanged', async ({ page }) 
   await reachBoard(page);
   await build(page);
 
+  await openDayChecks(page);
   const before = await page
     .getByRole('region', { name: 'Weather on day 1' })
     .first()
@@ -246,6 +250,7 @@ test('the weather behind a plan survives a refresh unchanged', async ({ page }) 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Mammoth Lakes', exact: true })).toBeVisible();
   await openHubView(page, 'days');
+  await openDayChecks(page);
 
   const after = await page
     .getByRole('region', { name: 'Weather on day 1' })
@@ -261,6 +266,7 @@ test('the weather behind a plan survives a refresh unchanged', async ({ page }) 
 test('different dates get different weather, and a different kind of it', async ({ page }) => {
   await reachBoard(page);
   await build(page);
+  await openDayChecks(page);
   const august = await page
     .getByRole('region', { name: 'Weather on day 1' })
     .first()
@@ -271,6 +277,7 @@ test('different dates get different weather, and a different kind of it', async 
   // fresh trip is the shortest path to two plans that differ only in that.
   await reachBoard(page, FAR);
   await build(page);
+  await openDayChecks(page);
   const far = await page
     .getByRole('region', { name: 'Weather on day 1' })
     .first()
@@ -285,6 +292,7 @@ test('a trip beyond the forecast window says so in those words', async ({ page }
   await reachBoard(page, FAR);
   await build(page);
 
+  await openDayChecks(page);
   const weather = page.getByRole('region', { name: 'Weather on day 1' }).first();
   // PRODUCTION UI V1 — the day line carries the chip ("Typical"); the reasoning sits behind a disclosure.
   await expect(weather.getByText('Typical')).toBeVisible();
@@ -298,6 +306,8 @@ test('a trip beyond the forecast window says so in those words', async ({ page }
   await expect(page.getByText(/clearest|best day|looks like the day/i)).toHaveCount(0);
   await expect(page.getByText('Forecast', { exact: true })).toHaveCount(0);
   await openHubView(page, 'prepare');
+  /* V11 §I — the weather plan is reference material, under Prepare's "Good to know" disclosure. */
+  await openPrepareReference(page);
   const prepare = page.locator('#hub-view-prepare');
   await expect(prepare.getByText('Historical pattern', { exact: true }).first()).toBeVisible();
   /*

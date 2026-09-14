@@ -620,8 +620,48 @@ export type JurisdictionRef = z.infer<typeof jurisdictionRefSchema>;
 export function jurisdictionPhrase(jurisdictions: readonly JurisdictionRef[]): string {
   const countries = jurisdictions.filter((j) => j.level === 'country');
   if (countries.length === 0) return 'this country';
-  if (countries.length === 1) return countries[0]!.name;
-  return `${countries.slice(0, -1).map((c) => c.name).join(', ')} and ${countries[countries.length - 1]!.name}`;
+  if (countries.length === 1) return countryInProse(countries[0]!.name);
+  return `${countries.slice(0, -1).map((c) => countryInProse(c.name)).join(', ')} and ${countryInProse(countries[countries.length - 1]!.name)}`;
+}
+
+/**
+ * V11 §N — A COUNTRY NAME IS NOT ALWAYS A SENTENCE-READY NOUN.
+ *
+ * Read at four widths, the Prepare screen said "English and Spanish are spoken
+ * in United States", "United States uses the USD" and "United States uses type
+ * A/B sockets" — three sentences, one missing article, on the screen whose
+ * entire job is to sound like somebody who knows what they are talking about.
+ *
+ * This is grammar, not a place patch: a country name takes a definite article
+ * when its head is a common noun (a republic, a kingdom, a union of states or
+ * emirates, a group of islands) or when the name is itself a plural. Those two
+ * rules cover almost everything; the short list beside them is the set of
+ * established plural-form names English does not spell as plurals of anything,
+ * and it is a list of *words*, not of destinations — nothing here decides
+ * anything about a trip, a route or a measurement.
+ */
+const ARTICLE_HEAD = /\b(Republic|Kingdom|States|Emirates|Federation|Islands|Isles|Union)\b/;
+const ARTICLE_NAMES = new Set(['Netherlands', 'Philippines', 'Bahamas', 'Maldives', 'Gambia', 'Comoros', 'Seychelles']);
+
+/** Whether English puts "the" in front of this country name. */
+export function countryTakesArticle(name: string): boolean {
+  return ARTICLE_HEAD.test(name) || ARTICLE_NAMES.has(name.trim());
+}
+
+/** The country name as it is used inside a sentence: "the United States", "Japan". */
+export function countryInProse(name: string): string {
+  return countryTakesArticle(name) ? `the ${name}` : name;
+}
+
+/**
+ * The possessive form: "the United States’", "Japan’s".
+ *
+ * A plural name ending in s takes the bare apostrophe, which is why this is not
+ * simply `countryInProse(name) + '’s'`.
+ */
+export function countryPossessive(name: string): string {
+  const inProse = countryInProse(name);
+  return inProse.endsWith('s') ? `${inProse}’` : `${inProse}’s`;
 }
 
 // ---------------------------------------------------------------------------

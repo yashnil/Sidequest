@@ -134,6 +134,16 @@ export default async function DecideSessionPage({
               : 'Places that fit this trip'}
       </h1>
 
+      <div className="mt-10">
+        <ShortlistView
+          sessionId={id}
+          shortlist={session.shortlist}
+          answers={session.answers}
+          answersSummary={summary}
+          images={images}
+        />
+      </div>
+
       {/*
         THE ONE INPUT THAT WOULD CHANGE THE ANSWER.
 
@@ -150,7 +160,15 @@ export default async function DecideSessionPage({
         than saying nothing.
       */}
       {session.shortlist && !separation.separates && lead?.nextQuestion ? (
-        <div className="mt-6 max-w-2xl rounded-[var(--radius-card)] border border-rule bg-paper-sunk p-5">
+        /*
+         * V11 §A2 — BELOW THE ANSWER, NOT ABOVE IT.
+         *
+         * This sat between the heading and the recommendations, so a traveller
+         * who asked where they should go met a question from us before they met
+         * an answer from us. It is a good offer and it belongs after the thing
+         * it would improve.
+         */
+        <div className="mt-10 max-w-2xl rounded-[var(--radius-card)] border border-rule bg-paper-sunk p-5">
           <p className="eyebrow">One answer would change this</p>
           <p className="mt-3 leading-relaxed text-ink">{lead.nextQuestion.action}</p>
           <a href="#revise" className={`${buttonClass('primary')} mt-5`}>
@@ -158,15 +176,6 @@ export default async function DecideSessionPage({
           </a>
         </div>
       ) : null}
-
-      <div className="mt-10">
-        <ShortlistView
-          sessionId={id}
-          shortlist={session.shortlist}
-          answersSummary={summary}
-          images={images}
-        />
-      </div>
 
       {/*
         Photographs are resolved after the ranking is on screen, never in front
@@ -209,6 +218,27 @@ export default async function DecideSessionPage({
             adults: session.answers.adults,
             children: session.answers.children,
             avoid: session.answers.avoid ?? '',
+            /*
+             * V11 §A1 — everything the intake ladder collects, so reopening the
+             * answers shows what was said rather than an empty question. A field
+             * missing here is a question the traveller answered and is asked
+             * again, which is the exact experience §A5 exists to prevent.
+             */
+            ...(session.answers.duration.minNights ? { minNights: session.answers.duration.minNights } : {}),
+            ...(session.answers.duration.maxNights ? { maxNights: session.answers.duration.maxNights } : {}),
+            ...(session.answers.origin ? { origin: session.answers.origin } : {}),
+            ...(session.answers.originCountry ? { originCountry: session.answers.originCountry } : {}),
+            ...(session.answers.flightTolerance ? { flightTolerance: session.answers.flightTolerance } : {}),
+            ...(session.answers.climatePreference ? { climatePreference: session.answers.climatePreference } : {}),
+            ...(session.answers.lodgingComfort ? { lodgingComfort: session.answers.lodgingComfort } : {}),
+            ...(session.answers.tripScope ? { tripScope: session.answers.tripScope } : {}),
+            ...(session.answers.surpriseAppetite ? { surpriseAppetite: session.answers.surpriseAppetite } : {}),
+            ...(session.answers.crowdTolerance ? { crowdTolerance: session.answers.crowdTolerance } : {}),
+            ...(session.answers.visited?.length ? { visited: [...session.answers.visited] } : {}),
+            ...(typeof session.answers.budgetPerPerson === 'number' ? { budgetPerPerson: session.answers.budgetPerPerson } : {}),
+            ...(session.answers.budgetIncludesFlights === undefined ? {} : { budgetIncludesFlights: session.answers.budgetIncludesFlights }),
+            travelerNeeds: [...session.answers.travelerNeeds],
+            skipped: [...session.answers.skipped],
           }}
         />
       </div>

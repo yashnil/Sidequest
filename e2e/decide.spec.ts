@@ -16,28 +16,34 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function answerAndRank(page: Page): Promise<void> {
   await page.goto('/decide');
+  /*
+   * V11 §A1 — the intake asks one question at a time, in the order that changes
+   * the ranking most, and stops as soon as it can rank. Two answers is enough,
+   * which is why the primary action appears here rather than a third question.
+   */
   await page.getByRole('radio', { name: 'Some time in a month' }).check();
   await page.getByLabel('Which month?').selectOption('7');
-  await page.getByLabel('How many nights?').fill('9');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
   await page.getByRole('checkbox', { name: 'Mountains and high country' }).check();
-  await page.getByRole('radio', { name: 'Two bases, split the trip' }).check();
-  await page.getByRole('radio', { name: 'Drive', exact: true }).check();
+  await page.getByRole('button', { name: 'One more question' }).click();
+  await page.getByRole('spinbutton', { name: 'Nights away' }).fill('9');
   await page.getByRole('button', { name: 'Show me where to go' }).click();
   await page.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
 }
 
+/** The featured answer: three and a wildcard, with everything else demoted below. */
 async function shortlist(page: Page) {
-  const list = page.getByRole('list', { name: 'Suggested destinations' });
-  await expect(list).toBeVisible({ timeout: 30_000 });
-  return list;
+  const featured = page.getByTestId('shortlist-featured');
+  await expect(featured).toBeVisible({ timeout: 30_000 });
+  return featured;
 }
 
 test('both doors are on the front page, and the second one works', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('link', { name: 'I know where I am going' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'I know where I want to go' })).toBeVisible();
 
-  await page.getByRole('link', { name: 'Help me decide' }).click();
+  await page.getByRole('link', { name: 'Help me choose' }).click();
   await expect(page).toHaveURL(/\/decide$/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('when and what for');
 });
@@ -51,9 +57,13 @@ test('four answers produce a ranked, explained shortlist', async ({ page }) => {
   expect(count, 'a shortlist is a choice, not a verdict').toBeGreaterThan(1);
   expect(count, 'nobody reads more than eight').toBeLessThanOrEqual(8);
 
-  // The detail panel argues for the selected one rather than repeating the row.
-  await expect(page.locator('section[aria-labelledby="shortlist-detail-heading"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Plan / })).toBeVisible();
+  /*
+   * V11 §A2 — the evidence is on the card it belongs to, not in a second panel
+   * that argued for the lead destination all over again. Every featured card
+   * carries its own "what we checked" disclosure and its own Plan action.
+   */
+  await expect(items.first().getByText('What we checked, one thing at a time')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Plan this' }).first()).toBeVisible();
 });
 
 /**
@@ -121,11 +131,9 @@ test('choosing a destination carries the answers into a normal trip', async ({ p
   await answerAndRank(page);
   const list = await shortlist(page);
 
-  const chosen = (
-    await list.getByRole('listitem').first().locator('span').first().innerText()
-  ).trim();
+  const chosen = (await list.getByRole('heading', { level: 3 }).first().innerText()).trim();
 
-  await page.getByRole('button', { name: /^Plan / }).click();
+  await page.getByRole('button', { name: 'Plan this' }).first().click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
 
   // The trip knows where it is going, and it did not ask again.
@@ -137,7 +145,13 @@ test('changing the answers replaces the list rather than leaving a stale one', a
   await answerAndRank(page);
   await shortlist(page);
 
+  /*
+   * Revising reopens the same intake, and with every question settled it opens
+   * on the summary — so a question is reopened by pressing the line that states
+   * its answer, which is what "change what you told us" means on this screen.
+   */
   await page.getByRole('button', { name: 'Change what you told us' }).click();
+  await page.getByRole('button', { name: /Hiking and being outside/ }).first().click();
   await page.getByRole('checkbox', { name: 'City life' }).check();
   await page.getByRole('button', { name: 'Save and rank again' }).click();
 

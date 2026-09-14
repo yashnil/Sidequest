@@ -19,6 +19,9 @@ import {
   findOperatingCalendar,
   operatingOn,
   permittedModesFor,
+  assessModeConsistency,
+  type DestinationAffordanceProfile,
+  type TravelReality,
   tripDates,
   ITINERARY_VERSION,
   FOOD_DATASET_VERSION,
@@ -171,6 +174,18 @@ export interface ProviderPlaceIdentity {
 export interface ReconcileContext extends SkeletonPlanningContext {
   /** Every place the compiled region knows, not only the board's scored candidates — a broader identity source, still real evidence. */
   compiledPlaces?: readonly Place[];
+  /**
+   * V12 §17 — WHAT THE WORLD SUPPORTS, FOR THE MODES THAT NEED THE WORLD.
+   *
+   * A draft may hint any mode, and the hint used to be honoured without asking
+   * whether the mode exists here: the V11 Canadian Rockies build shipped three
+   * ferry legs across a landlocked mountain park, one of them between Lake
+   * Louise and its own lakeshore. `assessModeConsistency` answers it, and this
+   * is what it reads. Both optional: absent means "nothing was screened", which
+   * refuses nothing that the trip's own days or episodes vouch for.
+   */
+  affordances?: DestinationAffordanceProfile | null;
+  reality?: TravelReality | null;
   /**
    * LIVE WORLD V1 — identities persisted by an earlier build of this trip,
    * keyed by normalised anchor name. First in the resolution order: a name
@@ -1715,6 +1730,16 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   // --- Lay out each day ---------------------------------------------------------
   const hardCeiling = context.matrix.mode === 'car' ? context.profile.transport.maxDailyDriveMinutes : context.profile.transport.maxDailyTransportMinutes;
   const permitted = permittedModesFor(context.profile);
+  /*
+   * V12 §17 — the trip's own testimony about how it moves, gathered once.
+   *
+   * A destination nobody could screen still knows something about itself: a
+   * cruise episode says there are boats, a day whose `move` names a ferry says
+   * there is a crossing. Read from the draft rather than from the traveller's
+   * tolerances, which is the distinction the Rockies defect turned on.
+   */
+  const tripEpisodeModes = (draft.episodes ?? []).map((episode) => String(episode.mode ?? '')).filter(Boolean);
+  const tripDayMoveModes = draft.days.map((day) => String(day.move?.how ?? '')).filter(Boolean);
   const days: ItineraryDay[] = [];
   /** V10 §7 — one spatial-order verdict per day. */
   const orderReports: { dayNumber: number; report: SpatialOrderReport; corrected: boolean }[] = [];
@@ -1758,6 +1783,9 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       relocation,
       anchors: dayAnchors,
       groundArrangement: groundArrangementFor(draft, context.matrix.mode === 'transit'),
+      /* V12 §17 — what this trip's own experiences and declared moves vouch for. */
+      episodeModes: tripEpisodeModes,
+      dayMoveModes: tripDayMoveModes,
       episode: episodeForDay(episodes, dayNumber),
       episodeEntersToday: episodes.some((e) => e.fromDay === dayNumber),
       isLastDay: d === dates.length - 1,
@@ -2164,6 +2192,15 @@ interface DayLayoutInput {
   groundArrangement?: GroundArrangement | undefined;
   /** V7 §8 — the episode this day sits inside, when it does. */
   episode?: DraftEpisode | null;
+  /**
+   * V12 §17 — how the trip's own experiences and days say it moves.
+   *
+   * Evidence that a mode is real here even where the destination was never
+   * screened: a cruise episode vouches for a boat, a day whose `move` says
+   * `ferry` vouches for the crossing it declares.
+   */
+  episodeModes?: readonly string[];
+  dayMoveModes?: readonly string[];
   episodeEntersToday?: boolean;
   isLastDay?: boolean;
   context: ReconcileContext;
@@ -2369,7 +2406,28 @@ export function groundArrangementFor(draft: Pick<TripDraft, 'driving' | 'days'>,
     case 'operator_transfer':
       return 'operator';
     case 'none':
-      return transitMatrix ? 'transit' : 'none';
+      /*
+       * V11 §M — "NONE" MEANS NO CAR, NOT NO GROUND TRANSPORT.
+       *
+       * The draft vocabulary says so in as many words: `none` is "no road
+       * vehicle the traveller is responsible for: **transit, walking, rail,
+       * boat, flight**". This branch read `transitMatrix` — whether a *compiled
+       * transit matrix* happened to exist — and answered `'none'` otherwise,
+       * which makes the mode correction impossible: `groundModeFor('none')` is
+       * null, so the hint stands whatever the geometry says.
+       *
+       * The nine-shape matrix found the consequence on a Tokyo trip with a
+       * day out to Kamakura: 46 km, hinted `walk`, no compiled matrix, and the
+       * plan shipped **"Walk to Tokyo"** across Sagami Bay. The same shape
+       * produces the same defect for any rail or ferry trip planned without a
+       * transit provider, which is every one of them on this deployment.
+       *
+       * A compiled matrix is evidence about *us*; what the trip moves by is
+       * evidence about the trip, and the days say it. So the hints are read
+       * here too, and `'none'` survives only for a plan that genuinely has no
+       * ground service in it — a walking trip, where a "walk" hint is right.
+       */
+      return transitMatrix ? 'transit' : (groundHint(draft) ?? 'none');
     default:
       break;
   }
@@ -2377,10 +2435,26 @@ export function groundArrangementFor(draft: Pick<TripDraft, 'driving' | 'days'>,
    * The model did not state an arrangement, so read the trip's own legs. A plan
    * whose days say "metro" is a transit trip whatever the field is empty of, and
    * correcting one of its walks to a hired ride would be the same substitution
-   * in the other direction. Most specific evidence first: a car in the plan
-   * beats transit, because a trip with both is carried by the car.
+   * in the other direction.
    */
-  const hints = new Set(draft.days.flatMap((day) => day.anchors.map((anchor) => anchor.transport).filter(Boolean)));
+  return groundHint(draft);
+}
+
+/**
+ * The ground arrangement the days themselves imply, or undefined.
+ *
+ * Most specific evidence first: a car in the plan beats transit, because a trip
+ * with both is carried by the car. A boat or a flight is deliberately **not**
+ * here — neither is a ground mode, and neither may stand in for a road leg.
+ */
+function groundHint(draft: Pick<TripDraft, 'days'>): GroundArrangement | undefined {
+  const hints = new Set(
+    draft.days.flatMap((day) => [
+      ...day.anchors.map((anchor) => anchor.transport).filter(Boolean),
+      /* A relocation states how it moves; that is the strongest hint a day carries. */
+      day.move?.how,
+    ]).filter(Boolean),
+  );
   if (hints.has('car') || hints.has('four_wheel_drive')) return 'self_drive';
   if (hints.has('private_transfer') || hints.has('guide_or_lodge_transfer')) return 'driver';
   if (hints.has('metro') || hints.has('rail') || hints.has('bus') || hints.has('high_speed_rail')) return 'transit';
@@ -2570,7 +2644,30 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       }
     }
     if (measured && confirmation && confirmation.minutes !== null) measured = { minutes: confirmation.minutes, km: confirmation.km ?? measured.km };
-    const hinted = transportModeFor(hint, context.matrix.mode, canDrive);
+    const hintedRaw = transportModeFor(hint, context.matrix.mode, canDrive);
+    /*
+     * V12 §17 — THE HINT HAS TO BE POSSIBLE HERE.
+     *
+     * A draft may hint any mode, and until now the hint was honoured on sight.
+     * The V11 Canadian Rockies build hinted `boat` three times in a landlocked
+     * mountain park — once between Lake Louise and its own lakeshore — and the
+     * plan carried three ferry legs holding sixty to a hundred and twenty
+     * minutes each. The only gate on the path asked whether the *traveller*
+     * accepts ferries, which everybody does by default.
+     *
+     * Only `ferry` and `rail` are checked, because only they need the world to
+     * have supplied something; a car, a walk or an arranged transfer can be
+     * organised anywhere and refusing one would invent a limit. A refusal falls
+     * back to how the trip actually moves, and is recorded as a correction so
+     * the day can say what happened.
+     */
+    const worldCheck = assessModeConsistency(hintedRaw, {
+      affordances: context.affordances ?? null,
+      reality: context.reality ?? null,
+      episodeModes: input.episodeModes ?? [],
+      dayMoveModes: input.dayMoveModes ?? [],
+    });
+    const hinted = worldCheck.ok ? hintedRaw : transportModeFor(undefined, context.matrix.mode, canDrive);
     /*
      * An unresolved stop that the draft places in the base's own town (a
      * "Latin Quarter evening walk" in Galway) has no coordinate of its own,
@@ -2612,7 +2709,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       ...(basis ? { basis } : {}),
       ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
-      ...(plausible.corrected ? { modeCorrectedFrom: hinted } : {}),
+      ...(plausible.corrected ? { modeCorrectedFrom: hinted } : !worldCheck.ok ? { modeCorrectedFrom: hintedRaw } : {}),
       ...(hint ? { hint } : {}),
       ...(confirmation?.staticMinutes !== undefined ? { staticMinutes: confirmation.staticMinutes } : {}),
       ...(confirmation?.effectiveDepartAt ? { effectiveDepartAt: confirmation.effectiveDepartAt } : {}),
@@ -2720,7 +2817,22 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       clock = Math.max(clock, DINNER_EARLIEST - 30);
       hadDinner = placeMeal('dinner', draftDay.meals.dinner, true);
     }
-    pushLeg(cursor, target, anchor.draft.transport, 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
+    /*
+     * V11 §M — THE FIRST LEG OF A RELOCATION DAY IS THE MOVE.
+     *
+     * A stop's `transport` says how you get *around* once you are there; the
+     * day's `move` says how the trip gets *between* two bases. When the first
+     * leg leaves last night's base, it is the move, and using the stop's hint
+     * for it is how a 150 km ferry crossing became "Walk to Naxos harbour" on
+     * the nine-shape matrix's island trip — with the topology audit then
+     * reporting, correctly, that the day promised a boat and had none.
+     *
+     * Only the leg that actually departs the previous base, and only where the
+     * day declared a move: everything after it is the stop's own business, and a
+     * day with no stated move keeps the behaviour it had.
+     */
+    const leavingBase = cursor === startPoint && input.relocation && !moveFirst;
+    pushLeg(cursor, target, leavingBase && move ? move.how : anchor.draft.transport, 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
     if (!hadLunch && clock >= LUNCH_EARLIEST && clock <= LUNCH_LATEST) {
       hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
     }
@@ -3080,7 +3192,15 @@ function nameVenuesForDay(
     const claims = venue.dietary.filter((claim) => declared.includes(claim.need));
     const unverified = declared.filter((need) => !claims.some((claim) => claim.need === need));
     const routeContext = atBase ? 'at_base' : best.km <= 2 ? 'on_route' : 'near_route';
-    const where = atBase ? 'near your base' : best.km <= 2 ? 'right on the route' : `${Math.round(best.km)} km off the route, on the way`;
+    /*
+     * V11 §N — "11 km off the route, on the way" said both things at once.
+     *
+     * The figure is the distance from the stop before it, which is a fact a
+     * traveller can act on; "off the route" and "on the way" are two readings
+     * of that fact glued together, and together they say nothing. The distance
+     * is now stated as what it was measured from.
+     */
+    const where = atBase ? 'near your base' : best.km <= 2 ? 'beside your last stop' : `${Math.round(best.km)} km from your last stop`;
     items[index] = {
       ...item,
       title: `${slot === 'lunch' ? 'Lunch' : 'Dinner'} — ${venue.name}`,

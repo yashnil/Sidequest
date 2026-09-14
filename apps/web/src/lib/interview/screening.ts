@@ -4,6 +4,8 @@ import {
   FEATURE_TYPE_ENTITY,
   interestOffer,
   screenDestination,
+  deriveAffordances,
+  type DestinationAffordanceProfile,
   tripMonths,
   type CompiledRegion,
   type DestinationClassSignal,
@@ -270,4 +272,20 @@ export function realityForTrip(input: ScreeningInputs & { party?: InterviewConte
   const signals = screeningSignalsFor(input);
   const screened = screenDestination(signals);
   return travelRealityFor({ signals, screened, intent: input.intent, ...(input.party ? { party: input.party } : {}), ...(input.willDrive !== undefined ? { willDrive: input.willDrive } : {}) });
+}
+
+/**
+ * V12 §4 — what this destination affords, for the build.
+ *
+ * Reads the same screening every other caller reads, so a trait that decided a
+ * question and a trait that decides an affordance can never be two different
+ * readings of the same place. A destination the screening cannot describe comes
+ * back `unknown`, which the derivation treats as "we do not know" rather than as
+ * "it affords nothing".
+ */
+export function affordancesForTrip(input: ScreeningInputs & { party?: InterviewContext['traveller']['party']; willDrive?: boolean }): DestinationAffordanceProfile {
+  const signals = screeningSignalsFor(input);
+  const screened = screenDestination(signals);
+  const reality = travelRealityFor({ signals, screened, intent: input.intent, ...(input.party ? { party: input.party } : {}), ...(input.willDrive !== undefined ? { willDrive: input.willDrive } : {}) });
+  return deriveAffordances({ destination: screened, reality });
 }

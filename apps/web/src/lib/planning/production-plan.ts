@@ -4,6 +4,8 @@ import {
   countNights,
   countryFacts,
   currencyForCountry,
+  deriveOperatingModel,
+  deriveTravelerIntent,
   type TravelerBrief,
   displayNameOf,
   tripDates,
@@ -25,7 +27,7 @@ import { verificationProviders } from './verification-providers';
 import { getIntent, saveComposerAnswers } from '../db/compiler-repository';
 import { getTripDraft, listCompositionAttempts, recordCompositionParse, saveCompositionAttempt, saveTripDraft } from '../db/draft-repository';
 import { randomUUID } from 'node:crypto';
-import { getProfile, getSelections, getTrip, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
+import { getAnswers, getProfile, getSelections, getTrip, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-repository';
@@ -48,7 +50,7 @@ import { episodesOf, type TripDraft } from './trip-draft';
 import { defaultProfileFor } from './default-profile';
 import { listBookedItems } from '@/lib/db/intelligence-repository';
 import { listPartyMembersForBrief, listPartyMembersForContract, partyFactsFor, profileWithPartyDiet } from '@/lib/db/party-repository';
-import { realityForTrip } from '@/lib/interview/screening';
+import { affordancesForTrip, realityForTrip } from '@/lib/interview/screening';
 import { learnedForOwner } from '@/lib/db/preference-evidence-repository';
 import { compactBookedFacts } from '@/lib/intelligence/booked-facts';
 import { applyBookedFacts, bookedLeaveByMinute } from '@/lib/intelligence/booked-reconcile';
@@ -535,6 +537,36 @@ export async function generateSidequestPlanForTrip(
       return null;
     }
   })();
+  /*
+   * V12 §2 §4 §6 — WHAT KIND OF PLANNING PROBLEM THIS IS, DECIDED BEFORE THE CALL.
+   *
+   * Three pure derivations, no model and no provider between them: what the
+   * traveller means by their answers, what this ground supports, and — from the
+   * meeting of the two — how the trip should work. The composition call is told
+   * the result as a policy, and the verification layers read the same record
+   * afterwards, so "what were we trying to build" and "did we build it" are one
+   * fact rather than two opinions.
+   *
+   * Wrapped, because none of it may cost a trip: a derivation that throws leaves
+   * the build exactly as it was before V12.
+   */
+  const storedAnswers = getAnswers(tripId);
+  const operating = (() => {
+    try {
+      const affordances = affordancesForTrip({ trip, intent, region, ...(partyFacts ? { party: partyFacts } : {}), ...(profile.provenance.transport_mode?.source === 'explicit' ? { willDrive: profile.transport.willDrive } : {}) });
+      const travelerIntent = deriveTravelerIntent({
+        profile,
+        /* The role answers as the traveller gave them, where this trip has stored answers. */
+        ...(storedAnswers?.interestRoles ? { interestRoles: storedAnswers.interestRoles } : {}),
+        ...(trip.basics.children > 0 ? { party: { children: trip.basics.children } } : {}),
+      });
+      return deriveOperatingModel({ intent: travelerIntent, affordances, nights: brief.tripFacts.nights, willDrive: profile.transport.willDrive });
+    } catch (error) {
+      console.warn('The operating model could not be derived; the plan proceeds without it', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+      return null;
+    }
+  })();
+
   const context: CompositionContext = {
     envelope,
     ...(boardSignals ? { boardSignals } : {}),
@@ -544,6 +576,7 @@ export async function generateSidequestPlanForTrip(
     timing,
     contract,
     reality,
+    operating,
     planningFacts: { carAvailable: input.movement.carAvailable, desiredBaseCount: input.movement.desiredBaseCount.value ?? 1, budgetBand: profile.budgetStyle },
   };
   const preparationMs = since(preparationStartedMs);

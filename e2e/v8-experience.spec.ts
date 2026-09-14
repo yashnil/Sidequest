@@ -90,7 +90,7 @@ for (const viewport of VIEWPORTS) {
     const problems = watchForRuntimeProblems(page);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /I know where I am going/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /I know where I want to go/ })).toBeVisible();
     await expectNoHorizontalOverflow(page, `home at ${viewport.name}`);
     await page.goto('/trips');
     await expectNoHorizontalOverflow(page, `dashboard at ${viewport.name}`);

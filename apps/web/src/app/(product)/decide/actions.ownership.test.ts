@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DecisionAnswersInput } from './actions';
+import type { DecisionAnswersInput } from '@/lib/destinations/decision-answers';
 
 /**
  * WHOSE DECISION THIS IS, AND HOW FAST ANYONE MAY MAKE ONE.

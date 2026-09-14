@@ -119,6 +119,19 @@ test.describe('the questionnaire remembers where you were', () => {
 
     await page.getByRole('checkbox', { name: 'Hiking', exact: true }).check();
     await page.getByTestId('interview-continue').click();
+    /*
+     * WAIT FOR THE STEP TO CHANGE, THEN READ IT.
+     *
+     * `getAttribute` is a read at one instant, and the assertion below is about
+     * a transition: pressing Continue saves the answer through a server action
+     * and the next question arrives after it. Asserting on the first attribute
+     * read after the click passes whenever the machine is quick and fails
+     * whenever it is busy — which is what it did, in two projects of a
+     * single-worker run of the whole suite and in neither of them on its own.
+     * The wait is the assertion; the equality below only names what it is
+     * waiting for.
+     */
+    await expect(page.getByTestId('interview-question-priorities')).toBeHidden({ timeout: 30_000 });
     const second = page.locator('[data-testid^="interview-question-"]');
     await expect(second).toBeVisible();
     const id = await second.getAttribute('data-testid');

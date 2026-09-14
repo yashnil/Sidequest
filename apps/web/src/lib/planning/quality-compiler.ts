@@ -31,7 +31,7 @@ import {
   type TravelerProfile,
   type Trip,
 } from '@sidequest/core';
-import { parseDestinationIntent } from '@sidequest/core';
+import { parseDestinationIntent, calendarConflicts, type CalendarFact } from '@sidequest/core';
 import type { TripDraft } from './trip-draft';
 
 /**
@@ -72,6 +72,14 @@ export interface QualityCompilerInput {
   gateway?: GatewayPlan | null;
   experiences?: ExperienceGraph | null;
   accessConstraints?: readonly AccessConstraint[];
+  /**
+   * V12 §22 §24 §26 — date-sensitive facts that can invalidate a planned day.
+   *
+   * A weekly market, a seasonal ferry, a permit window. Empty by default, so a
+   * build with nothing recorded behaves exactly as it did before V12: the check
+   * is *skipped*, which this compiler already distinguishes from passing.
+   */
+  calendarFacts?: readonly CalendarFact[];
   /** Prose the compiler may rewrite when the geometry contradicts it. Mutated in place by the caller's own copy. */
   claims?: { routeRationale?: string };
 }
@@ -467,6 +475,44 @@ export function compileQuality(input: QualityCompilerInput): QualityCompilerResu
         severity: 'issue',
         dayNumber: day.dayNumber,
         detail: `Day ${day.dayNumber} holds ${busy} minutes of content and measured travel against a ${day.window.usableMinutes}-minute window.`,
+      });
+    }
+  }
+
+  // --- V12 §24 §26 date-specific calendars -----------------------------------
+  /*
+   * A stop planned on a day its own calendar disagrees with.
+   *
+   * The V11 live Kyrgyzstan build put a Sunday market on a Sunday and nothing
+   * checked it: the model happened to be right. This is the check that was
+   * missing. It reports and never repairs — §26 forbids a second model call,
+   * and a deterministic reorder is only safe where the evidence is affirmative,
+   * so a `questionable` verdict raises a caution and an `unavailable` one an
+   * error, and both name the day that would work instead where one does.
+   */
+  if ((input.calendarFacts ?? []).length === 0) {
+    skipped.push({ check: 'date_specific_calendar', reason: 'no date-specific calendar facts were loaded for this destination' });
+  } else {
+    mark('date_specific_calendar');
+    const tripDates = itinerary.days.map((day) => day.date);
+    const conflicts = calendarConflicts({
+      facts: input.calendarFacts ?? [],
+      tripDates,
+      items: itinerary.days.flatMap((day) =>
+        day.items.filter((item) => item.kind === 'activity').map((item) => ({ subject: item.title, date: day.date, dayNumber: day.dayNumber })),
+      ),
+    });
+    for (const conflict of conflicts) {
+      add({
+        check: 'date_specific_calendar',
+        /*
+         * `issue`, not `blocker`: a stop on a day its calendar refuses is wrong
+         * and fixable by moving it, which is a decision the traveller or a
+         * deterministic reorder makes — not a reason to refuse the whole trip.
+         */
+        severity: conflict.status === 'unavailable' ? 'issue' : 'caution',
+        detail: `${conflict.subject} is planned for day ${conflict.dayNumber}, which its own calendar does not support${conflict.moveTo ? `; ${conflict.moveTo} would work` : ' and no day of this trip does'}.`,
+        travellerNote: conflict.note,
       });
     }
   }

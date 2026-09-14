@@ -57,7 +57,7 @@ export function FixtureSeed({
             data-testid="fixture-case"
             value={caseId}
             onChange={(event) => setCaseId(event.target.value)}
-            className="mt-1 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm"
+            className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm"
           >
             {cases.map((entry) => (
               <option key={entry.caseId} value={entry.caseId}>
@@ -73,7 +73,7 @@ export function FixtureSeed({
             data-testid="fixture-seed"
             value={seedText}
             onChange={(event) => setSeedText(event.target.value)}
-            className="mt-1 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm"
+            className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm"
           />
         </label>
 
@@ -95,7 +95,7 @@ export function FixtureSeed({
               const chosen = FIXTURE_SHAPES.find((shapeName) => shapeName === event.target.value);
               if (chosen) setShape(chosen);
             }}
-            className="mt-1 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm"
+            className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm"
           >
             {FIXTURE_SHAPES.map((shapeName) => (
               <option key={shapeName} value={shapeName}>

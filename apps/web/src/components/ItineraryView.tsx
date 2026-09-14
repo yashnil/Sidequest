@@ -67,7 +67,7 @@ import { FEASIBILITY_WORDS, humanize, verificationNeedsChip } from './hub/HumanW
 import { PrintAppendix } from './PrintAppendix';
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
-import { assuranceSummary, dayPartFor, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
+import { assuranceSummary, dayPartFor, sameIdentity, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
 import { MapWorkspace } from './hub/MapWorkspace';
@@ -445,10 +445,42 @@ export function ItineraryView({
   const openBookFirst = intelligence ? intelligence.bookings.items.filter((b) => b.priority === 'book_first' && b.status === 'open' && !b.memberIds).length + (intelligence.bookings.items.some((b) => b.memberIds && b.status === 'open') ? 1 : 0) : 0;
   const stopCount = itinerary.days.reduce((sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length, 0);
 
-  /* EXPERIENCE V2 — the base sequence, each base linked to the first day that sleeps there. */
-  const baseSequence: BaseSequenceStop[] = (itinerary.package?.bases ?? []).map((base) => {
-    const first = itinerary.days.find((day) => day.baseId === base.id || day.baseName === base.name || (base.displayName !== undefined && day.baseName === base.displayName));
-    return { id: base.id, name: base.name, nights: base.nights, firstDay: first?.dayNumber ?? null, ...(base.insertedBySidequest ? { insertedBySidequest: true } : {}) };
+  /*
+   * V11 §N — how many nights the plan actually books, from the bases.
+   *
+   * Days and nights are different counts: a plan of five days normally holds
+   * four nights, and only a plan whose nights reach its day count sleeps on its
+   * final day. The last day's overnight row is drawn from this rather than from
+   * "there is a base on this day", which is true of every departure morning.
+   */
+  const plannedNights = (itinerary.package?.bases ?? []).reduce((sum, base) => sum + base.nights, 0);
+
+  /*
+   * EXPERIENCE V2 — the base sequence, each stay linked to the first day that
+   * sleeps there.
+   *
+   * V11 §5 §N — READ OFF THE DERIVED STAY SEQUENCE, NOT THE RAW BASE LIST.
+   *
+   * The live Kyrgyzstan build ended its trek with a night in Karakol the
+   * operator books and followed it with a recovery night in Karakol the
+   * traveller books — two package rows, one town, one bed — and the hub printed
+   * "7 bases, in order" with Karakol twice in a row. That is the founder defect
+   * §5 exists to prevent, and §5's own answer is that the stay sequence is the
+   * authority: `normalizeStays` already folds the pair and keeps the
+   * experience attribution. The headline count comes from the same place, so
+   * "how many bases" and "which bases" can never disagree.
+   */
+  const baseSequence: BaseSequenceStop[] = normalizeStays({ bases: itinerary.package?.bases ?? [], episodes: itinerary.package?.episodes ?? [] }).stays.map((stay) => {
+    const bases = itinerary.package?.bases ?? [];
+    const folded = stay.baseIds.map((id) => bases.find((base) => base.id === id)).filter((base): base is NonNullable<typeof base> => base !== undefined);
+    const first = itinerary.days.find((day) => folded.some((base) => day.baseId === base.id || day.baseId === base.placeId || day.baseName === base.name || (base.displayName !== undefined && day.baseName === base.displayName)));
+    return {
+      id: stay.id,
+      name: stay.name,
+      nights: stay.nights,
+      firstDay: first?.dayNumber ?? null,
+      ...(folded.some((base) => base.insertedBySidequest) ? { insertedBySidequest: true } : {}),
+    };
   });
   /*
    * V6 — THE SIGNATURE EXPERIENCES.
@@ -530,11 +562,35 @@ export function ItineraryView({
           <div id="itinerary" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
           <DayRail days={itinerary.days} chapters={itinerary.package?.chapters} />
           <ol className="space-y-10">
-            {itinerary.days.map((day) => (
+            {itinerary.days.map((day, dayIndex) => (
               <li key={day.dayNumber} className="break-inside-avoid">
                 <DayFocusTarget dayNumber={day.dayNumber}>
                   <DayCard
                     day={day}
+                    /*
+                     * V11 §D — where the day starts, so the header can say
+                     * "Banff → Jasper" on the day that moves and "based in
+                     * Banff" on the day that does not. Read from the day before
+                     * rather than from a field, because the base sequence is
+                     * already the authority (V11 §2) and a second copy of it on
+                     * the day row is a second thing to keep true.
+                     */
+                    {...(dayIndex > 0 ? { previousBaseName: itinerary.days[dayIndex - 1]!.baseName } : {})}
+                    /*
+                     * V11 §E — the chapter this day opens, so a long trip reads
+                     * as its parts rather than as a run of days.
+                     *
+                     * Only where there is something to divide: a three-day city
+                     * break sectioned into three chapters is one heading per day,
+                     * which is §E's own warning and is worse than none. Two
+                     * chapters over at least five days is the floor.
+                     */
+                    {...(() => {
+                      const chapters = itinerary.package?.chapters ?? [];
+                      if (chapters.length < 2 || itinerary.days.length < 5) return {};
+                      const index = chapters.findIndex((entry) => entry.dayNumbers[0] === day.dayNumber);
+                      return index >= 0 ? { chapterOpening: { ...chapters[index]!, index: index + 1 } } : {};
+                    })()}
                     episode={itinerary.package?.episodes?.find((e) => e.dayNumbers.includes(day.dayNumber)) ?? null}
                     renderedAt={renderedAt}
                     coordinates={coordinates}
@@ -547,6 +603,7 @@ export function ItineraryView({
                     anchorKinds={anchorKinds}
                     isFirst={day.dayNumber === itinerary.days[0]?.dayNumber}
                     isLast={day.dayNumber === itinerary.days[itinerary.days.length - 1]?.dayNumber}
+                    endsWithNight={plannedNights >= itinerary.days.length}
                     tiles={tiles}
                     dayCount={itinerary.days.length}
                     anchorRoles={anchorRoles}
@@ -869,6 +926,32 @@ export function ItineraryView({
           <p className="type-body text-ink">Nothing on this trip needs arranging right now. The sections below are here when you want them.</p>
         </div>
       )}
+      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} view="book-first" /> : null}
+      {intelligence ? <BeforeYouGoSection intel={intelligence} {...(tripId ? { tripId } : {})} readinessProfile={readinessProfile} checks={checks.checklist} bookingsListedAbove /> : null}
+      {intelligence ? <PackSection intel={intelligence} {...(tripId ? { tripId } : {})} checks={checks.packing} /> : null}
+      {/*
+        V11 §I — WHAT TO DO, THEN WHAT TO KNOW.
+
+        Prepare ran to 13,130 px on a phone after the V11 §3 de-duplication, and
+        the reason was no longer repetition: it was that nine sections of two
+        different kinds were stacked at equal weight. Four of them ask the
+        traveller to *do* something — the readiness list, the booking needs, the
+        profile that decides what those needs say, and the packing list. Five are
+        *reference*: what apps to install when you land, the day-by-day fallback,
+        what the plan itself says is worth re-checking, and the evidence behind
+        it.
+
+        Reference material does not stop being useful by being folded, and none
+        of it is removed, reworded or made harder to reach than one press. It
+        prints open, so the paper packet is byte-for-byte what it was. What
+        changes is that a traveller who opens Prepare to answer "what do I do
+        now" sees only that.
+      */}
+      <details className="mt-12 rule-top pt-5" data-print="open" data-testid="prepare-reference">
+        <summary className="min-h-11 cursor-pointer list-none type-body text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+          <span className="font-display text-xl text-ink">Good to know</span>
+          <span className="ml-3 type-small">apps and set-up, the fallback for each day, what to re-check, and the evidence behind all of it</span>
+        </summary>
       {localSetup.length > 0 ? (
         <section className="card mt-8 p-5" aria-labelledby="local-setup-heading" data-testid="local-setup">
           <p className="eyebrow">Apps and set-up</p>
@@ -897,9 +980,6 @@ export function ItineraryView({
           </ol>
         </section>
       ) : null}
-      {intelligence ? <BookFirstSection intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} view="book-first" /> : null}
-      {intelligence ? <BeforeYouGoSection intel={intelligence} {...(tripId ? { tripId } : {})} readinessProfile={readinessProfile} checks={checks.checklist} /> : null}
-      {intelligence ? <PackSection intel={intelligence} {...(tripId ? { tripId } : {})} checks={checks.packing} /> : null}
       <section className="mt-14" aria-labelledby="backups" data-testid="hub-backups-section">
         <div className="rule-strong pt-5 scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="backups">
           <h2 className="display-md text-ink">Backups</h2>
@@ -941,6 +1021,8 @@ export function ItineraryView({
         <div id="verify" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
         {intelligence ? <VerifySection intel={intelligence} manifest={recheck} pkg={itinerary.package} /> : <TripConfidence pkg={itinerary.package} intel={null} compact />}
       </section>
+      </details>
+
       {/* EXPERIENCE V2 — everything evaluative or archival is one disclosure, never eight open sections. */}
       <details className="mt-10 rule-top pt-4" data-testid="prepare-notes-disclosure" data-print="appendix">
         <summary className="min-h-11 cursor-pointer list-none type-body text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -1197,14 +1279,68 @@ export function ItineraryView({
 function overviewMapModel(itinerary: Itinerary, coordinates: Record<string, { lat: number; lng: number }>, rationale: Record<string, StopRationale>) {
   const markers: (MapMarker & { dayNumber: number })[] = [];
   const seen = new Set<string>();
+
+  /*
+   * V11 §F4 — WHICH CLASS EACH MARK IS, FROM WHAT THE PLAN ALREADY SAYS.
+   *
+   * Every mark on the overview used to be `place` — one grey dot for a gateway
+   * airport, for the trek the trip is built around, and for a coffee stop. The
+   * three facts that separate them are already persisted and already read by
+   * other surfaces:
+   *
+   * - `package.signatures` (V11 §3) is the scored answer to "what is this trip
+   *   built around", which the Overview panel has shown in words since V11 and
+   *   the map ignored.
+   * - `package.episodes` (V7 §8) says which days an operator owns, so a night on
+   *   a trek is not a hotel and should not draw as one.
+   * - `package.gateway` (V10 §8) names arrival and departure, which are the two
+   *   marks a traveller looks for first and the two the map never had.
+   */
+  /* V11 §K — matched by identity, so a signature the plan spelled one way finds the stop spelled another. */
+  const signatureNames = (itinerary.package?.signatures ?? []).map((entry) => entry.name);
+  const signatureIds = new Set((itinerary.package?.signatures ?? []).map((entry) => entry.id));
+  const episodeDays = new Set((itinerary.package?.episodes ?? []).flatMap((episode) => episode.dayNumbers));
+
   for (const day of itinerary.days) {
     for (const item of day.items) {
       if (item.kind !== 'activity' || !item.placeId) continue;
       const point = coordinates[item.placeId];
       if (!point || seen.has(item.placeId)) continue;
       seen.add(item.placeId);
-      markers.push({ id: item.placeId, name: rationale[item.placeId]?.name ?? item.title, coordinates: point, kind: 'place', chosen: true, dayNumber: day.dayNumber });
+      const name = rationale[item.placeId]?.name ?? item.title;
+      const signature =
+        signatureIds.has(item.placeId) || signatureIds.has(item.id) || signatureNames.some((candidate) => sameIdentity(candidate, name));
+      markers.push({
+        id: item.placeId,
+        name,
+        coordinates: point,
+        kind: signature ? 'signature' : episodeDays.has(day.dayNumber) ? 'overnight_experience' : 'place',
+        chosen: true,
+        dayNumber: day.dayNumber,
+      });
     }
+  }
+
+  /*
+   * The gateways. Drawn only where a coordinate was actually resolved, and
+   * never for an unresolved "Calgary or Edmonton" — a mark at one of two
+   * candidate airports is a claim the plan has deliberately not made.
+   */
+  for (const [role, node] of [
+    ['arrival', itinerary.package?.gateway?.arrival],
+    ['departure', itinerary.package?.gateway?.departure],
+  ] as const) {
+    if (!node || node.unresolved || !node.coordinates) continue;
+    const id = `gateway-${role}-${node.id}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    markers.push({
+      id,
+      name: node.name,
+      coordinates: node.coordinates,
+      kind: 'gateway',
+      dayNumber: role === 'arrival' ? 1 : itinerary.days.length,
+    });
   }
   const baseIds = [...new Set(itinerary.days.map((day) => day.baseId))];
   const bases = baseIds.map((id) => ({ id, name: itinerary.days.find((day) => day.baseId === id)?.baseName ?? 'base', point: coordinates[id] ?? null }));
@@ -1377,7 +1513,7 @@ function WeatherPlan({ itinerary, timeZone }: { itinerary: Itinerary; timeZone?:
       ) : null}
 
       {decisions.length > 0 ? (
-        <div className="mt-5 rounded-lg bg-paper-sunk p-4">
+        <div className="mt-5 rounded-[var(--radius-card)] bg-paper-sunk p-4">
           <p className="text-xs font-medium text-ink">What the weather changed</p>
           <ul className="mt-1 space-y-1 text-sm leading-relaxed text-ink-muted">
             {decisions.map((decision) => (
@@ -1527,7 +1663,7 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
       </dl>
 
       {strategy.seasonalWarnings.length > 0 ? (
-        <div className="mt-5 rounded-lg bg-amber-soft p-4">
+        <div className="mt-5 rounded-[var(--radius-card)] bg-amber-soft p-4">
           <h3 className="text-sm font-medium text-ink">Seasonal limits</h3>
           <ul className="mt-1.5 space-y-1 text-xs leading-relaxed text-ink-muted">
             {strategy.seasonalWarnings.map((line) => (
@@ -1538,7 +1674,7 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
       ) : null}
 
       {strategy.verifyBeforeTravel.length > 0 ? (
-        <div className="mt-3 rounded-lg border border-clay p-4">
+        <div className="mt-3 rounded-[var(--radius-card)] border border-clay p-4">
           <h3 className="text-sm font-medium text-clay">Check these before you book</h3>
           <p className="mt-1 text-xs text-ink-faint">
             These change year to year. We have not checked today&rsquo;s conditions.
@@ -1699,7 +1835,7 @@ function DayTransport({ day }: { day: ItineraryDay }) {
       */}
       {/* V6 §5 — a split day: who does what instead, and where everyone is together again. */}
       {day.split ? (
-        <p className="mt-2 rounded-md border border-rule bg-paper-raised p-2.5 text-sm leading-relaxed text-ink" data-testid={`day-split-${day.dayNumber}`}>
+        <p className="mt-2 rounded-[var(--radius-control)] border border-rule bg-paper-raised p-2.5 text-sm leading-relaxed text-ink" data-testid={`day-split-${day.dayNumber}`}>
           <span className="font-medium">{day.split.who}</span> {day.split.does}
           {day.split.rejoin ? <span className="text-ink-muted"> · Back together: {day.split.rejoin}</span> : null}
         </p>
@@ -1717,7 +1853,7 @@ function DayTransport({ day }: { day: ItineraryDay }) {
         </details>
       ) : null}
       {transport.verifyBeforeTravel.length > 0 ? (
-        <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+        <p className="mt-2 rounded-[var(--radius-control)] bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
           {/*
             Through `travellerVoice`, because these sentences are stored on the
             artifact in the data layer's own words — a live plan printed "We
@@ -1793,7 +1929,7 @@ function DayHours({ day }: { day: ItineraryDay }) {
       ) : null}
 
       {availability.bookings.length > 0 ? (
-        <div className="mt-2 rounded-md border border-clay/40 p-2.5">
+        <div className="mt-2 rounded-[var(--radius-control)] border border-clay/40 p-2.5">
           <p className="text-xs font-medium text-clay">
             {availability.bookings.length === 1
               ? 'One thing here needs arranging'
@@ -1896,7 +2032,7 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
             </ul>
           ) : null}
           {weather.backups.length > 0 ? (
-            <div className="mt-2 rounded-md border border-slate-blue/40 p-2.5">
+            <div className="mt-2 rounded-[var(--radius-control)] border border-slate-blue/40 p-2.5">
               <p className="text-xs font-medium text-slate-blue">{weather.backups.length === 1 ? 'If it turns' : 'If it turns, either of these'}</p>
               <ul className="mt-1 space-y-1.5 text-xs leading-relaxed text-ink-muted">
                 {weather.backups.map((backup) => (
@@ -1909,7 +2045,7 @@ function DayWeather({ day, renderedAt }: { day: ItineraryDay; renderedAt: number
             </div>
           ) : null}
           {weather.noBackupReason ? (
-            <p className="mt-2 rounded-md bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+            <p className="mt-2 rounded-[var(--radius-control)] bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
               <span className="font-medium text-ink">No strong fallback for this one.</span> {weather.noBackupReason}
             </p>
           ) : null}
@@ -1934,6 +2070,23 @@ const EPISODE_KIND_WORD: Record<string, string> = {
   hut_to_hut: 'Hut to hut',
 };
 
+/**
+ * What a chapter's role means to somebody reading a plan.
+ *
+ * Six roles, six sentences, and none of them is the role's own name: `finale`
+ * and `transition` are how the derivation thinks about a run of days, not how a
+ * traveller would describe one. See `experience/chapters.ts` for what earns
+ * each.
+ */
+const CHAPTER_ROLE_WORD: Record<string, string> = {
+  arrival: 'Getting there and finding your feet',
+  exploration: 'Days out from one place',
+  expedition: 'The part you came for',
+  transition: 'Moving on',
+  recovery: 'Slower, on purpose',
+  finale: 'The last of it',
+};
+
 function DayCard({
   day,
   episode = null,
@@ -1947,6 +2100,7 @@ function DayCard({
   verification = {},
   isFirst,
   isLast,
+  endsWithNight = false,
   tiles = null,
   dayCount = 1,
   anchorRoles = {},
@@ -1954,8 +2108,14 @@ function DayCard({
   plannedOff = [],
   stateBadge = null,
   split = null,
+  previousBaseName,
+  chapterOpening = null,
 }: {
   day: ItineraryDay;
+  /** Where the traveller woke up. Absent on day one, where there is no move to describe. */
+  previousBaseName?: string;
+  /** V11 §E — set only on the day a chapter opens, so the card can introduce it once. */
+  chapterOpening?: { index: number; title: string; role: string; dayNumbers: readonly number[]; experience?: string } | null;
   /** V9 §1 — where the day stands, read off the state graph. Null without a graph. */
   stateBadge?: React.ReactNode;
   /** V9 §17 — the day's split as a structure, when the day carries one. */
@@ -1987,6 +2147,16 @@ function DayCard({
   /** Whether this is the arrival or the departure day, for the empty-day copy. */
   isFirst: boolean;
   isLast: boolean;
+  /**
+   * V11 §N — whether the plan actually has a night on its final day.
+   *
+   * A five-day plan with four nights ends on a departure morning, and the
+   * overnight row printed "Tonight — Mammoth Lakes · last night of the trip"
+   * under it: a fifth night the trip does not contain, stated as a fact. The
+   * night count comes from the bases, so the row is drawn on the last day only
+   * where the nights outnumber the days that precede it.
+   */
+  endsWithNight?: boolean;
 }) {
   /*
    * Empty means empty. A day carrying a meal, a transfer or a stop the
@@ -2186,6 +2356,28 @@ function DayCard({
           buttons, and — where one of the day's places has a licensed picture —
           that picture at a fixed ratio beside the header, never a stand-in.
         */}
+        {/*
+          V11 §E — THE CHAPTER, WHERE IT OPENS, AND NOWHERE ELSE.
+
+          `package.chapters` has existed since V11 §2 and was read only by the
+          day rail, which is a navigation control — so a traveller scrolling the
+          plan never saw that their eleven days were three things. It is
+          introduced once, on the day the chapter starts, which is also the only
+          place it is true to introduce it.
+        */}
+        {chapterOpening ? (
+          <div className="border-b border-rule bg-paper-sunk/60 px-5 py-3 sm:px-6" data-testid={`chapter-opening-${day.dayNumber}`}>
+            <p className="eyebrow">
+              Chapter {chapterOpening.index}
+              {' · '}
+              {chapterOpening.dayNumbers.length === 1
+                ? `day ${chapterOpening.dayNumbers[0]}`
+                : `days ${chapterOpening.dayNumbers[0]}–${chapterOpening.dayNumbers[chapterOpening.dayNumbers.length - 1]}`}
+            </p>
+            <p className="mt-1 font-display text-xl leading-tight text-ink">{chapterOpening.title}</p>
+            <p className="mt-0.5 type-small text-ink-muted">{CHAPTER_ROLE_WORD[chapterOpening.role] ?? chapterOpening.role}</p>
+          </div>
+        ) : null}
         <div className={cx('grid gap-5 p-5 sm:p-6', identity.hero && 'md:grid-cols-[minmax(0,1fr)_13rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_13rem]')}>
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -2215,9 +2407,25 @@ function DayCard({
             */}
             <p className="mt-3 font-display text-xl leading-snug text-ink">{day.theme}</p>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 type-small text-ink-muted">
+              {/*
+                V11 §D — WHERE THE DAY GOES, NOT ONLY WHERE IT SLEEPS.
+
+                "Based in Jasper" on the day that drives from Banff to Jasper
+                describes the end of the day as if it were the whole of it. A day
+                that moves is the single most consequential shape a day has, and
+                the header now says so in the two words the brief names.
+              */}
               <span>
                 <span aria-hidden="true" className="mr-1 text-ink-faint">⌂</span>
-                {episode?.mode === 'boat' ? 'on board' : 'based in'} {day.baseName}
+                {previousBaseName && previousBaseName !== day.baseName ? (
+                  <>
+                    {previousBaseName} <span aria-hidden="true">→</span> {day.baseName}
+                  </>
+                ) : (
+                  <>
+                    {episode?.mode === 'boat' ? 'on board' : 'based in'} {day.baseName}
+                  </>
+                )}
               </span>
               {/* V7 §9 — a day inside a cruise, trek or safari says so, and says which day of it this is. */}
               {episode ? (
@@ -2305,34 +2513,6 @@ function DayCard({
         </div>
         {split ? <div className="px-5 pb-5 sm:px-6">{split}</div> : null}
 
-        <div className="border-t border-rule bg-paper-sunk/50 px-5 py-3 sm:px-6">
-          <DayHours day={day} />
-          <DayWeather day={day} renderedAt={renderedAt} />
-          {day.window.note ? <p className="mt-2 type-small text-ink-muted">{day.window.note}</p> : null}
-          {/*
-            EXPERIENCE V2 — the working detail of the day (how it moves, the meals)
-            waits behind one disclosure; the timeline is what a traveller reads
-            first. The packet prints it open.
-          */}
-          {day.totals.travelMinutes > 0 || day.items.some((item) => item.food) ? (
-            <details className="mt-2" data-print="open" data-testid={`day-notes-${day.dayNumber}`}>
-              <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 type-small text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
-                <span aria-hidden="true" className="text-xs">▸</span> How this day moves and eats
-              </summary>
-              {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
-              <DayFood day={day} />
-            </details>
-          ) : null}
-          {/*
-            The drawing of the day, below `lg` where the sticky map is not
-            rendered. It draws only stops whose position a source published.
-          */}
-          {placedStops.length > 0 ? (
-            <div className="mt-3 lg:hidden print:hidden">
-              <DayMap base={mapModel.base} markers={mapModel.markers} connectors={mapModel.connectors} omitted={mapModel.omitted} dayNumber={day.dayNumber} tiles={tiles} />
-            </div>
-          ) : null}
-        </div>
       </div>
 
       {isEmpty ? (
@@ -2388,8 +2568,74 @@ function DayCard({
               <ol className="divide-y divide-rule">{group.items.map(row)}</ol>
             </div>
           ))}
+          {/*
+            V11 §D — WHERE THE NIGHT IS, AS ITS OWN THING.
+
+            The brief's shape ends the day at a bed, visually distinct from the
+            stops above it. There is no lodging item on the wire to render — a
+            stay is a base, not an itinerary item — so this is derived from the
+            one fact that is already true: the day ends somewhere, and on a day
+            that moves it ends somewhere new.
+
+            No clock. Nothing here knows what time anybody checks in, and a time
+            printed beside a bed would be read as one.
+          */}
+          {!isLast || endsWithNight ? (
+            <p
+              className="flex items-center gap-3 border-t border-rule bg-paper-sunk/60 px-5 py-2.5 sm:px-6"
+              data-testid={`day-overnight-${day.dayNumber}`}
+            >
+              <span aria-hidden="true" className="text-ink-faint">⌂</span>
+              <span className="type-small text-ink">
+                {previousBaseName && previousBaseName !== day.baseName ? 'Tonight, somewhere new — ' : 'Tonight — '}
+                <span className="font-medium">{day.baseName}</span>
+              </span>
+              {isLast ? <span className="type-meta text-ink-faint">last night of the trip</span> : null}
+            </p>
+          ) : null}
         </div>
       )}
+      {/*
+        V11 §D — TIMING & CHECKS, AFTER THE DAY RATHER THAN IN FRONT OF IT.
+
+        Opening hours, the weather read, the window note, how the day moves and
+        what it eats all used to sit in a band *between* the day's heading and
+        its first timed row. Measured in the browser, that band was most of the
+        **659 words a traveller read before the first thing they would actually
+        do** — against a §D target of 400.
+
+        Nothing is deleted and nothing is hidden behind a press that was not
+        already behind one: the same four blocks, in the same order, under the
+        timeline instead of over it, folded into the one disclosure §D names. The
+        packet prints it open, so the printed day still carries every word.
+
+        Deliberately *not* solved by shortening the copy. Each of these sentences
+        is load-bearing on the day it appears — a closure, a forecast a stop
+        depends on, a catered camp — and trimming them to hit a word count would
+        be exactly the gaming §D forbids. What was wrong was the order.
+      */}
+      {day.items.length > 0 && (day.totals.travelMinutes > 0 || day.items.some((item) => item.food) || placedStops.length > 0 || day.window.note) ? (
+        <details className="border-t border-rule bg-paper-sunk/50 px-5 py-3 sm:px-6" data-print="open" data-testid={`day-notes-${day.dayNumber}`}>
+          <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 type-small text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="text-xs">▸</span> Timing &amp; checks
+          </summary>
+          <DayHours day={day} />
+          <DayWeather day={day} renderedAt={renderedAt} />
+          {day.window.note ? <p className="mt-2 type-small text-ink-muted">{day.window.note}</p> : null}
+          {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
+          <DayFood day={day} />
+          {/*
+            The drawing of the day, below `lg` where the sticky map is not
+            rendered. It draws only stops whose position a source published.
+          */}
+          {placedStops.length > 0 ? (
+            <div className="mt-3 lg:hidden print:hidden">
+              <DayMap base={mapModel.base} markers={mapModel.markers} connectors={mapModel.connectors} omitted={mapModel.omitted} dayNumber={day.dayNumber} tiles={tiles} />
+            </div>
+          ) : null}
+        </details>
+      ) : null}
+
       {tripId && itineraryHasPackage(day) ? <AddStopForm tripId={tripId} dayNumber={day.dayNumber} /> : null}
 
       {/*
@@ -2611,7 +2857,7 @@ function DayFood({ day }: { day: ItineraryDay }) {
         </ul>
       ) : null}
       {food.reservations.length > 0 ? (
-        <p className="mt-2 rounded-md border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
+        <p className="mt-2 rounded-[var(--radius-control)] border border-clay/40 p-2.5 text-xs leading-relaxed text-ink-muted">
           <span className="font-medium text-clay">
             {food.reservations.length === 1
               ? 'One table to book'
@@ -2731,7 +2977,7 @@ function FoodPlanPanel({ plan, strategy = [], intel = null }: { plan: FoodPlan; 
       ) : null}
 
       {plan.dietaryDisclosure ? (
-        <p className="mt-4 rounded-md bg-amber-soft p-3 text-xs leading-relaxed text-ink-muted">
+        <p className="mt-4 rounded-[var(--radius-control)] bg-amber-soft p-3 text-xs leading-relaxed text-ink-muted">
           <span className="font-medium text-ink">
             {plan.dietaryNeeds.map((need) => DIETARY_NEED_LABELS[need]).join(', ')}.
           </span>{' '}
@@ -2740,7 +2986,7 @@ function FoodPlanPanel({ plan, strategy = [], intel = null }: { plan: FoodPlan; 
       ) : null}
 
       {plan.unusedChoices.length > 0 ? (
-        <div className="mt-4 rounded-md border border-clay/40 p-3">
+        <div className="mt-4 rounded-[var(--radius-control)] border border-clay/40 p-3">
           <p className="text-xs font-medium text-clay">
             {plan.unusedChoices.length === 1
               ? 'One place you asked for is not on the plan'
@@ -3045,8 +3291,36 @@ function TimelineRow({
 
   return (
     <div
-      className={cx('flex gap-2.5 px-3 sm:gap-4 sm:px-5 target:bg-pine-soft focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-[-2px]', item.kind === 'travel' ? 'py-2.5 sm:py-3' : 'py-3.5 sm:py-4')}
+      className={cx(
+        'flex gap-2.5 px-3 sm:gap-4 sm:px-5 target:bg-pine-soft focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-[-2px]',
+        /*
+         * V11 §D — A TRAVEL LEG IS A CONNECTOR, NOT A STOP.
+         *
+         * It used to be a row exactly like the stops around it: the same
+         * padding, the same rail, its own heading element and, until §8, its own
+         * badge. Eleven days of that reads as a list of twenty-two equal things,
+         * half of which are the gaps between the other half. The brief's shape
+         * is a thin line between two stops, and thin is what it is now — half
+         * the vertical rhythm, no rail, and set in the same muted type as the
+         * duration beside it.
+         */
+        item.kind === 'travel' ? 'py-1 sm:py-1.5' : item.kind === 'meal' ? 'py-2.5 sm:py-3' : 'py-3.5 sm:py-4',
+      )}
       data-row-kind={item.kind}
+      /*
+       * V11 §D — the row is addressable, because the thing §D measures is "words
+       * before the first meaningful itinerary activity" and nothing on the page
+       * said where that was.
+       *
+       * The measuring walk used to find it by looking for a heading whose text
+       * began with a clock or a `≈`, and what it actually found was the first
+       * *travel* row — the only heading on the page that began that way. A leg
+       * between two stops is not the activity the brief is asking about, and
+       * making the travel row a span (a connector is not a section) removed the
+       * anchor entirely. So the row says what it is, and the measurement stops
+       * depending on an accident of markup.
+       */
+      data-testid={`item-${item.id}`}
       {...(item.placeId ? { 'data-timeline-place': item.placeId, tabIndex: -1 } : {})}
       {...(dayNumber !== undefined ? { 'data-day': dayNumber } : {})}
     >
@@ -3075,7 +3349,10 @@ function TimelineRow({
         two documents about one thing: a numbered mark on the drawing above
         answers "where is that" only if the row says which number it is.
       */}
-      {stopNumber === null ? (
+      {item.kind === 'travel' ? (
+        /* The connector's own line: one hairline in the rail column, no cap, no colour. */
+        <span aria-hidden="true" className="my-0.5 w-px shrink-0 self-stretch bg-rule" />
+      ) : stopNumber === null ? (
         <span aria-hidden="true" className={cx('mt-1.5 w-1 shrink-0 rounded-full', style.rail)} />
       ) : (
         <span
@@ -3101,9 +3378,14 @@ function TimelineRow({
              * leg is gone; the legend on the map says it once.
              */
             <>
-              <h3 className="text-sm text-ink-muted" title={travelProvenanceLabel(item.travel) || item.reason}>
+              {/*
+                A span, not a heading. A connector is not a section of the day,
+                and eleven days of travel legs put twenty-two extra headings into
+                the document outline a screen-reader user navigates by.
+              */}
+              <span className="text-xs leading-snug text-ink-muted" title={travelProvenanceLabel(item.travel) || item.reason}>
                 {travelLine(item)}
-              </h3>
+              </span>
               {/*
                 V11 §8 — A GOOD LEG NEEDS NO BADGE.
 
@@ -3126,7 +3408,7 @@ function TimelineRow({
               )}
             </>
           ) : (
-            <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-xl leading-snug sm:text-[1.375rem]' : 'text-base font-medium')}>
+            <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-xl leading-snug sm:text-[1.375rem]' : item.kind === 'meal' ? 'text-sm font-medium' : 'text-base font-medium')}>
               {sheet ? (
                 <PlaceSheetTrigger detail={sheet} image={frame} actions={menu}>
                   {rationale?.name ?? item.title}
@@ -3476,7 +3758,7 @@ function WhereToStay({
       </p>
       <ul className="mt-3 grid gap-3">
         {stays.map(({ stay, base }) => (
-          <li key={stay.id} className="rounded-lg border border-rule p-3 text-sm">
+          <li key={stay.id} className="rounded-[var(--radius-card)] border border-rule p-3 text-sm">
             <span className="font-medium text-ink">{stay.name}</span>
             <span className="text-ink-faint">
               {' '}
@@ -3495,7 +3777,7 @@ function WhereToStay({
       {verifiedAreas.length > 0 ? (
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           {verifiedAreas.map((area) => (
-            <li key={area.name} className="rounded-lg border border-pine/40 p-3 text-sm">
+            <li key={area.name} className="rounded-[var(--radius-card)] border border-pine/40 p-3 text-sm">
               <span className="font-medium text-ink">{area.name}</span>
               <span className="text-ink-faint"> · lodging evidence on record</span>
               <span className="mt-0.5 block text-ink-muted">{area.rationale}</span>
@@ -3549,7 +3831,7 @@ function ConsideredPanel({ pkg }: { pkg: TripPackage }) {
           {pkg.omissions.length > 0 ? (
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {pkg.omissions.map((omission) => (
-                <li key={omission.name} className="rounded-lg border border-rule p-3 text-sm">
+                <li key={omission.name} className="rounded-[var(--radius-card)] border border-rule p-3 text-sm">
                   <span className="font-medium text-ink">{omission.name}</span>
                   <span className="mt-0.5 block text-ink-muted">{omission.reason}</span>
                 </li>

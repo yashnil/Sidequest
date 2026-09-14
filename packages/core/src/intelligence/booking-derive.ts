@@ -315,7 +315,7 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
             kind,
             necessity: 'required',
             priority: bookingPriorityFor({ necessity: 'required', hardDependency: false, fixedDateTime: item.booking.kind === 'timed_entry', limitedCapacity: item.booking.kind !== 'reservation', fewAlternatives: false, longLeadTime: item.booking.kind === 'permit', weatherSensitive: Boolean(item.weatherSensitive), importance: 'core' }),
-            reason: item.booking.note ?? 'The evidence Sidequest holds says entry is controlled.',
+            reason: item.booking.note ?? 'What Sidequest could check says entry here is controlled.',
             dayNumber: day.dayNumber,
             date: day.date,
             timeLabel: `${String(Math.floor(item.startMinute / 60)).padStart(2, '0')}:${String(item.startMinute % 60).padStart(2, '0')}`,

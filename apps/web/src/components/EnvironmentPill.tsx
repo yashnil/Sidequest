@@ -34,7 +34,7 @@ export function EnvironmentPill() {
   const tone = registry.mode === 'live' ? 'border-clay text-clay bg-clay-soft' : registry.mode === 'mixed' ? 'border-amber text-amber bg-amber-soft' : 'border-rule text-ink-muted bg-paper-sunk';
   return (
     <p className="mx-auto max-w-4xl px-5 pt-3 sm:px-8 print:hidden">
-      <span className={`inline-flex items-center gap-2 rounded-md border border-dashed px-2.5 py-1 text-xs ${tone}`} data-testid="environment-pill" data-mode={registry.mode} title={real.length > 0 ? `Real providers: ${real.join(', ')}` : 'No real provider is configured.'}>
+      <span className={`inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-dashed px-2.5 py-1 text-xs ${tone}`} data-testid="environment-pill" data-mode={registry.mode} title={real.length > 0 ? `Real providers: ${real.join(', ')}` : 'No real provider is configured.'}>
         <span className="font-medium">{modeLabel(registry.mode)}</span>
         <span>{modeExplanation(registry)}</span>
       </span>

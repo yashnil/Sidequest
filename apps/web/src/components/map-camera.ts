@@ -181,6 +181,18 @@ export interface LabelCandidate {
   /** Where the label's anchor sits, in pixels. */
   x: number;
   y: number;
+  /**
+   * V11 §N — the drawn radius of this candidate's own mark.
+   *
+   * A label is drawn beside its mark, not on it, and the marks are the other
+   * thing on the drawing a label can land on top of. Without this the selection
+   * reasoned about points and the renderer drew chips, so a chip could sit
+   * squarely over a neighbouring dot while the collision count said zero — which
+   * is exactly what a four-width read of the Mammoth overview showed around the
+   * base. Defaulted so a caller that has no radius to give still gets the old
+   * behaviour with a conservative mark size.
+   */
+  radius?: number;
 }
 
 export interface LabelSelection {
@@ -189,14 +201,56 @@ export interface LabelSelection {
   text: string;
   x: number;
   y: number;
+  /**
+   * Which side of its mark this chip was placed on.
+   *
+   * The decision is made here, once, and the renderer draws where it is told:
+   * a chip tries the right of its mark, then the left, and is dropped only if
+   * neither side is clear. Two independent flip rules — one in the selection
+   * and one in the drawing — is how a chip ends up judged in one place and
+   * drawn in another.
+   */
+  side: 'left' | 'right';
 }
 
 /** Rough label box, from the text length. A real text measurement is not available before paint. */
 const CHAR_WIDTH = 6.6;
 const LABEL_HEIGHT = 16;
+/** The gap the renderer leaves between a mark's edge and the chip beside it. */
+const LABEL_GAP = 6;
+/** The radius assumed for a mark whose caller did not state one. */
+const DEFAULT_MARKER_RADIUS = 6;
 
 function overlaps(a: { x: number; y: number; w: number }, b: { x: number; y: number; w: number }): boolean {
   return Math.abs(a.y - b.y) < LABEL_HEIGHT && a.x < b.x + b.w && b.x < a.x + a.w;
+}
+
+/**
+ * Where the chip for this candidate is actually drawn.
+ *
+ * The renderer puts it to the right of the mark and flips it to the left when
+ * the right-hand position would run off the frame. Both halves of that rule are
+ * repeated here rather than guessed at, because a selection that reasons about
+ * a position the renderer does not use is not a collision test — it is a second
+ * opinion about a different drawing.
+ */
+function chipBox(candidate: LabelCandidate, textLength: number, side: 'left' | 'right'): { x: number; y: number; w: number } {
+  const radius = candidate.radius ?? DEFAULT_MARKER_RADIUS;
+  const w = textLength * CHAR_WIDTH;
+  const offset = radius + LABEL_GAP;
+  return { x: side === 'left' ? candidate.x - offset - w : candidate.x + offset, y: candidate.y, w };
+}
+
+/** Whether a chip on this side would run off the frame. Unknown width means it never does. */
+function fitsInFrame(box: { x: number; w: number }, width: number | undefined): boolean {
+  if (width === undefined) return true;
+  return box.x >= 4 && box.x + box.w <= width - 4;
+}
+
+/** A mark's own footprint, as a box the same shape as a label box so one test covers both. */
+function markBox(candidate: LabelCandidate): { x: number; y: number; w: number } {
+  const radius = candidate.radius ?? DEFAULT_MARKER_RADIUS;
+  return { x: candidate.x - radius, y: candidate.y, w: radius * 2 };
 }
 
 /**
@@ -225,6 +279,24 @@ export interface LabelOptions {
   selectedId?: string | undefined;
   /** Longest label, in characters, before abbreviation. */
   maxChars?: number;
+  /**
+   * The drawn width of the frame, in pixels.
+   *
+   * Only used to know which side of its mark a chip ends up on, which the
+   * renderer decides by the same rule. Omit it and every chip is assumed to sit
+   * to the right, as it did before the frame width was available here.
+   */
+  width?: number;
+  /**
+   * Marks that are drawn but carry no label of their own.
+   *
+   * The trip's base square is one: it is painted from the frame's own `base`,
+   * not from the marker list, so the selection could not see it and a chip was
+   * placed squarely underneath it — the Mammoth explore view drew a name that
+   * read "h Lakes". Anything on the drawing that a chip must not cover belongs
+   * here.
+   */
+  obstacles?: readonly { x: number; y: number; radius: number }[];
 }
 
 export function selectLabels(candidates: readonly LabelCandidate[], options: LabelOptions): LabelSelection[] {
@@ -237,16 +309,56 @@ export function selectLabels(candidates: readonly LabelCandidate[], options: Lab
       return LABEL_PRIORITY[a.kind] - LABEL_PRIORITY[b.kind] || a.label.localeCompare(b.label);
     });
 
+  /*
+   * The marks are obstacles too, not only the labels already placed.
+   *
+   * Every candidate's own mark is on the drawing whether or not it gets a
+   * label, so a chip that clears every other chip and lands on a neighbouring
+   * dot is still a collision — and it was the one the metric could not see.
+   */
+  const marks = [
+    ...ordered.map((candidate) => ({ id: candidate.id, box: markBox(candidate) })),
+    ...(options.obstacles ?? []).map((obstacle, index) => ({
+      id: `obstacle:${index}`,
+      box: { x: obstacle.x - obstacle.radius, y: obstacle.y, w: obstacle.radius * 2 },
+    })),
+  ];
   const placedBoxes: { x: number; y: number; w: number }[] = [];
+  /*
+   * ONE NAME PER BLOB.
+   *
+   * Two marks closer together than the gap a chip needs are one point on the
+   * screen, and a name either side of one point does not say which dot it
+   * belongs to — it says both, which is the smear the Bishkek screenshot
+   * showed. So a mark that is already inside a labelled mark's personal space
+   * yields entirely rather than taking the other side; priority decides which
+   * of them that is.
+   */
+  const placedMarks: LabelCandidate[] = [];
+  const sameBlob = (a: LabelCandidate, b: LabelCandidate): boolean =>
+    Math.abs(a.y - b.y) < LABEL_HEIGHT &&
+    Math.abs(a.x - b.x) < (a.radius ?? DEFAULT_MARKER_RADIUS) + (b.radius ?? DEFAULT_MARKER_RADIUS) + LABEL_GAP * 2;
   const out: LabelSelection[] = [];
   for (const candidate of ordered) {
     if (out.length >= options.max && candidate.id !== options.selectedId) break;
     const text = abbreviateLabel(candidate.label, maxChars);
-    const box = { x: candidate.x, y: candidate.y, w: text.length * CHAR_WIDTH };
+    const selected = candidate.id === options.selectedId;
+    if (!selected && placedMarks.some((placed) => sameBlob(placed, candidate))) continue;
+    const clear = (box: { x: number; y: number; w: number }): boolean =>
+      fitsInFrame(box, options.width) &&
+      !placedBoxes.some((other) => overlaps(box, other)) &&
+      !marks.some((mark) => mark.id !== candidate.id && overlaps(box, mark.box));
+
+    /* Right first — the reading order — then left, and only then not at all. */
+    const right = chipBox(candidate, text.length, 'right');
+    const left = chipBox(candidate, text.length, 'left');
+    const side: 'left' | 'right' | null = clear(right) ? 'right' : clear(left) ? 'left' : null;
     /* The selected label is drawn whatever it overlaps; everything else yields to what is already there. */
-    if (candidate.id !== options.selectedId && placedBoxes.some((other) => overlaps(box, other))) continue;
-    placedBoxes.push(box);
-    out.push({ id: candidate.id, text, x: candidate.x, y: candidate.y });
+    if (side === null && !selected) continue;
+    const chosen = side ?? (fitsInFrame(right, options.width) ? 'right' : 'left');
+    placedBoxes.push(chipBox(candidate, text.length, chosen));
+    placedMarks.push(candidate);
+    out.push({ id: candidate.id, text, x: candidate.x, y: candidate.y, side: chosen });
   }
   return out;
 }

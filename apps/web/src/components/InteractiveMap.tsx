@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { tilesForViewport, type MapBasemap } from './map-adapter';
 import { VectorBasemapLayer, type MapHealth } from './VectorBasemap';
 import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoint, type MapViewport } from './map-projection';
-import { labelBudget, selectLabels } from './map-camera';
+import { labelBudget, selectLabels, type MapMode } from './map-camera';
 import { cx } from './ui';
 import { LEG_LINE_STYLE, legPath, legendFor } from './hub/route-styles';
 
@@ -25,7 +25,30 @@ import { LEG_LINE_STYLE, legPath, legendFor } from './hub/route-styles';
  * known: positions, one ring of true ground radius, and the legs.
  */
 
-export type MapMarkerKind = 'base' | 'stop' | 'place';
+/**
+ * V11 §F4 — THE SIX CLASSES OF MARK, AND WHY SIX.
+ *
+ * There were three — `base`, `stop`, `place` — and they were about which
+ * *surface* was drawing rather than about what the thing is. So a gateway
+ * airport, the trek the whole trip is built around and a coffee stop were all
+ * the same dot, and a place nothing could position was either drawn at a
+ * coordinate it did not have or silently dropped.
+ *
+ * These six are the vocabulary `map-camera.ts` already reasons in, which is the
+ * point: camera priority, label priority and the drawn mark are now three
+ * readings of one classification instead of three independent guesses.
+ *
+ * `place` is kept as the board's ordinary point of interest and draws as an
+ * ordinary stop; it is not a seventh class.
+ */
+export type MapMarkerKind =
+  | 'gateway'
+  | 'base'
+  | 'signature'
+  | 'stop'
+  | 'place'
+  | 'overnight_experience'
+  | 'unresolved';
 
 export interface MapMarker {
   id: string;
@@ -38,6 +61,40 @@ export interface MapMarker {
   category?: string;
   travelMinutes?: number | null;
 }
+
+/**
+ * How each class is drawn.
+ *
+ * `radius` is the unfocused radius; a focused mark grows by `FOCUS_GROWTH`. The
+ * hierarchy is deliberate and reads without the legend: a gateway and a base are
+ * squares (places you arrive at and sleep in), a signature is the largest circle
+ * (the reason the trip exists), an ordinary stop is a small circle, and an
+ * unresolved mark is a hollow ring — the shape that says "we know this is part
+ * of the trip and we could not place it", which is the one thing a filled dot
+ * can never say honestly.
+ */
+const MARKER_STYLE: Record<MapMarkerKind, { radius: number; fill: string; stroke: string; shape: 'circle' | 'square' | 'ring'; rank: number }> = {
+  gateway: { radius: 5.5, fill: 'var(--color-ink)', stroke: 'var(--color-paper-raised)', shape: 'square', rank: 0 },
+  base: { radius: 5.5, fill: 'var(--color-ink)', stroke: 'var(--color-paper-raised)', shape: 'square', rank: 1 },
+  signature: { radius: 8.5, fill: 'var(--color-accent)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 2 },
+  overnight_experience: { radius: 7, fill: 'var(--color-pine)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 3 },
+  stop: { radius: 8.5, fill: 'var(--color-ink)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 4 },
+  place: { radius: 3.5, fill: 'var(--color-ink-faint)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 5 },
+  unresolved: { radius: 5, fill: 'none', stroke: 'var(--color-ink-faint)', shape: 'ring', rank: 6 },
+};
+
+const FOCUS_GROWTH = 1.6;
+
+/** The classes the shared camera and label logic understand, from the drawn class. */
+const LABEL_KIND: Record<MapMarkerKind, 'gateway' | 'base' | 'signature' | 'stop' | 'overnight_experience' | 'unresolved'> = {
+  gateway: 'gateway',
+  base: 'base',
+  signature: 'signature',
+  overnight_experience: 'overnight_experience',
+  stop: 'signature',
+  place: 'stop',
+  unresolved: 'unresolved',
+};
 
 export type MapConnectorStyle =
   | 'measured_drive'
@@ -96,6 +153,25 @@ export interface InteractiveMapProps {
   /** PRODUCTION UI V1 — points the initial fit must include without drawing them (a destination's extent, a stated reach). */
   fitPoints?: readonly GeoPoint[];
   /**
+   * V11 §F — which of the three modes this drawing is in.
+   *
+   * It decides the label budget and the minimum ground span, both of which are
+   * genuinely different questions for a day and for a whole trip. Defaulted to
+   * `day` so every existing caller keeps the behaviour it had.
+   */
+  mode?: MapMode;
+  /**
+   * V11 §F2 — the rest of the trip, drawn faintly behind today.
+   *
+   * A day map that draws only today is a day map with no idea where today is.
+   * These are drawn small, uncoloured, unlabelled and not interactive, and they
+   * are deliberately **excluded from the camera fit** — context must never move
+   * the frame off the thing being read.
+   */
+  faded?: readonly MapMarker[];
+  /** V11 §F5 — the smallest ground span the frame may represent, when the caller has decided it. */
+  minSpanKm?: number;
+  /**
    * MVP V3 — draw the map and nothing around it.
    *
    * For the generation screen, where the map is scenery: pan controls a
@@ -142,7 +218,7 @@ interface View {
   scale: number;
 }
 
-function fitView(points: readonly GeoPoint[], width: number, height: number): View {
+function fitView(points: readonly GeoPoint[], width: number, height: number, floorKm?: number): View {
   /*
    * V11 §11 — how much ground the floor should cover depends on how many places
    * are actually in the frame. Counted on distinct positions rather than on the
@@ -151,7 +227,12 @@ function fitView(points: readonly GeoPoint[], width: number, height: number): Vi
    */
   const distinct = new Set(points.map((point) => `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`));
   const spread = points.length > 1 && (Math.max(...points.map((p) => p.lat)) - Math.min(...points.map((p) => p.lat)) > DISTINCT_POINT_DEGREES || Math.max(...points.map((p) => p.lng)) - Math.min(...points.map((p) => p.lng)) > DISTINCT_POINT_DEGREES);
-  const minSpanKm = distinct.size > 1 && spread ? MIN_SPAN_KM : SINGLE_POINT_SPAN_KM;
+  /*
+   * V11 §F5 — a caller that has run `cameraFrameFor` already knows how much
+   * ground this frame has to cover, and its answer wins. Without one this falls
+   * back to the two floors below, which is what every pre-V11 caller gets.
+   */
+  const minSpanKm = floorKm ?? (distinct.size > 1 && spread ? MIN_SPAN_KM : SINGLE_POINT_SPAN_KM);
   const viewport = fitMercator({ points, width, height, insets: INSETS, minSpanKm });
   return { cx: viewport.centre.x, cy: viewport.centre.y, scale: viewport.scale };
 }
@@ -204,12 +285,20 @@ export function InteractiveMap({
   pinLabel,
   fitPoints = [],
   chromeless = false,
+  mode = 'day',
+  faded = [],
+  minSpanKm,
 }: InteractiveMapProps) {
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
+  /*
+   * V11 §F2 — `faded` is deliberately absent from this list. Context must be
+   * visible and must never decide the frame: a whole trip's worth of faint marks
+   * behind one day would pull the camera out to the trip every time.
+   */
   const points = useMemo<GeoPoint[]>(() => [...markers.map((m) => m.coordinates), ...(base ? [base.coordinates] : []), ...fitPoints], [markers, base, fitPoints]);
   const fitKey = points.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join('|');
-  const fitted = useMemo(() => fitView(points, width, height), [fitKey, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fitted = useMemo(() => fitView(points, width, height, minSpanKm), [fitKey, width, height, minSpanKm]); // eslint-disable-line react-hooks/exhaustive-deps
   const [view, setView] = useState<View>(fitted);
   /*
    * V8 — THE CAMERA EASES; IT DOES NOT CUT.
@@ -256,6 +345,18 @@ export function InteractiveMap({
   }, [fitKey, fitted, animateTo]);
   const viewport = viewportFor(view, width, height);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  /** The figure's real width in CSS pixels, watched, so the label budget is about the screen. */
+  const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.round(entry?.contentRect.width ?? 0);
+      if (next > 0) setRenderedWidth(next);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
   const lastDragMoved = useRef(false);
@@ -322,8 +423,20 @@ export function InteractiveMap({
 
   const baseAt = base ? viewport.project(base.coordinates) : null;
   const focused = placed.find((entry) => entry.marker.id === focusedId) ?? null;
-  /* Names beside the pins when the drawing is sparse enough to read them; a basemap's own labels take over otherwise. */
-  const labelAll = markers.filter((m) => m.name).length <= 14 && width >= 400;
+  /*
+   * V11 §F6 — THE LABEL BUDGET IS ABOUT THE SCREEN, NOT THE COORDINATE SYSTEM.
+   *
+   * `width` is the SVG's `viewBox` width — 1120 on the map workspace — and the
+   * figure is responsive, so on a 390 px phone the drawing is rendered at about
+   * a third of that. Deciding how many names fit from the coordinate width meant
+   * the phone got a desktop's worth of labels at a third of the size, which is
+   * the cluster of unreadable text the §N walk photographed.
+   *
+   * Measured rather than assumed, and only used for the two label decisions: the
+   * geometry is still computed in viewBox units, as it must be.
+   */
+  const drawnWidth = renderedWidth ?? width;
+  const labelAll = markers.filter((m) => m.name).length <= 14 && drawnWidth >= 400;
   /*
    * V11 §12 §15 — WHICH LABELS ARE ACTUALLY DRAWN.
    *
@@ -340,8 +453,8 @@ export function InteractiveMap({
    * overlaps, and a colliding lower-priority label dropped rather than drawn
    * over. Recomputed only when the positions or the focus change.
    */
-  const labelledIds = useMemo(() => {
-    if (!labelAll) return new Set<string>();
+  const labelPlacement = useMemo(() => {
+    if (!labelAll) return new Map<string, { text: string; side: 'left' | 'right' }>();
     const chosen = selectLabels(
       placed
         .filter((entry) => entry.marker.name)
@@ -349,14 +462,25 @@ export function InteractiveMap({
           id: entry.marker.id,
           label: entry.marker.name,
           /* This component's three kinds map onto the shared vocabulary; a "place" is an ordinary stop. */
-          kind: entry.marker.kind === 'base' ? ('base' as const) : entry.marker.kind === 'stop' ? ('signature' as const) : ('stop' as const),
+          /* V11 §F4 — the marker's own class, rather than this component's guess at one. */
+          kind: LABEL_KIND[entry.marker.kind],
           x: entry.x,
           y: entry.y,
+          /* The mark this chip is drawn beside, at the radius it is actually drawn at. */
+          radius: MARKER_STYLE[entry.marker.kind].radius,
         })),
-      { max: labelBudget({ mode: 'day', widthPx: width }), ...(focusedId ? { selectedId: focusedId } : {}) },
+      {
+        max: labelBudget({ mode, widthPx: drawnWidth }),
+        width,
+        /* The base square is drawn from `base`, not from the marker list, so the selection is told about it here. */
+        ...(base ? { obstacles: [{ ...viewport.project(base.coordinates), radius: 5.5 }] } : {}),
+        ...(focusedId ? { selectedId: focusedId } : {}),
+      },
     );
-    return new Set(chosen.map((entry) => entry.id));
-  }, [placed, labelAll, width, focusedId]);
+    return new Map(chosen.map((entry) => [entry.id, { text: entry.text, side: entry.side }]));
+    // The projection is a pure read of the view below, which is already in the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed, labelAll, drawnWidth, focusedId, mode, width, base, view.cx, view.cy, view.scale]);
 
   const ring = useMemo(() => {
     if (!base) return null;
@@ -414,7 +538,18 @@ export function InteractiveMap({
     <div className={cx('group min-w-0', className)}>
       <figure className="m-0" data-testid={testId}>
         <div className="relative overflow-hidden rounded-[var(--radius-card)] border border-rule bg-paper-sunk">
-          {vector ? <VectorBasemapLayer source={vector} centre={centreGeo} scale={view.scale} width={width} height={height} onHealth={setBasemapHealth} /> : null}
+          {vector ? (
+            <VectorBasemapLayer
+              source={vector}
+              centre={centreGeo}
+              scale={view.scale}
+              width={width}
+              height={height}
+              onHealth={setBasemapHealth}
+              /* V11 §F6 — while we are writing names, the basemap stops writing its own point-of-interest ones. */
+              quietLabels={labelAll}
+            />
+          ) : null}
           <svg
             ref={svgRef}
             viewBox={`0 0 ${width} ${height}`}
@@ -511,9 +646,27 @@ export function InteractiveMap({
               <line x1={baseAt.x} y1={baseAt.y} x2={focused.x} y2={focused.y} stroke="var(--color-pine)" strokeWidth={1.5} strokeDasharray="3 4" opacity={0.55} data-connector-style="sightline" />
             ) : null}
 
+            {/*
+              V11 §F2 — the rest of the trip, behind today.
+
+              `pointerEvents="none"`, no label, no number, no focus ring: this is
+              geography, not content. Drawn before the real marks so nothing
+              faint can ever sit on top of something the traveller can press.
+            */}
+            {faded.length > 0 ? (
+              <g pointerEvents="none" opacity={0.28} data-testid="map-context">
+                {faded.map((marker) => {
+                  const at = viewport.project(marker.coordinates);
+                  return <circle key={`faded-${marker.id}`} cx={at.x} cy={at.y} r={2.5} fill="var(--color-ink-faint)" />;
+                })}
+              </g>
+            ) : null}
+
             {placed.map(({ marker, x, y }) => {
               const isFocused = marker.id === focusedId;
               const label = pinLabel ? pinLabel(marker) : defaultPinLabel(marker);
+              const style = MARKER_STYLE[marker.kind];
+              const radius = (style.radius * (isFocused ? FOCUS_GROWTH : 1)) * (marker.kind === 'place' && marker.chosen ? 1.4 : 1);
               const stop = marker.kind === 'stop';
               return (
                 <g key={marker.id} data-marker={marker.id}>
@@ -542,57 +695,38 @@ export function InteractiveMap({
                       }
                     }}
                   />
-                  {isFocused ? <circle key={`pulse-${marker.id}`} cx={x} cy={y} r={stop ? 10 : 6.5} fill="none" stroke="var(--color-route)" strokeWidth={2} className="pulse-once" aria-hidden="true" /> : null}
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r={stop ? (isFocused ? 10 : 8.5) : isFocused ? 6.5 : marker.chosen ? 5 : 3.5}
-                    fill={stop ? 'var(--color-ink)' : marker.chosen ? 'var(--color-accent)' : 'var(--color-ink-faint)'}
-                    stroke={isFocused ? 'var(--color-ink)' : 'var(--color-paper-raised)'}
-                    strokeWidth={isFocused ? 2.5 : 1}
-                    pointerEvents="none"
-                  />
+                  {isFocused ? <circle key={`pulse-${marker.id}`} cx={x} cy={y} r={radius + 1.5} fill="none" stroke="var(--color-route)" strokeWidth={2} className="pulse-once" aria-hidden="true" /> : null}
+                  {style.shape === 'square' ? (
+                    <rect
+                      x={x - radius}
+                      y={y - radius}
+                      width={radius * 2}
+                      height={radius * 2}
+                      rx={marker.kind === 'gateway' ? radius : 2}
+                      fill={style.fill}
+                      stroke={isFocused ? 'var(--color-ink)' : style.stroke}
+                      strokeWidth={isFocused ? 2.5 : 1}
+                      pointerEvents="none"
+                      data-marker-kind={marker.kind}
+                    />
+                  ) : (
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={radius}
+                      fill={style.shape === 'ring' ? 'none' : marker.kind === 'place' && marker.chosen ? 'var(--color-accent)' : style.fill}
+                      stroke={isFocused ? 'var(--color-ink)' : style.stroke}
+                      strokeWidth={style.shape === 'ring' ? 1.6 : isFocused ? 2.5 : 1}
+                      strokeDasharray={style.shape === 'ring' ? '3 3' : undefined}
+                      pointerEvents="none"
+                      data-marker-kind={marker.kind}
+                    />
+                  )}
                   {stop && marker.order !== undefined ? (
                     <text x={x} y={y + 3.2} textAnchor="middle" fontSize={9} fontWeight={600} fill="var(--color-paper-raised)" pointerEvents="none">
                       {marker.order}
                     </text>
                   ) : null}
-                  {labelAll && labelledIds.has(marker.id) && marker.name && !isFocused
-                    ? (() => {
-                        /*
-                         * MVP V3 — A LABEL THAT RUNS OFF THE MAP IS NOT A LABEL.
-                         *
-                         * Seen on the live Kyrgyzstan review: a mark near the
-                         * right edge read "Second base (to be" and stopped at
-                         * the frame. Labels sit to the right of their mark by
-                         * default; one that would not fit flips to the left of
-                         * it instead. The width is estimated from the character
-                         * count at this font size — measuring text in SVG means
-                         * a layout read per marker per frame, and a label that
-                         * flips a few pixels early is invisible where a clipped
-                         * one is not.
-                         */
-                        const text = marker.name.length > 28 ? `${marker.name.slice(0, 27)}…` : marker.name;
-                        const estimated = text.length * 5.4;
-                        const offset = stop ? 12 : 8;
-                        const flip = x + offset + estimated > width - 4;
-                        return (
-                          <text
-                            x={flip ? x - offset : x + offset}
-                            y={y + 3.5}
-                            textAnchor={flip ? 'end' : 'start'}
-                            fontSize={10}
-                            fill="var(--color-ink-muted)"
-                            stroke="var(--color-paper-sunk)"
-                            strokeWidth={2.5}
-                            paintOrder="stroke"
-                            pointerEvents="none"
-                          >
-                            {text}
-                          </text>
-                        );
-                      })()
-                    : null}
                 </g>
               );
             })}
@@ -600,6 +734,69 @@ export function InteractiveMap({
             {baseAt ? (
               <g pointerEvents="none">
                 <rect x={baseAt.x - 5.5} y={baseAt.y - 5.5} width={11} height={11} rx={2} fill="var(--color-ink)" stroke="var(--color-paper-raised)" strokeWidth={1.5} />
+              </g>
+            ) : null}
+
+            {/*
+              V11 §N — EVERY LABEL AFTER EVERY MARK.
+
+              The chips used to be drawn inside each mark's own group, so a mark
+              later in the list painted over the chip of a mark earlier in it —
+              and the base square, which is drawn after all of them, painted over
+              whatever it landed on. On the Mammoth explore view that produced a
+              chip reading "h Lakes" beside its own base. Nothing about the
+              placement was wrong; the paint order was. One pass, last, so a name
+              is never half a name.
+            */}
+            {labelAll ? (
+              <g data-testid={`${testId}-labels`}>
+                {placed.map(({ marker, x, y }) => {
+                  if (marker.id === focusedId || !marker.name) return null;
+                  const placement = labelPlacement.get(marker.id);
+                  if (!placement) return null;
+                  const style = MARKER_STYLE[marker.kind];
+                  const radius = style.radius * (marker.kind === 'place' && marker.chosen ? 1.4 : 1);
+                  /*
+                   * MVP V3 — A LABEL THAT RUNS OFF THE MAP IS NOT A LABEL.
+                   *
+                   * Seen on the live Kyrgyzstan review: a mark near the right
+                   * edge read "Second base (to be" and stopped at the frame.
+                   *
+                   * V11 §N — WHICH SIDE IS DECIDED WITH THE COLLISION, NOT
+                   * AFTERWARDS. This used to flip here, on its own rule, while
+                   * `selectLabels` judged every collision as though the chip sat
+                   * on the right: the drawing and the decision were about two
+                   * different pictures, which is how a chip cleared every other
+                   * chip and still landed on a neighbouring dot. The side now
+                   * comes back with the text, from the one place that weighed it.
+                   */
+                  const estimated = placement.text.length * 5.4;
+                  const offset = radius + 6;
+                  const left = placement.side === 'left' ? x - offset - estimated : x + offset;
+                  return (
+                    /*
+                      V11 §F6 — A LABEL SITS ON A CHIP, NOT ON A HALO.
+
+                      A stroke halo knocks out *some* of what is behind it and
+                      leaves the rest, which on a basemap that is drawing its own
+                      place names produces exactly what the founder screenshot
+                      showed: our name legible, the basemap's name half-erased
+                      beneath it, and the pair unreadable as either. A filled chip
+                      hides what it covers completely, so there is one name at that
+                      point rather than one and a half.
+
+                      The basemap's point-of-interest layers are already switched
+                      off while we are labelling (`quietLabels`); this is the other
+                      half of the same problem, for the layers that must stay on.
+                    */
+                    <g key={`label-${marker.id}`} pointerEvents="none">
+                      <rect x={left - 3} y={y - 7} width={estimated + 6} height={14} rx={3} fill="var(--color-paper)" opacity={0.92} />
+                      <text x={left} y={y + 3.5} textAnchor="start" fontSize={10} fill="var(--color-ink-muted)">
+                        {placement.text}
+                      </text>
+                    </g>
+                  );
+                })}
               </g>
             ) : null}
 
@@ -658,7 +855,26 @@ export function InteractiveMap({
           deliberately *not* in that row: it is a licence obligation, so it sits
           on its own line where it can never be scrolled out of sight.
         */}
-        <figcaption className={cx('mt-2 flex items-center gap-x-3 gap-y-1.5 overflow-x-auto text-xs leading-snug text-ink-faint sm:flex-wrap sm:overflow-visible [&>*]:shrink-0 sm:[&>*]:shrink', chromeless && 'sr-only')} data-testid={`${testId}-legend`}>
+        {/*
+          V11 — `sr-only` IS A LAYOUT, AND IT LOSES TO A LATER UTILITY.
+
+          `sr-only` hides its box by clipping a 1x1 square, which only holds
+          while `overflow: hidden` holds. Kept alongside the visible key's own
+          classes, `sm:overflow-visible` won inside the breakpoint and the
+          hidden caption's nowrap sentence escaped its 1 px box and pushed the
+          document 78 px sideways from 640 px up — invisible, and still a
+          horizontal scrollbar on every chromeless map. A chromeless legend
+          therefore carries no layout classes at all: it is a sentence for a
+          screen reader, not a row.
+        */}
+        <figcaption
+          className={
+            chromeless
+              ? 'sr-only'
+              : 'mt-2 flex items-center gap-x-3 gap-y-1.5 overflow-x-auto text-xs leading-snug text-ink-faint sm:flex-wrap sm:overflow-visible [&>*]:shrink-0 sm:[&>*]:shrink'
+          }
+          data-testid={`${testId}-legend`}
+        >
           {base ? (
             <span className="flex items-center gap-1.5">
               <span aria-hidden="true" className="inline-block h-2 w-2 rounded-[2px] bg-ink" />
@@ -671,6 +887,38 @@ export function InteractiveMap({
               chosen
             </span>
           ) : null}
+          {/*
+            V11 §F4 — one entry per class actually on the drawing, never a key
+            for a shape nobody drew. The classes a traveller has to be able to
+            tell apart are the three that mean something different: the reason
+            the trip exists, a night an operator owns, and a place we could not
+            put on the map.
+          */}
+          {markers.some((m) => m.kind === 'gateway') ? (
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-ink" />
+              in and out
+            </span>
+          ) : null}
+          {markers.some((m) => m.kind === 'signature') ? (
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full bg-accent" />
+              what the trip is built around
+            </span>
+          ) : null}
+          {markers.some((m) => m.kind === 'overnight_experience') ? (
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-pine" />
+              nights on the move
+            </span>
+          ) : null}
+          {markers.some((m) => m.kind === 'unresolved') ? (
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full border border-dashed border-ink-faint" />
+              we could not place this
+            </span>
+          ) : null}
+          {faded.length > 0 ? <span>Faint marks are the rest of the trip.</span> : null}
           {markers.some((m) => m.kind === 'stop') ? <span>Numbered in the order of the day.</span> : null}
           {/*
             One entry per line style actually on the map, each with a sample of

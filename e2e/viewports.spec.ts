@@ -46,7 +46,7 @@ for (const viewport of VIEWPORTS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
     await page.goto('/');
-    await expect(page.getByRole('link', { name: 'I know where I am going' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'I know where I want to go' })).toBeVisible();
     await expectNoHorizontalOverflow(page, `landing at ${viewport.name}`);
 
     /*
@@ -229,13 +229,14 @@ test.describe('every normal route', () => {
     compiled = await createTrip(shared, 'Harbour City');
     await compileRegion(shared);
 
+    /* V11 §A1 — the intake asks one question at a time and stops when it can rank. */
     await shared.goto('/decide');
     await shared.getByRole('radio', { name: 'Some time in a month' }).check();
     await shared.getByLabel('Which month?').selectOption('7');
-    await shared.getByLabel('How many nights?').fill('9');
+    await shared.getByRole('button', { name: 'Next', exact: true }).click();
     await shared.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
-    await shared.getByRole('radio', { name: 'Two bases, split the trip' }).check();
-    await shared.getByRole('radio', { name: 'Drive', exact: true }).check();
+    await shared.getByRole('button', { name: 'One more question' }).click();
+    await shared.getByRole('spinbutton', { name: 'Nights away' }).fill('9');
     await shared.getByRole('button', { name: 'Show me where to go' }).click();
     await shared.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
     decided = new URL(shared.url()).pathname.split('/').pop()!;

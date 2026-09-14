@@ -320,7 +320,7 @@ export function ReviewSurface({
           data-testid="lock-error"
           ref={lockErrorNote}
           tabIndex={-1}
-          className="rounded-lg focus:outline focus:outline-2 focus:outline-clay focus:outline-offset-2"
+          className="rounded-[var(--radius-card)] focus:outline focus:outline-2 focus:outline-clay focus:outline-offset-2"
         >
           <ErrorNote>{lockError}</ErrorNote>
         </div>
@@ -339,7 +339,7 @@ export function ReviewSurface({
               id="reviewer"
               value={draft.reviewer}
               onChange={(event) => setDraft({ ...draft, reviewer: event.target.value })}
-              className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+              className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
             />
           </div>
         </Panel>
@@ -367,7 +367,7 @@ export function ReviewSurface({
             }}
             data-testid={`switch-${panel.label}`}
             className={cx(
-              'min-h-11 flex-1 rounded-lg border px-3 text-sm font-medium transition-colors motion-reduce:transition-none',
+              'min-h-11 flex-1 rounded-[var(--radius-card)] border px-3 text-sm font-medium transition-colors motion-reduce:transition-none',
               shown === panel.label
                 ? 'border-pine bg-pine-soft text-pine'
                 : 'border-rule bg-paper-raised text-ink',
@@ -450,7 +450,7 @@ export function ReviewSurface({
                         notRateable: { ...draft.notRateable, [panel.label]: event.target.value },
                       })
                     }
-                    className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+                    className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
                   />
                 </div>
               ) : (
@@ -498,7 +498,7 @@ export function ReviewSurface({
                     <label
                       key={option}
                       className={cx(
-                        'relative flex min-h-11 items-center justify-center rounded-lg border px-2 text-center text-sm transition-colors motion-reduce:transition-none',
+                        'relative flex min-h-11 items-center justify-center rounded-[var(--radius-card)] border px-2 text-center text-sm transition-colors motion-reduce:transition-none',
                         FOCUS_RING,
                         draft.choices[question.id] === option
                           ? 'border-pine bg-pine-soft text-pine'
@@ -533,7 +533,7 @@ export function ReviewSurface({
                     aria-describedby="explanation-hint"
                     value={draft.explanation}
                     onChange={(event) => setDraft({ ...draft, explanation: event.target.value })}
-                    className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+                    className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
                   />
                   {draft.explanation.trim().length > 0 && draft.explanation.trim().length < 20 ? (
                     <ErrorNote>{LABS_COPY.explanationTooShort}</ErrorNote>
@@ -721,7 +721,7 @@ function RatingRow({
           <label
             key={score}
             className={cx(
-              'relative flex min-h-11 min-w-0 items-center justify-center rounded-lg border text-sm transition-colors motion-reduce:transition-none',
+              'relative flex min-h-11 min-w-0 items-center justify-center rounded-[var(--radius-card)] border text-sm transition-colors motion-reduce:transition-none',
               FOCUS_RING,
               value === score
                 ? 'border-pine bg-pine-soft font-medium text-pine'
@@ -799,7 +799,7 @@ function CorrectionPanel({
           disabled={locked}
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
-          className="mt-2 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+          className="mt-2 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
         />
       </div>
 

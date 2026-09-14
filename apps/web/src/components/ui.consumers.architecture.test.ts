@@ -85,3 +85,36 @@ describe('the shared UI kit exports nothing it does not render', () => {
     });
   }
 });
+
+/**
+ * V11 §C — THE RADIUS SCALE IS FOUR VALUES, AND ONLY FOUR.
+ *
+ * The V11 audit counted **fourteen** distinct `rounded-*` values across the
+ * product. None of that was anyone's decision; it is what happens when each
+ * component answers the question alone, and the result is a screen where three
+ * boxes on one row have three different corners for no reason a reader could
+ * name.
+ *
+ * `globals.css` publishes the scale — `--radius-control`, `--radius-card`,
+ * `--radius-panel`, `--radius-plate` — and `/labs/design` renders it. This makes
+ * the scale enforceable rather than merely documented: a `rounded-md` added
+ * tomorrow fails here with the file that added it.
+ *
+ * `rounded-full` and `rounded-sm` are deliberately allowed. A pill and a hairline
+ * corner are shapes rather than points on the surface scale, and expressing
+ * "completely round" as a token would be a token nobody could read.
+ */
+describe('V11 §C — one radius scale', () => {
+  const TAILWIND_RADII = /\brounded(?:-[a-z]+)?-(?:md|lg|xl|2xl|3xl)\b/;
+
+  it('uses the published tokens rather than Tailwind’s own scale', () => {
+    const offenders: string[] = [];
+    for (const file of walk(WEB_SRC).filter((path) => path.endsWith('.tsx') && !path.includes('.test.'))) {
+      const source = readFileSync(file, 'utf8');
+      for (const [index, line] of source.split('\n').entries()) {
+        if (TAILWIND_RADII.test(line)) offenders.push(`${file.replace(WEB_SRC, '')}:${index + 1}`);
+      }
+    }
+    expect(offenders, `use var(--radius-control|card|panel|plate) instead:\n${offenders.join('\n')}`).toEqual([]);
+  });
+});

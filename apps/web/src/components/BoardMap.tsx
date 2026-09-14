@@ -113,7 +113,7 @@ export function BoardMap({
           {categories.length > 1 ? (
             <label className="inline-flex min-h-9 items-center gap-1.5 text-xs text-ink-muted">
               <span>Show</span>
-              <select value={category} onChange={(event) => setCategory(event.target.value as PlaceCategory | 'all')} className="rounded-md border border-rule bg-paper px-2 py-1 text-xs text-ink" aria-label="Filter the map by kind of place" data-testid="board-map-category">
+              <select value={category} onChange={(event) => setCategory(event.target.value as PlaceCategory | 'all')} className="rounded-[var(--radius-control)] border border-rule bg-paper px-2 py-1 text-xs text-ink" aria-label="Filter the map by kind of place" data-testid="board-map-category">
                 <option value="all">every kind of place</option>
                 {categories.map((value) => (
                   <option key={value} value={value}>

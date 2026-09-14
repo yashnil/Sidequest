@@ -75,7 +75,7 @@ export type UnknownReason = z.infer<typeof unknownReasonSchema>;
 export const UNKNOWN_REASON_COPY: Record<UnknownReason, string> = {
   no_climate_record: 'There are no climate records for this place.',
   climate_provider_unavailable: 'Our climate source did not answer, so we left this out of the score.',
-  not_requested: 'We did not look this up for every candidate — only for the ones near the top.',
+  not_requested: 'We did not look this up for every place — only for the ones near the top.',
   no_index_coverage: 'Our place index does not cover this yet.',
   traveller_did_not_say: 'You have not told us, and we would rather not assume.',
   not_sourced: 'Nobody publishes this in a form we would stand behind.',
@@ -336,6 +336,18 @@ export const rankedDestinationSchema = z.object({
   /** Nights this ground actually supports, when the model could say. */
   suggestedNights: z.number().int().min(1).max(60).optional(),
   suggestedBases: z.number().int().min(1).max(10).optional(),
+
+  /**
+   * V11 §A2 — the months, among the ones the traveller could travel in, that
+   * this place is actually at its best in.
+   *
+   * Persisted because the results screen has to name a sub-window inside a free
+   * window, and the only honest way to place one is against the same climate
+   * records the ranking used. Optional and additive: a stored shortlist written
+   * before this existed parses with it absent, and the screen then says the
+   * window is the traveller's own rather than inventing a preference for it.
+   */
+  bestMonths: z.array(z.number().int().min(1).max(12)).max(12).optional(),
 });
 export type RankedDestination = z.infer<typeof rankedDestinationSchema>;
 

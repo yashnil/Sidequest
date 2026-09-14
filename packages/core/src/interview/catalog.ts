@@ -20,6 +20,7 @@ import type { TravelerNeed } from '../schemas/trip';
 import { availableRegionalExpansions, EXPANSION_CEILING_MINUTES } from '../questionnaire/definition';
 import type { PlanningImpactKey } from './impact';
 import { hasTrait, type DestinationQuestionContext, type DestinationTrait } from './traits';
+import { PRIORITY_ROLE_ANSWERS, type InterestRoles, type PriorityRoleAnswer } from '../intent/roles';
 import { modeStatusFor } from '../reality/schema';
 import { movementFromReality } from '../reality/interview';
 
@@ -433,17 +434,35 @@ export const PRIORITY_ROLES: QuestionDefinition = {
   optional: true,
   dependsOn: ['priorities'],
   relevance: (_ctx, answers) => (chosenInterests(answers).length > 0 ? 1 : 0),
-  read: (answers) => Object.fromEntries(chosenInterests(answers).map((interest) => [interest, LEVEL_ROLE[answers.interests[interest] ?? 'low'] ?? 'couple'])),
+  /*
+   * The recorded answer first: a traveller who chose "Build the trip around it"
+   * was shown "Most days" when they came back, because the level is all that
+   * survived and `core` reads back as the weaker of the two roles that produce it.
+   */
+  read: (answers) => Object.fromEntries(chosenInterests(answers).map((interest) => [interest, answers.interestRoles?.[interest] ?? LEVEL_ROLE[answers.interests[interest] ?? 'low'] ?? 'couple'])),
   apply: (value, answers) => {
     const record = (value && typeof value === 'object' ? (value as Record<string, unknown>) : {}) as Record<string, unknown>;
     const interests = { ...answers.interests };
+    /*
+     * V12 §2 — KEEP THE ANSWER, AND KEEP THE LEVEL IT IMPLIES.
+     *
+     * `ROLE_LEVEL` is lossy by construction: `most_days` and `build_around`
+     * both become `core`, so a trip built around a trek and a trip that walks
+     * most mornings arrive at the planner as the same fact. The level is still
+     * written, because everything downstream reads it and nothing about those
+     * readers changes here — and the role is written beside it, so the layers
+     * that need to know whether something is a rhythm or the reason for the
+     * journey can ask.
+     */
+    const roles: InterestRoles = { ...(answers.interestRoles ?? {}) };
     // Every row the traveller set; a role for an interest not yet chosen chooses it.
     for (const [key, raw] of Object.entries(record)) {
       if (!(INTERESTS as readonly string[]).includes(key)) continue;
       const role = String(raw ?? '');
       if (ROLE_LEVEL[role]) interests[key as Interest] = ROLE_LEVEL[role]!;
+      if ((PRIORITY_ROLE_ANSWERS as readonly string[]).includes(role)) roles[key as Interest] = role as PriorityRoleAnswer;
     }
-    return { interests };
+    return { interests, interestRoles: roles };
   },
   smartDefault: (ctx, answers) => {
     const role = ctx.destination.tripDays >= 5 ? 'couple' : 'once';
@@ -473,7 +492,18 @@ export function roleQuestionFor(interest: Interest, position: number): QuestionD
     // Hidden from the interview: the matrix question asks this for every chosen interest at once. Kept for the brief, analytics and by-id reads.
     relevance: () => 0,
     read: (answers) => LEVEL_ROLE[answers.interests[interest] ?? 'low'],
-    apply: (value, answers) => ({ interests: { ...answers.interests, [interest]: ROLE_LEVEL[String(value)] ?? 'frequent' } }),
+    /* The same answer, kept the same way as the matrix above keeps it. */
+    apply: (value, answers): Partial<QuestionnaireAnswers> => {
+      const patch: Partial<QuestionnaireAnswers> = {
+        interests: { ...answers.interests, [interest]: ROLE_LEVEL[String(value)] ?? 'frequent' },
+      };
+      if ((PRIORITY_ROLE_ANSWERS as readonly string[]).includes(String(value))) {
+        const roles: InterestRoles = { ...(answers.interestRoles ?? {}) };
+        roles[interest] = String(value) as PriorityRoleAnswer;
+        patch.interestRoles = roles;
+      }
+      return patch;
+    },
     smartDefault: (ctx) => ({
       value: ctx.destination.tripDays >= 5 ? 'couple' : 'once',
       reason: `${ctx.destination.tripDays >= 5 ? 'A couple of' : 'One'} ${label} ${ctx.destination.tripDays >= 5 ? 'stops fit' : 'stop fits'} ${ctx.destination.tripDays} days without crowding out everything else.`,

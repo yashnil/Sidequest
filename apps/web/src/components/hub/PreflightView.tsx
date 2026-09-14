@@ -151,8 +151,18 @@ function Bucket({ id, group, items, tripId, collapsible = false }: { id: string;
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <h3 className="type-section text-ink">{title}</h3>
         <span className="type-figure text-sm text-ink-faint">{items.length}</span>
+        {/*
+          V11 §N — ONE TESTID PER BUTTON, NOT PER KIND OF BUTTON.
+
+          Two buckets fold on a phone and both carried `preflight-later-toggle`,
+          so a spec asking whether that button is visible got a strict-mode
+          violation, swallowed it with the `.catch(() => false)` beside it, and
+          silently went on to assert against a list that was still folded. The
+          name is derived from the bucket, which keeps this one exactly as it was
+          and gives the other its own.
+        */}
         {collapsible && items.length > 0 ? (
-          <button type="button" className={cx(buttonClass('ghost', 'sm'), 'ml-auto lg:hidden')} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)} data-testid="preflight-later-toggle">
+          <button type="button" className={cx(buttonClass('ghost', 'sm'), 'ml-auto lg:hidden')} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)} data-testid={`${id}-toggle`}>
             {expanded ? 'Hide' : `Show ${items.length}`}
           </button>
         ) : null}

@@ -65,7 +65,18 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
 
   // Real scheduled content: a stop with a time, a meal, and travel between them.
   await expect(page.getByRole('heading', { name: /^Lunch/ }).first()).toBeVisible();
-  await expect(page.locator('#hub-view-days').getByRole('heading', { level: 3, name: /\d+ km|estimate|timing to confirm|timing not/ }).first()).toBeVisible();
+  /*
+   * V11 §D — a travel leg is a CONNECTOR, not a heading.
+   *
+   * It used to be an `<h3>` exactly like the stops around it, which put
+   * twenty-two extra headings into the document outline a screen-reader user
+   * navigates by. It is a span inside the row now, so the assertion is about the
+   * *row* carrying a real timing sentence rather than about its markup being a
+   * heading — which is what the test meant all along.
+   */
+  await expect(
+    page.locator('#hub-view-days [data-row-kind="travel"]').filter({ hasText: /\d+ km|estimate|timing to confirm|timing not/ }).first(),
+  ).toBeVisible();
   // The day says where its hours went, and free time is a deliberate block.
   await expect(page.getByText(/(\d+ min|\d+ hr( \d+ min)?) at stops/).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Free time' }).first()).toBeVisible();

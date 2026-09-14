@@ -150,7 +150,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       <EnvironmentPill />
       {fixtureMode ? (
         <p className="mx-auto max-w-4xl px-5 pt-4 sm:px-8">
-          <span className="inline-flex items-center gap-2 rounded-md border border-dashed border-amber bg-amber-soft px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
+          <span className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-dashed border-amber bg-amber-soft px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
             Fixture planning data — this plan was composed from a saved fixture, not the live model.
           </span>
         </p>

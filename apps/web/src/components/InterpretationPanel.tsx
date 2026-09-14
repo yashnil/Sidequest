@@ -157,7 +157,7 @@ export function InterpretationPanel({
                 <li
                   key={chip.id}
                   className={cx(
-                    'flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border p-3',
+                    'flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[var(--radius-card)] border p-3',
                     off ? 'border-dashed border-rule opacity-55' : 'border-rule bg-paper-sunk',
                   )}
                 >
@@ -228,7 +228,7 @@ export function InterpretationPanel({
         ) : null}
 
         {interpretation.unresolved.length > 0 ? (
-          <div className="mt-5 rounded-lg border border-dashed border-rule p-3.5">
+          <div className="mt-5 rounded-[var(--radius-card)] border border-dashed border-rule p-3.5">
             <p className="eyebrow">We could not make anything of</p>
             <ul className="mt-2 space-y-1.5 text-sm text-ink-muted">
               {interpretation.unresolved.map((entry) => (
@@ -268,7 +268,7 @@ export function InterpretationPanel({
               * claim we cannot support.
               */}
             {outsideLocale ? (
-              <p className="mt-2 rounded-md bg-amber-soft px-2.5 py-2 text-xs leading-relaxed text-ink">
+              <p className="mt-2 rounded-[var(--radius-control)] bg-amber-soft px-2.5 py-2 text-xs leading-relaxed text-ink">
                 Some of this is not in a language we read. Our reader works in{' '}
                 <span className="font-medium">{languageName(interpretation.lexiconLocale)}</span>{' '}
                 only, so anything written in another language stays exactly as you typed it and
@@ -323,7 +323,7 @@ export function InterpretationPanel({
         ) : null}
 
         {interpretation.suggestedQuestions.length > 0 ? (
-          <div className="mt-5 rounded-lg bg-amber-soft p-3.5">
+          <div className="mt-5 rounded-[var(--radius-card)] bg-amber-soft p-3.5">
             <p className="eyebrow">Worth telling us properly</p>
             <ul className="mt-2 space-y-2 text-sm leading-relaxed text-ink">
               {interpretation.suggestedQuestions.map((question) => (

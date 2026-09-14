@@ -6,6 +6,7 @@ import {
   EXPANSION_CEILING_MINUTES,
   isQuestionVisible,
   NO_CAR_DETOUR_MINUTES,
+  NO_CAR_TRANSPORT_MINUTES,
   type QuestionnaireContext,
 } from './definition';
 import { buildTravelerProfile, defaultAnswers, normalizeAnswers } from './transform';
@@ -413,5 +414,38 @@ describe('profile transformation', () => {
     const a = buildTravelerProfile(answers(MAMMOTH_HIKER_ANSWERS), ctx());
     const b = buildTravelerProfile(answers(MAMMOTH_HIKER_ANSWERS), ctx());
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+describe('being driven is not the same as having no car', () => {
+  /*
+   * The live Kyrgyzstan setup: "Guided, with transfers arranged" — somebody
+   * else drives, in a vehicle that goes where the trip goes — used to inherit
+   * the car-free ceiling written for shuttles, buses and walking, and the
+   * reconciler enforces that ceiling by taking anchors off the plan.
+   */
+  const drivenAnswers = (choice: 'guided' | 'rail_transfers' | 'boats_transfers' | 'taxis') =>
+    answers({ willDrive: false, transportChoice: choice, privateTransfers: 'fine', maxDailyTravelMinutes: 150 });
+
+  it('budgets a driven traveller the same day a driver gets from the same answer', () => {
+    const driver = buildTravelerProfile(answers({ willDrive: true, transportChoice: 'rent_car', maxDailyTravelMinutes: 150 }), ctx());
+    for (const choice of ['guided', 'rail_transfers', 'boats_transfers', 'taxis'] as const) {
+      const driven = buildTravelerProfile(drivenAnswers(choice), ctx());
+      expect(driven.transport.maxDailyTransportMinutes, choice).toBe(driver.transport.maxDailyTransportMinutes);
+      /* Still not driving: the wheel budget stays zero, which is what shapes the road legs. */
+      expect(driven.transport.maxDailyDriveMinutes, choice).toBe(0);
+    }
+  });
+
+  it('carries a raised answer through, rather than pinning a driven traveller to a constant', () => {
+    const far = buildTravelerProfile(answers({ willDrive: false, transportChoice: 'guided', privateTransfers: 'fine', maxDailyTravelMinutes: 360 }), ctx());
+    expect(far.transport.maxDailyTransportMinutes).toBeGreaterThan(360);
+  });
+
+  it('leaves the car-free ceiling to the traveller it was written for', () => {
+    for (const choice of ['transit_walk', 'no_car'] as const) {
+      const carFree = buildTravelerProfile(answers({ willDrive: false, transportChoice: choice, maxDailyTravelMinutes: 150 }), ctx());
+      expect(carFree.transport.maxDailyTransportMinutes, choice).toBe(NO_CAR_TRANSPORT_MINUTES);
+    }
   });
 });

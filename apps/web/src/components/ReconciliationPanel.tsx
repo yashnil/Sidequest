@@ -346,7 +346,7 @@ function PinnedLoss({
   const headingId = `reconciliation-${entry.placeId}`;
   return (
     <li
-      className="rounded-lg bg-clay-soft p-3.5"
+      className="rounded-[var(--radius-card)] bg-clay-soft p-3.5"
       data-testid="pinned-removal"
       data-acknowledged={waiting ? 'false' : 'true'}
       aria-labelledby={headingId}

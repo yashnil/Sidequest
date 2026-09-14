@@ -333,7 +333,7 @@ function PooledQuestion({
                   setValue(event.target.value);
                   setRefused(false);
                 }}
-                className="mt-1 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+                className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
               >
                 <option value="">{NEUTRAL_COPY.notStated}</option>
                 {question.options.map((option) => (
@@ -355,7 +355,7 @@ function PooledQuestion({
                   setValue(event.target.value);
                   setRefused(false);
                 }}
-                className="mt-1 min-h-11 w-full rounded-lg border border-rule bg-paper-raised px-3 text-sm text-ink"
+                className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3 text-sm text-ink"
               />
             )}
           </label>

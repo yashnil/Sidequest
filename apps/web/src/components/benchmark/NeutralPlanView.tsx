@@ -181,7 +181,7 @@ function PlanDayView({ day }: { day: BlindPlan['days'][number] }) {
           {day.blocks.map((block, index) => (
             <li
               key={`${day.dayNumber}-${index}`}
-              className="rounded-lg border border-rule bg-paper-raised p-2.5"
+              className="rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2.5"
             >
               <PlanBlockView block={block} />
             </li>

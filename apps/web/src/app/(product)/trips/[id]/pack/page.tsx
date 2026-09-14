@@ -91,7 +91,18 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
           ← Back to the trip
         </Link>
       </p>
-      <h1 className="display-lg mt-3 text-ink">Take it with you</h1>
+      {/*
+        V11 §I — ONE SURFACE, NOT SEVEN CARDS.
+
+        Seven bordered, rounded, shadowed boxes in a column, each holding a
+        heading, a sentence and two buttons. Every one of them is the same kind
+        of thing — a way to carry this trip somewhere Sidequest is not — so a
+        border around each says nothing except that they are separate, which
+        they are not. They are one surface, separated by a rule and by
+        whitespace, which is what the design lab's own guidance says a run of
+        peers should look like.
+      */}
+      <h1 className="display-lg mt-3 text-ink">Take Sidequest with you</h1>
       <p className="mt-2 type-body text-ink-muted">
         {trip.basics.destinationInput} · {dateLabel} · {plan.days.length} {plan.days.length === 1 ? 'day' : 'days'}
       </p>
@@ -99,8 +110,8 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
         <strong>{verdictLabel}.</strong> {model.preflight.headline}
       </p>
 
-      <section className="card mt-8 p-5" aria-labelledby="pack-paper">
-        <h2 id="pack-paper" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-paper">
+        <h2 id="pack-paper" className="type-title text-ink">
           On paper
         </h2>
         <p className="mt-1 type-small text-ink-muted">
@@ -116,8 +127,8 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
         </div>
       </section>
 
-      <section className="card mt-5 p-5" aria-labelledby="pack-calendar">
-        <h2 id="pack-calendar" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-calendar">
+        <h2 id="pack-calendar" className="type-title text-ink">
           In your calendar
         </h2>
         <p className="mt-1 type-small text-ink-muted">
@@ -128,12 +139,12 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
             Download the calendar file (.ics)
           </a>
         </div>
-        <h3 className="mt-5 type-title text-ink">Subscribe, so edits reach every device</h3>
+        <h3 className="mt-5 type-section text-ink">Subscribe, so edits reach every device</h3>
         <CalendarSubscription tripId={id} feed={feed} />
       </section>
 
-      <section className="card mt-5 p-5" aria-labelledby="pack-maps">
-        <h2 id="pack-maps" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-maps">
+        <h2 id="pack-maps" className="type-title text-ink">
           Maps, day by day
         </h2>
         <p className="mt-1 type-small text-ink-muted">
@@ -182,8 +193,8 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
         </ol>
       </section>
 
-      <section className="card mt-5 p-5" aria-labelledby="pack-offline-heading">
-        <h2 id="pack-offline-heading" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-offline-heading">
+        <h2 id="pack-offline-heading" className="type-title text-ink">
           Without signal
         </h2>
         <p className="mt-1 type-small text-ink-muted">
@@ -194,8 +205,8 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
         </p>
       </section>
 
-      <section className="card mt-5 p-5" aria-labelledby="pack-share">
-        <h2 id="pack-share" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-share">
+        <h2 id="pack-share" className="type-title text-ink">
           Share a read-only copy
         </h2>
         <p className="mt-1 type-small text-ink-muted">Companions see the plan and nothing private: no references, notes, costs or documents. Revoke the link and it opens nothing from that moment.</p>
@@ -205,8 +216,8 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
         {sharePath ? <p className="mt-1 hidden type-meta print:block">{sharePath}</p> : null}
       </section>
 
-      <section className="card mt-5 p-5" aria-labelledby="pack-pictures">
-        <h2 id="pack-pictures" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-pictures">
+        <h2 id="pack-pictures" className="type-title text-ink">
           Pictures to send
         </h2>
         <p className="mt-1 type-small text-ink-muted">An overview card for the group chat and one card per day. They carry the route and the days — never a booking, a price or a name.</p>
@@ -222,8 +233,8 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
         </div>
       </section>
 
-      <section className="card mt-5 p-5" aria-labelledby="pack-packing-heading">
-        <h2 id="pack-packing-heading" className="type-section text-ink">
+      <section className="mt-10 rule-top pt-6" aria-labelledby="pack-packing-heading">
+        <h2 id="pack-packing-heading" className="type-title text-ink">
           Packing
         </h2>
         <p className="mt-1 type-small text-ink-muted">{packing.basisNote}</p>

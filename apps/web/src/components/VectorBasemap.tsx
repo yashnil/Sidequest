@@ -58,7 +58,32 @@ interface MapLibreLike {
   remove: () => void;
   on: (event: string, handler: (payload?: unknown) => void) => void;
   loaded: () => boolean;
+  /** Used only to find the style's own label layers. See `SUPPRESSED_LABEL_LAYERS`. */
+  getStyle: () => { layers?: { id: string; type: string }[] } | undefined;
+  setLayoutProperty: (layer: string, property: string, value: unknown) => void;
 }
+
+/**
+ * V11 §F6 — WHICH OF THE BASEMAP'S OWN LABELS STEP ASIDE.
+ *
+ * The overlay draws its own names for the places the *trip* is about, with
+ * collision handling (`selectLabels`). The basemap underneath draws names for
+ * everything else, in its own typography, with no knowledge of what is above it
+ * — so a stop's label and a point-of-interest label land on each other and both
+ * become unreadable. Measuring that collision from outside the canvas is not
+ * possible; the honest fix is to decide which layer owns which kind of name.
+ *
+ * Point-of-interest and transit-stop labels are ours to draw where they matter
+ * and noise where they do not, so they are hidden while the overlay is
+ * labelling. **Settlement, country, water and road-shield labels stay**: they are
+ * the context a traveller reads the frame with, the overlay never draws them,
+ * and hiding them would leave a map of anonymous coastline.
+ *
+ * Matched on the layer id prefix, which is the convention every OpenMapTiles
+ * -derived style follows. A style that names its layers differently keeps all
+ * its labels — degraded, never broken.
+ */
+const SUPPRESSED_LABEL_LAYERS = /^(poi|place_label_other|transit|aerodrome[-_]label|mountain_peak)/i;
 
 /** How long a basemap may take to draw before the figure stops waiting on it. */
 const READY_TIMEOUT_MS = 20_000;
@@ -68,6 +93,24 @@ function zoomFor(scale: number, maxZoom: number): number {
   return Math.max(0, Math.min(maxZoom, Math.log2(scale / 512)));
 }
 
+/**
+ * Hide the basemap's own point-of-interest labels.
+ *
+ * Wrapped whole in a `try` because this reaches into a third-party style: a
+ * style without the layers, or a library version that renames the method, must
+ * leave a working map with a slightly busier caption — never a blank frame.
+ */
+function hideConflictingLabels(instance: MapLibreLike): void {
+  try {
+    for (const layer of instance.getStyle()?.layers ?? []) {
+      if (layer.type !== 'symbol' || !SUPPRESSED_LABEL_LAYERS.test(layer.id)) continue;
+      instance.setLayoutProperty(layer.id, 'visibility', 'none');
+    }
+  } catch {
+    /* A busier map is not a broken one. */
+  }
+}
+
 export function VectorBasemapLayer({
   source,
   centre,
@@ -75,6 +118,7 @@ export function VectorBasemapLayer({
   width,
   height,
   onHealth,
+  quietLabels = false,
 }: {
   source: VectorBasemapSource;
   centre: GeoPoint;
@@ -83,6 +127,13 @@ export function VectorBasemapLayer({
   height: number;
   /** Called as the basemap moves through its states, so the figure can decide what to draw. */
   onHealth?: (health: MapHealth) => void;
+  /**
+   * V11 §F6 — true while the overlay is drawing its own place names.
+   *
+   * Hides the basemap's point-of-interest labels so two layers do not write over
+   * each other. Settlement and geography labels are never touched.
+   */
+  quietLabels?: boolean;
 }) {
   /** The element MapLibre owns. It writes its own class and position onto this one. */
   const container = useRef<HTMLDivElement | null>(null);
@@ -102,11 +153,13 @@ export function VectorBasemapLayer({
   /* The wrapper's own box, watched, so the camera tracks a responsive figure. */
   const wrapper = useRef<HTMLDivElement | null>(null);
   const displayScaleRef = useRef(1);
+  const quietLabelsRef = useRef(quietLabels);
   /* Latest values for the long-lived map effect, written after commit rather than during render. */
   useEffect(() => {
     report.current = onHealth;
     displayScaleRef.current = displayScale;
-  }, [onHealth, displayScale]);
+    quietLabelsRef.current = quietLabels;
+  }, [onHealth, displayScale, quietLabels]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +211,15 @@ export function VectorBasemapLayer({
         settled = true;
         settle(next, reason);
       };
-      instance.on('load', () => become('ready'));
+      instance.on('load', () => {
+        become('ready');
+        /*
+         * Once, on load, and never in the camera effect: a style's layer list is
+         * fixed for the life of the style, and setting a layout property on
+         * every pan is a repaint the frame does not need.
+         */
+        if (quietLabelsRef.current) hideConflictingLabels(instance);
+      });
       const startedAt = Date.now();
       const poll = () => {
         if (cancelled || settled) return;

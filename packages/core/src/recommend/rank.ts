@@ -616,6 +616,18 @@ export function rankDestination(input: RankInput): RankedDestination {
 
   const { reasons, tradeoffs, conflicts } = narrate(input, factors);
 
+  /*
+   * V11 §A2 — which of the candidate months this place is best in.
+   *
+   * The same `scoreWindow(windowFeatures(...))` the climate dimension scores
+   * with, so the sub-window the results screen recommends and the score that put
+   * the destination on the list cannot disagree. Absent when there is no climate
+   * record, which the screen reads as "we have no reason to prefer one week of
+   * your window over another" — the honest answer, and not the same as "any
+   * week is as good".
+   */
+  const bestMonths = bestMonthsFor(input);
+
   const best = candidate.duration?.kind === 'recommended'
     ? candidate.duration.options.find((option) => option.recommended) ?? candidate.duration.options[0]
     : undefined;
@@ -638,7 +650,36 @@ export function rankDestination(input: RankInput): RankedDestination {
     reasons,
     tradeoffs,
     ...(best ? { suggestedNights: best.maxNights, suggestedBases: best.bases } : {}),
+    ...(bestMonths.length > 0 ? { bestMonths } : {}),
   };
+}
+
+/**
+ * The candidate months this place scores highest in, best first.
+ *
+ * Everything within `TIE` of the leader, because a tenth of a point between two
+ * months is not a reason to move somebody's holiday. Returns an empty list when
+ * there is no climate record — never all twelve, which would read as a positive
+ * claim that every month is equally good.
+ */
+const MONTH_TIE = 0.05;
+
+function bestMonthsFor(input: RankInput): number[] {
+  const { candidate, answers, candidateMonths } = input;
+  if (!candidate.climate) return [];
+  const months = candidateMonths.length > 0 ? candidateMonths : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const scored: { month: number; score: number }[] = [];
+  for (const month of months) {
+    const normal = monthNormal(candidate.climate, month);
+    if (!normal) continue;
+    scored.push({ month, score: scoreWindow(windowFeatures(normal, answers)) });
+  }
+  if (scored.length === 0) return [];
+  const leader = Math.max(...scored.map((entry) => entry.score));
+  return scored
+    .filter((entry) => entry.score >= leader - MONTH_TIE)
+    .sort((a, b) => b.score - a.score || a.month - b.month)
+    .map((entry) => entry.month);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { transportPrioritySchema } from './access';
 import { preferenceSignalSchema } from './interpretation';
+import { interestRolesSchema } from '../intent/roles';
 import {
   altitudeComfortSchema,
   baseMoveToleranceSchema,
@@ -79,6 +80,23 @@ export const questionnaireAnswersSchema = z.object({
    * vocabulary growing, and why an absent grading reads as `low` everywhere.
    */
   interests: interestLevelsSchema,
+  /**
+   * V12 §2 — THE ROLE ANSWER, KEPT RATHER THAN FOLDED AWAY.
+   *
+   * `priority_roles` offers four roles and the catalog folds the answer into
+   * `interests` above, where **`most_days` and `build_around` both land on
+   * `core`**. The difference between "I want to walk most days" and "this trip
+   * exists because of the trek" is asked, answered, and lost one function later
+   * — the read-back even shows a traveller who chose "Build the trip around it"
+   * the words "Most days" when they return to the screen.
+   *
+   * This keeps the answer as given. `interests` is unchanged and every existing
+   * reader — scoring, frequency caps, the brief — behaves exactly as before;
+   * `intent/roles.ts` reads this where it exists and falls back to the level
+   * where it does not, so a trip saved before this field existed still resolves
+   * a role for every interest.
+   */
+  interestRoles: interestRolesSchema.optional(),
   pace: paceSchema,
   dayStart: dayStartSchema,
   dailyIntensity: dailyIntensitySchema,

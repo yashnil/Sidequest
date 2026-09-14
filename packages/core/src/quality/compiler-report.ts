@@ -48,6 +48,14 @@ export const QUALITY_COMPILER_CHECKS = [
   'route_critical_placed',
   /** §2 §22 — a destination region has not become its containing country. */
   'destination_not_country',
+  /**
+   * V12 §24 §26 — a stop is planned on a day its own calendar supports.
+   *
+   * A weekly market, a seasonal ferry, a permit window. The V11 live Kyrgyzstan
+   * build put a Sunday market on a Sunday and nothing checked it — the model
+   * happened to be right, which is not the same as the plan being verified.
+   */
+  'date_specific_calendar',
 ] as const;
 export const qualityCompilerCheckSchema = z.enum(QUALITY_COMPILER_CHECKS);
 export type QualityCompilerCheck = z.infer<typeof qualityCompilerCheckSchema>;

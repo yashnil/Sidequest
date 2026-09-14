@@ -676,13 +676,13 @@ function Counter({ label, min, value, onChange }: { label: string; min: number; 
     <div>
       <p className="label">{label}</p>
       <div className="mt-1.5 flex items-center gap-1">
-        <button type="button" aria-label={`One fewer ${label.toLowerCase().replace(/s$/, '')}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={cx('flex h-11 w-11 items-center justify-center rounded-lg border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40', FOCUS_RING)}>
+        <button type="button" aria-label={`One fewer ${label.toLowerCase().replace(/s$/, '')}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={cx('flex h-11 w-11 items-center justify-center rounded-[var(--radius-card)] border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40', FOCUS_RING)}>
           −
         </button>
         <span className="type-figure w-10 text-center text-xl text-ink" aria-live="polite" data-testid={`count-${label.toLowerCase()}`}>
           {value}
         </span>
-        <button type="button" aria-label={`One more ${label.toLowerCase().replace(/s$/, '')}`} disabled={value >= 12} onClick={() => onChange(clamp(value + 1))} className={cx('flex h-11 w-11 items-center justify-center rounded-lg border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40', FOCUS_RING)}>
+        <button type="button" aria-label={`One more ${label.toLowerCase().replace(/s$/, '')}`} disabled={value >= 12} onClick={() => onChange(clamp(value + 1))} className={cx('flex h-11 w-11 items-center justify-center rounded-[var(--radius-card)] border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40', FOCUS_RING)}>
           +
         </button>
       </div>

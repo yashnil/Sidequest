@@ -1,4 +1,4 @@
-import { contractBands, renderTravelerBriefXml, MODE_CONCEPT_LABELS, MODE_STATUS_LABELS, type TravelerBrief, type TravelReality, type TripContract } from '@sidequest/core';
+import { contractBands, renderTravelerBriefXml, MODE_CONCEPT_LABELS, MODE_STATUS_LABELS, type TravelerBrief, type TravelReality, type TripContract, type TripOperatingModel } from '@sidequest/core';
 import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import type { CompositionTimingBrief } from './canonical-input';
 import { createHash } from 'node:crypto';
@@ -171,6 +171,21 @@ export interface CompositionContext {
    * and never something it may restate as a verified fact.
    */
   reality?: TravelReality | null;
+  /**
+   * V12 §12 — HOW THIS TRIP SHOULD WORK, DECIDED BEFORE THE CALL.
+   *
+   * The operating model is derived from the traveller's intent and what the
+   * ground affords (`deriveOperatingModel`), so the model is told what kind of
+   * planning problem this is rather than left to infer it from a destination
+   * name and a list of interests.
+   *
+   * **It is a policy, never a template (§13).** It says what matters, what a
+   * good day looks like here and what the trip will be judged on; it does not
+   * say which places to choose or in what order. The model still authors the
+   * trip, and a draft that ignores the policy for a better trip is allowed —
+   * the verification layers read the same policy afterwards and will say so.
+   */
+  operating?: TripOperatingModel | null;
 }
 
 export interface CompositionPlanningFacts {
@@ -508,6 +523,7 @@ export function buildCompositionTask(context: CompositionContext): string {
     '',
     ...(context.contract ? [renderContractBands(context.contract), ''] : []),
     ...(context.reality ? [renderTravelReality(context.reality), ''] : []),
+    ...(context.operating ? [renderOperatingModel(context.operating), ''] : []),
     ...(context.mode === 'quick' ? ['The traveller gave only the essentials and asked Sidequest to plan what it thinks is right. Choose sensible defaults confidently.', ''] : []),
     'DAY WINDOWS (hard). Nothing may be scheduled before the arrival on day 1 or after the departure on the last day: a morning departure means the last day holds at most a short walk or nothing. Keep every day inside a normal waking window and never assume a late night the traveller did not ask for.',
     ...(context.bookedFacts && context.bookedFacts.length > 0
@@ -520,6 +536,48 @@ export function buildCompositionTask(context: CompositionContext): string {
     `Archetypes: ${CURRENT_TRIP_ARCHETYPES.join(', ')}. Activity categories: ${ANCHOR_CATEGORIES.join(', ')}. Transport values: ${DRAFT_TRANSPORTS.join(', ')}. Driving arrangements: ${DRAFT_DRIVING_ARRANGEMENTS.join(', ')}. Time-of-day values: ${WIRE_TIME_OF_DAY.join(', ')}.`,
     'An activity is a place or an experience with a name. Movement between places ("Drive X to Y", "Transfer to Z", "Flight to W") and arrival or departure points (an airport, a station) are never activities: Sidequest builds the legs and the terminal plan from the stays and the transport values. Name a gateway only in transport notes, and only one — if the traveller has not chosen between two airports, say so in unresolved.',
     'Every activity carries its real name and, where the name could mean more than one place, a locality. Keep each prose field to a sentence or two; no web addresses, no markup.',
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * V12 §12 §13 — the operating model, as a short policy the model plans against.
+ *
+ * Deliberately compact: §12 warns against exploding the prompt, and everything
+ * here is a consequence rather than a setting. Each line answers "what does this
+ * change about a good day?", which is the only reason a planner needs to know
+ * any of it. The closing sentence is the §13 guarantee, stated to the model in
+ * as many words so that a policy is never read as an itinerary.
+ */
+export function renderOperatingModel(operating: TripOperatingModel): string {
+  const policy = operating.policy;
+  const density =
+    policy.activityDensity === 'sparse'
+      ? 'Most days should hold one thing, or nothing. Empty time is the point of this trip, not a gap in it.'
+      : policy.activityDensity === 'light'
+        ? 'One or two real things a day, with room around them.'
+        : policy.activityDensity === 'full'
+          ? 'Full days: this trip is what happens in them.'
+          : 'Two or three real things a day.';
+  const moves =
+    policy.hotelChangeCost >= 0.8
+      ? 'Changing where they sleep is expensive here — do it only for a reason you can state.'
+      : policy.hotelChangeCost <= 0.2
+        ? 'Moving on is normal here; do not contort the route to avoid a change of bed.'
+        : 'Move bases where the route earns it.';
+  const lines = [
+    '<how_this_trip_should_work>',
+    `This reads as ${operating.type.replace(/_/g, ' ')}${operating.confidence < 0.5 ? ' (weakly — treat it as a hint, not a frame)' : ''}.`,
+    ...operating.rationale.map((line) => `- ${line}`),
+    `- Shape: ${policy.basePattern.replace(/_/g, ' ')}, moving ${policy.mobilityPattern.replace(/_/g, ' ')}. ${moves}`,
+    `- Density: ${density}`,
+    `- Timing: plan ${policy.scheduleGranularity === 'to_the_hour' ? 'to the hour where opening times demand it' : policy.scheduleGranularity === 'loose' ? 'loosely — times here are an imposition' : 'to parts of the day rather than to the clock'}.`,
+    `- Food: ${policy.foodPattern === 'named_meals_matter' ? 'named meals are part of why they came; treat them as anchors.' : policy.foodPattern === 'operator_provided' ? 'meals come with the experience; do not invent restaurants.' : policy.foodPattern === 'meal_plan' ? 'the property feeds them; food is not a planning problem.' : policy.foodPattern === 'self_supplied' ? 'supply matters more than restaurants; say where to stock up.' : 'food is fuel near what they are already doing.'}`,
+    `- Lodging: ${policy.lodgingPattern === 'neighbourhood_matters' ? 'which neighbourhood decides the days.' : policy.lodgingPattern === 'property_is_the_trip' ? 'the property is most of the trip.' : policy.lodgingPattern === 'access_defines_it' ? 'where they sleep decides what they can reach.' : policy.lodgingPattern === 'experience_owned' ? 'the experience decides where they sleep.' : policy.lodgingPattern === 'social_lodging' ? 'meeting people where they sleep is part of it.' : 'practical: position and access over luxury.'}`,
+    ...(policy.recoveryImportance >= 0.6 ? ['- A hard day needs an easier one after it. Build that in rather than leaving it to chance.'] : []),
+    ...(policy.operatorDependence >= 0.7 ? ['- Much of this depends on an operator doing their part. Say what has to be arranged, and when.'] : []),
+    'This is a policy, not a template. It says what matters and how the trip will be judged — never which places to choose or in what order. If a better trip breaks one of these, build the better trip and say why in the tradeoffs.',
+    '</how_this_trip_should_work>',
   ];
   return lines.join('\n');
 }

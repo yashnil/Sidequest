@@ -51,6 +51,21 @@ export interface StayInput {
   baseKind?: BaseKind | undefined;
   coordinates?: { lat: number; lng: number } | undefined;
   episode?: string | undefined;
+  /**
+   * V11 §N — THE ID A *DAY* USES FOR ITS BASE, WHICH IS NOT THIS ONE.
+   *
+   * A package base is keyed by a slug the draft chose (`karakol`); a day is
+   * keyed by whatever the place resolved to (`relation/15585749`). On the live
+   * Kyrgyzstan build not one of eleven days matched a single base, so every
+   * chapter resolved to zero stays: the titles fell back to "This part of the
+   * trip" and the geographic cut — the rule that decides where a chapter
+   * begins — compared `null` to `null` and never fired. Every chapter boundary
+   * in that trip came from the trek episode alone, which is why a four-base
+   * Rockies road trip also came out as three chapters.
+   *
+   * The join therefore needs every identity a base answers to, not one of them.
+   */
+  placeId?: string | undefined;
 }
 
 export interface EpisodeInput {
@@ -67,6 +82,17 @@ export interface Stay {
   id: string;
   /** Every base folded into this stay, in order. More than one means a collapse happened. */
   baseIds: string[];
+  /**
+   * Every identity a day might name this stay by: the base ids above, the
+   * provider refs those bases resolved to, and the names they were given.
+   * A day is joined to a stay through this rather than through `id`, because
+   * the two layers key a base differently (see `StayInput.placeId`).
+   *
+   * Optional so that a `Stay` built by hand — or read back from a package
+   * written before this field existed — still resolves, through the ids and the
+   * name it has always carried.
+   */
+  identifiers?: string[];
   name: string;
   nights: number;
   baseKind?: BaseKind | undefined;
@@ -111,13 +137,31 @@ function normalizeLabel(value: string | undefined): string {
  * fold two genuinely different villages together.
  */
 function sameStay(a: StayInput, b: StayInput): 'same_name' | 'same_point' | null {
-  /* Nights inside two *different* experiences are never one stay, whatever they are called. */
-  if ((a.episode ?? null) !== (b.episode ?? null)) return null;
+  /*
+   * Nights inside two *different* experiences are never one stay, whatever they
+   * are called.
+   *
+   * V11 §N — but one of them having an experience and the other not is a
+   * different case, and it used to be refused by the same line. The live
+   * Kyrgyzstan build ended its trek with a night in Karakol the operator owns
+   * and followed it with a recovery night in Karakol the traveller books: two
+   * consecutive nights, one town, one bed — shown as two bases both called
+   * "Karakol", which is the founder defect §5 exists to prevent, arriving
+   * through a door §5 did not close. Who paid for the night is not where the
+   * traveller sleeps. Two *stated* experiences that differ still never merge.
+   */
+  if (a.episode !== undefined && b.episode !== undefined && a.episode !== b.episode) return null;
   const labelsA = [a.name, a.displayName, a.canonicalName, a.locality].map(normalizeLabel).filter(Boolean);
   const labelsB = [b.name, b.displayName, b.canonicalName, b.locality].map(normalizeLabel).filter(Boolean);
   if (labelsA.some((label) => labelsB.includes(label))) return 'same_name';
   if (a.coordinates && b.coordinates && haversineKm(a.coordinates, b.coordinates) <= SAME_PLACE_KM) return 'same_point';
   return null;
+}
+
+/** Every string a day could plausibly name this base by, normalised where it is a name. */
+function identifiersOf(base: StayInput): string[] {
+  const out = [base.id, base.placeId, base.name, base.displayName, base.canonicalName, base.locality];
+  return [...new Set(out.filter((value): value is string => typeof value === 'string' && value.length > 0))];
 }
 
 /**
@@ -148,6 +192,8 @@ export function normalizeStays(input: { bases: readonly StayInput[]; episodes?: 
     if (previous && same) {
       previous.nights += base.nights;
       previous.baseIds.push(base.id);
+      previous.identifiers ??= [];
+      for (const identifier of identifiersOf(base)) if (!previous.identifiers.includes(identifier)) previous.identifiers.push(identifier);
       /* A coordinate the earlier row lacked is still a coordinate for the stay. */
       if (!previous.coordinates && base.coordinates) previous.coordinates = base.coordinates;
       const record = collapsed.find((entry) => entry.name === previous.name);
@@ -158,6 +204,7 @@ export function normalizeStays(input: { bases: readonly StayInput[]; episodes?: 
     stays.push({
       id: base.id,
       baseIds: [base.id],
+      identifiers: identifiersOf(base),
       name: base.displayName ?? base.name,
       nights: base.nights,
       ...(base.baseKind ? { baseKind: base.baseKind } : {}),
@@ -235,17 +282,40 @@ interface ChapterDay {
  * ordinary chapter that follows an expedition and contains no strenuous day.
  */
 export function deriveChapters(input: {
-  days: readonly Pick<ItineraryDay, 'dayNumber' | 'baseId' | 'items' | 'intensity' | 'totals'>[];
+  days: readonly Pick<ItineraryDay, 'dayNumber' | 'baseId' | 'baseName' | 'items' | 'intensity' | 'totals'>[];
   stays: readonly Stay[];
   episodes?: readonly EpisodeInput[];
 }): Chapter[] {
   const episodes = input.episodes ?? [];
-  const stayById = new Map(input.stays.flatMap((stay) => stay.baseIds.map((id) => [id, stay] as const)));
+  /*
+   * One index, every identity. A day names its base by whichever id the place
+   * resolved to and carries the display name beside it; the stay knows both.
+   * The first stay to claim an identity keeps it, so a name shared by two
+   * stays (two visits to one town) resolves to the earlier — and the two are
+   * still distinguished by the ids, which are unique.
+   */
+  const stayByIdentity = new Map<string, Stay>();
+  for (const stay of input.stays) {
+    const identifiers = stay.identifiers ?? [stay.id, ...stay.baseIds, stay.name];
+    for (const identifier of identifiers) if (identifier && !stayByIdentity.has(identifier)) stayByIdentity.set(identifier, stay);
+  }
+  const stayFor = (day: { baseId?: string | undefined; baseName?: string | undefined }): string | null => {
+    /* By id first: a name is ambiguous where a trip visits one town twice, an id never is. */
+    if (day.baseId) {
+      const byId = stayByIdentity.get(day.baseId);
+      if (byId) return byId.id;
+    }
+    if (day.baseName) {
+      const byName = stayByIdentity.get(day.baseName);
+      if (byName) return byName.id;
+    }
+    return null;
+  };
   const lastDayNumber = input.days[input.days.length - 1]?.dayNumber ?? 0;
 
   const chapterDays: ChapterDay[] = input.days.map((day) => ({
     dayNumber: day.dayNumber,
-    stayId: day.baseId ? (stayById.get(day.baseId)?.id ?? null) : null,
+    stayId: stayFor(day),
     episode: episodes.find((episode) => episode.dayNumbers.includes(day.dayNumber))?.name ?? null,
     strenuous: day.intensity === 'intense' || day.totals.strenuousCount > 0,
     /*

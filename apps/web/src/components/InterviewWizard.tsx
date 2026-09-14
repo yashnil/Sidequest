@@ -22,7 +22,8 @@ import {
   planInterview,
   questionElaborates,
   questionnaireContextOf,
-  reviewGlance,
+  reviewShapers,
+  type ReviewLedger,
   reviewLedger,
   skipQuestion,
   withMode,
@@ -378,7 +379,7 @@ export function InterviewWizard({
       <div className="flex flex-wrap items-center justify-between gap-3 pt-6">
         <p className="label">Your trip preferences</p>
         {fixtureMode ? (
-          <span className="inline-flex items-center gap-2 rounded-md border border-dashed border-amber/60 px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
+          <span className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-dashed border-amber/60 px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
             Fixture planning data — not the live model
           </span>
         ) : null}
@@ -1072,7 +1073,12 @@ function ReviewScreen({
     [answers, context],
   );
   const ledger = useMemo(() => reviewLedger(context, answers, plan), [context, answers, plan]);
-  const glance: ReviewGlanceGroup[] = useMemo(() => reviewGlance(ledger), [ledger]);
+  /*
+   * V11 §H — the groups the traveller actually answered, and a count of the ones
+   * Sidequest decided for them. See `reviewShapers`.
+   */
+  const shapers = useMemo(() => reviewShapers(ledger), [ledger]);
+  const glance: ReviewGlanceGroup[] = shapers.groups;
   const sketch = useMemo(() => sketchFor(context, answers), [context, answers]);
   const profile = useMemo(() => {
     try {
@@ -1099,8 +1105,10 @@ function ReviewScreen({
         shapeLabel: sketch.shapeLabel,
         shapeOpen: sketch.shapeOpen,
         shapeAssumed: sketch.shapeAssumed,
+        pace: ledgerValue(ledger, 'day_shape'),
+        priorities: ledgerValue(ledger, 'priorities'),
       }),
-    [context, acceptedWindow, timingOpen, timingAccepted, sketch],
+    [context, acceptedWindow, timingOpen, timingAccepted, sketch, ledger],
   );
   const party = context.traveller.party;
   const showTiming = timingOpen || timingAccepted || Boolean(acceptedWindow);
@@ -1163,8 +1171,12 @@ function ReviewScreen({
       */}
       <section className="mt-10" data-testid="review-glance" aria-labelledby="review-glance-heading">
         <h2 id="review-glance-heading" className="eyebrow">
-          Your trip, in one glance
+          What will shape the route
         </h2>
+        <p className="measure mt-2 type-small text-ink-muted">
+          The answers that change where you go and what the days hold. Everything else you told us is in the full list
+          below.
+        </p>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {glance.map((group) => (
             <article key={group.id} className="card min-w-0 p-5" data-testid={`glance-${group.id}`}>
@@ -1244,6 +1256,32 @@ function ReviewScreen({
 
           {showTiming ? <ReviewTimingCard tripId={tripId} initialAccepted={acceptedWindow} onAccepted={() => setTimingAccepted(true)} className="sm:col-span-2 xl:col-span-3" /> : null}
         </div>
+
+        {/*
+          V11 §H — what Sidequest decided, as one line rather than as cards.
+
+          These were three or four equal cards of defaults for questions the
+          traveller never saw, on the screen where they check what they said.
+          They are not deleted and not hidden behind anything new: the ledger
+          below is one press away and already carries every one of them with its
+          reason.
+        */}
+        {shapers.decidedForYou.length > 0 ? (
+          <p className="mt-4 type-small text-ink-muted" data-testid="review-decided-for-you">
+            {/*
+              V11 §N — TOPICS, BECAUSE THAT IS WHAT IS BEING COUNTED.
+
+              `decidedForYou` holds group titles, not answers, so "6 things you
+              did not answer" sat two lines under "16 decided by Sidequest" and
+              invited the obvious question about which of the two numbers was
+              real. Both are: six topics, sixteen answers inside them.
+            */}
+            Sidequest also decided {shapers.decidedForYou.length}{' '}
+            {shapers.decidedForYou.length === 1 ? 'topic' : 'topics'} you did not answer at all —{' '}
+            {shapers.decidedForYou.map((title) => title.toLowerCase()).join(', ')}. Every one is in the list below, with
+            the reason.
+          </p>
+        ) : null}
       </section>
 
       {durationAdvice ? (
@@ -1379,6 +1417,17 @@ function ReviewScreen({
       </div>
     </div>
   );
+}
+
+/**
+ * One ledger entry as the band wants it: its rendered value and who decided it.
+ *
+ * Null when the interview never asked, which the band reads as "do not state a
+ * fact nobody has".
+ */
+function ledgerValue(ledger: ReviewLedger, questionId: string): { value: string; assumed: boolean } | null {
+  const entry = [...ledger.told, ...ledger.assumed].find((candidate) => candidate.questionId === questionId);
+  return entry ? { value: entry.value, assumed: entry.source !== 'explicit' } : null;
 }
 
 function LedgerColumn({ title, blurb, entries, testId, onJump, empty, assumed = false }: { title: string; blurb: string; entries: ReviewEntry[]; testId: string; onJump: (id: string) => void; empty: string; assumed?: boolean }) {

@@ -397,7 +397,7 @@ export const EASTERN_SIERRA_HOURS: OperatingHoursDataset = operatingHoursDataset
         'https://www.fs.usda.gov/r05/inyo/recreation/mammoth-lakes-basin',
         { confidence: 0.85 },
       ),
-      'Signed for day use from sunrise to sunset, with no gate and no staff. The constraints that actually bind here are the winter closure of Lake Mary Road and the trolley timetable.',
+      'Signed for day use from sunrise to sunset, with no gate and no staff. What actually limits you here is the winter closure of Lake Mary Road and the trolley timetable.',
       true,
     ),
     alwaysOpen(

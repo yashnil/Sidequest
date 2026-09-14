@@ -46,38 +46,51 @@ export const metadata: Metadata = {
  * three screens later.
  */
 
-const INTENTS = [
+/**
+ * V11 §B1 — TWO JOBS, NOT THREE DOORS.
+ *
+ * There were three, weighted equally, below the fold and below a hero whose own
+ * call to action was a fourth thing ("New trip") that did not correspond to any
+ * of them. A first-time visitor's question is one of exactly two, and the page
+ * has about five seconds to show that it answers both.
+ *
+ * The third door — "I already have a plan" — is not a third job. It is the first
+ * job with a list already in hand, and it goes to the same screen. It stays
+ * reachable as a line under the two, which is the correct weight for something
+ * a minority of visitors want and none of them scan for.
+ */
+const JOBS = [
   {
     href: '/trips/new',
-    title: 'I know where I am going',
+    title: 'I know where I want to go',
     body: 'Name a town, a region, a park or a country. We work out how much of it your dates can hold.',
     glyph: 'pin',
   },
   {
     href: '/decide',
-    title: 'Help me decide where to go',
+    title: 'Help me choose',
     body: 'Tell us when you are free and what you are after. We rank real places against your dates.',
     glyph: 'compass',
-  },
-  {
-    href: '/trips/new?have=plan',
-    title: 'I already have a plan',
-    body: 'List the places you have lined up. We build the region around them and say which do not fit.',
-    glyph: 'list',
   },
 ] as const;
 
 /** Example prompts. Places, not itineraries: nothing here claims a route exists for them. */
-const PROMPTS = ['Kenya and Tanzania', 'Ten days in Japan', 'Iceland ring road', 'Chongqing and the Yangtze'];
+const PROMPTS = ['Kenya and Tanzania', 'Ten days in Japan', 'Iceland ring road'];
 
-/** Six short items, not six sections: what the trip already accounts for when it arrives. */
+/**
+ * V11 §B1 — FOUR SENTENCES, IN ORDER, ABOUT WHAT HAPPENS.
+ *
+ * Six unrelated nouns is a feature list, and a feature list is what a visitor
+ * skips. These four are the product's actual sequence — it learns, it designs,
+ * it checks, it holds the trip together — so reading them in order is reading
+ * what Sidequest does. No word here names a model, a provider or a technology,
+ * because none of that is what the traveller is buying.
+ */
 const PROOF: [string, string][] = [
-  ['Route', 'Bases, and the order you sleep in them.'],
-  ['Logistics', 'Travel timed where it can be, and said where it cannot.'],
-  ['Timing', 'What your dates open, close and crowd.'],
-  ['Reality', 'Every named place checked against the map.'],
-  ['Travelling as a group', 'One person’s hard rule is the group’s.'],
-  ['Preparation', 'What to book, pack and keep a fallback for.'],
+  ['It learns how you travel', 'One adaptive interview, not a form. A hard rule for one person is a hard rule for the group.'],
+  ['It designs the route', 'Where you sleep, in what order, and which days are worth the detour.'],
+  ['It checks whether it works', 'Every place found on the map, every journey timed where it can be — and said plainly where it cannot.'],
+  ['It keeps the trip together', 'What to book, what to pack, what is shut on your dates, and a fallback for the day it rains.'],
 ];
 
 export default async function HomePage() {
@@ -130,13 +143,38 @@ export default async function HomePage() {
               shut on your dates, and what to skip.
             </p>
 
-            <div className="mt-7 flex flex-wrap items-center gap-2" aria-label="Try a destination">
-              <span className="type-small text-ink-faint">Try</span>
+            {/*
+              THE TWO JOBS, IN THE HERO, WHERE THE QUESTION IS ASKED.
+
+              They used to be three cards a scroll below a button called "New
+              trip" — which is a fourth thing, in our words, corresponding to
+              neither question a visitor arrives with.
+            */}
+            <ul className="mt-8 grid gap-3 sm:grid-cols-2" aria-label="Two ways to start">
+              {JOBS.map((job, index) => (
+                <li key={job.href} className="min-w-0">
+                  <Link
+                    href={job.href}
+                    className="card lift pressable group flex h-full min-w-0 flex-col gap-2.5 rounded-[var(--radius-panel)] p-5 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                    data-testid={index === 0 ? 'home-new-trip' : 'home-decide'}
+                  >
+                    <span aria-hidden="true" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-paper-sunk text-ink">
+                      <DoorGlyph kind={job.glyph} />
+                    </span>
+                    <span className="block font-display text-[1.375rem] leading-tight text-ink group-hover:text-pine">{job.title}</span>
+                    <span className="block type-small text-ink-muted">{job.body}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2" aria-label="Try a destination">
+              <span className="type-small text-ink-faint">Or start from</span>
               {PROMPTS.map((prompt) => (
                 <Link
                   key={prompt}
                   href={`/trips/new?destination=${encodeURIComponent(prompt)}`}
-                  className="pressable lift inline-flex min-h-11 items-center rounded-full border border-rule bg-paper-raised px-4 text-sm font-medium text-ink shadow-[var(--shadow-card)] hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+                  className="inline-flex min-h-11 items-center text-sm text-ink underline decoration-rule underline-offset-4 hover:text-pine focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
                   data-testid="home-prompt"
                 >
                   {prompt}
@@ -144,12 +182,12 @@ export default async function HomePage() {
               ))}
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-              <Link href="/trips/new" className={buttonClass('accent', 'lg')} data-testid="home-new-trip">
-                New trip
+            <p className="mt-5 type-small text-ink-muted">
+              No account needed. Nothing is researched until you have seen what we made of it.{' '}
+              <Link href="/trips/new?have=plan" className="underline underline-offset-4 hover:text-pine">
+                Already have a plan? Paste it and we will build the region around it.
               </Link>
-              <p className="type-small text-ink-muted">No account needed. Nothing is researched until you have seen what we made of it.</p>
-            </div>
+            </p>
 
             {!compileReady ? (
               <p className="card mt-6 border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
@@ -162,52 +200,19 @@ export default async function HomePage() {
           <LivingAtlas />
         </section>
 
-        {/*
-          THREE DOORS, IN THE TRAVELLER'S WORDS.
-
-          Not "Mode 1 / Mode 2 / Mode 3", and not three bordered rows: cards with
-          depth that lift under the pointer. Each says what it needs *from you*.
-        */}
-        <section className="mt-14 sm:mt-16" aria-labelledby="doors-heading">
-          <h2 id="doors-heading" className="sr-only">
-            Three ways to start
-          </h2>
-          <ul className="grid gap-4 sm:grid-cols-3">
-            {INTENTS.map((intent) => (
-              <li key={intent.href} className="min-w-0">
-                <Link
-                  href={intent.href}
-                  className="card lift pressable group flex h-full min-w-0 flex-col gap-3 rounded-[var(--radius-panel)] p-5 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
-                >
-                  <span aria-hidden="true" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-paper-sunk text-ink">
-                    <DoorGlyph kind={intent.glyph} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-display text-[1.375rem] leading-tight text-ink group-hover:text-pine">{intent.title}</span>
-                    <span className="mt-1.5 block type-small text-ink-muted">{intent.body}</span>
-                  </span>
-                  <span aria-hidden="true" className="text-lg text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-pine">
-                    →
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* WHAT SIDEQUEST ADDS — six words, one line each, no sections. */}
+        {/* WHAT HAPPENS, IN ORDER — four sentences, no sections, no technology. */}
         <section className="mt-14 rule-top pt-8 sm:mt-16" aria-labelledby="proof-heading">
           <h2 id="proof-heading" className="type-small font-semibold text-ink-muted">
-            Already accounted for when the plan arrives
+            What Sidequest does with that
           </h2>
-          <ul className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+          <ol className="mt-5 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
             {PROOF.map(([word, line]) => (
               <li key={word} className="min-w-0">
                 <p className="font-display text-xl leading-tight text-ink">{word}</p>
-                <p className="mt-1 type-small text-ink-muted">{line}</p>
+                <p className="mt-1.5 type-small text-ink-muted">{line}</p>
               </li>
             ))}
-          </ul>
+          </ol>
         </section>
       </div>
     </ProductChrome>
@@ -245,7 +250,12 @@ function LivingAtlas() {
           <circle cx="336" cy="100" r="7" stroke="var(--color-route-bright)" strokeWidth={2} fill="var(--color-atlas)" />
         </g>
       </svg>
-      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-5 sm:p-6">
+      {/*
+        Stacked below `sm`. Side by side at 360 px the two lines ran into each
+        other — "Where you sleep, in" / "order." wrapping under "Then the days
+        between." — which is two sentences colliding rather than one caption.
+      */}
+      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6">
         <p className="font-display text-xl leading-tight text-[var(--color-atlas-ink)] sm:text-2xl">Where you sleep, in order.</p>
         <p className="type-small atlas-muted">Then the days between.</p>
       </div>

@@ -2,13 +2,10 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
 import {
   ARRIVAL_PLANNING_MINUTES,
   DEPARTURE_PLANNING_MINUTES,
-  TRIP_COMPOSER_VERSION,
   datesInWindow,
-  emptyComposerAnswers,
   qualifiedNameFor,
   seasonMonths,
   tripBasicsSchema,
@@ -16,7 +13,6 @@ import {
   type ImageSubject,
   type SelectedDestination,
   type TripComposerAnswers,
-  DATE_MODES,
 } from '@sidequest/core';
 import {
   createDecisionSession,
@@ -32,6 +28,11 @@ import { currentUserId } from '@/lib/auth/session';
 import { decisionAccessRefusal } from '@/lib/net/decision-access';
 import { saveComposerAnswers, saveDestinationQuery, saveSelectedDestination } from '@/lib/db/compiler-repository';
 import { recommendDestinations } from '@/lib/destinations/recommend';
+import {
+  decisionAnswersSchema as answersSchema,
+  decisionAnswersToComposer as toComposerAnswers,
+  type DecisionAnswersInput,
+} from '@/lib/destinations/decision-answers';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
 import { imageryCache } from '@/lib/db/imagery-repository';
 import { resolveImageryForSubjects } from '@/lib/providers/wikimedia';
@@ -56,88 +57,11 @@ import { resolveImageryForSubjects } from '@/lib/providers/wikimedia';
  * produced a second-class trip would be a second product.
  */
 
-const answersSchema = z.object({
-  /*
-   * The full timing vocabulary (`DATE_MODES`), even though the decide composer
-   * only offers four of them. One enum across the product means a session saved
-   * from one surface can always be read by another; a narrower copy here is how
-   * a shared type quietly becomes two.
-   */
-  dateMode: z.enum(DATE_MODES),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  month: z.number().int().min(1).max(12).optional(),
-  season: z.enum(['spring', 'summer', 'autumn', 'winter']).optional(),
-  nights: z.number().int().min(1).max(30).nullable(),
-  shape: z.enum(['one_base', 'two_bases', 'circuit', 'undecided']).nullable(),
-  transport: z.enum(['drive', 'public_transport', 'mixed', 'undecided']).nullable(),
-  pace: z.enum(['slow', 'balanced', 'packed']).nullable(),
-  themes: z.array(z.string().min(1)).max(12),
-  outdoorIntensity: z.enum(['gentle', 'moderate', 'strenuous']).nullable(),
-  budget: z.enum(['budget', 'mid_range', 'premium', 'luxury', 'unstated']).nullable(),
-  adults: z.number().int().min(1).max(12),
-  children: z.number().int().min(0).max(12),
-  avoid: z.string().max(600),
-});
-
-export type DecisionAnswersInput = z.infer<typeof answersSchema>;
 
 export interface DecisionResult {
   ok: boolean;
   error?: string;
 }
-
-function toComposerAnswers(input: DecisionAnswersInput, now: Date): TripComposerAnswers {
-  const base = emptyComposerAnswers('help_me_decide', now);
-  /*
-   * Themes are validated against the enum here rather than in the input schema,
-   * so a value the browser invented is dropped rather than rejecting the whole
-   * submission — losing one checkbox is better than losing four screens of
-   * answers to a client that sent one bad string.
-   */
-  const themes = input.themes.filter((theme): theme is TripComposerAnswers['themes'][number] =>
-    THEME_VALUES.has(theme),
-  );
-  return {
-    ...base,
-    schemaVersion: TRIP_COMPOSER_VERSION,
-    dates: {
-      mode: input.dateMode,
-      ...(input.startDate ? { startDate: input.startDate } : {}),
-      ...(input.endDate ? { endDate: input.endDate } : {}),
-      ...(input.month ? { month: input.month } : {}),
-      ...(input.season ? { season: input.season } : {}),
-      year: now.getUTCFullYear(),
-      wantsRecommendation: false,
-    },
-    duration: {
-      mode: input.nights === null ? 'unknown' : 'fixed',
-      ...(input.nights === null ? {} : { nights: input.nights }),
-      wantsRecommendation: input.nights === null,
-    },
-    adults: input.adults,
-    children: input.children,
-    ...(input.shape ? { shape: input.shape } : {}),
-    ...(input.transport ? { transport: input.transport } : {}),
-    ...(input.pace ? { pace: input.pace } : {}),
-    ...(input.budget ? { budget: input.budget } : {}),
-    ...(input.outdoorIntensity ? { outdoorIntensity: input.outdoorIntensity } : {}),
-    themes,
-    ...(input.avoid.trim() ? { avoid: input.avoid.trim() } : {}),
-    updatedAt: now.toISOString(),
-  };
-}
-
-const THEME_VALUES = new Set([
-  'outdoors',
-  'mountains',
-  'water',
-  'wildlife',
-  'food',
-  'culture',
-  'cities',
-  'quiet',
-]);
 
 /**
  * Start a session and go to it. The id in the URL is what makes a refresh free.

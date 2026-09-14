@@ -514,9 +514,44 @@ export function transportPreferencesFrom(
   answers: QuestionnaireAnswers,
 ): TravelerProfile['transport'] {
   const maxDailyDriveMinutes = answers.willDrive ? answers.maxDailyTravelMinutes : 0;
-  const maxDailyTransportMinutes = answers.willDrive
-    ? Math.min(600, maxDailyDriveMinutes + ACCESS_TRAVEL_ALLOWANCE_MINUTES)
-    : NO_CAR_TRANSPORT_MINUTES;
+  /*
+   * BEING DRIVEN IS NOT THE SAME AS HAVING NO CAR.
+   *
+   * `NO_CAR_TRANSPORT_MINUTES` is written for the traveller it names: shuttles,
+   * buses and walking, where the day's reach really is the length of what runs.
+   * It was applied to everybody who answered `willDrive: false`, which includes
+   * the traveller who chose "Guided, with transfers arranged" — somebody else
+   * is driving them, in a vehicle that goes where the trip goes.
+   *
+   * Measured on a live Kyrgyzstan setup: `transportChoice: 'guided'`,
+   * `privateTransfers: 'fine'`, and a **150-minute total transport ceiling for
+   * the whole day**, which the reconciler enforces by taking anchors off the
+   * plan. The trip's own centrepieces sit five and six hours from the capital.
+   * Nobody asked for that limit: `daily_driving` — the one question that could
+   * have raised it, and whose smart default for a broad or remote region is
+   * four hours — declares itself irrelevant to a traveller who does not drive.
+   *
+   * The asymmetry is the bug. A driver who is never asked gets their stated
+   * figure *plus* the access allowance; a driven traveller who is never asked
+   * gets ninety minutes less, for no reason other than who holds the wheel.
+   * The difference between driving and being driven is who is tired at the end
+   * of it, not how far the day may reach. So a driven traveller is budgeted
+   * exactly as a driver is, from the same answer, and the car-free constant is
+   * left to the case it was written for.
+   *
+   * No new number is introduced here, deliberately: inventing a second ceiling
+   * would be the same mistake one layer along.
+   */
+  const drivenBySomebodyElse =
+    !answers.willDrive &&
+    (answers.transportChoice === 'guided' ||
+      answers.transportChoice === 'rail_transfers' ||
+      answers.transportChoice === 'boats_transfers' ||
+      answers.transportChoice === 'taxis');
+  const maxDailyTransportMinutes =
+    answers.willDrive || drivenBySomebodyElse
+      ? Math.min(600, answers.maxDailyTravelMinutes + ACCESS_TRAVEL_ALLOWANCE_MINUTES)
+      : NO_CAR_TRANSPORT_MINUTES;
 
   return {
     willDrive: answers.willDrive,

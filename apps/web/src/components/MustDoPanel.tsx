@@ -117,7 +117,7 @@ function MustDoRow({
 
   return (
     <li
-      className="rounded-lg border border-rule p-3.5"
+      className="rounded-[var(--radius-card)] border border-rule p-3.5"
       data-testid="must-do-row"
       data-must-do-status={resolution.status}
     >

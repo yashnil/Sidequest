@@ -88,7 +88,7 @@ export function buildWeatherIntelligence(input: { itinerary: Itinerary; category
   return weatherIntelligenceSchema.parse({
     days,
     packingBasis,
-    providerNote: packingBasis === 'unknown' ? 'No weather provider answered for this plan.' : `Weather from ${provider}. ${packingBasis === 'forecast' ? 'Every day is inside the forecast horizon.' : 'Packing is based on climate because at least one day is beyond the forecast horizon.'}`,
+    providerNote: packingBasis === 'unknown' ? 'Nothing answered when Sidequest asked for the weather here.' : `Weather from ${provider}. ${packingBasis === 'forecast' ? 'Every day is inside the forecast horizon.' : 'Packing is based on climate because at least one day is beyond the forecast horizon.'}`,
   });
 }
 

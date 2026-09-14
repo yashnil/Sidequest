@@ -88,7 +88,7 @@ export function buildRecheckManifest(input: {
   const booked = by(['booked_fact']);
   if (booked.length > 0) push('one_to_two_days', 'recheck:booked-venues', 'Booked venues and pickups', 'Confirm the booked things you cannot do without.', booked, false);
 
-  push('same_day', 'recheck:same-day', 'Traffic, transit and disruptions', input.capabilities.traffic || input.capabilities.transit ? 'Where a provider supports it, this can run automatically on the day.' : 'No live traffic or transit provider is configured; check the operator apps.', [], input.capabilities.traffic || input.capabilities.transit);
+  push('same_day', 'recheck:same-day', 'Traffic, transit and disruptions', input.capabilities.traffic || input.capabilities.transit ? 'Where the source allows it, this can run automatically on the day.' : 'No live traffic or transit provider is configured; check the operator apps.', [], input.capabilities.traffic || input.capabilities.transit);
 
   const due = items.filter((i) => i.state === 'due').length;
   return recheckManifestSchema.parse({

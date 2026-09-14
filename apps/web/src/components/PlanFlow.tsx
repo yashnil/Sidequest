@@ -987,7 +987,7 @@ function ClarificationStep({ tripId, questions, answers, pending, onRun }: StepP
               is a rule firing when it should not.
             */}
             {question.evidenceThatTriggeredIt && question.evidenceThatTriggeredIt.length > 0 ? (
-              <p className="mb-3 rounded-lg border border-dashed border-rule bg-paper-sunk px-3 py-2 text-sm text-ink-muted">
+              <p className="mb-3 rounded-[var(--radius-card)] border border-dashed border-rule bg-paper-sunk px-3 py-2 text-sm text-ink-muted">
                 <span className="font-medium text-ink">What made us ask: </span>
                 {question.evidenceThatTriggeredIt.map((entry) => entry.detail).join(' ')}
               </p>
@@ -1015,7 +1015,7 @@ function ClarificationStep({ tripId, questions, answers, pending, onRun }: StepP
                 onChange={(event) =>
                   setGiven((current) => ({ ...current, [question.id]: [event.target.value] }))
                 }
-                className="mt-2 w-full rounded-lg border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
+                className="mt-2 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
               />
             ) : null}
           </Fieldset>

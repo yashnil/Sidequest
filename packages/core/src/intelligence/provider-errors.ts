@@ -37,7 +37,7 @@ export class ProviderFailure extends Error {
 /** What each failure means for the trip. None of them is "impossible". */
 export const PROVIDER_ERROR_DEGRADATION: Record<ProviderErrorReason, { traveller: string; claimState: 'unverified' | 'contradicted'; retryable: boolean }> = {
   not_found: { traveller: 'Sidequest could not independently resolve this.', claimState: 'unverified', retryable: false },
-  no_route: { traveller: 'The route provider found no way to make this journey by that mode.', claimState: 'contradicted', retryable: false },
+  no_route: { traveller: 'The map service found no way to make this journey by that mode.', claimState: 'contradicted', retryable: false },
   unsupported: { traveller: 'Sidequest cannot check this kind of journey yet.', claimState: 'unverified', retryable: false },
   unauthorized: { traveller: 'Verification is unavailable right now.', claimState: 'unverified', retryable: false },
   quota: { traveller: 'Verification is unavailable right now.', claimState: 'unverified', retryable: true },

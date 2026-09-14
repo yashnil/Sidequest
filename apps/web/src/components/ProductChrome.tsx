@@ -64,13 +64,22 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
   const initials = user ? (user.displayName ?? user.email ?? '?').trim().charAt(0).toUpperCase() : null;
   const places: { href: string; label: string; testId: string; place: 'trips' | 'explore' }[] = [
     { href: '/trips', label: 'Trips', testId: 'nav-trips', place: 'trips' },
-    ...(user ? [{ href: '/decide', label: 'Explore', testId: 'nav-explore', place: 'explore' as const }] : []),
+    /*
+     * V11 §B2 — Explore browses; `/decide` recommends.
+     *
+     * This pointed at `/decide`, so the header's "Explore" and the landing
+     * page's "Help me choose" were two names for one screen. They are two
+     * different questions: one is somebody with no idea what kind of trip they
+     * want, the other is somebody ready to be asked. Explore hands off to
+     * `/decide` when they are.
+     */
+    ...(user ? [{ href: '/explore', label: 'Explore', testId: 'nav-explore', place: 'explore' as const }] : []),
   ];
   return (
     <>
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
       >
         Skip to content
       </a>

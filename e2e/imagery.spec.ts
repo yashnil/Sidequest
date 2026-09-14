@@ -88,16 +88,21 @@ async function brokenImages(page: Page): Promise<string[]> {
 
 async function rankedShortlist(page: Page): Promise<void> {
   await page.goto('/decide');
+  /*
+   * V11 §A1 — the intake asks one question at a time, in the order that changes
+   * the ranking most, and stops as soon as it can rank. Two answers is enough,
+   * which is why the primary action appears here rather than a third question.
+   */
   await page.getByRole('radio', { name: 'Some time in a month' }).check();
   await page.getByLabel('Which month?').selectOption('7');
-  await page.getByLabel('How many nights?').fill('9');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
   await page.getByRole('checkbox', { name: 'Mountains and high country' }).check();
+  await page.getByRole('button', { name: 'One more question' }).click();
+  await page.getByRole('spinbutton', { name: 'Nights away' }).fill('9');
   await page.getByRole('button', { name: 'Show me where to go' }).click();
   await page.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
-  await expect(page.getByRole('list', { name: 'Suggested destinations' })).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(page.getByTestId('shortlist-featured')).toBeVisible({ timeout: 30_000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +122,7 @@ test('NO EXTERNAL REQUEST DURING RENDER', async ({ page }) => {
 
   const afterRanking = external.length;
   await page.reload();
-  await expect(page.getByRole('list', { name: 'Suggested destinations' })).toBeVisible();
+  await expect(page.getByTestId('shortlist-featured')).toBeVisible();
 
   // A re-render added no lookups of any kind.
   const added = external.slice(afterRanking);
@@ -205,7 +210,8 @@ for (const mode of ['abort', 'not_found', 'corrupt'] as const) {
     await sealOff(page, mode);
     await rankedShortlist(page);
 
-    const detail = page.locator('section[aria-labelledby="shortlist-detail-heading"]');
+    /* V11 §A2 — the featured card is where a destination is argued for and pictured. */
+    const detail = page.getByTestId('shortlist-featured-card').first();
     await expect(detail).toBeVisible();
 
     const hero = detail.locator('figure').first();
@@ -284,20 +290,19 @@ test('an artifact with no imagery still renders every card', async ({ page }) =>
   await sealOff(page);
   await rankedShortlist(page);
 
-  const rows = page.getByRole('list', { name: 'Suggested destinations' }).getByRole('listitem');
+  const rows = page.getByTestId('shortlist-featured-card');
   const count = await rows.count();
   expect(count).toBeGreaterThan(1);
 
   for (let index = 0; index < count; index += 1) {
     const row = rows.nth(index);
-    // Every row has a heading-weight name and at least two badges, photograph or
-    // not. A card that lost its content because it lost its picture would fail
-    // here.
-    await expect(row.locator('span.font-display')).not.toBeEmpty();
-    await expect(row.getByRole('button')).toBeVisible();
+    // Every card has a name and its three actions, photograph or not. A card
+    // that lost its content because it lost its picture would fail here.
+    await expect(row.getByRole('heading', { level: 3 })).not.toBeEmpty();
+    await expect(row.getByRole('button', { name: 'Plan this' })).toBeVisible();
   }
 
   // And the journey onward is unaffected: choosing still produces a trip.
-  await page.getByRole('button', { name: /^Plan / }).click();
+  await page.getByRole('button', { name: 'Plan this' }).first().click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
 });

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openHubView, useBandAction } from './support/hub';
+import { openDayChecks, openHubView, useBandAction } from './support/hub';
 import { completeQuestionnaire, createTrip } from './support/trip';
 
 /**
@@ -158,6 +158,7 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
   await expect(page.getByText('Open 09:00–16:30 · arrive before 16:00').first()).toBeVisible();
   // The day says which stop fixed its shape — whichever stop with published
   // hours the composed day leads with; the gondola's own window is asserted above.
+  await openDayChecks(page);
   await expect(page.getByText(/sets the shape of this day/).first()).toBeVisible();
   // And where the hours came from, with no claim to have checked today.
   // V6 — the stop's detail is a sheet the traveller opens by pressing the stop, not a disclosure under it.
@@ -178,6 +179,7 @@ test('a limited-hours stop is scheduled inside its window, with its source', asy
   // It survives a refresh, hours evidence and all.
   await page.reload();
   await expect(page.getByText('Open 09:00–16:30 · arrive before 16:00').first()).toBeVisible();
+  await openDayChecks(page);
   await expect(page.getByText(/sets the shape of this day/).first()).toBeVisible();
 });
 

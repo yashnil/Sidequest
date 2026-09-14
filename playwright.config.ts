@@ -44,7 +44,7 @@ const TIMING_LOCK_SPEC = ['**/timing-lock.spec.ts', '**/build-lifecycle.spec.ts'
  * running it here would cost nothing — and relying on that is exactly the shape
  * of accident this list exists to prevent. Named, not trusted.
  */
-const LIVE_SPEC = ['**/v10-live.spec.ts'];
+const LIVE_SPEC = ['**/v10-live.spec.ts', '**/v11-live.spec.ts', '**/v12-live.spec.ts'];
 
 /**
  * The port is not defined here. `config.port` in the root package.json is the one

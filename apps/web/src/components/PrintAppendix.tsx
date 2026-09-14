@@ -101,13 +101,13 @@ export function PrintAppendix({
 
   return (
     <section className="hidden print:block" data-testid="print-appendix" aria-labelledby="print-appendix-heading">
-      <h2 id="print-appendix-heading" className="type-section text-ink">
+      <h2 id="print-appendix-heading" className="type-title text-ink">
         On paper: bookings, addresses and positions
       </h2>
 
       {tripId ? (
         <>
-          <h3 className="mt-4 type-title text-ink">Booking status</h3>
+          <h3 className="mt-4 type-section text-ink">Booking status</h3>
           {needs.length > 0 ? (
             <ul className="mt-2 type-small" data-testid="print-booking-status">
               {needs.map((item) => (
@@ -138,7 +138,7 @@ export function PrintAppendix({
 
       {bookedWithAddress.length > 0 ? (
         <>
-          <h3 className="mt-4 type-title text-ink">Addresses of what is booked</h3>
+          <h3 className="mt-4 type-section text-ink">Addresses of what is booked</h3>
           <ul className="mt-2 type-small" data-testid="print-addresses">
             {bookedWithAddress.map((item) => (
               <li key={item.id}>
@@ -150,7 +150,7 @@ export function PrintAppendix({
         </>
       ) : null}
 
-      <h3 className="mt-4 type-title text-ink">Positions and map addresses</h3>
+      <h3 className="mt-4 type-section text-ink">Positions and map addresses</h3>
       <p className="mt-1 type-meta">Coordinates for every stop with a confirmed position, and the plain web address that opens it in a map app. Type either into the search box.</p>
       {positioned.some((entry) => entry.stops.length > 0) ? (
         <ol className="mt-2 type-small" data-testid="print-positions">
@@ -182,7 +182,7 @@ export function PrintAppendix({
         <p className="mt-2 type-small text-ink-muted">No stop on this plan has a confirmed position yet.</p>
       )}
 
-      <h3 className="mt-4 type-title text-ink">If something goes wrong</h3>
+      <h3 className="mt-4 type-section text-ink">If something goes wrong</h3>
       {facts ? (
         <p className="mt-1 type-small" data-testid="print-emergency">
           Emergency number in {facts.name}: <strong>{facts.emergency}</strong>
@@ -196,7 +196,7 @@ export function PrintAppendix({
 
       {tripId ? (
         <>
-          <h3 className="mt-4 type-title text-ink">Saved on your phone</h3>
+          <h3 className="mt-4 type-section text-ink">Saved on your phone</h3>
           <p className="mt-1 type-small" data-testid="print-offline">
             These pages open without signal once they have been opened while online: {`/trips/${tripId}/itinerary`}, {`/trips/${tripId}/today`}, {`/trips/${tripId}/pack`}
             {sharePath ? `. The read-only copy for companions: ${sharePath}` : ''}.

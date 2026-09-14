@@ -55,7 +55,16 @@ export function NextActionCard({ nextActions, moreHref }: { nextActions: NextAct
         {actions.length === 0 ? (nextActions.phase === 'past' ? 'Nothing left to do' : 'Nothing needs you right now') : actions.length === 1 ? 'The one thing to do next' : `The ${actions.length === 2 ? 'two' : 'three'} things to do next`}
       </h2>
       <p className="mt-1 type-small text-ink-muted">{actions.length === 0 && nextActions.phase !== 'past' ? 'Everything the trip depends on is settled or waiting on nobody.' : phase.blurb}</p>
-      <ol className="mt-4 grid gap-2.5">
+      {/*
+        V11 §C — ROWS IN A PANEL, NOT CARDS INSIDE A CARD.
+
+        Three bordered, shadowed cards inside a bordered, shadowed card is the
+        exact "white card inside white card" §C names, and it is the first thing
+        a traveller sees on the trip. The rows are still whole click targets and
+        still lift under the pointer; what they have stopped doing is drawing a
+        second frame inside the one they are already in.
+      */}
+      <ol className="mt-4 divide-y divide-rule border-t border-rule">
         <AnimatePresence initial={false}>
           {actions.map((action) => (
             <motion.li
@@ -70,7 +79,7 @@ export function NextActionCard({ nextActions, moreHref }: { nextActions: NextAct
                 href={action.href}
                 data-testid="next-action"
                 data-kind={action.kind}
-                className="card lift pressable group flex items-start gap-3.5 px-4 py-3.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
+                className="pressable group -mx-2 flex items-start gap-3.5 rounded-[var(--radius-control)] px-2 py-3.5 hover:bg-paper-sunk focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
               >
                 {/* V9.1 §10 — the kind of act is operational text, so it sits on the 13 px floor rather than the 12 px eyebrow. */}
                 <span className={cx('mt-0.5 inline-flex h-6 shrink-0 items-center rounded-sm px-1.5 text-xs font-semibold uppercase tracking-[0.08em]', KIND_CLASS[action.kind])}>{NEXT_ACTION_KIND_WORD[action.kind]}</span>

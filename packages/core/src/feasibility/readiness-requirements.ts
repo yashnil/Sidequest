@@ -88,7 +88,31 @@ function isRoadCarried(archetype: TripArchetype | undefined): boolean {
  * An empty array means every route-critical requirement is met — which is not
  * the same as "nothing is uncertain", and the caller still has its cautions.
  */
-export function readinessShortfalls(input: { archetype: TripArchetype | undefined; completeness: RouteCompleteness }): ReadinessShortfall[] {
+export function readinessShortfalls(input: {
+  archetype: TripArchetype | undefined;
+  completeness: RouteCompleteness;
+  /**
+   * V12 §21 — HOW CERTAIN THIS KIND OF TRIP NEEDS ITS TRANSPORT TO BE.
+   *
+   * V11 gated Ready per archetype, which is a label the model writes after
+   * composing. The operating model is derived before the call from what the
+   * traveller wants and what the ground affords, and it says *how much* the
+   * transport has to be nailed down: a road trip cannot be ready with untimed
+   * base transfers, and a guided trek can, because the operator owns those
+   * legs. Optional, so a caller that has no operating model keeps exactly the
+   * V11 behaviour.
+   */
+  transportCertaintyRequirement?: number | undefined;
+  /**
+   * V12 §35 — the trip missing the reason it exists.
+   *
+   * Operational incompleteness and intent mismatch are different failures and
+   * must read differently: "we could not time this" is Sidequest's unfinished
+   * work, "this is not the trip you asked for" is the plan's. Passed in rather
+   * than computed here, because the satisfaction report is a layer above this one.
+   */
+  unmetPrimaryGoals?: readonly string[] | undefined;
+}): ReadinessShortfall[] {
   const c = input.completeness;
   const shortfalls: ReadinessShortfall[] = [];
 
@@ -117,7 +141,17 @@ export function readinessShortfalls(input: { archetype: TripArchetype | undefine
     });
   }
 
-  if (isRoadCarried(input.archetype)) {
+  /*
+   * V12 §21 — the operating model decides this where it exists, and the
+   * archetype decides it where it does not.
+   *
+   * `transportCertaintyRequirement` is the same question `isRoadCarried` was
+   * answering with a list of labels, asked of the thing that actually knows:
+   * a self-driven route needs its transfers timed, an operator-led trek does
+   * not, and a resort transfer the operator arranges is somewhere between.
+   */
+  const transfersMustBeTimed = input.transportCertaintyRequirement !== undefined ? input.transportCertaintyRequirement >= 0.8 : isRoadCarried(input.archetype);
+  if (transfersMustBeTimed) {
     const untimedTransfers = c.baseTransfersTotal - c.baseTransfersTimed;
     if (untimedTransfers > 0) {
       shortfalls.push({
@@ -146,6 +180,19 @@ export function readinessShortfalls(input: { archetype: TripArchetype | undefine
       requirement: 'access_requirements',
       detail: `${c.unrepresentedAccessRequirements} stop${c.unrepresentedAccessRequirements === 1 ? '' : 's'} can only be reached a particular way, and the plan does not yet say how.`,
     });
+  }
+
+  /*
+   * V12 §35 — A PERFECTLY ROUTED TRIP THAT MISSES THE POINT IS NOT READY.
+   *
+   * Every shortfall above is about Sidequest's own unfinished work: something
+   * unlocated, untimed, or in an order the ground refuses. This one is about
+   * the plan itself, and it is the only one a traveller can neither wait out
+   * nor help with — which is exactly why it has to be said plainly rather than
+   * folded into the same list of measurements.
+   */
+  for (const goal of input.unmetPrimaryGoals ?? []) {
+    shortfalls.push({ requirement: 'primary_intent', detail: `This trip was meant to be built around ${goal}` });
   }
 
   return shortfalls;
