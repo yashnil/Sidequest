@@ -23,10 +23,30 @@ import { openHubView } from './support/hub';
  */
 
 const OUT = '.claude-private/artifacts/v12.1/live';
+/** The database `playwright.v12.1-live.config.ts` starts the app on. */
+const DATABASE = 'apps/web/data/v12-1-live.db';
 mkdirSync(OUT, { recursive: true });
 
 async function captureTrip(page: Page, slug: string, tripId: string, seen: string[]): Promise<void> {
   writeFileSync(`${OUT}/${slug}-trip-id.txt`, `${tripId}\n`);
+  /*
+   * V12.2 — DUMP THE DRAFT, NOT ONLY THE PICTURES.
+   *
+   * The V12.1 Japan acceptance is unreplayable: the live database was reset
+   * before the third call, and all that survived was screenshots and the
+   * rendered day text. Everything a later pass needs to re-judge a trip lives in
+   * the draft and the stored itinerary, so it is written beside them here — the
+   * same shape `dump-trip.mjs` produces, which the V11 and V12 replays read.
+   *
+   * Best-effort: a dump that fails must never fail an acceptance that has
+   * already spent its model call.
+   */
+  try {
+    const { execFileSync } = await import('node:child_process');
+    execFileSync('node', ['apps/web/scripts/dump-trip.mjs', DATABASE, tripId, `${OUT}/${slug}-dump`], { stdio: 'ignore' });
+  } catch {
+    /* Recorded by its absence; the screenshots below still land. */
+  }
   writeFileSync(`${OUT}/${slug}-questions.txt`, `${seen.join('\n')}\n`);
   await page.screenshot({ path: `${OUT}/${slug}-01-hub.png`, fullPage: true, animations: 'disabled' });
   for (const view of ['days', 'map', 'book', 'prepare'] as const) {

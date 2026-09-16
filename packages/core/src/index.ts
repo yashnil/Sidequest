@@ -177,6 +177,7 @@ export * from './mobility/screening';
 export * from './mobility/readiness';
 export * from './mobility/transitions';
 export * from './mobility/recheck';
+export * from './mobility/walking';
 export * from './satisfaction/intent-satisfaction';
 export * from './calendar/trip-calendar';
 export * from './destinations/decomposition';

@@ -19,6 +19,8 @@ import {
   findOperatingCalendar,
   operatingOn,
   permittedModesFor,
+  assessWalk,
+  type MobilityPattern,
   screenProposedMode,
   travelModeFromDraft,
   isRoadRoutable,
@@ -189,6 +191,12 @@ export interface ReconcileContext extends SkeletonPlanningContext {
    */
   affordances?: DestinationAffordanceProfile | null;
   reality?: TravelReality | null;
+  /**
+   * V12.2 §2 — how this kind of trip moves, so a walk's ceiling can depend on
+   * the trip rather than on one universal number. Optional: a build without an
+   * operating model keeps the V11 ceilings.
+   */
+  mobilityPattern?: MobilityPattern | null;
   /**
    * LIVE WORLD V1 — identities persisted by an earlier build of this trip,
    * keyed by normalised anchor name. First in the resolution order: a name
@@ -2736,11 +2744,73 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
     const mode = plausible.mode;
-    const estimate = !measured && routable && fromCoordinates && toCoordinates ? estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode }) : null;
+    /*
+     * V12.2 §2 §3 — A WALK NOBODY WOULD TAKE LOSES ITS FIGURE.
+     *
+     * `plausibleModeFor` above already substitutes a ground mode for an
+     * over-long walk, and its rule — only ever a mode the trip actually uses —
+     * is what keeps it safe. What it could not do is the case the V12.1 Greek
+     * acceptance shipped: a trip answering "boats and local transfers, not
+     * driving" has **no ground mode at all**, so the correction had nothing to
+     * substitute and kept the walk. Nine walks over three kilometres reached a
+     * traveller, the worst of them **218 km straight line, priced at sixty
+     * hours on foot**.
+     *
+     * Keeping an implausible figure is worse than having none: a number is
+     * believed and an absence is not. So where the walk survives the
+     * substitution and is still not a walk a person would take, the leg keeps
+     * its endpoints and loses only its claim — the same shape V11 §11 uses for
+     * a measurement it refuses.
+     *
+     * A walk the plan asked for as an *activity* is never touched: a trek stage
+     * and a coast path are the trip, not a mistake in it.
+     */
+    /*
+     * V12.2 — AND ONLY WHERE THE WALK IS ACTUALLY THE JOURNEY.
+     *
+     * Two shapes carry a `walk` label over a figure that is not a walk, and
+     * judging either of them on its own distance is wrong:
+     *
+     *   `viaBases`   the figure is the base-to-base leg standing in for a
+     *                shorter hop, so its kilometres belong to a different pair;
+     *   `scheduled`  the pair was answered by a timetabled service, and the
+     *                pedestrian label is the stand-in the resolver keeps rather
+     *                than inventing a train (V6's `unverifiedScheduled` rule).
+     *
+     * The city replay caught this: a 0.55 km hop measured base-to-base at 6.1 km
+     * on a metro schedule was refused as an impossible walk. Neither figure was
+     * ever a walk.
+     */
+    const walkIsTheJourney = mode === 'walk' && !viaBases && (confirmation?.basis ?? (context.matrix.mode === 'transit' ? 'scheduled' : 'static')) !== 'scheduled';
+    const walk =
+      walkIsTheJourney
+        ? assessWalk(
+            {
+              segment: { role, ...(hint ? { hint } : {}), ...(episode?.name ? { episode: episode.name } : {}), ...(episode?.mode ? { episodeMode: episode.mode } : {}), provenance: measured ? 'measured' : 'estimated', km: measured?.km ?? null },
+              straightLineKm,
+              ...(context.mobilityPattern ? { mobilityPattern: context.mobilityPattern } : {}),
+              ...(context.profile?.transport.maxAccessWalkMinutes !== undefined ? { maxWalkMinutes: context.profile.transport.maxAccessWalkMinutes } : {}),
+              ...(context.profile?.accessibility.mobilityLimited ? { mobilityLimited: true } : {}),
+              statedAsActivity: inEpisode,
+            },
+            /* A substitute was available only if the correction above actually produced one. */
+            plausible.corrected,
+          )
+        : null;
+    const walkRefused = walk?.verdict === 'refuse';
+    const estimate = !measured && routable && !walkRefused && fromCoordinates && toCoordinates ? estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode }) : null;
     const noRouteAnswered = ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;
-    const unmeasuredReason: TravelSegment['unmeasuredReason'] = !routable || mode === 'unsupported' || mode === 'ferry' || mode === 'private_transfer' ? 'mode_not_routed' : noRouteAnswered ? 'no_route_found' : 'provider_unavailable';
-    const minutes = measured?.minutes ?? estimate?.minutes ?? null;
-    const km = measured?.km ?? null;
+    const unmeasuredReason: TravelSegment['unmeasuredReason'] =
+      walkRefused
+        ? /* Nobody was asked and nobody refused: the figure was withdrawn because the journey it described is not one a person makes. */
+          'provider_unavailable'
+        : !routable || mode === 'unsupported' || mode === 'ferry' || mode === 'private_transfer'
+          ? 'mode_not_routed'
+          : noRouteAnswered
+            ? 'no_route_found'
+            : 'provider_unavailable';
+    const minutes = walkRefused ? null : (measured?.minutes ?? estimate?.minutes ?? null);
+    const km = walkRefused ? null : (measured?.km ?? null);
     const geometry = confirmation?.geometry && confirmation.geometry.length > 1 ? encodePolyline(simplifyPolyline(confirmation.geometry)) : undefined;
     const basis: TravelSegment['basis'] = measured ? (confirmation?.basis ?? (context.matrix.mode === 'transit' ? 'scheduled' : 'static')) : estimate ? 'estimated' : undefined;
     const sameLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) === normalizeName(to.locality));
@@ -2755,8 +2825,8 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       km,
       mode,
       role,
-      provenance: measured ? 'measured' : estimate ? 'estimated' : 'unmeasured',
-      ...(measured || estimate ? {} : { unmeasuredReason }),
+      provenance: walkRefused ? 'unmeasured' : measured ? 'measured' : estimate ? 'estimated' : 'unmeasured',
+      ...(!walkRefused && (measured || estimate) ? {} : { unmeasuredReason }),
       ...(basis ? { basis } : {}),
       ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),

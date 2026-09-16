@@ -360,7 +360,17 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
   const journeyLayer = input.journeys !== undefined && input.operatingType !== undefined;
   if (input.completeness) {
     for (const shortfall of readinessShortfalls({ archetype: itinerary.package?.archetype, completeness: input.completeness, journeyReadinessSupplied: journeyLayer })) {
-      items.push({ area: shortfall.requirement === 'access_requirements' ? 'transport' : shortfall.requirement === 'bases_placed' ? 'bases' : 'transport', severity: 'dependency', detail: shortfall.detail, owner: 'sidequest' });
+      /*
+       * V12.2 §4 — an unjudged day is a caution, not a dependency.
+       *
+       * It blocks nothing on its own, because the thing that actually blocks —
+       * stops nobody could place — is already raised once by
+       * `route_critical_placed`. Raising it twice made one placement gap into
+       * two reasons a trip could not be Ready, and the second of them carried a
+       * sentence describing a route defect that had never occurred.
+       */
+      const severity: FeasibilityItem['severity'] = shortfall.requirement === 'route_order_unjudged' ? 'caution' : 'dependency';
+      items.push({ area: shortfall.requirement === 'access_requirements' ? 'transport' : shortfall.requirement === 'bases_placed' ? 'bases' : 'transport', severity, detail: shortfall.detail, owner: 'sidequest' });
     }
   }
 

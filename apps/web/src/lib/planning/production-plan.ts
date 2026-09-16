@@ -579,7 +579,7 @@ export async function generateSidequestPlanForTrip(
        * it is judged against are one fact rather than two.
        */
       const mobility = selectModes({ policy: operating.policy, world: { affordances, reality } });
-      return { operating, mobility };
+      return { operating, mobility, affordances };
     } catch (error) {
       console.warn('The operating model could not be derived; the plan proceeds without it', { tripId, message: error instanceof Error ? error.message : 'unknown' });
       return null;
@@ -898,6 +898,29 @@ export async function generateSidequestPlanForTrip(
     ...(divisions.length > 0 ? { destinationDivisions: divisions } : {}),
     ...(conceptGateways.length > 0 ? { destinationGateways: conceptGateways } : {}),
   };
+  /*
+   * V12.2 §1 — THE WORLD THE MODE SCREEN IS SUPPOSED TO CONSULT.
+   *
+   * `ReconcileContext` has declared `affordances` and `reality` since V12 §17,
+   * `reconcile.ts` reads them at the one place a hint becomes a mode, and
+   * **nothing has ever set them on the production path**. `assessModeConsistency`
+   * treats "nothing was consulted" as "refuse nothing" — deliberately, so that a
+   * destination nobody screened keeps its legitimate ferry — so the phantom-mode
+   * gate has been passing everything through since the day it was written.
+   *
+   * The Canadian Rockies refusal that V12 §17 demonstrates, and that V12.1's
+   * replay tests assert against the stored plan, was therefore never actually
+   * running on a live build. It is running now.
+   *
+   * Both come from the derivation that already computed them for the operating
+   * model, so what the screen consults and what the composition envelope was
+   * told are one fact rather than two.
+   */
+  const worldContext: Pick<ReconcileContext, 'affordances' | 'reality' | 'mobilityPattern'> = {
+    ...(derived?.affordances ? { affordances: derived.affordances } : {}),
+    ...(reality ? { reality } : {}),
+    ...(operating ? { mobilityPattern: operating.policy.mobilityPattern } : {}),
+  };
   const reconcileContext: ReconcileContext = region
     ? {
         tripId,
@@ -925,6 +948,7 @@ export async function generateSidequestPlanForTrip(
         subregionGeometries: productionSubregionGeometries(region.compiled),
         deadlineReached,
         mustIncludeNames,
+        ...worldContext,
         ...placementContext,
         ...timedSeams,
         ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
@@ -933,6 +957,7 @@ export async function generateSidequestPlanForTrip(
         ...contextWithoutRegion({ trip, profile: verifyingProfile, candidate, envelope, now, deadlineReached, mustIncludeNames, geocoder: timedGeocoder, nearby: timedNearby, routing, weather: (await regionlessWeather) ?? undefined }),
         ...(routing ? { routeMatrix: routeMatrixFor(profile.transport.willDrive ? 'car' : 'foot')!, confirmRoute: confirmRouteFor(profile.transport.willDrive ? 'car' : 'foot')! } : {}),
         weatherForBases,
+        ...worldContext,
         ...placementContext,
         ...timedSeams,
         ...(leaveBy !== null ? { lastDayLeaveByMinute: leaveBy } : {}),
@@ -1040,7 +1065,18 @@ export async function generateSidequestPlanForTrip(
     baseTransfersTotal: baseTransfers.length,
     signaturesPlaced: (pkgForCompleteness?.signatures ?? []).filter((signature) => placedAnchorIds.has(signature.id)).length,
     signaturesTotal: (pkgForCompleteness?.signatures ?? []).length,
-    orderContradictions: compiled.report.issues.filter((issue) => issue.check === 'route_order_coherent' && issue.severity !== 'caution').length,
+    /*
+     * V12.2 §4 — judged-and-contradicted, kept apart from could-not-be-judged.
+     *
+     * The compiler emits two outcomes under one check id: a `violation` (the
+     * day was measured against the ground and doubles back) and an
+     * `unplaceable` (its stops have no coordinates, so nothing could be
+     * measured). Both were counted here, and the audit found that across six
+     * real live trips **every one of 43 findings was `unplaceable`** — so the
+     * sentence a traveller read described a defect that has never occurred.
+     */
+    orderContradictions: reconciledRaw.dayOrders.filter((order) => order.report.verdict === 'violation').length,
+    orderUnjudged: reconciledRaw.dayOrders.filter((order) => order.report.verdict === 'unplaceable').length,
     implausibleMeasurements: 0,
     unrepresentedAccessRequirements: compiled.report.issues.filter((issue) => issue.check === 'access_requirements_represented' && issue.severity === 'blocker').length,
     legsTimed: applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId)).filter((item) => item.travel!.minutes !== null).length,

@@ -46,7 +46,24 @@ export interface RouteCompleteness {
   signaturesPlaced: number;
   signaturesTotal: number;
   /** Any day whose stop order could not be judged, or was judged and contradicts the ground. */
+  /**
+   * Days that were **judged** against the ground and found to double back.
+   *
+   * V12.2 §4 — this used to include days whose order could not be judged at
+   * all, and the audit found the consequence: across **43 order findings on six
+   * real live trips, every single one was `unplaceable`** and not one was a
+   * violation. A placement gap of ours was therefore reported to the traveller
+   * as *"N days run their stops in an order the ground does not support"* — a
+   * defect in the plan's route that had never once occurred — and raised as a
+   * dependency that blocked Ready.
+   *
+   * Unjudged days are counted separately below, and are already reported
+   * honestly elsewhere as places the route is built around that nobody could
+   * locate. Counting them twice, once under a false heading, was the defect.
+   */
   orderContradictions: number;
+  /** Days whose order nobody could judge because their stops are unplaced. Sidequest's gap, never the plan's. */
+  orderUnjudged?: number;
   /** Provider measurements refused as implausible on this build. */
   implausibleMeasurements: number;
   /** Required access modes the plan does not represent (a shuttle-only road driven to). */
@@ -180,7 +197,22 @@ export function readinessShortfalls(input: {
   if (c.orderContradictions > 0) {
     shortfalls.push({
       requirement: 'route_order',
-      detail: `${c.orderContradictions} day${c.orderContradictions === 1 ? '' : 's'} ${c.orderContradictions === 1 ? 'runs' : 'run'} its stops in an order the ground does not support.`,
+      detail: `${c.orderContradictions} day${c.orderContradictions === 1 ? '' : 's'} ${c.orderContradictions === 1 ? 'runs its' : 'run their'} stops in an order the ground does not support.`,
+    });
+  }
+  /*
+   * V12.2 §4 — an unjudged day is not a disordered one.
+   *
+   * It is raised, because a day nobody could check is a real gap in what
+   * Sidequest knows about the plan, and it is worded as what it is. The places
+   * themselves are already named by `route_critical_placed` above, so this says
+   * only what follows from them being unplaced.
+   */
+  if ((c.orderUnjudged ?? 0) > 0) {
+    const n = c.orderUnjudged!;
+    shortfalls.push({
+      requirement: 'route_order_unjudged',
+      detail: `${n} day${n === 1 ? '' : 's'} could not be checked for the order ${n === 1 ? 'it runs' : 'they run'} in, because some of ${n === 1 ? 'its' : 'their'} stops have not been located yet.`,
     });
   }
 

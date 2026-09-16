@@ -14,6 +14,7 @@ import {
   RECHECK_WINDOW_LABELS,
   RESERVATION_LABELS,
   TRANSPORT_MODE_LABELS,
+  TRAVEL_MODE_LABELS,
   journeyBadge,
   journeyFromSegment,
   journeyWords,
@@ -3089,9 +3090,26 @@ function travelLine(item: ItineraryItem): string {
    * Kyoto · schedule to confirm" and "Transfer to the lodge · arranged by your
    * operator" are different facts and a traveller acts on them differently.
    */
-  const words = journeyWords(journeyFromSegment(travel));
+  const journey = journeyFromSegment(travel);
+  const words = journeyWords(journey);
   const qualifier = words.headline.includes(' · ') ? words.headline.slice(words.headline.indexOf(' · ') + 3) : words.headline;
-  return `${item.title} · ${qualifier}`;
+  /*
+   * V12.2 §13 — SAY HOW, NOT JUST THAT.
+   *
+   * The reconciler titles a leg it could not time "Travel to Kyoto", because
+   * historically the mode on an unmeasured leg was not reliable enough to print.
+   * The Journey makes it reliable, and the V12.1 Japan acceptance shows what the
+   * old title costs: every train, ferry and transfer on that trip read
+   * "Travel to X · schedule to confirm", so a traveller could not tell a
+   * Shinkansen from a taxi anywhere on the plan.
+   *
+   * The mode goes back in, and only where the title is the generic one — a row
+   * the reconciler already named ("Walk to Quarter Market") keeps its own words.
+   * No new chip, no second line: §13's shape exactly.
+   */
+  const generic = /^Travel to /.test(item.title);
+  const titled = generic && journey.mode !== 'unknown' ? `${TRAVEL_MODE_LABELS[journey.mode]} to ${item.title.slice('Travel to '.length)}` : item.title;
+  return `${titled} · ${qualifier}`;
 }
 
 /**
