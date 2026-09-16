@@ -751,6 +751,24 @@ export interface GeocodedLocality {
   entityType?: string;
   /** The geocoder's own 0–1 relevance score, when it exposes one — diagnostic only, never the ranking's primary signal. */
   importance?: number;
+  /**
+   * V12.3 §9 — the geocoder's own *specific* type word: `village`, `island`,
+   * `ferry_terminal`, `cafe`, `lake`.
+   *
+   * Deliberately separate from `entityType`, which is this codebase's coarse
+   * breadth bucket and is the right reading for "is this somewhere to sleep".
+   * It is the wrong reading for "is this the harbour or the gift shop beside
+   * it": Nominatim files a dockside restaurant, a souvenir shop and the ferry
+   * terminal itself all under `amenity`, and only the specific word separates
+   * them. Both readings are kept because both questions get asked.
+   */
+  placeType?: string;
+  /**
+   * The administrative names the geocoder attached to this row, in no
+   * particular order — for agreement against a region the day already names.
+   * Evidence the provider volunteered, never parsed out of a display string.
+   */
+  adminNames?: readonly string[];
 }
 
 /**

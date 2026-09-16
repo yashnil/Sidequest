@@ -84,6 +84,12 @@ import {
   type AnchorKind,
   gatewayIsUnresolved,
   type BaseKind,
+  pickContextualWinner,
+  sanityCheckResolved,
+  isAuthoritative,
+  type PlaceCandidate,
+  type ResolutionConfidence,
+  type ResolutionContext,
 } from '@sidequest/core';
 import {
   AUTHORITATIVE_NO_ROUTE,
@@ -97,7 +103,6 @@ import {
   ledgerSnapshot,
   measuredLeg,
   normalizeName,
-  pickAnchorGeocoderWinner,
   resolveSkeletonBase,
   isLocalityCandidate,
   haversineKm,
@@ -257,6 +262,16 @@ export interface ReconciledAnchor {
   place: Place | null;
   candidate: DiscoveryCandidate | null;
   method: 'persisted' | 'board' | 'compiled_place' | 'places' | 'geocoder' | null;
+  /**
+   * V12.3 §14 — HOW GROUNDED THE COORDINATE IS, PERSISTED RATHER THAN INFERRED.
+   *
+   * Every layer downstream treats a coordinate as a fact, and before this pass
+   * there was nothing on the record to say whether it had been *chosen* between
+   * plausible alternatives or merely returned. `ambiguous` is the value that
+   * matters: the name and the point survive for the audit, and routing,
+   * readiness and day-order must not build on them.
+   */
+  resolutionConfidence: ResolutionConfidence;
   /** LIVE WORLD V1 — the provider identity behind `identity`, persisted on the package anchor. */
   providerIdentity?: ProviderPlaceIdentity | null;
   /** LIVE WORLD V1 closure — normalised operational evidence, in memory for this cycle only. */
@@ -307,6 +322,44 @@ const CATEGORY_DEFAULT_MINUTES: Record<DraftAnchor['category'], number> = {
   relaxation: 120,
   other: 90,
 };
+
+/**
+ * V12.3 §9 — WHAT SHAPE OF THING THE PLAN ASKED FOR, WHERE IT SAID SOMETHING USEFUL.
+ *
+ * Only the categories where the word genuinely constrains the answer are here.
+ * The rule §9 states is that a broad concept the model authored must **not** be
+ * forced onto a precise provider type, so `landmark`, `nature`, `activity`,
+ * `historic`, `scenic_drive`, `wildlife`, `geothermal` and `relaxation` are all
+ * deliberately absent: they are real categories that legitimately resolve to a
+ * peak, a lagoon, a boundary or a business, and scoring them against a type list
+ * would refuse correct answers to buy a small gain on the ones below.
+ *
+ * An absent category scores neutrally. That is the honest default and it is the
+ * common case.
+ */
+const EXPECTED_KIND_FOR_CATEGORY: Partial<Record<DraftAnchor['category'], string>> = {
+  museum: 'museum',
+  market: 'market',
+  viewpoint: 'viewpoint',
+  town: 'town',
+  neighbourhood: 'village',
+  food: 'restaurant',
+  water: 'lake',
+  beach: 'beach',
+  hike: 'hike',
+};
+
+/**
+ * How far from its day's base a route-critical stop may sit before a single-answer
+ * tier is asked to show its work (V12.3 §12).
+ *
+ * Not a claim that a stop this far away is wrong — Skaftafell is 193 km from the
+ * founder's day-7 base and is correct. It is the threshold past which a *second*
+ * opinion is worth one request, and where the two agree nothing changes.
+ */
+const CROSS_CHECK_KM = 60;
+/** Two answers this close are the same answer; see `SAME_PLACE_KM` in the disambiguation module. */
+const CROSS_CHECK_AGREEMENT_KM = 5;
 
 const ROLE_RANK: Record<AnchorRole, number> = { core: 0, secondary: 1, optional: 2, flex: 3 };
 
@@ -524,7 +577,13 @@ async function resolveDraftAnchor(
   anchor: DraftAnchor,
   context: ReconcileContext,
   notes: string[],
-): Promise<Pick<ReconciledAnchor, 'verification' | 'identity' | 'place' | 'candidate' | 'method' | 'providerIdentity'>> {
+  /**
+   * V12.3 §5 — what the day this anchor belongs to already knows about where it
+   * is. Empty for a day that has placed nothing, and an empty context degrades
+   * this function to exactly its pre-V12.3 behaviour.
+   */
+  spatial: ResolutionContext,
+): Promise<Pick<ReconciledAnchor, 'verification' | 'identity' | 'place' | 'candidate' | 'method' | 'providerIdentity' | 'resolutionConfidence'>> {
   const target = normalizeName(anchor.name);
   /*
    * LIVE WORLD V1 — resolution order: persisted identity → board evidence →
@@ -540,28 +599,65 @@ async function resolveDraftAnchor(
       place: null,
       candidate: null,
       method: 'persisted',
+      /* A persisted identity was settled on an earlier build and re-confirmed by name; it is cited evidence, not a match. */
+      resolutionConfidence: 'confirmed_identity',
       providerIdentity: { providerRef: persisted.providerRef ?? persisted.placeId, provider: persisted.provider, name: persisted.name, coordinates: persisted.coordinates, ...(persisted.placeClass ? { placeClass: persisted.placeClass } : {}), ...(persisted.confidence ? { confidence: persisted.confidence } : {}), ...(persisted.attribution ? { attribution: persisted.attribution } : {}) },
     };
   }
   const candidate = context.candidates.find((c) => normalizeName(displayNameOf(c.place)) === target || normalizeName(c.place.name) === target);
   if (candidate) {
-    return { verification: 'verified', identity: identityFromPlace(candidate.place), place: candidate.place, candidate, method: 'board' };
+    return { verification: 'verified', identity: identityFromPlace(candidate.place), place: candidate.place, candidate, method: 'board', resolutionConfidence: 'confirmed_identity' };
   }
   const compiled = (context.compiledPlaces ?? []).find((p) => normalizeName(displayNameOf(p)) === target || normalizeName(p.name) === target);
   if (compiled) {
-    return { verification: 'partially_verified', identity: identityFromPlace(compiled), place: compiled, candidate: null, method: 'compiled_place' };
+    return { verification: 'partially_verified', identity: identityFromPlace(compiled), place: compiled, candidate: null, method: 'compiled_place', resolutionConfidence: 'confirmed_identity' };
   }
-  if (!context.geocodeLocality && !context.resolvePlaceIdentity) return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+  if (!context.geocodeLocality && !context.resolvePlaceIdentity) return { verification: 'unverified', identity: null, place: null, candidate: null, method: null, resolutionConfidence: 'unresolved' };
   if (context.deadlineReached?.()) {
     notes.push(`"${anchor.name}" was not looked up: the verification deadline had already passed.`);
-    return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+    return { verification: 'unverified', identity: null, place: null, candidate: null, method: null, resolutionConfidence: 'unresolved' };
   }
+  /*
+   * V12.3 §12 — THE TIER THAT ACTUALLY PLACED HALKI ON THE WRONG ISLAND.
+   *
+   * The saved Greek trip persisted `google-places:ChIJsQokTEq_lRQRwapax-i__90`
+   * at `36.2296, 27.5672`. It never reached the geocoder: the places provider
+   * answered first, `assessGeographicScope` accepted it (Chalki is in Greece),
+   * and that was the end of the ladder.
+   *
+   * **A places provider returns one answer.** There is no field to rank, no
+   * runner-up to measure a margin against, nothing for a contextual judgement to
+   * be contextual about. Every guard V12.3 adds downstream is a guard on a set of
+   * candidates, and this tier never produces a set.
+   *
+   * So a suspicious answer here gets a second opinion instead: where a
+   * route-critical stop lands well outside the day's own reach of its base, the
+   * geocoder ladder runs anyway and its contextual winner is preferred. That
+   * winner was *chosen* among alternatives; this one was merely *returned*.
+   * Asked `"Halki, Greece"`, the geocoder returns the Naxos village first.
+   *
+   * The cost is bounded and it is paid only where it is earned: an ordinary stop
+   * near its base returns here exactly as before, with no extra request.
+   */
+  let placesFallback: Awaited<ReturnType<typeof resolveDraftAnchor>> | null = null;
   if (context.resolvePlaceIdentity) {
     try {
       const found = await context.resolvePlaceIdentity({ name: anchor.name, ...(anchor.locality ? { locality: anchor.locality } : {}), category: anchor.category, near: context.region.baseCoordinates, radiusKm: context.region.maxRadiusKm });
       if (found && found.confidence !== 'weak') {
         const scope = assessGeographicScope({ point: found.coordinates, countryCode: found.countryCode, region: context.region, scope: context.destinationScope, subregions: context.subregionGeometries, evidenceCandidates: context.candidates });
-        if (scope.accepted) {
+        const farFromTheDay = Boolean(spatial.routeCritical && spatial.base && haversineKm(spatial.base, found.coordinates) > CROSS_CHECK_KM);
+        if (scope.accepted && farFromTheDay && context.geocodeLocality && !context.deadlineReached?.()) {
+          /* Kept, in case the second opinion has nothing to say. Better a checked answer than none. */
+          placesFallback = {
+            verification: 'partially_verified',
+            identity: { id: `${found.provider}:${found.providerRef}`, name: anchor.name, coordinates: found.coordinates },
+            place: null,
+            candidate: null,
+            method: 'places',
+            resolutionConfidence: 'contextual_match',
+            providerIdentity: { ...found, name: anchor.name },
+          };
+        } else if (scope.accepted) {
           return {
             verification: 'partially_verified',
             // The plan keeps the name the model wrote; a provider's display name is matched against, never stored.
@@ -569,6 +665,8 @@ async function resolveDraftAnchor(
             place: null,
             candidate: null,
             method: 'places',
+            /* A dedicated places provider matched a named venue and the geographic gate accepted it. Strong, but still a match rather than a citation. */
+            resolutionConfidence: 'contextual_match',
             providerIdentity: { ...found, name: anchor.name },
           };
         }
@@ -577,7 +675,7 @@ async function resolveDraftAnchor(
       notes.push(`The places lookup for "${anchor.name}" failed; the locality geocoder was tried instead.`);
     }
   }
-  if (!context.geocodeLocality) return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+  if (!context.geocodeLocality) return placesFallback ?? { verification: 'unverified', identity: null, place: null, candidate: null, method: null, resolutionConfidence: 'unresolved' };
   /*
    * V10 §5 — A ROUTE-DEFINING STOP GETS THE SAME LADDER A BASE GETS.
    *
@@ -596,7 +694,26 @@ async function resolveDraftAnchor(
     ...(context.destinationCountryName ? { countryName: context.destinationCountryName } : {}),
     ...(context.destinationDivisions ? { divisions: context.destinationDivisions } : {}),
   });
-  let winner: ReturnType<typeof pickAnchorGeocoderWinner> = null;
+  /*
+   * V12.3 §2 §3 — THE GEOGRAPHIC GATE SAYS "IN"; IT DOES NOT SAY "WHICH".
+   *
+   * `assessGeographicScope` above accepts everything inside the destination —
+   * and its first tier accepts anything inside the *country*, which for Greece
+   * is every island in the Aegean. That was never wrong; it was answering a
+   * different question. What chose between the survivors was
+   * `pickAnchorGeocoderWinner`, which ranks on the geocoder's own `importance`,
+   * and an island of four thousand outranks a village of four hundred inside it.
+   * That pairing is how "Halki" on a Naxos day became a point 218 km away.
+   *
+   * `pickContextualWinner` weighs the same rows against what the day already
+   * knows — where it sleeps, what else is placed on it, which region it names,
+   * what shape of thing was asked for — with importance kept as one light term
+   * rather than the deciding one. Where nothing separates the field it returns
+   * `ambiguous` and the stop stays unplaced, which §4 prefers to a confident
+   * error, and which the importance rule also did (by returning nothing) for
+   * every venue the geocoder scores at zero.
+   */
+  let outcome: ReturnType<typeof pickContextualWinner> | null = null;
   for (const [index, query] of ladder.slice(0, LADDER_LIMITS.route_defining_stop).entries()) {
     if (index > 0 && context.deadlineReached?.()) break;
     let results: readonly GeocodedLocality[];
@@ -604,29 +721,68 @@ async function resolveDraftAnchor(
       results = await context.geocodeLocality(query);
     } catch {
       notes.push(`The place lookup for "${anchor.name}" failed; it is kept as unverified.`);
-      return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+      return placesFallback ?? { verification: 'unverified', identity: null, place: null, candidate: null, method: null, resolutionConfidence: 'unresolved' };
     }
-    const assessed = results.map((r) => ({
-      result: r,
-      ...assessGeographicScope({
+    const accepted = results.filter((r) =>
+      assessGeographicScope({
         point: r,
         countryCode: r.countryCode,
         region: context.region,
         scope: context.destinationScope,
         subregions: context.subregionGeometries,
         evidenceCandidates: context.candidates,
-      }),
-    }));
-    winner = pickAnchorGeocoderWinner(assessed.filter((a) => a.accepted));
-    if (winner) break;
+      }).accepted,
+    );
+    if (accepted.length === 0) continue;
+    outcome = pickContextualWinner(accepted.map(candidateFromGeocoded), spatial);
+    if (outcome.winner) break;
   }
-  if (!winner) return { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+  if (!outcome?.winner) {
+    if (outcome?.confidence === 'ambiguous') notes.push(`"${anchor.name}" ${outcome.note}`);
+    /*
+     * The second opinion had nothing to say. The places answer stands — it was
+     * never contradicted, only unconfirmed, and `missing ≠ contradicted`.
+     */
+    return placesFallback ?? { verification: 'unverified', identity: null, place: null, candidate: null, method: null, resolutionConfidence: outcome?.confidence ?? 'unresolved' };
+  }
+  if (placesFallback) {
+    const apart = haversineKm(placesFallback.identity!.coordinates, outcome.winner.point);
+    if (apart <= CROSS_CHECK_AGREEMENT_KM) {
+      /* The two agree. Keep the places identity, which carries the provider reference the package persists. */
+      return placesFallback;
+    }
+    notes.push(`"${anchor.name}" sat ${Math.round(haversineKm(spatial.base!, placesFallback.identity!.coordinates))} km from where that day is based, so it was checked against the map: the two answers were ${Math.round(apart)} km apart, and the one that fits the trip's own geography was used.`);
+  }
   return {
     verification: 'partially_verified',
-    identity: { id: winner.result.sourceId, name: winner.result.name, coordinates: { lat: winner.result.lat, lng: winner.result.lng } },
+    identity: { id: outcome.winner.id, name: outcome.winner.name, coordinates: outcome.winner.point },
     place: null,
     candidate: null,
     method: 'geocoder',
+    resolutionConfidence: outcome.confidence,
+  };
+}
+
+function coarseKindOf(row: GeocodedLocality): string | undefined {
+  if (row.placeType) return row.placeType;
+  return row.entityType && row.entityType !== 'unknown' ? row.entityType : undefined;
+}
+
+/** A geocoder row as something the contextual judgement can read. Nothing is inferred; absent stays absent. */
+function candidateFromGeocoded(row: GeocodedLocality): PlaceCandidate {
+  return {
+    id: row.sourceId,
+    name: row.name,
+    point: { lat: row.lat, lng: row.lng },
+    ...(row.importance !== undefined ? { importance: row.importance } : {}),
+    /*
+     * The specific word, falling back to this codebase's coarse breadth bucket
+     * where the provider gave none — but never to `'unknown'`, which is that
+     * classifier stating it could not place the row in any bucket at all.
+     */
+    ...(coarseKindOf(row) ? { kind: coarseKindOf(row) } : {}),
+    ...(row.countryCode ? { countryCode: row.countryCode } : {}),
+    ...(row.adminNames ? { adminNames: row.adminNames } : {}),
   };
 }
 
@@ -1475,17 +1631,93 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       return { day, anchor, index, kind, priority: lookupPriorityFor(kind, anchor.role) };
     }),
   );
-  type ResolvedFields = Pick<ReconciledAnchor, 'verification' | 'identity' | 'place' | 'candidate' | 'method' | 'providerIdentity'>;
-  const NOT_LOOKED_UP: ResolvedFields = { verification: 'unverified', identity: null, place: null, candidate: null, method: null };
+  type ResolvedFields = Pick<ReconciledAnchor, 'verification' | 'identity' | 'place' | 'candidate' | 'method' | 'providerIdentity' | 'resolutionConfidence'>;
+  const NOT_LOOKED_UP: ResolvedFields = { verification: 'unverified', identity: null, place: null, candidate: null, method: null, resolutionConfidence: 'unresolved' };
   const resolvedAnchors: ResolvedFields[] = anchorJobs.map(() => NOT_LOOKED_UP);
   const lookupOrder = anchorJobs
     .map((job, jobIndex) => ({ job, jobIndex }))
     .filter(({ job }) => job.priority !== null)
     .sort((a, b) => a.job.priority! - b.job.priority! || a.jobIndex - b.jobIndex);
-  const lookedUp = await mapConcurrent(lookupOrder, ANCHOR_RESOLUTION_CONCURRENCY, ({ job }) => resolveDraftAnchor(job.anchor, context, providerNotes));
+  /*
+   * V12.3 §5 — THE CONTEXT EACH DAY ALREADY CARRIES, HANDED TO ITS OWN LOOKUPS.
+   *
+   * Assembled once per day and shared by every anchor on it. Note what is *not*
+   * here: neighbours. Nothing on the day is placed yet when these run — they run
+   * concurrently, by design, because that is what keeps the build inside its
+   * deadline — so the first pass has the bed and the region and no more. The
+   * day's own footprint is evidence that only exists once the pass is over, and
+   * §13's second pass below is where it is spent.
+   */
+  const spatialByDay = new Map<number, ResolutionContext>();
+  for (const day of draft.days) {
+    const base = baseForDate[day.dayNumber - 1]?.identity?.coordinates;
+    spatialByDay.set(day.dayNumber, {
+      ...(base ? { base } : {}),
+      ...(context.region.maxRadiusKm ? { extentKm: context.region.maxRadiusKm } : {}),
+      regionNames: [context.region.name, ...(context.destinationDivisions ?? [])],
+    });
+  }
+  const spatialFor = (job: (typeof anchorJobs)[number]): ResolutionContext => {
+    const day = spatialByDay.get(job.day.dayNumber) ?? {};
+    const expectedKind = EXPECTED_KIND_FOR_CATEGORY[job.anchor.category];
+    return {
+      ...day,
+      ...(expectedKind ? { expectedKind } : {}),
+      /*
+       * V12.3 §10 — `core` is the test, not `named_place`.
+       *
+       * The V10 placement *record* counts a route-critical stop as a core
+       * `named_place`, and that is right for what it measures. It is too narrow
+       * here: the live Greek trip's `Halki` is classified `area_experience` — a
+       * village is an area — and it is the stop day 5 is built around. Scoping
+       * the second opinion to `named_place` would have left the defect this pass
+       * exists for untouched.
+       */
+      ...(job.anchor.role === 'core' ? { routeCritical: true } : {}),
+    };
+  };
+  const lookedUp = await mapConcurrent(lookupOrder, ANCHOR_RESOLUTION_CONCURRENCY, ({ job }) => resolveDraftAnchor(job.anchor, context, providerNotes, spatialFor(job)));
   lookupOrder.forEach(({ jobIndex }, i) => {
     resolvedAnchors[jobIndex] = lookedUp[i]!;
   });
+
+  /*
+   * V12.3 §13 — THE SECOND PASS, WHICH IS THE ONE THAT CATCHES HALKI.
+   *
+   * Every tier above can hand back a plausible-looking coordinate having never
+   * seen the day it belongs to: a persisted identity settled on an older build,
+   * a places provider that matched a name, a geocoder answering a query whose
+   * only qualifier was the country. The evidence that refuses them is the day's
+   * own footprint, and that footprint does not exist until the first pass is
+   * finished. So it is spent here, on what came back.
+   *
+   * A suspicious winner is **downgraded, never deleted**: the name and the point
+   * stay on the record for the audit, `resolutionConfidence` becomes `ambiguous`,
+   * and `isAuthoritative` is what every consumer asks before routing on it. Costs
+   * nothing — no provider, no clock, one haversine per anchor.
+   */
+  for (const day of draft.days) {
+    const placed = anchorJobs
+      .map((job, jobIndex) => ({ jobIndex, dayNumber: job.day.dayNumber, point: resolvedAnchors[jobIndex]!.identity?.coordinates }))
+      .filter((entry): entry is { jobIndex: number; dayNumber: number; point: { lat: number; lng: number } } => entry.dayNumber === day.dayNumber && Boolean(entry.point));
+    /* One placed stop is the stop being judged; a footprint needs somebody else on it. */
+    if (placed.length < 2) continue;
+    const dayContext = spatialByDay.get(day.dayNumber) ?? {};
+    for (const { jobIndex, point } of placed) {
+      const resolved = resolvedAnchors[jobIndex]!;
+      if (!isAuthoritative(resolved.resolutionConfidence)) continue;
+      const others = placed.filter((other) => other.jobIndex !== jobIndex).map((other) => other.point);
+      const checked = sanityCheckResolved(point, { ...dayContext, neighbours: others }, resolved.resolutionConfidence);
+      if (checked.confidence === resolved.resolutionConfidence) continue;
+      /*
+       * Downgraded, not deleted. `unverified` is the verification state the rest
+       * of the reconciler already uses for "we could not stand behind this",
+       * and it is what keeps the point out of the day's measured legs.
+       */
+      resolvedAnchors[jobIndex] = { ...resolved, resolutionConfidence: checked.confidence, verification: 'unverified' };
+      providerNotes.push(`"${anchorJobs[jobIndex]!.anchor.name}" ${checked.note}`);
+    }
+  }
   /*
    * V10 §5 — a `core` named place the route is built around is route-critical
    * too. Not every stop: a decorative viewpoint may degrade, and an experience
@@ -1499,7 +1731,28 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       id: `${draftAnchorId(job.day.dayNumber, job.index, job.anchor.name)}`,
       name: job.anchor.name,
       kind: 'route_defining_stop',
-      outcome: resolved.identity ? 'placed' : context.deadlineReached?.() ? 'not_attempted' : !context.geocodeLocality && !context.resolvePlaceIdentity ? 'no_provider' : 'no_acceptable_candidate',
+      /*
+       * V12.3 §15 — SAY WHICH KIND OF FAILURE THIS WAS.
+       *
+       * Before this pass every anchor that did not place was reported as
+       * `no_acceptable_candidate` — "Sidequest could not find it on the map" —
+       * which for an ambiguous name is simply untrue: the map found several, and
+       * declining to guess between them is a different fact and a better one. It
+       * is also the one a traveller can act on, by saying which they meant.
+       *
+       * A stop the second pass downgraded lands here too: it has a coordinate and
+       * is deliberately not treated as placed.
+       */
+      outcome:
+        resolved.identity && isAuthoritative(resolved.resolutionConfidence)
+          ? 'placed'
+          : resolved.resolutionConfidence === 'ambiguous'
+            ? 'ambiguous'
+            : context.deadlineReached?.()
+              ? 'not_attempted'
+              : !context.geocodeLocality && !context.resolvePlaceIdentity
+                ? 'no_provider'
+                : 'no_acceptable_candidate',
       ...(resolved.identity ? { coordinates: resolved.identity.coordinates } : {}),
       attempts: [],
     };
@@ -1902,6 +2155,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
               coordinates: anchor.identity.coordinates,
               ...(anchor.providerIdentity?.placeClass ? { placeClass: anchor.providerIdentity.placeClass } : {}),
               ...(anchor.providerIdentity?.confidence ? { confidence: anchor.providerIdentity.confidence } : {}),
+              /* V12.3 §14 — persisted, so no downstream layer has to re-derive it or assume it. */
+              resolutionConfidence: anchor.resolutionConfidence,
               ...(anchor.providerIdentity?.attribution ? { attribution: anchor.providerIdentity.attribution } : {}),
               resolvedAt: (context.now ?? new Date()).toISOString(),
             },

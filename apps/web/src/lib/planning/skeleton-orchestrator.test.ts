@@ -34,7 +34,7 @@ describe('productionGeocodeLocality — real Nominatim, zero model calls', () =>
 
   it('maps a real Nominatim response into GeocodedLocality, using the same osm-element id convention used elsewhere', async () => {
     const { geocode } = await import('../providers/nominatim');
-    const { productionGeocodeLocality } = await import('./skeleton-orchestrator');
+    const { productionGeocodeLocality, GEOCODER_RESULT_LIMIT } = await import('./skeleton-orchestrator');
     const place: NominatimPlace = {
       place_id: 12345,
       osm_type: 'node',
@@ -50,9 +50,10 @@ describe('productionGeocodeLocality — real Nominatim, zero model calls', () =>
     vi.mocked(geocode).mockResolvedValue({ places: [place], calls: 1, cacheHit: false });
 
     const results = await productionGeocodeLocality('Reykjavík, Iceland');
-    expect(geocode).toHaveBeenCalledWith('Reykjavík, Iceland', expect.objectContaining({ limit: 5 }));
+    expect(geocode).toHaveBeenCalledWith('Reykjavík, Iceland', expect.objectContaining({ limit: GEOCODER_RESULT_LIMIT }));
     expect(results).toEqual([
-      { sourceId: 'node/987654', name: 'Reykjavik', lat: 64.14598, lng: -21.94224, entityType: 'city', importance: 0.83 },
+      /* V12.3 §9 — `placeType` carries the provider's own specific word beside this codebase's coarse `entityType` bucket. */
+      { sourceId: 'node/987654', name: 'Reykjavik', lat: 64.14598, lng: -21.94224, entityType: 'city', importance: 0.83, placeType: 'city' },
     ]);
   });
 

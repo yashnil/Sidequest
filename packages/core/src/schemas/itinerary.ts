@@ -1277,6 +1277,16 @@ export const packageAnchorSchema = z.object({
       coordinates: z.object({ lat: z.number(), lng: z.number() }),
       placeClass: z.enum(['business_venue', 'controlled_site', 'open_ground', 'area', 'transport_terminal', 'unknown']).optional(),
       confidence: z.enum(['exact', 'probable', 'weak']).optional(),
+      /**
+       * V12.3 §14 — how grounded this coordinate is, as a fact on the record.
+       *
+       * Distinct from `confidence` above, which is the *provider's* own opinion of
+       * its match. This is Sidequest's: whether the point was **chosen** between
+       * plausible alternatives against the trip's own geography, or merely
+       * returned. `ambiguous` is the value that earns its keep — the identity is
+       * kept for the audit and nothing may route on it (`isAuthoritative`).
+       */
+      resolutionConfidence: z.enum(['confirmed_identity', 'contextual_match', 'ambiguous', 'unresolved']).optional(),
       attribution: z.string().min(1).optional(),
       resolvedAt: z.string().optional(),
     })

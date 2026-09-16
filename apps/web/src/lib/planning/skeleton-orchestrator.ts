@@ -1,5 +1,5 @@
 import 'server-only';
-import { classifyNominatim, geocode, osmElementId, reverseGeocode } from '../providers/nominatim';
+import { classifyNominatim, geocode, osmElementId, reverseGeocode, type NominatimPlace } from '../providers/nominatim';
 import { fetchSettlements, isPoiProviderEnabled, normalizeSettlement, type BoundingBox } from '../providers/overpass';
 import { createOpenProviders } from '../providers/live';
 import { getProfile, getTrip } from '../db/repository';
@@ -142,15 +142,43 @@ export function productionSubregionGeometries(compiled: CompiledRegion): readonl
  * one discovered during a live compilation are the same identity if they are
  * the same place, not two different spellings of it.
  */
+/**
+ * V12.3 §11 — WHY TEN AND NOT FIVE.
+ *
+ * Recorded from the live geocoder during this pass: asked for `Halki`, the
+ * Naxos village the Greek trip meant comes back **tenth of ten**, behind a
+ * village in Maharashtra and four Polish streets. At `limit: 5` it is not in
+ * the response at all, and no amount of scoring downstream can choose a row
+ * that was never returned. The cost is one response body, not one request —
+ * the same query, the same rate limit, the same cache key.
+ */
+export const GEOCODER_RESULT_LIMIT = 10;
+
 export async function productionGeocodeLocality(query: string): Promise<readonly GeocodedLocality[]> {
-  const result = await geocode(query, { limit: 5 });
+  const result = await geocode(query, { limit: GEOCODER_RESULT_LIMIT });
   const localities: GeocodedLocality[] = [];
   for (const place of result.places) {
+    const locality = geocodedLocalityFrom(place);
+    if (locality) localities.push(locality);
+  }
+  return localities;
+}
+
+/**
+ * One Nominatim row, read into this codebase's own shape.
+ *
+ * Exported because the recorded corpora replay real rows through it. There used
+ * to be a second copy of this mapping in the V10 founder fixture, and the moment
+ * V12.3 added a field the two disagreed — a benchmark whose stated contract is
+ * "the product's reading of real rows" was quietly reading them differently.
+ */
+export function geocodedLocalityFrom(place: NominatimPlace): GeocodedLocality | null {
+  {
     const lat = Number(place.lat);
     const lng = Number(place.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
     const sourceId = osmElementId(place) ?? (place.place_id !== undefined ? `nominatim/${place.place_id}` : null);
-    if (!sourceId) continue;
+    if (!sourceId) return null;
     // `addressdetails=1` is already requested in `geocode()` (see its own
     // comment on why), so `address.country_code` is real, structured,
     // ISO-3166-1 alpha-2 evidence — never guessed from the display name.
@@ -160,7 +188,7 @@ export async function productionGeocodeLocality(query: string): Promise<readonly
     // `live.ts`'s destination-candidate scoring — rather than inventing a
     // second reading of the same raw fields.
     const { entityType } = classifyNominatim(place);
-    localities.push({
+    return {
       sourceId,
       name: place.namedetails?.['name:en'] ?? place.name ?? place.display_name,
       lat,
@@ -168,9 +196,15 @@ export async function productionGeocodeLocality(query: string): Promise<readonly
       ...(countryCode ? { countryCode } : {}),
       entityType,
       ...(place.importance !== undefined ? { importance: place.importance } : {}),
-    });
+      /*
+       * V12.3 §9 — the specific word alongside the bucket. `type` first:
+       * `addresstype` is the coarser of the two and collapses the distinctions
+       * a contextual judgement needs.
+       */
+      ...(place.type ?? place.addresstype ? { placeType: place.type ?? place.addresstype } : {}),
+      ...(place.address ? { adminNames: Object.values(place.address) } : {}),
+    };
   }
-  return localities;
 }
 
 /** `place=city`/`town` reads the same as Nominatim's own `addresstype: city`; `village`/`hamlet` reads as `neighbourhood` — the same two buckets `classifyNominatim()`'s `LOCALITY_ENTITY_TYPES` already recognises, so an Overpass-found settlement and a Nominatim-found one are judged by the identical rule. */

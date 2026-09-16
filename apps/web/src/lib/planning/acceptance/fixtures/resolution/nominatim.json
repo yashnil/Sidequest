@@ -1,0 +1,2489 @@
+{
+  "halki": {
+    "query": "Halki",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 247121736,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 793725375,
+        "lat": "18.2937426",
+        "lon": "76.7577517",
+        "category": "place",
+        "type": "village",
+        "place_rank": 19,
+        "importance": 0.14670416800183103,
+        "addresstype": "village",
+        "name": "Halki",
+        "display_name": "Halki, Shirur-Anantpal, Latur, Maharashtra, India",
+        "address": {
+          "village": "Halki",
+          "county": "Shirur-Anantpal",
+          "state_district": "Latur",
+          "state": "Maharashtra",
+          "ISO3166-2-lvl4": "IN-MH",
+          "country": "India",
+          "country_code": "in"
+        },
+        "extratags": {
+          "residential": "rural",
+          "linked_place": "village"
+        },
+        "boundingbox": [
+          "18.2899362",
+          "18.2963284",
+          "76.7537230",
+          "76.7627646"
+        ]
+      },
+      {
+        "place_id": 179737193,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 3009708546,
+        "lat": "51.0822222",
+        "lon": "22.7475000",
+        "category": "place",
+        "type": "hamlet",
+        "place_rank": 20,
+        "importance": 0.1333850774395361,
+        "addresstype": "hamlet",
+        "name": "Halka",
+        "display_name": "Halka, Majdan Kozic Górnych, gmina Jabłonna, powiat lubelski, województwo lubelskie, Polska",
+        "address": {
+          "hamlet": "Halka",
+          "village": "Majdan Kozic Górnych",
+          "municipality": "gmina Jabłonna",
+          "county": "powiat lubelski",
+          "state": "województwo lubelskie",
+          "ISO3166-2-lvl4": "PL-06",
+          "country": "Polska",
+          "country_code": "pl"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "51.0622222",
+          "51.1022222",
+          "22.7275000",
+          "22.7675000"
+        ]
+      },
+      {
+        "place_id": 176310946,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 28005368,
+        "lat": "52.1802208",
+        "lon": "21.1863781",
+        "category": "highway",
+        "type": "residential",
+        "place_rank": 26,
+        "importance": 0.0534169962615396,
+        "addresstype": "road",
+        "name": "Halki",
+        "display_name": "Halki, Radość, Wawer, Warszawa, województwo mazowieckie, 04-864, Polska",
+        "address": {
+          "road": "Halki",
+          "quarter": "Radość",
+          "suburb": "Wawer",
+          "city": "Warszawa",
+          "state": "województwo mazowieckie",
+          "ISO3166-2-lvl4": "PL-14",
+          "postcode": "04-864",
+          "country": "Polska",
+          "country_code": "pl"
+        },
+        "extratags": {
+          "wikidata": "Q114599191"
+        },
+        "boundingbox": [
+          "52.1774955",
+          "52.1830969",
+          "21.1847407",
+          "21.1880710"
+        ]
+      },
+      {
+        "place_id": 176659145,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 963281512,
+        "lat": "52.1767346",
+        "lon": "21.1883432",
+        "category": "highway",
+        "type": "residential",
+        "place_rank": 26,
+        "importance": 0.0534169962615396,
+        "addresstype": "road",
+        "name": "Halki",
+        "display_name": "Halki, Radość, Wawer, Warszawa, województwo mazowieckie, 04-885, Polska",
+        "address": {
+          "road": "Halki",
+          "quarter": "Radość",
+          "suburb": "Wawer",
+          "city": "Warszawa",
+          "state": "województwo mazowieckie",
+          "ISO3166-2-lvl4": "PL-14",
+          "postcode": "04-885",
+          "country": "Polska",
+          "country_code": "pl"
+        },
+        "extratags": {
+          "surface": "compacted",
+          "wikidata": "Q114599191"
+        },
+        "boundingbox": [
+          "52.1764281",
+          "52.1770296",
+          "21.1881166",
+          "21.1885559"
+        ]
+      },
+      {
+        "place_id": 183152143,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 40770002,
+        "lat": "50.0647922",
+        "lon": "19.8583210",
+        "category": "highway",
+        "type": "residential",
+        "place_rank": 26,
+        "importance": 0.05341270084687568,
+        "addresstype": "road",
+        "name": "Halki",
+        "display_name": "Halki, Wola Justowska, Zwierzyniec, Kraków, województwo małopolskie, 30-228, Polska",
+        "address": {
+          "road": "Halki",
+          "quarter": "Wola Justowska",
+          "city_district": "Zwierzyniec",
+          "city": "Kraków",
+          "state": "województwo małopolskie",
+          "ISO3166-2-lvl4": "PL-12",
+          "postcode": "30-228",
+          "country": "Polska",
+          "country_code": "pl"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "50.0646000",
+          "50.0649675",
+          "19.8572786",
+          "19.8593587"
+        ]
+      },
+      {
+        "place_id": 180059919,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 177806326,
+        "lat": "51.7014897",
+        "lon": "19.4416514",
+        "category": "highway",
+        "type": "residential",
+        "place_rank": 26,
+        "importance": 0.05340810482948039,
+        "addresstype": "road",
+        "name": "Halki",
+        "display_name": "Halki, Ruda Pabianicka, Łódź-Górna, Łódź, województwo łódzkie, 93-436, Polska",
+        "address": {
+          "road": "Halki",
+          "quarter": "Ruda Pabianicka",
+          "city_district": "Łódź-Górna",
+          "city": "Łódź",
+          "state": "województwo łódzkie",
+          "ISO3166-2-lvl4": "PL-10",
+          "postcode": "93-436",
+          "country": "Polska",
+          "country_code": "pl"
+        },
+        "extratags": {
+          "surface": "asphalt"
+        },
+        "boundingbox": [
+          "51.6998145",
+          "51.7031725",
+          "19.4415007",
+          "19.4418836"
+        ]
+      },
+      {
+        "place_id": 190309593,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 7440940,
+        "lat": "51.5821800",
+        "lon": "30.4909200",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 20,
+        "importance": 0.33935777253266924,
+        "addresstype": "hamlet",
+        "name": "Галкі",
+        "display_name": "Галкі, Новаялчанскі сельскі Савет, Брагінскі раён, Гомельская вобласць, Беларусь",
+        "address": {
+          "hamlet": "Галкі",
+          "city": "Новаялчанскі сельскі Савет",
+          "county": "Брагінскі раён",
+          "state": "Гомельская вобласць",
+          "ISO3166-2-lvl4": "BY-HO",
+          "country": "Беларусь",
+          "country_code": "by"
+        },
+        "extratags": {
+          "place": "hamlet",
+          "wikidata": "Q3920586",
+          "wikipedia": "be:Галкі",
+          "name:prefix": "вёска",
+          "linked_place": "hamlet",
+          "name:prefix:be": "вёска",
+          "name:prefix:ru": "деревня",
+          "admin_level": "10"
+        },
+        "boundingbox": [
+          "51.5757154",
+          "51.5883424",
+          "30.4722163",
+          "30.5091664"
+        ]
+      },
+      {
+        "place_id": 176525778,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 963281504,
+        "lat": "52.1772180",
+        "lon": "21.1882566",
+        "category": "highway",
+        "type": "proposed",
+        "place_rank": 30,
+        "importance": 0.00008366292820625647,
+        "addresstype": "highway",
+        "name": "Halki",
+        "display_name": "Halki, Radość, Wawer, Warszawa, województwo mazowieckie, 04-864, Polska",
+        "address": {
+          "highway": "Halki",
+          "road": "Halki",
+          "quarter": "Radość",
+          "suburb": "Wawer",
+          "city": "Warszawa",
+          "state": "województwo mazowieckie",
+          "ISO3166-2-lvl4": "PL-14",
+          "postcode": "04-864",
+          "country": "Polska",
+          "country_code": "pl"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "52.1769280",
+          "52.1774955",
+          "21.1880710",
+          "21.1883118"
+        ]
+      },
+      {
+        "place_id": 54494198,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 806501481,
+        "lat": "37.0639027",
+        "lon": "25.4839886",
+        "category": "place",
+        "type": "village",
+        "place_rank": 19,
+        "importance": 0.14672107804989695,
+        "addresstype": "village",
+        "name": "Χαλκί",
+        "display_name": "Χαλκί, Δήμος Νάξου και Μικρών Κυκλάδων, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 843 02, Ελλάς",
+        "address": {
+          "village": "Χαλκί",
+          "municipality": "Δήμος Νάξου και Μικρών Κυκλάδων",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "843 02",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "extratags": {
+          "wikidata": "Q12886012",
+          "wikipedia": "el:Χαλκί Νάξου"
+        },
+        "boundingbox": [
+          "37.0439027",
+          "37.0839027",
+          "25.4639886",
+          "25.5039886"
+        ]
+      },
+      {
+        "place_id": 170408111,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 7543159,
+        "lat": "54.5127000",
+        "lon": "28.9110400",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 20,
+        "importance": 0.23822746059912708,
+        "addresstype": "hamlet",
+        "name": "Галькі",
+        "display_name": "Галькі, Халопеніцкі сельскі Савет, Крупскі раён, Мінская вобласць, 222029, Беларусь",
+        "address": {
+          "hamlet": "Галькі",
+          "city": "Халопеніцкі сельскі Савет",
+          "county": "Крупскі раён",
+          "state": "Мінская вобласць",
+          "ISO3166-2-lvl4": "BY-MI",
+          "postcode": "222029",
+          "country": "Беларусь",
+          "country_code": "by"
+        },
+        "extratags": {
+          "place": "hamlet",
+          "wikidata": "Q16696028",
+          "wikipedia": "be:Галькі (Крупскі раён)",
+          "population": "135",
+          "name:prefix": "вёска",
+          "linked_place": "hamlet",
+          "name:prefix:be": "вёска",
+          "name:prefix:ru": "деревня",
+          "population:date": "2009-10-14",
+          "admin_level": "10"
+        },
+        "boundingbox": [
+          "54.5040429",
+          "54.5209802",
+          "28.9071740",
+          "28.9168700"
+        ]
+      }
+    ]
+  },
+  "halki-naxos": {
+    "query": "Halki, Naxos",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 55190193,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 1110820044,
+        "lat": "37.0594927",
+        "lon": "25.4760618",
+        "category": "highway",
+        "type": "secondary",
+        "place_rank": 26,
+        "importance": 0.053387744716563636,
+        "addresstype": "road",
+        "name": "Νάξος - Χαλκί",
+        "display_name": "Νάξος - Χαλκί, Βουρβουριά, Χαλκί, Δήμος Νάξου και Μικρών Κυκλάδων, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 843 02, Ελλάς",
+        "address": {
+          "road": "Νάξος - Χαλκί",
+          "hamlet": "Βουρβουριά",
+          "village": "Χαλκί",
+          "municipality": "Δήμος Νάξου και Μικρών Κυκλάδων",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "843 02",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "extratags": {
+          "lanes": "2",
+          "surface": "asphalt",
+          "name:prefix": "Επαρχιακή Οδός"
+        },
+        "boundingbox": [
+          "37.0547808",
+          "37.0644414",
+          "25.4666616",
+          "25.4848125"
+        ]
+      },
+      {
+        "place_id": 55186523,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 806501481,
+        "lat": "37.0639027",
+        "lon": "25.4839886",
+        "category": "place",
+        "type": "village",
+        "place_rank": 19,
+        "importance": 0.14672107804989695,
+        "addresstype": "village",
+        "name": "Χαλκί",
+        "display_name": "Χαλκί, Δήμος Νάξου και Μικρών Κυκλάδων, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 843 02, Ελλάς",
+        "address": {
+          "village": "Χαλκί",
+          "municipality": "Δήμος Νάξου και Μικρών Κυκλάδων",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "843 02",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "extratags": {
+          "wikidata": "Q12886012",
+          "wikipedia": "el:Χαλκί Νάξου"
+        },
+        "boundingbox": [
+          "37.0439027",
+          "37.0839027",
+          "25.4639886",
+          "25.5039886"
+        ]
+      },
+      {
+        "place_id": 55292210,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 12230333959,
+        "lat": "37.0638448",
+        "lon": "25.4834372",
+        "category": "craft",
+        "type": "sculptor",
+        "place_rank": 30,
+        "importance": 0.000054411383230289426,
+        "addresstype": "craft",
+        "name": "Μαρμαίρω Νάξος",
+        "display_name": "Μαρμαίρω Νάξος, Νάξος - Χαλκί, Βουρβουριά, Χαλκί, Δήμος Νάξου και Μικρών Κυκλάδων, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 843 02, Ελλάς",
+        "address": {
+          "craft": "Μαρμαίρω Νάξος",
+          "road": "Νάξος - Χαλκί",
+          "hamlet": "Βουρβουριά",
+          "village": "Χαλκί",
+          "municipality": "Δήμος Νάξου και Μικρών Κυκλάδων",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "843 02",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "37.0637948",
+          "37.0638948",
+          "25.4833872",
+          "25.4834872"
+        ]
+      }
+    ]
+  },
+  "field": {
+    "query": "Field",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 372400247,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 3554329,
+        "lat": "44.9168278",
+        "lon": "-93.2684148",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 20,
+        "importance": 0.3151525238377993,
+        "addresstype": "neighbourhood",
+        "name": "Field",
+        "display_name": "Field, Nokomis, Minneapolis, Hennepin County, Minnesota, United States",
+        "address": {
+          "neighbourhood": "Field",
+          "suburb": "Nokomis",
+          "city": "Minneapolis",
+          "county": "Hennepin County",
+          "state": "Minnesota",
+          "ISO3166-2-lvl4": "US-MN",
+          "country": "United States",
+          "country_code": "us"
+        },
+        "extratags": {
+          "wikidata": "Q5446859",
+          "wikipedia": "en:Field, Minneapolis",
+          "linked_place": "neighbourhood",
+          "admin_level": "10"
+        },
+        "boundingbox": [
+          "44.9092720",
+          "44.9197320",
+          "-93.2748115",
+          "-93.2625841"
+        ]
+      },
+      {
+        "place_id": 341209751,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 154360128,
+        "lat": "36.8928650",
+        "lon": "-83.6021372",
+        "category": "place",
+        "type": "hamlet",
+        "place_rank": 20,
+        "importance": 0.2946949388609965,
+        "addresstype": "hamlet",
+        "name": "Field",
+        "display_name": "Field, Bell County, Kentucky, United States",
+        "address": {
+          "hamlet": "Field",
+          "county": "Bell County",
+          "state": "Kentucky",
+          "ISO3166-2-lvl4": "US-KY",
+          "country": "United States",
+          "country_code": "us"
+        },
+        "extratags": {
+          "ele": "407",
+          "wikidata": "Q14690390"
+        },
+        "boundingbox": [
+          "36.8728650",
+          "36.9128650",
+          "-83.6221372",
+          "-83.5821372"
+        ]
+      },
+      {
+        "place_id": 18848111,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 7066776,
+        "lat": "-35.7936155",
+        "lon": "139.6437378",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 18,
+        "importance": 0.23648094285300414,
+        "addresstype": "city_district",
+        "name": "Field",
+        "display_name": "Field, South Australia, Australia",
+        "address": {
+          "city_district": "Field",
+          "state": "South Australia",
+          "ISO3166-2-lvl4": "AU-SA",
+          "country": "Australia",
+          "country_code": "au"
+        },
+        "extratags": {
+          "wikidata": "Q48799549",
+          "ref:psma:loc_pid": "loc3b099ae68193",
+          "ref:dpti:suburb_num": "526502",
+          "admin_level": "9"
+        },
+        "boundingbox": [
+          "-35.9029573",
+          "-35.6953211",
+          "139.5070923",
+          "139.8360943"
+        ]
+      },
+      {
+        "place_id": 368800890,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 5863840243,
+        "lat": "46.5206969",
+        "lon": "-80.0273257",
+        "category": "place",
+        "type": "town",
+        "place_rank": 18,
+        "importance": 0.21822785325192331,
+        "addresstype": "town",
+        "name": "Field",
+        "display_name": "Field, West Nipissing, Nipissing District, Northeastern Ontario, Ontario, Canada",
+        "address": {
+          "town": "Field",
+          "village": "West Nipissing",
+          "county": "Nipissing District",
+          "state_district": "Northeastern Ontario",
+          "state": "Ontario",
+          "ISO3166-2-lvl4": "CA-ON",
+          "country": "Canada",
+          "country_code": "ca"
+        },
+        "extratags": {
+          "wikidata": "Q115174220",
+          "wikipedia": "en:Field, Ontario"
+        },
+        "boundingbox": [
+          "46.4806969",
+          "46.5606969",
+          "-80.0673257",
+          "-79.9873257"
+        ]
+      },
+      {
+        "place_id": 25531087,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 7259806123,
+        "lat": "-40.8564398",
+        "lon": "175.1103943",
+        "category": "natural",
+        "type": "peak",
+        "place_rank": 18,
+        "importance": 0.1600424361028458,
+        "addresstype": "peak",
+        "name": "Field",
+        "display_name": "Field, Waikanae, Kāpiti Coast District, Wellington, New Zealand / Aotearoa",
+        "address": {
+          "peak": "Field",
+          "town": "Waikanae",
+          "county": "Kāpiti Coast District",
+          "state": "Wellington",
+          "ISO3166-2-lvl4": "NZ-WGN",
+          "country": "New Zealand / Aotearoa",
+          "country_code": "nz"
+        },
+        "extratags": {
+          "ele": "611"
+        },
+        "boundingbox": [
+          "-40.8564898",
+          "-40.8563898",
+          "175.1103443",
+          "175.1104443"
+        ]
+      },
+      {
+        "place_id": 376819525,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 51970759,
+        "lat": "51.3961113",
+        "lon": "-116.4891525",
+        "category": "place",
+        "type": "village",
+        "place_rank": 19,
+        "importance": 0.1467181300068665,
+        "addresstype": "village",
+        "name": "Field",
+        "display_name": "Field, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, V0A 1G0, Canada",
+        "address": {
+          "village": "Field",
+          "city": "Area A (Kicking Horse/Kinbasket Lake)",
+          "county": "Columbia-Shuswap Regional District",
+          "state": "British Columbia",
+          "ISO3166-2-lvl4": "CA-BC",
+          "postcode": "V0A 1G0",
+          "country": "Canada",
+          "country_code": "ca"
+        },
+        "extratags": {
+          "wikidata": "Q3071515",
+          "wikipedia": "en:Field, British Columbia"
+        },
+        "boundingbox": [
+          "51.3761113",
+          "51.4161113",
+          "-116.5091525",
+          "-116.4691525"
+        ]
+      },
+      {
+        "place_id": 243371517,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 346013729,
+        "lat": "24.8087590",
+        "lon": "85.0304487",
+        "category": "water",
+        "type": "lake",
+        "place_rank": 20,
+        "importance": 0.1333994056610971,
+        "addresstype": "lake",
+        "name": "field",
+        "display_name": "field, Manpur, Gaya, Bihar, 811320, India",
+        "address": {
+          "lake": "field",
+          "town": "Manpur",
+          "county": "Manpur",
+          "state_district": "Gaya",
+          "state": "Bihar",
+          "ISO3166-2-lvl4": "IN-BR",
+          "postcode": "811320",
+          "country": "India",
+          "country_code": "in"
+        },
+        "extratags": {
+          "natural": "water"
+        },
+        "boundingbox": [
+          "24.8083661",
+          "24.8090699",
+          "85.0298890",
+          "85.0309471"
+        ]
+      },
+      {
+        "place_id": 333496731,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 151328722,
+        "lat": "34.6286812",
+        "lon": "-103.5655142",
+        "category": "place",
+        "type": "hamlet",
+        "place_rank": 20,
+        "importance": 0.13336833524071104,
+        "addresstype": "hamlet",
+        "name": "Field",
+        "display_name": "Field, Curry County, New Mexico, United States",
+        "address": {
+          "hamlet": "Field",
+          "county": "Curry County",
+          "state": "New Mexico",
+          "ISO3166-2-lvl4": "US-NM",
+          "country": "United States",
+          "country_code": "us"
+        },
+        "extratags": {
+          "ele": "1414"
+        },
+        "boundingbox": [
+          "34.6086812",
+          "34.6486812",
+          "-103.5855142",
+          "-103.5455142"
+        ]
+      },
+      {
+        "place_id": 47801770,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 476988957,
+        "lat": "25.6847037",
+        "lon": "32.6320695",
+        "category": "natural",
+        "type": "grassland",
+        "place_rank": 22,
+        "importance": 0.10673152132448308,
+        "addresstype": "grassland",
+        "name": "Field",
+        "display_name": "Field, مدينه الاقصر, جزيرة العوامية, الأقصر, مصر",
+        "address": {
+          "grassland": "Field",
+          "suburb": "مدينه الاقصر",
+          "village": "جزيرة العوامية",
+          "state": "الأقصر",
+          "ISO3166-2-lvl4": "EG-LX",
+          "country": "مصر",
+          "country_code": "eg"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "25.6838625",
+          "25.6855014",
+          "32.6308572",
+          "32.6332765"
+        ]
+      },
+      {
+        "place_id": 47562418,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 477102125,
+        "lat": "25.6806744",
+        "lon": "32.6400865",
+        "category": "natural",
+        "type": "grassland",
+        "place_rank": 22,
+        "importance": 0.10673152132448308,
+        "addresstype": "grassland",
+        "name": "field",
+        "display_name": "field, مدينه الاقصر, الأقصر, مصر",
+        "address": {
+          "grassland": "field",
+          "suburb": "مدينه الاقصر",
+          "city": "الأقصر",
+          "state": "الأقصر",
+          "ISO3166-2-lvl4": "EG-LX",
+          "country": "مصر",
+          "country_code": "eg"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "25.6804371",
+          "25.6808506",
+          "32.6397584",
+          "32.6406203"
+        ]
+      }
+    ]
+  },
+  "field-british-columbia": {
+    "query": "Field, British Columbia",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 378264721,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 51970759,
+        "lat": "51.3961113",
+        "lon": "-116.4891525",
+        "category": "place",
+        "type": "village",
+        "place_rank": 19,
+        "importance": 0.1467181300068665,
+        "addresstype": "village",
+        "name": "Field",
+        "display_name": "Field, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, V0A 1G0, Canada",
+        "address": {
+          "village": "Field",
+          "city": "Area A (Kicking Horse/Kinbasket Lake)",
+          "county": "Columbia-Shuswap Regional District",
+          "state": "British Columbia",
+          "ISO3166-2-lvl4": "CA-BC",
+          "postcode": "V0A 1G0",
+          "country": "Canada",
+          "country_code": "ca"
+        },
+        "extratags": {
+          "wikidata": "Q3071515",
+          "wikipedia": "en:Field, British Columbia"
+        },
+        "boundingbox": [
+          "51.3761113",
+          "51.4161113",
+          "-116.5091525",
+          "-116.4691525"
+        ]
+      },
+      {
+        "place_id": 375644486,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 269762966,
+        "lat": "51.3953601",
+        "lon": "-116.4895833",
+        "category": "amenity",
+        "type": "post_office",
+        "place_rank": 30,
+        "importance": 0.000051463340199847675,
+        "addresstype": "amenity",
+        "name": "Field",
+        "display_name": "Field, 312, Wall Street, Field, Area A (Kicking Horse/Kinbasket Lake), Columbia-Shuswap Regional District, British Columbia, V0A 1G0, Canada",
+        "address": {
+          "amenity": "Field",
+          "house_number": "312",
+          "road": "Wall Street",
+          "village": "Field",
+          "city": "Area A (Kicking Horse/Kinbasket Lake)",
+          "county": "Columbia-Shuswap Regional District",
+          "state": "British Columbia",
+          "ISO3166-2-lvl4": "CA-BC",
+          "postcode": "V0A 1G0",
+          "country": "Canada",
+          "country_code": "ca"
+        },
+        "extratags": {
+          "building": "public",
+          "operator": "Canada Post",
+          "opening_hours": "09:30-13:30",
+          "brand:wikidata": "Q1032001",
+          "brand:wikipedia": "en:Canada Post",
+          "operator:wikidata": "Q1032001"
+        },
+        "boundingbox": [
+          "51.3953088",
+          "51.3954113",
+          "-116.4896795",
+          "-116.4894871"
+        ]
+      }
+    ]
+  },
+  "hofn": {
+    "query": "Höfn",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 273080247,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 249085731,
+        "lat": "64.2532647",
+        "lon": "-15.2080441",
+        "category": "place",
+        "type": "town",
+        "place_rank": 18,
+        "importance": 0.4419798675817451,
+        "addresstype": "town",
+        "name": "Höfn",
+        "display_name": "Höfn, Sveitarfélagið Hornafjörður, Suðurland, 780, Ísland",
+        "address": {
+          "town": "Höfn",
+          "county": "Sveitarfélagið Hornafjörður",
+          "ISO3166-2-lvl6": "IS-SHF",
+          "state_district": "Suðurland",
+          "ISO3166-2-lvl5": "IS-8",
+          "postcode": "780",
+          "country": "Ísland",
+          "country_code": "is"
+        },
+        "extratags": {
+          "is_in": "Iceland",
+          "wikidata": "Q817118",
+          "wikipedia": "is:Höfn í Hornafirði",
+          "population": "1813",
+          "population:date": "2026"
+        },
+        "boundingbox": [
+          "64.2132647",
+          "64.2932647",
+          "-15.2480441",
+          "-15.1680441"
+        ]
+      },
+      {
+        "place_id": 273264134,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 7992571,
+        "lat": "65.3575695",
+        "lon": "-22.2522207",
+        "category": "place",
+        "type": "islet",
+        "place_rank": 20,
+        "importance": 0.1333433333333333,
+        "addresstype": "islet",
+        "name": "Höfn",
+        "display_name": "Höfn, Ísland",
+        "address": {
+          "islet": "Höfn",
+          "country": "Ísland",
+          "country_code": "is"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "65.3550420",
+          "65.3601238",
+          "-22.2568309",
+          "-22.2456300"
+        ]
+      }
+    ]
+  },
+  "old-harbour": {
+    "query": "Old Harbour",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 379603170,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 16770739,
+        "lat": "57.2028038",
+        "lon": "-153.3056510",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 16,
+        "importance": 0.4000978874196021,
+        "addresstype": "village",
+        "name": "Old Harbor",
+        "display_name": "Old Harbor, Kodiak Island Borough, Alaska, 99643, United States",
+        "address": {
+          "village": "Old Harbor",
+          "county": "Kodiak Island Borough",
+          "state": "Alaska",
+          "ISO3166-2-lvl4": "US-AK",
+          "postcode": "99643",
+          "country": "United States",
+          "country_code": "us"
+        },
+        "extratags": {
+          "ele": "1",
+          "wikidata": "Q79559",
+          "wikipedia": "en:Old Harbor, Alaska",
+          "population": "216",
+          "border_type": "city",
+          "linked_place": "village",
+          "population:date": "2006",
+          "admin_level": "8"
+        },
+        "boundingbox": [
+          "57.1644130",
+          "57.2474610",
+          "-153.4350390",
+          "-153.2121230"
+        ]
+      },
+      {
+        "place_id": 307568084,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 290802771,
+        "lat": "17.9383872",
+        "lon": "-77.1134173",
+        "category": "place",
+        "type": "town",
+        "place_rank": 18,
+        "importance": 0.3567097398182398,
+        "addresstype": "town",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Saint Catherine, Middlesex County, Jamaica",
+        "address": {
+          "town": "Old Harbour",
+          "county": "Saint Catherine",
+          "ISO3166-2-lvl6": "JM-14",
+          "state_district": "Middlesex County",
+          "country": "Jamaica",
+          "country_code": "jm"
+        },
+        "extratags": {
+          "is_in": "St. Catherine, Jamaica",
+          "wikidata": "Q771267",
+          "wikipedia": "en:Old Harbour, Jamaica"
+        },
+        "boundingbox": [
+          "17.8983872",
+          "17.9783872",
+          "-77.1534173",
+          "-77.0734173"
+        ]
+      },
+      {
+        "place_id": 275035935,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 1483499682,
+        "lat": "56.0049460",
+        "lon": "-2.5124089",
+        "category": "waterway",
+        "type": "dock",
+        "place_rank": 20,
+        "importance": 0.13338652857251848,
+        "addresstype": "dock",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Belhaven, Dunbar, East Lothian, Alba / Scotland, United Kingdom",
+        "address": {
+          "dock": "Old Harbour",
+          "suburb": "Belhaven",
+          "town": "Dunbar",
+          "county": "East Lothian",
+          "ISO3166-2-lvl6": "GB-ELN",
+          "state": "Alba / Scotland",
+          "ISO3166-2-lvl4": "GB-SCT",
+          "country": "United Kingdom",
+          "country_code": "gb"
+        },
+        "extratags": {
+          "operator": "Dunbar Harbour Trust",
+          "wikidata": "Q17804051",
+          "seamark:type": "harbour"
+        },
+        "boundingbox": [
+          "56.0041500",
+          "56.0056479",
+          "-2.5132121",
+          "-2.5119102"
+        ]
+      },
+      {
+        "place_id": 276354508,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 1318856671,
+        "lat": "54.3248176",
+        "lon": "-4.3830666",
+        "category": "waterway",
+        "type": "dock",
+        "place_rank": 20,
+        "importance": 0.1333852101930266,
+        "addresstype": "dock",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Ramsey, Garff, Isle of Man",
+        "address": {
+          "dock": "Old Harbour",
+          "town": "Ramsey",
+          "county": "Garff",
+          "country": "Isle of Man",
+          "country_code": "im"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "54.3236632",
+          "54.3260251",
+          "-4.3845711",
+          "-4.3818443"
+        ]
+      },
+      {
+        "place_id": 283235284,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 8359126298,
+        "lat": "51.3919571",
+        "lon": "-3.2838492",
+        "category": "natural",
+        "type": "bay",
+        "place_rank": 22,
+        "importance": 0.10674087663080795,
+        "addresstype": "bay",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, The Knap, Barry, Vale of Glamorgan, Cymru / Wales, CF62 5HA, United Kingdom",
+        "address": {
+          "bay": "Old Harbour",
+          "suburb": "The Knap",
+          "town": "Barry",
+          "county": "Vale of Glamorgan",
+          "ISO3166-2-lvl6": "GB-VGL",
+          "state": "Cymru / Wales",
+          "ISO3166-2-lvl4": "GB-WLS",
+          "postcode": "CF62 5HA",
+          "country": "United Kingdom",
+          "country_code": "gb"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "51.3919071",
+          "51.3920071",
+          "-3.2838992",
+          "-3.2837992"
+        ]
+      },
+      {
+        "place_id": 277328643,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 104262110,
+        "lat": "52.4114497",
+        "lon": "-4.0876048",
+        "category": "water",
+        "type": "harbour",
+        "place_rank": 22,
+        "importance": 0.1067262600137331,
+        "addresstype": "harbour",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Aberystwyth, Ceredigion, Cymru / Wales, United Kingdom",
+        "address": {
+          "harbour": "Old Harbour",
+          "suburb": "Aberystwyth",
+          "town": "Aberystwyth",
+          "county": "Ceredigion",
+          "ISO3166-2-lvl6": "GB-CGN",
+          "state": "Cymru / Wales",
+          "ISO3166-2-lvl4": "GB-WLS",
+          "country": "United Kingdom",
+          "country_code": "gb"
+        },
+        "extratags": {
+          "leisure": "marina",
+          "natural": "water",
+          "intermittent": "yes",
+          "seamark:type": "harbour",
+          "seamark:harbour:category": "marina"
+        },
+        "boundingbox": [
+          "52.4110588",
+          "52.4118740",
+          "-4.0881190",
+          "-4.0871803"
+        ]
+      },
+      {
+        "place_id": 274895390,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 364187071,
+        "lat": "56.0345056",
+        "lon": "-3.5031050",
+        "category": "natural",
+        "type": "water",
+        "place_rank": 22,
+        "importance": 0.10672597161821924,
+        "addresstype": "water",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Charlestown, Fife, Alba / Scotland, United Kingdom",
+        "address": {
+          "water": "Old Harbour",
+          "village": "Charlestown",
+          "county": "Fife",
+          "ISO3166-2-lvl6": "GB-FIF",
+          "state": "Alba / Scotland",
+          "ISO3166-2-lvl4": "GB-SCT",
+          "country": "United Kingdom",
+          "country_code": "gb"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "56.0337753",
+          "56.0355090",
+          "-3.5053730",
+          "-3.5005681"
+        ]
+      },
+      {
+        "place_id": 363690191,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 368383085,
+        "lat": "43.0795329",
+        "lon": "-70.7569976",
+        "category": "natural",
+        "type": "bay",
+        "place_rank": 22,
+        "importance": 0.10672350728618293,
+        "addresstype": "bay",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Portsmouth, Rockingham County, New Hampshire, 03802, United States",
+        "address": {
+          "bay": "Old Harbour",
+          "city": "Portsmouth",
+          "county": "Rockingham County",
+          "state": "New Hampshire",
+          "ISO3166-2-lvl4": "US-NH",
+          "postcode": "03802",
+          "country": "United States",
+          "country_code": "us"
+        },
+        "extratags": {
+          "ele": "14",
+          "wikidata": "Q49386976"
+        },
+        "boundingbox": [
+          "43.0794829",
+          "43.0795829",
+          "-70.7570476",
+          "-70.7569476"
+        ]
+      },
+      {
+        "place_id": 159725386,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 5597211635,
+        "lat": "57.9684639",
+        "lon": "7.5329333",
+        "category": "natural",
+        "type": "bay",
+        "place_rank": 22,
+        "importance": 0.10671666819256884,
+        "addresstype": "bay",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Lindesnes, Agder, Norge",
+        "address": {
+          "bay": "Old Harbour",
+          "municipality": "Lindesnes",
+          "county": "Agder",
+          "ISO3166-2-lvl4": "NO-42",
+          "country": "Norge",
+          "country_code": "no"
+        },
+        "extratags": {
+          "ssr:type": "vikISjø",
+          "ssr:stedsnr": "268047"
+        },
+        "boundingbox": [
+          "57.9684139",
+          "57.9685139",
+          "7.5328833",
+          "7.5329833"
+        ]
+      },
+      {
+        "place_id": 286677617,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 13659388,
+        "lat": "56.2297604",
+        "lon": "-61.8621494",
+        "category": "natural",
+        "type": "bay",
+        "place_rank": 22,
+        "importance": 0.10667666666666664,
+        "addresstype": "bay",
+        "name": "Old Harbour",
+        "display_name": "Old Harbour, Labrador, Newfoundland and Labrador, Canada",
+        "address": {
+          "bay": "Old Harbour",
+          "state_district": "Labrador",
+          "state": "Newfoundland and Labrador",
+          "ISO3166-2-lvl4": "CA-NL",
+          "country": "Canada",
+          "country_code": "ca"
+        },
+        "extratags": {
+          "ocean": "yes",
+          "ref:gnbc": "ABMPK"
+        },
+        "boundingbox": [
+          "56.2277551",
+          "56.2319897",
+          "-61.8644395",
+          "-61.8591211"
+        ]
+      }
+    ]
+  },
+  "old-harbour-reykjavik": {
+    "query": "Old Harbour, Reykjavik",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 274948241,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 3705813858,
+        "lat": "64.1511479",
+        "lon": "-21.9443846",
+        "category": "amenity",
+        "type": "restaurant",
+        "place_rank": 30,
+        "importance": 0.000040000762951049326,
+        "addresstype": "amenity",
+        "name": "Old Harbour House",
+        "display_name": "Old Harbour House, Ægisgarður, Vesturhöfn, Vesturbær, Reykjavíkurborg, Höfuðborgarsvæðið, 101, Ísland",
+        "address": {
+          "amenity": "Old Harbour House",
+          "road": "Ægisgarður",
+          "neighbourhood": "Vesturhöfn",
+          "suburb": "Vesturbær",
+          "city": "Reykjavíkurborg",
+          "ISO3166-2-lvl6": "IS-RKV",
+          "state_district": "Höfuðborgarsvæðið",
+          "ISO3166-2-lvl5": "IS-1",
+          "postcode": "101",
+          "country": "Ísland",
+          "country_code": "is"
+        },
+        "extratags": {
+          "website": "http://www.casagrande.is/",
+          "wheelchair": "limited"
+        },
+        "boundingbox": [
+          "64.1510979",
+          "64.1511979",
+          "-21.9444346",
+          "-21.9443346"
+        ]
+      },
+      {
+        "place_id": 271648663,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 3009373781,
+        "lat": "64.1510199",
+        "lon": "-21.9436517",
+        "category": "shop",
+        "type": "gift",
+        "place_rank": 30,
+        "importance": 0.000040000762951049326,
+        "addresstype": "shop",
+        "name": "Old Harbour Souvenirs",
+        "display_name": "Old Harbour Souvenirs, 5, Geirsgata, Miðbær, Vesturhöfn, Vesturbær, Reykjavíkurborg, Höfuðborgarsvæðið, 101, Ísland",
+        "address": {
+          "shop": "Old Harbour Souvenirs",
+          "house_number": "5",
+          "road": "Geirsgata",
+          "neighbourhood": "Miðbær",
+          "suburb": "Vesturbær",
+          "city": "Reykjavíkurborg",
+          "ISO3166-2-lvl6": "IS-RKV",
+          "state_district": "Höfuðborgarsvæðið",
+          "ISO3166-2-lvl5": "IS-1",
+          "postcode": "101",
+          "country": "Ísland",
+          "country_code": "is"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "64.1509699",
+          "64.1510699",
+          "-21.9437017",
+          "-21.9436017"
+        ]
+      },
+      {
+        "place_id": 271638503,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 5830610821,
+        "lat": "64.1516689",
+        "lon": "-21.9421028",
+        "category": "amenity",
+        "type": "ferry_terminal",
+        "place_rank": 30,
+        "importance": 0.000040000762951049326,
+        "addresstype": "amenity",
+        "name": "Gamla höfnin",
+        "display_name": "Gamla höfnin, Ægisgarður, Vesturhöfn, Vesturbær, Reykjavíkurborg, Höfuðborgarsvæðið, 101, Ísland",
+        "address": {
+          "amenity": "Gamla höfnin",
+          "road": "Ægisgarður",
+          "neighbourhood": "Vesturhöfn",
+          "suburb": "Vesturbær",
+          "city": "Reykjavíkurborg",
+          "ISO3166-2-lvl6": "IS-RKV",
+          "state_district": "Höfuðborgarsvæðið",
+          "ISO3166-2-lvl5": "IS-1",
+          "postcode": "101",
+          "country": "Ísland",
+          "country_code": "is"
+        },
+        "extratags": {
+          "ferry": "yes",
+          "public_transport": "station"
+        },
+        "boundingbox": [
+          "64.1516189",
+          "64.1517189",
+          "-21.9421528",
+          "-21.9420528"
+        ]
+      }
+    ]
+  },
+  "song-kol": {
+    "query": "Song-Kol",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 214924598,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6510666206,
+        "lat": "42.8394348",
+        "lon": "74.5959217",
+        "category": "amenity",
+        "type": "cafe",
+        "place_rank": 30,
+        "importance": 0.00006820401312271332,
+        "addresstype": "amenity",
+        "name": "Song-Kol",
+        "display_name": "Song-Kol, улица Таш-Кумырская, Октябрь району, Бишкек шаары, 720044, Кыргызстан",
+        "address": {
+          "amenity": "Song-Kol",
+          "road": "улица Таш-Кумырская",
+          "city_district": "Октябрь району",
+          "city": "Бишкек шаары",
+          "ISO3166-2-lvl4": "KG-GB",
+          "postcode": "720044",
+          "country": "Кыргызстан",
+          "country_code": "kg"
+        },
+        "extratags": null,
+        "boundingbox": [
+          "42.8393848",
+          "42.8394848",
+          "74.5958717",
+          "74.5959717"
+        ]
+      },
+      {
+        "place_id": 214736133,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 15576907,
+        "lat": "41.8413750",
+        "lon": "75.1551824",
+        "category": "water",
+        "type": "lake",
+        "place_rank": 20,
+        "importance": 0.33029660482760953,
+        "addresstype": "lake",
+        "name": "Соң-Көл",
+        "display_name": "Соң-Көл, Кочкор району, Нарын облусу, Кыргызстан",
+        "address": {
+          "lake": "Соң-Көл",
+          "county": "Кочкор району",
+          "state": "Нарын облусу",
+          "ISO3166-2-lvl4": "KG-N",
+          "country": "Кыргызстан",
+          "country_code": "kg"
+        },
+        "extratags": {
+          "ele": "3010",
+          "natural": "water",
+          "wikidata": "Q2298945",
+          "wikipedia": "ky:Соң-Көл"
+        },
+        "boundingbox": [
+          "41.7590000",
+          "41.9237784",
+          "75.0087500",
+          "75.3376955"
+        ]
+      }
+    ]
+  },
+  "halki-greece": {
+    "query": "Halki, Greece",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 54702363,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 806501481,
+        "lat": "37.0639027",
+        "lon": "25.4839886",
+        "category": "place",
+        "type": "village",
+        "place_rank": 19,
+        "importance": 0.14672107804989695,
+        "addresstype": "village",
+        "name": "Χαλκί",
+        "display_name": "Χαλκί, Δήμος Νάξου και Μικρών Κυκλάδων, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 843 02, Ελλάς",
+        "address": {
+          "village": "Χαλκί",
+          "municipality": "Δήμος Νάξου και Μικρών Κυκλάδων",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "843 02",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Χαλκί",
+          "name:el": "Χαλκί",
+          "name:en": "Halki",
+          "name:es": "Halki"
+        },
+        "boundingbox": [
+          "37.0439027",
+          "37.0839027",
+          "25.4639886",
+          "25.5039886"
+        ]
+      },
+      {
+        "place_id": 55599044,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6383269491,
+        "lat": "39.5626156",
+        "lon": "22.5414196",
+        "category": "shop",
+        "type": "car_repair",
+        "place_rank": 30,
+        "importance": 0.00006445181963831567,
+        "addresstype": "shop",
+        "name": "Χάλκη",
+        "display_name": "Χάλκη, Πατριάρχου Γρηγορίου Ε', Χάλκη, Δημοτική Ενότητα Πλατυκάμπου, Δήμος Κιλελέρ, Περιφερειακή Ενότητα Λάρισας, Περιφέρεια Θεσσαλίας, Αποκεντρωμένη Διοίκηση Θεσσαλίας - Στερεάς Ελλάδος, 415 00, Ελλάς",
+        "address": {
+          "shop": "Χάλκη",
+          "road": "Πατριάρχου Γρηγορίου Ε'",
+          "village": "Χάλκη",
+          "city": "Δημοτική Ενότητα Πλατυκάμπου",
+          "municipality": "Δήμος Κιλελέρ",
+          "county": "Περιφερειακή Ενότητα Λάρισας",
+          "state": "Περιφέρεια Θεσσαλίας",
+          "ISO3166-2-lvl5": "GR-E",
+          "postcode": "415 00",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Χάλκη",
+          "name:de": "Halki",
+          "name:el": "Χάλκη"
+        },
+        "boundingbox": [
+          "39.5625656",
+          "39.5626656",
+          "22.5413696",
+          "22.5414696"
+        ]
+      }
+    ]
+  },
+  "naxos-greece": {
+    "query": "Naxos, Greece",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 54342596,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 453091,
+        "lat": "37.0600105",
+        "lon": "25.4707567",
+        "category": "place",
+        "type": "island",
+        "place_rank": 17,
+        "importance": 0.5613143590375791,
+        "addresstype": "island",
+        "name": "Νάξος",
+        "display_name": "Νάξος, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, Ελλάς",
+        "address": {
+          "island": "Νάξος",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Νάξος",
+          "name:de": "Naxos",
+          "name:el": "Νάξος",
+          "name:en": "Naxos",
+          "name:es": "Naxos",
+          "name:fr": "Naxos",
+          "name:hu": "Náxosz",
+          "name:it": "Nasso",
+          "name:ml": "നാക്‌സോസ്",
+          "name:pl": "Naksos",
+          "name:sk": "Naxos",
+          "name:sl": "Naksos",
+          "name:tr": "Nakşa",
+          "name:zh": "纳克索斯岛",
+          "int_name": "Naxos"
+        },
+        "boundingbox": [
+          "36.9163849",
+          "37.2036260",
+          "25.3329200",
+          "25.6064953"
+        ]
+      },
+      {
+        "place_id": 54541672,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 1842979116,
+        "lat": "37.1020709",
+        "lon": "25.3762458",
+        "category": "place",
+        "type": "town",
+        "place_rank": 18,
+        "importance": 0.37310569550553185,
+        "addresstype": "town",
+        "name": "Νάξος",
+        "display_name": "Νάξος, Δήμος Νάξου και Μικρών Κυκλάδων, Περιφερειακή Ενότητα Νάξου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 843 00, Ελλάς",
+        "address": {
+          "town": "Νάξος",
+          "municipality": "Δήμος Νάξου και Μικρών Κυκλάδων",
+          "county": "Περιφερειακή Ενότητα Νάξου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "843 00",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Νάξος",
+          "name:ca": "Naxos",
+          "name:el": "Νάξος",
+          "name:en": "Naxos",
+          "name:es": "Naxos",
+          "name:fi": "Naxos",
+          "name:fr": "Naxos",
+          "name:ml": "നാക്‌സോസ്",
+          "name:ru": "Наксос",
+          "alt_name": "Χώρα",
+          "int_name": "Naxos"
+        },
+        "boundingbox": [
+          "37.0620709",
+          "37.1420709",
+          "25.3362458",
+          "25.4162458"
+        ]
+      }
+    ]
+  },
+  "paros-greece": {
+    "query": "Paros, Greece",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 54354562,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "way",
+        "osm_id": 591351971,
+        "lat": "37.0870636",
+        "lon": "25.1509969",
+        "category": "landuse",
+        "type": "harbour",
+        "place_rank": 24,
+        "importance": 0.08005942702372774,
+        "addresstype": "harbour",
+        "name": "Πάρος",
+        "display_name": "Πάρος, Παροικιά, Δήμος Πάρου, Περιφερειακή Ενότητα Πάρου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, 844 00, Ελλάς",
+        "address": {
+          "harbour": "Πάρος",
+          "town": "Παροικιά",
+          "municipality": "Δήμος Πάρου",
+          "county": "Περιφερειακή Ενότητα Πάρου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "postcode": "844 00",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Πάρος",
+          "name:el": "Πάρος",
+          "name:en": "Paros",
+          "int_name": "Páros"
+        },
+        "boundingbox": [
+          "37.0859434",
+          "37.0882436",
+          "25.1480143",
+          "25.1548558"
+        ]
+      },
+      {
+        "place_id": 54380370,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 5321416,
+        "lat": "37.0651495",
+        "lon": "25.1919784",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 14,
+        "importance": 0.5437522907993191,
+        "addresstype": "municipality",
+        "name": "Δήμος Πάρου",
+        "display_name": "Δήμος Πάρου, Περιφερειακή Ενότητα Πάρου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, Ελλάς",
+        "address": {
+          "municipality": "Δήμος Πάρου",
+          "county": "Περιφερειακή Ενότητα Πάρου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Δήμος Πάρου",
+          "name:ca": "Municipi de Paros",
+          "name:el": "Δήμος Πάρου",
+          "name:en": "Paros Municipality"
+        },
+        "boundingbox": [
+          "36.9676799",
+          "37.1946337",
+          "25.0602409",
+          "25.2991201"
+        ]
+      },
+      {
+        "place_id": 54339803,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 5323643,
+        "lat": "37.0656829",
+        "lon": "25.1305242",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 12,
+        "importance": 0.44917108759705926,
+        "addresstype": "county",
+        "name": "Περιφερειακή Ενότητα Πάρου",
+        "display_name": "Περιφερειακή Ενότητα Πάρου, Περιφέρεια Νοτίου Αιγαίου, Αποκεντρωμένη Διοίκηση Αιγαίου, Ελλάς",
+        "address": {
+          "county": "Περιφερειακή Ενότητα Πάρου",
+          "state": "Περιφέρεια Νοτίου Αιγαίου",
+          "ISO3166-2-lvl5": "GR-L",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Περιφερειακή Ενότητα Πάρου",
+          "name:ca": "Unitat perifèrica de Paros",
+          "name:de": "Regionalbezirk Paros",
+          "name:el": "Περιφερειακή Ενότητα Πάρου",
+          "name:en": "Paros Regional Unit",
+          "name:ru": "периферийная единица Парос"
+        },
+        "boundingbox": [
+          "36.8580533",
+          "37.2741077",
+          "24.8582026",
+          "25.3717125"
+        ]
+      }
+    ]
+  },
+  "athens-greece": {
+    "query": "Athens, Greece",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 56029539,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 441183,
+        "lat": "37.9755648",
+        "lon": "23.7348324",
+        "category": "place",
+        "type": "city",
+        "place_rank": 15,
+        "importance": 0.7869062105765003,
+        "addresstype": "city",
+        "name": "Αθήνα",
+        "display_name": "Αθήνα, Δήμος Αθηναίων, Περιφερειακή Ενότητα Κεντρικού Τομέα Αθηνών, Περιφέρεια Αττικής, Αποκεντρωμένη Διοίκηση Αττικής, 105 57, Ελλάς",
+        "address": {
+          "city": "Αθήνα",
+          "municipality": "Δήμος Αθηναίων",
+          "county": "Περιφερειακή Ενότητα Κεντρικού Τομέα Αθηνών",
+          "state": "Περιφέρεια Αττικής",
+          "ISO3166-2-lvl5": "GR-I",
+          "postcode": "105 57",
+          "country": "Ελλάς",
+          "country_code": "gr"
+        },
+        "namedetails": {
+          "name": "Αθήνα",
+          "name:af": "Athene",
+          "name:am": "አቴና",
+          "name:an": "Atenas",
+          "name:ar": "أثينا",
+          "name:ay": "Athina",
+          "name:az": "Afina",
+          "name:ba": "Афина",
+          "name:be": "Афіны",
+          "name:bg": "Атина",
+          "name:bn": "অ্যাথেন্স",
+          "name:bo": "ཨ་ཐེན།",
+          "name:br": "Aten",
+          "name:bs": "Atina",
+          "name:ca": "Atenes",
+          "name:ce": "Афина",
+          "name:co": "Atene",
+          "name:cs": "Athény",
+          "name:cu": "Аѳинꙑ",
+          "name:cv": "Афин",
+          "name:cy": "Athen",
+          "name:da": "Athen",
+          "name:de": "Athen",
+          "name:el": "Αθήνα",
+          "name:en": "Athens",
+          "name:eo": "Ateno",
+          "name:es": "Atenas",
+          "name:et": "Ateena",
+          "name:eu": "Atenas",
+          "name:fa": "آتن",
+          "name:fi": "Ateena",
+          "name:fo": "Athen",
+          "name:fr": "Athènes",
+          "name:fy": "Atene",
+          "name:ga": "An Aithin",
+          "name:gd": "An Àithne",
+          "name:gl": "Atenas",
+          "name:gn": "Atena",
+          "name:gv": "Yn Atheen",
+          "name:ha": "Athens",
+          "name:he": "אתונה",
+          "name:hi": "एथेंस",
+          "name:hr": "Atena",
+          "name:ht": "Atèn",
+          "name:hu": "Athén",
+          "name:hy": "Աթենք",
+          "name:ia": "Athenas",
+          "name:id": "Athena",
+          "name:ie": "Athina",
+          "name:ig": "Atens",
+          "name:io": "Athina",
+          "name:is": "Aþena",
+          "name:it": "Atene",
+          "name:ja": "アテネ",
+          "name:jv": "Aténa",
+          "name:ka": "ათენი",
+          "name:kk": "Афина",
+          "name:kn": "ಅಥೆನ್ಸ್",
+          "name:ko": "아테네",
+          "name:ks": "ایتھنز",
+          "name:ku": "Atîna",
+          "name:kv": "Афинъяс",
+          "name:kw": "Athína",
+          "name:ky": "Афины",
+          "name:la": "Athenae",
+          "name:lb": "Athen",
+          "name:li": "Athene",
+          "name:ln": "Atenis",
+          "name:lo": "ເອເທນ",
+          "name:lt": "Atėnai",
+          "name:lv": "Atēnas",
+          "name:mg": "Atena",
+          "name:mi": "Ātene",
+          "name:mk": "Атина",
+          "name:ml": "അഥേന",
+          "name:mn": "Афин",
+          "name:mr": "अथेन्स",
+          "name:ms": "Athens",
+          "name:mt": "Ateni",
+          "name:my": "အေသင်မြို့",
+          "name:nb": "Athen",
+          "name:ne": "एथेन्स",
+          "name:nl": "Athene",
+          "name:nn": "Aten",
+          "name:no": "Aten",
+          "name:nv": "Tsékʼi Ííyah Daniiʼáii",
+          "name:ny": "Athens",
+          "name:oc": "Atenas",
+          "name:os": "Афинæтæ",
+          "name:pa": "ਐਥਨਜ਼",
+          "name:pl": "Ateny",
+          "name:ps": "اتن",
+          "name:pt": "Atenas",
+          "name:qu": "Athina",
+          "name:rm": "Athen",
+          "name:ro": "Atena",
+          "name:ru": "Афины",
+          "name:sc": "Atene",
+          "name:sd": "اٿينس",
+          "name:se": "Athena",
+          "name:sh": "Atena",
+          "name:si": "ඇතන්ස්",
+          "name:sk": "Atény",
+          "name:sl": "Atene",
+          "name:sm": "Atenai",
+          "name:sn": "Athens",
+          "name:sq": "Athinë",
+          "name:sr": "Атина",
+          "name:sv": "Aten",
+          "name:sw": "Athens",
+          "name:ta": "ஏதென்ஸ்",
+          "name:te": "ఏథెన్స్",
+          "name:tg": "Афина",
+          "name:th": "เอเธนส์",
+          "name:tk": "Afiny",
+          "name:tl": "Atenas",
+          "name:tr": "Atina",
+          "name:tt": "Афиннар",
+          "name:tw": "Athens",
+          "name:ug": "ئافېنا",
+          "name:uk": "Афіни",
+          "name:ur": "ایتھنز",
+          "name:uz": "Afina",
+          "name:vi": "Athena",
+          "name:vo": "Atina",
+          "name:wa": "Atene",
+          "name:wo": "Aten",
+          "name:yi": "אטען",
+          "name:yo": "Áténì",
+          "name:zh": "雅典",
+          "name:zu": "I-Athene",
+          "int_name": "Athina",
+          "name:ang": "Athēnas",
+          "name:arc": "ܐܬܢܘܣ",
+          "name:arz": "اتينا",
+          "name:ast": "Atenes",
+          "name:ceb": "Atenas",
+          "name:ckb": "ئەسینا",
+          "name:crh": "Atina",
+          "name:diq": "Atêna",
+          "name:ext": "Atenas",
+          "name:frp": "Atèna",
+          "name:gag": "Afina",
+          "name:gan": "雅典",
+          "name:grc": "Ἀθῆναι",
+          "name:haw": "‘Akenai",
+          "name:hif": "Athens",
+          "name:ilo": "Atenas",
+          "name:jbo": "atenas",
+          "name:kab": "Atena",
+          "name:krc": "Афинле",
+          "name:lad": "Atina",
+          "name:lez": "Афинаяр",
+          "name:lij": "Aten",
+          "name:lmo": "Atene",
+          "name:mdf": "Афитт",
+          "name:mwl": "Atenas",
+          "name:nah": "Atēna",
+          "name:nan": "Athína",
+          "name:new": "एथेन्स",
+          "name:nov": "Atena",
+          "name:pms": "Atene",
+          "name:pnb": "ایتھنز",
+          "name:pnt": "Αθήνα",
+          "name:rue": "Атены",
+          "name:sah": "Атина",
+          "name:scn": "Atini",
+          "name:sco": "Athens",
+          "name:stq": "Athene",
+          "name:szl": "Atyny",
+          "name:udm": "Афины",
+          "name:vec": "Atene",
+          "name:vep": "Afinad",
+          "name:vro": "Ateena",
+          "name:war": "Atenas",
+          "name:xmf": "ათენი",
+          "name:yue": "雅典",
+          "name:zea": "Athene",
+          "alt_name:cs": "Atény",
+          "alt_name:gd": "Baile na h-Àithne",
+          "alt_name:gl": "Αθήνα",
+          "alt_name:uk": "Атени",
+          "name:simple": "Athens",
+          "old_name:ca": "Cetines",
+          "name:bat-smg": "Atienā",
+          "name:roa-rup": "Athina",
+          "name:sr-Latn": "Atina",
+          "name:roa-tara": "Atene",
+          "official_name": "Αθήναι",
+          "name:be-tarask": "Атэны",
+          "official_name:en": "Athine"
+        },
+        "boundingbox": [
+          "37.8155648",
+          "38.1355648",
+          "23.5748324",
+          "23.8948324"
+        ]
+      }
+    ]
+  },
+  "shinjuku-tokyo": {
+    "query": "Shinjuku, Tokyo",
+    "status": 200,
+    "results": [
+      {
+        "place_id": 265852106,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 1758858,
+        "lat": "35.6937632",
+        "lon": "139.7036319",
+        "category": "boundary",
+        "type": "administrative",
+        "place_rank": 16,
+        "importance": 0.6318493945437935,
+        "addresstype": "city",
+        "name": "新宿区",
+        "display_name": "新宿区, 東京都, 160-8484, 日本",
+        "address": {
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-8484",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "131041",
+          "name": "新宿区",
+          "name:cs": "Šindžuku",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Arrondissement de Shinjuku",
+          "name:it": "Shinjuku",
+          "name:ja": "新宿区",
+          "name:ko": "신주쿠구",
+          "name:pl": "Shinjuku",
+          "name:pt": "Shinjuku",
+          "name:ru": "Синдзюку",
+          "name:uk": "Шінджюку",
+          "name:zh": "新宿区",
+          "name:ja-Hira": "しんじゅくく",
+          "name:ja-Latn": "Shinjuku-ku",
+          "name:zh-Hans": "新宿区",
+          "name:zh-Hant": "新宿區",
+          "_place_name:fr": "Shinjuku",
+          "name:hr": "Shinjuku",
+          "name:id": "Shinjuku",
+          "name:mr": "शिंजुकू",
+          "name:th": "เขตชินจูกุ",
+          "_place_name:uk": "Сіндзюку",
+          "_place_name:zh": "新宿区/新宿區"
+        },
+        "boundingbox": [
+          "35.6732207",
+          "35.7299039",
+          "139.6732748",
+          "139.7451394"
+        ]
+      },
+      {
+        "place_id": 266378275,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6310410522,
+        "lat": "35.6904666",
+        "lon": "139.6992935",
+        "category": "railway",
+        "type": "stop",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 京王 新宿駅;地下2階;1番線, 西新宿一丁目, 西新宿, 新宿区, 東京都, 160-0023, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "京王 新宿駅;地下2階;1番線",
+          "neighbourhood": "西新宿一丁目",
+          "quarter": "西新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0023",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "KO01",
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠"
+        },
+        "boundingbox": [
+          "35.6904166",
+          "35.6905166",
+          "139.6992435",
+          "139.6993435"
+        ]
+      },
+      {
+        "place_id": 265861149,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 7677962359,
+        "lat": "35.6903431",
+        "lon": "139.6994491",
+        "category": "railway",
+        "type": "stop",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 小田急 新宿駅;1階;6番ホーム, 西新宿一丁目, 西新宿, 新宿区, 東京都, 160-0023, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "小田急 新宿駅;1階;6番ホーム",
+          "neighbourhood": "西新宿一丁目",
+          "quarter": "西新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0023",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "OH01",
+          "name": "新宿",
+          "name:de": "Shinjuku",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠",
+          "name:ru": "Синдзюку",
+          "name:th": "ชินจูกุ",
+          "name:ja-Hira": "しんじゅく",
+          "name:ja-Latn": "Shinjuku"
+        },
+        "boundingbox": [
+          "35.6902931",
+          "35.6903931",
+          "139.6993991",
+          "139.6994991"
+        ]
+      },
+      {
+        "place_id": 265861866,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6283384525,
+        "lat": "35.6905828",
+        "lon": "139.6991102",
+        "category": "railway",
+        "type": "station",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 京王 新宿駅;地下2階, 西新宿一丁目, 西新宿, 新宿区, 東京都, 160-0023, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "京王 新宿駅;地下2階",
+          "neighbourhood": "西新宿一丁目",
+          "quarter": "西新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0023",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "KO01",
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠"
+        },
+        "boundingbox": [
+          "35.6855828",
+          "35.6955828",
+          "139.6941102",
+          "139.7041102"
+        ]
+      },
+      {
+        "place_id": 265898809,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6282970734,
+        "lat": "35.6882153",
+        "lon": "139.6991810",
+        "category": "railway",
+        "type": "stop",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 四谷角筈線, 代々木二丁目, 代々木, 渋谷区, 東京都, 151-0053, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "四谷角筈線",
+          "neighbourhood": "代々木二丁目",
+          "quarter": "代々木",
+          "city": "渋谷区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "151-0053",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ru": "Синдзюку",
+          "name:ja_rm": "Shinjuku"
+        },
+        "boundingbox": [
+          "35.6881653",
+          "35.6882653",
+          "139.6991310",
+          "139.6992310"
+        ]
+      },
+      {
+        "place_id": 268598648,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 1926277346,
+        "lat": "35.6922273",
+        "lon": "139.7006009",
+        "category": "railway",
+        "type": "station",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, メトロプロムナード, 新宿三丁目, 新宿, 新宿区, 東京都, 160-0022, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "メトロプロムナード",
+          "neighbourhood": "新宿三丁目",
+          "quarter": "新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0022",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "M08",
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠",
+          "name:ru": "Синдзюку",
+          "name:ja_rm": "Shinjuku",
+          "name:ja-Hira": "しんじゅく"
+        },
+        "boundingbox": [
+          "35.6872273",
+          "35.6972273",
+          "139.6956009",
+          "139.7056009"
+        ]
+      },
+      {
+        "place_id": 265883354,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 5073455404,
+        "lat": "35.6904488",
+        "lon": "139.6990389",
+        "category": "railway",
+        "type": "stop",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 京王 新宿駅;地下1階, 西新宿一丁目, 西新宿, 新宿区, 東京都, 160-0023, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "京王 新宿駅;地下1階",
+          "neighbourhood": "西新宿一丁目",
+          "quarter": "西新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0023",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "KO01",
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠"
+        },
+        "boundingbox": [
+          "35.6903988",
+          "35.6904988",
+          "139.6989889",
+          "139.6990889"
+        ]
+      },
+      {
+        "place_id": 265847835,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6184943237,
+        "lat": "35.6923037",
+        "lon": "139.7005849",
+        "category": "railway",
+        "type": "stop",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 新宿駅東口公衆喫煙所, 新宿三丁目, 新宿, 新宿区, 東京都, 160-0022, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "新宿駅東口公衆喫煙所",
+          "neighbourhood": "新宿三丁目",
+          "quarter": "新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0022",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "M08",
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠",
+          "name:ru": "Синдзюку",
+          "name:ja_rm": "Shinjuku",
+          "name:ja-Hira": "しんじゅく"
+        },
+        "boundingbox": [
+          "35.6922537",
+          "35.6923537",
+          "139.7005349",
+          "139.7006349"
+        ]
+      },
+      {
+        "place_id": 265855412,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 2389061847,
+        "lat": "35.6912419",
+        "lon": "139.6996059",
+        "category": "information",
+        "type": "board",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "information",
+        "name": "新宿",
+        "display_name": "新宿, 東西自由通路, 西新宿一丁目, 西新宿, 新宿区, 東京都, 160-0022, 日本",
+        "address": {
+          "information": "新宿",
+          "road": "東西自由通路",
+          "neighbourhood": "西新宿一丁目",
+          "quarter": "西新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0022",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "name": "新宿",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠",
+          "name:ru": "Синдзюку",
+          "name:ja_rm": "Shinjuku",
+          "name:ja-Hira": "しんじゅく"
+        },
+        "boundingbox": [
+          "35.6911919",
+          "35.6912919",
+          "139.6995559",
+          "139.6996559"
+        ]
+      },
+      {
+        "place_id": 265842222,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 6281974025,
+        "lat": "35.6899223",
+        "lon": "139.6996683",
+        "category": "railway",
+        "type": "stop",
+        "place_rank": 30,
+        "importance": 0.5882398182395301,
+        "addresstype": "railway",
+        "name": "新宿",
+        "display_name": "新宿, 小田急 新宿駅;地下1階;8番ホーム, 西新宿一丁目, 西新宿, 新宿区, 東京都, 160-0023, 日本",
+        "address": {
+          "railway": "新宿",
+          "road": "小田急 新宿駅;地下1階;8番ホーム",
+          "neighbourhood": "西新宿一丁目",
+          "quarter": "西新宿",
+          "city": "新宿区",
+          "ISO3166-2-lvl4": "JP-13",
+          "postcode": "160-0023",
+          "country": "日本",
+          "country_code": "jp"
+        },
+        "namedetails": {
+          "ref": "OH01",
+          "name": "新宿",
+          "name:de": "Shinjuku",
+          "name:en": "Shinjuku",
+          "name:es": "Shinjuku",
+          "name:fr": "Shinjuku",
+          "name:ja": "新宿",
+          "name:ko": "신주쿠",
+          "name:ru": "Синдзюку",
+          "name:th": "ชินจูกุ",
+          "name:ja-Hira": "しんじゅく",
+          "name:ja-Latn": "Shinjuku"
+        },
+        "boundingbox": [
+          "35.6898723",
+          "35.6899723",
+          "139.6996183",
+          "139.6997183"
+        ]
+      }
+    ]
+  }
+}

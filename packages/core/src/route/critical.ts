@@ -364,7 +364,12 @@ export function placementQueries(input: PlacementQueryInput): string[] {
 export function describeUnplaced(placement: RouteCriticalPlacement): string {
   switch (placement.outcome) {
     case 'ambiguous':
-      return `There is more than one ${placement.name}, and Sidequest will not guess which one you mean.`;
+      /*
+       * V12.3 §15 — the traveller is the one who can settle this, so the sentence
+       * says what would settle it. "Could not find it" was both wrong and a dead
+       * end; several candidates were found, and naming the area chooses.
+       */
+      return `More than one place is called ${placement.name}, and Sidequest will not guess which you mean — tell it the island, town or area and it will place it.`;
     case 'no_acceptable_candidate':
       return `Sidequest could not find ${placement.name} on the map, so the travel to and from it is not timed.`;
     case 'provider_unavailable':

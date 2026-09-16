@@ -137,6 +137,7 @@ export * from './region/source';
 export * from './evidence/resolve';
 export * from './evidence/preparation';
 export * from './evidence/identity';
+export * from './evidence/disambiguation';
 export * from './evidence/claims';
 export * from './evidence/freshness';
 

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { classifyNominatim, osmElementId, type NominatimPlace } from '@/lib/providers/nominatim';
+import type { NominatimPlace } from '@/lib/providers/nominatim';
+import { geocodedLocalityFrom } from '../../../skeleton-orchestrator';
 import type { GeocodedLocality } from '../../../skeleton-adapter';
 
 /**
@@ -69,23 +70,14 @@ export function recordedGeocoder(log: string[] = []): (query: string) => Promise
     log.push(query);
     const rows = recordedRows(query);
     if (!rows) return [];
+    /*
+     * The product's own reading of these rows, not a second one. V12.3 replaced a
+     * copy of this mapping that lived here and had already drifted from it.
+     */
     const out: GeocodedLocality[] = [];
     for (const place of rows) {
-      const lat = Number(place.lat);
-      const lng = Number((place as { lon?: string }).lon);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      const sourceId = osmElementId(place) ?? (place.place_id !== undefined ? `nominatim/${place.place_id}` : null);
-      if (!sourceId) continue;
-      const { entityType } = classifyNominatim(place);
-      out.push({
-        sourceId,
-        name: place.namedetails?.['name:en'] ?? place.name ?? place.display_name,
-        lat,
-        lng,
-        ...(place.address?.['country_code'] ? { countryCode: place.address['country_code'] } : {}),
-        entityType,
-        ...(place.importance !== undefined ? { importance: place.importance } : {}),
-      });
+      const locality = geocodedLocalityFrom(place);
+      if (locality) out.push(locality);
     }
     return out;
   };
