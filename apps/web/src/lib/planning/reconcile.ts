@@ -19,7 +19,10 @@ import {
   findOperatingCalendar,
   operatingOn,
   permittedModesFor,
-  assessModeConsistency,
+  screenProposedMode,
+  travelModeFromDraft,
+  isRoadRoutable,
+  type TravelMode,
   type DestinationAffordanceProfile,
   type TravelReality,
   tripDates,
@@ -417,9 +420,21 @@ function transportModeFor(hint: DraftTransport | undefined, matrixMode: TravelTi
   }
 }
 
-/** Whether a road router could ever have measured this hint — a ferry or a flight leg that the router cannot see is `mode_not_routed`, never "no route". */
+/**
+ * Whether a road router could ever have measured this hint — a ferry or a
+ * flight leg that the router cannot see is `mode_not_routed`, never "no route".
+ *
+ * V12.1 §2 — the enumeration this used to be had to be edited every time the
+ * draft vocabulary grew, and a new value silently defaulted to "not routable".
+ * It now asks the one total map (`TRAVEL_MODE_ROUTING_PROFILE`), so a word the
+ * model learns tomorrow is classified rather than dropped. The two absent cases
+ * keep their old reading: a leg that states no transport is attempted on the
+ * road, because the road is the default instrument and not a claim about the
+ * journey.
+ */
 function roadRoutable(hint: DraftTransport | undefined): boolean {
-  return hint === undefined || hint === 'car' || hint === 'four_wheel_drive' || hint === 'walk' || hint === 'bus' || hint === 'private_transfer' || hint === 'taxi' || hint === 'unknown';
+  if (hint === undefined || hint === 'unknown') return true;
+  return isRoadRoutable(travelModeFromDraft(hint));
 }
 
 /** V7 §8 — the transport hint an episode's own movement implies for a stop inside it that names none. */
@@ -1781,6 +1796,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       base,
       previousBase,
       relocation,
+      ...(relocation && !draftDay?.move && d > 0 && draft.days[d - 1]?.move ? { previousDayMove: draft.days[d - 1]!.move } : {}),
       anchors: dayAnchors,
       groundArrangement: groundArrangementFor(draft, context.matrix.mode === 'transit'),
       /* V12 §17 — what this trip's own experiences and declared moves vouch for. */
@@ -2187,6 +2203,28 @@ interface DayLayoutInput {
   base: ResolvedBase | null;
   previousBase: ResolvedBase | null;
   relocation: boolean;
+  /**
+   * V12.1 §12 §13 — THE MOVE THE *PREVIOUS* DAY DECLARED, WHEN THIS DAY IS THE
+   * ONE THAT ACTUALLY RELOCATES.
+   *
+   * Found by the §50 live acceptance. A Greek island plan wrote, on day 5,
+   * `move: { how: "ferry", via: "Athinios port to Naxos port" }` — the crossing
+   * named, with both ports — and left day 5's `baseId` on Santorini. The base
+   * therefore changes between day 5 and day 6, so the transfer leg is built on
+   * day **6**, which declares no move of its own. The stated ferry was dropped
+   * and the leg fell through to the matrix's default: a **`public_bus`, with an
+   * estimated duration, across a hundred kilometres of the Aegean**.
+   *
+   * That is the Canadian Rockies defect wearing the opposite costume — a road
+   * leg over open water instead of a boat leg over dry land — and it comes from
+   * the same place: an instrument's default outranking the plan's own words.
+   *
+   * A draft that says which day it sails and a draft that says which night it
+   * sleeps where can disagree by one day without either being wrong; what may
+   * not happen is that the disagreement silently discards the mode. So the
+   * relocation leg reads the previous day's move when it has none of its own.
+   */
+  previousDayMove?: TripDraft['days'][number]['move'] | undefined;
   anchors: readonly ReconciledAnchor[];
   /** V11 §10 — how the trip's ground travel is arranged, for the mode correction. Undefined when the draft did not say. */
   groundArrangement?: GroundArrangement | undefined;
@@ -2646,29 +2684,6 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     if (measured && confirmation && confirmation.minutes !== null) measured = { minutes: confirmation.minutes, km: confirmation.km ?? measured.km };
     const hintedRaw = transportModeFor(hint, context.matrix.mode, canDrive);
     /*
-     * V12 §17 — THE HINT HAS TO BE POSSIBLE HERE.
-     *
-     * A draft may hint any mode, and until now the hint was honoured on sight.
-     * The V11 Canadian Rockies build hinted `boat` three times in a landlocked
-     * mountain park — once between Lake Louise and its own lakeshore — and the
-     * plan carried three ferry legs holding sixty to a hundred and twenty
-     * minutes each. The only gate on the path asked whether the *traveller*
-     * accepts ferries, which everybody does by default.
-     *
-     * Only `ferry` and `rail` are checked, because only they need the world to
-     * have supplied something; a car, a walk or an arranged transfer can be
-     * organised anywhere and refusing one would invent a limit. A refusal falls
-     * back to how the trip actually moves, and is recorded as a correction so
-     * the day can say what happened.
-     */
-    const worldCheck = assessModeConsistency(hintedRaw, {
-      affordances: context.affordances ?? null,
-      reality: context.reality ?? null,
-      episodeModes: input.episodeModes ?? [],
-      dayMoveModes: input.dayMoveModes ?? [],
-    });
-    const hinted = worldCheck.ok ? hintedRaw : transportModeFor(undefined, context.matrix.mode, canDrive);
-    /*
      * An unresolved stop that the draft places in the base's own town (a
      * "Latin Quarter evening walk" in Galway) has no coordinate of its own,
      * but the town does: the base stands in for it, so the leg into town is
@@ -2682,6 +2697,42 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const straightLineKm = fromCoordinates && toCoordinates ? haversineKm(fromCoordinates, toCoordinates) : null;
     // Two distinct identities at the same spot (a town and its own harbour walk) are one place: no leg, no minutes.
     if (!measured && straightLineKm !== null && straightLineKm <= 0.15) return;
+    /*
+     * V12 §17, widened by V12.1 §6 §7 — THE HINT HAS TO BE POSSIBLE HERE.
+     *
+     * A draft may hint any mode, and until V12 the hint was honoured on sight.
+     * The V11 Canadian Rockies build hinted `boat` three times in a landlocked
+     * mountain park — once between Lake Louise and its own lakeshore — and the
+     * plan carried three ferry legs holding sixty to a hundred and twenty
+     * minutes each. The only gate on the path asked whether the *traveller*
+     * accepts ferries, which everybody does by default.
+     *
+     * V12 checked `ferry` and `rail` over the ten persisted labels. This checks
+     * the mode the draft actually named, over the full vocabulary — so a `boat`
+     * hint is screened as water rather than first collapsing into `ferry`, a
+     * `metro` hint is screened as a city network rather than as intercity rail,
+     * and a `flight` hint is screened at all, which it never was. The screen now
+     * also sees the geometry, which is what refuses a four-kilometre flight.
+     *
+     * A car, a walk, a taxi or an arranged transfer still needs no evidence
+     * anywhere: refusing one because nothing mentioned it would invent a limit.
+     * A refusal falls back to how the trip actually moves, and is recorded as a
+     * correction so the day can say what happened.
+     */
+    const proposedTravelMode: TravelMode = travelModeFromDraft(hint);
+    const worldCheck =
+      proposedTravelMode === 'unknown'
+        ? { ok: true as const, refusal: null }
+        : screenProposedMode(proposedTravelMode, {
+            world: {
+              affordances: context.affordances ?? null,
+              reality: context.reality ?? null,
+              episodeModes: input.episodeModes ?? [],
+              dayMoveModes: input.dayMoveModes ?? [],
+            },
+            straightLineKm,
+          });
+    const hinted = worldCheck.ok ? hintedRaw : transportModeFor(undefined, context.matrix.mode, canDrive);
     const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
     const mode = plausible.mode;
@@ -2832,7 +2883,50 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * day with no stated move keeps the behaviour it had.
      */
     const leavingBase = cursor === startPoint && input.relocation && !moveFirst;
-    pushLeg(cursor, target, leavingBase && move ? move.how : anchor.draft.transport, 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
+    /*
+     * V12.1 §50 — AND THE MOVE MAY HAVE BEEN DECLARED THE DAY BEFORE.
+     *
+     * V11 §M made the first leg of a relocation day take the day's own `move`.
+     * The §50 live acceptance found the case it does not cover: a Greek plan
+     * wrote `move: { how: "ferry", via: "Athinios port to Naxos port" }` on the
+     * day it *sails* and kept that day's `baseId` on Santorini, because that is
+     * where the traveller wakes. The bed therefore changes a day later, the
+     * relocating day declares no move of its own, and the crossing fell through
+     * to the matrix default — **a `public_bus`, estimated, across a hundred
+     * kilometres of the Aegean**.
+     *
+     * A draft may disagree with itself by one day about when a crossing happens
+     * without either statement being wrong. What it may not do is lose the mode
+     * in the disagreement.
+     */
+    const declaredMove = move ?? input.previousDayMove;
+    /*
+     * V12.1 §50 — AND THE CROSSING HAS TO ACTUALLY REACH THE FAR SIDE.
+     *
+     * The §50 re-run produced `ferry · Athens → Acropolis`: a boat to a hilltop
+     * three kilometres from where it set off. The day relocated Athens→Naxos and
+     * declared a ferry, and V11 §M gives the day's first leg the move — but that
+     * day's first stop was the Acropolis, still in Athens. The morning's sightseeing
+     * inherited the crossing.
+     *
+     * That is the Canadian Rockies defect one more time: a boat leg on dry land.
+     * The test is geographic and needs no threshold — a leg is the crossing only
+     * if it ends up **nearer the new base than the old one**. A stop at the origin
+     * fails it and keeps its own word; the leg that genuinely departs takes the
+     * move.
+     *
+     * Only where all three points are placed. Without coordinates there is no
+     * question to ask, and the V11 behaviour stands rather than being guessed at.
+     */
+    const movesToward = (() => {
+      if (!leavingBase || !declaredMove) return false;
+      const from = startPoint.coordinates;
+      const to = endPoint.coordinates;
+      const at = target.coordinates;
+      if (!from || !to || !at) return true;
+      return haversineKm(at, to) <= haversineKm(at, from);
+    })();
+    pushLeg(cursor, target, movesToward && declaredMove ? declaredMove.how : anchor.draft.transport, 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
     if (!hadLunch && clock >= LUNCH_EARLIEST && clock <= LUNCH_LATEST) {
       hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
     }
@@ -2911,8 +3005,19 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
   }
   if (!moveFirst) {
-    /* The day's own move names the transfer's mode; failing that, the first stop's hint; an ordinary day returns to base. */
-    const transferHint = input.relocation ? (move?.how ?? draftDay?.anchors[0]?.transport) : undefined;
+    /*
+     * The day's own move names the transfer's mode; failing that, the first
+     * stop's hint; an ordinary day returns to base.
+     *
+     * V12.1 §50 — the previous day's move is inherited here **only when this leg
+     * is itself the departure from the previous base**, which is to say only on a
+     * relocation day that holds no stops. Where the day does have stops, the
+     * crossing is its first leg and has already taken the word; letting this one
+     * take it too gave the Aegean trip two ferries — the crossing, and the short
+     * hop from the last stop to the new bed on the far island.
+     */
+    const inheritedMove = cursor === startPoint ? input.previousDayMove?.how : undefined;
+    const transferHint = input.relocation ? (move?.how ?? inheritedMove ?? draftDay?.anchors[0]?.transport) : undefined;
     pushLeg(cursor, endPoint, transferHint, input.relocation ? 'transfer' : 'return', { inEpisode: episode !== null && !input.relocation && cursor !== startPoint });
   } else if (cursor !== endPoint) {
     pushLeg(cursor, endPoint, undefined, 'return', { inEpisode: episode !== null && offRoad });

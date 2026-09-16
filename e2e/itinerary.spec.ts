@@ -75,7 +75,7 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
    * heading — which is what the test meant all along.
    */
   await expect(
-    page.locator('#hub-view-days [data-row-kind="travel"]').filter({ hasText: /\d+ km|estimate|timing to confirm|timing not/ }).first(),
+    page.locator('#hub-view-days [data-row-kind="travel"]').filter({ hasText: /\d+ km|estimate|timing to confirm|timing not|time to confirm|schedule to confirm|arranged|own pace|frequent service/ }).first(),
   ).toBeVisible();
   // The day says where its hours went, and free time is a deliberate block.
   await expect(page.getByText(/(\d+ min|\d+ hr( \d+ min)?) at stops/).first()).toBeVisible();

@@ -146,7 +146,23 @@ export function auditTopology(input: { draft: TripDraft; itinerary: Itinerary })
     if (dd.move) for (const m of [legModeFromHint(dd.move.how as Parameters<typeof legModeFromHint>[0]) ?? dd.move.how]) if (m === 'flight' || m === 'ferry' || m === 'boat' || m === 'rail' || m === 'metro') promisedModes.add(m);
     if (promisedModes.size === 0) continue;
     const legs = travelItems(itinerary, dd.dayNumber);
-    const modesPresent = new Set(legs.map((i) => legModeOf(i.travel)));
+    /*
+     * V12.1 §50 — A DECLARED CROSSING MAY LAND ON THE NEXT DAY'S LEGS.
+     *
+     * A draft can say which day it sails and which night it sleeps where, and
+     * the two may differ by one: a plan that writes `move: ferry` on the day it
+     * leaves and keeps that day's `baseId` on the origin puts the bed change —
+     * and therefore the leg — on the following day. The reconciler now carries
+     * the declared mode across that boundary (`previousDayMove`), so the boat
+     * exists; it is simply on day N+1.
+     *
+     * Looking only at the declaring day's own legs reported "day 6 promises a
+     * boat and has no boat leg" on a trip whose day 7 held exactly that boat.
+     * The promise is kept if the mode appears on either day, and nowhere else —
+     * a leg two days later is a different journey.
+     */
+    const adjacentLegs = travelItems(itinerary, dd.dayNumber + 1);
+    const modesPresent = new Set([...legs, ...adjacentLegs].map((i) => legModeOf(i.travel)));
     const episode = episodeForDay(episodes, dd.dayNumber);
     const wantsFlight = promisedModes.has('flight');
     const wantsBoat = promisedModes.has('ferry') || promisedModes.has('boat');
@@ -154,8 +170,8 @@ export function auditTopology(input: { draft: TripDraft; itinerary: Itinerary })
     const hasFlight = modesPresent.has('flight');
     /* "Board the cruise" on the evening before the ship sails is kept by tomorrow's episode; tonight's vessel base keeps it too. */
     const tonightBase = itinerary.package?.bases.find((b) => b.id === days.find((d) => d.dayNumber === dd.dayNumber)?.baseId);
-    const hasBoat = modesPresent.has('ferry') || modesPresent.has('boat') || legs.some((i) => i.travel.episodeMode === 'boat') || episode?.mode === 'boat' || episodeForDay(episodes, dd.dayNumber + 1)?.mode === 'boat' || tonightBase?.baseKind === 'vessel';
-    const hasRail = modesPresent.has('rail') || modesPresent.has('metro') || legs.some((i) => i.travel.episodeMode === 'rail');
+    const hasBoat = modesPresent.has('ferry') || modesPresent.has('boat') || [...legs, ...adjacentLegs].some((i) => i.travel.episodeMode === 'boat') || episode?.mode === 'boat' || episodeForDay(episodes, dd.dayNumber + 1)?.mode === 'boat' || tonightBase?.baseKind === 'vessel';
+    const hasRail = modesPresent.has('rail') || modesPresent.has('metro') || [...legs, ...adjacentLegs].some((i) => i.travel.episodeMode === 'rail');
     if (wantsFlight && !hasFlight) missingPromises.push(`day ${dd.dayNumber} promises a flight ("${dd.theme}") and has no flight leg`);
     if (wantsBoat && !hasBoat) missingPromises.push(`day ${dd.dayNumber} promises a boat ("${dd.theme}") and has no boat leg`);
     if (wantsRail && !hasRail && !wantsFlight) missingPromises.push(`day ${dd.dayNumber} promises a train ("${dd.theme}") and has no rail leg`);

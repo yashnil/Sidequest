@@ -3,6 +3,9 @@ import { modelMayOverride, type TripContract } from '../contract/trip-contract';
 import { STRENUOUS_BLOCKERS, FUNCTIONAL_NEED_LABELS, type FunctionalNeed } from '../party/traveler';
 import { dayStrain } from '../party/strain';
 import { readinessShortfalls, type RouteCompleteness } from './readiness-requirements';
+import { assessJourneyReadiness, journeyShortfalls } from '../mobility/readiness';
+import type { Journey } from '../mobility/journey';
+import type { OperatingType } from '../operating/model';
 
 /**
  * THE FEASIBILITY REPORT — DETERMINISTIC, FROM THE PLAN AS IT STANDS.
@@ -123,6 +126,20 @@ export interface FeasibilityInput {
    * exactly as it did before — an absence is never turned into a shortfall.
    */
   completeness?: RouteCompleteness;
+  /**
+   * V12.1 §18 — THE TRIP'S JOURNEYS, AND WHAT KIND OF TRIP IT IS.
+   *
+   * Supplied together or not at all. With them, the route-critical mobility
+   * question is answered per family in the vocabulary that family actually
+   * uses — measured for a self-drive route, a real corridor with an unread
+   * timetable for a rail journey, the operator's own timing for a trek — and
+   * `readinessShortfalls` stands its own transfer requirement down rather than
+   * asking a Shinkansen to be road-measured.
+   *
+   * Absent, every verdict is exactly what V11 and V12 produced.
+   */
+  journeys?: readonly Journey[];
+  operatingType?: OperatingType;
 }
 
 /** Which feasibility area a V10 compiler check belongs to. */
@@ -340,9 +357,32 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
    * choice. That combination is the point: the trip stops calling itself Ready,
    * and the traveller is not handed a queue of work only we can do.
    */
+  const journeyLayer = input.journeys !== undefined && input.operatingType !== undefined;
   if (input.completeness) {
-    for (const shortfall of readinessShortfalls({ archetype: itinerary.package?.archetype, completeness: input.completeness })) {
+    for (const shortfall of readinessShortfalls({ archetype: itinerary.package?.archetype, completeness: input.completeness, journeyReadinessSupplied: journeyLayer })) {
       items.push({ area: shortfall.requirement === 'access_requirements' ? 'transport' : shortfall.requirement === 'bases_placed' ? 'bases' : 'transport', severity: 'dependency', detail: shortfall.detail, owner: 'sidequest' });
+    }
+  }
+
+  /*
+   * --- V12.1 §18 §22: what Ready requires of THIS trip's journeys ----------------------
+   *
+   * Two severities and two owners, and the split is the whole point. A journey
+   * an affirmative source says is not running is a **blocker** the traveller has
+   * to act on; a route-critical journey that is merely unsettled is a
+   * dependency; and a journey nobody could time because no provider in this
+   * deployment does ferries is **ours** — it lowers the verdict, it is stated
+   * plainly, and V11 §`owner` keeps it off the traveller's list of actions.
+   */
+  if (journeyLayer) {
+    const readiness = assessJourneyReadiness(input.journeys!, input.operatingType!);
+    for (const shortfall of journeyShortfalls(readiness, input.operatingType!)) {
+      items.push({
+        area: 'transport',
+        severity: shortfall.requirement === 'journey_contradicted' ? 'blocker' : 'dependency',
+        detail: shortfall.detail,
+        ...(shortfall.owner === 'sidequest' ? { owner: 'sidequest' as const } : {}),
+      });
     }
   }
 

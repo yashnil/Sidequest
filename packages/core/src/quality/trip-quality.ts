@@ -2,6 +2,8 @@ import type { Itinerary } from '../schemas/itinerary';
 import type { StructuralMetrics } from './metrics';
 import type { Chapter, Stay } from '../experience/chapters';
 import type { RouteCompleteness } from '../feasibility/readiness-requirements';
+import type { OperatingPolicy } from '../operating/model';
+import { densityExpectation, hotelChangeThresholds } from '../operating/policy-effects';
 
 /**
  * V11 §2 — THE TRIP QUALITY REPORT.
@@ -44,10 +46,21 @@ export const TRIP_QUALITY_DIMENSIONS = [
   'routeCriticalPlacement',
   'temporalFeasibility',
   'uncertaintyBurden',
+  /**
+   * V12.1 §39 — how full the days are, **judged against what this kind of trip
+   * wants them to be**.
+   *
+   * Twelve dimensions became thirteen rather than one of them being widened,
+   * because V11 §`trip-quality` is explicit that these are scored separately and
+   * never collapsed into one number. A day's fullness is a different question
+   * from its route coherence and has a different answer on a resort week.
+   */
+  'activityDensity',
 ] as const;
 export type TripQualityDimension = (typeof TRIP_QUALITY_DIMENSIONS)[number];
 
 export const TRIP_QUALITY_LABELS: Record<TripQualityDimension, string> = {
+  activityDensity: 'How full the days are',
   routeCoherence: 'Route coherence',
   geographicProgression: 'Geographic progression',
   baseEfficiency: 'Base efficiency',
@@ -95,6 +108,15 @@ export interface TripQualityInput {
   transport?: { declared: string | null; used: readonly string[] } | null;
   /** Measurements refused as implausible during the build. */
   implausibleMeasurements?: number;
+  /**
+   * V12.1 §38–§40 — HOW THIS KIND OF TRIP SHOULD BE JUDGED.
+   *
+   * Optional, and its absence keeps every threshold exactly where V11 put them.
+   * With it, two checks stop using a road trip's standards for everybody:
+   * `baseEfficiency` reads what a hotel change actually costs here, and
+   * `activityDensity` knows whether an open afternoon is a gap or the point.
+   */
+  policy?: OperatingPolicy | null;
 }
 
 function finding(dimension: TripQualityDimension, verdict: QualityVerdict, detail: string, figure?: string): TripQualityFinding {
@@ -167,16 +189,61 @@ export function buildTripQualityReport(input: TripQualityInput): TripQualityRepo
     const changes = stays.filter((stay) => stay.countsAsHotelChange).length;
     const ownOneNighters = stays.filter((stay) => stay.nights === 1 && !stay.withinExperience).length;
     const ratio = nights > 0 ? changes / nights : 0;
+    /*
+     * V12.1 §40 — WHAT A HOTEL CHANGE COSTS DEPENDS ON THE TRIP.
+     *
+     * 0.25 / 0.45 were a road trip's thresholds applied to everybody. A
+     * backpacking route that moves every other night is working as intended; a
+     * resort week that moves twice has spent two of seven days in transit. The
+     * policy already carries that difference as `hotelChangeCost`, so the bands
+     * are read off it rather than written down twice.
+     */
+    const bands = input.policy ? hotelChangeThresholds(input.policy) : { strong: 0.25, adequate: 0.45, note: '' };
     findings.push(
       finding(
         'baseEfficiency',
-        ratio <= 0.25 ? 'strong' : ratio <= 0.45 ? 'adequate' : 'weak',
-        ratio <= 0.25
-          ? 'The traveller unpacks rarely for the ground the route covers.'
-          : `${changes} change(s) of hotel across ${nights} nights, ${ownOneNighters} of them one-night stays the traveller books themselves.`,
+        ratio <= bands.strong ? 'strong' : ratio <= bands.adequate ? 'adequate' : 'weak',
+        ratio <= bands.strong
+          ? `The traveller unpacks rarely for the ground the route covers.${bands.note ? ` ${bands.note}` : ''}`
+          : `${changes} change(s) of hotel across ${nights} nights, ${ownOneNighters} of them one-night stays the traveller books themselves.${bands.note ? ` ${bands.note}` : ''}`,
         `${changes} changes / ${nights} nights`,
       ),
     );
+  }
+
+  // --- V12.1 §39: how full the days are, for THIS kind of trip ---------------------------
+  {
+    /* `items` is optional on a partially-built day, and a day with none is a day with no anchors rather than an error. */
+    const anchorsPerDay = days.map((day) => (day.items ?? []).filter((item) => item.kind === 'activity').length);
+    if (anchorsPerDay.length === 0) {
+      findings.push(unknownFinding('activityDensity', 'The plan has no days to judge.'));
+    } else if (!input.policy) {
+      /*
+       * Without a policy there is no standard to judge against, and a generic
+       * one would be a road trip's applied to everybody — the exact mistake
+       * above. `unknown` is the honest verdict and it costs nothing: V11's
+       * report already treats an unmeasured dimension as unmeasured rather than
+       * as a failure.
+       */
+      findings.push(unknownFinding('activityDensity', 'Nothing said what kind of trip this is, so there is no standard to judge how full its days should be.'));
+    } else {
+      const expectation = densityExpectation(input.policy);
+      const thin = anchorsPerDay.filter((count) => count < expectation.minAnchors).length;
+      const crammed = anchorsPerDay.filter((count) => count > expectation.maxAnchors).length;
+      const off = thin + crammed;
+      findings.push(
+        finding(
+          'activityDensity',
+          off === 0 ? 'strong' : off <= Math.max(1, Math.floor(days.length * 0.25)) ? 'adequate' : 'weak',
+          off === 0
+            ? expectation.note
+            : crammed > thin
+              ? `${crammed} day(s) hold more than a trip like this comfortably does. ${expectation.note}`
+              : `${thin} day(s) hold less than a trip like this usually does. ${expectation.note}`,
+          `${anchorsPerDay.join('/')} anchors per day against ${expectation.minAnchors}–${expectation.maxAnchors}`,
+        ),
+      );
+    }
   }
 
   // --- chapter rhythm --------------------------------------------------------------------

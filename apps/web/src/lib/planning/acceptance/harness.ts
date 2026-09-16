@@ -247,6 +247,8 @@ export interface DayShape {
   partOf?: string;
   /** V6 §5 — a split experience on this day. */
   split?: { who: string; does: string; rejoin?: string };
+  /** V7 §8 — how this day says it moves, and via where. The `move` the §50 acceptance found being dropped. */
+  move?: TripDraft['days'][number]['move'];
 }
 
 export function draftOf(input: {
@@ -287,6 +289,7 @@ export function draftOf(input: {
       meals: d.meals ?? { lunch: 'somewhere near the first stop', dinner: 'near base' },
       ...(d.partOf ? { partOf: d.partOf } : {}),
       ...(d.split ? { split: d.split } : {}),
+      ...(d.move ? { move: d.move } : {}),
     })),
     omissions: input.omissions ? [...input.omissions] : [],
     unresolved: [],

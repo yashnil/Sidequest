@@ -345,21 +345,59 @@ export async function recommendDestinations(input: RecommendInput): Promise<Dest
   const wanted = new Set(provisional.picks.map((pick) => pick.entryId));
 
   // ---- Stage 2: climate, for the few --------------------------------------
+  /*
+   * V12.1 §31 §36 — THE TWELVE REQUESTS RUN TOGETHER, NOT ONE AFTER ANOTHER.
+   *
+   * ## What the profiling found
+   *
+   * Measured in this pass against the real 109,853-row index: the whole local
+   * pipeline — the universe scan, ninety-nine per-country feature reads, and
+   * two full passes of the fourteen-dimension ranking over 239 candidates —
+   * costs **~280 ms**. The climate stage costs **90% of the wall clock**, and
+   * it did so because this loop `await`ed each of twelve archive requests in
+   * turn. The V11 live acceptance measured the whole operation at **101.9 s**,
+   * which is twelve sequential requests to a busy ERA5 archive and almost
+   * nothing else.
+   *
+   * ## Why this is not a cache change
+   *
+   * Each request is one point's twenty years of daily records, ~250 kB, and it
+   * is already cached for thirty days. A cold shortlist has twelve misses by
+   * construction, and no cache can make the *first* one fast. The only thing
+   * that was wrong was the shape: twelve independent lookups, with no data
+   * dependency between them, taken in series.
+   *
+   * ## What is preserved
+   *
+   * Everything §32 asks for. The same twelve candidates are chosen, by the same
+   * provisional ranking; each one either gets a profile or carries
+   * `climate_provider_unavailable`; `climateRequests` counts the same
+   * successes; and the results are reassembled **in the original candidate
+   * order**, so the ranking sees exactly the list it saw before. A failure is
+   * still swallowed per candidate rather than failing the shortlist.
+   *
+   * The concurrency limit is politeness, not throughput tuning: Open-Meteo is a
+   * free service and twelve simultaneous 250 kB requests from one client is not
+   * how to use one.
+   */
+  const CLIMATE_CONCURRENCY = 6;
   let climateRequests = 0;
-  const enriched: CandidateEvidence[] = [];
-  for (const candidate of free) {
-    if (!wanted.has(candidate.entry.id)) {
-      enriched.push(candidate);
-      continue;
-    }
-    const profile = await climateFor(candidate.entry.center, input.now).catch(() => null);
-    if (profile) climateRequests += 1;
-    enriched.push(
-      profile
-        ? { ...candidate, climate: profile, climateAbsence: undefined }
-        : { ...candidate, climateAbsence: 'climate_provider_unavailable' },
-    );
+  const wantedCandidates = free.filter((candidate) => wanted.has(candidate.entry.id));
+  const profiles = new Map<string, Awaited<ReturnType<typeof climateFor>>>();
+  for (let start = 0; start < wantedCandidates.length; start += CLIMATE_CONCURRENCY) {
+    const batch = wantedCandidates.slice(start, start + CLIMATE_CONCURRENCY);
+    const answers = await Promise.all(batch.map((candidate) => climateFor(candidate.entry.center, input.now).catch(() => null)));
+    batch.forEach((candidate, index) => {
+      const profile = answers[index] ?? null;
+      if (profile) climateRequests += 1;
+      profiles.set(candidate.entry.id, profile);
+    });
   }
+  const enriched: CandidateEvidence[] = free.map((candidate) => {
+    if (!wanted.has(candidate.entry.id)) return candidate;
+    const profile = profiles.get(candidate.entry.id) ?? null;
+    return profile ? { ...candidate, climate: profile, climateAbsence: undefined } : { ...candidate, climateAbsence: 'climate_provider_unavailable' };
+  });
 
   /*
    * The hemisphere a season means depends on where the candidate is, so it

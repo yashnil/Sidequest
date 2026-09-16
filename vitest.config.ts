@@ -66,7 +66,7 @@ export default defineConfig({
      * hundreds of other tests fight for the same cores measures the contention,
      * not the code.
      */
-    exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/src/lib/execution/perf-offline.test.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/src/lib/execution/perf-offline.test.ts', 'apps/web/src/lib/destinations/recommend-perf.test.ts'],
     environment: 'node',
     passWithNoTests: false,
   },

@@ -18,7 +18,7 @@ export default defineConfig({
   resolve: base.resolve,
   oxc: base.oxc,
   test: {
-    include: ['apps/web/src/lib/execution/perf-offline.test.ts'],
+    include: ['apps/web/src/lib/execution/perf-offline.test.ts', 'apps/web/src/lib/destinations/recommend-perf.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     environment: 'node',
     passWithNoTests: false,

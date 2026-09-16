@@ -1,4 +1,4 @@
-import { contractBands, renderTravelerBriefXml, MODE_CONCEPT_LABELS, MODE_STATUS_LABELS, type TravelerBrief, type TravelReality, type TripContract, type TripOperatingModel } from '@sidequest/core';
+import { contractBands, renderTravelerBriefXml, MODE_CONCEPT_LABELS, MODE_STATUS_LABELS, TRAVEL_MODE_LABELS, type ModeSelection, type TravelerBrief, type TravelReality, type TripContract, type TripOperatingModel } from '@sidequest/core';
 import type { StructuredModel } from '@/lib/providers/interpretation-model';
 import type { CompositionTimingBrief } from './canonical-input';
 import { createHash } from 'node:crypto';
@@ -186,6 +186,25 @@ export interface CompositionContext {
    * the verification layers read the same policy afterwards and will say so.
    */
   operating?: TripOperatingModel | null;
+  /**
+   * V12.1 §6 §7 — THE WAYS THIS TRIP CAN ACTUALLY MOVE.
+   *
+   * The output of the mode-selection pipeline: what the traveller accepts,
+   * intersected with what this kind of trip travels by, with what the ground
+   * affords, with what the geography allows.
+   *
+   * It is here because prevention at source is cheaper and more honest than
+   * correction afterwards. The V11 Canadian Rockies build hinted `boat` three
+   * times in a landlocked mountain park; the reconciler now refuses those hints,
+   * and a refusal is still a leg whose mode had to be replaced. A model told
+   * plainly that this trip does not cross water does not propose a ferry between
+   * a lake and its own shore.
+   *
+   * **A list of what is possible, never a list of what to use.** The same rule
+   * the evidence layer has always had: this never becomes an itinerary, and a
+   * mode being available says nothing about whether any day should use it.
+   */
+  mobility?: ModeSelection | null;
 }
 
 export interface CompositionPlanningFacts {
@@ -524,6 +543,7 @@ export function buildCompositionTask(context: CompositionContext): string {
     ...(context.contract ? [renderContractBands(context.contract), ''] : []),
     ...(context.reality ? [renderTravelReality(context.reality), ''] : []),
     ...(context.operating ? [renderOperatingModel(context.operating), ''] : []),
+    ...(context.mobility ? [renderMobility(context.mobility), ''] : []),
     ...(context.mode === 'quick' ? ['The traveller gave only the essentials and asked Sidequest to plan what it thinks is right. Choose sensible defaults confidently.', ''] : []),
     'DAY WINDOWS (hard). Nothing may be scheduled before the arrival on day 1 or after the departure on the last day: a morning departure means the last day holds at most a short walk or nothing. Keep every day inside a normal waking window and never assume a late night the traveller did not ask for.',
     ...(context.bookedFacts && context.bookedFacts.length > 0
@@ -578,6 +598,32 @@ export function renderOperatingModel(operating: TripOperatingModel): string {
     ...(policy.operatorDependence >= 0.7 ? ['- Much of this depends on an operator doing their part. Say what has to be arranged, and when.'] : []),
     'This is a policy, not a template. It says what matters and how the trip will be judged — never which places to choose or in what order. If a better trip breaks one of these, build the better trip and say why in the tradeoffs.',
     '</how_this_trip_should_work>',
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * V12.1 §6 §7 — the ways this trip can move, and the ones it cannot.
+ *
+ * Short by design. The affirmative list is the useful half; the refusals are
+ * included only where the world was actually consulted and came back without a
+ * mode, because a refusal without a reason is just a restriction and the model
+ * has no way to weigh one.
+ *
+ * Nothing here is a route. A mode being available says only that a day *could*
+ * use it.
+ */
+export function renderMobility(mobility: ModeSelection): string {
+  const available = mobility.candidates.map((mode) => TRAVEL_MODE_LABELS[mode].toLowerCase());
+  const refused = mobility.refused.filter((entry) => entry.refusedBy === 'world' && entry.refusal);
+  const lines = [
+    '<how_this_trip_can_move>',
+    available.length > 0
+      ? `Ways this trip can travel: ${available.join(', ')}.`
+      : 'Nothing could be established about how this trip travels; use your own judgement and say what you assumed.',
+    ...refused.map((entry) => `- Not ${TRAVEL_MODE_LABELS[entry.mode].toLowerCase()}: ${entry.refusal}`),
+    'This is what is possible, not what to use. It never decides a day. If a journey genuinely needs a way of moving that is not listed, write it and say why in the tradeoffs.',
+    '</how_this_trip_can_move>',
   ];
   return lines.join('\n');
 }

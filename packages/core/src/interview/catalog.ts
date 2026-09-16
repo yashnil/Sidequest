@@ -21,6 +21,8 @@ import { availableRegionalExpansions, EXPANSION_CEILING_MINUTES } from '../quest
 import type { PlanningImpactKey } from './impact';
 import { hasTrait, type DestinationQuestionContext, type DestinationTrait } from './traits';
 import { PRIORITY_ROLE_ANSWERS, type InterestRoles, type PriorityRoleAnswer } from '../intent/roles';
+import { diagnoseTrip, intentIsSpecified, looksLikeAny } from './diagnosis';
+import type { OperatingType } from '../operating/model';
 import { modeStatusFor } from '../reality/schema';
 import { movementFromReality } from '../reality/interview';
 
@@ -53,6 +55,16 @@ export const INTERVIEW_MODULES = [
   'budget',
   'hard_constraints',
   'names',
+  /**
+   * V12.1 §27 — the questions only *this kind of trip* raises.
+   *
+   * Not a topic like the others: a module whose questions are chosen by what
+   * the answers so far say the trip **is**. A trek asks where you sleep on the
+   * trail; a resort week asks whether it is one property or two; a safari asks
+   * whether the vehicle is yours. None of them is worth asking of anybody else,
+   * and every one of them changes the plan.
+   */
+  'operating_mode',
 ] as const;
 export type InterviewModule = (typeof INTERVIEW_MODULES)[number];
 
@@ -71,6 +83,7 @@ export const INTERVIEW_MODULE_LABELS: Record<InterviewModule, string> = {
   budget: 'Spend',
   hard_constraints: 'Hard limits',
   names: 'Named places',
+  operating_mode: 'How this trip works',
 };
 
 export type ResponseKind =
@@ -540,7 +553,26 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
       const status = (mode: Parameters<typeof modeStatusFor>[1]) => modeStatusFor(reality, mode);
       const regionalRail = rec.regional.includes('high_speed_rail') || rec.regional.includes('intercity_train') || rec.regional.includes('private_driver');
       const urbanTransit = rec.urban.length > 0;
-      if (urbanTransit && regionalRail) options.push({ value: 'rail_transfers', label: 'Trains and hired transfers for the regional days', detail: 'On foot, metro and ride-hailing in the city' });
+      /*
+       * V12.1 §12 — A RAIL COUNTRY OFFERS RAIL, WHETHER OR NOT ITS CITIES WERE READ.
+       *
+       * This used to require `urbanTransit && regionalRail`, and the dry run for
+       * the §49 acceptance found what that costs: a ten-day trip to **Japan** was
+       * offered exactly two ways of getting around — "Rent a car" and "A mix".
+       * The Shinkansen is `recommended` in the compiled reality and the traveller
+       * could not choose it.
+       *
+       * The cause is that `urban` is only populated where the screening read the
+       * destination as urban, and a whole country typed as one phrase is not read
+       * that way. So the country's own *regional* answer was discarded because
+       * nothing had been established about its cities — our gap in reading the
+       * ground, turned into a restriction on the traveller. That is the same
+       * mistake this pass exists to correct, one screen earlier than usual.
+       *
+       * The regional answer now stands on its own, and the detail line says which
+       * of the two situations it is rather than claiming a metro nobody screened.
+       */
+      if (regionalRail) options.push({ value: 'rail_transfers', label: 'Trains and hired transfers between places', detail: urbanTransit ? 'On foot, metro and ride-hailing in the city' : 'Trains for the long legs, and local transport once you are there' });
       else if (urbanTransit) options.push({ value: 'transit_walk', label: 'On foot and by public transport', detail: 'Keeps the days flexible and the city close' });
       if (rec.regional.includes('guided_transfer')) options.push({ value: 'guided', label: 'Guided, with transfers arranged', detail: 'Let local operators handle the hard legs' });
       if (rec.regional.includes('ferry') && !regionalRail) options.push({ value: 'boats_transfers', label: 'Boats and local transfers', detail: 'Move between islands by ferry or short hop' });
@@ -1673,6 +1705,329 @@ export const CORE_QUESTIONS: readonly QuestionDefinition[] = [
   HARD_CONSTRAINTS,
 ];
 
+
+// ---------------------------------------------------------------------------
+// V12.1 §27 — Operating-mode questions
+//
+// THE QUESTIONS ONLY *THIS KIND OF TRIP* RAISES.
+//
+// V12 derived `TripOperatingModel` before the composition call and handed it to
+// composition, readiness and quality. The intake never saw it, so every
+// traveller was asked the same questions in the same order whatever trip they
+// were describing — which is the thing §25 says a traveller should notice has
+// changed.
+//
+// Two rules govern what is allowed in here, and between them they are why this
+// module is eight questions rather than forty.
+//
+//   **§28 — a question must be able to change something.** Every one below
+//   writes real answer fields that a real downstream reader consumes, and the
+//   `impacts` list names them. `question-value.test.ts` holds this to the code.
+//
+//   **No duplicates of the generic set.** The catalog already asks about guide
+//   willingness, lodging style, base moves, day trips, late nights, driving
+//   ceilings and convenience spend, for everybody. A trek question that asked
+//   "do you mind a guide?" would be the same question wearing a second id, and
+//   the selector would show both. What is here is what the generic set
+//   genuinely cannot ask: where you sleep *on a trail*, whether a night bus is
+//   a bed, whether the safari vehicle is yours.
+//
+// **Nothing here says the family's name.** §25: a question may be asked
+// *because* the trip looks like a trek; it may never use the word "operating
+// model", and none of these prompts does.
+// ---------------------------------------------------------------------------
+
+/** How strongly this trip has to look like one of these families before its question is worth a screen. */
+function familyFit(ctx: InterviewContext, answers: QuestionnaireAnswers, families: readonly OperatingType[]): number {
+  if (!intentIsSpecified(answers)) return 0;
+  return looksLikeAny(diagnoseTrip(ctx, answers), families);
+}
+
+const TREK_NIGHTS: QuestionDefinition = choice({
+  id: 'trek_nights',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'On the nights out on the route, where would you rather sleep?',
+  why: () => 'What sleeps on a multi-day route is booked months ahead and decides how far each day can run. It is a different question from what you want in a town.',
+  options: () => [
+    { value: 'huts', label: 'Huts or refuges', detail: 'A bed, a roof and usually a meal. Booked early.' },
+    { value: 'camps', label: 'Tented or yurt camps', detail: 'Set up for you, further from the road' },
+    { value: 'own_tent', label: 'Our own tent', detail: 'Wild camping where it is allowed' },
+    { value: 'back_to_town', label: 'Back to a town each night', detail: 'Day walks out and back rather than a through-route' },
+  ],
+  impacts: ['lodging', 'effort', 'base_count', 'budget'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['multi_day_trek', 'remote_overland']),
+  read: (answers) => answers.trailSetting === 'backcountry' ? (answers.rusticLodgingOk ? 'camps' : 'huts') : answers.trailSetting === 'frontcountry' ? 'back_to_town' : undefined,
+  apply: (value) => {
+    switch (String(value)) {
+      case 'huts':
+        return { lodgingStyle: 'basic_hotel', rusticLodgingOk: true, trailSetting: 'backcountry' };
+      case 'camps':
+        return { lodgingStyle: 'nature_lodge', rusticLodgingOk: true, trailSetting: 'backcountry' };
+      case 'own_tent':
+        return { lodgingStyle: 'nature_lodge', rusticLodgingOk: true, trailSetting: 'backcountry', remoteComfort: 'fine' };
+      case 'back_to_town':
+      default:
+        return { trailSetting: 'frontcountry', rusticLodgingOk: false };
+    }
+  },
+  smartDefault: (_ctx, answers) => (answers.rusticLodgingOk ? { value: 'huts', reason: 'We will plan around huts where the route has them, and say when it does not.', source: 'smart_default' } : { value: 'back_to_town', reason: 'Day walks out and back, so every night is a proper bed.', source: 'smart_default' }),
+});
+
+const TREK_LOAD: QuestionDefinition = choice({
+  id: 'trek_load',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'Who carries the gear?',
+  why: () => 'Carrying everything roughly halves how far a day goes and changes what a day can include. Somebody else carrying it is a cost and an arrangement.',
+  options: () => [
+    { value: 'ourselves', label: 'We carry everything', detail: 'Shorter days, full independence' },
+    { value: 'porters', label: 'Porters or pack animals', detail: 'Longer days, arranged in advance' },
+    { value: 'vehicle', label: 'A vehicle meets us', detail: 'Day packs only; bags move by road' },
+  ],
+  impacts: ['effort', 'day_density', 'guide_transfer', 'budget'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['multi_day_trek']),
+  read: (answers) => (answers.guideWillingness === 'prefer' ? 'porters' : answers.dailyIntensity === 'intense' ? 'ourselves' : undefined),
+  apply: (value, answers) => {
+    switch (String(value)) {
+      case 'ourselves':
+        return { dailyIntensity: 'intense', guideWillingness: answers.guideWillingness === 'prefer' ? 'sometimes' : answers.guideWillingness };
+      case 'porters':
+        return { guideWillingness: 'prefer', privateTransfers: 'fine' };
+      case 'vehicle':
+      default:
+        return { privateTransfers: 'fine', guideWillingness: 'sometimes' };
+    }
+  },
+  smartDefault: () => ({ value: 'porters', reason: 'We will assume the heavy bags are carried for you and say where that has to be arranged.', source: 'smart_default' }),
+});
+
+const OVERNIGHT_TRANSPORT: QuestionDefinition = choice({
+  id: 'overnight_transport',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'Travelling overnight — a night bus or a sleeper train:',
+  why: () => 'An overnight leg buys a whole day and costs a night of sleep. Whether it is on the table changes how far the route can reach.',
+  options: () => [
+    { value: 'yes', label: 'Yes, that saves a day', detail: 'Long legs at night, days kept for places' },
+    { value: 'sleeper_only', label: 'Only in a proper sleeper', detail: 'A berth, not a reclining seat' },
+    { value: 'no', label: 'No — I want a bed', detail: 'Every night in a room' },
+  ],
+  impacts: ['transportation_mode', 'lodging', 'scope', 'day_density'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['overland_backpacking', 'rail_journey']),
+  read: (answers) => (answers.maxDailyTravelMinutes >= 420 ? 'yes' : undefined),
+  apply: (value, answers) => {
+    switch (String(value)) {
+      case 'yes':
+        return { maxDailyTravelMinutes: Math.max(answers.maxDailyTravelMinutes, 420), rusticLodgingOk: true, willUseShuttles: true };
+      case 'sleeper_only':
+        return { maxDailyTravelMinutes: Math.max(answers.maxDailyTravelMinutes, 360), convenienceSpend: 'balance' };
+      case 'no':
+      default:
+        return { maxDailyTravelMinutes: Math.min(answers.maxDailyTravelMinutes, 300) };
+    }
+  },
+  smartDefault: () => ({ value: 'no', reason: 'We will keep every night in a room and plan the long legs by day.', source: 'smart_default' }),
+});
+
+const RESORT_SHAPE: QuestionDefinition = choice({
+  id: 'resort_shape',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'One place the whole time, or two?',
+  why: () => 'Moving between properties costs most of a day here, and it is the single biggest decision about how this trip feels.',
+  options: () => [
+    { value: 'one', label: 'One place, all week', detail: 'Unpack once' },
+    { value: 'two', label: 'Split it between two', detail: 'A change of scene, one transfer day' },
+    { value: 'open', label: 'Whatever suits the place', detail: 'Decide it for me' },
+  ],
+  impacts: ['base_count', 'hotel_switching', 'lodging', 'day_density'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['resort_stay']),
+  read: (answers) => (answers.baseMoveTolerance === 'stay_put' ? 'one' : answers.baseMoveTolerance === 'move_once' ? 'two' : undefined),
+  apply: (value) => (String(value) === 'one' ? { baseMoveTolerance: 'stay_put' } : String(value) === 'two' ? { baseMoveTolerance: 'move_once' } : { baseMoveTolerance: 'move_if_it_saves_time' }),
+  smartDefault: () => ({ value: 'one', reason: 'One property the whole time, so no day is spent moving.', source: 'smart_default' }),
+});
+
+const RESORT_BALANCE: QuestionDefinition = choice({
+  id: 'resort_balance',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'How much do you want to be doing?',
+  why: () => 'On a trip like this an empty afternoon is the plan working rather than a gap in it — but only if that is what you wanted.',
+  options: () => [
+    { value: 'mostly_still', label: 'Mostly nothing', detail: 'The property, the water, a book' },
+    { value: 'one_thing', label: 'One thing most days', detail: 'A dive, a boat, a village — then back' },
+    { value: 'out_daily', label: 'Out every day', detail: 'Excursions are the point' },
+  ],
+  impacts: ['day_density', 'activity_frequency', 'budget'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['resort_stay']),
+  read: (answers) => (answers.freeTime === 'lots' ? 'mostly_still' : answers.freeTime === 'packed' ? 'out_daily' : undefined),
+  apply: (value) =>
+    String(value) === 'mostly_still'
+      ? { freeTime: 'lots', pace: 'slow', dailyIntensity: 'light' }
+      : String(value) === 'out_daily'
+        ? { freeTime: 'packed', pace: 'balanced' }
+        : { freeTime: 'balanced', pace: 'slow' },
+  smartDefault: () => ({ value: 'one_thing', reason: 'One thing most days, and the rest of the time yours.', source: 'smart_default' }),
+});
+
+const WILDLIFE_VEHICLE: QuestionDefinition = choice({
+  id: 'wildlife_vehicle',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'On the game drives, would you rather have the vehicle to yourselves?',
+  why: () => 'A private vehicle decides when you leave, how long you stay at a sighting and where you sit — and it costs noticeably more than a shared one.',
+  options: () => [
+    { value: 'private', label: 'Ours alone', detail: 'We set the pace and the hours' },
+    { value: 'shared', label: 'Share it', detail: 'Fixed departure times, lower cost' },
+    { value: 'either', label: 'Either is fine', detail: 'Whichever the lodge normally does' },
+  ],
+  impacts: ['guide_transfer', 'budget', 'convenience', 'day_start'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['guided_wildlife']),
+  read: (answers) => (answers.privateTransfers === 'fine' && answers.convenienceSpend === 'pay_to_reduce_hassle' ? 'private' : undefined),
+  apply: (value) =>
+    String(value) === 'private'
+      ? { privateTransfers: 'fine', guideWillingness: 'prefer', convenienceSpend: 'pay_to_reduce_hassle' }
+      : String(value) === 'shared'
+        ? { guideWillingness: 'prefer', convenienceSpend: 'save_money' }
+        : { guideWillingness: 'prefer', convenienceSpend: 'balance' },
+  smartDefault: () => ({ value: 'either', reason: 'Whatever the camp normally runs, and we will say what that means for the mornings.', source: 'smart_default' }),
+});
+
+const ISLAND_COUNT: QuestionDefinition = choice({
+  id: 'island_count',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'How many islands is this trip?',
+  why: () => 'Every hop costs a boat, a check-out and most of a day. Two islands well beats four in passing, unless seeing more is the point.',
+  options: () => [
+    { value: 'one', label: 'One, properly', detail: 'No crossings after the first' },
+    { value: 'two', label: 'Two', detail: 'One crossing in the middle' },
+    { value: 'three', label: 'Three', detail: 'Two crossings; days get shorter' },
+    { value: 'as_many', label: 'As many as fit', detail: 'Keep moving' },
+  ],
+  impacts: ['base_count', 'hotel_switching', 'scope', 'transportation_mode'],
+  burden: 1,
+  criticality: 3,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['island_hopping']),
+  read: (answers) => (answers.baseMoveTolerance === 'stay_put' ? 'one' : answers.baseMoveTolerance === 'move_once' ? 'two' : answers.baseMoveTolerance === 'move_freely' ? 'as_many' : undefined),
+  apply: (value) => {
+    switch (String(value)) {
+      case 'one':
+        return { baseMoveTolerance: 'stay_put', scopeStrategy: 'depth' };
+      case 'two':
+        return { baseMoveTolerance: 'move_once', scopeStrategy: 'best_subset' };
+      case 'three':
+        return { baseMoveTolerance: 'move_if_it_saves_time', scopeStrategy: 'best_subset' };
+      case 'as_many':
+      default:
+        return { baseMoveTolerance: 'move_freely', scopeStrategy: 'breadth' };
+    }
+  },
+  smartDefault: (ctx) => (ctx.traveller.tripDays >= 9 ? { value: 'three', reason: 'Three islands over this many days, with the crossings planned as whole half-days.', source: 'smart_default' } : { value: 'two', reason: 'Two islands, so only one day goes to a crossing.', source: 'smart_default' }),
+});
+
+const RAIL_BOOKING: QuestionDefinition = choice({
+  id: 'rail_booking',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'On the long train legs:',
+  why: () => 'Reserved seats and passes are bought before you go, and which one you want changes what the days can be pinned to.',
+  options: () => [
+    { value: 'reserved', label: 'Reserved seats, booked ahead', detail: 'Fixed departures, nothing to queue for' },
+    { value: 'pass', label: 'A rail pass, decide as we go', detail: 'Flexible, sometimes standing' },
+    { value: 'cheapest', label: 'Whatever is cheapest', detail: 'Slower trains are fine' },
+  ],
+  impacts: ['transportation_mode', 'budget', 'convenience', 'day_start'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['rail_journey']),
+  read: (answers) => (answers.convenienceSpend === 'pay_to_reduce_hassle' ? 'reserved' : answers.convenienceSpend === 'save_money' ? 'cheapest' : undefined),
+  apply: (value) =>
+    String(value) === 'reserved'
+      ? { convenienceSpend: 'pay_to_reduce_hassle', transportPriority: 'fastest' }
+      : String(value) === 'pass'
+        ? { convenienceSpend: 'balance', transportPriority: 'best_value' }
+        : { convenienceSpend: 'save_money', transportPriority: 'cheapest' },
+  smartDefault: () => ({ value: 'reserved', reason: 'We will assume reserved seats on the long legs and put them on the booking list.', source: 'smart_default' }),
+});
+
+
+const CITY_SHAPE: QuestionDefinition = choice({
+  id: 'city_shape',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'Which would you rather look back on?',
+  why: () => 'The famous rooms and the ordinary streets are two different weeks in the same city, and they are timed and routed differently.',
+  options: () => [
+    { value: 'the_great_ones', label: 'The great collections and the landmarks', detail: 'Timed entries, early starts, a booked list' },
+    { value: 'the_streets', label: 'Streets, markets and whichever quarter we end up in', detail: 'Fewer fixed times, longer on foot' },
+    { value: 'both', label: 'Two or three of the famous things, then wander', detail: 'A booked morning, an open afternoon' },
+  ],
+  impacts: ['famous_vs_hidden', 'crowds', 'day_density', 'walking'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['urban_culture', 'urban_family']),
+  read: (answers) => (answers.discoveryMix === 'mostly_classics' ? 'the_great_ones' : answers.discoveryMix === 'mostly_hidden' || answers.discoveryMix === 'deep_cuts' ? 'the_streets' : undefined),
+  apply: (value) =>
+    String(value) === 'the_great_ones'
+      ? { discoveryMix: 'mostly_classics', iconicCrowdStrategy: 'go_at_odd_hours', convenienceSpend: 'pay_to_reduce_hassle' }
+      : String(value) === 'the_streets'
+        ? { discoveryMix: 'mostly_hidden', iconicCrowdStrategy: 'quieter_alternative' }
+        : { discoveryMix: 'balanced', iconicCrowdStrategy: 'go_at_odd_hours' },
+  smartDefault: () => ({ value: 'both', reason: 'Two or three of the famous things booked, and the rest of each day left open.', source: 'smart_default' }),
+});
+
+const CITY_TABLE: QuestionDefinition = choice({
+  id: 'city_table',
+  module: 'operating_mode',
+  tier: 'destination',
+  prompt: () => 'How much of the eating should be decided in advance?',
+  why: () => 'A table that has to be booked weeks out pins a whole evening, and a city where the good places are walk-ins does not need any of that.',
+  options: () => [
+    { value: 'book_the_lot', label: 'Book the good ones', detail: 'Reservations weeks ahead; evenings are fixed' },
+    { value: 'one_or_two', label: 'One or two, the rest as we go', detail: 'A couple of evenings pinned' },
+    { value: 'walk_in', label: 'Walk in wherever', detail: 'Nothing booked; queue if it is worth it' },
+  ],
+  impacts: ['food_strategy', 'meal_frequency', 'budget', 'convenience'],
+  burden: 1,
+  criticality: 2,
+  relevance: (ctx, answers) => familyFit(ctx, answers, ['urban_food_nightlife']),
+  read: (answers) => (answers.specialMealAppetite === 'often' ? 'book_the_lot' : answers.specialMealAppetite === 'none' ? 'walk_in' : undefined),
+  apply: (value) =>
+    String(value) === 'book_the_lot'
+      ? { specialMealAppetite: 'often' as const, convenienceSpend: 'pay_to_reduce_hassle' as const, foodStyle: 'destination' as const }
+      : String(value) === 'walk_in'
+        ? { specialMealAppetite: 'none' as const, convenienceSpend: 'save_money' as const, foodStyle: 'local_casual' as const }
+        : { specialMealAppetite: 'a_few' as const, convenienceSpend: 'balance' as const },
+  smartDefault: () => ({ value: 'one_or_two', reason: 'A couple of evenings booked and the rest left to the night.', source: 'smart_default' }),
+});
+
+export const OPERATING_MODE_QUESTIONS: readonly QuestionDefinition[] = [
+  CITY_SHAPE,
+  CITY_TABLE,
+  TREK_NIGHTS,
+  TREK_LOAD,
+  OVERNIGHT_TRANSPORT,
+  RESORT_SHAPE,
+  RESORT_BALANCE,
+  WILDLIFE_VEHICLE,
+  ISLAND_COUNT,
+  RAIL_BOOKING,
+];
+
 export const DESTINATION_QUESTIONS: readonly QuestionDefinition[] = [
   COVERAGE_STRATEGY,
   BASE_MOVES,
@@ -1696,6 +2051,7 @@ export const DESTINATION_QUESTIONS: readonly QuestionDefinition[] = [
   PERMIT_ACTIVITIES,
   EVERYONE_EVERY_DAY,
   WEATHER_AVOIDANCES,
+  ...OPERATING_MODE_QUESTIONS,
 ];
 
 export const FINE_TUNE_QUESTIONS: readonly QuestionDefinition[] = [

@@ -167,6 +167,16 @@ export * from './intent/traveler-intent';
 export * from './operating/model';
 export * from './operating/mode-consistency';
 export * from './operating/chapter-model';
+export * from './operating/policy-effects';
+/* V12.1 — the Journey model and the mobility vocabulary that joins the other six. */
+export * from './mobility/vocabulary';
+export * from './mobility/journey';
+export * from './mobility/adapter';
+export * from './mobility/capability';
+export * from './mobility/screening';
+export * from './mobility/readiness';
+export * from './mobility/transitions';
+export * from './mobility/recheck';
 export * from './satisfaction/intent-satisfaction';
 export * from './calendar/trip-calendar';
 export * from './destinations/decomposition';

@@ -14,6 +14,9 @@ import {
   RECHECK_WINDOW_LABELS,
   RESERVATION_LABELS,
   TRANSPORT_MODE_LABELS,
+  journeyBadge,
+  journeyFromSegment,
+  journeyWords,
   type DailyWindow,
   type FoodPlan,
   type FoodStopKind,
@@ -3053,21 +3056,21 @@ function timePrecisionByItem(day: ItineraryDay): Record<string, TimePrecisionWor
  * The same four words the Plan view and the map legend use.
  */
 function travelState(travel: TravelSegment): { word: string; tone: BadgeTone } {
-  if (travel.unverifiedScheduled) return { word: 'timing to confirm', tone: 'amber' };
-  switch (travel.provenance) {
-    case 'measured':
-      return { word: travel.basis === 'scheduled' ? 'timetable' : 'measured', tone: 'pine' };
-    case 'official':
-      return { word: 'timetable', tone: 'pine' };
-    case 'estimated':
-      return { word: 'estimated', tone: 'blue' };
-    case 'modelled':
-      return { word: 'modelled', tone: 'blue' };
-    case 'unmeasured':
-      return travel.unmeasuredReason === 'mode_not_routed' || travel.unmeasuredReason === 'operator_unpublished' ? { word: 'operator-timed', tone: 'blue' } : { word: 'allowance — not timed', tone: 'amber' };
-    default:
-      return { word: 'not timed', tone: 'neutral' };
-  }
+  /*
+   * V12.1 §19 — THE CHIP READS THE JOURNEY, NOT THE PROVENANCE.
+   *
+   * This used to switch on `provenance` alone, which meant an untimed
+   * Shinkansen, an untimed farm track, an operator's trek shuttle and a trail
+   * stage all read **"allowance — not timed"** — a sentence that is about our
+   * instruments and tells a traveller nothing they can act on. The journey knows
+   * who owns the departure, so the chip can say "schedule to confirm" for the
+   * train and "arranged for you" for the transfer.
+   *
+   * `measured` still returns nothing, which V11 §8 settled: a badge on the
+   * ordinary case costs a line on every row and conveys nothing.
+   */
+  const badge = journeyBadge(journeyFromSegment(travel));
+  return badge ? { word: badge.word, tone: badge.tone as BadgeTone } : { word: 'measured', tone: 'pine' };
 }
 
 /** The one-line travel row: the rounded duration, then the leg's own title ("Walk to Quarter Market"), then what kind of figure it is. */
@@ -3080,8 +3083,15 @@ function travelLine(item: ItineraryItem): string {
   if (travel.minutes !== null && travel.provenance !== 'unmeasured') {
     return `${travel.provenance === 'estimated' ? '≈' : ''}${travelSpan(travel.minutes)} ${item.title} · ${travel.provenance === 'estimated' ? `estimate${travel.estimate?.approxKm ? ` (~${travel.estimate.approxKm} km)` : ''}` : travelProvenanceLabel(travel)}`;
   }
-  if (travel.unmeasuredReason === 'mode_not_routed') return `${item.title} · timing from the operator`;
-  return `${item.title} · timing to confirm`;
+  /*
+   * V12.1 §19 §20 — a journey nobody could time says what *kind* of unknown it
+   * is, in one clause, rather than "timing to confirm" for everything. "Train to
+   * Kyoto · schedule to confirm" and "Transfer to the lodge · arranged by your
+   * operator" are different facts and a traveller acts on them differently.
+   */
+  const words = journeyWords(journeyFromSegment(travel));
+  const qualifier = words.headline.includes(' · ') ? words.headline.slice(words.headline.indexOf(' · ') + 3) : words.headline;
+  return `${item.title} · ${qualifier}`;
 }
 
 /**
@@ -3396,16 +3406,29 @@ function TimelineRow({
                 everything conveys nothing and costs a line on every row.
 
                 The chip now appears only when the timing is *not* the ordinary
-                measured kind — an estimate, an allowance, an operator's own
-                hours, a timetable to confirm — which is exactly when a traveller
-                needs to know. The measured case keeps its precise wording in the
-                row's `title` and in the transfers table on Getting around.
+                measured kind — an estimate, an operator's own hours, a timetable
+                to confirm — which is exactly when a traveller needs to know. The
+                measured case keeps its precise wording in the row's `title` and
+                in the transfers table on Getting around.
+
+                V12.1 §19 — AND NOT WHEN THE ROW ALREADY SAID IT.
+
+                The row and the chip are now built from the same journey, so an
+                untimed train reads "Travel to Kyoto · schedule to confirm" with
+                a chip beside it saying "schedule to confirm". Saying a thing
+                twice on one line is the same defect as saying it on every line:
+                it stops being read. The chip earns its place only where it adds
+                a word the row does not already carry.
               */}
-              {travelState(item.travel).word === 'measured' ? null : (
-                <Badge tone={travelState(item.travel).tone} title={travelProvenanceLabel(item.travel)}>
-                  {travelState(item.travel).word}
-                </Badge>
-              )}
+              {(() => {
+                const state = travelState(item.travel!);
+                if (state.word === 'measured' || travelLine(item).toLowerCase().endsWith(state.word.toLowerCase())) return null;
+                return (
+                  <Badge tone={state.tone} title={travelProvenanceLabel(item.travel!)}>
+                    {state.word}
+                  </Badge>
+                );
+              })()}
             </>
           ) : (
             <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-xl leading-snug sm:text-[1.375rem]' : item.kind === 'meal' ? 'text-sm font-medium' : 'text-base font-medium')}>

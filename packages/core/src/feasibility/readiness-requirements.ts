@@ -112,6 +112,22 @@ export function readinessShortfalls(input: {
    * than computed here, because the satisfaction report is a layer above this one.
    */
   unmetPrimaryGoals?: readonly string[] | undefined;
+  /**
+   * V12.1 §18 — SET WHEN THE JOURNEY LAYER IS ANSWERING THIS INSTEAD.
+   *
+   * `base_transfers_timed` asks whether every base-to-base move has a duration,
+   * and V12's single certainty float made that requirement apply to
+   * `island_hopping` and `rail_journey` — the two families at 0.90 — where it is
+   * **unsatisfiable**: no road router measures a ferry or a Shinkansen, so both
+   * were permanently unready for a reason that has nothing to do with the trip.
+   *
+   * When a caller supplies journeys, `journeyShortfalls` decides the same
+   * question with the right vocabulary — measured for a self-drive route,
+   * timetabled or honestly schedule-to-confirm for a scheduled one, operator-set
+   * for a trek — and this shortfall stands down rather than double-counting it.
+   * Absent, everything behaves exactly as V11 and V12 left it.
+   */
+  journeyReadinessSupplied?: boolean | undefined;
 }): ReadinessShortfall[] {
   const c = input.completeness;
   const shortfalls: ReadinessShortfall[] = [];
@@ -150,7 +166,7 @@ export function readinessShortfalls(input: {
    * a self-driven route needs its transfers timed, an operator-led trek does
    * not, and a resort transfer the operator arranges is somewhere between.
    */
-  const transfersMustBeTimed = input.transportCertaintyRequirement !== undefined ? input.transportCertaintyRequirement >= 0.8 : isRoadCarried(input.archetype);
+  const transfersMustBeTimed = input.journeyReadinessSupplied ? false : input.transportCertaintyRequirement !== undefined ? input.transportCertaintyRequirement >= 0.8 : isRoadCarried(input.archetype);
   if (transfersMustBeTimed) {
     const untimedTransfers = c.baseTransfersTotal - c.baseTransfersTimed;
     if (untimedTransfers > 0) {

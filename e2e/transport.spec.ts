@@ -143,7 +143,7 @@ test('a car trip produces a strategy and a multimodal access day', async ({ page
   await openHubView(page, 'days');
   const firstLeg = page.locator('#hub-view-days [data-row-kind="travel"]').first();
   await expect(firstLeg).toBeVisible();
-  await expect(firstLeg).toContainText(/\d+ km|estimate|not measured|timing to confirm|timing not|timing from the operator/);
+  await expect(firstLeg).toContainText(/\d+ km|estimate|not measured|timing to confirm|timing not|timing from the operator|time to confirm|schedule to confirm|arranged|own pace|frequent service/);
 
   // The centrepiece of this slice, captured for a human to look at. The
   // multimodal day is the one screen that cannot be judged from assertions.

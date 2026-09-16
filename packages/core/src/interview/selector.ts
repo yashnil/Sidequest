@@ -52,10 +52,44 @@ export const CORE_BUDGET = 7;
 /** Role questions asked in the core tier; the rest wait in fine-tune. */
 export const CORE_ROLE_BUDGET = 2;
 export const DESTINATION_BUDGET = 5;
+/**
+ * V12.1 §27 §29 — HOW MANY TRIP-TYPE QUESTIONS THE WALKED INTERVIEW MAY ASK.
+ *
+ * Two, and they come out of their own budget rather than out of the
+ * destination one. Both halves of that matter.
+ *
+ * **A reserved share, not an extra one.** A trek question scores around 4.1 and
+ * the ground's own questions — trail length, altitude, road comfort — score 4.6,
+ * so with twenty-two destination questions competing for six slots the trip-type
+ * questions were demoted every time and a traveller describing a trek was asked
+ * exactly what a traveller describing a drive was asked. That is the defect §25
+ * names, reproduced by a cap. Reserving slots fixes it; *adding* slots would
+ * have made every such interview one screen longer, which §56 forbids and which
+ * the browser suite caught.
+ *
+ * **Two**, because §28's rule cuts both ways: a question that cannot change
+ * anything must not be asked, and a screen of them is how an intake starts
+ * feeling like a form. The rest stay reachable behind "Personalize it more".
+ */
+export const OPERATING_BUDGET = 2;
 
-/** V8.1 — the destination tier's cap for this trip: one more slot where the ground itself asks more (a mountain or wilderness region). */
+/**
+ * V8.1 — the destination tier's cap for this trip: one more slot where the
+ * ground itself asks more (a mountain or wilderness region).
+ *
+ * V12.1 §30 adds a second slot on the same principle, for the same reason, from
+ * the other direction. A party with a real difference in it — a child among
+ * adults, a recorded need, members whose profiles differ — has a question whose
+ * answer decides whether a day may hold a hard hike and an easy alternative side
+ * by side. It is `criticality: 1`, so on ground with many questions of its own it
+ * was demoted every time, and a family of four in a mountain region was asked
+ * precisely what two hikers were asked. The slot is granted only where the
+ * question is relevant, so nothing widens for a trip that has no group to split.
+ */
 export function destinationBudgetFor(ctx: InterviewContext): number {
-  return DESTINATION_BUDGET + (ctx.destination.traits.includes('mountain') || ctx.destination.traits.includes('wilderness') ? 1 : 0);
+  const ground = ctx.destination.traits.includes('mountain') || ctx.destination.traits.includes('wilderness') ? 1 : 0;
+  const party = (ctx.traveller.party?.differences ?? false) || (ctx.traveller.party?.needs.length ?? 0) > 0 || (ctx.traveller.children > 0 && ctx.traveller.adults + ctx.traveller.children >= 3) || ctx.traveller.travelerNeeds.length > 0 ? 1 : 0;
+  return DESTINATION_BUDGET + ground + party;
 }
 
 export type QuestionStatus = 'open' | 'answered' | 'decided' | 'skipped' | 'carried';
@@ -177,7 +211,43 @@ export function planInterview(input: { ctx: InterviewContext; answers: Questionn
 
   // --- destination: by value, capped, critical ones never demoted -----------------
   const destination = candidates.filter((q) => q.tier === 'destination').sort(byScore);
-  const destinationVisible = destination.filter((q) => !q.hidden);
+
+  /*
+   * V12.1 §27 §56 — THE TRIP-TYPE QUESTIONS ARE CAPPED FIRST, AND THEY COST A SLOT.
+   *
+   * Both halves of that are a correction to the first version of this, which
+   * gave them a budget *beside* the destination one. The browser suite caught
+   * what that meant: a wilderness trip's walked interview went from sixteen
+   * questions to seventeen. §25 asks for an intake that asks **different**
+   * questions for different journeys, and §56 asks that the new machinery not
+   * show; an intake that asks *more* questions fails both.
+   *
+   * So the tier has one size, and what fills it depends on the trip: the
+   * trip-type questions take at most `OPERATING_BUDGET` of it, and the ground's
+   * own questions divide what is left. A traveller describing a wildlife trip is
+   * asked whether the vehicle is theirs **instead of** the lowest-scoring
+   * question the ground would otherwise have asked — which is the trade the
+   * whole feature is worth making.
+   */
+  const operatingVisible = destination.filter((q) => !q.hidden && q.module === 'operating_mode');
+  for (const q of operatingVisible) {
+    if (q.status === 'open' && q.definition.criticality < 3 && q.score < WORTH_ASKING_SCORE) demoted.add(q.id);
+  }
+  if (operatingVisible.filter((q) => !demoted.has(q.id)).length > OPERATING_BUDGET) {
+    const demotable = operatingVisible
+      .filter((q) => q.status === 'open' && q.definition.criticality < 3)
+      .sort((a, b) => a.definition.criticality - b.definition.criticality || a.score - b.score || a.id.localeCompare(b.id));
+    let kept = operatingVisible.filter((q) => !demoted.has(q.id)).length;
+    for (const q of demotable) {
+      if (demoted.has(q.id)) continue;
+      if (kept <= OPERATING_BUDGET) break;
+      demoted.add(q.id);
+      kept -= 1;
+    }
+  }
+  const operatingKept = operatingVisible.filter((q) => !demoted.has(q.id)).length;
+
+  const destinationVisible = destination.filter((q) => !q.hidden && q.module !== 'operating_mode');
   for (const q of destinationVisible) {
     if (q.status === 'open' && q.definition.criticality < 3 && q.score < WORTH_ASKING_SCORE) demoted.add(q.id);
   }
@@ -187,7 +257,7 @@ export function planInterview(input: { ctx: InterviewContext; answers: Questionn
    * altitude, road comfort, where to sleep) that a city does not, and five
    * slots forced the trail question out behind the route questions.
    */
-  const budget = destinationBudgetFor(ctx);
+  const budget = Math.max(1, destinationBudgetFor(ctx) - operatingKept);
   if (destinationVisible.filter((q) => !demoted.has(q.id)).length > budget) {
     const demotable = destinationVisible
       .filter((q) => q.status === 'open' && q.definition.criticality < 3)

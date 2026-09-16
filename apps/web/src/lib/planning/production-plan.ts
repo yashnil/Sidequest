@@ -2,6 +2,10 @@ import 'server-only';
 import {
   buildTravelerBrief,
   countNights,
+  journeyFromSegment,
+  measurementAvailability,
+  selectModes,
+  travelModeOfSegment,
   countryFacts,
   currencyForCountry,
   deriveOperatingModel,
@@ -62,6 +66,7 @@ import { auditItinerary, type QualityAudit } from './quality-audit';
 import { compileQualitySafely } from './quality-compiler';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
+import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
 import { beginGeneration, finishGeneration, markGenerationDraftSaved, markGenerationModelInvoked, markGenerationStage, noteGenerationCounters, noteGenerationPlaced, type GenerationCounters } from '../db/generation-progress-repository';
@@ -551,7 +556,7 @@ export async function generateSidequestPlanForTrip(
    * the build exactly as it was before V12.
    */
   const storedAnswers = getAnswers(tripId);
-  const operating = (() => {
+  const derived = (() => {
     try {
       const affordances = affordancesForTrip({ trip, intent, region, ...(partyFacts ? { party: partyFacts } : {}), ...(profile.provenance.transport_mode?.source === 'explicit' ? { willDrive: profile.transport.willDrive } : {}) });
       const travelerIntent = deriveTravelerIntent({
@@ -560,12 +565,27 @@ export async function generateSidequestPlanForTrip(
         ...(storedAnswers?.interestRoles ? { interestRoles: storedAnswers.interestRoles } : {}),
         ...(trip.basics.children > 0 ? { party: { children: trip.basics.children } } : {}),
       });
-      return deriveOperatingModel({ intent: travelerIntent, affordances, nights: brief.tripFacts.nights, willDrive: profile.transport.willDrive });
+      const operating = deriveOperatingModel({ intent: travelerIntent, affordances, nights: brief.tripFacts.nights, willDrive: profile.transport.willDrive });
+      /*
+       * V12.1 §6 §7 — WHAT THIS TRIP CAN ACTUALLY MOVE BY, BEFORE THE CALL.
+       *
+       * Prevention at source. The reconciler refuses a hint the world does not
+       * support, and a refusal is still a leg whose mode had to be replaced; a
+       * model told plainly that this trip does not cross water does not propose
+       * a ferry between a lake and its own shore in the first place.
+       *
+       * Derived from the same affordances and the same country reality the
+       * verification layers read afterwards, so what the model was told and what
+       * it is judged against are one fact rather than two.
+       */
+      const mobility = selectModes({ policy: operating.policy, world: { affordances, reality } });
+      return { operating, mobility };
     } catch (error) {
       console.warn('The operating model could not be derived; the plan proceeds without it', { tripId, message: error instanceof Error ? error.message : 'unknown' });
       return null;
     }
   })();
+  const operating = derived?.operating ?? null;
 
   const context: CompositionContext = {
     envelope,
@@ -577,6 +597,7 @@ export async function generateSidequestPlanForTrip(
     contract,
     reality,
     operating,
+    ...(derived?.mobility ? { mobility: derived.mobility } : {}),
     planningFacts: { carAvailable: input.movement.carAvailable, desiredBaseCount: input.movement.desiredBaseCount.value ?? 1, budgetBand: profile.budgetStyle },
   };
   const preparationMs = since(preparationStartedMs);
@@ -1025,7 +1046,34 @@ export async function generateSidequestPlanForTrip(
     legsTimed: applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId)).filter((item) => item.travel!.minutes !== null).length,
     legsTotal: applied.itinerary.days.flatMap((day) => day.items.filter((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId)).length,
   };
-  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value, compilerIssues: compiled.report.issues, completeness });
+  /*
+   * V12.1 §3 §18 — THE TRIP'S JOURNEYS, DERIVED FROM THE PLAN AS IT STANDS.
+   *
+   * Nothing is stored and nothing is re-measured: a `Journey` is a reading of a
+   * leg that is already on the itinerary, and this derives one per travel item
+   * so readiness can ask the right question of each kind of movement. A base
+   * transfer is route-critical; an in-day hop is not.
+   *
+   * `providerCanMeasureMode` comes from the capability registry, which is what
+   * turns "we could not time this" into the specific and honest "no provider in
+   * this deployment measures a ferry" — a statement about us, which §22 then
+   * keeps off the traveller's list of actions.
+   */
+  const journeyCapabilities = mobilityCapabilities();
+  const journeys = applied.itinerary.days.flatMap((day) =>
+    day.items
+      .filter((item) => item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId)
+      .map((item) => {
+        const segment = item.travel!;
+        const mode = travelModeOfSegment(segment);
+        const point = (pkgForCompleteness?.bases ?? []).find((base) => base.coordinates)?.coordinates;
+        return journeyFromSegment(segment, {
+          routeCritical: segment.role === 'transfer',
+          providerCanMeasureMode: measurementAvailability(journeyCapabilities, mode, point ?? undefined) === 'measurable',
+        });
+      }),
+  );
+  const feasibility = buildFeasibilityReport({ itinerary: applied.itinerary, contract, audit: quality, partyNeeds: contract.party.needs, maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value, compilerIssues: compiled.report.issues, completeness, journeys, ...(operating ? { operatingType: operating.type } : {}) });
 
   /*
    * V11 §2 §5 §6 — THE STRUCTURE AND THE QUALITY REPORT.
@@ -1046,6 +1094,8 @@ export async function generateSidequestPlanForTrip(
     /* Judgeable days only: a day nothing could be placed on is not a day that scored zero excess. */
     dayExcess: reconciledRaw.dayOrders.filter((order) => order.report.verdict !== 'unplaceable').map((order) => ({ dayNumber: order.dayNumber, excessRatio: order.report.excessFraction })),
     transport: { declared: applied.itinerary.transportStrategy.primaryMode, used: usedModes },
+    /* V12.1 §39 §40 — how this kind of trip should be judged, where the derivation produced one. */
+    ...(operating ? { policy: operating.policy } : {}),
   });
   if (tripQuality.weak.length > 0) {
     console.warn('Trip quality: weak dimensions', { tripId, weak: tripQuality.weak, detail: tripQuality.findings.filter((f) => f.verdict === 'weak').map((f) => `${f.dimension}: ${f.detail}`) });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTravelerProfile, decomposeDestination, defaultAnswers, destinationConceptSchema, routeObjectivesFor, type Trip } from '@sidequest/core';
+import { buildTravelerProfile, decomposeDestination, defaultAnswers, deriveAffordances, destinationConceptSchema, routeObjectivesFor, selectModes, type Trip } from '@sidequest/core';
 import { COMPOSITION_INSTRUCTION, buildCompositionTask, type DestinationEnvelope } from './composition';
 import { buildCanonicalTripBuildInput } from './canonical-input';
 import { travelerBriefFor } from './production-plan';
@@ -157,5 +157,68 @@ describe('the composition envelope', () => {
     expect(task).not.toMatch(/openMinute|closeMinute|providerRef/);
     /* The destination's own centre is context and is the only coordinate in the task. */
     expect((task.match(/-?\d+\.\d{2,},\s*-?\d+\.\d{2,}/g) ?? []).length).toBeLessThanOrEqual(2);
+  });
+});
+
+/**
+ * V12.1 §6 §7 — WHAT THE MODEL IS TOLD ABOUT HOW THIS TRIP MOVES.
+ *
+ * Prevention at source, and the reason it is worth a section of its own: the
+ * V11 Canadian Rockies build — this exact envelope — hinted `boat` three times
+ * in a landlocked mountain park, once between Lake Louise and its own lakeshore.
+ * The reconciler now refuses such a hint, and a refusal is still a leg whose
+ * mode had to be replaced. A model told plainly that this trip does not cross
+ * water does not propose the ferry in the first place.
+ *
+ * Asserted on the rendered task, like everything else here, because a section
+ * nobody renders is a section the model never sees.
+ */
+describe('how this trip can move', () => {
+  const ROCKIES_WORLD = {
+    affordances: deriveAffordances({
+      destination: {
+        traits: ['mountain', 'road_trip_region', 'car_dependent'] as const,
+        basis: { mountain: 'Screened as a mountain region.', road_trip_region: 'Covered along its roads.', car_dependent: 'Most of what is here needs a drive.' },
+      } as Parameters<typeof deriveAffordances>[0]['destination'],
+    }),
+    reality: null,
+  };
+
+  function taskWithMobility(pattern: Parameters<typeof selectModes>[0]['policy']) {
+    const mobility = selectModes({ policy: pattern, world: ROCKIES_WORLD });
+    const answers = defaultAnswers({ travelerNeeds: [], tripDays: 9 });
+    const profile = buildTravelerProfile(answers, { travelerNeeds: [], tripDays: 9 });
+    const input = buildCanonicalTripBuildInput({ trip: TRIP, composer: null, profile, now: NOW });
+    const envelope: DestinationEnvelope = {
+      name: 'the Canadian Rockies',
+      countryCode: 'CA',
+      countryName: 'Canada',
+      scale: 'region',
+      center: CONCEPT.center!,
+    };
+    const brief = travelerBriefFor({ input, envelope });
+    return buildCompositionTask({ brief, envelope, mode: 'full', timing: { sidequestChooses: false, today: '2026-09-12', earliestStart: '2026-09-19' }, mobility });
+  }
+
+  it('names the ways a self-drive mountain trip can travel', () => {
+    const task = taskWithMobility({ mobilityPattern: 'self_drive' });
+    expect(task).toContain('<how_this_trip_can_move>');
+    expect(task).toMatch(/Ways this trip can travel:.*drive/i);
+  });
+
+  it('says outright that this trip does not cross water, with the reason', () => {
+    const task = taskWithMobility({ mobilityPattern: 'self_drive' });
+    expect(task).toMatch(/Not ferry:/i);
+    expect(task).toMatch(/crosses water/i);
+  });
+
+  it('tells the model this is what is possible, never what to use', () => {
+    const task = taskWithMobility({ mobilityPattern: 'self_drive' });
+    expect(task).toContain('This is what is possible, not what to use. It never decides a day.');
+  });
+
+  it('renders nothing at all when no selection was derived', () => {
+    /* A build whose derivation threw keeps exactly the envelope V12 sent. */
+    expect(taskFor()).not.toContain('<how_this_trip_can_move>');
   });
 });

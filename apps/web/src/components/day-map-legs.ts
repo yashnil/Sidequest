@@ -1,4 +1,4 @@
-import { decodePolyline, type ItineraryDay, type TransportMode } from '@sidequest/core';
+import { decodePolyline, journeyFromSegment, journeyLineKind, type ItineraryDay, type TravelSegment } from '@sidequest/core';
 import type { MapConnector, MapConnectorStyle, MapMarker } from './InteractiveMap';
 
 /**
@@ -20,30 +20,43 @@ export interface DayMapModel {
   omitted: number;
 }
 
-function styleFor(mode: TransportMode, provenance: string, episodeMode?: string, hint?: string): MapConnectorStyle {
-  /* V7 §14 — an episode leg is drawn by how it moves, whatever a router said about it. */
-  const m = mode as string;
-  if (episodeMode === 'boat' || m === 'ferry' || hint === 'ferry' || hint === 'boat') return 'boat';
-  if (episodeMode === 'rail' || m === 'rail' || hint === 'rail' || hint === 'high_speed_rail') return 'rail';
-  if (hint === 'flight') return 'flight';
-  if (episodeMode === 'walk' || episodeMode === 'horse') return 'trail';
-  if (provenance === 'unmeasured') return 'unmeasured';
-  if (provenance === 'estimated') return 'estimated';
-  switch (mode) {
-    case 'walk':
-    case 'bicycle':
-      return 'measured_walk';
+/**
+ * V12.1 §21 — THE LINE IS DRAWN BY THE JOURNEY, NOT BY A CHAIN OF STRING TESTS.
+ *
+ * This used to compare the raw `hint` against seven literals before falling
+ * through to a `switch` on the persisted mode — one of the three places in the
+ * repository re-parsing the same field with its own rules. It now asks the
+ * journey what kind of movement it is, so a mode the vocabulary learns is drawn
+ * correctly here without this file changing.
+ *
+ * Two axes, kept apart exactly as V8 had them: *how it moves* decides the shape
+ * (an arc for a flight, a wave for water, dots for a trail), and *what is known*
+ * decides the colour — and a mode whose shape carries the meaning keeps that
+ * shape whether or not anybody timed it. A flight nobody timed is still an arc;
+ * drawing it as a faint straight connector would say "we do not know how you get
+ * there", which is false.
+ */
+function styleFor(segment: Pick<TravelSegment, 'mode' | 'provenance' | 'episodeMode' | 'hint'>): MapConnectorStyle {
+  const journey = journeyFromSegment(segment as TravelSegment);
+  switch (journeyLineKind(journey)) {
+    case 'air':
+      return 'flight';
+    case 'water':
+      return 'boat';
     case 'rail':
-    case 'public_bus':
-    case 'ferry':
-    case 'shuttle':
-      return 'measured_transit';
-    case 'drive':
-    case 'rideshare':
-    case 'private_transfer':
-      return 'measured_drive';
+      return 'rail';
+    case 'trail':
+      return 'trail';
+    case 'operator':
+      /* An arranged transfer runs on roads the traveller does not choose; drawn as road when timed, as an untimed connector otherwise. */
+      return segment.provenance === 'measured' ? 'measured_drive' : segment.provenance === 'estimated' ? 'estimated' : 'unmeasured';
+    case 'pedestrian':
+      return segment.provenance === 'measured' ? 'measured_walk' : segment.provenance === 'estimated' ? 'estimated' : 'unmeasured';
+    case 'road':
     default:
-      return 'unmeasured';
+      if (segment.provenance === 'unmeasured') return 'unmeasured';
+      if (segment.provenance === 'estimated') return 'estimated';
+      return segment.mode === 'public_bus' || segment.mode === 'shuttle' ? 'measured_transit' : 'measured_drive';
   }
 }
 
@@ -58,7 +71,7 @@ export function dayMapModel(input: {
   const connectors: MapConnector[] = [];
   let omitted = 0;
   let cursor: { lat: number; lng: number } | null = base;
-  let pendingLeg: { mode: TransportMode; provenance: string; id: string; episodeMode?: string; hint?: string; path?: readonly { lat: number; lng: number }[] } | null = null;
+  let pendingLeg: { segment: TravelSegment; id: string; path?: readonly { lat: number; lng: number }[] } | null = null;
   let order = 0;
   const pathOf = (geometry: string | undefined) => {
     if (!geometry) return undefined;
@@ -72,10 +85,10 @@ export function dayMapModel(input: {
   for (const item of day.items) {
     if (item.kind === 'travel' && item.travel) {
       const path = item.travel.provenance === 'measured' ? pathOf(item.travel.geometry) : undefined;
-      pendingLeg = { mode: item.travel.mode, provenance: item.travel.provenance, id: item.id, ...(item.travel.episodeMode ? { episodeMode: item.travel.episodeMode } : {}), ...(item.travel.hint ? { hint: item.travel.hint } : {}), ...(path ? { path } : {}) };
+      pendingLeg = { segment: item.travel, id: item.id, ...(path ? { path } : {}) };
       // A return leg to base closes the loop when the base is placed.
       if (item.travel.role === 'return' && base && cursor && cursor !== base) {
-        connectors.push({ id: `${item.id}-return`, from: cursor, to: base, style: styleFor(item.travel.mode, item.travel.provenance, item.travel.episodeMode, item.travel.hint), ...(path ? { path } : {}) });
+        connectors.push({ id: `${item.id}-return`, from: cursor, to: base, style: styleFor(item.travel), ...(path ? { path } : {}) });
         cursor = base;
         pendingLeg = null;
       }
@@ -90,7 +103,7 @@ export function dayMapModel(input: {
     order += 1;
     markers.push({ id: item.placeId, name: input.nameOf ? input.nameOf(item.placeId, item.title) : item.title, coordinates: point, kind: 'stop', order });
     if (cursor) {
-      connectors.push({ id: `${pendingLeg?.id ?? item.id}-leg`, from: cursor, to: point, style: pendingLeg ? styleFor(pendingLeg.mode, pendingLeg.provenance, pendingLeg.episodeMode, pendingLeg.hint) : 'unmeasured', ...(pendingLeg?.path ? { path: pendingLeg.path } : {}) });
+      connectors.push({ id: `${pendingLeg?.id ?? item.id}-leg`, from: cursor, to: point, style: pendingLeg ? styleFor(pendingLeg.segment) : 'unmeasured', ...(pendingLeg?.path ? { path: pendingLeg.path } : {}) });
     }
     cursor = point;
     pendingLeg = null;
