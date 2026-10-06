@@ -165,6 +165,29 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       }
     }
     /*
+     * Private alpha — the name without the locality. A live Dolomites scan
+     * placed 11 of 30: the model's locality for a pass or a lake is often the
+     * neighbouring comune, and the open geocoder then finds nothing, while the
+     * name alone (still gated by country and distance) finds the place. Only
+     * after "nothing came back" — a refusal (wrong country, too far) is an
+     * answer, not a miss, and is never retried.
+     */
+    if (!position && !isBase && item.locality && attempts.length > 0 && attempts[attempts.length - 1]!.outcome === 'no_results') {
+      const query = `${item.name}${country}`;
+      try {
+        geocoderCalls += 1;
+        const hit = await geocodeFirst(query, options);
+        attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
+        if ('point' in hit) {
+          const locality = localityFrom(hit.place);
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16, ...(locality ? { locality } : {}) };
+          providers.add('nominatim');
+        }
+      } catch {
+        attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
+      }
+    }
+    /*
      * Private alpha — the name as it is written locally. A live Seoul scan
      * placed 16 of 27: the open geocoder had no English name for the War
      * Memorial of Korea or Changdeokgung, and found both by their Korean names.

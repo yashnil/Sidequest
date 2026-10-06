@@ -1468,7 +1468,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const routingCapable = Boolean(context.routeMatrix) && !deadline();
   const routeAttempted = routingCapable && identities.length > 1;
   if (routeAttempted) {
-    await acquireRoute(ledger, context.routeMatrix!, identities.map((b) => ({ id: b.identity.id, ...b.identity.coordinates })), context.matrix);
+    await acquireRoute(ledger, context.routeMatrix!, identities.map((b) => ({ id: b.identity.id, ...b.identity.coordinates })), evidenceMatrixOf(context.matrix));
   }
   let extraMatrix: RouteMatrixResult | null = ledgerSnapshot(ledger);
   const confirmationMemo: ConfirmationMemo = new Map();
@@ -1481,7 +1481,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
    * overnight stop. Only a measured or modelled matrix may trigger a remedy;
    * otherwise the leg is unmeasured, which is never a claim of infeasibility.
    */
-  const relocationMatrix = context.matrix.provenance.kind === 'estimated' ? ({ ...context.matrix, ids: [], minutes: [], km: [] } as ReconcileContext['matrix']) : context.matrix;
+  const relocationMatrix = evidenceMatrixOf(context.matrix);
   const feasibility = await assessRelocationFeasibility({
     orderedBases: bases,
     matrix: relocationMatrix,
@@ -1820,7 +1820,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       if (prev) points.push({ id: prev.id, ...prev.coordinates });
       if (here) points.push({ id: here.id, ...here.coordinates });
       for (const a of anchors) if (a.dayNumber === dayNumber && a.identity && roadRoutable(a.draft.transport)) points.push({ id: a.identity.id, ...a.identity.coordinates });
-      await acquireRoute(ledger, context.routeMatrix!, points, context.matrix);
+      await acquireRoute(ledger, context.routeMatrix!, points, evidenceMatrixOf(context.matrix));
     }
   }
   extraMatrix = ledgerSnapshot(ledger);
@@ -2334,7 +2334,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const busiest = [...minutesByModeAcrossTrip.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   const selfDrives = impliesSelfDriving(draft.driving) || (draft.driving === undefined && context.profile.transport.willDrive);
   const primaryMode: TransportMode = selfDrives ? 'drive' : busiest && busiest !== 'unsupported' ? busiest : context.profile.transport.willDrive ? 'drive' : context.matrix.mode === 'foot' ? 'walk' : 'public_bus';
-  const routerName = context.matrix.provenance.kind === 'measured' ? 'the routing provider' : `${context.matrix.provenance.kind} road data`;
+  /* An estimated region matrix is never the source of a measurement: those legs were measured by the router during the build. */
+  const routerName = context.matrix.provenance.kind === 'measured' || context.matrix.provenance.kind === 'estimated' ? 'the routing provider' : `${context.matrix.provenance.kind} road data`;
   const itinerary: Itinerary = {
     version: ITINERARY_VERSION,
     tripId: context.tripId,
@@ -2792,6 +2793,20 @@ function sameOvernightPlace(a: ResolvedBase, b: ResolvedBase): boolean {
 }
 
 /** A matrix that answers nothing: lets `measuredLeg` consult only the router's own ledger. */
+/**
+ * The matrix as *evidence*: itself when a router measured or a region author
+ * modelled it, empty when its figures are Sidequest's own distance estimates.
+ *
+ * Private alpha finding: a scanned region's matrix holds an estimate for every
+ * pair, and `acquireRoute` skips any pair the primary matrix already "knows" —
+ * so no build on a scanned trip ever asked openrouteservice, and production
+ * shipped zero measured legs with a working key. Anything that decides whether
+ * to measure, or whether a move is too long, reads this, never the raw matrix.
+ */
+export function evidenceMatrixOf(matrix: ReconcileContext['matrix']): ReconcileContext['matrix'] {
+  return matrix.provenance.kind === 'estimated' ? ({ ...matrix, ids: [], minutes: [], km: [] } as ReconcileContext['matrix']) : matrix;
+}
+
 const EMPTY_TRAVEL_MATRIX = { mode: 'car', ids: [], minutes: [], km: [], provenance: { kind: 'estimated', note: 'No matrix consulted.' } } as unknown as ReconcileContext['matrix'];
 
 function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor[]): { day: ItineraryDay; overflowMinutes: number; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
@@ -3120,7 +3135,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       provenance: walkRefused ? 'unmeasured' : measured ? 'measured' : estimate ? 'estimated' : 'unmeasured',
       ...(!walkRefused && (measured || estimate) ? {} : { unmeasuredReason }),
       ...(basis ? { basis } : {}),
-      ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
+      ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (!trustedMatrix || context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
       ...(plausible.corrected ? { modeCorrectedFrom: hinted } : !worldCheck.ok ? { modeCorrectedFrom: hintedRaw } : {}),
       ...(hint ? { hint } : {}),

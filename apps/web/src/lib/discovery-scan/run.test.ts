@@ -147,7 +147,7 @@ describe('a thin scan (live Tokyo finding)', () => {
 });
 
 describe('scan regions are estimated, and say so (live Utah finding)', () => {
-  it('a planner build on a distance-estimated region labels no leg "measured"', async () => {
+  it('a planner build on a distance-estimated region never relabels an estimate "measured", and asks the router itself', async () => {
     const tripId = await dynamicTrip('Testmouth');
     const { startDiscoveryScan } = await import('./run');
     startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
@@ -158,7 +158,14 @@ describe('scan regions are estimated, and say so (live Utah finding)', () => {
     expect(result.ok, result.error).toBe(true);
     const legs = result.result!.itinerary.days.flatMap((d) => d.items.filter((i) => i.kind === 'travel').map((i) => i.travel!));
     expect(legs.length).toBeGreaterThan(0);
-    expect(legs.filter((l) => l.provenance === 'measured')).toHaveLength(0);
+    /*
+     * The scan's distance estimates are never relabelled as measured; a measured
+     * leg is one the router answered during the build (private alpha finding:
+     * builds on scanned trips used to skip the router entirely).
+     */
+    const measured = legs.filter((l) => l.provenance === 'measured');
+    for (const leg of measured) expect(leg.provider, `${leg.fromName} → ${leg.toName}`).not.toMatch(/estimate/);
+    expect(measured.length).toBeGreaterThan(0);
     expect(result.result!.itinerary.transportStrategy.dataDisclosure).not.toMatch(/measured by estimated/);
     /* Live Hanoi finding: a walking matrix's figure was reused for a bus leg (95 km in 1,480 minutes). No ridden leg is ever timed at walking pace. */
     for (const leg of legs) {

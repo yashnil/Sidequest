@@ -11,7 +11,8 @@ const NO_LEAKS = /\bstack\b|TypeError|ECONNREFUSED|at Object\.|node_modules|\b40
 test.describe('routing, weather, geocoder and food all down', () => {
   test.use({ baseURL: 'http://localhost:4321' });
   test('the trip still builds, honestly labelled', async ({ page }) => {
-    await createTrip(page, 'Harbour City', { start: '2027-05-10', end: '2027-05-14' });
+    /* A country places from the bundled reference, so the geocoder being down does not stop the trip. */
+    await createTrip(page, 'Portugal', { start: '2027-05-10', end: '2027-05-14' });
     await page.waitForURL(/\/questionnaire$/, { timeout: 30_000 });
     await completeQuestionnaire(page);
     const find = page.getByTestId('interview-find-places');
@@ -26,6 +27,22 @@ test.describe('routing, weather, geocoder and food all down', () => {
     expect(days).toMatch(/estimate/i);
     expect(days).not.toMatch(/\d+\s?°C/);
     expect(await page.locator('body').innerText()).not.toMatch(NO_LEAKS);
+  });
+});
+
+test.describe('the geocoder is down and the destination is a town nobody bundled', () => {
+  test.use({ baseURL: 'http://localhost:4321' });
+  test('discovery stops with a typed, user-safe message and the answers are kept', async ({ page }) => {
+    await createTrip(page, 'Harbour City', { start: '2027-05-10', end: '2027-05-14' });
+    await page.waitForURL(/\/questionnaire$/, { timeout: 30_000 });
+    await completeQuestionnaire(page);
+    const find = page.getByTestId('interview-find-places');
+    await waitUntilInteractive(find);
+    await find.click();
+    await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
+    const body = page.locator('body');
+    await expect(body).toContainText(/answers are saved|could not|couldn.t|can.t/i, { timeout: 150_000 });
+    expect(await body.innerText()).not.toMatch(NO_LEAKS);
   });
 });
 
