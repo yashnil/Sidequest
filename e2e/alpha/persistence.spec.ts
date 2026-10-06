@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { createTrip, waitUntilInteractive } from '../support/trip';
-import { openHubView } from '../support/hub';
+import { bandAction, openHubView } from '../support/hub';
 
 /**
  * PRIVATE ALPHA — DOES A REAL TRIP SURVIVE A REDEPLOY, AND WHO CAN SEE IT?
@@ -140,4 +140,23 @@ test('verify: everything survived, and a stranger sees only the share page', asy
   const strangerIcs = await other.request.get(`/trips/${snap.tripId}/itinerary/calendar`);
   expect(strangerIcs.status()).not.toBe(200);
   await stranger.close();
+});
+
+test('regenerate: the owner rebuilds the saved trip on the planner (no model call)', async ({ browser }) => {
+  test.skip(phase !== 'regenerate');
+  const snap = JSON.parse(readFileSync(statePath, 'utf8')) as Snapshot;
+  const owner = await browser.newContext({ storageState: sessionPath });
+  const page = await owner.newPage();
+  await page.goto(`/trips/${snap.tripId}/itinerary`);
+  await expect(page.getByTestId('route-overview')).toBeVisible({ timeout: 60_000 });
+  await openHubView(page, 'overview');
+  await bandAction(page, 'Regenerate');
+  await page.getByTestId('regenerate-trip').click();
+  await page.getByTestId('regenerate-confirm-start').click();
+  await expect(page).toHaveURL(/\/build$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 300_000 });
+  await openHubView(page, 'days');
+  const days = await page.locator('#hub-view-days').innerText();
+  writeFileSync(`${statePath}.regenerated.txt`, days);
+  await owner.close();
 });

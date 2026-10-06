@@ -9,7 +9,7 @@ One Railway service (`@sidequest/web`, project `diligent-celebration`, environme
 - **One replica.** SQLite on a Railway volume mounted at `/data`; the database is `/data/sidequest.db` (WAL mode).
 - **Health:** `GET /api/health` (database `SELECT 1`, used by Railway's health check). **Readiness:** `GET /api/readiness` (every capability, with a `ready` / `degraded` / `broken` verdict and the traveller-facing consequence; no secrets, no paths).
 - **Restart:** `ON_FAILURE`, up to 10 retries.
-- **Deploys:** a push to `main` on GitHub (`yashnil/Sidequest`) builds and deploys automatically. Settings are in `railway.json` (config as code), which overrides the dashboard. Its watch patterns include `packages/**`, so a fix in the shared packages redeploys too. The dashboard previously watched only `apps/web/**`.
+- **Deploys:** a push to `main` on GitHub (`yashnil/Sidequest`) builds and deploys automatically. Settings are in `railway.json` (config as code). Its watch patterns include `packages/**`, so a fix in the shared packages should redeploy too. **Unverified:** after the first deploy with `railway.json`, Railway recorded the file's fields but still reported the dashboard's watch pattern (`/apps/web/**`). Set Service → Settings → Watch Paths to match `railway.json`, or confirm with a `packages/`-only commit.
 - **Background work:** discovery scans and builds run in the same process after the response (`after()`), with heartbeats and durable rows (`discovery_scans`, `generation_progress`). A deploy or a crash during one leaves it `lost`. The traveller sees that, and pressing Build again resumes from saved answers.
 
 ### Why this is enough for a private alpha, and where it stops

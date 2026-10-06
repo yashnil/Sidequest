@@ -1120,9 +1120,9 @@ export function ItineraryView({
    *
    * So the destination leads whenever there is one, single-base or not, and the
    * base moves to the subline where it already lives ("Based in …"). The base is
-   * still the title for a trip with no destination name at all — a shared plan,
-   * or a row from before the destination was recorded — because a heading has to
-   * say something.
+   * still the title for a trip with no destination name at all — a row from
+   * before the destination was recorded — because a heading has to say
+   * something. (The share page passes the destination too, since alpha.)
    */
   const titleNode = destinationName ? destinationName : <PlaceName entity={baseEntity} />;
   const eyebrow = (

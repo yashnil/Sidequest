@@ -115,6 +115,8 @@ export default async function SharedTripPage({
       tiles={resolveMapBasemap(process.env)}
       {...shared}
       itinerary={model.appliedItinerary}
+      /* Private alpha — the shared copy is titled by its destination, as its own page title and preview card already are, not by where the owner sleeps. */
+      destinationName={trip.basics.destinationInput}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock`.
