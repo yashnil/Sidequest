@@ -4,6 +4,7 @@ import {
   DESTINATION_SEMANTICS_VERSION,
   assessConfidence,
   attachIntentResolutions,
+  envelopeOf,
   countryFacts,
   countryPointFor,
   describeIntentGraph,
@@ -19,6 +20,9 @@ import {
   parseDestinationIntent,
   rankCandidates,
   scaleOfDiagonalKm,
+  travelExtentFor,
+  coherentScale,
+  type TravelExtent,
   semanticTypeOfKind,
   type ConfidenceSignal,
   type DestinationCandidate,
@@ -451,12 +455,15 @@ function containedPart(graph: DestinationIntentGraph, resolutions: ReadonlyMap<s
   const a = resolutions.get(place.id);
   const b = resolutions.get(container.id);
   if (!a || !b?.bounds || a.source === 'reference') return null;
-  const { southWest: sw, northEast: ne } = b.bounds;
+  /* A city container is judged by its travel area, not its administrative box: a metropolis whose boundary reaches distant islands does not contain every town under that box. */
+  const urbanType = b.featureType === 'municipality' ? 'city_region' : b.featureType && ['city', 'town', 'village', 'settlement', 'hamlet'].includes(b.featureType) ? 'settlement' : null;
+  const containerBox = urbanType ? travelExtentFor({ type: urbanType, center: b.center, bounds: b.bounds }).bounds : b.bounds;
+  const { southWest: sw, northEast: ne } = containerBox;
   const inside = a.center.lat >= sw.lat && a.center.lat <= ne.lat && a.center.lng >= sw.lng && a.center.lng <= ne.lng;
   if (!inside) return null;
   const area = (box: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } }) => Math.max(1e-9, (box.northEast.lat - box.southWest.lat) * (box.northEast.lng - box.southWest.lng));
   /* The container must be plainly the larger area; two overlapping neighbours of similar size are a list. */
-  if (a.bounds && area(b.bounds) < 4 * area(a.bounds)) return null;
+  if (a.bounds && area(containerBox) < 4 * area(a.bounds)) return null;
   return { place, container };
 }
 
@@ -541,12 +548,27 @@ function semanticsFor(input: {
   let extent: DestinationSemantics['extent'];
   let confidence: DestinationSemantics['confidence'];
   let parts: SemanticPart[] = [];
+  let travelExtent: TravelExtent | undefined;
 
   if (!only) {
     /* A composite: several parts, the union of what placed. */
     type = graph.crossBorder ? 'multi_country' : graph.children.every((c) => c.kind === 'country') ? 'country' : 'informal_region';
     parts = resolvedParts;
-    const box = graph.envelope;
+    /*
+     * V1 — the union of the parts' travel areas, not their administrative boxes:
+     * "Tokyo, Kyoto" is two cities, and Tokyo's boundary out to its remote
+     * islands made the pair a 2,500 km "country-scale" region.
+     */
+    const urbanTypeOf = (featureType: string | undefined) => (featureType === 'municipality' ? 'city_region' : featureType && ['city', 'town', 'village', 'settlement', 'hamlet'].includes(featureType) ? 'settlement' : null);
+    const travelParts = graph.children
+      .filter((c) => c.resolution && c.resolution.source !== 'interpretation')
+      .map((c) => {
+        const r = c.resolution!;
+        const urban = urbanTypeOf(r.featureType);
+        const population = input.leads.get(c.id)?.candidate.providerClass?.population;
+        return { center: r.center, ...(r.bounds ? { bounds: urban ? travelExtentFor({ type: urban, center: r.center, bounds: r.bounds, ...(population ? { population } : {}) }).bounds : r.bounds } : {}) };
+      });
+    const box = travelParts.length > 0 ? envelopeOf(travelParts) : graph.envelope;
     center = box?.center;
     centerBasis = center ? 'union_of_parts' : 'none';
     extent = box?.bounds ? { bounds: box.bounds, source: 'union_of_parts' } : undefined;
@@ -590,7 +612,17 @@ function semanticsFor(input: {
     type = concept?.type ?? (standIn || referenceOnly ? phraseType : only.resolution.source === 'reference' ? 'country' : sem?.type ?? semanticTypeOfKind(only.kind));
     /* The phrase's own shape wins over a row's class for the kind of thing: a mountain range answered by a region row is still mountain country. */
     if (isRegionKind(only.kind) && only.kind !== 'admin_region' && only.kind !== 'country' && (type === 'admin_area' || type === 'protected_area' || type === 'natural_region') && semanticTypeOfKind(only.kind) !== 'informal_region') type = semanticTypeOfKind(only.kind);
-    const km = only.resolution.bounds ? diagonalKm(only.resolution.bounds) : null;
+    /*
+     * V1 — the canonical extent stays the published one; the travel extent is
+     * the area planning treats as the destination (a metropolis whose boundary
+     * reaches remote islands is planned around the city). Scale reads the
+     * travel extent, so a city never reports itself at country scale.
+     */
+    if (!standIn && only.resolution.bounds && (sem?.hasExtent ?? true) && only.resolution.source !== 'reference') {
+      const population = lead?.candidate.providerClass?.population;
+      travelExtent = travelExtentFor({ type, center: only.resolution.center, bounds: only.resolution.bounds, ...(population ? { population } : {}) });
+    }
+    const km = travelExtent ? diagonalKm(travelExtent.bounds) : only.resolution.bounds ? diagonalKm(only.resolution.bounds) : null;
     scale =
       standIn || referenceOnly
         ? scaleOfPhrase(only.kind, concept?.scale)
@@ -626,6 +658,8 @@ function semanticsFor(input: {
     else evidence.push({ source: 'traveller', note: 'Nothing has placed this yet; the plan starts from your words.' });
   }
 
+  scale = coherentScale(type, scale);
+  if (travelExtent?.basis === 'urban_core' && travelExtent.reason) evidence.push({ source: 'geocoder', note: travelExtent.reason });
   const countries = concept && concept.countries.length > 0 ? [...new Set([...graph.countries, ...concept.countries])] : graph.countries;
   const label = only?.resolution && only.resolution.source !== 'interpretation' && only.resolution.source !== 'reference' && !isRegionKind(only.kind) ? only.resolution.label : graph.travellerLabel;
   return destinationConceptSchema.parse({
@@ -637,6 +671,7 @@ function semanticsFor(input: {
     countries,
     regions: concept?.regions ?? [],
     ...(only?.landscape || concept?.landscape ? { landscape: only?.landscape ?? concept?.landscape } : {}),
+    ...(travelExtent && travelExtent.basis === 'urban_core' ? { travelExtent } : {}),
     ...(center ? { center } : {}),
     centerBasis,
     ...(extent ? { extent } : {}),
@@ -864,8 +899,9 @@ export interface ConceptCache {
  * thirty-day concept cached under the old reading is not served. 2: "Place,
  * Country" is one place (no longer the place plus the whole country), and a
  * state whose settlement answer is itself stays a state (V1, 2026-10-06).
+ * 3: a city's travel extent and a type-coherent scale (V1 correctness wave).
  */
-const CONCEPT_CACHE_EPOCH = 2;
+const CONCEPT_CACHE_EPOCH = 3;
 
 /** The cache key: the phrase, normalised, plus the resolution and semantics versions so a shape change invalidates everything. */
 export function conceptCacheKeyFor(text: string): string {

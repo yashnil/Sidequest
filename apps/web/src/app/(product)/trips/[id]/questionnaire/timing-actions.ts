@@ -77,7 +77,7 @@ export async function recommendTripTimingAction(tripId: string): Promise<TripTim
    */
   const placementOf = (of: typeof intent): { center: { lat: number; lng: number }; bounds: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } } | null; scale: GeographicScale } | null => {
     const semantics = of?.destinationIntent?.semantics;
-    if (semantics?.center) return { center: semantics.center, bounds: semantics.extent?.bounds ?? null, scale: semantics.scale };
+    if (semantics?.center) return { center: semantics.center, bounds: semantics.travelExtent?.bounds ?? semantics.extent?.bounds ?? null, scale: semantics.scale };
     const candidate = of?.resolution?.candidates.find((c) => c.id === (of.selectedCandidateId ?? of.resolution?.unambiguousCandidateId)) ?? of?.resolution?.candidates[0] ?? null;
     const picked = of?.selectedDestination ?? null;
     const center = picked?.center ?? candidate?.center ?? of?.destinationIntent?.graph?.envelope?.center ?? null;

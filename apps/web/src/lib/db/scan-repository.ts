@@ -169,6 +169,29 @@ export interface ScanProposalExtras {
   foodAreas: { name: string; locality: string; specialty: string; why: string }[];
   skipped: { name: string; reason: string }[];
   package: { transportSummary: string; transportNotes: string[]; beforeYouGo: string[]; packing: string[]; foodStrategy: string[]; bookingPriorities: string[] };
+  /** V1 — the scan's own account of itself. Developer-facing; no traveller screen reads it. */
+  diagnostics?: ScanDiagnostics;
+}
+
+/** What a scan proposed, what it could not place and why, and whether it recovered — enough to explain a thin scan without rerunning it. */
+export interface ScanDiagnostics {
+  proposal: { returned: number; kept: number; dropped: { name: string; reason: string }[]; stopReason: string | null; outputTokens: number | null };
+  envelope: { scale: string | null; reachKm: number; center: { lat: number; lng: number } };
+  placement: {
+    attempted: number;
+    unplaced: { name: string; locality: string; category: string; isBase: boolean; outcome: string; attempts: { provider: string; query: string; outcome: string }[] }[];
+  };
+  /** Placed, but not usable as a point: only the town placed, or the same place as another proposal. */
+  assembly: { name: string; code: string }[];
+  recovery: {
+    attempted: boolean;
+    reasons: string[];
+    before: { have: number; needed: number; kinds: number };
+    after?: { have: number; needed: number; kinds: number };
+    /** `added` | `none_new` | `model_unavailable` | `allowance_used` | `model_failed` | `invalid_response`. */
+    outcome?: string;
+    added?: number;
+  };
 }
 
 export function saveScanProposalExtras(tripId: string, extras: ScanProposalExtras): void {

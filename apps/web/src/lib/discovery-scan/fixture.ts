@@ -3,7 +3,9 @@
  * and integration tests, reached only under the fixture switches. Names are
  * plainly synthetic ("<destination> Old Quarter") so a fixture can never pass
  * for real research, and the token `unscannable` in what the traveller typed
- * makes the scan fail, so the failure screen can be exercised.
+ * makes the scan fail, so the failure screen can be exercised. The token
+ * `thinscan` makes the first pass propose only four places, so the bounded
+ * supplement can be exercised; the supplement (`already` given) proposes the rest.
  */
 const KINDS = [
   ['Old Quarter', 'neighbourhood', 'classic', 120, 'easy', 'mixed', ['neighbourhoods_and_local_life', 'history_and_culture']],
@@ -26,7 +28,7 @@ const KINDS = [
   ['History Museum', 'museum', 'classic', 120, 'none', 'indoor', ['museums_and_galleries', 'history_and_culture']],
 ] as const;
 
-export function fixtureScanProposal(destinationName: string, typed: string, days: number): unknown {
+export function fixtureScanProposal(destinationName: string, typed: string, days: number, options: { already?: readonly string[] } = {}): unknown {
   if (/\bunscannable\b/i.test(typed)) throw new Error('The fixture proposer refused this destination, as asked.');
   const name = destinationName.trim() || 'Destination';
   const second = `${name} Hills`;
@@ -36,7 +38,7 @@ export function fixtureScanProposal(destinationName: string, typed: string, days
       { name, locality: name, nightsHint: Math.max(1, days - 3), why: 'The natural base, with the most within reach.' },
       ...(days >= 5 ? [{ name: second, locality: second, nightsHint: 2, why: 'Closer to the outdoor side quests.' }] : []),
     ],
-    candidates: KINDS.slice(0, count).map(([label, kind, tier, duration, intensity, exposure, interests], i) => ({
+    candidates: KINDS.slice(0, count).filter((_, i) => (options.already ? true : !/\bthinscan\b/i.test(typed) || i < 4)).map(([label, kind, tier, duration, intensity, exposure, interests], i) => ({
       name: `${name} ${label}`,
       locality: i >= 7 && i % 2 === 1 && days >= 5 ? second : name,
       kind,
@@ -51,7 +53,7 @@ export function fixtureScanProposal(destinationName: string, typed: string, days
       rainyDayOk: exposure === 'indoor',
       interests,
       why: `A fixture ${kind.replace(/_/g, ' ')} for testing.`,
-    })),
+    })).filter((c) => !options.already?.includes(c.name)),
     foodAreas: [{ name: `${name} Market Hall`, locality: name, specialty: 'local dishes', why: 'Fixture food area.' }],
     skipped: [{ name: `${name} Theme Park`, reason: 'Fixture: not a fit for this traveller.' }],
     package: {

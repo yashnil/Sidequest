@@ -218,7 +218,7 @@ function placedFrom(query: string, outcome: GraphResolutionOutcome, reason: 'unr
       query,
       name: semantics.label,
       center: centre,
-      bounds: semantics.extent?.bounds ?? graph.envelope?.bounds ?? null,
+      bounds: semantics.travelExtent?.bounds ?? semantics.extent?.bounds ?? graph.envelope?.bounds ?? null,
       featureType: semantics.type === 'mountain_region' || semantics.type === 'natural_region' || semantics.type === 'coast' ? 'natural_region' : featureType,
       ...(semantics.countries.length === 1 ? { countryCode: semantics.countries[0]! } : {}),
       source: only?.resolution?.source ?? 'composite',

@@ -131,6 +131,23 @@ export function buildScanTask(input: ScanPromptInput): string {
   return lines.join('\n');
 }
 
+/**
+ * V1 — THE ONE SUPPLEMENT A THIN SCAN MAY ASK FOR.
+ *
+ * Same destination, same traveller, same output contract; the task names what
+ * the first pass already proposed (so nothing repeats) and what the board is
+ * missing. Called at most once per scan, only when `scanSufficiency` says the
+ * placed pool cannot be planned from.
+ */
+export function buildScanSupplementTask(input: ScanPromptInput, gap: { already: readonly string[]; count: number; missingInterests: readonly string[] }): string {
+  const task = [
+    `<task>The first pass proposed too few places that could be found on a map to plan ${input.days} days from. Propose ${gap.count} to ${gap.count + 8} MORE candidates — real, specific, findable places with their proper names and localities — that are NOT in this list: ${gap.already.slice(0, 60).join('; ')}.`,
+    gap.missingInterests.length > 0 ? ` Favour what the board does not yet cover: ${gap.missingInterests.map((i) => i.replace(/_/g, ' ')).join(', ')}.` : ' Favour kinds of place the list does not cover yet.',
+    ' Repeat the bases from before (at least one). Food areas, skipped classics and the package may be empty.</task>',
+  ].join('');
+  return buildScanTask(input).replace(/<task>[\s\S]*<\/task>/, task);
+}
+
 export function buildScanUntrusted(input: ScanPromptInput): Record<string, unknown> {
   return {
     ...(envelope(input).travellerPhrase ? { destinationAsTyped: envelope(input).travellerPhrase } : {}),

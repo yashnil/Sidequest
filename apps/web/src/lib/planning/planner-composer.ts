@@ -194,6 +194,24 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
   };
   const weather = plannerWeatherFor(region.weather ?? null, weatherLocationFor, region.dates);
 
+  /* V1 — the arrival and departure transfers, from the destination's own centre (where a scan region says the trip is anchored) to the first and last base. */
+  function edgeTransfersFor(): { edgeTransfers?: { arrivalMinutes: number; departureMinutes: number } } {
+    /* Only a scanned city is anchored where the traveller arrives; an authored or regional destination's centre is not an arrival point. */
+    const scope = (compiled as unknown as { compilerVersion?: string; scope?: { center?: { lat: number; lng: number }; destinationEntityType?: string } }).scope;
+    const scanned = String((compiled as unknown as { compilerVersion?: string }).compilerVersion ?? '').startsWith('discovery-scan');
+    const cityLike = scope?.destinationEntityType === 'city' || scope?.destinationEntityType === 'municipality' || scope?.destinationEntityType === 'neighbourhood';
+    const anchor = scanned && cityLike ? scope?.center : undefined;
+    const first = bases[0];
+    const last = bases[bases.length - 1];
+    if (!anchor || !first || !last) return {};
+    const leg = (to: { lat: number; lng: number }) => {
+      const km = haversineKm(anchor, to);
+      if (km <= 3) return 0;
+      return Math.round(estimateLegMinutes({ from: anchor, to, mode: input.carAvailable ? 'drive' : 'rail' })?.minutes ?? 0);
+    };
+    return { edgeTransfers: { arrivalMinutes: leg(first.coordinates), departureMinutes: leg(last.coordinates) } };
+  }
+
   const foodAreas: PlannerFoodArea[] = (input.extras?.foodAreas ?? []).map((f) => ({ name: f.name, locality: f.locality, specialty: f.specialty }));
 
   const plannerInput: StructurePlannerInput = {
@@ -210,6 +228,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     frequencyCaps: profile.derived.frequencyCaps,
     weather,
     foodAreas,
+    ...edgeTransfersFor(),
   };
   const plan = planStructure(plannerInput);
 
@@ -290,7 +309,8 @@ function draftFromPlan(args: {
       ...(day.relocation ? { relocation: true } : {}),
       anchors,
       meals: {
-        ...(!isFirst && early ? { breakfast: clip(`Early breakfast in ${name} before heading out`, DRAFT_SOFT_PROSE_CAPS.meal) } : {}),
+        /* On a moving day the traveller wakes where they slept last night, not where they sleep tonight. */
+        ...(!isFirst && (early || day.relocation) ? { breakfast: clip(`${early ? 'Early breakfast' : 'Breakfast'} in ${day.relocation ? baseName.get(plan.days[day.dayNumber - 2]?.baseId ?? '') ?? name : name} before heading out`, DRAFT_SOFT_PROSE_CAPS.meal) } : {}),
         ...(lunch ? { lunch: clip(lunch, DRAFT_SOFT_PROSE_CAPS.meal) } : {}),
         ...(!isLast ? { dinner: clip(`Dinner in ${name}`, DRAFT_SOFT_PROSE_CAPS.meal) } : {}),
         ...(day.lunchFoodArea ? { area: clip(day.lunchFoodArea.name, DRAFT_SOFT_PROSE_CAPS.lodgingArea) } : {}),
@@ -480,4 +500,23 @@ function dedupeLines(lines: readonly string[]): string[] {
 /** Trip dates the board's operating assessment says are closed. `unknown` is never closed. */
 function closedDatesOf(board: DiscoveryCandidate): string[] {
   return (board.operating?.byDate ?? []).filter((d) => d.status === 'closed').map((d) => d.date);
+}
+
+export type PlannerFallbackReason = 'insufficient_candidates' | 'insufficient_placed_candidates' | 'no_feasible_day_assignment' | 'required_user_places_unplaceable';
+
+/**
+ * Why a planner attempt cannot ship, or null when it can. A day between arrival
+ * and departure left empty is the only refusal: the planner already relaxed its
+ * own fit floor and frequency preferences to fill it, never the traveller's
+ * limits, so what remains is a fact about the pool or the constraints.
+ */
+export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFallbackReason | null {
+  const interior = composed.plan.days.slice(1, -1);
+  if (!interior.some((day) => day.stops.length === 0)) return null;
+  if (composed.poolSize === 0) return 'insufficient_placed_candidates';
+  /* Everything plannable was either scheduled or left out for a reason other than the day being full: nothing remains to put on the empty day. */
+  const spare = composed.plan.dropped.filter((d) => d.reason !== 'excluded' && d.reason !== 'out_of_season' && d.reason !== 'closed' && d.reason !== 'not_workable');
+  if (spare.length === 0) return 'insufficient_candidates';
+  if (composed.plan.mustConflicts.length > 0 && spare.every((d) => d.candidate.status === 'must')) return 'required_user_places_unplaceable';
+  return 'no_feasible_day_assignment';
 }

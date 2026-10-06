@@ -82,7 +82,7 @@ export interface ScanPointPlan {
   placeIdByKey: Map<string, string>;
   baseIdByKey: Map<string, string>;
   /** Proposals that could not be placed, with the reason, for the scan's own record and the board's footnote. */
-  unplaced: { key: string; name: string; reason: string }[];
+  unplaced: { key: string; name: string; reason: string; code: 'not_placed' | 'approximate_only' | 'duplicate' }[];
 }
 
 /**
@@ -101,7 +101,20 @@ export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<st
   for (const base of proposal.bases) {
     const position = positions.get(base.key);
     if (!position) {
-      unplaced.push({ key: base.key, name: base.name, reason: 'Could not be placed on the map.' });
+      unplaced.push({ key: base.key, name: base.name, reason: 'Could not be placed on the map.', code: 'not_placed' });
+      continue;
+    }
+    /*
+     * The same place to sleep proposed twice ("Hanoi Old Quarter" and "Hanoi Old
+     * Quarter (return)") is one base: two halves of it each looked like less
+     * than the other base and lost the first night to it. Whether to return to
+     * it at the end is the route's decision (`orderBasesForEdges`), not the
+     * proposal's.
+     */
+    const sameBase = points.find((p) => p.kind === 'base' && haversineKm(p.coordinates, position.coordinates) <= 2 && sharesLeadingName(p.name, base.name));
+    if (sameBase) {
+      baseIdByKey.set(base.key, sameBase.id);
+      unplaced.push({ key: base.key, name: base.name, reason: `The same place to sleep as ${sameBase.name}.`, code: 'duplicate' });
       continue;
     }
     const id = scanIdFor('base', base.name, taken);
@@ -111,16 +124,16 @@ export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<st
   for (const candidate of proposal.candidates) {
     const position = positions.get(candidate.key);
     if (!position) {
-      unplaced.push({ key: candidate.key, name: candidate.name, reason: 'Could not be placed on the map.' });
+      unplaced.push({ key: candidate.key, name: candidate.name, reason: 'Could not be placed on the map.', code: 'not_placed' });
       continue;
     }
     if (position.approximate && !AREA_LIKE.has(candidate.kind)) {
-      unplaced.push({ key: candidate.key, name: candidate.name, reason: 'Only its town could be placed, which is not precise enough to plan around.' });
+      unplaced.push({ key: candidate.key, name: candidate.name, reason: 'Only its town could be placed, which is not precise enough to plan around.', code: 'approximate_only' });
       continue;
     }
     const duplicate = points.find((p) => p.kind === 'place' && haversineKm(p.coordinates, position.coordinates) <= 0.3 && sharesLeadingName(p.name, candidate.name));
     if (duplicate) {
-      unplaced.push({ key: candidate.key, name: candidate.name, reason: `The same place as ${duplicate.name}.` });
+      unplaced.push({ key: candidate.key, name: candidate.name, reason: `The same place as ${duplicate.name}.`, code: 'duplicate' });
       continue;
     }
     const id = scanIdFor('place', candidate.name, taken);
@@ -174,6 +187,8 @@ export interface AssembleScanRegionInput {
   timeZone: string;
   /** Trip calendar dates, first to last, inclusive. */
   dates: readonly string[];
+  /** V1 — where the trip starts and ends (the arrival gateway, else the destination centre) and the usable minutes of each edge day. */
+  edges?: { arrival: { lat: number; lng: number }; departure: { lat: number; lng: number }; arrivalUsableMinutes: number; departureUsableMinutes: number };
   carAvailable: boolean | null;
   /** From the traveller's hotel-switching tolerance. 0 keeps one base. */
   maxBaseChanges: number;
@@ -255,7 +270,9 @@ export function chooseScanBases(input: {
   minutes: (fromId: string, toId: string) => number | null;
   nights: number;
   maxBaseChanges: number;
-}): { kept: { id: string; nights: number; transferMinutesFromPrevious: number }[]; leftOut: { id: string; reason: string }[]; nearestBase: Map<string, string> } {
+  /** Where the trip starts and ends, and how much of each edge day is usable; absent means the order is decided by the bases alone. */
+  edges?: TripEdges;
+}): { kept: { id: string; nights: number; transferMinutesFromPrevious: number }[]; leftOut: { id: string; reason: string }[]; nearestBase: Map<string, string>; splitStay: boolean } {
   const { bases, places, minutes, nights } = input;
   const nearestBase = new Map<string, string>();
   const value = new Map<string, number>(bases.map((b) => [b.id, Math.min(2, b.proposal.nightsHint) * 60]));
@@ -311,13 +328,20 @@ export function chooseScanBases(input: {
     if (best) nearestBase.set(place.id, best.id);
   }
 
-  // Shortest open path from the proposal's first kept base.
+  // Shortest open path from the proposal's first kept base — or, with the trip's edges known, the order that respects arrival and departure.
   const keptInProposalOrder = bases.filter((b) => keptIds.has(b.id)).map((b) => b.id);
-  const order = shortestOpenPath(keptInProposalOrder, minutes);
+  const ordered = input.edges ? orderBasesForEdges(keptInProposalOrder, minutes, input.edges, input.maxBaseChanges, effectiveNights) : { order: shortestOpenPath(keptInProposalOrder, minutes), splitStay: false };
+  const order = ordered.order;
 
-  // Nights by value, largest remainder, at least one each.
-  const totalValue = order.reduce((n, id) => n + Math.max(1, value.get(id) ?? 0), 0);
-  const raw = order.map((id) => (Math.max(1, value.get(id) ?? 0) / totalValue) * effectiveNights);
+  // Nights by value, largest remainder, at least one each. A split stay shares its base's value: one arrival night, the rest at the end.
+  const occurrences = (id: string) => order.filter((o) => o === id).length;
+  const stayValue = (id: string, i: number) => {
+    const v = Math.max(1, value.get(id) ?? 0);
+    if (occurrences(id) === 1) return v;
+    return i === order.indexOf(id) ? Math.max(1, v * 0.25) : v * 0.75;
+  };
+  const totalValue = order.reduce((n, id, i) => n + stayValue(id, i), 0);
+  const raw = order.map((id, i) => (stayValue(id, i) / totalValue) * effectiveNights);
   const floors = raw.map((r) => Math.max(1, Math.floor(r)));
   let assigned = floors.reduce((a, b) => a + b, 0);
   const remainders = raw.map((r, i) => ({ i, rem: r - Math.floor(r) })).sort((a, b) => b.rem - a.rem || a.i - b.i);
@@ -338,7 +362,70 @@ export function chooseScanBases(input: {
     transferMinutesFromPrevious: i === 0 ? 0 : Math.round(minutes(order[i - 1]!, id) ?? 0),
   }));
   void DAY_MINUTES_PER_BASE_NIGHT;
-  return { kept, leftOut, nearestBase };
+  return { kept, leftOut, nearestBase, splitStay: ordered.splitStay };
+}
+
+/**
+ * V1 — THE ARRIVAL DAY AND THE DEPARTURE DAY ARE PART OF THE ROUTE.
+ *
+ * Where a traveller lands and leaves, and how much of each of those days is
+ * left once they have, decides which base comes first and last. An order is
+ * scored by the transfer from the arrival point to its first base (weighted by
+ * how little of the arrival day is usable, with a firm penalty when the
+ * transfer would eat most of it), the transfers between bases, and the
+ * transfer from its last base to the departure point (the same way). A split
+ * stay — the arrival base again at the end — is allowed when it clearly wins
+ * and the traveller's move tolerance covers the extra move. An early arrival
+ * may still go straight on: that is a routing decision, not a rule.
+ */
+export interface TripEdges {
+  /** Minutes from where the traveller arrives to each base, estimated; null when unknown. */
+  fromArrival: (baseId: string) => number | null;
+  /** Minutes from each base to where the traveller leaves. */
+  toDeparture: (baseId: string) => number | null;
+  /** Minutes of the arrival day left once landed and settled. */
+  arrivalUsableMinutes: number;
+  /** Minutes of the departure day before the traveller must leave for the airport or station. */
+  departureUsableMinutes: number;
+}
+
+/** Weighted minutes a transfer costs on an edge day: dearer the less of the day there is, with a firm penalty past 40% of it. */
+export function edgeTransferCost(minutes: number | null, usableMinutes: number): number {
+  if (minutes === null || minutes <= 20) return 0;
+  const weight = Math.max(0.5, Math.min(4, 300 / Math.max(60, usableMinutes)));
+  return minutes * weight + (minutes > 0.4 * Math.max(0, usableMinutes) ? 180 : 0);
+}
+
+/** A split stay must beat the best plain order by this many weighted minutes to be worth the extra move. */
+const SPLIT_STAY_MIN_GAIN = 120;
+
+export function orderBasesForEdges(ids: readonly string[], minutes: (a: string, b: string) => number | null, edges: TripEdges, maxBaseChanges: number, nights: number): { order: string[]; splitStay: boolean } {
+  if (ids.length <= 1) return { order: [...ids], splitStay: false };
+  const leg = (a: string, b: string) => minutes(a, b) ?? 10_000;
+  const costOf = (order: readonly string[]) => {
+    let total = edgeTransferCost(edges.fromArrival(order[0]!), edges.arrivalUsableMinutes) + edgeTransferCost(edges.toDeparture(order[order.length - 1]!), edges.departureUsableMinutes);
+    for (let i = 1; i < order.length; i += 1) total += leg(order[i - 1]!, order[i]!);
+    return total;
+  };
+  const permutations = (rest: readonly string[]): string[][] => (rest.length <= 1 ? [[...rest]] : rest.flatMap((head, i) => permutations([...rest.slice(0, i), ...rest.slice(i + 1)]).map((tail) => [head, ...tail])));
+  let best: { order: string[]; cost: number } | null = null;
+  for (const order of permutations(ids)) {
+    const cost = costOf(order);
+    if (!best || cost < best.cost) best = { order, cost };
+  }
+  /* The split stay: the base nearest both ends holds the first night and the last. Every stay keeps at least one night, and the moves stay within tolerance. */
+  if (ids.length + 1 <= nights && ids.length <= maxBaseChanges) {
+    const anchor = [...ids].sort((a, b) => ((edges.fromArrival(a) ?? 999) + (edges.toDeparture(a) ?? 999)) - ((edges.fromArrival(b) ?? 999) + (edges.toDeparture(b) ?? 999)))[0]!;
+    const rest = ids.filter((id) => id !== anchor);
+    let split: { order: string[]; cost: number } | null = null;
+    for (const middle of permutations(rest)) {
+      const order = [anchor, ...middle, anchor];
+      const cost = costOf(order);
+      if (!split || cost < split.cost) split = { order, cost };
+    }
+    if (split && split.cost + SPLIT_STAY_MIN_GAIN <= best!.cost) return { order: split.order, splitStay: true };
+  }
+  return { order: best!.order, splitStay: false };
 }
 
 /** Open path from the first id visiting all, minimum total minutes. Exhaustive up to 7 stops (the base cap is 6). */
@@ -410,13 +497,29 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
 
   const baseEntries = proposal.bases
     .map((b) => ({ id: plan.baseIdByKey.get(b.key), proposal: b }))
-    .filter((b): b is { id: string; proposal: ScanBaseProposal } => b.id !== undefined);
+    .filter((b): b is { id: string; proposal: ScanBaseProposal } => b.id !== undefined)
+    /* A base proposed twice is one base, kept under its first proposal. */
+    .filter((b, i, all) => all.findIndex((other) => other.id === b.id) === i);
   const placeEntries = proposal.candidates
     .map((c) => ({ id: plan.placeIdByKey.get(c.key), proposal: c }))
     .filter((c): c is { id: string; proposal: ScanCandidateProposal } => c.id !== undefined);
   if (baseEntries.length === 0) throw new Error('A scan region needs at least one placed base.');
 
-  const choice = chooseScanBases({ bases: baseEntries, places: placeEntries, minutes, nights, maxBaseChanges: input.maxBaseChanges });
+  const edgeMinutes = (point: { lat: number; lng: number }, baseId: string): number | null => {
+    const at = pointAt.get(baseId);
+    if (!at) return null;
+    if (haversineKm(at, point) <= CAR_FREE_WALK_KM) return 0;
+    return estimateLegMinutes({ from: point, to: at, mode: matrix.mode === 'foot' ? 'rail' : 'drive' })?.minutes ?? null;
+  };
+  const edges: TripEdges | undefined = input.edges
+    ? {
+        fromArrival: (id) => edgeMinutes(input.edges!.arrival, id),
+        toDeparture: (id) => edgeMinutes(input.edges!.departure, id),
+        arrivalUsableMinutes: input.edges.arrivalUsableMinutes,
+        departureUsableMinutes: input.edges.departureUsableMinutes,
+      }
+    : undefined;
+  const choice = chooseScanBases({ bases: baseEntries, places: placeEntries, minutes, nights, maxBaseChanges: input.maxBaseChanges, ...(edges ? { edges } : {}) });
   const keptIds = choice.kept.map((k) => k.id);
   const primaryBaseId = keptIds[0]!;
   const positionOf = (key: string) => positions.get(key)!;
@@ -531,7 +634,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const toDate = order === choice.kept.length - 1 ? input.dates[input.dates.length - 1]! : addDays(fromDate, k.nights);
     cursor = toDate;
     return {
-      clusterId: `cluster-${k.id}`,
+      clusterId: choice.kept.findIndex((other) => other.id === k.id) === order ? `cluster-${k.id}` : `cluster-${k.id}-return`,
       baseId: k.id,
       baseName: baseById.get(k.id)!.proposal.name,
       order,
@@ -743,8 +846,10 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
             excluded: choice.leftOut.map((l) => ({ clusterId: `cluster-${l.id}`, name: baseById.get(l.id)!.proposal.name, reason: l.reason, unreachable: false })),
             transferDays: portfolioBases.filter((b) => b.transferIsWholeDay).length,
             rationale:
-              portfolioBases.length > 1
-                ? `${portfolioBases.length} bases in the order that keeps the drive between them shortest, nights in proportion to what is near each.`
+              choice.splitStay
+                ? `The first and last nights are near where you arrive and leave, so neither travel day also carries a long transfer; the stays between them are in the order that keeps the moves shortest.`
+                : portfolioBases.length > 1
+                ? `${portfolioBases.length} bases in the order that keeps the moves between them shortest${input.edges ? ' and the arrival and departure days light' : ''}, nights in proportion to what is near each.`
                 : 'One base: everything worth doing is within reach of it, or you asked to stay put.',
           },
         }

@@ -1307,6 +1307,14 @@ export const tripPackageSchema = z.object({
     .object({
       mode: z.enum(['planner', 'model_composed']),
       reason: z.string().min(1).optional(),
+      /**
+       * V1 — why the deterministic planner did not build this trip, typed so it
+       * can be counted. Absent when the planner built it. Never silent: a
+       * model-composed plan always carries one (older plans excepted).
+       */
+      fallbackReason: z
+        .enum(['no_discovery_board', 'insufficient_candidates', 'insufficient_placed_candidates', 'no_feasible_day_assignment', 'required_user_places_unplaceable', 'planner_internal_failure', 'regression_mode', 'reverified_existing_draft'])
+        .optional(),
       poolSize: z.number().int().min(0).optional(),
       scheduled: z.object({ traveller: z.number().int().min(0), sidequest: z.number().int().min(0), maybe: z.number().int().min(0), filler: z.number().int().min(0) }).optional(),
       weatherMoves: z.array(z.object({ name: z.string().min(1), avoidedDate: z.string().min(1), chosenDate: z.string().min(1) })).default([]),

@@ -121,6 +121,95 @@ export function scaleOfDiagonalKm(km: number): GeographicScale {
   return 'continental';
 }
 
+/**
+ * V1 — THE ADMINISTRATIVE BOUNDARY IS NOT THE TRAVEL ENVELOPE.
+ *
+ * A city's published boundary answers "what place is this?" and is kept as
+ * the canonical extent. It can be a poor answer to "what area is this
+ * traveller's destination?": a metropolis whose boundary runs a thousand
+ * kilometres out to sea to take in its islands, a consolidated city-county, a
+ * municipality the size of a province. The travel extent is derived from the
+ * evidence the row already carries — its population, its centre and how its
+ * box sits around that centre — and only ever narrows a city. States, parks,
+ * islands, regions and countries keep their published extent untouched.
+ */
+export interface TravelExtent {
+  bounds: GeoBounds;
+  /** `published`: the canonical extent is a fair travel area. `urban_core`: it was not, and this is the practical city around the centre. */
+  basis: 'published' | 'urban_core';
+  reason?: string;
+}
+
+const URBAN_TRAVEL_TYPES: ReadonlySet<GeographicSemanticType> = new Set<GeographicSemanticType>(['settlement', 'city_region']);
+
+/**
+ * The widest span (box diagonal, km) a city of this size plausibly occupies as
+ * a travel destination: a generous low-density urban footprint (1,500 people
+ * per km²) with room to spare. Without a published population, the type's
+ * own ceiling.
+ */
+export function plausibleUrbanSpanKm(type: GeographicSemanticType, population?: number): number {
+  if (population && population > 0) {
+    const side = Math.sqrt(population / 1500);
+    return Math.max(12, Math.min(220, side * Math.SQRT2 * 1.5));
+  }
+  return type === 'city_region' ? 160 : 60;
+}
+
+function kmBetween(a: Coordinates, b: Coordinates): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng) * Math.cos(toRad((a.lat + b.lat) / 2));
+  return 6371 * Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+export function travelExtentFor(input: { type: GeographicSemanticType; center: Coordinates; bounds: GeoBounds; population?: number }): TravelExtent {
+  const published: TravelExtent = { bounds: input.bounds, basis: 'published' };
+  if (!URBAN_TRAVEL_TYPES.has(input.type)) return published;
+  const diag = diagonalKm(input.bounds);
+  const plausible = plausibleUrbanSpanKm(input.type, input.population);
+  const boxCentre = { lat: (input.bounds.southWest.lat + input.bounds.northEast.lat) / 2, lng: (input.bounds.southWest.lng + input.bounds.northEast.lng) / 2 };
+  const offset = kmBetween(input.center, boxCentre);
+  /* Detached territory: the city's own centre sits far from the middle of its box, so most of the box is somewhere else. */
+  const fragmented = offset > Math.max(0.3 * diag, plausible / 2);
+  const oversized = diag > plausible * 1.5;
+  if (!fragmented && !oversized) return published;
+  const radiusKm = Math.max(8, Math.min(60, plausible / (2 * Math.SQRT2)));
+  const dLat = radiusKm / 111.32;
+  const dLng = radiusKm / (111.32 * Math.max(0.2, Math.cos((input.center.lat * Math.PI) / 180)));
+  const core = {
+    southWest: { lat: Math.max(input.bounds.southWest.lat, input.center.lat - dLat), lng: Math.max(input.bounds.southWest.lng, input.center.lng - dLng) },
+    northEast: { lat: Math.min(input.bounds.northEast.lat, input.center.lat + dLat), lng: Math.min(input.bounds.northEast.lng, input.center.lng + dLng) },
+  };
+  const valid = core.southWest.lat < core.northEast.lat && core.southWest.lng < core.northEast.lng;
+  const bounds = valid ? core : { southWest: { lat: input.center.lat - dLat, lng: input.center.lng - dLng }, northEast: { lat: input.center.lat + dLat, lng: input.center.lng + dLng } };
+  const why = fragmented ? `its published boundary is ${Math.round(diag)} km across and centred ${Math.round(offset)} km from the city itself` : `its published boundary is ${Math.round(diag)} km across, more than a city of its size occupies`;
+  return { bounds, basis: 'urban_core', reason: `Planned around the city within about ${Math.round(radiusKm)} km of its centre: ${why}.` };
+}
+
+/**
+ * A scale that agrees with the type. Scale alone is read off box size, which is
+ * how a country answered by a reference point came out as a "settlement" and a
+ * small town as a "neighbourhood". The type bounds the range; size chooses
+ * within it.
+ */
+const SCALE_RANGE: Partial<Record<GeographicSemanticType, readonly [GeographicScale, GeographicScale]>> = {
+  settlement: ['settlement', 'district'],
+  city_region: ['district', 'subregion'],
+  admin_area: ['subregion', 'country'],
+  country: ['country', 'continental'],
+  multi_country: ['country', 'continental'],
+};
+
+export function coherentScale(type: GeographicSemanticType, scale: GeographicScale): GeographicScale {
+  const range = SCALE_RANGE[type];
+  if (!range) return scale;
+  const [lo, hi] = range;
+  if (SCALE_RANK[scale] < SCALE_RANK[lo]) return lo;
+  if (SCALE_RANK[scale] > SCALE_RANK[hi]) return hi;
+  return scale;
+}
+
 /** Which kinds of intent part describe an area rather than a place to stand. */
 export const REGION_KINDS: ReadonlySet<IntentNodeKind> = new Set<IntentNodeKind>(['admin_region', 'natural_region', 'park', 'island_chain', 'coast', 'mountain_range', 'vague_region', 'country']);
 
@@ -749,6 +838,8 @@ export const destinationSemanticsSchema = z.object({
   /** V10 §2 — how that centre was arrived at. `country_reference` is a stand-in, not a location. */
   centerBasis: centerBasisSchema.default('none'),
   extent: z.object({ bounds: geoBoundsSchema, source: extentSourceSchema }).optional(),
+  /** V1 — the area planning and discovery treat as the destination; absent means `extent` is it. Never wider than `extent`. */
+  travelExtent: z.object({ bounds: geoBoundsSchema, basis: z.enum(['published', 'urban_core']), reason: z.string().min(1).optional() }).optional(),
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: z.array(z.object({ source: semanticEvidenceSourceSchema, note: z.string().min(1) })).default([]),
   ambiguities: z.array(z.string().min(1)).default([]),

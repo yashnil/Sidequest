@@ -1,5 +1,6 @@
 import 'server-only';
 import { after } from 'next/server';
+import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import { matchNamedMustDos } from './match';
 import { z } from 'zod';
 import {
@@ -7,9 +8,13 @@ import {
   estimatedScanMatrix,
   normalizeScanProposal,
   planScanPoints,
+  scanSufficiency,
   tripDates,
   validateCompiledRegion,
   type DestinationEntityType,
+  type Interest,
+  type TravelerProfile,
+  type Trip,
   type ScanPoint,
   type ScanProposal,
   type ScopeBreadth,
@@ -17,13 +22,13 @@ import {
 } from '@sidequest/core';
 import { getIntent } from '../db/compiler-repository';
 import { getProfile, getTrip, setSelection, travellerDecisions } from '../db/repository';
-import { beginScan, completeScan, failScan, heartbeatScan, markScanStage, noteScanCounters, saveScanProposalExtras, scanView, type ScanView } from '../db/scan-repository';
+import { beginScan, completeScan, failScan, heartbeatScan, markScanStage, noteScanCounters, saveScanProposalExtras, scanView, type ScanDiagnostics, type ScanView } from '../db/scan-repository';
 import { listBookedItems } from '../db/intelligence-repository';
 import { listPartyMembersForBrief } from '../db/party-repository';
 import { compactBookedFacts } from '../intelligence/booked-facts';
 import { ResearchModel } from '../providers/anthropic';
 import { reserveModelCalls } from '../compiler/daily-ceiling';
-import { isGeocoderEnabled, isPoiProviderEnabled } from '../providers/switches';
+import { isCompositionModelConfigured, isGeocoderEnabled, isPoiProviderEnabled } from '../providers/switches';
 import { verificationProviders } from '../planning/verification-providers';
 import { buildCanonicalTripBuildInput } from '../planning/canonical-input';
 import { composerModel } from '../planning/composition-model';
@@ -33,7 +38,7 @@ import { destinationCandidateFor, travelerBriefFor } from '../planning/productio
 import { buildFailure, classifyModelError, type BuildFailureCause } from '../planning/build-failure';
 import { boardFor, foodProviderChoice, resolveTripRegion } from '../region';
 import { seedPlannerAutoPicks } from '../planning/seed-autopicks';
-import { SCAN_INSTRUCTION, SCAN_JSON_TAG, SCAN_PROMPT_VERSION, buildScanTask, buildScanUntrusted, scanProposalWireSchema } from './prompt';
+import { SCAN_INSTRUCTION, SCAN_JSON_TAG, SCAN_PROMPT_VERSION, buildScanSupplementTask, buildScanTask, buildScanUntrusted, scanCandidateTarget, scanProposalWireSchema } from './prompt';
 import { fixturePlacement, placeScanProposal } from './placement';
 import { fixtureScanProposal } from './fixture';
 import { fixtureScanFood, groundScanFood, type ScanFoodGrounding } from './food';
@@ -226,23 +231,12 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
   };
   try {
     const now = new Date();
-    const trip = getTrip(tripId);
-    if (!trip) return fail('internal_generation_error', 'trip disappeared');
-    const intent = getIntent(tripId);
-    const composer = intent?.composer ?? null;
-    const profile = getProfile(tripId) ?? defaultProfileFor(trip, composer);
-    const candidate = await destinationCandidateFor(trip, intent?.resolution ?? null, intent?.selectedCandidateId ?? null, now);
-    const { envelope, rawDestinationPhrase } = destinationEnvelopeFor({ trip, intent, candidate, region: null, profile });
+    const prepared = await scanPromptFor(tripId, now);
+    if (!prepared) return fail('internal_generation_error', 'trip disappeared');
+    const { trip, profile, envelope, conceptGateways, canonical, dates, days, namedMustDos, promptInput } = prepared;
     if (!envelope.center || (envelope.center.lat === 0 && envelope.center.lng === 0)) {
       return fail('destination_unplaced', 'no destination centre');
     }
-    const bookedFacts = compactBookedFacts(listBookedItems(tripId));
-    const canonical = buildCanonicalTripBuildInput({ trip, composer, profile, bookedFacts, destinationPhrase: rawDestinationPhrase, now });
-    const brief = travelerBriefFor({ input: canonical, envelope, party: listPartyMembersForBrief(tripId, profile.interests as Record<string, string>) });
-    const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
-    const days = dates.length;
-    const namedMustDos = [...canonical.ownWords.mustDo];
-    const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos };
 
     // --- 1. propose -------------------------------------------------------------
     markScanStage(tripId, scanId, 'proposing', new Date());
@@ -286,7 +280,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       const seen = rawInfo as { text: string; stopReason: string | null } | null;
       return fail('invalid_model_response', `${normalized.reason}${seen ? ` | stop=${seen.stopReason} head=${JSON.stringify(seen.text.slice(0, 300))}` : ''}`);
     }
-    const proposal: ScanProposal = normalized.proposal;
+    let proposal: ScanProposal = normalized.proposal;
+    const rawCandidateCount = Array.isArray((raw as { candidates?: unknown } | null)?.candidates) ? (raw as { candidates: unknown[] }).candidates.length : 0;
     {
       /*
        * Every scan says what the model returned and what the normaliser kept. A
@@ -295,7 +290,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
        * proposed 4 or proposed 30 and lost 26 here.
        */
       const seen = rawInfo as { stopReason: string | null; outputTokens: number | null } | null;
-      const rawCount = Array.isArray((raw as { candidates?: unknown } | null)?.candidates) ? ((raw as { candidates: unknown[] }).candidates.length) : 0;
+      const rawCount = rawCandidateCount;
       const drops = normalized.dropped.map((d) => `${d.name}: ${d.reason}`).slice(0, 12);
       console.warn(`Discovery scan proposal for ${tripId}: ${rawCount} returned, ${proposal.candidates.length} kept, ${normalized.dropped.length} dropped, stop=${seen?.stopReason ?? 'n/a'} out=${seen?.outputTokens ?? 'n/a'}${drops.length > 0 ? ` | ${drops.join('; ')}` : ''}`);
     }
@@ -305,7 +300,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     markScanStage(tripId, scanId, 'placing', new Date());
     const placementStarted = Date.now();
     const reach = placementReachKm(envelope.scale, days - 1);
-    const placement = fixtureScan() || !isGeocoderEnabled()
+    let placement = fixtureScan() || !isGeocoderEnabled()
       ? fixtureScan()
         ? fixturePlacement(proposal, envelope.center)
         : null
@@ -321,8 +316,64 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           },
         });
     if (!placement) return fail('provider_unavailable', 'no geocoder or places provider is configured to place the proposal');
-    const plan = planScanPoints(proposal, placement.positions);
-    noteScanCounters(tripId, scanId, { placed: plan.points.filter((p) => p.kind === 'place').length, unplaced: plan.unplaced.length }, new Date());
+    let plan = planScanPoints(proposal, placement.positions);
+
+    // --- 2b. enough to plan from? one bounded supplement if not -------------------------
+    const requested = scanCandidateTarget(days).min;
+    const priorities = (Object.entries(profile.interests) as [Interest, string][]).filter(([, level]) => level === 'core' || level === 'frequent').map(([interest]) => interest);
+    const sufficiencyOf = () =>
+      scanSufficiency({
+        days,
+        stopsPerDay: profile.derived.activitySlotsPerDay,
+        requested,
+        placed: proposal.candidates.filter((c) => plan.placeIdByKey.has(c.key)).map((c) => ({ kind: c.kind, interests: c.interests })),
+        priorities,
+      });
+    const firstSufficiency = sufficiencyOf();
+    const recovery: ScanDiagnostics['recovery'] = { attempted: false, reasons: firstSufficiency.reasons, before: { have: firstSufficiency.have, needed: firstSufficiency.needed, kinds: firstSufficiency.distinctKinds } };
+    if (!firstSufficiency.sufficient) {
+      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count: Math.max(8, firstSufficiency.needed - firstSufficiency.have + 4), typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
+      recovery.attempted = true;
+      recovery.outcome = supplement.outcome;
+      if (supplement.proposal) {
+        const supplementPlacement = fixtureScan()
+          ? fixturePlacement({ ...supplement.proposal, bases: proposal.bases }, envelope.center)
+          : await placeScanProposal({ ...supplement.proposal, bases: [] }, {
+              center: envelope.center,
+              maxDistanceKm: reach,
+              ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
+              ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+              placesBudget: supplement.proposal.candidates.length,
+              deadline: () => false,
+            });
+        const positions = new Map(placement.positions);
+        for (const c of supplement.proposal.candidates) positions.set(c.key, supplementPlacement.positions.get(c.key) ?? null);
+        proposal = { ...proposal, candidates: [...proposal.candidates, ...supplement.proposal.candidates] };
+        placement = { ...placement, positions, diagnostics: [...placement.diagnostics, ...supplementPlacement.diagnostics.filter((d) => !d.isBase)], placesCalls: placement.placesCalls + supplementPlacement.placesCalls, geocoderCalls: placement.geocoderCalls + supplementPlacement.geocoderCalls };
+        plan = planScanPoints(proposal, placement.positions);
+        recovery.added = supplement.proposal.candidates.length;
+      }
+      const after = sufficiencyOf();
+      recovery.after = { have: after.have, needed: after.needed, kinds: after.distinctKinds };
+      console.warn(`Discovery scan supplement for ${tripId}: ${recovery.outcome}; ${firstSufficiency.have} → ${after.have} placed (needed ${after.needed}).`);
+    }
+
+    /* The scan's own account of itself: what was proposed, what could not be placed and why, and any recovery. Developer-facing; never on the traveller's screen. */
+    const placementDiagnostics = placement.diagnostics.filter((d) => d.outcome !== 'placed');
+    const diagnostics: ScanDiagnostics = {
+      proposal: { returned: rawCandidateCount, kept: normalized.proposal.candidates.length, dropped: normalized.dropped.map((d) => ({ name: d.name, reason: d.reason })), stopReason: (rawInfo as { stopReason: string | null } | null)?.stopReason ?? null, outputTokens: (rawInfo as { outputTokens: number | null } | null)?.outputTokens ?? null },
+      envelope: { scale: envelope.scale ?? null, reachKm: reach, center: envelope.center },
+      placement: {
+        attempted: placement.diagnostics.length,
+        unplaced: placementDiagnostics.map((d) => ({ name: d.name, locality: d.locality, category: d.category, isBase: d.isBase, outcome: d.outcome, attempts: d.attempts })),
+      },
+      assembly: plan.unplaced.filter((u) => u.code !== 'not_placed').map((u) => ({ name: u.name, code: u.code })),
+      recovery,
+    };
+    if (placementDiagnostics.length > 0 || diagnostics.assembly.length > 0) {
+      console.warn(`Discovery scan unplaced for ${tripId}: ${[...placementDiagnostics.map((d) => `${d.name} [${d.outcome}]`), ...diagnostics.assembly.map((a) => `${a.name} [${a.code}]`)].join('; ')}`);
+    }
+    noteScanCounters(tripId, scanId, { proposed: proposal.candidates.length, placed: plan.points.filter((p) => p.kind === 'place').length, unplaced: plan.unplaced.length }, new Date());
     if (plan.points.filter((p) => p.kind === 'base').length === 0 || plan.points.filter((p) => p.kind === 'place').length < 4) {
       return fail('nothing_placed', `placed ${plan.points.length} of ${proposal.candidates.length + proposal.bases.length}`);
     }
@@ -352,6 +403,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       dates,
       carAvailable: canonical.movement.carAvailable,
       maxBaseChanges: canonical.movement.maxBaseChanges.value ?? 1,
+      ...((edges) => (edges ? { edges } : {}))(tripEdgesFor(trip, profile, envelope.center, conceptGateways, envelope.scale)),
       proposal,
       positions: placement.positions,
       plan,
@@ -363,7 +415,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const region = validateCompiledRegion(assembly.region);
     completeScan(tripId, scanId, region, new Date());
     try {
-      saveScanExtras(tripId, proposal);
+      saveScanExtras(tripId, proposal, diagnostics);
     } catch {
       /* extras are display-only */
     }
@@ -403,8 +455,110 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
  * left out on purpose, and the practical package — kept beside the region for
  * the board and the build to read. Stored as a small JSON row; never planned.
  */
-function saveScanExtras(tripId: string, proposal: ScanProposal): void {
-  saveScanProposalExtras(tripId, { foodAreas: proposal.foodAreas, skipped: proposal.skipped, package: proposal.package });
+function saveScanExtras(tripId: string, proposal: ScanProposal, diagnostics: ScanDiagnostics): void {
+  saveScanProposalExtras(tripId, { foodAreas: proposal.foodAreas, skipped: proposal.skipped, package: proposal.package, diagnostics });
+}
+
+/**
+ * Everything the scan's one model call is asked, assembled from the stored trip
+ * alone — no provider beyond the destination candidate lookup the scan itself
+ * makes, and no model. Exported so a thin or odd scan can be diagnosed by
+ * replaying exactly what was asked, without spending another call.
+ */
+export async function scanPromptFor(tripId: string, now: Date) {
+  const trip = getTrip(tripId);
+  if (!trip) return null;
+  const intent = getIntent(tripId);
+  const composer = intent?.composer ?? null;
+  const profile = getProfile(tripId) ?? defaultProfileFor(trip, composer);
+  const candidate = await destinationCandidateFor(trip, intent?.resolution ?? null, intent?.selectedCandidateId ?? null, now);
+  const { envelope, rawDestinationPhrase, conceptGateways } = destinationEnvelopeFor({ trip, intent, candidate, region: null, profile });
+  const bookedFacts = compactBookedFacts(listBookedItems(tripId));
+  const canonical = buildCanonicalTripBuildInput({ trip, composer, profile, bookedFacts, destinationPhrase: rawDestinationPhrase, now });
+  const brief = travelerBriefFor({ input: canonical, envelope, party: listPartyMembersForBrief(tripId, profile.interests as Record<string, string>) });
+  const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
+  const days = dates.length;
+  const namedMustDos = [...canonical.ownWords.mustDo];
+  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos };
+  return { trip, intent, profile, candidate, envelope, conceptGateways, canonical, dates, days, namedMustDos, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
+}
+
+/**
+ * V1 — the one supplementary proposal a thin scan may make: same model, same
+ * contract, a task naming what is already proposed and what is missing. At
+ * most one call per scan, counted against the same allowance; any failure is
+ * an outcome, never a retry.
+ */
+async function proposeSupplement(input: {
+  tripId: string;
+  promptInput: Parameters<typeof buildScanTask>[0];
+  proposal: ScanProposal;
+  missingInterests: readonly string[];
+  count: number;
+  typed: string;
+  envelopeName: string;
+  days: number;
+  caller: string | null;
+  now: Date;
+}): Promise<{ outcome: string; proposal: ScanProposal | null }> {
+  const already = input.proposal.candidates.map((c) => c.name);
+  let raw: unknown;
+  if (fixtureScan()) {
+    raw = fixtureScanProposal(input.envelopeName, input.typed, input.days, { already });
+  } else {
+    if (!isCompositionModelConfigured()) return { outcome: 'model_unavailable', proposal: null };
+    const reservation = reserveModelCalls(1, { now: input.now, caller: input.caller });
+    if (!reservation.allowed) return { outcome: 'allowance_used', proposal: null };
+    try {
+      const model = new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() });
+      raw = await model.structured({
+        promptVersion: SCAN_PROMPT_VERSION,
+        instruction: SCAN_INSTRUCTION,
+        task: buildScanSupplementTask(input.promptInput, { already, count: input.count, missingInterests: input.missingInterests }),
+        untrusted: buildScanUntrusted(input.promptInput),
+        schema: scanProposalWireSchema as unknown as z.ZodType<unknown>,
+        validationSchema: z.unknown() as z.ZodType<unknown>,
+        schemaEnforcement: 'grammar',
+        allowEnforcementFallback: true,
+        jsonWrapperTag: SCAN_JSON_TAG,
+        effort: 'low',
+        maxTokens: SCAN_MAX_TOKENS,
+        timeoutMs: SCAN_MODEL_TIMEOUT_MS,
+        callLabel: 'discovery_scan_supplement',
+        attempt: 1,
+      });
+    } catch (error) {
+      console.warn(`Discovery scan supplement failed for ${input.tripId}: ${error instanceof Error ? error.message : 'unknown'}`);
+      return { outcome: 'model_failed', proposal: null };
+    }
+  }
+  const record = (raw ?? {}) as Record<string, unknown>;
+  const withBases = Array.isArray(record.bases) && record.bases.length > 0 ? record : { ...record, bases: input.proposal.bases.map((b) => ({ name: b.name, locality: b.locality, nightsHint: b.nightsHint, why: b.why })) };
+  const normalized = normalizeScanProposal(withBases);
+  if (!normalized.ok) return { outcome: 'invalid_response', proposal: null };
+  /* Nothing already proposed comes back in under a new key: the same name, or one whose leading name matches, is the same place. */
+  const seen = new Set(already.map((n) => n.toLowerCase()));
+  const offset = input.proposal.candidates.length;
+  const fresh = normalized.proposal.candidates
+    .filter((c) => !seen.has(c.name.toLowerCase()))
+    .map((c, i) => ({ ...c, key: `c${offset + i + 1}` }));
+  if (fresh.length === 0) return { outcome: 'none_new', proposal: null };
+  return { outcome: 'added', proposal: { ...normalized.proposal, candidates: fresh } };
+}
+
+/**
+ * V1 — where the trip starts and ends and how much of each edge day is usable,
+ * from the same daily windows the planner uses (arrival settle and departure
+ * lead already applied). The arrival point is the first gateway with a
+ * position, else the destination centre.
+ */
+function tripEdgesFor(trip: Trip, profile: TravelerProfile, center: { lat: number; lng: number }, gateways: readonly { coordinates?: { lat: number; lng: number } }[], scale: string | undefined) {
+  /* Only a gateway with a position, or a city the traveller named, is where they arrive. A region's centre is a centroid, not an arrival point: unknown edges change nothing. */
+  const point = gateways.find((g) => g.coordinates)?.coordinates ?? (scale === 'city' || scale === 'local' ? center : null);
+  if (!point) return undefined;
+  const windows = buildDailyWindows(trip.basics, profile, resolveConfig());
+  const usable = (w: (typeof windows)[number] | undefined) => (w ? Math.max(0, w.window.endMinute - w.window.startMinute) : 0);
+  return { arrival: point, departure: point, arrivalUsableMinutes: usable(windows[0]), departureUsableMinutes: usable(windows[windows.length - 1]) };
 }
 
 export { matchNamedMustDos };

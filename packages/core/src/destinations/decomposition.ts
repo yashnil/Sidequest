@@ -94,7 +94,7 @@ export function coreRadiusKm(input: { extentDiagonalKm: number | null; distances
 }
 
 export interface DecompositionInput {
-  concept: Pick<DestinationConcept, 'type' | 'scale' | 'center' | 'centerBasis' | 'extent' | 'parts' | 'gateways' | 'label'>;
+  concept: Pick<DestinationConcept, 'type' | 'scale' | 'center' | 'centerBasis' | 'extent' | 'travelExtent' | 'parts' | 'gateways' | 'label'>;
   /** Experiences the interpreter named, by name only. Assigned to the nearest zone that placed. */
   signatureExperiences?: readonly { name: string; near?: Coordinates }[];
   /** Measured road minutes for zone pairs, when a router answered. Keyed `fromId>toId`. */
@@ -135,7 +135,7 @@ export function decomposeDestination(input: DecompositionInput): DestinationDeco
 
   const partDistances = centre ? concept.parts.map((p) => kmBetween(centre, p.center)) : [];
   const radius = coreRadiusKm({
-    extentDiagonalKm: concept.extent ? diagonalKm(concept.extent.bounds) : null,
+    extentDiagonalKm: concept.travelExtent ? diagonalKm(concept.travelExtent.bounds) : concept.extent ? diagonalKm(concept.extent.bounds) : null,
     distances: partDistances,
   });
 

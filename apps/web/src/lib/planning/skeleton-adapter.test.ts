@@ -560,6 +560,30 @@ describe('explicit hard drive limits remain hard', () => {
   });
 });
 
+describe('an attraction is never somewhere to sleep (live Tokyo finding)', () => {
+  it('a park or viewpoint near a base is not offered as an intermediate overnight stop', async () => {
+    const context = tightContext(50);
+    const candidates = context.candidates.map((c) => (c.place.id === 'the-village-at-mammoth' ? { ...c, place: { ...c.place, category: 'viewpoint' as const } } : c));
+    const basin = candidates.find((c) => c.place.id === 'mammoth-lakes-basin')!.place;
+    const bishop = candidates.find((c) => c.place.id === 'bishop-town')!.place;
+    const result = await assessRelocationFeasibility({
+      orderedBases: [
+        { skeletonBaseId: 'basin', name: basin.name, nights: 2, identity: { id: basin.id, name: basin.name, coordinates: basin.coordinates } },
+        { skeletonBaseId: 'bishop', name: bishop.name, nights: 1, identity: { id: bishop.id, name: bishop.name, coordinates: bishop.coordinates } },
+      ],
+      matrix: context.matrix,
+      profile: context.profile,
+      candidates,
+      archetype: 'moving_route',
+      tolerant: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.orderedBases.map((b) => b.identity?.id)).not.toContain('the-village-at-mammoth');
+    expect(result.deviations.some((d) => d.kind === 'relocation_resolved_with_intermediate_base')).toBe(false);
+  });
+});
+
 /* ------------------------------------------------------------------ *
  * Deterministic relocation-corridor remediation — the tier tried when the
  * board has no base-eligible candidate at all (the exact gap a live

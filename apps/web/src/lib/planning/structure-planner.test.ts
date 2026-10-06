@@ -257,3 +257,33 @@ describe('structure planner — a day hangs together (live Tokyo finding)', () =
     if (withSunset) expect(withSunset.travelMinutes + withSunset.eveningTravelMinutes).toBeLessThanOrEqual(100);
   });
 });
+
+describe('arrival and departure days carry their transfers (V1)', () => {
+  const places = [c('near-a', { coordinates: at(0.01, 0.01) }), c('near-b', { coordinates: at(-0.01, 0.01) }), c('near-c', { coordinates: at(0.01, -0.01) }), c('near-d', { coordinates: at(-0.01, -0.01) }), c('near-e', { coordinates: at(0.02, 0) }), c('near-f', { coordinates: at(0, 0.02) })];
+  const withArrival = (startMinute: number, arrivalMinutes: number) =>
+    planStructure(input(places, { windows: DATES.map((date, i) => ({ date, startMinute: i === 0 ? startMinute : 9 * 60, endMinute: i === DATES.length - 1 ? 12 * 60 : 19 * 60 })), edgeTransfers: { arrivalMinutes, departureMinutes: 0 } }));
+
+  it('a long transfer after a late landing leaves the arrival day as the journey', () => {
+    const late = withArrival(16 * 60 + 30, 130);
+    expect(late.days[0]!.capacityMinutes).toBe(0);
+    expect(late.days[0]!.stops.filter((s) => s.slot === 'day')).toHaveLength(0);
+  });
+
+  it('the same transfer after an early landing still leaves a real afternoon', () => {
+    const early = withArrival(8 * 60 + 30, 130);
+    expect(early.days[0]!.capacityMinutes).toBeGreaterThan(180);
+    expect(early.days[0]!.stops.length).toBeGreaterThan(0);
+  });
+
+  it('arrival time changes what the arrival day holds, materially', () => {
+    const noon = withArrival(12 * 60, 60);
+    const evening = withArrival(17 * 60, 60);
+    expect(noon.days[0]!.capacityMinutes).toBeGreaterThan(evening.days[0]!.capacityMinutes + 200);
+  });
+
+  it('the departure transfer comes off the last day', () => {
+    const plain = planStructure(input(places));
+    const leaving = planStructure(input(places, { edgeTransfers: { arrivalMinutes: 0, departureMinutes: 90 } }));
+    expect(leaving.days.at(-1)!.capacityMinutes).toBeLessThan(plain.days.at(-1)!.capacityMinutes);
+  });
+});

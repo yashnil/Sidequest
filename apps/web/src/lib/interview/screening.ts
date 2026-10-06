@@ -130,7 +130,9 @@ export function screeningSignalsFor(input: ScreeningInputs): ScreeningSignals {
     const landscape = semantics.landscape ?? graph?.children.find((c) => c.landscape)?.landscape;
     signals.semantic = { type: semantics.type, scale: semantics.scale, ...(landscape ? { landscape } : {}), ...(semantics.extent ? { extentSource: semantics.extent.source } : {}), gateways: semantics.gateways.length };
     if (!signals.center && semantics.center) signals.center = semantics.center;
-    if (!signals.bounds && semantics.extent) signals.bounds = semantics.extent.bounds;
+    /* V1 — a city whose published boundary is not its travel area is screened on the travel area, so remote islands never make it "an archipelago". */
+    if (semantics.travelExtent) signals.bounds = semantics.travelExtent.bounds;
+    else if (!signals.bounds && semantics.extent) signals.bounds = semantics.extent.bounds;
     if (semantics.countries.length > 0) signals.countries = [...new Set([...(signals.countries ?? []), ...semantics.countries])];
     if (!signals.countryCode && semantics.countries.length === 1) signals.countryCode = semantics.countries[0]!;
     /* A concept the gate read as a landscape is one, whatever a same-named row was typed as. */

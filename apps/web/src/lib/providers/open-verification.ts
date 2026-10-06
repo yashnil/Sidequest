@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   assessConfidence,
+  countryFacts,
   DESTINATION_RESOLUTION_VERSION,
   licence,
   normalizeDestinationQuery,
@@ -111,20 +112,33 @@ export function toCandidate(place: NominatimPlace, query: string): DestinationCa
   signals.push('single_provider_only');
 
   const elementId = osmElementId(place);
+  const displayName = resolveDisplayName({
+    candidates: candidatesFromNominatim(place),
+    fallback: place.display_name.split(',')[0]?.trim() ?? place.display_name,
+  }).display;
+  /*
+   * The geocoder answers in the local script ("東京都, 日本"). The display name
+   * already goes through the name resolver; the country and the qualified line
+   * did not, and reached the scan prompt and the screen in a script the
+   * traveller may not read. The bundled reference names the country; a local-
+   * script qualified line is rebuilt from the resolved name and that country.
+   */
+  const referenceCountry = countryCode && countryCode.length === 2 ? countryFacts(countryCode)?.name : undefined;
+  const countryName = referenceCountry ?? country;
+  const latinOnly = (text: string) => !/[^\u0020-\u024F\u1E00-\u1EFF\u2000-\u206F]/.test(text);
+  /* A multilingual country ("Schweiz/Suisse/Svizzera/Svizra") is as unreadable in a qualified line as a script the traveller cannot read. */
+  const qualifiedName = latinOnly(place.display_name) && !place.display_name.includes('/') ? place.display_name : [displayName, countryName].filter(Boolean).join(', ');
 
   return {
     id: elementId ?? `nominatim-${place.place_id ?? `${lat},${lng}`}`,
-    displayName: resolveDisplayName({
-      candidates: candidatesFromNominatim(place),
-      fallback: place.display_name.split(',')[0]?.trim() ?? place.display_name,
-    }).display,
-    qualifiedName: place.display_name,
+    displayName,
+    qualifiedName,
     entityType,
     breadth,
     center: { lat, lng },
     ...(bounds ? { bounds } : {}),
     ...(countryCode && countryCode.length === 2 ? { countryCode } : {}),
-    ...(country ? { countryName: country } : {}),
+    ...(countryName ? { countryName } : {}),
     ...(place.address?.['ISO3166-2-lvl4'] ? { regionCode: place.address['ISO3166-2-lvl4']! } : {}),
     ...(firstLevelDivisionName(place) ? { regionName: firstLevelDivisionName(place)! } : {}),
     aliases: candidatesFromNominatim(place).map((entry) => entry.value),
@@ -145,6 +159,7 @@ export function toCandidate(place: NominatimPlace, query: string): DestinationCa
       ...(place.osm_type === 'node' || place.osm_type === 'way' || place.osm_type === 'relation' ? { osmType: place.osm_type } : {}),
       ...(place.category ? { category: place.category } : {}),
       ...(place.type ? { type: place.type } : {}),
+      ...(Number.isFinite(Number(place.extratags?.population)) && Number(place.extratags?.population) > 0 ? { population: Math.round(Number(place.extratags?.population)) } : {}),
       ...(typeof place.place_rank === 'number' ? { rank: Math.max(0, Math.min(40, Math.round(place.place_rank))) } : {}),
     },
   };

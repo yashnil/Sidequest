@@ -125,6 +125,8 @@ export const destinationCandidateSchema = z.object({
       category: z.string().min(1).optional(),
       type: z.string().min(1).optional(),
       rank: z.number().int().min(0).max(40).optional(),
+      /** The population the record publishes, when it does: evidence for how large a city's practical footprint can be. */
+      population: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });

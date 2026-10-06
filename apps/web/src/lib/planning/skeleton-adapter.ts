@@ -2075,6 +2075,8 @@ export async function assessRelocationFeasibility(input: {
     for (const candidate of candidates) {
       const place = candidate.place;
       if (place.relationship !== 'base') continue;
+      /* Somewhere to sleep is a settlement: an attraction near a base (a park, a temple) is never an overnight stop. */
+      if (place.category !== 'town_and_food') continue;
       if (place.id === from.identity.id || place.id === to.identity.id) continue;
       const legOne = measuredMinutes(matrix, extra, from.identity.id, place.id);
       const legTwo = measuredMinutes(matrix, extra, place.id, to.identity.id);

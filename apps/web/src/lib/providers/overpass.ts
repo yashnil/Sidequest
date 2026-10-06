@@ -721,7 +721,14 @@ const PLANNING_TAG_KEYS = [
 export function normalizeElement(element: OverpassElement): NormalizedOsmPlace | null {
   const coordinates = elementCoordinates(element);
   const tags = element.tags ?? {};
-  const name = tags.name;
+  /*
+   * V1 — "Lunch — 鮨鶴" names a place a traveller cannot read or ask for. Where
+   * the primary name is in another script and the map also publishes an
+   * English or Latin-script name, that one is shown; otherwise the name stands
+   * as published (never transliterated by us).
+   */
+  const latin = (text: string) => !/[^\u0020-\u024F\u1E00-\u1EFF\u2000-\u206F]/.test(text);
+  const name = tags.name && !latin(tags.name) ? tags['name:en'] ?? tags['name:latin'] ?? tags.int_name ?? tags.name : tags.name;
   if (!coordinates || !name) return null;
 
   const selector = [...POI_SELECTORS, ...FOOD_SELECTORS].find((entry) => {

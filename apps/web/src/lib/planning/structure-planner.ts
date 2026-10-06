@@ -116,6 +116,13 @@ export interface StructurePlannerInput {
   frequencyCaps: Partial<Record<Interest, number>>;
   weather: readonly PlannerDayWeather[];
   foodAreas: readonly PlannerFoodArea[];
+  /**
+   * V1 — minutes from where the traveller lands to the first base, and from the
+   * last base to where they leave, estimated. They come off the arrival and
+   * departure days like any transfer; absent means the trip starts and ends at
+   * its bases.
+   */
+  edgeTransfers?: { arrivalMinutes: number; departureMinutes: number };
 }
 
 export type DropReason = 'excluded' | 'out_of_season' | 'too_strenuous' | 'too_far' | 'frequency' | 'capacity' | 'weather' | 'closed' | 'not_workable';
@@ -247,8 +254,11 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
     const window = dayWindowOf(input, date);
     const span = Math.max(0, window.endMinute - window.startMinute);
     const lunch = window.startMinute <= 13 * 60 && window.endMinute >= 13 * 60 ? LUNCH_MINUTES : 0;
-    const transfer = relocation ? base.transferMinutesFromPrevious : 0;
-    const capacity = Math.max(0, span - lunch - buffer - transfer - (isFirst || isLast ? 30 : 0));
+    const edgeTransfer = (isFirst ? input.edgeTransfers?.arrivalMinutes ?? 0 : 0) + (isLast && dates.length > 1 ? input.edgeTransfers?.departureMinutes ?? 0 : 0);
+    const transfer = (relocation ? base.transferMinutesFromPrevious : 0) + edgeTransfer;
+    const raw = span - lunch - buffer - transfer - (isFirst || isLast ? 30 : 0);
+    /* What is left of an edge day after a long transfer is not a sightseeing window: under ninety minutes, the day is the journey. */
+    const capacity = Math.max(0, (isFirst || isLast) && edgeTransfer > 0 && raw < 90 ? 0 : raw);
     return {
       dayNumber: i + 1,
       date,

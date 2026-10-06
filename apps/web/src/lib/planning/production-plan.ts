@@ -39,7 +39,7 @@ import { getAnswers, getItineraryLocks, getProfile, getSelections, getTrip, save
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-repository';
-import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
+import { weatherAvailability, type TripPackage, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
 import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
@@ -71,7 +71,7 @@ import { compileQualitySafely } from './quality-compiler';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
-import { composeWithPlanner, planningRecordOf, type PlannerComposition } from './planner-composer';
+import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, type PlannerComposition } from './planner-composer';
 import { getScanProposalExtras } from '../db/scan-repository';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
@@ -511,9 +511,12 @@ export async function generateSidequestPlanForTrip(
    * composition below (and says so on the package), or — with no composer —
    * refuses with an actionable reason rather than shipping an empty day.
    */
-  const plannerAttempt =
-    !options.useDraft && !options.reuseStoredDraft && process.env.SIDEQUEST_PLANNING_MODE?.trim() !== 'model' && plannerScheduledAnything(region, board) && region && board
-      ? composeWithPlanner({
+  const regressionMode = process.env.SIDEQUEST_PLANNING_MODE?.trim() === 'model';
+  let plannerFailure: string | null = null;
+  const attemptPlanner = (): PlannerComposition | null => {
+    if (options.useDraft || options.reuseStoredDraft || regressionMode || !plannerScheduledAnything(region, board) || !region || !board) return null;
+    try {
+      return composeWithPlanner({
           trip,
           profile,
           region,
@@ -525,10 +528,34 @@ export async function generateSidequestPlanForTrip(
           maxDailyTravelMinutes: input.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes,
           ...(input.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value } : {}),
           locks: getItineraryLocks(tripId),
-        })
-      : null;
-  const plannerTooThin = plannerAttempt ? plannerAttempt.plan.days.slice(1, -1).some((day) => day.stops.length === 0) : false;
-  if (plannerTooThin) console.warn('The board could not fill every day; falling back to composition', { tripId, pool: plannerAttempt?.poolSize });
+        });
+    } catch (error) {
+      plannerFailure = error instanceof Error ? error.message : 'unknown';
+      console.error('The planner failed; falling back to composition', { tripId, message: plannerFailure });
+      return null;
+    }
+  };
+  const plannerAttempt = attemptPlanner();
+  /*
+   * V1 — THE FALLBACK IS TYPED AND NEVER SILENT. The architecture is discovery
+   * → structured candidates → deterministic planner; the model composing the
+   * whole trip is the exception, and the package says which exception.
+   */
+  const plannerFallbackReason: NonNullable<TripPackage['planning']>['fallbackReason'] | null = options.useDraft || options.reuseStoredDraft
+    ? 'reverified_existing_draft'
+    : regressionMode
+      ? 'regression_mode'
+      : plannerFailure
+        ? 'planner_internal_failure'
+        : !region || !board
+          ? 'no_discovery_board'
+          : board.candidates.length === 0
+            ? 'insufficient_placed_candidates'
+            : plannerAttempt
+              ? plannerFallbackReasonOf(plannerAttempt)
+              : 'planner_internal_failure';
+  const plannerTooThin = Boolean(plannerAttempt && plannerFallbackReason);
+  if (plannerFallbackReason && plannerFallbackReason !== 'reverified_existing_draft') console.warn('Planner fallback', { tripId, plannerFallbackReason, pool: plannerAttempt?.poolSize ?? board?.candidates.length ?? 0 });
   if (options.useDraft) {
     const supplied = options.useDraft;
     model = { callsRemaining: 1, structured: async () => supplied as never } as unknown as StructuredModel;
@@ -559,7 +586,7 @@ export async function generateSidequestPlanForTrip(
     });
   } else {
     if (!isCompositionModelConfigured()) {
-      const failure = buildFailure(plannerTooThin ? 'planner_refused' : 'composer_not_configured');
+      const failure = buildFailure(plannerTooThin || plannerFallbackReason === 'insufficient_placed_candidates' ? 'planner_refused' : 'composer_not_configured');
       return { ok: false, error: failure.message, failure };
     }
     const reservation = reserveModelCalls(1, { now, caller: options.caller });
@@ -1129,7 +1156,7 @@ export async function generateSidequestPlanForTrip(
         package: {
           ...applied.itinerary.package,
           ...(reality ? { reality } : {}),
-          planning: plannerComposition ? planningRecordOf(plannerComposition) : { mode: 'model_composed' as const, reason: options.useDraft || options.reuseStoredDraft ? 'Re-verified an existing draft.' : plannerTooThin ? 'The Discovery Board had too few places to fill every day, so a model composed the draft.' : region ? 'Composed by the model at the traveller\u2019s request (regression mode).' : 'No Discovery Board existed for this trip, so a model composed the draft.', weatherMoves: [], mustConflicts: [] },
+          planning: plannerComposition ? planningRecordOf(plannerComposition) : { mode: 'model_composed' as const, ...(plannerFallbackReason ? { fallbackReason: plannerFallbackReason } : {}), reason: options.useDraft || options.reuseStoredDraft ? 'Re-verified an existing draft.' : plannerTooThin ? 'The Discovery Board had too few places to fill every day, so a model composed the draft.' : region ? 'Composed by the model at the traveller\u2019s request (regression mode).' : 'No Discovery Board existed for this trip, so a model composed the draft.', weatherMoves: [], mustConflicts: [] },
           feasibility,
           preservation: {
             version: 1 as const,

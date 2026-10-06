@@ -114,6 +114,38 @@ describe('discovery scan', () => {
   });
 });
 
+describe('a thin scan (live Tokyo finding)', () => {
+  it('asks once for more, places only the new places, records why, and plans on the planner', async () => {
+    const tripId = await dynamicTrip('thinscan harbour');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 150 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(scanView(tripId).state).toBe('ready');
+    const diagnostics = getScanProposalExtras(tripId)?.diagnostics;
+    expect(diagnostics?.proposal.kept).toBe(4);
+    expect(diagnostics?.recovery.attempted).toBe(true);
+    expect(diagnostics?.recovery.outcome).toBe('added');
+    expect(diagnostics?.recovery.reasons).toContain('too_few_places');
+    expect(diagnostics!.recovery.after!.have).toBeGreaterThan(diagnostics!.recovery.before.have);
+    expect(scanView(tripId).counters.proposed).toBeGreaterThan(4);
+
+    const { generateSidequestPlanForTrip } = await import('@/lib/planning/production-plan');
+    const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW });
+    expect(result.ok, result.error).toBe(true);
+    expect(result.result!.itinerary.package?.planning?.mode).toBe('planner');
+  }, 60_000);
+
+  it('a sufficient scan never spends the supplement', async () => {
+    const tripId = await dynamicTrip('Testmouth');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 100 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(getScanProposalExtras(tripId)?.diagnostics?.recovery.attempted).toBe(false);
+  });
+});
+
 describe('scan regions are estimated, and say so (live Utah finding)', () => {
   it('a planner build on a distance-estimated region labels no leg "measured"', async () => {
     const tripId = await dynamicTrip('Testmouth');
@@ -128,6 +160,11 @@ describe('scan regions are estimated, and say so (live Utah finding)', () => {
     expect(legs.length).toBeGreaterThan(0);
     expect(legs.filter((l) => l.provenance === 'measured')).toHaveLength(0);
     expect(result.result!.itinerary.transportStrategy.dataDisclosure).not.toMatch(/measured by estimated/);
+    /* Live Hanoi finding: a walking matrix's figure was reused for a bus leg (95 km in 1,480 minutes). No ridden leg is ever timed at walking pace. */
+    for (const leg of legs) {
+      if (leg.mode === 'walk' || leg.minutes === null || !leg.estimate || leg.estimate.straightLineKm < 5) continue;
+      expect(leg.estimate.straightLineKm / (leg.minutes / 60), `${leg.fromName} → ${leg.toName} by ${leg.mode}`).toBeGreaterThan(8);
+    }
   }, 60_000);
 });
 

@@ -6,6 +6,8 @@ import { validateCompiledRegion } from '../region/source';
 import { unavailableWeatherDataset } from '../weather/snapshot';
 import { assembleScanRegion, chooseScanBases, estimatedScanMatrix, planScanPoints, type ResolvedPosition } from './assemble';
 import { normalizeScanProposal, type ScanProposal } from './proposal';
+import { scanSufficiency } from './sufficiency';
+import { edgeTransferCost, orderBasesForEdges, type TripEdges } from './assemble';
 
 /*
  * A fictional coast — no real destination is named in the fixture, so nothing
@@ -202,5 +204,83 @@ describe('base names', () => {
     const normalized = normalizeScanProposal(raw);
     if (!normalized.ok) throw new Error(normalized.reason);
     expect(normalized.proposal.bases[0]!.name).not.toMatch(/\(return\)/);
+  });
+});
+
+describe('scan sufficiency', () => {
+  const place = (kind: string, interests: string[] = []) => ({ kind, interests: interests as never[] });
+  it('four places for a six-day trip is thin; the need scales with days and pace, never above what was requested', () => {
+    const thin = scanSufficiency({ days: 6, stopsPerDay: 2, requested: 24, placed: [place('museum'), place('temple'), place('market'), place('park')], priorities: [] });
+    expect(thin.sufficient).toBe(false);
+    expect(thin.reasons).toContain('too_few_places');
+    expect(thin.needed).toBe(12);
+    const long = scanSufficiency({ days: 14, stopsPerDay: 3, requested: 36, placed: [], priorities: [] });
+    expect(long.needed).toBe(36);
+    const short = scanSufficiency({ days: 2, stopsPerDay: 2, requested: 18, placed: [], priorities: [] });
+    expect(short.needed).toBe(6);
+  });
+
+  it('enough places of one kind is still too little variety; an uncovered priority is reported but does not fail the board', () => {
+    const same = scanSufficiency({ days: 3, stopsPerDay: 2, requested: 18, placed: Array.from({ length: 10 }, () => place('museum', ['museums_and_galleries'])), priorities: ['hiking'] as never[] });
+    expect(same.sufficient).toBe(false);
+    expect(same.reasons).toEqual(['too_little_variety', 'priority_uncovered']);
+    const varied = scanSufficiency({ days: 3, stopsPerDay: 2, requested: 18, placed: ['museum', 'temple', 'market', 'park', 'viewpoint', 'museum'].map((k) => place(k)), priorities: ['hiking'] as never[] });
+    expect(varied.sufficient).toBe(true);
+    expect(varied.missingInterests).toEqual(['hiking']);
+  });
+});
+
+describe('arrival and departure shape the base order (V1)', () => {
+  /* G sits by the airport; F is two hours away. */
+  const minutes = (a: string, b: string) => (a === b ? 0 : 120);
+  const edges = (arrivalUsableMinutes: number, departureUsableMinutes: number): TripEdges => ({
+    fromArrival: (id) => (id === 'G' ? 10 : 120),
+    toDeparture: (id) => (id === 'G' ? 10 : 120),
+    arrivalUsableMinutes,
+    departureUsableMinutes,
+  });
+
+  it('an early arrival may go straight on: no split stay, the far base can come first', () => {
+    const out = orderBasesForEdges(['G', 'F'], minutes, edges(750, 600), 2, 4);
+    expect(out.splitStay).toBe(false);
+  });
+
+  it('a mid-afternoon arrival with a morning flight out sleeps by the airport at both ends', () => {
+    const out = orderBasesForEdges(['F', 'G'], minutes, edges(270, 0), 2, 4);
+    expect(out).toEqual({ order: ['G', 'F', 'G'], splitStay: true });
+  });
+
+  it('a late-night arrival never starts with the long transfer', () => {
+    const out = orderBasesForEdges(['F', 'G'], minutes, edges(0, 600), 2, 4);
+    expect(out.order[0]).toBe('G');
+  });
+
+  it('a traveller who will move only once never gets the extra move, and too few nights never split', () => {
+    expect(orderBasesForEdges(['F', 'G'], minutes, edges(270, 0), 1, 4).splitStay).toBe(false);
+    expect(orderBasesForEdges(['F', 'G'], minutes, edges(270, 0), 2, 2).splitStay).toBe(false);
+  });
+
+  it('an edge-day transfer costs more the less of the day there is, and nothing when it is short', () => {
+    expect(edgeTransferCost(15, 100)).toBe(0);
+    expect(edgeTransferCost(120, 750)).toBeLessThan(edgeTransferCost(120, 270));
+    expect(edgeTransferCost(120, 270)).toBeGreaterThan(120 + 180 - 1);
+  });
+});
+
+describe('the same base proposed twice (live Hanoi finding)', () => {
+  it('is one base; the second proposal maps onto the first and is recorded as a duplicate', () => {
+    const raw = rawProposal() as { bases: { name: string; locality: string }[] };
+    raw.bases.push({ ...raw.bases[0]!, name: `${raw.bases[0]!.name} (return)` });
+    const normalized = normalizeScanProposal(raw);
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const proposal = normalized.proposal;
+    const positions = positionsFor(proposal);
+    const first = proposal.bases[0]!;
+    const again = proposal.bases[proposal.bases.length - 1]!;
+    positions.set(again.key, positions.get(first.key)!);
+    const plan = planScanPoints(proposal, positions);
+    expect(plan.baseIdByKey.get(again.key)).toBe(plan.baseIdByKey.get(first.key));
+    expect(plan.points.filter((p) => p.kind === 'base')).toHaveLength(proposal.bases.length - 1);
+    expect(plan.unplaced.find((u) => u.key === again.key)?.code).toBe('duplicate');
   });
 });

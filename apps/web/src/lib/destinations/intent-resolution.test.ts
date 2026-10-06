@@ -36,7 +36,9 @@ const KNOWN: Record<string, DestinationCandidate> = {
   moab: candidate({ id: 'r198930', displayName: 'Moab', center: { lat: 38.57, lng: -109.55 }, bounds: { southWest: { lat: 38.54, lng: -109.58 }, northEast: { lat: 38.6, lng: -109.52 } }, countryCode: 'US' }),
   utah: candidate({ id: 'r161993', displayName: 'Utah', entityType: 'state_or_province', breadth: 'region', center: { lat: 39.42, lng: -111.71 }, bounds: { southWest: { lat: 37.0, lng: -114.05 }, northEast: { lat: 42.0, lng: -109.04 } }, countryCode: 'US' }),
   'zurich, switzerland': candidate({ id: 'r1682248', displayName: 'Zurich', center: { lat: 47.37, lng: 8.54 }, bounds: { southWest: { lat: 47.32, lng: 8.45 }, northEast: { lat: 47.43, lng: 8.63 } }, countryCode: 'CH' }),
-  tokyo: candidate({ id: 'r1543125', displayName: 'Tokyo', center: { lat: 35.68, lng: 139.76 }, bounds: { southWest: { lat: 35.5, lng: 138.9 }, northEast: { lat: 35.9, lng: 139.9 } }, countryCode: 'JP' }),
+  /* Tokyo's published administrative box: it reaches the Ogasawara Islands and Okinotorishima. */
+  tokyo: candidate({ id: 'r1543125', displayName: 'Tokyo', center: { lat: 35.68, lng: 139.76 }, bounds: { southWest: { lat: 20.21, lng: 135.85 }, northEast: { lat: 35.9, lng: 154.21 } }, countryCode: 'JP', providerClass: { osmType: 'relation', category: 'boundary', type: 'administrative', rank: 8, population: 13_613_660 } }),
+  nagoya: candidate({ id: 'r2688911', displayName: 'Nagoya', center: { lat: 35.18, lng: 136.91 }, bounds: { southWest: { lat: 35.04, lng: 136.79 }, northEast: { lat: 35.26, lng: 137.06 } }, countryCode: 'JP' }),
   kyoto: candidate({ id: 'r357794', displayName: 'Kyoto', center: { lat: 35.01, lng: 135.77 }, bounds: { southWest: { lat: 34.88, lng: 135.56 }, northEast: { lat: 35.32, lng: 135.88 } }, countryCode: 'JP' }),
   chongqing: candidate({ id: 'r913069', displayName: 'Chongqing', entityType: 'municipality', breadth: 'region', center: { lat: 29.56, lng: 106.55 }, bounds: { southWest: { lat: 28.2, lng: 105.3 }, northEast: { lat: 32.2, lng: 110.2 } }, countryCode: 'CN' }),
 };
@@ -173,5 +175,37 @@ describe('a place and the area it sits in (V1)', () => {
   it('"Tokyo, Kyoto" stays two places: neither sits inside the other', async () => {
     const { outcome } = await resolveDestinationPhrase({ text: 'Tokyo, Kyoto', resolver: fakeResolver(), now: NOW, interpreter: null });
     expect(outcome.graph.children.map((c) => c.label)).toEqual(['Tokyo', 'Kyoto']);
+  });
+});
+
+describe('destination semantics, end to end (V1 correctness wave)', () => {
+  const read = (text: string) => resolveDestinationPhrase({ text, resolver: fakeResolver(), now: NOW, interpreter: null });
+
+  it('Tokyo keeps its canonical boundary and is planned as a city', async () => {
+    const { semantics } = await read('Tokyo');
+    expect(semantics.type).toBe('settlement');
+    expect(semantics.extent?.bounds.southWest.lat).toBeLessThan(21);
+    expect(semantics.travelExtent?.basis).toBe('urban_core');
+    expect(semantics.travelExtent!.bounds.southWest.lat).toBeGreaterThan(34.5);
+    expect(['settlement', 'district']).toContain(semantics.scale);
+  });
+
+  it('countries are national, a state is regional, cities are cities', async () => {
+    expect((await read('Switzerland')).semantics).toMatchObject({ type: 'country', scale: 'country' });
+    expect((await read('Japan')).semantics).toMatchObject({ type: 'country', scale: 'country' });
+    const utah = (await read('Utah')).semantics;
+    expect(utah.type).toBe('admin_area');
+    expect(['subregion', 'region', 'country']).toContain(utah.scale);
+    expect((await read('Zurich, Switzerland')).semantics).toMatchObject({ type: 'settlement', scale: 'settlement' });
+    expect((await read('Moab, Utah')).semantics).toMatchObject({ type: 'settlement', scale: 'settlement' });
+  });
+
+  it('two cities stay two, even when one has a sprawling administrative box', async () => {
+    const pair = await read('Tokyo, Kyoto');
+    expect(pair.outcome.graph.children.map((c) => c.label)).toEqual(['Tokyo', 'Kyoto']);
+    /* The union is of the two cities' travel areas, not of Tokyo's boundary out to its islands. */
+    expect(pair.semantics.extent!.bounds.southWest.lat).toBeGreaterThan(34);
+    expect(pair.semantics.scale).not.toBe('country');
+    expect((await read('Nagoya, Tokyo')).outcome.graph.children.map((c) => c.label)).toEqual(['Nagoya', 'Tokyo']);
   });
 });

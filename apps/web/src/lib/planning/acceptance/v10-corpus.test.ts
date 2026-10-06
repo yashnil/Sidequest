@@ -290,7 +290,9 @@ describe('V10 acceptance corpus', () => {
             /* Unmeasured is allowed only where the world refuses the pair or the mode is not a road question. */
             const endpoints = `${travel.fromName} ${travel.toName}`.toLowerCase();
             /* A rail, ferry, flight or operator leg is timed by a timetable, not by a road router: honest, not missing. */
-            const excused = [...refused].some((n) => endpoints.includes(n)) || travel.unmeasuredReason === 'mode_not_routed' || travel.unmeasuredReason === 'operator_unpublished' || travel.unmeasuredReason === 'no_route_found';
+            /* V1 — a timetable leg with no timetable now carries Sidequest's labelled geo-estimate instead of an allowance; still not a road question. */
+            const timetableEstimate = travel.provenance === 'estimated' && (travel.mode === 'rail' || travel.mode === 'public_bus');
+            const excused = [...refused].some((n) => endpoints.includes(n)) || timetableEstimate || travel.unmeasuredReason === 'mode_not_routed' || travel.unmeasuredReason === 'operator_unpublished' || travel.unmeasuredReason === 'no_route_found';
             expect(excused, `day ${day.dayNumber}: ${travel.fromName} → ${travel.toName} unmeasured (${travel.unmeasuredReason})`).toBe(true);
           }
         }

@@ -1474,9 +1474,17 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const confirmationMemo: ConfirmationMemo = new Map();
 
   // --- Whole-route relocation feasibility, tolerant ------------------------
+  /*
+   * V1 — a distance-estimated matrix is not evidence that a move is too long.
+   * A scanned car-free Tokyo trip read its walking-pace estimate for a 10 km
+   * Shibuya → Asakusa move as past the daily limit and inserted a park as an
+   * overnight stop. Only a measured or modelled matrix may trigger a remedy;
+   * otherwise the leg is unmeasured, which is never a claim of infeasibility.
+   */
+  const relocationMatrix = context.matrix.provenance.kind === 'estimated' ? ({ ...context.matrix, ids: [], minutes: [], km: [] } as ReconcileContext['matrix']) : context.matrix;
   const feasibility = await assessRelocationFeasibility({
     orderedBases: bases,
-    matrix: context.matrix,
+    matrix: relocationMatrix,
     profile: context.profile,
     candidates: context.candidates,
     archetype: movementShapeOf(draft.archetype),
@@ -2113,7 +2121,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   if (context.food) {
     for (const day of days) {
       const base = baseForDate[day.dayNumber - 1]?.identity?.coordinates ?? null;
-      mealsNamed += nameVenuesForDay(day, context.food, context.profile, anchorCoordinates, base, venueUse);
+      mealsNamed += nameVenuesForDay(day, context.food, context.profile, anchorCoordinates, base, venueUse, context.matrix.mode !== 'car');
     }
   }
 
@@ -3069,8 +3077,17 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
           )
         : null;
     const walkRefused = walk?.verdict === 'refuse';
-    const estimate = !measured && routable && !walkRefused && fromCoordinates && toCoordinates
-      ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive') === (context.matrix.mode === 'car')
+    /*
+     * V1 — a metro, rail or bus hop no router can see still gets Sidequest's own
+     * mode-aware figure, labelled estimated (CLAUDE.md: unknown travel time is a
+     * geo_estimate, never zero). Leaving every car-free hop over a kilometre and
+     * a half as an unmeasured allowance is how a scanned Hanoi day showed
+     * "Travel to Tam Coc — ? min" for a hundred-kilometre move. Flights, ferries
+     * and arranged transfers still have no honest estimate without a timetable.
+     */
+    const geoEstimable = mode === 'rail' || mode === 'public_bus';
+    const estimate = !measured && (routable || geoEstimable) && !walkRefused && fromCoordinates && toCoordinates
+      ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot')
         ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
         : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode })
       : null;
@@ -3552,6 +3569,8 @@ function formatClock(minute: number): string {
  * ------------------------------------------------------------------ */
 
 const VENUE_SEARCH_KM = 25;
+/** On a car-free trip, how far a named meal may be from where the traveller is. */
+const CAR_FREE_VENUE_SEARCH_KM = 3;
 const MAX_TIMES_ONE_VENUE_IS_NAMED = 2;
 
 function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -3594,10 +3613,28 @@ function venueHoursOn(venue: FoodVenue, date: string): ItineraryItem['food'] ext
 /**
  * For each lunch and dinner on the day, the nearest venue in the region's own
  * food data that serves that meal, sits within the everyday price band, is
- * within reach of where the traveller already is, and has not been named more
- * than twice on the trip. A meal with no such venue keeps the draft's own
+ * within reach of where the traveller already is, and — where anything new is
+ * close — has not been named on the trip already (never more than twice). A meal with no such venue keeps the draft's own
  * intent, plainly. Returns how many meals were named.
  */
+/** How much further a not-yet-named venue may be than the nearest one before the nearest is repeated instead. */
+const FRESH_VENUE_DETOUR_KM = 1.5;
+
+/**
+ * The venue for one meal, from candidates already filtered (meal period, diet,
+ * price, the cap, hours) and sorted nearest first. A not-yet-named venue wins
+ * when it is still close; a declared diet can pull the choice up to 2 km
+ * further. Pure, for the tests.
+ */
+export function pickMealVenue<T extends { venue: { id: string }; km: number }>(candidates: readonly T[], venueUse: ReadonlyMap<string, number>, supports: (venue: T['venue']) => boolean): T | undefined {
+  const nearestAny = candidates[0];
+  const fresh = candidates.filter((entry) => (venueUse.get(entry.venue.id) ?? 0) === 0);
+  const nearestFresh = fresh[0];
+  const pool = nearestAny && nearestFresh && nearestFresh.km <= Math.max(nearestAny.km + FRESH_VENUE_DETOUR_KM, nearestAny.km * 2) ? fresh : candidates;
+  const nearest = pool[0];
+  return nearest ? (pool.find((entry) => supports(entry.venue) && entry.km <= nearest.km + 2) ?? nearest) : undefined;
+}
+
 function nameVenuesForDay(
   day: ItineraryDay,
   food: FoodDataset,
@@ -3605,6 +3642,7 @@ function nameVenuesForDay(
   anchorCoordinates: ReadonlyMap<string, { lat: number; lng: number }>,
   base: { lat: number; lng: number } | null,
   venueUse: Map<string, number>,
+  carFree = false,
 ): number {
   let named = 0;
   const items = day.items;
@@ -3630,6 +3668,8 @@ function nameVenuesForDay(
     const origin = near ?? base;
     if (!origin) continue;
     const declaredNeeds = profile.food.dietaryNeeds;
+    /* V1 — on foot and by transit a meal is a walk or a short ride away; 25 km is a road-trip radius, and it named a Shibuya restaurant for dinner in Asakusa. */
+    const venueSearchKm = carFree ? CAR_FREE_VENUE_SEARCH_KM : VENUE_SEARCH_KM;
     const candidates = food.venues
       .filter((venue) => venue.mealPeriods.includes(slot))
       // A venue whose record says it cannot do one of the traveller's needs is never named for them.
@@ -3638,7 +3678,7 @@ function nameVenuesForDay(
       .filter((venue) => (venueUse.get(venue.id) ?? 0) < MAX_TIMES_ONE_VENUE_IS_NAMED && !namedToday.has(venue.id))
       .filter((venue) => venue.hours.kind === 'unknown' || venue.hours.kind === 'always_open' || operatingOn(venue.hours, day.date).status !== 'closed')
       .map((venue) => ({ venue, km: kmBetween(origin, venue.coordinates) }))
-      .filter((entry) => entry.km <= VENUE_SEARCH_KM)
+      .filter((entry) => entry.km <= venueSearchKm)
       .sort((a, b) => a.km - b.km);
     /*
      * With a declared need, a venue whose record says it serves it wins over a
@@ -3646,8 +3686,17 @@ function nameVenuesForDay(
      * nearest, so a diet never sends anyone across town for lunch.
      */
     const supports = (venue: FoodVenue) => declaredNeeds.length > 0 && declaredNeeds.every((need) => venue.dietary.some((claim) => claim.need === need && claim.evidence !== 'venue_states_unsuitable' && claim.evidence !== 'unknown'));
-    const nearest = candidates[0];
-    const best = nearest ? (candidates.find((entry) => supports(entry.venue) && entry.km <= nearest.km + 2) ?? nearest) : undefined;
+    /*
+     * V1 — A NEW TABLE BEFORE THE SAME ONE AGAIN.
+     *
+     * A leisure trip that sends you back to Tuesday's bagel shop on Friday has
+     * run out of imagination, not of restaurants. A venue already named on the
+     * trip is passed over for one not yet named, as long as the new one is
+     * still close (within FRESH_VENUE_DETOUR_KM of the nearest, or twice its
+     * distance); diversity never sends anyone across town. A repeat happens
+     * only where nothing new is in reach, and never more than the cap.
+     */
+    const best = pickMealVenue(candidates, venueUse, supports);
     if (!best) continue;
     const { venue } = best;
     venueUse.set(venue.id, (venueUse.get(venue.id) ?? 0) + 1);
