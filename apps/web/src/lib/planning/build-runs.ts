@@ -1,4 +1,5 @@
 import 'server-only';
+import { productEvent } from '../net/product-events';
 import { after } from 'next/server';
 import {
   BUILD_HEARTBEAT_MS,
@@ -104,6 +105,20 @@ export async function runBuild(input: StartBuildRunInput): Promise<void> {
     if (!generated.ok) {
       const failure = failureForResult(generated, input.tripId, { caller: input.caller, ...(input.reuseStoredDraft ? { reuseStoredDraft: true } : {}) });
       recordFailure(input, { message: generated.error ?? 'the generation returned no plan', cause: encodeBuildFailure(failure) });
+    } else {
+      /* Private alpha — one summary line per successful build: who built it, why any fallback, and how much of the clock is measured. */
+      const itinerary = generated.result?.itinerary;
+      const legs = (itinerary?.days ?? []).flatMap((day) => day.items.flatMap((item) => (item.kind === 'travel' && item.travel ? [item.travel] : [])));
+      const planning = itinerary?.package?.planning;
+      productEvent('build_completed', input.tripId, {
+        mode: planning?.mode ?? 'unknown',
+        fallbackReason: planning?.fallbackReason ?? null,
+        days: itinerary?.days.length ?? 0,
+        legsMeasured: legs.filter((leg) => leg.provenance === 'measured').length,
+        legsEstimated: legs.filter((leg) => leg.provenance === 'estimated').length,
+        legsUnmeasured: legs.filter((leg) => leg.provenance === 'unmeasured').length,
+        regenerate: input.reuseStoredDraft ? false : null,
+      });
     }
   } catch (error) {
     recordFailure(input, { message: error instanceof Error ? error.message : 'unknown', name: error instanceof Error ? error.name : 'Error', ...(error instanceof Error && error.stack ? { where: error.stack.split('\n').slice(1, 6).map((l) => l.trim()).join(' | ') } : {}), cause: encodeBuildFailure(buildFailure(classifyModelError(error))) });
@@ -136,6 +151,7 @@ function recordFailure(input: StartBuildRunInput, detail: { message: string; nam
   } catch {
     /* the log line below still carries the failure */
   }
+  productEvent('build_failed', input.tripId, { cause: detail.cause.slice(0, 40), kind: kind ?? 'unknown' });
   console.error('Build failed', {
     ref: ref ?? 'unrecorded',
     kind: kind ?? 'unknown',

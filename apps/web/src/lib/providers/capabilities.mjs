@@ -131,6 +131,36 @@ export function deploymentProblems(env = process.env) {
   return problems;
 }
 
+/**
+ * PRIVATE ALPHA — WHAT A HOSTED DEPLOYMENT MAY NOT START WITHOUT.
+ *
+ * `deploymentProblems` warns, because `next start` is also how every browser
+ * suite runs. On a hosting platform (Railway sets RAILWAY_ENVIRONMENT, or an
+ * operator sets SIDEQUEST_REQUIRE_CONFIG=on) four mistakes lose data or leak
+ * the wrong URL, and the server refuses to start rather than serve through
+ * them. A refused start fails the platform health check, so the previous
+ * deployment keeps serving. Everything else — a missing model key included —
+ * degrades and is reported by `/api/readiness`, because the trips a traveller
+ * already has stay readable without it.
+ */
+export function hostedDeployment(env = process.env) {
+  return read(env, 'RAILWAY_ENVIRONMENT') !== '' || eq(env, 'SIDEQUEST_REQUIRE_CONFIG', 'on');
+}
+
+export function requiredConfigProblems(env = process.env) {
+  if (!hostedDeployment(env)) return [];
+  const problems = [];
+  const dbPath = read(env, 'SIDEQUEST_DB_PATH');
+  const volume = read(env, 'RAILWAY_VOLUME_MOUNT_PATH');
+  if (!dbPath.startsWith('/')) problems.push('SIDEQUEST_DB_PATH must be an absolute path on the mounted volume.');
+  else if (volume !== '' && !dbPath.startsWith(volume.endsWith('/') ? volume : `${volume}/`)) problems.push(`SIDEQUEST_DB_PATH is not under the mounted volume (${volume}); every trip would be lost on the next deploy.`);
+  if (read(env, 'SIDEQUEST_SESSION_SECRET').length < 32) problems.push('SIDEQUEST_SESSION_SECRET must be set (32+ characters) so sessions survive a restart and cannot be forged.');
+  const base = read(env, 'SIDEQUEST_BASE_URL');
+  if (!/^https:\/\//.test(base) || /localhost|127\.0\.0\.1|\.internal\b/.test(base)) problems.push('SIDEQUEST_BASE_URL must be the public https URL, or share links, calendar feeds and sign-in callbacks point somewhere a traveller cannot reach.');
+  if (productionFixtureRefusal(env).refused) problems.push('Fixture switches are on in production without SIDEQUEST_FIXTURES=allow.');
+  return problems;
+}
+
 export function capabilityRegistry(env = process.env) {
   const fixtureGuard = productionFixtureRefusal(env);
   const compilerChoice = read(env, 'SIDEQUEST_COMPILER_PROVIDER').toLowerCase();

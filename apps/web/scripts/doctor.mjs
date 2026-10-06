@@ -658,8 +658,41 @@ try {
     say('');
   }
   hardProblem = productionFixtureRefusal(process.env).refused;
+  /* Private alpha — the same refusal the server makes at start on a hosting platform. */
+  const { requiredConfigProblems } = await import('../src/lib/providers/capabilities.mjs');
+  const required = requiredConfigProblems(process.env);
+  if (required.length > 0) {
+    say('Required configuration (the server refuses to start on a hosting platform)');
+    for (const problem of required) say(`  ! ${problem}`);
+    say('');
+    hardProblem = true;
+  }
 } catch {
   /* The registry section above already reported an unreadable module. */
+}
+
+/*
+ * PRIVATE ALPHA — THE PRACTICAL ANSWER. Can this deployment serve a traveller
+ * right now? The same verdicts and consequences `/api/readiness` returns
+ * (`lib/readiness/report.ts#CONSEQUENCE`), from configuration plus the --probe
+ * results when they were asked for.
+ */
+{
+  const env = process.env;
+  const has = (name) => (env[name] ?? '').trim() !== '';
+  const modelState = probeFailures.includes('Composition model') ? 'BROKEN' : has('ANTHROPIC_API_KEY') || (env.SIDEQUEST_COMPOSER_PROVIDER ?? '') === 'fixture' ? 'READY' : 'BROKEN';
+  const rows = [
+    ['Trips (model)', modelState, 'discovery scans and trips without a board cannot be generated'],
+    ['Database', (env.SIDEQUEST_DB_PATH ?? '').startsWith('/') ? 'READY' : 'DEGRADED', 'a redeploy may discard every trip'],
+    ['Routing', (env.SIDEQUEST_ROUTES_PROVIDER ?? '') === 'valhalla' || ((env.SIDEQUEST_ROUTES_GLOBAL_PROVIDER ?? '') === 'openrouteservice' && has('OPENROUTESERVICE_API_KEY')) ? (probeFailures.includes('Routing (local)') ? 'DEGRADED' : 'READY') : 'DEGRADED', 'travel times use labelled distance estimates'],
+    ['Places', has('GOOGLE_MAPS_API_KEY') ? 'READY' : 'DEGRADED', 'proposed places are placed by the open geocoder only; some may not place'],
+    ['Food', (env.SIDEQUEST_POI_PROVIDER ?? '') === 'overpass' ? 'READY' : 'DEGRADED', 'meals give area-level advice instead of named venues'],
+    ['Weather', probeFailures.includes('Weather') ? 'DEGRADED' : 'READY', 'days are planned without a forecast'],
+    ['Base URL', /^https:\/\//.test(env.SIDEQUEST_BASE_URL ?? '') && !/localhost|\.internal/.test(env.SIDEQUEST_BASE_URL ?? '') ? 'READY' : 'DEGRADED', 'share links and calendar feeds may point somewhere unreachable'],
+  ];
+  say('Can this deployment serve a traveller right now?');
+  for (const [label, state, consequence] of rows) say(`  ${state.padEnd(8)} ${label}${state === 'READY' ? '' : ` — ${consequence}`}`);
+  say('');
 }
 if (probeFailures.length > 0) {
   say(`Probes failing: ${probeFailures.join(', ')}.`);

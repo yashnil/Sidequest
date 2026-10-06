@@ -1,5 +1,7 @@
 'use server';
 
+import { productEvent } from '@/lib/net/product-events';
+
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -127,6 +129,7 @@ export type RegenerateResult = { ok: true; buildKey: string } | { ok: false; err
 export async function regenerateItineraryAction(tripId: string, buildKey?: string): Promise<RegenerateResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
+  productEvent('regenerate_used', tripId);
   return startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_regenerate_action', () => {
     try {
       const itinerary = getItinerary(tripId);
@@ -309,6 +312,7 @@ export async function createShareLinkAction(tripId: string): Promise<ShareLinkRe
   if (!token) {
     return { ok: false, error: 'We could not make a link just then. Nothing was lost — try again.' };
   }
+  productEvent('share_created', tripId);
   return { ok: true, path: `/share/${token}` };
 }
 

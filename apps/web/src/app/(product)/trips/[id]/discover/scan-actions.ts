@@ -1,5 +1,6 @@
 'use server';
 
+import { productEvent } from '@/lib/net/product-events';
 import { revalidatePath } from 'next/cache';
 import { getTrip } from '@/lib/db/repository';
 import { scanView } from '@/lib/db/scan-repository';
@@ -28,6 +29,8 @@ export type StartScanActionResult =
 const TRIP_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export async function startDiscoveryScanAction(tripId: string, options: { autoBuild?: boolean } = {}): Promise<StartScanActionResult> {
+  /* The interview is done when the traveller asks for places (or for smart defaults, which scans first). */
+  productEvent('interview_completed', tripId, { smartDefaults: Boolean(options.autoBuild) });
   if (typeof tripId !== 'string' || !TRIP_ID.test(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };

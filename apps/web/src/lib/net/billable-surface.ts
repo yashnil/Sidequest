@@ -87,7 +87,7 @@ export const LABS_TOKEN_COOKIE = 'sidequest_labs';
  * not an open one.
  */
 export const LABS_UNCONFIGURED_MESSAGE =
-  'This deployment has billable providers configured and no SIDEQUEST_LABS_TOKEN set, so the comparison harness is closed.';
+  'The comparison harness is closed on this deployment: it is hosted or can spend, and no SIDEQUEST_LABS_TOKEN is set.';
 
 export type LabsAccess =
   | { allowed: true }
@@ -109,7 +109,16 @@ export type LabsAccess =
  * is this function's.
  */
 export function labsAccess(offered: string): LabsAccess {
-  if (!billableSurfaceConfigured()) return { allowed: true };
+  /*
+   * Private alpha — a hosted deployment is closed too. The rule above is about
+   * spending; but an internal evaluation harness and design lab on a URL handed
+   * to alpha testers is not a surface they should land on, whatever it costs.
+   * Same platform signal as `requiredConfigProblems` (Railway sets
+   * RAILWAY_ENVIRONMENT; SIDEQUEST_REQUIRE_CONFIG=on elsewhere), read inline
+   * because this module stays import-free for the proxy.
+   */
+  const hosted = (process.env.RAILWAY_ENVIRONMENT ?? '').trim() !== '' || (process.env.SIDEQUEST_REQUIRE_CONFIG ?? '').trim().toLowerCase() === 'on';
+  if (!billableSurfaceConfigured() && !hosted) return { allowed: true };
 
   const expected = process.env.SIDEQUEST_LABS_TOKEN?.trim();
   if (!expected) return { allowed: false, status: 404, message: LABS_UNCONFIGURED_MESSAGE };

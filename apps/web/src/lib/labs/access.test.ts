@@ -39,6 +39,8 @@ const ENV_KEYS = [
   'SIDEQUEST_ROUTES_PROVIDER',
   'SIDEQUEST_RESEARCH_PROVIDER',
   'ANTHROPIC_API_KEY',
+  'RAILWAY_ENVIRONMENT',
+  'SIDEQUEST_REQUIRE_CONFIG',
 ];
 const saved = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 
@@ -78,6 +80,14 @@ describe('the labs gate, inside the action', () => {
     const decision = await labsAccessDecision();
     expect(decision.allowed).toBe(false);
     if (!decision.allowed) expect(decision.status).toBe(401);
+  });
+
+  it('closes a hosted deployment even when nothing can spend (private alpha)', async () => {
+    process.env.RAILWAY_ENVIRONMENT = 'production';
+    const { labsAccessDecision } = await import('./access');
+    const decision = await labsAccessDecision();
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.status).toBe(404);
   });
 
   it('closes the door when spending is on and nobody set a token', async () => {

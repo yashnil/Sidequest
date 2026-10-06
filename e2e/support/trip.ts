@@ -64,7 +64,7 @@ export async function waitUntilInteractive(locator: Locator): Promise<void> {
  * because they are the same action; the visibility filter is what picks the one
  * a person could press.
  */
-function continueButton(page: Page): Locator {
+export function continueButton(page: Page): Locator {
   return page.getByTestId('setup-continue').locator('visible=true').first();
 }
 

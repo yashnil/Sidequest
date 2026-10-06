@@ -1,3 +1,4 @@
+import { productEvent } from '@/lib/net/product-events';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -59,6 +60,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    */
   const trip = await ownedTrip(id);
   if (!trip) notFound();
+  productEvent('itinerary_opened', id);
   // Whether a Discovery Board exists to go back to; without one, recovery is an explicit build from the saved answers.
   const boardAvailable = trip.basics.regionId !== DYNAMIC_REGION_ID || compiledRegionFor(id) !== null;
 

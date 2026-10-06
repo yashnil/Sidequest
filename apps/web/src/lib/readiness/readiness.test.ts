@@ -192,4 +192,20 @@ describe('readiness report', () => {
     expect(report.blocking).toEqual(expect.arrayContaining(['fixtures', 'composition']));
     expect(report.problems.join(' ')).toMatch(/SIDEQUEST_COMPOSER_PROVIDER=fixture/);
   });
+  it('every row carries a practical verdict: a missing model is broken, missing enrichment is degraded with its consequence', async () => {
+    const { readinessReport } = await import('./report');
+    const env = { SIDEQUEST_DB_PATH: join(dir, 'readiness.db'), SIDEQUEST_WEATHER_PROVIDER: 'off', SIDEQUEST_CLIMATE_PROVIDER: 'off', SIDEQUEST_BASE_URL: 'http://localhost:3000' };
+    const report = await readinessReport({ env, fetchImpl: refused });
+    const row = (capability: string) => report.capabilities.find((r) => r.capability === capability)!;
+    expect(report.ready).toBe(false);
+    expect(row('composition').verdict).toBe('broken');
+    expect(row('composition').consequence).toMatch(/cannot be generated/);
+    expect(row('routing').verdict).toBe('degraded');
+    expect(row('routing').consequence).toMatch(/labelled distance estimates/);
+    expect(row('food_grounding').consequence).toMatch(/area-level/);
+    expect(row('base_url').verdict).toBe('degraded');
+    expect(row('database').verdict).toBe('ready');
+    expect(row('destination_suggestions').verdict).toBe('ready');
+    expect(JSON.stringify(report)).not.toContain(dir);
+  });
 });

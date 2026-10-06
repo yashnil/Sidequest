@@ -1,5 +1,7 @@
 'use server';
 
+import { productEvent } from '@/lib/net/product-events';
+
 import { z } from 'zod';
 import {
   ARRIVAL_PLANNING_MINUTES,
@@ -386,6 +388,7 @@ export async function createTripFromComposer(raw: ComposerInput): Promise<Compos
      * cookie, and this is the first moment there is anything to own.
      */
     tripId = createTrip(basics, await sessionToken({ mint: true }), await currentUserId()).id;
+    productEvent('trip_created', tripId, { hasPlan: Boolean(input.existingPlan?.trim()) });
     saveComposerAnswers(tripId, answers);
     if (!region) {
       saveDestinationQuery(tripId, 'known_destination', input.destinationText);

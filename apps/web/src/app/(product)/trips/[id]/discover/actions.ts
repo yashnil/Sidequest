@@ -1,4 +1,6 @@
 'use server';
+
+import { productEvent } from '@/lib/net/product-events';
 import { seedPlannerAutoPicks } from '@/lib/planning/seed-autopicks';
 
 import { revalidatePath } from 'next/cache';
@@ -128,6 +130,7 @@ export async function setFoodSelectionAction(
  * left alone — auto-pick proposes, it does not overrule.
  */
 export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
+  productEvent('auto_pick_used', tripId);
   try {
     const trip = getTrip(tripId);
     if (!trip) return { ok: false, error: 'We could not find that trip any more.' };

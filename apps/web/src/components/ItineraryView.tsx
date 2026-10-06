@@ -66,6 +66,7 @@ import { BookView } from './hub/BookView';
 import { FreshnessBanner } from './hub/FreshnessBanner';
 import { SplitPlanCard } from './hub/SplitPlanCard';
 import { NextActionCard } from './hub/NextActionCard';
+import { AlphaFeedback } from './AlphaFeedback';
 import { DecisionCard } from './hub/DecisionCard';
 import { PreflightView } from './hub/PreflightView';
 import { StateBadge } from './hub/StateBadge';
@@ -803,6 +804,7 @@ export function ItineraryView({
           {feasibility ? <CautionsCard items={feasibility.items} /> : null}
         </div>
       </div>
+      {tripId ? <AlphaFeedback tripId={tripId} dayCount={itinerary.days.length} /> : null}
     </div>
   );
 

@@ -110,9 +110,9 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
   const country = options.countryName ? `, ${options.countryName}` : '';
   const radiusKm = Math.min(50, Math.max(10, options.maxDistanceKm / 4));
 
-  const items: { key: string; name: string; locality: string; category: string; areaLike: boolean }[] = [
+  const items: { key: string; name: string; localName?: string; locality: string; category: string; areaLike: boolean }[] = [
     ...proposal.bases.map((b) => ({ key: b.key, name: b.name, locality: b.locality, category: 'locality', areaLike: true })),
-    ...proposal.candidates.map((c) => ({ key: c.key, name: c.name, locality: c.locality, category: SCAN_KIND_PROFILES[c.kind].category, areaLike: SCAN_KIND_PROFILES[c.kind].hours === 'open_ground' })),
+    ...proposal.candidates.map((c) => ({ key: c.key, name: c.name, ...(c.localName ? { localName: c.localName } : {}), locality: c.locality, category: SCAN_KIND_PROFILES[c.kind].category, areaLike: SCAN_KIND_PROFILES[c.kind].hours === 'open_ground' })),
   ];
   let attempted = 0;
   let placed = 0;
@@ -161,6 +161,26 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         }
       } catch {
         /* absence */
+        attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
+      }
+    }
+    /*
+     * Private alpha — the name as it is written locally. A live Seoul scan
+     * placed 16 of 27: the open geocoder had no English name for the War
+     * Memorial of Korea or Changdeokgung, and found both by their Korean names.
+     */
+    if (!position && item.localName) {
+      const query = `${item.localName}${country}`;
+      try {
+        geocoderCalls += 1;
+        const hit = await geocodeFirst(query, options);
+        attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
+        if ('point' in hit) {
+          const locality = localityFrom(hit.place);
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 && !isBase, ...(locality ? { locality } : {}) };
+          providers.add('nominatim');
+        }
+      } catch {
         attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
       }
     }

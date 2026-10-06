@@ -1,8 +1,8 @@
 /**
  * V1 CONVERGENCE — WHAT AN OPERATOR MUST HEAR WHEN THE SERVER STARTS.
  *
- * Runs once per server instance (Next's `register` hook). Two things, both
- * cheap, neither able to stop the server from booting:
+ * Runs once per server instance (Next's `register` hook). Three things, all
+ * cheap; only the third can stop the server from booting:
  *
  * 1. **Loud configuration problems** — fixture data switched on in production,
  *    a database that is not on an absolute path — printed from the same
@@ -16,17 +16,27 @@
  *    deploy would pay a dead router's timeout to learn what one GET knows.
  *    Production only; a switched-off capability is answered without a request.
  *
+ * 3. **Required configuration on a hosting platform** (`requiredConfigProblems`)
+ *    — a database off the volume, no session secret, a base URL a traveller
+ *    cannot reach — refuses to start, so the platform keeps the last good deploy.
+ *
  * Imports nothing at module level, so the render-purity audit (which walks
  * this file) sees no provider; the Node-only work is loaded inside the
  * Node.js runtime branch.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  const { deploymentProblems, requiredConfigProblems } = await import('./lib/providers/capabilities.mjs');
   try {
-    const { deploymentProblems } = await import('./lib/providers/capabilities.mjs');
     for (const problem of deploymentProblems(process.env)) console.warn(`[sidequest] DEPLOYMENT PROBLEM — ${problem}`);
   } catch (error) {
     console.warn('[sidequest] could not check the deployment configuration at start', { name: error instanceof Error ? error.name : 'Error' });
+  }
+  /* Private alpha — on a hosting platform, missing required configuration is a refusal to start, never a warning (see `requiredConfigProblems`). */
+  const required = requiredConfigProblems(process.env);
+  if (required.length > 0) {
+    for (const problem of required) console.error(`[sidequest] REFUSING TO START — ${problem}`);
+    throw new Error(`Sidequest refused to start: ${required.length} required configuration problem(s); see the lines above.`);
   }
   if (process.env.NODE_ENV !== 'production') return;
   try {

@@ -117,6 +117,8 @@ export interface ScanCandidateProposal {
   /** Stable within one proposal; the model's own index, never trusted as an identity. */
   key: string;
   name: string;
+  /** The place's own name in the local language or script, when the model knows it differs: the open geocoder often knows only that one. */
+  localName?: string;
   /** Town, district or area that disambiguates the name for a geocoder. */
   locality: string;
   kind: ScanKind;
@@ -257,9 +259,11 @@ export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
     const caution = text(c.caution, 200);
     const seasonalNote = text(c.seasonalNote, 200);
     const zone = text(c.zone, 60);
+    const localName = text(c.localName, 80);
     candidates.push({
       key: `c${candidates.length + 1}`,
       name,
+      ...(localName && localName.toLowerCase() !== name.toLowerCase() ? { localName } : {}),
       locality,
       kind,
       tier: pick(c.tier, SCAN_TIERS, 'classic', coerced, `${path}.tier`),

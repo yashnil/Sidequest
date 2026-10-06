@@ -47,3 +47,5 @@ export function deploymentProblems(env?: Record<string, string | undefined>): st
 export function capabilityRegistry(env?: Record<string, string | undefined>): CapabilityRegistry;
 export function modeLabel(mode: ProviderMode): string;
 export function modeExplanation(registry: CapabilityRegistry): string;
+export function hostedDeployment(env?: Record<string, string | undefined>): boolean;
+export function requiredConfigProblems(env?: Record<string, string | undefined>): string[];

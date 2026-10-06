@@ -1,3 +1,4 @@
+import { productEvent } from '@/lib/net/product-events';
 import { NextResponse } from 'next/server';
 import type { Itinerary } from '@sidequest/core';
 import { getItinerary, getTrip } from '@/lib/db/repository';
@@ -37,6 +38,7 @@ export async function GET(
    * the id cannot be used to tell "hidden" from "gone".
    */
   if (await tripAccessRefusal(id)) return new NextResponse('No such trip.', { status: 404 });
+  productEvent('export_used', id, { format: 'ics' });
 
   let itinerary: Itinerary | null;
   try {

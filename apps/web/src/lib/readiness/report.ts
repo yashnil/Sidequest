@@ -39,6 +39,14 @@ export interface ReadinessRow {
   configured: boolean;
   /** Operator words: why this state. Never a value, never a secret. */
   reason?: string;
+  /**
+   * PRIVATE ALPHA — the practical answer, for an operator who asks "can this
+   * deployment serve a traveller right now?": `ready`, `degraded` (the trip
+   * still works, with the consequence below) or `broken` (it does not).
+   */
+  verdict?: 'ready' | 'degraded' | 'broken';
+  /** What a traveller experiences because of this row, when it is not ready. */
+  consequence?: string;
 }
 
 export interface ReadinessReport {
@@ -72,7 +80,11 @@ export async function readinessReport(options: ProbeOptions = {}): Promise<Readi
   const pathClass = configuredPath === '' ? 'default (inside the working directory)' : absolute ? 'absolute path' : 'relative to the working directory';
   let database: ReadinessRow = { capability: 'database', state: 'failing', provider: 'sqlite', configured: true, reason: 'The database could not be opened. Check that the volume is mounted and SIDEQUEST_DB_PATH points into it.' };
   try {
-    getDb().prepare('SELECT 1').get();
+    const db = getDb();
+    db.prepare('SELECT 1').get();
+    /* A write lock proves the file is writable (a read-only or full volume fails here) without writing anything. */
+    db.exec('BEGIN IMMEDIATE');
+    db.exec('ROLLBACK');
     database = absolute
       ? { capability: 'database', state: 'working', provider: 'sqlite', configured: true }
       : { capability: 'database', state: 'degraded', provider: 'sqlite', configured: true, reason: 'The database is not on an absolute path, so a redeploy may discard it. Set SIDEQUEST_DB_PATH to a file on a mounted volume.' };
@@ -153,6 +165,19 @@ export async function readinessReport(options: ProbeOptions = {}): Promise<Readi
     rows.push(configuredOnly(capability, byId[id], why));
   }
 
+  // --- Private alpha: the rows a deployment owner asked for that were missing ---
+  const scanFood = (env.SIDEQUEST_POI_PROVIDER ?? '').trim().toLowerCase() === 'overpass';
+  rows.push(
+    scanFood
+      ? { capability: 'food_grounding', state: 'configured_unverified', provider: 'overpass', configured: true, reason: (env.SIDEQUEST_POI_URL ?? '').trim() ? 'Own Overpass endpoint; not polled.' : 'Public Overpass (a volunteer service); not polled.' }
+      : { capability: 'food_grounding', state: 'not_configured', provider: null, configured: false, reason: 'SIDEQUEST_POI_PROVIDER is not overpass: discovery scans name no restaurants.' },
+  );
+  const fx = (env.SIDEQUEST_FX_PROVIDER ?? '').trim().toLowerCase();
+  rows.push(fx === 'off' ? { capability: 'fx', state: 'not_configured', provider: null, configured: false, reason: 'SIDEQUEST_FX_PROVIDER=off.' } : { capability: 'fx', state: 'configured_unverified', provider: fx === 'fixture' ? 'fixture' : 'frankfurter', configured: true, reason: 'ECB reference rates via Frankfurter, fetched when a budget needs them; not polled.' });
+  const baseUrl = (env.SIDEQUEST_BASE_URL ?? '').trim();
+  const baseOk = /^https:\/\//.test(baseUrl) && !/localhost|127\.0\.0\.1|\.internal\b/.test(baseUrl);
+  rows.push(baseOk ? { capability: 'base_url', state: 'working', provider: null, configured: true } : { capability: 'base_url', state: baseUrl ? 'degraded' : 'not_configured', provider: null, configured: Boolean(baseUrl), reason: 'SIDEQUEST_BASE_URL is not a public https URL.' });
+
   // --- Accounts: configured, or not — never a half-state reported as either ---
   const halfGoogle = Boolean((env.GOOGLE_OAUTH_CLIENT_ID ?? '').trim()) !== Boolean((env.GOOGLE_OAUTH_CLIENT_SECRET ?? '').trim()) || (Boolean((env.GOOGLE_OAUTH_CLIENT_ID ?? '').trim()) && !(env.SIDEQUEST_BASE_URL ?? '').trim());
   const auth = byId['auth.sign_in'];
@@ -177,6 +202,14 @@ export async function readinessReport(options: ProbeOptions = {}): Promise<Readi
   const blocking = rows.filter((row) => PRIMARY.has(row.capability) && (row.state === 'failing' || row.state === 'not_configured' || (row.capability === 'database' && row.state === 'degraded')));
   const degraded = rows.filter((row) => !blocking.includes(row) && (row.state === 'degraded' || row.state === 'failing'));
 
+  for (const row of rows) {
+    const blocked = blocking.includes(row);
+    const notReady = row.state === 'failing' || row.state === 'degraded' || row.state === 'not_configured';
+    row.verdict = blocked ? 'broken' : notReady && CONSEQUENCE[row.capability] !== null ? 'degraded' : 'ready';
+    const consequence = CONSEQUENCE[row.capability];
+    if (row.verdict !== 'ready' && consequence) row.consequence = consequence;
+  }
+
   return {
     ready: blocking.length === 0,
     mode: registry.mode,
@@ -187,6 +220,31 @@ export async function readinessReport(options: ProbeOptions = {}): Promise<Readi
     degraded: degraded.map((row) => row.capability),
   };
 }
+
+/**
+ * What a traveller experiences when a capability is not ready, in their terms.
+ * `null`: an absent optional capability with no effect worth reporting.
+ */
+const CONSEQUENCE: Record<string, string | null> = {
+  database: 'Trips cannot be saved or reopened.',
+  fixtures: 'Travellers would receive saved sample data instead of real trips.',
+  composition: 'Discovery scans and trips without a board cannot be generated.',
+  destination_resolution: 'Destinations place from the bundled country reference only; towns and regions may not place.',
+  destination_suggestions: null,
+  routing: 'Travel times use labelled distance estimates instead of measured routes.',
+  routing_global: 'Travel times outside the local router use labelled distance estimates.',
+  weather: 'Days are planned without a forecast; weather is marked unavailable.',
+  climate: 'Best-time advice and typical-weather notes are unavailable.',
+  map: 'Maps may not draw; the itinerary itself is unaffected.',
+  places: 'Proposed places are placed by the open geocoder only; some named places may not place.',
+  place_hours: null,
+  photos: null,
+  food_grounding: 'Meals give area-level advice instead of named venues.',
+  fx: 'Budgets stay in US dollars without a local-currency figure.',
+  base_url: 'Share links, calendar feeds and sign-in callbacks may point somewhere a traveller cannot reach.',
+  auth: 'Trips belong to the browser that made them; there is no sign-in to carry them across devices.',
+  refinement: 'Ask Sidequest refinements cannot be saved.',
+};
 
 function fromProbe(capability: string, provider: string | null, verdict: ProbeVerdict): ReadinessRow {
   return { capability, state: verdict.state, provider, configured: verdict.state !== 'not_configured', reason: verdict.reason };

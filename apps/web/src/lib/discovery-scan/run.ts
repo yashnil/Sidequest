@@ -2,6 +2,7 @@ import 'server-only';
 import { after } from 'next/server';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import { matchNamedMustDos } from './match';
+import { productEvent } from '../net/product-events';
 import { z } from 'zod';
 import {
   assembleScanRegion,
@@ -227,6 +228,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
   }, HEARTBEAT_MS);
   const fail = (kind: ScanFailureKind, detail: string) => {
     const ref = failScan(tripId, scanId, kind, new Date());
+    productEvent('discovery_failed', tripId, { kind });
     console.error(`Discovery scan failed [ref ${ref}] ${kind}: ${detail}`);
   };
   try {
@@ -439,6 +441,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     } catch (error) {
       console.warn('Scan pre-selection failed; the board stays unpicked', error instanceof Error ? error.message : error);
     }
+    productEvent('discovery_completed', tripId, { proposed: proposal.candidates.length, placed: plan.points.filter((p) => p.kind === 'place').length, unplaced: plan.unplaced.length, supplement: recovery.attempted, seconds: Math.round((Date.now() - started) / 1000) });
     console.warn(`Discovery scan ready for ${tripId} in ${Math.round((Date.now() - started) / 1000)}s: ${region.places.length} places, ${region.basePortfolio?.bases.length ?? 1} bases, matrix ${timed.matrix.provenance.kind} (${timed.measuredPairs}/${timed.totalPairs}).`);
 
     // --- 6. "Plan with smart defaults": the build the traveller asked to follow the scan (slice D) ---
