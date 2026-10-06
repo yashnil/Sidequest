@@ -144,7 +144,8 @@ export function resolverQueryFor(node: IntentNode): string {
   if (node.kind === 'country' && node.countryCode) return countryFacts(node.countryCode)?.name ?? node.label;
   const country = node.countryCode ? countryFacts(node.countryCode)?.name : null;
   const label = node.label.replace(/^(the)\s+/i, '');
-  return country && !new RegExp(`\\b${country}\\b`, 'i').test(label) ? `${label}, ${country}` : label;
+  const within = node.within && !new RegExp(`\\b${node.within.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(label) ? `, ${node.within}` : '';
+  return country && !new RegExp(`\\b${country}\\b`, 'i').test(label) ? `${label}${within}, ${country}` : `${label}${within}`;
 }
 
 /**
@@ -243,7 +244,9 @@ export async function resolveIntentGraph(input: {
   for (const child of order) {
     if (!input.resolver || calls >= budget) break;
     if (child.kind === 'vague_region') continue; // "rural Japan" has no row anywhere; the country point is the honest anchor.
-    const answer = await ask(resolverQueryFor(child));
+    let answer = await ask(resolverQueryFor(child));
+    /* Asked inside the container the phrase named and found nothing there: ask for the part on its own, once. */
+    if (child.within && (!answer || answer.candidates.length === 0) && calls < budget) answer = await ask(resolverQueryFor({ ...child, within: undefined }));
     if (!answer) continue;
     partResolutions.set(child.id, answer);
     if (child.kind === 'country') {
@@ -283,16 +286,35 @@ export async function resolveIntentGraph(input: {
     }
   }
 
+  /*
+   * V1 — "A, B" WHERE B IS ONLY WHERE A IS.
+   *
+   * "Moab, Utah", "Brooklyn, New York": two comma parts are a list only when
+   * they are two places. When the first placed inside the second's published
+   * extent and the second is plainly the larger area, the second is the
+   * address, not a second destination — and the union of the two made a town
+   * trip a state-wide region. Decided by placement, never by the names: "Tokyo,
+   * Kyoto" stays two cities because neither sits inside the other.
+   */
+  let working = input.graph;
+  const containment = containedPart(input.graph, resolutions);
+  if (containment) {
+    const { place, container } = containment;
+    working = { ...input.graph, children: [{ ...place, within: container.label }], relationship: 'single' };
+    resolutions.delete(container.id);
+    leads.delete(container.id);
+  }
+
   /* --- the world-model tier, for one region-like part the evidence could not settle --------------- */
   let interpretation: GraphResolutionOutcome['interpretation'] = null;
   const conceptParts: SemanticPart[] = [];
   const conceptGateways: SemanticGateway[] = [];
   let concept: InterpretedConcept | null = null;
-  const only = input.graph.children.length === 1 ? input.graph.children[0]! : null;
+  const only = working.children.length === 1 ? working.children[0]! : null;
   if (only && input.interpreter !== null && interpretationWorthwhile(only, partResolutions.get(only.id), leads.get(only.id) ?? null)) {
     const evidence = (partResolutions.get(only.id)?.candidates ?? []).slice(0, 5).map((c) => `${c.displayName} (${c.providerClass?.category ?? c.entityType}${c.countryCode ? `, ${c.countryCode}` : ''})`);
     const interpreterStartedMs = Date.now();
-    const outcome = await interpretDestinationConcept({ text: input.graph.rawText, graph: input.graph, evidence, ...(input.interpreter !== undefined ? { interpreter: input.interpreter } : {}) });
+    const outcome = await interpretDestinationConcept({ text: working.rawText, graph: working, evidence, ...(input.interpreter !== undefined ? { interpreter: input.interpreter } : {}) });
     clock.interpreterMs = Date.now() - interpreterStartedMs;
     interpretation = { concept: outcome.concept, source: outcome.source, modelCalls: outcome.modelCalls };
     concept = outcome.concept && outcome.concept.isPlace ? outcome.concept : null;
@@ -357,7 +379,7 @@ export async function resolveIntentGraph(input: {
         const centre = extent?.center ?? (lead && !REGION_TYPE_SET.has(concept.type) ? lead.center : null) ?? (lead && lead.entityType === 'natural_region' ? lead.center : null);
         if (centre) {
           resolutions.set(only.id, {
-            label: input.graph.travellerLabel,
+            label: working.travellerLabel,
             center: centre,
             ...(extent && conceptParts.length >= 2 ? { bounds: extent.bounds } : {}),
             featureType: entityTypeOfSemantic(concept.type, concept.countries.length),
@@ -381,7 +403,7 @@ export async function resolveIntentGraph(input: {
    * phrase's own meaning and every consumer can read the centre for what it is.
    */
   const standIns = new Set<string>();
-  for (const child of input.graph.children) {
+  for (const child of working.children) {
     if (resolutions.has(child.id)) continue;
     const reference = referenceResolution(child);
     if (!reference) continue;
@@ -400,10 +422,10 @@ export async function resolveIntentGraph(input: {
      * country-wide map centred on a city a thousand miles from the destination.
      * That is a stand-in, and it is recorded as one.
      */
-    if (child.kind === 'country' || countryNamedInPhrase(input.graph.rawText, child.countryCode)) continue;
+    if (child.kind === 'country' || countryNamedInPhrase(working.rawText, child.countryCode)) continue;
     standIns.add(child.id);
   }
-  let graph = attachIntentResolutions(input.graph, resolutions);
+  let graph = attachIntentResolutions(working, resolutions);
   if (concept && concept.countries.length > 0 && only) {
     /* The concept's countries are the phrase's countries: "the Alps" spans six, whatever the one row said. */
     const countries = [...new Set([...graph.countries, ...concept.countries])];
@@ -419,6 +441,23 @@ export async function resolveIntentGraph(input: {
     interpretation,
     timings: { totalMs: Date.now() - startedMs, geocoderMs: clock.geocoderMs, interpreterMs: clock.interpreterMs, geocoderCalls: calls, cacheHit: false },
   };
+}
+
+
+/** The place and its container, when a two-part comma phrase names a place and the area it sits in. */
+function containedPart(graph: DestinationIntentGraph, resolutions: ReadonlyMap<string, IntentNodeResolution>): { place: IntentNode; container: IntentNode } | null {
+  if (graph.children.length !== 2 || graph.relationship === 'corridor' || !/^[^,]+,\s*[^,]+$/.test(graph.rawText) || /\band\b/i.test(graph.rawText)) return null;
+  const [place, container] = graph.children as [IntentNode, IntentNode];
+  const a = resolutions.get(place.id);
+  const b = resolutions.get(container.id);
+  if (!a || !b?.bounds || a.source === 'reference') return null;
+  const { southWest: sw, northEast: ne } = b.bounds;
+  const inside = a.center.lat >= sw.lat && a.center.lat <= ne.lat && a.center.lng >= sw.lng && a.center.lng <= ne.lng;
+  if (!inside) return null;
+  const area = (box: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } }) => Math.max(1e-9, (box.northEast.lat - box.southWest.lat) * (box.northEast.lng - box.southWest.lng));
+  /* The container must be plainly the larger area; two overlapping neighbours of similar size are a list. */
+  if (a.bounds && area(b.bounds) < 4 * area(a.bounds)) return null;
+  return { place, container };
 }
 
 // ---------------------------------------------------------------------------
@@ -820,9 +859,17 @@ export interface ConceptCache {
   write(key: string, value: CachedConcept): void;
 }
 
+/**
+ * Bumped whenever the *reading* changes without the stored shape changing, so a
+ * thirty-day concept cached under the old reading is not served. 2: "Place,
+ * Country" is one place (no longer the place plus the whole country), and a
+ * state whose settlement answer is itself stays a state (V1, 2026-10-06).
+ */
+const CONCEPT_CACHE_EPOCH = 2;
+
 /** The cache key: the phrase, normalised, plus the resolution and semantics versions so a shape change invalidates everything. */
 export function conceptCacheKeyFor(text: string): string {
-  return `destination-concept|v${DESTINATION_SEMANTICS_VERSION}.${DESTINATION_RESOLUTION_VERSION}|${normalizeDestinationQuery(text)}`;
+  return `destination-concept|v${DESTINATION_SEMANTICS_VERSION}.${DESTINATION_RESOLUTION_VERSION}.e${CONCEPT_CACHE_EPOCH}|${normalizeDestinationQuery(text)}`;
 }
 
 export async function resolveDestinationPhrase(input: { text: string; resolver: DestinationResolver | null; now: Date; maxGeocoderCalls?: number; interpreter?: DestinationInterpreter | null; cache?: ConceptCache }): Promise<{ outcome: GraphResolutionOutcome; resolution: DestinationResolution; semantics: DestinationSemantics }> {

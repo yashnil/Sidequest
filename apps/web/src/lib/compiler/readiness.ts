@@ -4,6 +4,7 @@ import {
   openProvidersEnabled,
 } from '../providers/switches';
 import { capabilityRegistry } from '../capabilities';
+import { productionFixtureRefusal } from '../providers/capabilities.mjs';
 
 /**
  * WHICH PROVIDER SET RUNS — ANSWERABLE WITHOUT IMPORTING ANY OF THEM.
@@ -86,6 +87,22 @@ function blockedActions(): ProviderReadiness['nextActions'] {
 
 export function providerReadiness(): ProviderReadiness {
   const choice = compilerProviderChoice();
+  /*
+   * V1 convergence — synthetic worlds may not be researched for a traveller in
+   * production without the explicit test-server opt-in
+   * (`providers/capabilities.mjs#productionFixtureRefusal`). The traveller is
+   * told research is unavailable; the switch names are for the operator.
+   */
+  const guard = productionFixtureRefusal(process.env);
+  if (guard.refused) {
+    return {
+      ready: false,
+      choice,
+      message: 'Sidequest cannot research a new destination right now, so only places it already holds can be explored this way.',
+      nextActions: blockedActions(),
+      missing: ['SIDEQUEST_FIXTURES=allow (or unset: ' + guard.switches.join(', ') + ')'],
+    };
+  }
   if (choice === 'fixture') {
     return {
       ready: true,

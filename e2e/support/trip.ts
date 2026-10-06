@@ -89,6 +89,8 @@ export interface CreateTripOptions {
   pickSuggestion?: boolean | RegExp;
   /** `?have=plan` — the homepage's third door. */
   havePlan?: boolean;
+  /** The plan itself, one day per line (only on the `havePlan` door). */
+  existingPlan?: string;
   /** Which party shape to pick. Defaults to the couple every existing spec assumes. */
   party?: 'solo' | 'couple' | 'friends' | 'family' | 'other';
 }
@@ -129,6 +131,7 @@ export async function createTrip(
 
   // Anything already fixed: nothing, unless this spec is about something that is.
   await expect(page.getByTestId('setup-flow')).toHaveAttribute('data-step', 'fixed');
+  if (options.existingPlan) await page.getByTestId('setup-existing-plan').fill(options.existingPlan);
   if (options.mustDo) await page.getByLabel(/Booked, fixed, or would regret missing/).fill(options.mustDo);
   if (options.avoid) await page.getByLabel(/Anything you would rather not do/).fill(options.avoid);
   await continueButton(page).click();
@@ -177,6 +180,23 @@ export async function answerEveryQuestion(page: Page): Promise<void> {
  * just triggered had rendered, then waited twenty seconds for a heading that was
  * two steps away.
  */
+/**
+ * V1 CONVERGENCE — THE RESEARCH PATH IS BEHIND A URL NOW.
+ *
+ * The normal flow offers the Discovery scan ("Find places for my trip"); the
+ * old "Explore experiences first" link that starts the compile path under
+ * `/plan` renders only when the questionnaire is opened with `?research=1`.
+ * Specs that exercise the compile path open that door here, which is the
+ * same press on the same control — only the way to reach it moved.
+ */
+export async function openResearchDoor(page: Page): Promise<void> {
+  // Trip creation redirects; reading the URL before it lands made this a silent no-op.
+  const url = new URL(page.url());
+  if (!/\/questionnaire$/.test(url.pathname) || url.searchParams.get('research') === '1') return;
+  url.searchParams.set('research', '1');
+  await page.goto(url.toString());
+}
+
 export async function reachScope(page: Page): Promise<void> {
   await waitForLookup(page);
 
@@ -195,6 +215,7 @@ export async function reachScope(page: Page): Promise<void> {
      * A known destination lands on the interview; the research steps are an
      * explicit request from there. See `requestExploration`.
      */
+    await openResearchDoor(page);
     const explore = page.getByTestId('interview-explore');
     if (await explore.isVisible().catch(() => false)) {
       await waitUntilInteractive(explore);
@@ -251,7 +272,14 @@ export const REGION_READY_HEADING = /^We have been through /;
  * traveller's preferences; the interview can still be answered afterwards.
  */
 export async function requestExploration(page: Page): Promise<void> {
-  await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)/, { timeout: 20_000 });
+  /*
+   * `/plan` hands a known destination on to the interview, and the research
+   * door is on the questionnaire — so wait for that page here, once. Waiting
+   * inside `openResearchDoor` stalled `reachScope`, which calls it on every turn
+   * of its loop while it is legitimately on `/plan`.
+   */
+  await page.waitForURL(/\/trips\/[^/]+\/questionnaire/, { timeout: 30_000 }).catch(() => undefined);
+  await openResearchDoor(page);
   const explore = page.getByTestId('interview-explore');
   await expect(explore).toBeVisible({ timeout: 20_000 });
   await waitUntilInteractive(explore);

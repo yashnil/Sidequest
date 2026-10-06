@@ -1,22 +1,24 @@
 'use server';
+import { seedPlannerAutoPicks } from '@/lib/planning/seed-autopicks';
 
 import { revalidatePath } from 'next/cache';
 import {
-  autoSelect,
-  countTripDays,
+  describeAutoPickChange,
   selectionStatusSchema,
+  skipReasonSchema,
   type ImageSubject,
   type SelectionStatus,
+  type SkipReason,
 } from '@sidequest/core';
 import {
   clearFoodSelection,
-  clearSelection,
   getProfile,
   getSelections,
   getTrip,
-  replaceAutoSelections,
   setFoodSelection,
   setSelection,
+  travellerDecisions,
+  withdrawSelection,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion } from '@/lib/region';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
@@ -40,13 +42,34 @@ export interface AutoPickResult extends ActionResult {
    * actually stored rather than leaving the UI to guess.
    */
   selections?: Record<string, SelectionStatus>;
+  /** The included cards Sidequest picked (as opposed to the traveller), after the write. */
+  autoPicks?: string[];
+  /** What this press changed, in one sentence — said even when nothing did. */
+  change?: string;
   notes?: string[];
+}
+
+/**
+ * The board's view of the store: the three statuses a card can show, and which
+ * includes are Sidequest's. A `dismissed` row renders as an undecided card.
+ */
+function boardState(tripId: string): { selections: Record<string, SelectionStatus>; autoPicks: string[] } {
+  const selections: Record<string, SelectionStatus> = {};
+  const autoPicks: string[] = [];
+  for (const stored of getSelections(tripId)) {
+    if (stored.status === 'dismissed') continue;
+    selections[stored.placeId] = stored.status;
+    if (stored.source === 'auto' && stored.status === 'included') autoPicks.push(stored.placeId);
+  }
+  return { selections, autoPicks };
 }
 
 export async function setSelectionAction(
   tripId: string,
   placeId: string,
   status: SelectionStatus | null,
+  /** Only on a skip: why. Persisted on the row. */
+  reason?: SkipReason | null,
 ): Promise<ActionResult> {
   try {
     if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
@@ -55,9 +78,12 @@ export async function setSelectionAction(
     const refusal = await tripAccessRefusal(tripId);
     if (refusal) return { ok: false, error: refusal };
     if (status === null) {
-      clearSelection(tripId, placeId);
+      // Un-ticking an include is a decision ("not for me") and is recorded as one,
+      // so no automatic pass puts it back. See `withdrawSelection`.
+      withdrawSelection(tripId, placeId);
     } else {
-      setSelection(tripId, placeId, selectionStatusSchema.parse(status), 'user');
+      const parsedReason = reason ? skipReasonSchema.parse(reason) : null;
+      setSelection(tripId, placeId, selectionStatusSchema.parse(status), 'user', parsedReason);
     }
     revalidatePath(`/trips/${tripId}/discover`);
     return { ok: true };
@@ -128,28 +154,31 @@ export async function autoPickAction(tripId: string): Promise<AutoPickResult> {
      * picked more places than it had. Reading the store here is the only way the
      * two halves can agree, and it is why this call site owns the input.
      *
-     * Only rows the traveller wrote. An `auto` row is this pass's own previous
-     * answer, is about to be deleted, and treating it as a decision would freeze
-     * the first pre-selection in place for ever.
+     * Only rows the traveller wrote — `dismissed` un-ticks included, which is
+     * what stops an un-ticked pick coming back. An `auto` row is this pass's own
+     * previous answer, is about to be deleted, and treating it as a decision
+     * would freeze the first pre-selection in place for ever.
      */
-    const decided: Record<string, SelectionStatus> = {};
-    for (const stored of getSelections(tripId)) {
-      if (stored.source === 'user') decided[stored.placeId] = stored.status;
-    }
-    const selection = autoSelect({
-      candidates: board.candidates,
-      profile,
-      tripDays: countTripDays(trip.basics.startDate, trip.basics.endDate),
-      decided,
-      transitUnmeasured: board.transitUnmeasured,
-    });
-
-    replaceAutoSelections(tripId, selection.selectedIds);
+    const before = boardState(tripId);
+    const decided = travellerDecisions(tripId);
+    // V1 — the planner is the auto-pick: it plans the whole board around the traveller's own decisions and its schedule is the pick.
+    const selection = seedPlannerAutoPicks({ trip, profile, region: resolved.context, candidates: board.candidates });
     revalidatePath(`/trips/${tripId}/discover`);
 
-    const selections: Record<string, SelectionStatus> = {};
-    for (const stored of getSelections(tripId)) selections[stored.placeId] = stored.status;
-    return { ok: true, selections, notes: selection.notes };
+    const after = boardState(tripId);
+    const onBoard = new Set(board.candidates.map((candidate) => candidate.place.id));
+    const travellerPicks = Object.entries(decided).filter(
+      ([placeId, status]) => status === 'included' && onBoard.has(placeId),
+    ).length;
+    const change = describeAutoPickChange({ before: before.autoPicks, after: after.autoPicks, travellerPicks });
+    return {
+      ok: true,
+      selections: after.selections,
+      autoPicks: after.autoPicks,
+      change: change.message,
+      // An unchanged board does not re-explain a selection it did not make.
+      notes: change.changed ? selection.notes : [],
+    };
   } catch (error) {
     console.error('Failed to auto-pick', error);
     return { ok: false, error: 'We could not build a selection just then. Try again.' };

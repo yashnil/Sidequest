@@ -1,5 +1,6 @@
 'use client';
 
+import { placementNote } from './placement-note';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -230,6 +231,8 @@ export function SetupFlow({
    * the kind of thing it is still looking for instead of pretending.
    */
   const [locating, setLocating] = useState<string | null>(null);
+  /* V1 convergence — the reason a lookup placed nothing, when the failure was ours (`placement-note.ts`). */
+  const [unplacedNote, setUnplacedNote] = useState<string | null>(null);
   const placedFor = useRef<string | null>(null);
 
   const place = useCallback((text: string) => {
@@ -237,10 +240,12 @@ export function SetupFlow({
     if (query.length < 2 || placedFor.current === query) return;
     placedFor.current = query;
     setPlacing(true);
+    setUnplacedNote(null);
     void placeDestinationAction({ text: query })
       .then((result) => {
         if (placedFor.current !== query) return;
         setLocating(!result.placed && result.reason === 'locating' && result.locating ? result.locating.kindLabel : null);
+        setUnplacedNote(result.placed ? null : placementNote(result.reason));
         if (result.placed) {
           const placed = result.placed;
           setDraft((current) =>
@@ -261,6 +266,7 @@ export function SetupFlow({
       })
       .catch(() => {
         /* Not placed is not an error the traveller has to act on; the canvas says so quietly. */
+        if (placedFor.current === query) setUnplacedNote(placementNote('request_failed'));
       })
       .finally(() => {
         if (placedFor.current !== query) return;
@@ -383,7 +389,7 @@ export function SetupFlow({
 
               {step === 'nights' ? <NightsStep draft={draft} headingRef={heading} onChange={patch} onSubmit={advance} /> : null}
               {step === 'who' ? <WhoStep draft={draft} headingRef={heading} onChange={patch} /> : null}
-              {step === 'fixed' ? <FixedStep draft={draft} headingRef={heading} onChange={patch} /> : null}
+              {step === 'fixed' ? <FixedStep draft={draft} headingRef={heading} onChange={patch} hasPlan={intent === 'has_plan'} /> : null}
             </motion.div>
           </AnimatePresence>
 
@@ -405,7 +411,7 @@ export function SetupFlow({
         </div>
 
         <aside className="min-w-0">
-          <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} locating={locating} scope={scope} />
+          <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} locating={locating} unplacedNote={unplacedNote} scope={scope} />
           {/*
             V8 — THE TRIP PORTRAIT. The same object the review later opens on:
             a compact set of facts the traveller has actually given, each
@@ -694,7 +700,7 @@ function Counter({ label, min, value, onChange }: { label: string; min: number; 
 // Anything already fixed
 // ---------------------------------------------------------------------------
 
-function FixedStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRef: React.RefObject<HTMLHeadingElement | null>; onChange: (patch: Partial<SetupDraft>) => void }) {
+function FixedStep({ draft, headingRef, onChange, hasPlan }: { draft: SetupDraft; headingRef: React.RefObject<HTMLHeadingElement | null>; onChange: (patch: Partial<SetupDraft>) => void; hasPlan: boolean }) {
   return (
     <div>
       <p className="label">The trip</p>
@@ -704,6 +710,30 @@ function FixedStep({ draft, headingRef, onChange }: { draft: SetupDraft; heading
       <p className="mt-3 max-w-[52ch] type-body text-ink-muted">Only what the plan has to work around. How you like to travel comes next.</p>
 
       <div className="mt-7 space-y-6 max-w-2xl">
+        {/*
+          V1 — "I already have a plan": the plan itself, in the traveller's order.
+          Its places become their own must-dos, and the board checks the plan as
+          written — rushed days, doubling back, travel over their limit, closures,
+          weather and what it leaves out — before anything is built.
+        */}
+        {hasPlan || draft.existingPlan ? (
+          <div>
+            <label htmlFor="setup-existing-plan" className="block text-sm font-medium text-ink">
+              Your plan, one day per line
+            </label>
+            <textarea
+              id="setup-existing-plan"
+              data-testid="setup-existing-plan"
+              rows={5}
+              maxLength={2000}
+              value={draft.existingPlan}
+              onChange={(event) => onChange({ existingPlan: event.target.value })}
+              placeholder={'Day 1: the old town, the castle, a market for lunch\nDay 2: a day trip to the lakes'}
+              className={cx('mt-2 w-full resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint', FOCUS_RING)}
+            />
+            <p className="mt-1.5 type-small text-ink-faint">We check it against real travel times, your pace and the forecast, and keep every place you name.</p>
+          </div>
+        ) : null}
         <div>
           <label htmlFor="setup-fixed" className="block text-sm font-medium text-ink">
             Booked, fixed, or would regret missing

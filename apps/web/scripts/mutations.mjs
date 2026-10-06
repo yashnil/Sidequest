@@ -387,7 +387,7 @@ export const MUTATIONS = [
       },
     ],
     tests: [
-      'apps/web/src/middleware.test.ts',
+      'apps/web/src/proxy.test.ts',
       'apps/web/src/app/labs/actions.architecture.test.ts',
     ],
   },
@@ -433,12 +433,12 @@ export const MUTATIONS = [
       'The matcher is pointed at a route that does not exist, so Next never invokes the gate for /labs. M14 mutates the predicate; this mutates whether the predicate is ever consulted, which is the half that was undefended.',
     edits: [
       {
-        file: 'apps/web/src/middleware.ts',
+        file: 'apps/web/src/proxy.ts',
         find: "  matcher: ['/labs/:path*'],",
         replace: "  matcher: ['/never-a-real-route/:path*'],",
       },
     ],
-    tests: ['apps/web/src/middleware.test.ts'],
+    tests: ['apps/web/src/proxy.test.ts'],
   },
   {
     id: 'M17-rate-limits-never-refuse',

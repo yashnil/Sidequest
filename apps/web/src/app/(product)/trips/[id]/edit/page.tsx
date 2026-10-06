@@ -5,6 +5,8 @@ import { SetupFlow } from '@/components/setup/SetupFlow';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { buttonClass } from '@/components/ui';
+import { hasItinerary } from '@/lib/db/repository';
+import { tripHomeHref } from '@/lib/trips/trip-home';
 
 /**
  * CHANGING YOUR MIND, WITHOUT LOSING THE TRIP.
@@ -51,6 +53,8 @@ export default async function EditTripPage({ params }: { params: Promise<{ id: s
 
   const intent = getIntent(id);
   const answers = intent?.composer ?? null;
+  /* V1 convergence — the trip's own home, never `/plan`, which bounces a trip that did not take the research path. */
+  const back = tripHomeHref(id, hasItinerary(id));
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -86,7 +90,7 @@ export default async function EditTripPage({ params }: { params: Promise<{ id: s
               trip — this one stays where it is either way.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href={`/trips/${id}/plan`} className={buttonClass('primary')}>
+              <Link href={back} className={buttonClass('primary')} data-testid="edit-back-to-trip">
                 Back to this trip
               </Link>
               <Link href="/trips/new" className={buttonClass('ghost')}>
@@ -98,7 +102,7 @@ export default async function EditTripPage({ params }: { params: Promise<{ id: s
       </div>
 
       <p className="mt-14 border-t border-rule pt-6 text-sm text-ink-faint">
-        <Link href={`/trips/${id}/plan`} className="underline underline-offset-2">
+        <Link href={back} className="underline underline-offset-2" data-testid="edit-leave">
           Leave this without changing anything
         </Link>{' '}
         — nothing here is saved until you press the button above.

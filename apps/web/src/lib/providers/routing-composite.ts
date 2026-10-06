@@ -57,11 +57,23 @@ interface LocalReach {
  */
 const COVERAGE_STRIKES_BEFORE_FALLTHROUGH = 1;
 
-export function createCompositeRouting(input: { local: RoutingProvider | null; localCoverage: RoutingCoverage; global: RoutingProvider | null }): RoutingProvider | null {
+export function createCompositeRouting(input: {
+  local: RoutingProvider | null;
+  localCoverage: RoutingCoverage;
+  global: RoutingProvider | null;
+  /**
+   * V1 convergence — the readiness probe (`readiness/probe-cache.ts`) found the
+   * local router unreachable within its TTL. The composite starts latched, so
+   * the first build after a router dies does not pay a request timeout to
+   * learn what the probe already knew. Only an affirmative "could not reach"
+   * verdict sets this; an unprobed router is asked as before.
+   */
+  localKnownUnreachable?: boolean;
+}): RoutingProvider | null {
   const { local, localCoverage, global } = input;
   if (!local && !global) return null;
 
-  const reach: LocalReach = { outOfCoverage: false, unreachable: false, refusals: 0 };
+  const reach: LocalReach = { outOfCoverage: false, unreachable: Boolean(input.localKnownUnreachable && local), refusals: 0 };
   /** The local router is out of the picture for the rest of this build, for either reason. */
   const localExhausted = () => reach.outOfCoverage || reach.unreachable;
 

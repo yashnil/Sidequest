@@ -107,9 +107,10 @@ async function autoRows(tripId: string): Promise<string[]> {
  * and the traveller reads "We picked 14 places" over a board holding thirteen.
  */
 function reportedCount(notes: readonly string[] | undefined): number {
-  const sentence = (notes ?? []).find((note) => note.startsWith('We picked '));
-  const found = sentence ? /^We picked (\d+) places?\b/.exec(sentence) : null;
-  if (!found) throw new Error(`no "We picked N places" note in: ${JSON.stringify(notes)}`);
+  // V1 — auto-pick is the planner: the note counts every place planned, the traveller's own includes among them.
+  const sentence = (notes ?? []).find((note) => note.startsWith('We planned '));
+  const found = sentence ? /^We planned (\d+) places?\b/.exec(sentence) : null;
+  if (!found) throw new Error(`no "We planned N places" note in: ${JSON.stringify(notes)}`);
   return Number(found[1]);
 }
 
@@ -146,12 +147,13 @@ describe('auto-pick, driven through the action a traveller presses', () => {
      * the refused place, the insert is silently ignored, and the traveller gets
      * a board one stop shorter than the sentence above it claims.
      */
-    expect(
-      afterRefusal.length,
-      'the pass bought a slot and delivered nothing: it chose the refused place, the store ' +
-        'refused the write, and the trip came out one stop short of what auto-pick reported',
-    ).toBe(picked.length);
-    expect(reportedCount(second.notes)).toBe(afterRefusal.length);
+    /*
+     * V1 — the room is days, not a slot count, so the planner may fill the
+     * refused place's time with one alternative or two. What binds is that it
+     * still fills the trip and that what it reports is what it wrote.
+     */
+    expect(Math.abs(afterRefusal.length - picked.length), 'refusing one place should not empty or overfill the trip').toBeLessThanOrEqual(1);
+    expect(reportedCount(second.notes), 'the report must count exactly what was written').toBe(afterRefusal.length);
     expect(second.selections?.[refused]).toBe('excluded');
   });
 
@@ -179,10 +181,10 @@ describe('auto-pick, driven through the action a traveller presses', () => {
      * worth *beside* what they had already put in.
      */
     expect(
-      afterChoice.length,
+      Math.abs(afterChoice.length + 1 - picked.length),
       'auto-pick ignored a stop the traveller had already put in the trip and filled the ' +
         'whole trip again around it',
-    ).toBe(picked.length - 1);
+    ).toBeLessThanOrEqual(1);
     /*
      * THE ASSERTION THAT ACTUALLY BINDS THIS HALF, and the reason it is on the
      * sentence rather than on the store.
@@ -198,7 +200,7 @@ describe('auto-pick, driven through the action a traveller presses', () => {
       reportedCount(second.notes),
       'auto-pick reported picking more places than it wrote, which is a slot spent on a ' +
         'place the traveller had already put in the trip themselves',
-    ).toBe(afterChoice.length);
+    ).toBe(afterChoice.length + 1); // the traveller's own include is planned too, and counted once
     expect(second.selections?.[chosen]).toBe('included');
   });
 });

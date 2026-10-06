@@ -116,10 +116,27 @@ export interface DestinationEnvelope {
   routeObjectives?: readonly string[];
 }
 
+/**
+ * Discovery Board decisions as compact signals, projected from the one
+ * `DiscoveryDecisions` object (`@sidequest/core`, `buildDiscoveryDecisions`).
+ *
+ * `mustInclude`, `interested` and `avoid` are the traveller's own decisions;
+ * `recommended` is Sidequest's pre-selection and is never described as
+ * something the traveller chose. `omitted` counts what a prompt-size cap left
+ * out — never silently. The traveller's must-includes are never capped.
+ */
 export interface BoardSignals {
+  /** Traveller includes only. */
   mustInclude: readonly string[];
+  /** Traveller maybes. */
   interested: readonly string[];
+  /** Traveller skips. */
   avoid: readonly string[];
+  /** The skip reason by name, where the traveller gave one ("too expensive"). */
+  avoidReasons?: Readonly<Record<string, string>>;
+  /** Sidequest's own pre-selection, fit order. */
+  recommended?: readonly string[];
+  omitted?: { interested: number; avoid: number; recommended: number };
 }
 
 export interface CompositionContext {
@@ -394,17 +411,32 @@ export function compositionUntrustedPayload(context: CompositionContext): Record
       dislikes: brief.ownWords.dislikes,
       mobilityNotes: brief.ownWords.mobilityNotes ?? '',
       ...(brief.ownWords.groupNotes ? { groupNotes: brief.ownWords.groupNotes } : {}),
-      ...(boardSignals
+      ...(boardSignals && boardSignals.mustInclude.length + boardSignals.interested.length + boardSignals.avoid.length > 0
         ? {
             discoveryBoard: {
-              note: 'Places the traveller marked on their Discovery Board. Signals only — not a list of what exists.',
-              mustInclude: boardSignals.mustInclude.slice(0, 10),
-              interested: boardSignals.interested.slice(0, 10),
-              avoid: boardSignals.avoid.slice(0, 10),
+              note: 'Places the traveller themselves marked on their Discovery Board. Signals only — not a list of what exists.',
+              travellerMustIncludes: boardSignals.mustInclude,
+              travellerMaybes: boardSignals.interested,
+              travellerExclusions: boardSignals.avoid.map((name) => (boardSignals.avoidReasons?.[name] ? `${name} (${boardSignals.avoidReasons[name]})` : name)),
+              ...(boardSignals.omitted && boardSignals.omitted.interested > 0 ? { travellerMaybesNotShown: boardSignals.omitted.interested } : {}),
+              ...(boardSignals.omitted && boardSignals.omitted.avoid > 0 ? { travellerExclusionsNotShown: boardSignals.omitted.avoid } : {}),
             },
           }
         : {}),
     },
+    /*
+     * Outside travellerOwnWords on purpose: these were chosen by Sidequest, not
+     * written or marked by the traveller.
+     */
+    ...(boardSignals?.recommended && boardSignals.recommended.length > 0
+      ? {
+          sidequestRecommendedCandidates: {
+            note: 'Pre-selected automatically by Sidequest, not by the traveller. Use where they fit the plan; drop any that do not.',
+            names: boardSignals.recommended,
+            ...(boardSignals.omitted && boardSignals.omitted.recommended > 0 ? { notShown: boardSignals.omitted.recommended } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -549,7 +581,7 @@ export function buildCompositionTask(context: CompositionContext): string {
     ...(context.bookedFacts && context.bookedFacts.length > 0
       ? ['', 'BOOKED FACTS (hard). These are already booked and paid for. Build the trip around them exactly as stated: a booked hotel is the base for those nights, a booked flight or train fixes the arrival or departure, a booked ticket fixes that hour of that day. Do not move, replace or question them.', ...context.bookedFacts.map((line) => `- ${line}`)]
       : []),
-    'Their free text, must-dos, dislikes, mobility notes and Discovery Board signals are in the untrusted payload under travellerOwnWords.',
+    'Their free text, must-dos, dislikes, mobility notes and the Discovery Board places they themselves marked are in the untrusted payload under travellerOwnWords. Places Sidequest pre-selected on their behalf are under sidequestRecommendedCandidates: suggestions to use where they fit, never the traveller\'s own choices.',
     '',
     'WHAT TO RETURN',
     `One draft covering day 1 to day ${days} in order, no day missing; every day names one of the stays by its exact name; nights across stays sum to ${nights}. A stay is named after the real town or area where the traveller sleeps (lodgingArea and lodgingStyle say where and how to book), never after a hotel.`,
@@ -676,6 +708,14 @@ export type CompositionOutcome =
       /** Precise, sanitized diagnostics — extraction reason or normalization issues with paths, expected and received. */
       issues?: readonly WireIssue[];
       issueKind?: 'no_json' | 'structural' | 'semantic';
+      /**
+       * V1 convergence — what the transport said, when the call threw: the
+       * `ResearchModelError` code and any HTTP status. `failureKind` folds a rate
+       * limit into `malformed_output`; these let `build-failure.ts` tell the
+       * traveller the truth instead.
+       */
+      providerCode?: string;
+      providerStatus?: number;
     };
 
 export interface RawCompositionResponse {
@@ -791,10 +831,13 @@ export async function generateTripDraft(input: { model: StructuredModel; context
   } catch (error) {
     const code = (error as { code?: string } | null)?.code;
     const message = error instanceof Error ? error.message : 'The composition call failed.';
-    if (code === 'timeout') return { ok: false, failureKind: 'timeout', detail: message, enforcement };
-    if (code === 'auth_rejected' || code === 'not_configured') return { ok: false, failureKind: 'model_unavailable', detail: message, enforcement };
+    const statusRaw = (error as { httpStatus?: unknown; status?: unknown } | null);
+    const providerStatus = typeof statusRaw?.httpStatus === 'number' ? statusRaw.httpStatus : typeof statusRaw?.status === 'number' ? statusRaw.status : undefined;
+    const provider = { ...(typeof code === 'string' ? { providerCode: code } : {}), ...(providerStatus !== undefined ? { providerStatus } : {}) };
+    if (code === 'timeout') return { ok: false, failureKind: 'timeout', detail: message, enforcement, ...provider };
+    if (code === 'auth_rejected' || code === 'not_configured') return { ok: false, failureKind: 'model_unavailable', detail: message, enforcement, ...provider };
     // Nothing usable came back (no JSON object, a truncated one, a transport failure): the transport's sentence names the reason.
-    return { ok: false, failureKind: 'malformed_output', detail: message, enforcement, issueKind: 'no_json', issues: [{ path: '', code: 'no_json', message }] };
+    return { ok: false, failureKind: 'malformed_output', detail: message, enforcement, issueKind: 'no_json', issues: [{ path: '', code: 'no_json', message }], ...provider };
   }
   const normalized = normalizeTripDraftWire(raw, { days: input.context.brief.tripFacts.days });
   if (!normalized.ok) {

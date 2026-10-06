@@ -49,7 +49,8 @@ export function buildLedger(input: { budget: BudgetIntelligence | null; booked: 
   const currencies = new Map<string, number>();
   for (const l of committedLines) currencies.set(l.currency, (currencies.get(l.currency) ?? 0) + l.amount);
   const budget = input.budget;
-  const budgetCurrency = budget?.displayCurrency ?? budget?.currency ?? committedLines[0]?.currency ?? 'USD';
+  /* The estimate's own currency. `displayCurrency` is a second view of the total (the destination's money), never the currency the bands are in. */
+  const budgetCurrency = budget?.currency ?? committedLines[0]?.currency ?? 'USD';
   const primary = currencies.has(budgetCurrency) ? budgetCurrency : [...currencies.keys()][0] ?? budgetCurrency;
   const committed = currencies.size > 0 ? { amount: Math.round(currencies.get(primary) ?? 0), currency: primary, count: committedLines.length } : null;
   const otherCurrencies = [...currencies.entries()].filter(([c]) => c !== primary).map(([currency, amount]) => ({ currency, amount: Math.round(amount) }));

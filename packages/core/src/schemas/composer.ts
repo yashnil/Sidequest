@@ -377,6 +377,12 @@ export const tripComposerAnswersSchema = z.object({
    */
   mustDo: z.string().max(600).optional(),
   avoid: z.string().max(600).optional(),
+  /**
+   * V1 — "I already have a plan": the plan as the traveller wrote it, one day
+   * per line. Stored verbatim; its places are read as their own must-dos and
+   * the plan is checked against the board (`planning/plan-critique.ts`).
+   */
+  existingPlan: z.string().max(2000).optional(),
 
   /**
    * What we made of that text, and whether they accepted it.

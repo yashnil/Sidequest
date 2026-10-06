@@ -205,6 +205,7 @@ export * from './scoring/frequency';
 export * from './discovery/board';
 export * from './discovery/autoselect';
 export * from './discovery/reconcile';
+export * from './discovery/decisions';
 
 export * from './profile/personality';
 
@@ -216,3 +217,4 @@ export * from './interests/schema';
 
 // Seed data is reachable at `@sidequest/core/data`, never from here. See the
 // note at the top of this file.
+export * from './scan';

@@ -87,9 +87,12 @@ export function fixtureDraftFor(context: CompositionContext, hints: FixtureCompo
   // them: what the traveller excluded never appears, what they included leads.
   const avoid = new Set((context.boardSignals?.avoid ?? []).map((n) => n.toLowerCase()));
   const wanted = new Set((context.boardSignals?.mustInclude ?? []).map((n) => n.toLowerCase()));
+  // Sidequest's own picks come next — suggestions, never promoted to core like a traveller's include.
+  const recommended = new Set((context.boardSignals?.recommended ?? []).map((n) => n.toLowerCase()));
+  const rank = (name: string) => (wanted.has(name.toLowerCase()) ? 2 : recommended.has(name.toLowerCase()) ? 1 : 0);
   const pool = [...hints.placeNames]
     .filter((p) => !avoid.has(p.name.toLowerCase()))
-    .sort((a, b) => Number(wanted.has(b.name.toLowerCase())) - Number(wanted.has(a.name.toLowerCase())));
+    .sort((a, b) => rank(b.name) - rank(a.name));
   let poolIndex = 0;
   const nextPlace = (): { name: string; category?: string } | null => (poolIndex < pool.length ? pool[poolIndex++]! : null);
   const generic = ['old quarter walk', 'central market morning', 'riverside promenade', 'sunset lookout', 'local museum', 'harbour stroll'];
@@ -123,9 +126,11 @@ export function fixtureDraftFor(context: CompositionContext, hints: FixtureCompo
         });
       } else {
         const label = generic[genericIndex % generic.length]!;
+        // A long trip cycles the generic list; a round number keeps every stop distinct, as a real composer would.
+        const round = Math.floor(genericIndex / generic.length);
         genericIndex += 1;
         anchors.push({
-          name: `${envelope.name} ${label}`,
+          name: `${envelope.name} ${label}${round > 0 ? ` ${round + 1}` : ''}`,
           category: label.includes('museum') ? 'museum' : label.includes('market') ? 'market' : 'neighbourhood',
           role: i === 0 ? 'core' : 'secondary',
           estimatedDurationMinutes: 90,

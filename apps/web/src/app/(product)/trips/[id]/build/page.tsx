@@ -8,6 +8,7 @@ import { GENERATION_STAGES, GENERATION_STAGE_DETAIL, GENERATION_STAGE_LABELS, bu
 import { getIntent } from '@/lib/db/compiler-repository';
 import { hasItinerary } from '@/lib/db/repository';
 import { ownedTrip } from '@/lib/net/trip-access';
+import { runFailureView } from '@/lib/planning/build-run-view';
 import { resolveTripRegion } from '@/lib/region';
 
 export const dynamic = 'force-dynamic';
@@ -53,12 +54,7 @@ export default async function BuildPage({ params }: { params: Promise<{ id: stri
     milestones: milestonesFor(progress.counters, progress.stage),
     state,
     buildKey: progress.buildKey,
-    failure:
-      state === 'failed'
-        ? { ref: progress.failure?.ref ?? null, kind: progress.failure?.kind ?? 'before_model', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved }
-        : state === 'lost'
-          ? { ref: null, kind: 'lost', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved }
-          : null,
+    failure: runFailureView(progress, state),
     hasItinerary: planExists,
     placed: progress.placed,
   };

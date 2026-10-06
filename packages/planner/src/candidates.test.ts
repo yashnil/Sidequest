@@ -301,3 +301,29 @@ describe('the planning queue and the board it was built from', () => {
     ).toEqual(asBoarded);
   });
 });
+
+describe('selection provenance in the planning queue', () => {
+  it('ranks a traveller include above a Sidequest pick above a maybe, and never schedules a skip or an un-ticked pick', () => {
+    const pool = BOARD.candidates.filter((candidate) => candidate.fit.band !== 'not_workable').slice(0, 5);
+    expect(pool).toHaveLength(5);
+    const at = '2026-08-12T00:00:00.000Z';
+    const [mine, ours, maybe, skipped, unticked] = pool as [DiscoveryCandidate, DiscoveryCandidate, DiscoveryCandidate, DiscoveryCandidate, DiscoveryCandidate];
+    const selections: DiscoverySelection[] = [
+      { placeId: ours.place.id, status: 'included', source: 'auto', updatedAt: at },
+      { placeId: maybe.place.id, status: 'maybe', source: 'user', updatedAt: at },
+      { placeId: mine.place.id, status: 'included', source: 'user', updatedAt: at },
+      { placeId: skipped.place.id, status: 'excluded', source: 'user', reason: 'too_far', updatedAt: at },
+      { placeId: unticked.place.id, status: 'dismissed', source: 'user', updatedAt: at },
+    ];
+    const { eligible, rejected } = resolveCandidates(pool, selections, boardContext(AUGUST_DATES).travel.matrix);
+    const ids = eligible.map((candidate) => candidate.place.id);
+    expect(ids).not.toContain(skipped.place.id);
+    expect(ids).not.toContain(unticked.place.id);
+    expect(rejected.map((entry) => entry.placeId)).not.toContain(unticked.place.id);
+    const byId = new Map(eligible.map((candidate) => [candidate.place.id, candidate]));
+    expect(byId.get(mine.place.id)?.manual).toBe(true);
+    expect(byId.get(ours.place.id)?.manual).toBe(false);
+    expect(byId.get(mine.place.id)!.priority).toBeGreaterThan(byId.get(ours.place.id)!.priority);
+    expect(byId.get(ours.place.id)!.priority).toBeGreaterThan(byId.get(maybe.place.id)!.priority);
+  });
+});

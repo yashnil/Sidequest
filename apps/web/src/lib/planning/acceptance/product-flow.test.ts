@@ -40,7 +40,7 @@ function releaseDatabase(): void {
 beforeEach(() => {
   releaseDatabase();
   directory = mkdtempSync(join(tmpdir(), 'sidequest-product-flow-'));
-  for (const key of ['SIDEQUEST_DB_PATH', 'SIDEQUEST_COMPOSER_PROVIDER', 'SIDEQUEST_COMPILER_PROVIDER', 'ANTHROPIC_API_KEY', 'SIDEQUEST_GEOCODER_PROVIDER', 'SIDEQUEST_POI_PROVIDER', 'SIDEQUEST_ROUTES_PROVIDER', 'SIDEQUEST_ACTION_FENCES']) {
+  for (const key of ['SIDEQUEST_DB_PATH', 'SIDEQUEST_COMPOSER_PROVIDER', 'SIDEQUEST_COMPILER_PROVIDER', 'ANTHROPIC_API_KEY', 'SIDEQUEST_GEOCODER_PROVIDER', 'SIDEQUEST_POI_PROVIDER', 'SIDEQUEST_ROUTES_PROVIDER', 'SIDEQUEST_ACTION_FENCES', 'SIDEQUEST_PLANNING_MODE']) {
     savedEnv[key] = process.env[key];
   }
   process.env.SIDEQUEST_DB_PATH = join(directory, 'flow.db');
@@ -90,8 +90,50 @@ async function tripWithCompiledRegion(): Promise<string> {
  */
 const ORCHESTRATOR_TIMEOUT_MS = 30_000;
 
+describe('Build my trip, planner-first (V1)', () => {
+  it('builds the structure deterministically from the board, with no model call, and says so on the package', async () => {
+    const tripId = await tripWithCompiledRegion();
+    const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW, mode: 'full' });
+    expect(result.ok, result.error).toBe(true);
+    expect(result.modelCalls).toHaveLength(0);
+    const itinerary = getItinerary(tripId)!;
+    expect(itinerary.package?.planning?.mode).toBe('planner');
+    const trip = (await import('@/lib/db/repository')).getTrip(tripId)!;
+    const resolved = await resolveTripRegion(trip);
+    if (!resolved.ok) throw new Error(resolved.error);
+    const boardNames = new Set(boardFor(trip, defaultProfileFor(trip, null), resolved.context).candidates.map((c) => c.place.name));
+    const anchors = itinerary.package!.anchors;
+    expect(anchors.length).toBeGreaterThan(DATES.length);
+    // Every planned stop is a board place: the planner never invents one.
+    for (const anchor of anchors) expect(boardNames.has(anchor.name), anchor.name).toBe(true);
+    expect(anchors.some((a) => a.name === FIXTURE_UNVERIFIABLE_ANCHOR)).toBe(false);
+    expect(itinerary.package!.preservation!.silentLoss).toBe(0);
+  }, ORCHESTRATOR_TIMEOUT_MS);
+
+  it('never schedules a place the traveller skipped, and keeps the one they insisted on', async () => {
+    const tripId = await tripWithCompiledRegion();
+    const trip = (await import('@/lib/db/repository')).getTrip(tripId)!;
+    const resolved = await resolveTripRegion(trip);
+    if (!resolved.ok) throw new Error(resolved.error);
+    const candidates = boardFor(trip, defaultProfileFor(trip, null), resolved.context).candidates;
+    const { setSelection } = await import('@/lib/db/repository');
+    const skipped = candidates[0]!.place;
+    const insisted = candidates[candidates.length - 1]!.place;
+    setSelection(tripId, skipped.id, 'excluded', 'user');
+    setSelection(tripId, insisted.id, 'included', 'user');
+    const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW, mode: 'full' });
+    expect(result.ok, result.error).toBe(true);
+    const names = getItinerary(tripId)!.package!.anchors.map((a) => a.name);
+    expect(names).not.toContain(skipped.name);
+    const planning = getItinerary(tripId)!.package!.planning!;
+    expect(names.includes(insisted.name) || planning.mustConflicts.some((m) => m.name === insisted.name)).toBe(true);
+  }, ORCHESTRATOR_TIMEOUT_MS);
+});
+
 describe('Build my trip, through the canonical orchestrator', () => {
   it('composes, verifies against the compiled region, reconciles, persists and reloads a complete trip with its package', async () => {
+    /* V1 — the model-composed path (the regionless fallback) keeps its own guarantees; pinned here because a compiled region now plans through the planner by default. */
+    process.env.SIDEQUEST_PLANNING_MODE = 'model';
     const tripId = await tripWithCompiledRegion();
     const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW, mode: 'full' });
     expect(result.ok, result.error).toBe(true);
@@ -154,7 +196,13 @@ describe('Quick Plan, through the canonical orchestrator', () => {
 });
 
 describe('Auto Pick advances into the canonical build', () => {
-  it('auto-picked selections become compact board signals for the composition, and the build proceeds', async () => {
+  /*
+   * V1 convergence: this used to assert that auto-picks became `mustInclude`,
+   * which is the defect — Sidequest's own pre-selection was handed to the model
+   * as something the traveller marked. They now travel as Sidequest
+   * recommendations, and the traveller's must-includes stay empty.
+   */
+  it('auto-picked selections become Sidequest recommendations (never traveller must-includes), and the build proceeds', async () => {
     const tripId = await tripWithCompiledRegion();
     const trip = (await import('@/lib/db/repository')).getTrip(tripId)!;
     const region = await resolveTripRegion(trip);
@@ -166,10 +214,11 @@ describe('Auto Pick advances into the canonical build', () => {
     replaceAutoSelections(tripId, selection.selectedIds);
     expect(getSelections(tripId).length).toBeGreaterThan(0);
     const signals = boardSignalsFor(board.candidates, getSelections(tripId));
-    expect(signals?.mustInclude.length).toBeGreaterThan(0);
+    expect(signals?.mustInclude).toEqual([]);
+    expect(signals?.recommended?.length).toBeGreaterThan(0);
     const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW, mode: 'full' });
     expect(result.ok, result.error).toBe(true);
     const names = new Set(getItinerary(tripId)!.package!.anchors.map((a) => a.name));
-    expect(signals!.mustInclude.some((name) => names.has(name))).toBe(true);
+    expect(signals!.recommended!.some((name) => names.has(name))).toBe(true);
   });
 });

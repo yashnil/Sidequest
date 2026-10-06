@@ -35,7 +35,13 @@ export function seedDestinationIndexIfRequested(): void {
   if (destinationIndexRelease()) return;
 
   try {
-    const ndjson = readFileSync(resolve(process.cwd(), source), 'utf8');
+    /*
+     * `turbopackIgnore`: the seed path is an operator's environment variable,
+     * so the bundler cannot know it, and without the comment it traced the
+     * whole project (~52k files) into the server bundle of every route that
+     * imports this. Same convention as `db/client.ts`.
+     */
+    const ndjson = readFileSync(resolve(/* turbopackIgnore: true */ process.cwd(), source), 'utf8');
     importDestinationIndex({ ndjson, releaseId: 'fixture-1', now: new Date() });
   } catch (error) {
     // Never fatal. A missing seed file must degrade to "no index", which the

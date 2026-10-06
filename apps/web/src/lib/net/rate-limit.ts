@@ -265,6 +265,13 @@ export const ACTION_RATE_RULES = {
    * build, not for a loop.
    */
   build_start: { capacity: 4, refillPerMinute: 1 },
+  /**
+   * V1 convergence — starts one Discovery scan (one billed proposal call plus a
+   * placement pass against the geocoder, backstopped by the daily ceiling). A
+   * press while a scan runs attaches to it and is not charged; sized for a
+   * person rescanning after changing their mind, not for a loop.
+   */
+  scan_start: { capacity: 3, refillPerMinute: 1 },
   /** V8 — a browser reporting a page failure so its reference reaches the log. Local write only. */
   client_failure_report: { capacity: 6, refillPerMinute: 2 },
 } as const satisfies Record<string, RateLimitRule>;

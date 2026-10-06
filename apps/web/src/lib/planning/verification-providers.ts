@@ -5,6 +5,7 @@ import { createOpenResolver, createOpenRouting, emptyVerificationDiagnostics, ty
 import { isGeocoderEnabled, isGlobalRoutesProviderEnabled, isRoutesProviderEnabled } from '../providers/switches';
 import { routingCoverageFromEnv } from '../providers/routing-coverage';
 import { createCompositeRouting } from '../providers/routing-composite';
+import { localRouterKnownUnreachable } from '../readiness/probe-cache';
 import { createOrsRouting } from '../providers/openrouteservice';
 import { loadRecordedRoutes, recordedRoutesFetch } from '../providers/openrouteservice-fixture';
 import { CACHE_TTL_MS, cacheKeyFor } from '../providers/cache-policy';
@@ -64,7 +65,7 @@ export function verificationProviders(candidateId?: string): VerificationProvide
     : null;
   return {
     resolver: isGeocoderEnabled() ? createOpenResolver({ diagnostics }) : null,
-    routing: createCompositeRouting({ local, localCoverage: routingCoverageFromEnv(), global }),
+    routing: createCompositeRouting({ local, localCoverage: routingCoverageFromEnv(), global, localKnownUnreachable: localRouterKnownUnreachable() }),
     transit: null,
     diagnostics,
   };

@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { printWithAppendixHref } from './hub/print-links';
+import { planningLineFor } from './hub/planning-line';
 import {
   BOOKING_KIND_LABELS,
   DIETARY_EVIDENCE_COPY,
@@ -220,6 +222,7 @@ export function ItineraryView({
   attributions = [],
   coordinates = {},
   lockedPlaceIds = [],
+  regeneration,
   worthSkipping = [],
   lodgingAreas = [],
   images = {},
@@ -377,6 +380,8 @@ export function ItineraryView({
    * pins themselves live in the database and are read by the rebuild.
    */
   lockedPlaceIds?: readonly string[];
+  /** V1 convergence — what Regenerate keeps and replaces, from `regenerate-summary.ts`. Owner page only. */
+  regeneration?: { kept: string; replaced: readonly string[] };
   /**
    * Board supply the fit model marked "probably skip", from the same compiled
    * region this plan drew on. Empty when the board holds none, and the
@@ -688,6 +693,7 @@ export function ItineraryView({
   const routeDecision = decisions.find((d) => d.key === 'route') ?? null;
   const transportDecision = decisions.find((d) => d.key === 'transport') ?? null;
   const timingDecision = decisions.find((d) => d.key === 'timing') ?? null;
+  const planningLine = planningLineFor(itinerary.package?.planning);
   const overview = (
     <div data-testid="hub-overview">
       <div id="overview" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
@@ -720,6 +726,15 @@ export function ItineraryView({
             */}
             {purposeParagraph ? <p className="mt-4 max-w-[62ch] type-body text-ink-muted">{purposeParagraph}</p> : null}
             {itinerary.package?.routeRationale ? <p className="mt-3 max-w-[62ch] type-body text-ink-muted" data-testid="route-rationale">{itinerary.package.routeRationale}</p> : null}
+            {/* V1 convergence — how the structure was decided, from `package.planning`; nothing on a plan that predates the record. */}
+            {planningLine ? (
+              <div className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="planning-line" data-planning-mode={itinerary.package?.planning?.mode}>
+                <p>{planningLine.summary}</p>
+                {planningLine.notes.map((note) => (
+                  <p key={note} className="mt-1" data-testid="planning-note">{note}</p>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           {signatureExperiences.length > 0 ? (
@@ -1248,8 +1263,8 @@ export function ItineraryView({
                   <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('ghost', 'sm')}>
                     Change my answers
                   </Link>
-                  {itinerary.package ? <RegenerateButton tripId={tripId} /> : null}
-                  <a href={`/trips/${tripId}/itinerary?appendix=1`} className={buttonClass('ghost', 'sm')}>
+                  {itinerary.package ? <RegenerateButton tripId={tripId} {...(regeneration ? { copy: regeneration } : {})} /> : null}
+                  <a href={printWithAppendixHref(tripId)} className={buttonClass('ghost', 'sm')} data-testid="print-with-appendix">
                     Print with evidence appendix
                   </a>
                 </div>
@@ -3206,7 +3221,8 @@ function buildPlaceSheet({
   if (item.food?.hoursUnknown) notes.push({ body: 'Nobody publishes hours for this that we could read. Check before you go.' });
   if (item.food) {
     for (const claim of item.food.dietary.filter((entry) => entry.evidence !== 'unknown')) {
-      notes.push({ title: `${DIETARY_NEED_LABELS[claim.need]} —`, body: `${DIETARY_EVIDENCE_COPY[claim.evidence]}. ${claim.note}` });
+      // A community map tag is not the venue's menu: say only what the map records.
+      notes.push({ title: `${DIETARY_NEED_LABELS[claim.need]} —`, body: /community map data/i.test(claim.note) ? claim.note : `${DIETARY_EVIDENCE_COPY[claim.evidence]}. ${claim.note}` });
     }
     /*
      * A twenty-minute shop is not a meal. Asking a supermarket to confirm how

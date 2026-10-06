@@ -60,7 +60,7 @@ import {
  * **Bump this whenever a rule in `intelligence/` changes what a traveller
  * reads.** It costs one rebuild per trip and nothing else.
  */
-export const INTELLIGENCE_RULES_VERSION = 'v9.0' as const;
+export const INTELLIGENCE_RULES_VERSION = 'v9.1-budget-index' as const;
 
 export interface DraftHints {
   days: readonly { anchors: readonly { name: string; transport?: string }[] }[];
@@ -105,6 +105,9 @@ export interface BuildIntelligenceInput {
   providerTrafficAware?: boolean;
   /** LIVE WORLD V1 — a reference rate persisted at plan time; null when no FX provider is configured. */
   fx?: FxRate | null;
+  /** V1 CONVERGENCE — the USD reference rates persisted at plan time (to the traveller's and the destination's currency). */
+  fxRates?: readonly FxRate[];
+  /** @deprecated The budget's second currency is the destination's own; this is ignored. */
   displayCurrency?: string;
   /** V9 §5 — the traveller's word on booking needs nothing was booked for (skipped, replaced, not needed). */
   resolutions?: readonly BookingResolution[];
@@ -325,7 +328,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds, selfDrives: drives, reality, ...(input.resolutions ? { resolutions: input.resolutions } : {}) });
   const guideDays = new Set(bookings.filter((b) => b.kind === 'tour_guide').map((b) => b.dayNumber)).size;
   const permitCount = bookings.filter((b) => b.kind === 'permit' || b.kind === 'park_entry').length;
-  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(statedDriving ? { driving: statedDriving } : {}), ...(input.fx ? { fx: input.fx } : {}), ...(input.displayCurrency ? { displayCurrency: input.displayCurrency } : {}) });
+  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, party: { adults: input.basics.adults, children: input.basics.children }, ...(input.destination.countryCode ? { countryCode: input.destination.countryCode } : {}), legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(statedDriving ? { driving: statedDriving } : {}), ...(input.fxRates ? { rates: input.fxRates } : {}), ...(input.fx ? { fx: input.fx } : {}) });
 
   // Weather, access, safety, packing ------------------------------------------------------------------------
   const weather = buildWeatherIntelligence({ itinerary, categoryOf, packageBackups: pkg?.backups ?? [] });
@@ -345,6 +348,7 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
     strenuous,
     modelPacking: pkg?.packing ?? [],
     episodeKinds: (pkg?.episodes ?? []).map((e) => e.kind),
+    activities: itinerary.days.flatMap((d) => d.items.filter((i) => i.kind === 'activity').map((i) => ({ title: i.title, category: categoryOf(i), dayNumber: d.dayNumber, startMinute: i.startMinute, endMinute: i.endMinute }))),
   });
 
   // Claims from the plan's own evidence ------------------------------------------------------------------------

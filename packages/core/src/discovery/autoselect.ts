@@ -1,7 +1,7 @@
 import { INTEREST_LABELS, type Interest, type PlaceCategory } from '../schemas/common';
 import { frequencyCostOf } from '../scoring/frequency';
 import type { TravelerProfile } from '../schemas/profile';
-import type { SelectionStatus } from '../schemas/discovery';
+import type { StoredSelectionStatus } from '../schemas/discovery';
 import { nothingIsPublishedAboutIt } from '../quality/significance';
 import { detourToleranceMinutesFor, DETOUR_STRETCH_MULTIPLIER } from '../travel/reach';
 import { significanceLean, type DiscoveryCandidate } from './board';
@@ -109,13 +109,15 @@ export interface AutoSelectInput {
    * and is not overruled; an include is already on the board and already
    * occupies a stop, which is why it draws down `slots` rather than being
    * re-picked. What is left is exactly the set of cards this pass can turn on,
-   * so the number it reports is the number that changes.
+   * so the number it reports is the number that changes. A `dismissed` row — the
+   * traveller un-ticking one of our picks — is decided too, which is the whole
+   * point of recording it: it is never proposed again.
    *
-   * Optional, and absent means nobody has decided anything — the honest state on
-   * the write that finishes the questionnaire, and the historical behaviour for
-   * every caller that has not been given a store to read.
+   * Optional, and absent means nobody has decided anything. Every product caller
+   * passes `travellerDecided(getSelections(tripId))`, including the
+   * questionnaire's seeding on the way to a build.
    */
-  decided?: Readonly<Record<string, SelectionStatus>>;
+  decided?: Readonly<Record<string, StoredSelectionStatus>>;
   /**
    * `DiscoveryBoard.transitUnmeasured`, passed straight through.
    *

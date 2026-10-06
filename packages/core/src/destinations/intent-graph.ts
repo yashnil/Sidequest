@@ -114,6 +114,12 @@ export const intentNodeSchema = z.object({
   /** The landscape word that classified a natural region: "delta", "highlands". */
   landscape: z.string().min(1).optional(),
   resolution: intentNodeResolutionSchema.optional(),
+  /**
+   * V1 — the container the traveller named after a list ("Moab, Arches and
+   * Capitol Reef, Utah"): this part is looked up inside it first. A reading of
+   * the phrase's own punctuation, never a place name in code.
+   */
+  within: z.string().min(1).optional(),
 });
 export type IntentNode = z.infer<typeof intentNodeSchema>;
 
@@ -274,10 +280,27 @@ export function parseDestinationIntent(rawText: string): DestinationIntentGraph 
   const corridor = CORRIDOR_PHRASE.test(text) && !/^(drive|fly|walk|hike|sail|travel|go)\b/i.test(text);
   let parts = splitIntentPhrase(text);
   if (parts.length === 0) parts = [text];
+  /*
+   * "Zurich, Switzerland", "Cusco, Peru": one place and the country it is in.
+   * Split at the comma, the country became a second part of the trip and the
+   * envelope became the whole country, so a city trip was planned (and moved)
+   * at national scale. The country qualifies the place; it is not a destination.
+   * The part keeps its own name — the semantic gate compares names, and
+   * "Zurich, Switzerland" is not the name of any row — and carries the country,
+   * which `resolverQueryFor` appends to the query.
+   */
+  let qualifyingCountry: string | undefined;
+  if (!corridor && parts.length === 2 && /^[^,]+,\s*[^,]+$/.test(text)) {
+    const [place, tail] = parts.map(classifyIntentPart);
+    if (tail!.kind === 'country' && tail!.countryCode && place!.kind !== 'country' && !place!.countryCode) {
+      qualifyingCountry = tail!.countryCode;
+      parts = [parts[0]!];
+    }
+  }
 
   const children: IntentNode[] = parts.map((part, index) => {
     const classified = classifyIntentPart(part);
-    const countryCode = classified.countryCode ?? demonymCountry(part);
+    const countryCode = classified.countryCode ?? demonymCountry(part) ?? qualifyingCountry;
     const label = cleanLabel(part);
     return intentNodeSchema.parse({
       id: slug(label, index),
@@ -288,6 +311,17 @@ export function parseDestinationIntent(rawText: string): DestinationIntentGraph 
       ...(classified.landscape ? { landscape: classified.landscape } : {}),
     });
   });
+
+  /*
+   * "A, B and C, D": an and-joined list closed by a comma and one more part
+   * names D as the place the list sits in. Each listed part is then asked for
+   * inside D; D itself is still a part of the trip. A plain list ("Kyoto,
+   * Osaka and Nara") has no comma after its "and" and is left alone.
+   */
+  const container = children.length >= 3 && /\band\b[^,]*,\s*[^,]+$/i.test(text) && !/\band\b/i.test(children[children.length - 1]!.label) ? children[children.length - 1]! : null;
+  if (container) {
+    for (const child of children.slice(0, -1)) if (child.kind !== 'country') child.within = container.label;
+  }
 
   const countries = [...new Set(children.map((c) => c.countryCode).filter((c): c is string => Boolean(c)))];
   const crossBorder = countries.length > 1;

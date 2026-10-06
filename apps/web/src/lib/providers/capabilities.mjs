@@ -54,7 +54,85 @@ export const CONSUMERS = {
   'auth.sign_in': 'api/auth/google/callback/route.ts + signin/actions.ts#fixtureSignInAction → lib/auth/session.ts#currentUser → lib/net/trip-access.ts#tripAccessRefusal (account first, browser cookie only while unclaimed)',
 };
 
+/**
+ * V1 CONVERGENCE — TEST DATA MAY NOT MASQUERADE AS PRODUCTION.
+ *
+ * Every fixture switch below swaps a real source for saved or synthetic data,
+ * which is exactly right for the browser suite and exactly wrong for a
+ * traveller: a production deployment with `SIDEQUEST_COMPOSER_PROVIDER=fixture`
+ * left in its environment hands every traveller the same saved draft and calls
+ * it their trip.
+ *
+ * So in production (`NODE_ENV=production`) a fixture switch is refused unless
+ * the deployment opts in explicitly with `SIDEQUEST_FIXTURES=allow` — which the
+ * Playwright configs do, because they drive `next start` (a production server)
+ * against fixtures on purpose. The refusal is enforced at the build and
+ * compile doors (`planning/build-preflight.ts`, `compiler/readiness.ts`):
+ * a traveller sees "this site can't build trips right now", the operator sees
+ * the switch names here, in `/api/readiness`, in `npm run doctor` and in the
+ * startup log.
+ *
+ * Fixture sign-in keeps its own, narrower door (`SIDEQUEST_AUTH_FIXTURE=allow`,
+ * `lib/auth/config.ts`); once open in production it is listed here too.
+ *
+ * @param {Record<string, string|undefined>} env
+ * @returns {string[]} the fixture switches in use, as `NAME=value` (never a secret's value; none of these is one)
+ */
+export const FIXTURES_OPT_IN = 'SIDEQUEST_FIXTURES';
+
+export function fixtureSwitchesInUse(env = process.env) {
+  const used = [];
+  const named = (name, value) => {
+    if (eq(env, name, value)) used.push(`${name}=${value}`);
+  };
+  named('SIDEQUEST_COMPOSER_PROVIDER', 'fixture');
+  named('SIDEQUEST_COMPILER_PROVIDER', 'fixture');
+  named('SIDEQUEST_WEATHER_PROVIDER', 'fixture');
+  named('SIDEQUEST_CLIMATE_PROVIDER', 'fixture');
+  named('SIDEQUEST_FX_PROVIDER', 'fixture');
+  named('SIDEQUEST_IMAGERY_PROVIDER', 'fixture');
+  named('SIDEQUEST_DESTINATION_INTERPRETER', 'fixture');
+  if (set(env, 'SIDEQUEST_ROUTES_FIXTURE')) used.push('SIDEQUEST_ROUTES_FIXTURE');
+  if (set(env, 'SIDEQUEST_PLACES_FIXTURE')) used.push('SIDEQUEST_PLACES_FIXTURE');
+  if (eq(env, 'SIDEQUEST_AUTH_PROVIDER', 'fixture')) used.push('SIDEQUEST_AUTH_PROVIDER=fixture');
+  return used;
+}
+
+/**
+ * @param {Record<string, string|undefined>} env
+ * @returns {{ production: boolean; optedIn: boolean; switches: string[]; refused: boolean }}
+ */
+export function productionFixtureRefusal(env = process.env) {
+  const production = read(env, 'NODE_ENV') === 'production';
+  const optedIn = eq(env, FIXTURES_OPT_IN, 'allow');
+  const switches = fixtureSwitchesInUse(env);
+  return { production, optedIn, switches, refused: production && !optedIn && switches.length > 0 };
+}
+
+/**
+ * V1 CONVERGENCE — the operator's hard problems, in words. Empty when there are
+ * none. Not traveller copy: switch names appear here on purpose.
+ *
+ * @param {Record<string, string|undefined>} env
+ * @returns {string[]}
+ */
+export function deploymentProblems(env = process.env) {
+  const problems = [];
+  const guard = productionFixtureRefusal(env);
+  if (guard.refused) {
+    problems.push(`Fixture data is switched on in production (${guard.switches.join(', ')}). Builds and research are refused until these are unset, or ${FIXTURES_OPT_IN}=allow is set for a test deployment.`);
+  } else if (guard.production && guard.switches.length > 0) {
+    problems.push(`Fixture data is switched on in production with ${FIXTURES_OPT_IN}=allow (${guard.switches.join(', ')}). Acceptable for a test server only.`);
+  }
+  const dbPath = read(env, 'SIDEQUEST_DB_PATH');
+  if (guard.production && !dbPath.startsWith('/')) {
+    problems.push(dbPath === '' ? 'SIDEQUEST_DB_PATH is unset in production: the database lives inside the working directory and a redeploy may discard it.' : 'SIDEQUEST_DB_PATH is relative in production: the database lives inside the working directory and a redeploy may discard it.');
+  }
+  return problems;
+}
+
 export function capabilityRegistry(env = process.env) {
+  const fixtureGuard = productionFixtureRefusal(env);
   const compilerChoice = read(env, 'SIDEQUEST_COMPILER_PROVIDER').toLowerCase();
   const fixtureCompiler = compilerChoice === 'fixture';
   const fixtureComposer = eq(env, 'SIDEQUEST_COMPOSER_PROVIDER', 'fixture');
@@ -89,7 +167,8 @@ export function capabilityRegistry(env = process.env) {
   const weather = weatherRaw === '' ? 'openmeteo' : weatherRaw;
   const climate = !eq(env, 'SIDEQUEST_CLIMATE_PROVIDER', 'off');
   const fxRaw = read(env, 'SIDEQUEST_FX_PROVIDER').toLowerCase();
-  const fx = fxRaw === 'frankfurter' || fxRaw === 'fixture' ? fxRaw : 'off';
+  /* V1 CONVERGENCE — keyless ECB rates are on by default (mirrors `fx.ts#fxProviderChoice`); `off` turns them off. */
+  const fx = fxRaw === '' ? 'frankfurter' : fxRaw === 'frankfurter' || fxRaw === 'fixture' ? fxRaw : 'off';
   const imageryRaw = read(env, 'SIDEQUEST_IMAGERY_PROVIDER').toLowerCase();
   const imagery = imageryRaw === '' ? 'wikimedia' : imageryRaw;
   const openFreeMap = eq(env, 'SIDEQUEST_MAP_PROVIDER', 'openfreemap');
@@ -102,7 +181,7 @@ export function capabilityRegistry(env = process.env) {
     capabilities.push({ id, group, configured: cfg.configured, available: cfg.available ?? cfg.configured, provider: cfg.provider ?? null, costClass: cfg.costClass ?? 'none', freshness: cfg.freshness ?? 'stable', coverage: cfg.coverage ?? '', limitations: cfg.limitations ?? [], fixture: cfg.fixture ?? false, consumer: CONSUMERS[id] ?? null, adapterOnly: cfg.adapterOnly ?? false });
   };
 
-  add('composition.model', 'composition', fixtureComposer ? { configured: true, provider: 'fixture', costClass: 'free', fixture: true, coverage: 'Saved fixture drafts; no model call.' } : anthropic ? { configured: true, provider: 'anthropic', costClass: 'metered', coverage: 'One model call per generation.' } : { configured: false, provider: null, limitations: ['No model credential: nothing can compose a draft.'] });
+  add('composition.model', 'composition', fixtureComposer && fixtureGuard.refused ? { configured: false, provider: 'fixture', fixture: true, limitations: ['Fixture composer refused in production: no build can run until SIDEQUEST_COMPOSER_PROVIDER is unset (or SIDEQUEST_FIXTURES=allow on a test server).'] } : fixtureComposer ? { configured: true, provider: 'fixture', costClass: 'free', fixture: true, coverage: 'Saved fixture drafts; no model call.' } : anthropic ? { configured: true, provider: 'anthropic', costClass: 'metered', coverage: 'One model call per generation.' } : { configured: false, provider: null, limitations: ['No model credential: nothing can compose a draft.'] });
 
   const placeProvider = fixtureCompiler ? 'fixture' : google ? 'google-places' : overture ? 'overture' : nominatim ? 'nominatim' : overpass ? 'overpass' : null;
   add('places.identity', 'places', { configured: placesLive || fixtureCompiler || placesRecorded, provider: placesRecorded ? 'google-places' : placeProvider, costClass: fixtureCompiler || placesRecorded ? 'free' : google ? 'metered' : 'free', fixture: fixtureCompiler || placesRecorded, freshness: 'stable', coverage: fixtureCompiler ? 'Synthetic worlds.' : [nominatim && 'Nominatim', overture && 'Overture', overpass && 'Overpass', google && 'Google Places (identity level)'].filter(Boolean).join(', '), limitations: placesLive || fixtureCompiler ? [] : ['Every model anchor stays unverified.'] });
@@ -137,7 +216,7 @@ export function capabilityRegistry(env = process.env) {
   add('weather.forecast', 'weather', { configured: weather !== 'off', provider: weather, costClass: 'free', fixture: weather === 'fixture', freshness: 'very_volatile', coverage: weather === 'openmeteo' ? 'Open-Meteo, 16-day horizon.' : weather === 'fixture' ? 'Fixture weather.' : '', limitations: [] });
   add('weather.climate', 'weather', { configured: climate && weather !== 'off', provider: climate ? weather : null, costClass: 'free', fixture: weather === 'fixture', freshness: 'stable', coverage: climate ? 'Historical normals for dates beyond the forecast.' : '', limitations: climate ? [] : ['Climate is switched off; far-future days show no weather.'] });
 
-  add('currency.fx', 'currency', { configured: fx !== 'off', provider: fx === 'off' ? null : fx, costClass: 'free', fixture: fx === 'fixture', freshness: 'date_bound', coverage: fx === 'frankfurter' ? 'ECB reference rates via Frankfurter, dated.' : fx === 'fixture' ? 'Fixture rates.' : '', limitations: fx === 'off' ? ['Budgets stay in the local currency; no conversion shown.'] : ['Reference rates, not what a card will charge.'] });
+  add('currency.fx', 'currency', { configured: fx !== 'off', provider: fx === 'off' ? null : fx, costClass: 'free', fixture: fx === 'fixture', freshness: 'date_bound', coverage: fx === 'frankfurter' ? 'ECB reference rates via Frankfurter (keyless, ~30 currencies), dated.' : fx === 'fixture' ? 'Fixture rates.' : '', limitations: fx === 'off' ? ['Budgets stay in US dollars; no conversion shown.'] : ['Reference rates, not what a card will charge.', 'Currencies the ECB does not publish stay in US dollars, unconverted.'] });
 
   /*
    * V6 §21 — accounts. Google is real sign-in; the fixture door is the browser
@@ -146,7 +225,8 @@ export function capabilityRegistry(env = process.env) {
   const baseUrl = read(env, 'SIDEQUEST_BASE_URL').length > 0;
   const googleAuth = set(env, 'GOOGLE_OAUTH_CLIENT_ID') && set(env, 'GOOGLE_OAUTH_CLIENT_SECRET') && baseUrl;
   const fixtureAuthAsked = eq(env, 'SIDEQUEST_AUTH_PROVIDER', 'fixture');
-  const fixtureAuth = fixtureAuthAsked && (read(env, 'NODE_ENV') !== 'production' || read(env, 'SIDEQUEST_AUTH_FIXTURE') === 'allow' || eq(env, 'SIDEQUEST_ACTION_FENCES', 'off'));
+  /* V1 CONVERGENCE — one door only. `SIDEQUEST_ACTION_FENCES=off` used to open it too, which made a rate-limit switch a sign-in switch. Mirrors `lib/auth/config.ts`. */
+  const fixtureAuth = fixtureAuthAsked && (read(env, 'NODE_ENV') !== 'production' || read(env, 'SIDEQUEST_AUTH_FIXTURE') === 'allow');
   add('auth.sign_in', 'accounts', { configured: googleAuth || fixtureAuth, provider: googleAuth ? 'google' : fixtureAuth ? 'fixture' : null, costClass: 'free', fixture: fixtureAuth && !googleAuth, freshness: 'stable', coverage: googleAuth ? 'Google sign-in (OpenID Connect with PKCE); trips claimed onto the account.' : fixtureAuth ? 'Fixture sign-in by email, for the browser suite.' : '', limitations: googleAuth || fixtureAuth ? [] : ['No sign-in door: trips belong to the browser that made them. Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET and SIDEQUEST_BASE_URL.'].concat(set(env, 'GOOGLE_OAUTH_CLIENT_ID') && !baseUrl ? ['SIDEQUEST_BASE_URL is unset, so the Google redirect cannot be formed.'] : []) });
 
   add('readiness.entry', 'readiness', { configured: true, provider: 'official-source-registry', costClass: 'free', freshness: 'regulatory_volatile', coverage: 'Official entry-point links; nothing legal is confirmed by Sidequest.', limitations: ['No Timatic licence; the public IATA checker is the neutral entry point.'] });
@@ -221,9 +301,9 @@ export function capabilityRegistry(env = process.env) {
   const byId = Object.fromEntries(capabilities.map((c) => [c.id, c]));
   /* A model (composition, or the V8.1 destination interpreter) is not a world-data provider: `mode` says whether the world is real, and the model is counted through `composition`. */
   const realProviders = capabilities.some((c) => c.group !== 'composition' && c.configured && !c.fixture && c.provider && c.provider !== 'sidequest' && c.provider !== 'official-source-registry' && c.provider !== 'anthropic' && c.costClass !== 'none');
-  const composition = fixtureComposer ? 'fixture' : anthropic ? 'anthropic' : 'off';
+  const composition = fixtureComposer ? (fixtureGuard.refused ? 'off' : 'fixture') : anthropic ? 'anthropic' : 'off';
   const mode = composition === 'off' ? 'off' : composition === 'fixture' && !realProviders ? 'fixture' : composition === 'anthropic' && realProviders ? 'live' : 'mixed';
-  return { mode, composition, capabilities, byId };
+  return { mode, composition, capabilities, byId, fixtureGuard, problems: deploymentProblems(env) };
 }
 
 /** Short traveller-safe words for the dev-only environment pill. */

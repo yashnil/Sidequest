@@ -75,8 +75,9 @@ export async function POST(request: Request): Promise<NextResponse> {
    * source outside the working tree — and "we normalised your path into
    * something else" is a worse failure than "no".
    */
-  const root = resolve(process.cwd());
-  const target = resolve(root, requested);
+  /* `turbopackIgnore`: an operator-chosen path; tracing it pulled the whole project into the bundle. */
+  const root = resolve(/* turbopackIgnore: true */ process.cwd());
+  const target = resolve(/* turbopackIgnore: true */ root, requested);
   /*
    * `relative` rather than `startsWith`.
    *

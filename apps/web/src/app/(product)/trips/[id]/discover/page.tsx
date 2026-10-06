@@ -20,6 +20,8 @@ import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard'
 import { TripPersonalityCard } from '@/components/TripPersonalityCard';
 import { Panel, buttonClass } from '@/components/ui';
 import { MustDoPanel } from '@/components/MustDoPanel';
+import { PlanCritiquePanel } from '@/components/PlanCritiquePanel';
+import { plannerCritique } from '@/lib/planning/planner-autopick';
 import { ResearchReadinessPanel, coverageStoppedEarly } from '@/components/ResearchReadinessPanel';
 import { getIntent, getLatestJob } from '@/lib/db/compiler-repository';
 import { formatDateRange, formatMinutes } from '@/lib/format';
@@ -47,6 +49,14 @@ import {
 } from '@sidequest/core';
 import { boardFor, compiledRegionFor, resolveTripRegion } from '@/lib/region';
 import { refreshWeatherFormAction } from './actions';
+import { ScanScreen } from '@/components/ScanScreen';
+import { RescanButton } from '@/components/RescanButton';
+import { scanPreflight } from '@/lib/discovery-scan/preflight';
+import { scanFailureCopy, travellerScanView } from '@/lib/discovery-scan/view';
+import { getScanProposalExtras, scanView } from '@/lib/db/scan-repository';
+import { buildRunView } from '@/lib/planning/build-run-view';
+import { buildPreflight } from '@/lib/planning/build-preflight';
+import { callerKey } from '@/lib/net/caller';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,12 +100,39 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   if (!profile) redirect(`/trips/${id}/questionnaire`);
 
   const resolved = await resolveTripRegion(trip);
-  if (!resolved.ok) notFound();
+  /*
+   * V1 CONVERGENCE — THE SCAN IS THE STEP BEFORE THE BOARD, NOT A DEAD END.
+   *
+   * A trip with no board yet (or one being rescanned, or one whose scan has
+   * finished and is about to hand over to the build the traveller asked for)
+   * gets the scan screen: one primary action, then real progress, then the
+   * board. A scan that started the build "Plan with smart defaults" asked for
+   * is followed to the build screen rather than leaving the traveller on a
+   * board while their trip is being written.
+   */
+  const scan = travellerScanView(id);
+  if (resolved.ok && scan.autoBuildStarted && buildRunView(id).state === 'running') redirect(`/trips/${id}/build`);
+  if (!resolved.ok || scan.state === 'running' || (scan.state === 'ready' && scan.autoBuildPending)) {
+    const scanGate = scanPreflight();
+    const unavailable = scanGate.ok ? null : scanFailureCopy(scanGate.cause);
+    const build = buildPreflight(id, { caller: await callerKey() });
+    return (
+      <ScanScreen
+        tripId={id}
+        destination={trip.basics.destinationInput}
+        initial={scan}
+        unavailable={unavailable ? { heading: unavailable.heading, message: unavailable.message } : null}
+        canBuildWithoutBoard={!resolved.ok && build.ok && build.path !== 'planner'}
+      />
+    );
+  }
   const { region } = resolved.context;
 
   const days = countTripDays(trip.basics.startDate, trip.basics.endDate);
   const board = boardFor(trip, profile, resolved.context);
   const compiled = compiledRegionFor(id);
+  /* Whether the board on screen is the one a Discovery scan built, so its header can say where the places came from. */
+  const scannedBoard = compiled !== null && scanView(id).compiledRegionId === compiled.id;
   const attributions = compiled?.sourceManifest.attributions ?? [];
   const suggestion = autoSelect({
     candidates: board.candidates,
@@ -153,7 +190,14 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const awaitingReconciliation = reconciliation ? 0 : pendingActionCount(id);
   const stored = getSelections(id);
   const selections: Record<string, SelectionStatus | undefined> = {};
-  for (const selection of stored) selections[selection.placeId] = selection.status;
+  /* Which includes are Sidequest's rather than the traveller's, so the card can say so. */
+  const autoPicks: string[] = [];
+  for (const selection of stored) {
+    // An un-ticked pick (`dismissed`) is a decision the store keeps and an ordinary undecided card on screen.
+    if (selection.status === 'dismissed') continue;
+    selections[selection.placeId] = selection.status;
+    if (selection.source === 'auto' && selection.status === 'included') autoPicks.push(selection.placeId);
+  }
 
   const closed = board.candidates.filter((candidate) => candidate.season.status === 'closed');
   const workable = board.candidates.filter((candidate) => candidate.fit.band !== 'not_workable');
@@ -234,6 +278,13 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
     decisions: getIntent(id)?.composer?.mustDoDecisions ?? [],
   });
   const readiness = settled.readiness;
+  /* "I already have a plan": checked against the planner's own pool and clock. Pure — renders call no provider. */
+  let critique: ReturnType<typeof plannerCritique> = null;
+  try {
+    critique = plannerCritique({ trip, profile, region: resolved.context, candidates: board.candidates, selections: stored, extras: getScanProposalExtras(id), composer: getIntent(id)?.composer ?? null });
+  } catch (error) {
+    console.warn('Plan critique failed; the board renders without it', error instanceof Error ? error.message : error);
+  }
   /*
    * Whether the build behind this artifact stopped on its own budget, so a
    * `thin` reading can be attributed honestly — "we stopped before reading
@@ -292,8 +343,20 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
                 View the trip you built
               </Link>
             ) : null}
+            {scannedBoard ? <RescanButton tripId={id} /> : null}
           </div>
         </div>
+        {scannedBoard ? (
+          /*
+           * V1 convergence — where these places came from, said once and plainly:
+           * proposed by Sidequest's research, each located on a map, Sidequest's
+           * picks pre-ticked and the traveller's to change. A rescan keeps a pick
+           * only on a place that comes back under the same identity.
+           */
+          <p className="measure mt-3 text-sm leading-relaxed text-ink-muted" data-testid="board-provenance">
+            Sidequest’s research proposed these places for how you travel, and each one was located on a map before it reached this board. Sidequest’s picks are already ticked — keep them, change them, or let Sidequest choose again, then build your trip from what you chose. Rescanning replaces the list; your picks on places that still appear are kept.
+          </p>
+        ) : null}
         <p className="mt-3 text-sm text-ink-muted" data-testid="trip-line">
           {formatDateRange(trip.basics.startDate, trip.basics.endDate)} · {days} days ·{' '}
           {trip.basics.adults} adult{trip.basics.adults === 1 ? '' : 's'}
@@ -347,6 +410,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
         place name and got forty other places is owed a sentence about theirs
         before they are shown anything else.
       */}
+      {critique ? <PlanCritiquePanel critique={critique} /> : null}
       {settled.coverage ? <MustDoPanel tripId={id} coverage={settled.coverage} /> : null}
 
       {readiness && !mayShowDiscoveryBoard(readiness) ? null : (
@@ -409,6 +473,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               base={{ name: region.baseName, coordinates: region.baseCoordinates }}
               groups={board.groups}
               initialSelections={selections}
+              initialAutoPicks={autoPicks}
               autoPickNotes={suggestion.notes}
               hasItinerary={planned}
               weatherBackups={boardWeatherBackups(board.candidates)}

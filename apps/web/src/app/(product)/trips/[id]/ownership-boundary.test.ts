@@ -197,6 +197,10 @@ describe('the trip-mutating actions, invoked with a foreign cookie', () => {
       invoke: async (id) => (await import('./itinerary/actions')).buildItineraryAction(id),
     },
     {
+      name: 'itinerary/regenerateItineraryAction',
+      invoke: async (id) => (await import('./itinerary/actions')).regenerateItineraryAction(id, 'regen-key-0001'),
+    },
+    {
       name: 'itinerary/removeStopAction',
       invoke: async (id) => (await import('./itinerary/actions')).removeStopAction(id, 1, 'p1'),
     },

@@ -8,8 +8,11 @@ import {
   getGenerationProgress,
   heartbeatGeneration,
   newFailureRef,
+  noteFailureCause,
   type BuildFailureKind,
 } from '../db/generation-progress-repository';
+import { buildFailure, classifyModelError, encodeBuildFailure } from './build-failure';
+import { failureForResult } from './build-preflight';
 import { getTripDraft } from '../db/draft-repository';
 import { generateSidequestPlanForTrip, type GenerationMode } from './production-plan';
 import { viewOf, type BuildRunView } from './build-run-view';
@@ -98,9 +101,12 @@ export async function runBuild(input: StartBuildRunInput): Promise<void> {
       buildKey: input.buildKey,
       ...(input.reuseStoredDraft ? { reuseStoredDraft: true } : {}),
     });
-    if (!generated.ok) recordFailure(input, { message: generated.error ?? 'the generation returned no plan' });
+    if (!generated.ok) {
+      const failure = failureForResult(generated, input.tripId, { caller: input.caller, ...(input.reuseStoredDraft ? { reuseStoredDraft: true } : {}) });
+      recordFailure(input, { message: generated.error ?? 'the generation returned no plan', cause: encodeBuildFailure(failure) });
+    }
   } catch (error) {
-    recordFailure(input, { message: error instanceof Error ? error.message : 'unknown', name: error instanceof Error ? error.name : 'Error' });
+    recordFailure(input, { message: error instanceof Error ? error.message : 'unknown', name: error instanceof Error ? error.name : 'Error', ...(error instanceof Error && error.stack ? { where: error.stack.split('\n').slice(1, 6).map((l) => l.trim()).join(' | ') } : {}), cause: encodeBuildFailure(buildFailure(classifyModelError(error))) });
   } finally {
     clearInterval(heartbeat);
   }
@@ -111,7 +117,7 @@ export async function runBuild(input: StartBuildRunInput): Promise<void> {
  * is shown. Named fields only — never the error object, which for a provider
  * failure carries the outbound request and its headers.
  */
-function recordFailure(input: StartBuildRunInput, detail: { message: string; name?: string }): void {
+function recordFailure(input: StartBuildRunInput, detail: { message: string; name?: string; cause: string; where?: string }): void {
   const now = new Date();
   let ref: string | null = null;
   let kind: BuildFailureKind | null = null;
@@ -120,8 +126,10 @@ function recordFailure(input: StartBuildRunInput, detail: { message: string; nam
     if (row?.finished) {
       ref = row.failure?.ref ?? null;
       kind = row.failure?.kind ?? null;
+      /* The generation finished the row itself; the cause it knew is kept, and only a missing one is filled in. */
+      noteFailureCause(input.tripId, detail.cause);
     } else {
-      const recorded = finishGeneration(input.tripId, 'failed', now, { ref: newFailureRef() });
+      const recorded = finishGeneration(input.tripId, 'failed', now, { ref: newFailureRef(), cause: detail.cause });
       ref = recorded.ref;
       kind = recorded.kind;
     }
@@ -131,11 +139,14 @@ function recordFailure(input: StartBuildRunInput, detail: { message: string; nam
   console.error('Build failed', {
     ref: ref ?? 'unrecorded',
     kind: kind ?? 'unknown',
+    cause: detail.cause,
     tripId: input.tripId,
     buildKey: input.buildKey,
     reuseStoredDraft: Boolean(input.reuseStoredDraft),
     name: detail.name ?? null,
     message: detail.message.slice(0, 300),
+    /* Server log only: the first frames, so an unexplained failure names its own location. */
+    ...(detail.where ? { where: detail.where.slice(0, 600) } : {}),
   });
 }
 

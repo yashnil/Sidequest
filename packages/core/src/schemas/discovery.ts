@@ -14,11 +14,51 @@ export const SELECTION_STATUS_LABELS: Record<SelectionStatus, string> = {
 export const selectionSourceSchema = z.enum(['auto', 'user']);
 export type SelectionSource = z.infer<typeof selectionSourceSchema>;
 
+/**
+ * EVERY STATE A STORED SELECTION ROW CAN BE IN.
+ *
+ * The three statuses above are what the card's control offers. `dismissed` is
+ * the fourth, and it is never offered as a button: it is what un-ticking an
+ * include records. Before it existed, un-ticking deleted the row, so the next
+ * "Choose for me" — or the questionnaire's seeding on the way to a build —
+ * quietly put the same place straight back. A dismissed row is a traveller
+ * decision ("not chosen, do not add it for me") that every automatic pass reads
+ * as decided and the board renders as an ordinary undecided card.
+ */
+export const STORED_SELECTION_STATUSES = [...SELECTION_STATUSES, 'dismissed'] as const;
+export const storedSelectionStatusSchema = z.enum(STORED_SELECTION_STATUSES);
+export type StoredSelectionStatus = z.infer<typeof storedSelectionStatusSchema>;
+
+/**
+ * Why somebody skipped a card — the five reasons the board offers.
+ *
+ * Persisted on the selection row so the reason outlives the press: the planner
+ * and the brief can say "skipped: too expensive" rather than only "skipped".
+ */
+export const SKIP_REASONS = ['too_touristy', 'too_expensive', 'too_intense', 'too_far', 'not_my_thing'] as const;
+export const skipReasonSchema = z.enum(SKIP_REASONS);
+export type SkipReason = z.infer<typeof skipReasonSchema>;
+
+/** The words the brief uses for a skip reason. Lower case: they sit mid-sentence. */
+export const SKIP_REASON_PHRASES: Record<SkipReason, string> = {
+  too_touristy: 'too touristy',
+  too_expensive: 'too expensive',
+  too_intense: 'too much effort',
+  too_far: 'too far',
+  not_my_thing: 'not their thing',
+};
+
 export const discoverySelectionSchema = z.object({
   placeId: z.string().min(1),
-  status: selectionStatusSchema,
-  /** Distinguishes an auto-picked default from a choice the traveller made. */
+  status: storedSelectionStatusSchema,
+  /**
+   * Who made this row. `auto` is Sidequest's recommendation (only ever
+   * `included`); `user` is a decision the traveller made by hand, including a
+   * `dismissed` un-tick of a Sidequest pick.
+   */
   source: selectionSourceSchema,
+  /** Only on a `user` + `excluded` row, and only when the traveller gave one. */
+  reason: skipReasonSchema.optional(),
   updatedAt: z.string().min(1),
 });
 export type DiscoverySelection = z.infer<typeof discoverySelectionSchema>;

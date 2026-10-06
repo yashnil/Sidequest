@@ -6,23 +6,39 @@ import type { Trip } from '@sidequest/core';
 
 /**
  * Discovery Board decisions reach the composition call as compact *signals*
- * — must include / interested / avoid — never as a list of what exists. The
- * model stays free to compose anything the board never carried.
+ * — the traveller's must-includes / maybes / exclusions, and Sidequest's own
+ * recommendations kept apart — never as a list of what exists. The model stays
+ * free to compose anything the board never carried.
  */
 describe('boardSignalsFor', () => {
   const candidates = [
     { place: { id: 'a', name: 'Place A' } },
     { place: { id: 'b', name: 'Place B' } },
     { place: { id: 'c', name: 'Place C' } },
+    { place: { id: 'd', name: 'Place D' } },
   ] as never;
 
-  it('maps included → mustInclude, maybe → interested, excluded → avoid', () => {
+  it('maps the traveller\'s included → mustInclude, maybe → interested, excluded → avoid', () => {
     const out = boardSignalsFor(candidates, [
       { placeId: 'a', status: 'included' },
       { placeId: 'b', status: 'maybe' },
       { placeId: 'c', status: 'excluded' },
     ]);
-    expect(out).toEqual({ mustInclude: ['Place A'], interested: ['Place B'], avoid: ['Place C'] });
+    expect(out).toMatchObject({ mustInclude: ['Place A'], interested: ['Place B'], avoid: ['Place C'], recommended: [] });
+  });
+
+  it('carries a Sidequest auto-pick as a recommendation, never as a traveller must-include', () => {
+    const out = boardSignalsFor(candidates, [
+      { placeId: 'a', status: 'included', source: 'user', updatedAt: '2026-01-01T00:00:00.000Z' },
+      { placeId: 'd', status: 'included', source: 'auto', updatedAt: '2026-01-01T00:00:00.000Z' },
+      { placeId: 'b', status: 'dismissed', source: 'user', updatedAt: '2026-01-01T00:00:00.000Z' },
+      { placeId: 'c', status: 'excluded', source: 'user', reason: 'too_expensive', updatedAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+    expect(out?.mustInclude).toEqual(['Place A']);
+    expect(out?.recommended).toEqual(['Place D']);
+    expect(out?.avoidReasons).toEqual({ 'Place C': 'too expensive' });
+    // A dismissed pick is in no list the composition reads.
+    expect(JSON.stringify(out)).not.toContain('Place B');
   });
 
   it('ignores a selection whose place is not on the board, and returns nothing for none', () => {
@@ -30,10 +46,16 @@ describe('boardSignalsFor', () => {
     expect(boardSignalsFor(candidates, [])).toBeUndefined();
   });
 
-  it('caps each list at 10', () => {
-    const many = Array.from({ length: 15 }, (_, i) => ({ placeId: `p${i}`, status: 'included' }));
-    const manyCandidates = Array.from({ length: 15 }, (_, i) => ({ place: { id: `p${i}`, name: `Place ${i}` } })) as never;
-    expect(boardSignalsFor(manyCandidates, many)?.mustInclude.length).toBe(10);
+  it('never caps the traveller\'s includes; caps Sidequest\'s recommendations in fit order and counts what it left out', () => {
+    const manyCandidates = Array.from({ length: 15 }, (_, i) => ({ place: { id: `p${String(i).padStart(2, '0')}`, name: `Place ${i}` }, fit: { score: 50 + i } })) as never;
+    const userMany = Array.from({ length: 15 }, (_, i) => ({ placeId: `p${String(i).padStart(2, '0')}`, status: 'included' as const }));
+    expect(boardSignalsFor(manyCandidates, userMany)?.mustInclude.length).toBe(15);
+
+    const autoMany = Array.from({ length: 15 }, (_, i) => ({ placeId: `p${String(i).padStart(2, '0')}`, status: 'included' as const, source: 'auto' as const }));
+    const out = boardSignalsFor(manyCandidates, autoMany)!;
+    expect(out.recommended).toHaveLength(10);
+    expect(out.recommended?.[0]).toBe('Place 14');
+    expect(out.omitted?.recommended).toBe(5);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { printPacketHref, printWithAppendixHref } from '@/components/hub/print-links';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PACKING_CATEGORY_LABELS, type PackingCategory } from '@sidequest/core';
@@ -118,10 +119,10 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
           The packet prints from the trip itself: the route, the days, stays, getting around, what to book first, before-you-go, packing and the day backups — plus a last page of addresses, positions and the emergency number.
         </p>
         <div className="mt-3 flex flex-wrap gap-2" data-print="never">
-          <Link href={`/trips/${id}/itinerary?print=1`} className={buttonClass('secondary', 'sm')} data-testid="pack-pdf">
+          <Link href={printPacketHref(id)} className={buttonClass('secondary', 'sm')} data-testid="pack-pdf">
             Print or save as PDF
           </Link>
-          <Link href={`/trips/${id}/itinerary?print=1&appendix=1`} className={buttonClass('ghost', 'sm')}>
+          <Link href={printWithAppendixHref(id)} className={buttonClass('ghost', 'sm')}>
             Print with the evidence appendix
           </Link>
         </div>

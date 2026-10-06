@@ -418,17 +418,35 @@ function BuildFailure({
 }) {
   const failure = view?.failure ?? null;
   const lost = view?.state === 'lost';
-  const heading = lost ? 'We lost track of this build.' : 'Sidequest couldn’t finish this build.';
-  const preserved = failure?.draftSaved
-    ? 'Your trip profile is saved, and so is the draft Sidequest wrote — trying again finishes that draft rather than starting over.'
-    : failure?.modelInvoked
-      ? 'Your trip profile is saved. The draft could not be used, so trying again writes a fresh one.'
-      : 'Your trip profile is saved. Nothing was composed yet, so trying again starts the build from it.';
+  /*
+   * V1 CONVERGENCE — THE CAUSE DECIDES THE WORDS AND THE BUTTON.
+   *
+   * A run recorded with a cause (`planning/build-failure.ts`) says what
+   * actually stopped it, and offers "Try build again" only when pressing it can
+   * change the outcome: a site that cannot compose, a rejected key or a spent
+   * daily allowance is not fixed by the traveller pressing a button, and
+   * offering one is the loop this replaces. A run with no cause (lost, or
+   * recorded before the taxonomy) keeps the copy it always had.
+   */
+  const retryable = failure?.retryable ?? true;
+  const heading = lost ? 'We lost track of this build.' : (failure?.heading ?? 'Sidequest couldn’t finish this build.');
+  const preserved = !retryable
+    ? 'Your trip profile is saved. Nothing in the interview needs answering again.'
+    : failure?.draftSaved
+      ? 'Your trip profile is saved, and so is the draft Sidequest wrote — trying again finishes that draft rather than starting over.'
+      : failure?.modelInvoked
+        ? 'Your trip profile is saved. The draft could not be used, so trying again writes a fresh one.'
+        : 'Your trip profile is saved. Nothing was composed yet, so trying again starts the build from it.';
   return (
-    <div className="enter" data-testid="build-failure">
+    <div className="enter" data-testid="build-failure" data-cause={failure?.cause ?? 'unknown'} data-retryable={retryable ? 'true' : 'false'}>
       <p className="type-small atlas-muted">Building {destination}</p>
       <h2 className="display-xl mt-2 text-[var(--color-atlas-ink)]">{heading}</h2>
-      <p className="mt-4 max-w-[52ch] type-body text-[var(--color-atlas-ink)]" data-testid="build-failure-reason">
+      {!lost && failure?.message ? (
+        <p className="mt-4 max-w-[52ch] type-body text-[var(--color-atlas-ink)]" data-testid="build-failure-cause">
+          {failure.message}
+        </p>
+      ) : null}
+      <p className={cx('max-w-[52ch] type-body', !lost && failure?.message ? 'mt-2 atlas-muted' : 'mt-4 text-[var(--color-atlas-ink)]')} data-testid="build-failure-reason">
         {preserved}
       </p>
       {view?.hasItinerary ? (
@@ -436,11 +454,13 @@ function BuildFailure({
           Your earlier plan is still there and unchanged.
         </p>
       ) : null}
-      <p className="mt-2 max-w-[52ch] type-small atlas-muted">Nothing in the interview needs answering again.</p>
+      {retryable ? <p className="mt-2 max-w-[52ch] type-small atlas-muted">Nothing in the interview needs answering again.</p> : null}
       <div className="mt-8 flex flex-wrap gap-3">
-        <button type="button" onClick={onRetry} disabled={retrying} className={cx(buttonClass('primary', 'lg'), 'bg-[var(--color-atlas-ink)] text-[var(--color-atlas)] hover:bg-white')} data-testid="build-retry">
-          {retrying ? 'Starting…' : 'Try build again'}
-        </button>
+        {retryable ? (
+          <button type="button" onClick={onRetry} disabled={retrying} className={cx(buttonClass('primary', 'lg'), 'bg-[var(--color-atlas-ink)] text-[var(--color-atlas)] hover:bg-white')} data-testid="build-retry">
+            {retrying ? 'Starting…' : 'Try build again'}
+          </button>
+        ) : null}
         <Link href={`/trips/${tripId}/questionnaire`} className={cx(ATLAS_SECONDARY, 'min-h-12 px-6 text-base')} data-testid="build-return-review">
           Return to review
         </Link>

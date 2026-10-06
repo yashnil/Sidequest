@@ -16,7 +16,9 @@ import {
   type FoodSelection,
   type QuestionnaireAnswers,
   type SelectionSource,
-  type SelectionStatus,
+  type SkipReason,
+  type StoredSelectionStatus,
+  travellerDecided,
   type TravelerProfile,
   type Trip,
   type TripBasics,
@@ -72,6 +74,7 @@ interface SelectionRow {
   place_id: string;
   status: string;
   source: string;
+  reason: string | null;
   updated_at: string;
 }
 
@@ -603,41 +606,91 @@ export function getProfile(tripId: string): TravelerProfile | null {
   return migrated;
 }
 
+/**
+ * Every stored row, in a deterministic order: the order the rows were first
+ * written (`rowid` survives an upsert), then the place id. Downstream caps and
+ * "the order the traveller made them" both depend on this being stable — it was
+ * an unordered query under a `.slice(0, 10)`.
+ */
 export function getSelections(tripId: string): DiscoverySelection[] {
   const rows = getDb()
-    .prepare('SELECT place_id, status, source, updated_at FROM discovery_selections WHERE trip_id = ?')
+    .prepare(
+      'SELECT place_id, status, source, reason, updated_at FROM discovery_selections WHERE trip_id = ? ORDER BY rowid, place_id',
+    )
     .all(tripId) as SelectionRow[];
   return rows.map((row) =>
     discoverySelectionSchema.parse({
       placeId: row.place_id,
       status: row.status,
       source: row.source,
+      ...(row.reason && row.status === 'excluded' ? { reason: row.reason } : {}),
       updatedAt: row.updated_at,
     }),
   );
 }
 
+/**
+ * Writes one row. `reason` is kept only on a skip; any other status clears it,
+ * so a card skipped as "too far" and later included does not carry the old why.
+ */
 export function setSelection(
   tripId: string,
   placeId: string,
-  status: SelectionStatus,
+  status: StoredSelectionStatus,
   source: SelectionSource,
+  reason?: SkipReason | null,
 ): void {
+  const kept = status === 'excluded' && reason ? reason : null;
   discoverySelectionSchema.parse({
     placeId,
     status,
     source,
+    ...(kept ? { reason: kept } : {}),
     updatedAt: new Date().toISOString(),
   });
   getDb()
     .prepare(
-      `INSERT INTO discovery_selections (trip_id, place_id, status, source, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO discovery_selections (trip_id, place_id, status, source, reason, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(trip_id, place_id) DO UPDATE SET
-         status = excluded.status, source = excluded.source, updated_at = excluded.updated_at`,
+         status = excluded.status, source = excluded.source, reason = excluded.reason,
+         updated_at = excluded.updated_at`,
     )
-    .run(tripId, placeId, status, source, new Date().toISOString());
+    .run(tripId, placeId, status, source, kept, new Date().toISOString());
   setTripStatus(tripId, 'discovering');
+}
+
+/**
+ * Takes a card back off the trip, recording that as a decision when it was one.
+ *
+ * Un-ticking an include — Sidequest's pick or the traveller's own — writes a
+ * `user` + `dismissed` row instead of deleting: a deleted row is "nobody has
+ * decided", which is exactly what let the next auto-pick (or the
+ * questionnaire's seeding on the way to a build) put the place straight back.
+ * Clearing a maybe or a skip is still a plain delete — that is the traveller
+ * withdrawing an opinion, and an undecided card is the truthful result.
+ *
+ * Returns what the row now is.
+ */
+export function withdrawSelection(tripId: string, placeId: string): 'dismissed' | 'cleared' {
+  const existing = getDb()
+    .prepare('SELECT status FROM discovery_selections WHERE trip_id = ? AND place_id = ?')
+    .get(tripId, placeId) as { status: string } | undefined;
+  if (existing?.status === 'included' || existing?.status === 'dismissed') {
+    setSelection(tripId, placeId, 'dismissed', 'user');
+    return 'dismissed';
+  }
+  clearSelection(tripId, placeId);
+  return 'cleared';
+}
+
+/**
+ * The traveller's own decisions as `autoSelect`'s `decided` map — every `user`
+ * row, `dismissed` included. Every automatic pass reads this, so nothing the
+ * traveller decided is overruled and nothing they un-ticked comes back.
+ */
+export function travellerDecisions(tripId: string): Record<string, StoredSelectionStatus> {
+  return travellerDecided(getSelections(tripId));
 }
 
 /**

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ProductChrome } from '@/components/ProductChrome';
 import { buttonClass } from '@/components/ui';
 import { chromeAccount } from '@/lib/auth/chrome';
-import { isCompositionModelConfigured, isFixtureComposer } from '@/lib/providers/switches';
+import { buildPreflight } from '@/lib/planning/build-preflight';
 import { currentUserId } from '@/lib/auth/session';
 import { sessionToken } from '@/lib/net/caller';
 import { dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
@@ -95,8 +95,15 @@ const PROOF: [string, string][] = [
 
 export default async function HomePage() {
   const now = new Date();
-  /* Planning needs a composer, never the research stack: that is optional, behind "Explore experiences first". */
-  const compileReady = isFixtureComposer() || isCompositionModelConfigured();
+  /*
+   * Planning needs a composer, never the research stack: that is optional,
+   * behind "Explore experiences first". V1 convergence — asked of the one
+   * preflight every build door asks (composer, production fixture guard, a
+   * rejected key, the day's shared allowance), so this sentence and the Build
+   * button can never disagree.
+   */
+  const preflight = buildPreflight(null);
+  const compileReady = preflight.ok;
 
   /*
    * This browser's trips, not the database's. `mint: false` because a page
@@ -191,8 +198,7 @@ export default async function HomePage() {
 
             {!compileReady ? (
               <p className="card mt-6 border-amber bg-amber-soft p-4 text-sm leading-relaxed text-ink">
-                <strong className="font-semibold">This deployment cannot compose a new trip right now.</strong> Trips you have
-                already built still open normally.
+                <strong className="font-semibold">{preflight.ok ? '' : preflight.failure.heading}</strong> {preflight.ok ? '' : preflight.failure.message}
               </p>
             ) : null}
           </div>

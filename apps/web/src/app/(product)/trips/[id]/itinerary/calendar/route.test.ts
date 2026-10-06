@@ -95,6 +95,18 @@ describe('the calendar export', () => {
     expect(body).toContain('OpenStreetMap');
   });
 
+  it('the downloaded file carries a booking as confirmed, and none of its reference, notes, cost or link', async () => {
+    const result = planTrip(buildScenario());
+    if (!result.ok) throw new Error('the fixture scenario did not plan');
+    saveItinerary({ ...result.itinerary, tripId: TRIP });
+    const { addBookedItem } = await import('@/lib/db/intelligence-repository');
+    addBookedItem(TRIP, { type: 'activity', title: 'Guided lake paddle', date: result.itinerary.days[1]!.date, startTime: '09:00', confirmationRef: 'ICS-REF-7781', notes: 'ICS private note about the guide', url: 'https://example.invalid/ics-booking', cost: { amount: 987.65, currency: 'USD' }, status: 'booked' } as Parameters<typeof addBookedItem>[1]);
+    const body = await (await GET(new Request('http://localhost/x'), params(TRIP))).text();
+    for (const secret of ['ICS-REF-7781', 'ICS private note', 'example.invalid', '987.65', '987']) expect(body, `${secret} reached the calendar file`).not.toContain(secret);
+    expect(body).toContain('Guided lake paddle');
+    expect(body).toMatch(/^STATUS:CONFIRMED$/m);
+  });
+
   it('refuses a stale plan with a rebuild message rather than exporting stale claims', async () => {
     getDb()
       .prepare(

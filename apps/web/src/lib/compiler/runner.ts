@@ -972,7 +972,8 @@ export async function runCompilation(input: {
         entry.match?.target === 'place',
     );
     if (covered.length > 0) {
-      const already = new Set(getSelections(input.trip.id).map((entry) => entry.placeId));
+      // A Sidequest pick is not something the traveller said; their named must-do upgrades it to theirs.
+      const already = new Set(getSelections(input.trip.id).filter((entry) => entry.source === 'user').map((entry) => entry.placeId));
       for (const entry of covered) {
         const placeId = entry.match!.id;
         if (already.has(placeId)) continue;

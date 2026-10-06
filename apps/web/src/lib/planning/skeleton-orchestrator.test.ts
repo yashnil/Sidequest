@@ -332,3 +332,15 @@ describe('the production orchestrator never reaches the model', () => {
     expect(source).not.toMatch(/from ['"].*compiler\/providers['"]/);
   });
 });
+
+describe('productionFindNearbyLocalities — a silent geocoder is an absence', () => {
+  it('returns no localities, never throws, when the map data is empty and the reverse geocoder does not answer', async () => {
+    const { reverseGeocode, GeocoderError } = await import('../providers/nominatim');
+    const { fetchSettlements, isPoiProviderEnabled } = await import('../providers/overpass');
+    vi.mocked(isPoiProviderEnabled).mockReturnValue(true);
+    vi.mocked(fetchSettlements).mockResolvedValue({ elements: [] } as never);
+    vi.mocked(reverseGeocode).mockRejectedValue(new GeocoderError('request_failed', 'The geocoder did not answer.'));
+    const { productionFindNearbyLocalities } = await import('./skeleton-orchestrator');
+    await expect(productionFindNearbyLocalities({ lat: 21.0, lng: 105.8 }, 15)).resolves.toEqual([]);
+  });
+});

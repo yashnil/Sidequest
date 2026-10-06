@@ -184,7 +184,8 @@ export function compiledRegionFor(tripId: string): CompiledRegion | null {
   const intent = getIntent(tripId);
   if (!intent?.selectedCompiledRegionId) return null;
   try {
-    return getCompiledRegion(intent.selectedCompiledRegionId);
+    const region = getCompiledRegion(intent.selectedCompiledRegionId);
+    return region && scanCoordinatesExpired(region, new Date()) ? null : region;
   } catch (error) {
     // A stored artifact that will not parse is the itinerary case, not the cache
     // case: the caller offers a rebuild rather than silently compiling again.
@@ -474,4 +475,22 @@ export function boardFor(
         : {}),
     },
   });
+}
+
+/**
+ * V1 — GOOGLE COORDINATES ARE A THIRTY-DAY LOAN (Maps Service Terms §14.3).
+ *
+ * A discovery-scan region whose places were located with Google Places may
+ * serve those coordinates for at most thirty days from the scan. Past that it
+ * reads as absent, exactly like an unparseable artifact: the board offers a
+ * fresh scan rather than serving cached Maps Content. Regions located with open
+ * data (Nominatim/OSM) carry no such limit. An itinerary already built keeps
+ * what it persisted under the rules that already govern it.
+ */
+export const GOOGLE_COORDINATE_TTL_DAYS = 29;
+export function scanCoordinatesExpired(region: CompiledRegion, now: Date): boolean {
+  if (!region.compilerVersion.startsWith('discovery-scan/')) return false;
+  if (!region.places.some((place) => place.source.kind === 'google_places')) return false;
+  const created = Date.parse(region.createdAt);
+  return Number.isFinite(created) && now.getTime() - created > GOOGLE_COORDINATE_TTL_DAYS * 86_400_000;
 }

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { GENERATION_STAGES, GENERATION_STAGE_DETAIL, GENERATION_STAGE_LABELS, buildRunStateOf, getGenerationProgress, milestonesFor, type BuildFailureKind, type BuildRunState, type GenerationStage } from '@/lib/db/generation-progress-repository';
+import { GENERATION_STAGES, GENERATION_STAGE_DETAIL, GENERATION_STAGE_LABELS, buildRunStateOf, getGenerationProgress, milestonesFor, type BuildRunState, type GenerationStage } from '@/lib/db/generation-progress-repository';
 import { hasItinerary } from '@/lib/db/repository';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
+import { runFailureView, type RunFailureView } from '@/lib/planning/build-run-view';
 
 /**
  * V7 §16 — THE GENERATION SCREEN POLLS A ROUTE, NOT A SERVER ACTION.
@@ -33,7 +34,8 @@ export interface GenerationProgressView {
   /** V8 — the run's state, decided from the row and the clock. */
   state: BuildRunState;
   buildKey: string | null;
-  failure: { ref: string | null; kind: BuildFailureKind; modelInvoked: boolean; draftSaved: boolean } | null;
+  /** V1 convergence — `cause`, `retryable`, `heading`, `message`, `nextAction` say why, in the traveller's words (`planning/build-failure.ts`). */
+  failure: RunFailureView | null;
   hasItinerary: boolean;
   /** V8 §14 — places the build has put on the map so far, in the order they were placed. Real lookups only. */
   placed: { name: string; lat: number; lng: number }[];
@@ -61,12 +63,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     milestones: milestonesFor(progress.counters, progress.stage),
     state,
     buildKey: progress.buildKey,
-    failure:
-      state === 'failed'
-        ? { ref: progress.failure?.ref ?? null, kind: progress.failure?.kind ?? 'before_model', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved }
-        : state === 'lost'
-          ? { ref: null, kind: 'lost', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved }
-          : null,
+    failure: runFailureView(progress, state),
     hasItinerary: hasItinerary(id),
     placed: progress.placed,
   };

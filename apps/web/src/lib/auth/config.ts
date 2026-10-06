@@ -21,7 +21,13 @@ export function authProviders(env: Record<string, string | undefined> = process.
   const baseUrl = (env.SIDEQUEST_BASE_URL ?? '').trim().replace(/\/+$/, '') || null;
   const google = Boolean((env.GOOGLE_OAUTH_CLIENT_ID ?? '').trim() && (env.GOOGLE_OAUTH_CLIENT_SECRET ?? '').trim() && baseUrl);
   const fixtureAsked = (env.SIDEQUEST_AUTH_PROVIDER ?? '').trim().toLowerCase() === 'fixture';
-  const fixture = fixtureAsked && (env.NODE_ENV !== 'production' || (env.SIDEQUEST_AUTH_FIXTURE ?? '').trim() === 'allow' || (env.SIDEQUEST_ACTION_FENCES ?? '').trim() === 'off');
+  /*
+   * V1 CONVERGENCE — ONE DOOR. `SIDEQUEST_ACTION_FENCES=off` used to unlock
+   * this too, which made a rate-limit switch (set by the browser suite, and
+   * plausibly by an operator chasing a throttling bug) a passwordless
+   * sign-in switch in production. Only the explicit allow opens it now.
+   */
+  const fixture = fixtureAsked && (env.NODE_ENV !== 'production' || (env.SIDEQUEST_AUTH_FIXTURE ?? '').trim() === 'allow');
   return { google, fixture, any: google || fixture, baseUrl };
 }
 

@@ -112,7 +112,12 @@ export interface GenerationProgress {
   heartbeatAt: string | null;
   modelInvoked: boolean;
   draftSaved: boolean;
-  failure: { ref: string; kind: BuildFailureKind } | null;
+  /**
+   * `cause` is V1 convergence's encoded `BuildFailureCause` (`cause` or
+   * `cause/variant`, see `planning/build-failure.ts`); null on a run recorded
+   * before it existed, or one whose cause nobody established.
+   */
+  failure: { ref: string; kind: BuildFailureKind; cause: string | null } | null;
 }
 
 interface Row {
@@ -131,6 +136,7 @@ interface Row {
   draft_saved?: number | null;
   failure_ref?: string | null;
   failure_kind?: string | null;
+  failure_cause?: string | null;
 }
 
 /**
@@ -190,7 +196,7 @@ function parse(row: Row): GenerationProgress {
     heartbeatAt: row.heartbeat_at ?? null,
     modelInvoked: row.model_invoked === 1,
     draftSaved: row.draft_saved === 1,
-    failure: row.outcome === 'failed' && row.failure_ref ? { ref: row.failure_ref, kind: kind ?? 'before_model' } : null,
+    failure: row.outcome === 'failed' && row.failure_ref ? { ref: row.failure_ref, kind: kind ?? 'before_model', cause: row.failure_cause ?? null } : null,
   };
 }
 
@@ -228,10 +234,10 @@ export function beginGeneration(tripId: string, now: Date, options: { buildKey?:
     if (existing && existing.build_key === buildKey && existing.finished === 0) return 'attached';
   }
   db.prepare(
-    `INSERT INTO generation_progress (trip_id, stage, reached, started_at, updated_at, finished, outcome, detail_json, build_key, caller, heartbeat_at, model_invoked, draft_saved, failure_ref, failure_kind)
-     VALUES (?, 'understanding', 'understanding', ?, ?, 0, NULL, '{}', ?, ?, ?, 0, 0, NULL, NULL)
+    `INSERT INTO generation_progress (trip_id, stage, reached, started_at, updated_at, finished, outcome, detail_json, build_key, caller, heartbeat_at, model_invoked, draft_saved, failure_ref, failure_kind, failure_cause)
+     VALUES (?, 'understanding', 'understanding', ?, ?, 0, NULL, '{}', ?, ?, ?, 0, 0, NULL, NULL, NULL)
      ON CONFLICT(trip_id) DO UPDATE SET stage = 'understanding', reached = 'understanding', started_at = excluded.started_at, updated_at = excluded.updated_at, finished = 0, outcome = NULL, detail_json = '{}',
-       build_key = excluded.build_key, caller = excluded.caller, heartbeat_at = excluded.heartbeat_at, model_invoked = 0, draft_saved = 0, failure_ref = NULL, failure_kind = NULL`,
+       build_key = excluded.build_key, caller = excluded.caller, heartbeat_at = excluded.heartbeat_at, model_invoked = 0, draft_saved = 0, failure_ref = NULL, failure_kind = NULL, failure_cause = NULL`,
   ).run(tripId, at, at, buildKey, options.caller ?? null, at);
   return 'started';
 }
@@ -304,21 +310,34 @@ export function newFailureRef(): string {
  * The build ended. A failure records its kind and an opaque reference; the
  * kind, when the caller does not know it, is read off what the row reached.
  */
-export function finishGeneration(tripId: string, outcome: 'ok' | 'failed', now: Date, failure?: { ref?: string; kind?: BuildFailureKind }): { ref: string | null; kind: BuildFailureKind | null } {
+export function finishGeneration(tripId: string, outcome: 'ok' | 'failed', now: Date, failure?: { ref?: string; kind?: BuildFailureKind; cause?: string | null }): { ref: string | null; kind: BuildFailureKind | null } {
   const db = getDb();
   if (outcome === 'ok') {
-    db.prepare("UPDATE generation_progress SET finished = 1, outcome = 'ok', updated_at = ?, failure_ref = NULL, failure_kind = NULL WHERE trip_id = ?").run(now.toISOString(), tripId);
+    db.prepare("UPDATE generation_progress SET finished = 1, outcome = 'ok', updated_at = ?, failure_ref = NULL, failure_kind = NULL, failure_cause = NULL WHERE trip_id = ?").run(now.toISOString(), tripId);
     return { ref: null, kind: null };
   }
   const row = db.prepare('SELECT model_invoked, draft_saved, finished, failure_ref, failure_kind FROM generation_progress WHERE trip_id = ?').get(tripId) as
     | { model_invoked?: number | null; draft_saved?: number | null; finished: number; failure_ref?: string | null; failure_kind?: string | null }
     | undefined;
   /* Already recorded as failed: keep the first reference, which is the one the log line carries. */
-  if (row?.finished === 1 && row.failure_ref) return { ref: row.failure_ref, kind: (row.failure_kind as BuildFailureKind | null) ?? 'before_model' };
+  if (row?.finished === 1 && row.failure_ref) {
+    if (failure?.cause) noteFailureCause(tripId, failure.cause);
+    return { ref: row.failure_ref, kind: (row.failure_kind as BuildFailureKind | null) ?? 'before_model' };
+  }
   const kind: BuildFailureKind = failure?.kind ?? (row?.draft_saved === 1 ? 'after_model' : row?.model_invoked === 1 ? 'model_failed' : 'before_model');
   const ref = failure?.ref ?? newFailureRef();
-  db.prepare("UPDATE generation_progress SET finished = 1, outcome = 'failed', updated_at = ?, failure_ref = ?, failure_kind = ? WHERE trip_id = ?").run(now.toISOString(), ref, kind, tripId);
+  db.prepare("UPDATE generation_progress SET finished = 1, outcome = 'failed', updated_at = ?, failure_ref = ?, failure_kind = ?, failure_cause = ? WHERE trip_id = ?").run(now.toISOString(), ref, kind, failure?.cause ?? null, tripId);
   return { ref, kind };
+}
+
+/**
+ * V1 convergence — the cause of a run already recorded as failed, when it is
+ * learned after the row was finished (the generation returns its typed failure
+ * to the run worker after it has written the row). The first cause recorded
+ * wins, like the first reference: it is the one nearest the failure.
+ */
+export function noteFailureCause(tripId: string, cause: string): void {
+  getDb().prepare("UPDATE generation_progress SET failure_cause = ? WHERE trip_id = ? AND outcome = 'failed' AND failure_cause IS NULL").run(cause, tripId);
 }
 
 export function getGenerationProgress(tripId: string): GenerationProgress | null {

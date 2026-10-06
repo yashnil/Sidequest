@@ -1,4 +1,5 @@
 import 'server-only';
+import { existingPlanPlaceNames } from './plan-critique';
 import {
   ARRIVAL_PRECISION_LABELS,
   countNights,
@@ -465,9 +466,9 @@ export function buildCanonicalTripBuildInput(input: {
     },
     profile,
     ownWords: {
-      mustDo: splitFreeText(composer?.mustDo),
+      mustDo: [...new Set([...splitFreeText(composer?.mustDo), ...existingPlanPlaceNames(composer?.existingPlan).slice(0, 20)])],
       dislikes: splitFreeText(composer?.avoid),
-      freeText: [composer?.mustDo, composer?.avoid].filter(Boolean).join('\n').slice(0, 2000),
+      freeText: [composer?.mustDo, composer?.avoid, composer?.existingPlan].filter(Boolean).join('\n').slice(0, 2000),
     },
     bookedFacts: input.bookedFacts ?? [],
     priorities,

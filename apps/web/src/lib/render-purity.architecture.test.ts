@@ -119,8 +119,11 @@ const RENDER_MODULE =
  * rule is in force before the file is.
  */
 const ROOT_RUNTIME_MODULES = [
+  /* Next 16 renamed `middleware.ts` to `proxy.ts`; both names are checked so neither can slip past. */
+  join(WEB_SRC, 'proxy.ts'),
   join(WEB_SRC, 'middleware.ts'),
   join(WEB_SRC, 'instrumentation.ts'),
+  join(WEB_SRC, '..', 'proxy.ts'),
   join(WEB_SRC, '..', 'middleware.ts'),
   join(WEB_SRC, '..', 'instrumentation.ts'),
 ].filter((file) => existsSync(file));

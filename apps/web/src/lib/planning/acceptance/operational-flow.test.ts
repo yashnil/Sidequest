@@ -53,6 +53,8 @@ beforeEach(() => {
   for (const key of ENV_KEYS) savedEnv[key] = process.env[key];
   process.env.SIDEQUEST_DB_PATH = join(directory, 'flow.db');
   process.env.SIDEQUEST_COMPOSER_PROVIDER = 'fixture';
+  /* V1 — this file proves what verification does to venues a model named; the planner names only board places, so the model-composed path is pinned. */
+  process.env.SIDEQUEST_PLANNING_MODE = 'model';
   process.env.SIDEQUEST_COMPILER_PROVIDER = 'fixture';
   process.env.SIDEQUEST_ACTION_FENCES = 'off';
   delete process.env.ANTHROPIC_API_KEY;

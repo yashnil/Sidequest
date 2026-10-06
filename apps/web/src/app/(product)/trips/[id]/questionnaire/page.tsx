@@ -20,6 +20,8 @@ import { InterviewWizard } from '@/components/InterviewWizard';
 import { Panel } from '@/components/ui';
 import { answersRevision, getAnswers, getProfile } from '@/lib/db/repository';
 import { buildRunView } from '@/lib/planning/build-run-view';
+import { buildPreflight } from '@/lib/planning/build-preflight';
+import { callerKey } from '@/lib/net/caller';
 import { ownedTrip } from '@/lib/net/trip-access';
 import { getIntent } from '@/lib/db/compiler-repository';
 import { partyFactsFor } from '@/lib/db/party-repository';
@@ -28,7 +30,9 @@ import { interviewContextFor } from '@/lib/interview/screening';
 import { timingIntentOf } from '@/lib/planning/canonical-input';
 import { compiledRegionFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
 import { isFixtureComposer } from '@/lib/providers/switches';
+import { scanPreflight } from '@/lib/discovery-scan/preflight';
 import { providerReadiness } from '@/lib/compiler/readiness';
+import { scanFailureCopy } from '@/lib/discovery-scan/view';
 import { resolveMapBasemap } from '@/components/map-adapter';
 
 export const dynamic = 'force-dynamic';
@@ -51,8 +55,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
  * is reached on this render; a destination nothing has classified yet gets
  * the generic high-information interview rather than a wait.
  */
-export default async function QuestionnairePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function QuestionnairePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { id } = await params;
+  /*
+   * V1 convergence — the old research path ("Explore experiences first" → the
+   * compile flow under /plan) is no longer offered by the normal flow; the
+   * Discovery scan is the board's door. It stays reachable by direct URL,
+   * `?research=1`, for the compile path and the suites that exercise it.
+   */
+  const researchDoorRequested = (await searchParams)?.research === '1';
   const trip = await ownedTrip(id);
   if (!trip) notFound();
 
@@ -169,6 +180,17 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
   const revision = answersRevision(id);
   const run = buildRunView(id);
   const activeBuild = run.state === 'running' || run.state === 'failed' || run.state === 'lost' ? run : null;
+  /*
+   * V1 convergence — whether any build can run here, asked of the same
+   * function the Build action asks. Provider-free: environment, the day's
+   * ledger and a cached probe verdict, never a request.
+   */
+  const preflight = buildPreflight(id, { caller: await callerKey() });
+  const buildUnavailable = preflight.ok ? null : { heading: preflight.failure.heading, message: preflight.failure.message };
+  /* V1 convergence — the Discovery scan's own gate, for the review's primary action on a trip with no board yet. Provider-free. */
+  const scanGate = scanPreflight();
+  const scanCopy = scanGate.ok ? null : scanFailureCopy(scanGate.cause);
+  const scanUnavailable = scanCopy ? { heading: scanCopy.heading, message: scanCopy.message } : null;
   const recommendation = intent?.composer?.dates?.recommendation;
   const acceptedWindow =
     trip.basics.timingLock === 'traveler' && recommendation?.accepted && recommendation.startDate === trip.basics.startDate && recommendation.endDate === trip.basics.endDate
@@ -189,7 +211,8 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       initialAnswers={initialAnswers}
       durationAdvice={durationAdvice}
       boardAvailable={resolved.ok}
-      researchAvailable={trip.basics.regionId === DYNAMIC_REGION_ID && intent?.selectedDestination !== null && providerReadiness().ready}
+      scanUnavailable={scanUnavailable}
+      researchDoor={researchDoorRequested && !resolved.ok && trip.basics.regionId === DYNAMIC_REGION_ID && intent?.selectedDestination !== null && providerReadiness().ready}
       /*
        * Whenever fixtures are in use, wherever that is.
        *
@@ -207,6 +230,7 @@ export default async function QuestionnairePage({ params }: { params: Promise<{ 
       revision={revision}
       activeBuild={activeBuild}
       acceptedWindow={acceptedWindow}
+      buildUnavailable={buildUnavailable}
       {...(interpretation
         ? { interpretation: { set: interpretation, mustDo: intent?.composer?.mustDo ?? '', avoid: intent?.composer?.avoid ?? '' } }
         : {})}

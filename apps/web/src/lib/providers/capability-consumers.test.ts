@@ -59,7 +59,7 @@ describe('LIVE WORLD V1 closure — capability to consumer audit', () => {
 
   it('operational capabilities are usable with a key, and with recorded responses, but not from a fixture compiler alone', () => {
     expect(registry.byId['places.hours']!.available && registry.byId['places.business_status']!.available).toBe(true);
-    const recorded = capabilityRegistry({ SIDEQUEST_COMPOSER_PROVIDER: 'fixture', SIDEQUEST_COMPILER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'fixture', SIDEQUEST_IMAGERY_PROVIDER: 'fixture', SIDEQUEST_PLACES_FIXTURE: '/tmp/recorded.json' });
+    const recorded = capabilityRegistry({ SIDEQUEST_COMPOSER_PROVIDER: 'fixture', SIDEQUEST_COMPILER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'fixture', SIDEQUEST_IMAGERY_PROVIDER: 'fixture', SIDEQUEST_FX_PROVIDER: 'fixture', SIDEQUEST_PLACES_FIXTURE: '/tmp/recorded.json' });
     expect(recorded.byId['places.hours']!.provider).toBe('google-places');
     expect(recorded.byId['places.hours']!.fixture).toBe(true);
     expect(recorded.byId['places.hours']!.costClass).toBe('free');

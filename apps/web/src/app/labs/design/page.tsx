@@ -19,7 +19,7 @@ import { Badge, Panel, buttonClass, cx } from '@/components/ui';
  *
  * ## Where it lives, and why
  *
- * Under the internal `/labs` prefix, which already has the gate this needs: `middleware.ts` matches
+ * Under the internal `/labs` prefix, which already has the gate this needs: `proxy.ts` (formerly `middleware.ts`) matches
  * `/labs/:path*` and `labsAccess` closes it on any billable deployment unless
  * `SIDEQUEST_LABS_TOKEN` is presented. Putting the lab anywhere else would have
  * meant inventing a second gating mechanism to say the same thing, and two

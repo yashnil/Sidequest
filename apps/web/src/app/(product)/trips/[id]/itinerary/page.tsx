@@ -23,6 +23,11 @@ import { AskSidequestMount } from './ask-sidequest-mount';
 import { getTripDraft } from '@/lib/db/draft-repository';
 import { undoTarget } from '@/lib/refine/version-repository';
 import { itineraryViewModel } from './view-model';
+import { RecoveryBuildButton } from './RecoveryBuildButton';
+import { buildPreflight } from '@/lib/planning/build-preflight';
+import { callerKey } from '@/lib/net/caller';
+import { listBookedItems } from '@/lib/db/intelligence-repository';
+import { regenerationCopy, regenerationPreview } from './regenerate-summary';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +59,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    */
   const trip = await ownedTrip(id);
   if (!trip) notFound();
-  // Whether a Discovery Board exists to go back to; without one, recovery is an explicit "Retry the draft".
+  // Whether a Discovery Board exists to go back to; without one, recovery is an explicit build from the saved answers.
   const boardAvailable = trip.basics.regionId !== DYNAMIC_REGION_ID || compiledRegionFor(id) !== null;
 
   /**
@@ -89,7 +94,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       const display = getStaleItineraryDisplay(id);
       if (display && display.days.length > 0) {
         const includedCount = getSelections(id).filter(
-          (selection) => selection.status !== 'excluded',
+          (selection) => selection.status === 'included' || selection.status === 'maybe',
         ).length;
         return (
           <StaleItineraryView
@@ -144,6 +149,9 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
    * Never rendered in a production build.
    */
   const fixtureMode = isFixtureComposer();
+  const locks = getItineraryLocks(id);
+  /* What Regenerate keeps and replaces, read from the rows the rebuild reads — the stored plan, not the booked overlay. */
+  const regeneration = regenerationCopy(regenerationPreview({ itinerary, locks, selections: getSelections(id), bookings: listBookedItems(id).length }));
 
   return (
     <>
@@ -164,7 +172,8 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       savedToAccount={Boolean(trip.userId)}
       destinationName={trip.basics.destinationInput}
       boardAvailable={boardAvailable}
-      lockedPlaceIds={getItineraryLocks(id).map((lock) => lock.placeId)}
+      lockedPlaceIds={locks.map((lock) => lock.placeId)}
+      regeneration={regeneration}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a
@@ -194,16 +203,36 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
   );
 }
 
-function Recovery({ tripId, title, body, boardAvailable }: { tripId: string; title: string; body: string; boardAvailable: boolean }) {
-  // COMPOSITION RELIABILITY — a trip with no board (the normal interview path) recovers through an explicit Retry, never on load.
+async function Recovery({ tripId, title, body, boardAvailable }: { tripId: string; title: string; body: string; boardAvailable: boolean }) {
+  /*
+   * COMPOSITION RELIABILITY — a trip with no board (the normal interview path)
+   * recovers through an explicit press, never on load. V1 convergence — and the
+   * press does what it says: it starts the build from the saved answers, unless
+   * the preflight already knows no build can run, in which case the page says
+   * so and offers the review instead of a button that cannot work.
+   */
+  const preflight = boardAvailable ? null : buildPreflight(tripId, { caller: await callerKey() });
   return (
     <div className="mx-auto max-w-xl px-5 py-20 sm:px-8">
       <Panel className="p-8">
         <h1 className="font-display text-2xl text-ink">{title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">{body}</p>
-        <Link href={boardAvailable ? `/trips/${tripId}/discover` : `/trips/${tripId}/questionnaire`} className={`${buttonClass('primary')} mt-6`} data-testid="recovery-primary">
-          {boardAvailable ? 'Back to the Discovery Board' : 'Retry the draft'}
-        </Link>
+        {boardAvailable ? (
+          <Link href={`/trips/${tripId}/discover`} className={`${buttonClass('primary')} mt-6`} data-testid="recovery-primary">
+            Back to the Discovery Board
+          </Link>
+        ) : preflight && !preflight.ok ? (
+          <>
+            <p className="mt-4 text-sm leading-relaxed text-ink" data-testid="recovery-unavailable">
+              <strong className="font-semibold">{preflight.failure.heading}</strong> {preflight.failure.message}
+            </p>
+            <Link href={`/trips/${tripId}/questionnaire`} className={`${buttonClass('secondary')} mt-6`} data-testid="recovery-review">
+              Return to my answers
+            </Link>
+          </>
+        ) : (
+          <RecoveryBuildButton tripId={tripId} />
+        )}
       </Panel>
     </div>
   );

@@ -403,3 +403,36 @@ describe('§15 — parking advice belongs to a trip with a car in it', () => {
     expect(result.itinerary.transportStrategy.parkingSummary).toMatch(/check at each stop/);
   });
 });
+
+describe('V1 — scope_disciplined measures hotel moves against the traveller', () => {
+  async function auditWith(draft: TripDraft, tolerance: 'stay_put' | 'move_once' | 'move_if_it_saves_time' | 'move_freely'): Promise<QualityAudit> {
+    const context = boardWorld();
+    const profile = { ...context.profile, interview: { ...context.profile.interview, baseMoveTolerance: tolerance } };
+    const result = await reconcileTripDraft({ draft, context: { ...context, profile } });
+    const trip: Trip = { id: 'audit-scope', basics: { ...TRIP_BASE, ...context.basics }, status: 'draft', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    return auditItinerary({ draft, itinerary: result.itinerary, profile, trip });
+  }
+  const twoBases = draftOf({
+    bases: [
+      { id: 'north', name: 'Mammoth Lakes', nights: 2 },
+      { id: 'south', name: 'Bishop', nights: 1 },
+    ],
+    days: [
+      { base: 'north', anchors: [{ name: 'Convict Lake' }] },
+      { base: 'north', anchors: [{ name: 'Mono Lake' }] },
+      { base: 'south', anchors: [{ name: 'Hot Creek' }] },
+    ],
+  });
+
+  it('warns when the plan moves hotels and the traveller asked to stay put', async () => {
+    expect(check(await auditWith(twoBases, 'stay_put'), 'scope_disciplined').ok).toBe(false);
+  });
+
+  it('passes the same plan for a traveller happy to move', async () => {
+    expect(check(await auditWith(twoBases, 'move_freely'), 'scope_disciplined').ok).toBe(true);
+  });
+
+  it('passes a one-base trip whatever the tolerance', async () => {
+    expect(check(await auditWith(draftOf({ bases: [{ id: 'base', name: 'Mammoth Lakes', nights: 3 }], days: THREE_DAYS }), 'stay_put'), 'scope_disciplined').ok).toBe(true);
+  });
+});

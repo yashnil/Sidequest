@@ -50,8 +50,21 @@ export const regionSchema = z.object({
   summary: z.string().min(1),
   /** Outer bound of what this region can ever include. */
   maxRadiusKm: z.number().min(1),
-  /** Strings a user might type that resolve to this region. */
+  /**
+   * Phrases a user might type that resolve to this region.
+   *
+   * Matched as whole-token phrases (`resolveRegion`), never as substrings: a
+   * substring test made "Mammoth Cave National Park" and bare "Lake" resolve to
+   * the Eastern Sierra. So an alias must be distinctive on its own — a bare
+   * "mammoth" or "mono" is not.
+   */
   aliases: z.array(z.string().min(1)).default([]),
+  /**
+   * The only extra words an input may carry beside an alias and still mean this
+   * region: the state, country and their abbreviations ("Mammoth Lakes, CA").
+   * Any other distinctive word ("Mammoth Lakes Cave") is a different place.
+   */
+  aliasQualifiers: z.array(z.string().min(1)).optional(),
   /**
    * Why getting around this region works the way it does.
    *

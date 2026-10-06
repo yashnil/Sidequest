@@ -28,6 +28,7 @@ export function DestinationCanvas({
   placing = false,
   attempted = false,
   locating = null,
+  unplacedNote = null,
   scope = null,
 }: {
   geometry: DestinationGeometry | null;
@@ -46,6 +47,8 @@ export function DestinationCanvas({
   locating?: string | null;
   /** A lookup has been made and did not place it. Before that there is nothing to explain. */
   attempted?: boolean;
+  /** V1 convergence — set when the lookup failed on Sidequest's side (no geocoder, an outage, a rate limit); replaces the "will place this" line. */
+  unplacedNote?: string | null;
   /** The scope in human words ("A whole country"), shown only once the place is framed and only when there are words for it. */
   scope?: string | null;
 }) {
@@ -84,7 +87,7 @@ export function DestinationCanvas({
           </motion.div>
         ) : (
           <motion.div key="graticule" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, position: 'absolute', inset: 0 }} transition={fade}>
-            {typed ? <NamedGraticule name={typed} placing={placing} attempted={attempted} locating={locating} reduced={reduced} /> : <WorldGraticule />}
+            {typed ? <NamedGraticule name={typed} placing={placing} attempted={attempted} locating={locating} unplacedNote={unplacedNote} reduced={reduced} /> : <WorldGraticule />}
           </motion.div>
         )}
       </AnimatePresence>
@@ -122,7 +125,7 @@ function gridPath(): string {
  * either is explained: nothing about providers, nothing about an index, and no
  * suggestion that the trip cannot go ahead — because it can, and does.
  */
-function NamedGraticule({ name, placing, attempted, locating, reduced }: { name: string; placing: boolean; attempted: boolean; locating: string | null; reduced: boolean | null }) {
+function NamedGraticule({ name, placing, attempted, locating, unplacedNote, reduced }: { name: string; placing: boolean; attempted: boolean; locating: string | null; unplacedNote: string | null; reduced: boolean | null }) {
   return (
     <figure className="m-0">
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto w-full" role="img" aria-label={`${name}, not yet placed on the map`}>
@@ -147,7 +150,7 @@ function NamedGraticule({ name, placing, attempted, locating, reduced }: { name:
       */}
       {placing || attempted ? (
         <figcaption className={cx('px-4 pb-4 text-center type-small', placing || locating ? 'breathing' : '')} style={{ color: 'var(--color-atlas-muted)' }} data-testid="destination-canvas-note">
-          {placing ? 'Placing this on the map…' : locating ? `Locating this ${locating}…` : 'Sidequest will place this as the plan comes together.'}
+          {placing ? 'Placing this on the map…' : locating ? `Locating this ${locating}…` : (unplacedNote ?? 'Sidequest will place this as the plan comes together.')}
         </figcaption>
       ) : (
         <figcaption className="px-4 pb-4 text-center type-small" style={{ color: 'transparent' }} aria-hidden="true">

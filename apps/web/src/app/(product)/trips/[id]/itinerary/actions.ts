@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -19,7 +20,10 @@ import {
   type PlannerInput,
 } from '@sidequest/planner';
 import { type BuildResult, plannerInputForTrip } from '@/lib/planning/build';
-import { generateSidequestPlanForTrip } from '@/lib/planning/production-plan';
+import { buildPreflight } from '@/lib/planning/build-preflight';
+import { buildRunView, startBuildRun } from '@/lib/planning/build-runs';
+import { callerKey, guardAction } from '@/lib/net/caller';
+import { keepsToCarry, regenerationPreview } from './regenerate-summary';
 import { addCustomStop, easeReconciledDay, isReconciledItinerary, moveStopToDay, removeStopFromReconciledItinerary, setStopDuration, setStopKeep, shiftStop } from '@/lib/planning/reconciled-edits';
 import { repairReconciledDay } from '@/lib/planning/day-repair';
 import { discoverFoodNear, discoverStaysNear } from '@/lib/providers/discovery';
@@ -27,7 +31,9 @@ import {
   clearItineraryLock,
   ensureShareToken,
   getItinerary,
+  getItineraryLocks,
   getProfile,
+  getSelections,
   getTrip,
   saveItinerary,
   setItineraryLock,
@@ -45,51 +51,93 @@ export type { BuildResult } from '@/lib/planning/build';
  * that stays open without it.
  */
 
-/**
- * Builds and stores the itinerary, then navigates to it.
- *
- * The canonical production orchestrator (`generateSidequestPlanForTrip` —
- * "Claude authors a complete useful trip; Sidequest verifies and improves
- * it") is the default generation path this action reaches. It owns model
- * composition, targeted verification, routing/relocation remediation and
- * the draft-anchor scheduling bridge; this action stays thin — cache
- * invalidation and navigation only, exactly as before. The old pure-
- * deterministic `build.ts#buildItinerary()` (`planTrip()` with no model at
- * all) remains available for rollback/comparison but is no longer what this
- * button calls. Both persist through the identical `saveItinerary()`/
- * `getItinerary()` seam, so nothing downstream of this action — editing,
- * sharing, the itinerary page itself — needed to change.
- */
-export async function buildItineraryAction(tripId: string): Promise<BuildResult> {
-  const refusal = await tripAccessRefusal(tripId);
-  if (refusal) return { ok: false, error: refusal };
+const buildKeySchema = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 
-  const generated = await generateSidequestPlanForTrip(tripId, { caller: 'itinerary_build_action', mode: 'full' });
-  const result: BuildResult = generated.ok
-    ? { ok: true, ...(generated.result ? { readiness: generated.result.readiness } : {}) }
-    : { ok: false, error: generated.error ?? 'We could not build a plan just now.' };
-  if (!result.ok) return result;
-
-  revalidatePath(`/trips/${tripId}/itinerary`);
-  // `redirect` throws, so nothing below it runs and the caller never sees this
-  // return. It is here because a function typed as returning a result should
-  // not rely on a thrown control-flow signal to satisfy its own signature.
-  redirect(`/trips/${tripId}/itinerary`);
-  return result;
+/** A key for a press that did not bring one (a caller older than the durable build). */
+function serverBuildKey(): string {
+  return randomUUID().replace(/-/g, '');
 }
 
 /**
- * "Regenerate" on the itinerary page — the same canonical generation as
- * "Build my trip", reached from the plan itself. One model call, a fresh
- * draft, verified and reconciled the same way, replacing the stored plan.
+ * V1 CONVERGENCE — EVERY WHOLE-TRIP BUILD FROM THE ITINERARY IS A DURABLE RUN.
+ *
+ * "Rebuild my trip" (the stale plan and the board) and "Regenerate" (the plan's
+ * own menu) used to await the whole generation inside the server action — up to
+ * two minutes with nothing on screen but a relabelled button, and a dropped
+ * request lost the traveller's view of a build the server kept running. Both now
+ * do what "Build my trip" does: preflight, record a run under an idempotency
+ * key, schedule the generation after the response (`startBuildRun`), and send
+ * the traveller to `/trips/[id]/build`, which shows progress from the run row
+ * and returns to the itinerary when it succeeds. A refusal is typed and comes
+ * back as the failure's own sentence before anything is recorded.
  */
-export async function regenerateItineraryAction(tripId: string): Promise<BuildResult> {
+async function startWholeTripBuild(tripId: string, buildKey: string, caller: string, before?: () => void): Promise<{ ok: true; buildKey: string } | { ok: false; error: string }> {
+  if (!buildKeySchema.safeParse(buildKey).success) return { ok: false, error: 'That build could not be started.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  const generated = await generateSidequestPlanForTrip(tripId, { caller: 'itinerary_regenerate_action', mode: 'full' });
-  if (!generated.ok) return { ok: false, error: generated.error ?? 'We could not regenerate your trip just now.' };
+  if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+  /* A run already open is this press arriving twice, or a build already under way: attach, never a second composition. */
+  const current = buildRunView(tripId);
+  if (current.state === 'running') return { ok: true, buildKey: current.buildKey ?? buildKey };
+  const fence = await guardAction('build_start');
+  if (fence) return { ok: false, error: fence };
+  const who = (await callerKey()) ?? caller;
+  /*
+   * V1 convergence — the same preflight and the same typed copy as Build: a
+   * deployment with no composer used to answer Regenerate with "No model
+   * credential is configured, so we cannot compose a first draft yet", a
+   * sentence about environment variables shown to a traveller.
+   */
+  const preflight = buildPreflight(tripId, { caller: who });
+  if (!preflight.ok) {
+    console.warn('Build refused before it started', { tripId, door: caller, cause: preflight.failure.cause, reason: preflight.operatorReason });
+    return { ok: false, error: preflight.failure.message };
+  }
+  before?.();
+  startBuildRun({ tripId, buildKey, caller, mode: 'full' });
   revalidatePath(`/trips/${tripId}/itinerary`);
-  return { ok: true, ...(generated.result ? { readiness: generated.result.readiness } : {}) };
+  return { ok: true, buildKey };
+}
+
+/**
+ * "Build my trip" / "Rebuild my trip" from the board and the stale-plan view.
+ * Starts the durable run and navigates to the build screen. `buildKey` is the
+ * press's idempotency key; a caller that does not send one gets a fresh key.
+ */
+export async function buildItineraryAction(tripId: string, buildKey?: string): Promise<BuildResult> {
+  /* Asked here as well as inside the shared starter, so the guard is visible at the door (`ownership.architecture.test.ts`). */
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const started = await startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_build_action');
+  if (!started.ok) return { ok: false, error: started.error };
+  // `redirect` throws, so nothing below it runs; the return satisfies the signature.
+  redirect(`/trips/${tripId}/build`);
+  return { ok: true };
+}
+
+export type RegenerateResult = { ok: true; buildKey: string } | { ok: false; error: string };
+
+/**
+ * "Regenerate" on the itinerary — after the traveller has read what it keeps
+ * and what it replaces (`regenerate-summary.ts`). Stops marked must-keep or
+ * locked that are board places are recorded as the traveller's own includes
+ * first, so the plan the confirmation promised is the plan the build reads.
+ * Returns the run's key; the client goes to `/trips/[id]/build`.
+ */
+export async function regenerateItineraryAction(tripId: string, buildKey?: string): Promise<RegenerateResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  return startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_regenerate_action', () => {
+    try {
+      const itinerary = getItinerary(tripId);
+      if (!itinerary) return;
+      const selections = getSelections(tripId);
+      const preview = regenerationPreview({ itinerary, locks: getItineraryLocks(tripId), selections, bookings: 0 });
+      for (const placeId of keepsToCarry(preview, selections)) setSelection(tripId, placeId, 'included', 'user');
+    } catch {
+      /* A stale stored plan has no keeps to read; the rebuild itself is what replaces it. */
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

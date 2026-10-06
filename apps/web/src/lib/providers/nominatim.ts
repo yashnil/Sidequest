@@ -72,6 +72,17 @@ function nextSlot(): Promise<void> {
   return wait;
 }
 
+/**
+ * V1 — Nominatim writes `"extratags": null` (and sometimes a null `namedetails`)
+ * on a record with no such tags. That is "absent", not a malformed answer: one
+ * such row used to fail the whole array, so every lookup whose results included
+ * a tagless record — national parks among them — came back as "a shape we
+ * cannot read", and a destination's parts fell back to same-named places abroad.
+ */
+function absentWhenNull<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value) => (value === null ? undefined : value), schema.optional());
+}
+
 const nominatimPlaceSchema = z.object({
   place_id: z.number().optional(),
   osm_type: z.string().optional(),
@@ -84,9 +95,9 @@ const nominatimPlaceSchema = z.object({
    * `name`, `name:en`, `int_name`, `official_name`, … exactly as the record has
    * them. Values only — no key is trusted to be a language tag without checking.
    */
-  namedetails: z.record(z.string(), z.string()).optional(),
+  namedetails: absentWhenNull(z.record(z.string(), z.string())),
   /** V7 — `place`, `population`, `wikidata`, `admin_level`… as the record tags them; asked for so a state-typed record can say it is a city. */
-  extratags: z.record(z.string(), z.string()).optional(),
+  extratags: absentWhenNull(z.record(z.string(), z.string())),
   category: z.string().optional(),
   type: z.string().optional(),
   addresstype: z.string().optional(),
@@ -94,7 +105,7 @@ const nominatimPlaceSchema = z.object({
   /** V8.1 — Nominatim's address rank: 30 is a building or business, 16–18 a town, 4–8 a country or first-level division. */
   place_rank: z.number().optional(),
   boundingbox: z.array(z.string()).length(4).optional(),
-  address: z.record(z.string(), z.string()).optional(),
+  address: absentWhenNull(z.record(z.string(), z.string())),
 });
 export type NominatimPlace = z.infer<typeof nominatimPlaceSchema>;
 

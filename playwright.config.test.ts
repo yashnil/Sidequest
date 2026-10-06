@@ -209,10 +209,20 @@ describe('the browser suite configuration', () => {
        */
       'SIDEQUEST_TIMEZONE_PROVIDER=off',
       'SIDEQUEST_TRANSIT_PROVIDER=',
+      /* V1 convergence: keyless ECB rates default on, so the browser server pins them off. */
+      'SIDEQUEST_FX_PROVIDER=off',
     ]) {
       expect(command, `the end-to-end server no longer pins ${pin}`).toContain(pin);
     }
     expect(command).not.toContain('SIDEQUEST_COMPILER_PROVIDER=open');
+    /*
+     * V1 convergence — `next start` is a production server, and production
+     * refuses every fixture switch above unless the server says it is a test
+     * server. Without these two the suite's builds and fixture sign-in would be
+     * refused, as they must be on a real deployment.
+     */
+    expect(command, 'the end-to-end server must opt in to fixture data explicitly').toContain('SIDEQUEST_FIXTURES=allow');
+    expect(command, 'fixture sign-in has its own door; the action fences no longer open it').toContain('SIDEQUEST_AUTH_FIXTURE=allow');
     expect(command).not.toContain('SIDEQUEST_BENCHMARK_MODE=live');
   });
 

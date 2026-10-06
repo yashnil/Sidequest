@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server';
 // import rather than at nothing. The rationale for reaching in at all is on
 // `the matcher that decides whether the gate runs at all` below.
 import { getMiddlewareMatchers } from 'next/dist/build/analysis/get-page-static-info.js';
-import { config, middleware } from './middleware';
+import { config, proxy } from './proxy';
 
 /**
  * The spending control, asserted rather than assumed.
@@ -58,33 +58,33 @@ describe('the labs gate', () => {
   it('lets everything through when no live spending is configured', () => {
     delete process.env.SIDEQUEST_BENCHMARK_MODE;
     delete process.env.SIDEQUEST_BENCHMARK_BUDGET_USD;
-    expect(middleware(request()).status).toBe(200);
+    expect(proxy(request()).status).toBe(200);
   });
 
   it('stays open in fixture mode even with a budget set', () => {
     /** Both keys are required, exactly as the budget layer requires both. */
     process.env.SIDEQUEST_BENCHMARK_MODE = 'fixture';
     process.env.SIDEQUEST_BENCHMARK_BUDGET_USD = '5.00';
-    expect(middleware(request()).status).toBe(200);
+    expect(proxy(request()).status).toBe(200);
   });
 
   it('refuses an unauthenticated request once live spending is configured', () => {
     liveMode();
     process.env.SIDEQUEST_LABS_TOKEN = 'a-secret';
-    expect(middleware(request()).status).toBe(401);
+    expect(proxy(request()).status).toBe(401);
   });
 
   it('accepts the configured token', () => {
     liveMode();
     process.env.SIDEQUEST_LABS_TOKEN = 'a-secret';
-    expect(middleware(request({ 'x-sidequest-labs': 'a-secret' })).status).toBe(200);
+    expect(proxy(request({ 'x-sidequest-labs': 'a-secret' })).status).toBe(200);
   });
 
   it('refuses a wrong token, and one of a different length', () => {
     liveMode();
     process.env.SIDEQUEST_LABS_TOKEN = 'a-secret';
-    expect(middleware(request({ 'x-sidequest-labs': 'b-secret' })).status).toBe(401);
-    expect(middleware(request({ 'x-sidequest-labs': 'a-secret-longer' })).status).toBe(401);
+    expect(proxy(request({ 'x-sidequest-labs': 'b-secret' })).status).toBe(401);
+    expect(proxy(request({ 'x-sidequest-labs': 'a-secret-longer' })).status).toBe(401);
   });
 
   it('closes the door when live spending is on and nobody set a token', () => {
@@ -94,7 +94,7 @@ describe('the labs gate', () => {
      */
     liveMode();
     delete process.env.SIDEQUEST_LABS_TOKEN;
-    expect(middleware(request()).status).toBe(404);
+    expect(proxy(request()).status).toBe(404);
   });
 });
 
@@ -110,11 +110,11 @@ describe('the labs gate, against an open compiler', () => {
   it('gates /labs when the compiler is explicitly open, whatever the benchmark mode', () => {
     process.env.SIDEQUEST_COMPILER_PROVIDER = 'open';
     process.env.SIDEQUEST_BENCHMARK_MODE = 'fixture';
-    expect(middleware(request()).status).toBe(404);
+    expect(proxy(request()).status).toBe(404);
 
     process.env.SIDEQUEST_LABS_TOKEN = 'a-secret';
-    expect(middleware(request()).status).toBe(401);
-    expect(middleware(request({ 'x-sidequest-labs': 'a-secret' })).status).toBe(200);
+    expect(proxy(request()).status).toBe(401);
+    expect(proxy(request({ 'x-sidequest-labs': 'a-secret' })).status).toBe(200);
   });
 
   it('gates /labs when the open stack is merely inferred from the switches', () => {
@@ -124,7 +124,7 @@ describe('the labs gate, against an open compiler', () => {
     process.env.SIDEQUEST_ROUTES_PROVIDER = 'valhalla';
     process.env.SIDEQUEST_RESEARCH_PROVIDER = 'anthropic';
     process.env.ANTHROPIC_API_KEY = 'sk-test-never-real';
-    expect(middleware(request()).status).toBe(404);
+    expect(proxy(request()).status).toBe(404);
   });
 
   it('stays open when the switches are set but the compiler is pinned to fixture', () => {
@@ -135,14 +135,14 @@ describe('the labs gate, against an open compiler', () => {
     process.env.SIDEQUEST_RESEARCH_PROVIDER = 'anthropic';
     process.env.ANTHROPIC_API_KEY = 'sk-test-never-real';
     process.env.SIDEQUEST_COMPILER_PROVIDER = 'fixture';
-    expect(middleware(request()).status).toBe(200);
+    expect(proxy(request()).status).toBe(200);
   });
 
   it('stays open with an incomplete inferred stack, which cannot compile', () => {
     process.env.SIDEQUEST_GEOCODER_PROVIDER = 'nominatim';
     process.env.SIDEQUEST_ROUTES_PROVIDER = 'valhalla';
     // No place source, no research provider, no key: choice falls to `off`.
-    expect(middleware(request()).status).toBe(200);
+    expect(proxy(request()).status).toBe(200);
   });
 });
 
@@ -150,7 +150,7 @@ describe('the matcher that decides whether the gate runs at all', () => {
   /**
    * THE PREDICATE WAS TESTED; THE WIRING WAS NOT.
    *
-   * Every assertion above calls `middleware()` directly, so all of them hold
+   * Every assertion above calls `proxy()` directly, so all of them hold
    * with `config.matcher` pointed at a route that does not exist — and a gate
    * Next never invokes is not a gate. That is not hypothetical: the whole
    * suite stayed green with the matcher rewritten to `/never-a-real-route/:path*`,
@@ -177,7 +177,7 @@ describe('the matcher that decides whether the gate runs at all', () => {
   const matches = (pathname: string): boolean =>
     compiled.some((pattern) => pattern.test(pathname));
 
-  it('runs the middleware for every path under the labs tree', () => {
+  it('runs the proxy for every path under the labs tree', () => {
     // The tree root, the one page in it, and a nested action target — the URL
     // shapes a labs request actually takes.
     expect(matches('/labs')).toBe(true);

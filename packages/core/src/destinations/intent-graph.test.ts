@@ -189,3 +189,37 @@ describe('buildDestinationIntent reads the graph', () => {
     expect(intent.interpretedLabel).toBe('the steppes');
   });
 });
+
+describe('V1 — a list closed by a comma names its container', () => {
+  it('reads "A, B and C, D" as parts inside D, and leaves D a part of the trip', () => {
+    const graph = parseDestinationIntent('Moab, Arches, Canyonlands and Capitol Reef, Utah');
+    const labels = graph.children.map((c) => c.label);
+    expect(labels[labels.length - 1]).toBe('Utah');
+    for (const child of graph.children.slice(0, -1)) expect(child.within).toBe('Utah');
+    expect(graph.children[graph.children.length - 1]!.within).toBeUndefined();
+  });
+
+  it('leaves a plain list alone', () => {
+    for (const phrase of ['Kyoto, Osaka and Nara', 'Lisbon and Porto', 'Moab, Utah']) {
+      expect(parseDestinationIntent(phrase).children.every((c) => c.within === undefined), phrase).toBe(true);
+    }
+  });
+});
+
+describe('a place and the country it is in', () => {
+  it('"City, Country" is one place qualified by its country, never the country as a second destination', () => {
+    for (const [text, code] of [['Zurich, Switzerland', 'CH'], ['Hanoi, Vietnam', 'VN'], ['Cusco, Peru', 'PE']] as const) {
+      const graph = parseDestinationIntent(text);
+      expect(graph.relationship).toBe('single');
+      expect(graph.children).toHaveLength(1);
+      expect(graph.children[0]!.countryCode).toBe(code);
+      expect(graph.children[0]!.kind).not.toBe('country');
+      expect(graph.children[0]!.label).toBe(text.split(',')[0]);
+    }
+  });
+
+  it('a list of places still splits, and two countries stay two countries', () => {
+    expect(parseDestinationIntent('Tokyo, Kyoto').children).toHaveLength(2);
+    expect(parseDestinationIntent('France, Italy').children.map((c) => c.kind)).toEqual(['country', 'country']);
+  });
+});

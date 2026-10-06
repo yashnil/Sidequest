@@ -29,9 +29,9 @@ function load(): { dir: string; queries: Record<string, string> } {
   if (table) return table;
   for (const dir of FIXTURE_DIRS) {
     try {
-      const raw = readFileSync(join(process.cwd(), dir, 'index.json'), 'utf8');
+      const raw = readFileSync(join(/* turbopackIgnore: true */ process.cwd(), dir, 'index.json'), 'utf8');
       const parsed = JSON.parse(raw) as { queries: Record<string, string> };
-      table = { dir: join(process.cwd(), dir), queries: parsed.queries };
+      table = { dir: join(/* turbopackIgnore: true */ process.cwd(), dir), queries: parsed.queries };
       return table;
     } catch {
       /* try the next root */

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import {
   mayShowItinerary,
   PLANNER_READINESS_LEVEL_LABELS,
@@ -11,6 +11,7 @@ import {
 } from '@sidequest/core';
 import { buttonClass, ErrorNote, Panel } from './ui';
 import { buildItineraryAction } from '@/app/(product)/trips/[id]/itinerary/actions';
+import { callAction, newBuildKey } from './client-action';
 
 /**
  * The primary action on the board. `useTransition` gives a real pending state and
@@ -45,16 +46,29 @@ export function BuildTripButton({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /* One key per press, reused by a retry of the same press, so the server attaches instead of building twice. */
+  const key = useRef<string | null>(null);
 
   function build() {
     setError(null);
     onReadiness?.(null);
+    key.current ??= newBuildKey();
+    const buildKey = key.current;
     startTransition(async () => {
-      const result = await buildItineraryAction(tripId);
-      // On success this redirects and never returns.
-      if (!result.ok) {
-        setError(result.error ?? 'We could not build your trip just then.');
-        onReadiness?.(result.readiness ?? null);
+      /*
+       * V1 convergence — the action records a durable run and redirects to the
+       * build screen, which shows progress and returns to the itinerary. It
+       * never awaits the generation, so a dropped request loses nothing.
+       */
+      const outcome = await callAction(() => buildItineraryAction(tripId, buildKey));
+      if (!outcome.ok) {
+        setError(outcome.message);
+        return;
+      }
+      if (!outcome.value.ok) {
+        key.current = null;
+        setError(outcome.value.error ?? 'We could not build your trip just then.');
+        onReadiness?.(outcome.value.readiness ?? null);
       }
     });
   }
@@ -68,7 +82,7 @@ export function BuildTripButton({
         className={buttonClass('primary')}
         aria-describedby={includedCount === 0 ? 'build-hint' : undefined}
       >
-        {pending ? 'Building your trip…' : hasItinerary ? 'Rebuild my trip' : 'Build my trip'}
+        {pending ? 'Starting…' : hasItinerary ? 'Rebuild my trip' : 'Build my trip'}
       </button>
       {/*
         THE ONLY ANNOUNCEMENT OF A MULTI-SECOND OPERATION.
@@ -82,7 +96,7 @@ export function BuildTripButton({
         does, and empty when idle so it says nothing on arrival.
       */}
       <p role="status" aria-live="polite" className="sr-only">
-        {pending ? 'Building your trip. This can take a minute or two.' : ''}
+        {pending ? 'Starting your build.' : ''}
       </p>
       {includedCount === 0 ? (
         <p id="build-hint" className="mt-2 text-sm text-ink-muted">

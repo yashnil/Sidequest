@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 /**
  * THE GATE ON THE PATH A SPENDING REQUEST ACTUALLY TAKES.
  *
- * `middleware.test.ts` proves the gate for navigations. It cannot prove it for
+ * `proxy.test.ts` proves the gate for navigations. It cannot prove it for
  * server actions, and that gap is the defect this file exists for: Next
  * dispatches an action by its `Next-Action` id against a global manifest, so the
  * URL a POST names is irrelevant and `matcher: ['/labs/:path*']` never sees it.

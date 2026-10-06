@@ -444,6 +444,12 @@ export class ResearchModelError extends Error {
    * unparseable answer, which never reached `schema.safeParse` at all.
    */
   readonly schemaValidationIssues?: readonly { path: string; code: string; message: string }[];
+  /**
+   * V1 convergence — the provider's HTTP status, where one answered. Set only
+   * on the generic `request_failed` path, so `planning/build-failure.ts` can
+   * tell a 5xx outage from a 4xx Sidequest caused. Never the provider's body.
+   */
+  httpStatus?: number;
 
   constructor(
     code: ResearchModelError['code'],
@@ -1239,11 +1245,13 @@ export class ResearchModel {
            */
           providerMessage: String(error.message).slice(0, 300),
         });
-        throw new ResearchModelError(
+        const failed = new ResearchModelError(
           'request_failed',
           'The research model did not answer.',
           error.requestID ?? undefined,
         );
+        if (typeof error.status === 'number') failed.httpStatus = error.status;
+        throw failed;
       }
       /*
        * A BARE `AnthropicError` — THE SDK'S OWN BASE CLASS, NOT AN `APIError`

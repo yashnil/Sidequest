@@ -132,11 +132,27 @@ const routes = equals('SIDEQUEST_ROUTES_PROVIDER', 'valhalla');
  */
 const ROUTES_DEMO_ENDPOINT = 'https://valhalla1.openstreetmap.de';
 const routesUrl = env('SIDEQUEST_ROUTES_URL');
+/*
+ * V1 convergence — a loopback URL is its own state. It was reported as "a
+ * production endpoint", which is what a deployment with
+ * `SIDEQUEST_ROUTES_URL=http://127.0.0.1:8002` and nothing listening read as
+ * reassurance. Mirrors `readiness/probes.mjs#isLoopbackUrl`.
+ */
+const routesIsLoopback = (() => {
+  try {
+    const host = new URL(routesUrl).hostname.replace(/^\[|\]$/g, '');
+    return host === 'localhost' || host === '::1' || host.startsWith('127.') || host === '0.0.0.0';
+  } catch {
+    return false;
+  }
+})();
 const routesState = !routes
   ? 'off'
   : routesUrl === '' || routesUrl.replace(/\/+$/, '') === ROUTES_DEMO_ENDPOINT
     ? 'demo'
-    : 'production';
+    : routesIsLoopback
+      ? 'loopback'
+      : 'custom';
 const researchModel = isSet('ANTHROPIC_API_KEY');
 const researchProvider = equals('SIDEQUEST_RESEARCH_PROVIDER', 'anthropic');
 const climate = !equals('SIDEQUEST_CLIMATE_PROVIDER', 'off');
@@ -194,6 +210,8 @@ if (!researchProvider) missing.push('SIDEQUEST_RESEARCH_PROVIDER=anthropic');
 if (!researchModel) missing.push('ANTHROPIC_API_KEY');
 
 const lines = [];
+/** V1 convergence — capabilities a `--probe` run found failing. */
+const probeFailures = [];
 const say = (text) => lines.push(text);
 const mark = (ok, label, detail) => say(`  ${ok ? '✓' : '·'} ${label}${detail ? ` — ${detail}` : ''}`);
 
@@ -233,7 +251,9 @@ mark(
     ? 'SIDEQUEST_ROUTES_PROVIDER not set'
     : routesState === 'demo'
       ? 'valhalla, DEVELOPMENT/DEMO endpoint — the shared public instance is rate-limited and unversioned; not suitable for production traffic (see SIDEQUEST_ROUTES_URL below)'
-      : 'valhalla, production endpoint configured (SIDEQUEST_ROUTES_URL set to something other than the public demo host)',
+      : routesState === 'loopback'
+        ? 'valhalla on this machine (SIDEQUEST_ROUTES_URL is a loopback address) — real only if a router runs beside the app; pass --probe to check'
+        : 'valhalla, own endpoint configured (SIDEQUEST_ROUTES_URL set to something other than the public demo host; not verified — pass --probe)',
 );
 /*
  * PRODUCT RECOVERY V1 — the routing hierarchy as one line: what the local
@@ -407,25 +427,37 @@ say(
       ? 'SIDEQUEST_ROUTES_URL not applicable (SIDEQUEST_ROUTES_PROVIDER not set)'
       : routesState === 'demo'
         ? `SIDEQUEST_ROUTES_URL not set — using the public demo default (${ROUTES_DEMO_ENDPOINT}), suitable for development only`
-        : `SIDEQUEST_ROUTES_URL set to a production endpoint`
+        : routesState === 'loopback'
+          ? 'SIDEQUEST_ROUTES_URL set to a loopback address on this machine'
+          : 'SIDEQUEST_ROUTES_URL set to an operator endpoint (not the public demo)'
   }`,
 );
-if (process.argv.includes('--probe') && routesState !== 'off') {
+if (process.argv.includes('--probe')) {
   /*
-   * V6 §11 — the one failure the configuration report cannot see: a routes
-   * URL that points at nothing on this host. Opt-in, one request, four
-   * seconds, and the answer is a fact about reachability, never about the
-   * road network.
+   * V6 §11 / V1 convergence — the failures the configuration report cannot
+   * see, asked with the same code `/api/readiness` uses
+   * (`src/lib/readiness/probes.mjs`, import-free): the routes `/status`, the
+   * model API's free models list (validates the key, never a generation), and
+   * Open-Meteo. Each is one request, three seconds at most. Geocoder,
+   * openrouteservice and Places are never polled — volunteer-run or metered.
    */
-  const target = `${(routesUrl || ROUTES_DEMO_ENDPOINT).replace(/\/+$/, '')}/status`;
   try {
-    const response = await fetch(target, { signal: AbortSignal.timeout(4_000) });
-    say(`  · Probe — ${target} answered ${response.status}${response.ok ? '' : ' (not OK: every leg would be attempted and fail; set SIDEQUEST_ROUTES_GLOBAL_PROVIDER=openrouteservice or fix the URL)'}`);
+    const { probeValhalla, probeAnthropic, probeWeather, probeClimate } = await import('../src/lib/readiness/probes.mjs');
+    for (const [label, run] of [
+      ['Routing (local)', probeValhalla],
+      ['Composition model', probeAnthropic],
+      ['Weather', probeWeather],
+      ['Climate', probeClimate],
+    ]) {
+      const verdict = await run(process.env);
+      say(`  · Probe — ${label}: ${verdict.state.toUpperCase().replace(/_/g, ' ')} — ${verdict.reason}`);
+      if (verdict.state === 'failing') probeFailures.push(label);
+    }
   } catch (error) {
-    say(`  · Probe — ${target} could not be reached (${error instanceof Error ? error.name : 'error'}). The composite router now falls through on the first unreachable answer, but nothing will be measured locally.`);
+    say(`  · Probe — could not load the probes: ${error instanceof Error ? error.message : String(error)}`);
   }
 } else {
-  say('  · Not contacted. This is a configuration report, not a reachability check. Pass --probe to try the routes endpoint once.');
+  say('  · Not contacted. This is a configuration report, not a reachability check. Pass --probe to ask the router, the model API and the weather service once each (free calls only).');
 }
 say('');
 
@@ -472,7 +504,7 @@ say(
   }`,
 );
 /*
- * Mirrors `billableSurfaceConfigured()` in `middleware.ts`: the door is locked
+ * Mirrors `billableSurfaceConfigured()` in `proxy.ts`: the door is locked
  * when live benchmark spending is configured OR the compiler is on the open
  * stack — the benchmark's sidequest arm compiles real regions whenever the
  * compiler is open, whatever the benchmark mode says.
@@ -609,5 +641,30 @@ try {
   say('');
 }
 
+/*
+ * V1 CONVERGENCE — HARD PROBLEMS. Fixture data switched on in a production
+ * process (without SIDEQUEST_FIXTURES=allow) and a database off a mounted
+ * volume. Read from the same `deploymentProblems` the app logs at start and
+ * `/api/readiness` reports, so the three cannot disagree. A refused fixture
+ * switch fails the doctor: the deployment would refuse every build.
+ */
+let hardProblem = false;
+try {
+  const { deploymentProblems, productionFixtureRefusal } = await import('../src/lib/providers/capabilities.mjs');
+  const problems = deploymentProblems(process.env);
+  if (problems.length > 0) {
+    say('Deployment problems');
+    for (const problem of problems) say(`  ! ${problem}`);
+    say('');
+  }
+  hardProblem = productionFixtureRefusal(process.env).refused;
+} catch {
+  /* The registry section above already reported an unreadable module. */
+}
+if (probeFailures.length > 0) {
+  say(`Probes failing: ${probeFailures.join(', ')}.`);
+  say('');
+}
+
 process.stdout.write(lines.join('\n') + '\n');
-process.exit(blocked ? 1 : 0);
+process.exit(blocked || hardProblem ? 1 : 0);

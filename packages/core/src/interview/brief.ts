@@ -45,11 +45,25 @@ export interface TravelerBriefTripFacts {
   bookedFacts: readonly string[];
 }
 
+/**
+ * Discovery Board decisions, kept apart by who made them.
+ *
+ * `mustInclude`, `boardLikes` and `boardRejects` are the traveller's own;
+ * `sidequestRecommended` is what Sidequest pre-selected. The two used to arrive
+ * in one "Must include" list, which told the model an automatic pick was the
+ * traveller's choice. See `discovery/decisions.ts`.
+ */
 export interface TravelerBriefSignals {
-  /** Names the traveller typed or marked as must-include. */
+  /** Names the traveller typed or marked as must-include — never a Sidequest pick. Never capped. */
   mustInclude: readonly string[];
+  /** The traveller's maybes. */
   boardLikes: readonly string[];
+  /** The traveller's skips, with the reason where one was given ("Name — too expensive"). */
   boardRejects: readonly string[];
+  /** Sidequest's own pre-selection, in fit order. */
+  sidequestRecommended?: readonly string[];
+  /** How many of each capped list a prompt-size cap left out upstream. */
+  omitted?: { boardLikes?: number; boardRejects?: number; sidequestRecommended?: number };
 }
 
 export interface TravelerBriefOwnWords {
@@ -335,15 +349,30 @@ export function buildTravelerBrief(input: {
     popularity,
     scope,
     signals: {
-      mustInclude: [...new Set([...(input.signals?.mustInclude ?? []), ...interview.mustInclude])].slice(0, 12),
-      boardLikes: [...(input.signals?.boardLikes ?? [])].slice(0, 10),
-      boardRejects: [...(input.signals?.boardRejects ?? [])].slice(0, 10),
+      /* Never capped: these are bounded by the board and by what the traveller typed, and dropping one is a silent loss. */
+      mustInclude: [...new Set([...(input.signals?.mustInclude ?? []), ...interview.mustInclude])],
+      boardLikes: [...(input.signals?.boardLikes ?? [])].slice(0, SIGNAL_CAP),
+      boardRejects: [...(input.signals?.boardRejects ?? [])].slice(0, SIGNAL_CAP),
+      sidequestRecommended: [...(input.signals?.sidequestRecommended ?? [])].slice(0, SIGNAL_CAP),
+      omitted: {
+        boardLikes: (input.signals?.omitted?.boardLikes ?? 0) + Math.max(0, (input.signals?.boardLikes?.length ?? 0) - SIGNAL_CAP),
+        boardRejects: (input.signals?.omitted?.boardRejects ?? 0) + Math.max(0, (input.signals?.boardRejects?.length ?? 0) - SIGNAL_CAP),
+        sidequestRecommended:
+          (input.signals?.omitted?.sidequestRecommended ?? 0) + Math.max(0, (input.signals?.sidequestRecommended?.length ?? 0) - SIGNAL_CAP),
+      },
       smartDefaults,
     },
     assumptions,
     inTheirWords,
     ownWords,
   };
+}
+
+/** Prompt-size cap on each capped signal list; what it leaves out is counted, never silent. */
+const SIGNAL_CAP = 10;
+
+function omittedLine(count: number | undefined, noun: string): string[] {
+  return count && count > 0 ? [`and ${count} more ${noun} (not shown)`] : [];
 }
 
 function escapeXml(text: string): string {
@@ -409,10 +438,32 @@ export function renderTravelerBriefXml(brief: TravelerBrief): string {
     ...section('budget', brief.budget),
     ...section('popularity', brief.popularity),
     ...section('scope', brief.scope),
+    /*
+     * Four sections, one per author and intent. A Sidequest pre-selection is
+     * never described as something the traveller chose.
+     */
+    ...(brief.signals.mustInclude.length > 0
+      ? section('traveller_must_includes', [`Must include: ${brief.signals.mustInclude.join('; ')}`, 'Chosen by the traveller — schedule every one, or say why it could not be'])
+      : []),
+    ...(brief.signals.boardRejects.length > 0
+      ? section('traveller_exclusions', [
+          `The traveller said no — never schedule: ${brief.signals.boardRejects.join('; ')}`,
+          ...omittedLine(brief.signals.omitted?.boardRejects, 'traveller exclusions'),
+        ])
+      : []),
+    ...(brief.signals.boardLikes.length > 0
+      ? section('traveller_maybes', [
+          `The traveller marked maybe — include if it fits: ${brief.signals.boardLikes.join('; ')}`,
+          ...omittedLine(brief.signals.omitted?.boardLikes, 'traveller maybes'),
+        ])
+      : []),
+    ...((brief.signals.sidequestRecommended?.length ?? 0) > 0
+      ? section('sidequest_recommended_candidates', [
+          `Pre-selected by Sidequest, not by the traveller — use where they fit the plan, drop any that do not: ${brief.signals.sidequestRecommended!.join('; ')}`,
+          ...omittedLine(brief.signals.omitted?.sidequestRecommended, 'Sidequest recommendations'),
+        ])
+      : []),
     ...section('sidequest_signals', [
-      ...(brief.signals.mustInclude.length > 0 ? [`Must include: ${brief.signals.mustInclude.join('; ')}`] : []),
-      ...(brief.signals.boardLikes.length > 0 ? [`Discovery Board — sounds good: ${brief.signals.boardLikes.join('; ')}`] : []),
-      ...(brief.signals.boardRejects.length > 0 ? [`Discovery Board — not interested: ${brief.signals.boardRejects.join('; ')}`] : []),
       `${brief.signals.smartDefaults} setting${brief.signals.smartDefaults === 1 ? '' : 's'} above marked [assumed] were chosen by Sidequest, not the traveller`,
     ]),
     ...section(

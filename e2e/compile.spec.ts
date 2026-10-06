@@ -3,6 +3,7 @@ import { openHubView } from './support/hub';
 import {
   answerEveryQuestion,
   openHowThisWasBuilt,
+  openResearchDoor,
   reachScope,
   REGION_READY_HEADING,
   waitForLookup,
@@ -55,6 +56,7 @@ async function reachClarification(page: Page): Promise<void> {
       throw new Error('the flow skipped the clarification step; this test needs it');
     }
 
+    await openResearchDoor(page);
     const explore = page.getByTestId('interview-explore');
     if (await explore.isVisible().catch(() => false)) {
       await waitUntilInteractive(explore);

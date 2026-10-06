@@ -115,3 +115,42 @@ describe('the traveller brief', () => {
     expect(rendered).toMatch(/Must include: Cliffs of the Ninth/);
   });
 });
+
+describe('Discovery Board decisions in the brief', () => {
+  it('renders traveller must-includes, exclusions, maybes and Sidequest recommendations as separate sections', () => {
+    const profile = buildTravelerProfile(defaultAnswers({ travelerNeeds: [], tripDays: 8 }), { travelerNeeds: [], tripDays: 8 });
+    const rendered = renderTravelerBriefXml(
+      buildTravelerBrief({
+        profile,
+        trip: TRIP,
+        signals: {
+          mustInclude: ['Their Castle'],
+          boardRejects: ['Busy Tower — too expensive'],
+          boardLikes: ['Maybe Market'],
+          sidequestRecommended: ['Quiet Cove', 'Hill Fort'],
+          omitted: { sidequestRecommended: 4 },
+        },
+      }),
+    );
+    const sectionOf = (tag: string) => new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(rendered)?.[1] ?? '';
+    expect(sectionOf('traveller_must_includes')).toContain('Their Castle');
+    expect(sectionOf('traveller_exclusions')).toContain('Busy Tower — too expensive');
+    expect(sectionOf('traveller_maybes')).toContain('Maybe Market');
+    const recommended = sectionOf('sidequest_recommended_candidates');
+    expect(recommended).toContain('Quiet Cove; Hill Fort');
+    expect(recommended).toContain('not by the traveller');
+    expect(recommended).toContain('and 4 more Sidequest recommendations (not shown)');
+    // A Sidequest pick is never described as the traveller's choice.
+    for (const tag of ['traveller_must_includes', 'traveller_exclusions', 'traveller_maybes']) {
+      expect(sectionOf(tag)).not.toContain('Quiet Cove');
+    }
+    expect(sectionOf('hard_constraints')).not.toContain('Quiet Cove');
+  });
+
+  it('never caps the traveller must-includes', () => {
+    const profile = buildTravelerProfile(defaultAnswers({ travelerNeeds: [], tripDays: 8 }), { travelerNeeds: [], tripDays: 8 });
+    const many = Array.from({ length: 20 }, (_, i) => `Place ${i}`);
+    const brief = buildTravelerBrief({ profile, trip: TRIP, signals: { mustInclude: many } });
+    expect(brief.signals.mustInclude).toHaveLength(20);
+  });
+});

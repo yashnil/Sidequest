@@ -771,15 +771,25 @@ export function BudgetSection({ intel }: { intel: TravelIntelligence }) {
           {b.currency} {b.total.low.toLocaleString()}–{b.total.high.toLocaleString()}
         </span>
         <span className="mt-1 block text-sm text-ink-muted">for {b.travellers} {b.travellers === 1 ? 'traveller' : 'travellers'} — a range, not a quote</span>
+        {b.converted && b.displayCurrency ? (
+          <span className="mt-1 block text-sm text-ink-muted" data-testid="hub-budget-local">
+            ≈ {b.displayCurrency} {b.converted.low.toLocaleString()}–{b.converted.high.toLocaleString()} in local currency
+          </span>
+        ) : null}
       </p>
       {b.envelope ? (
-        <p className={cx('mt-1 text-sm', b.envelope.fit === 'over' ? 'text-clay' : b.envelope.fit === 'tight' ? 'text-amber' : 'text-pine')} data-testid="hub-budget-envelope">
-          Against your {b.currency} {b.envelope.amount.toLocaleString()} {b.envelope.basis.replace(/_/g, ' ')}: {b.envelope.fit}.
+        <p className={cx('mt-1 text-sm', b.envelope.fit === 'over' ? 'text-clay' : b.envelope.fit === 'tight' ? 'text-amber' : b.envelope.fit === 'unknown' ? 'text-ink-muted' : 'text-pine')} data-testid="hub-budget-envelope">
+          {b.envelope.fit === 'unknown'
+            ? `Your ${b.envelope.currency ?? b.currency} ${b.envelope.amount.toLocaleString()} ${b.envelope.basis.replace(/_/g, ' ')} is not compared: no exchange rate was available to put it in ${b.currency}.`
+            : `Against your ${b.envelope.currency ?? b.currency} ${b.envelope.amount.toLocaleString()} ${b.envelope.basis.replace(/_/g, ' ')}: ${b.envelope.fit}.`}
         </p>
       ) : null}
+      {b.costIndex ? (
+        <p className="mt-2 type-meta" data-testid="hub-budget-cost-index">{b.costIndex.note}</p>
+      ) : null}
       <dl className="mt-4 divide-y divide-rule text-sm">
-        {b.lines.map((line) => (
-          <div key={line.category} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-3">
+        {b.lines.map((line, index) => (
+          <div key={`${line.category}-${index}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-3">
             <dt className="font-medium text-ink">{BUDGET_CATEGORY_LABELS[line.category]}</dt>
             <dd className="type-figure text-ink">
               {line.low.toLocaleString()}–{line.high.toLocaleString()} <span className="font-sans text-xs font-normal text-ink-muted">{line.perPerson ? 'per person' : 'for the party'}</span>

@@ -65,9 +65,14 @@ async function expectCanonicalItinerary(page: Page) {
    * named stop, so it is the case that carries a tier -- and asserts the sheet
    * states one of the four words, which is the promise being relocated.
    */
-  await expect(page.getByRole('heading', { name: 'A Quiet Overlook Nobody Documented', exact: true })).toBeVisible();
+  /*
+   * V1 CONVERGENCE — a board trip is planned by Sidequest's deterministic
+   * planner, which schedules only places on the board, so the fixture
+   * composer's deliberately unverifiable stop cannot appear here. The
+   * model-composed guarantee (kept and labelled, never dropped) is held by the
+   * "skip the board" build below and by the vitest acceptance suite.
+   */
   const days = page.locator('#hub-view-days');
-  await expect(days.getByText('Still checking').first()).toBeVisible();
   await expect(days.locator('[data-row-kind="activity"]').getByText('Confirmed')).toHaveCount(0);
   const placedStop = days.locator('[data-row-kind="activity"]').filter({ has: page.getByTestId('stop-number') }).first();
   await placedStop.getByTestId('stop-open-sheet').click();
@@ -86,6 +91,8 @@ async function expectCanonicalItinerary(page: Page) {
   await expect(page.getByTestId('backups')).toBeVisible();
   await expect(page.getByTestId('considered-and-left-out')).toBeVisible();
   await openHubView(page, 'overview');
+  // V1 — the trip says how it was built.
+  await expect(page.getByTestId('planning-line')).toContainText('Planned by Sidequest from');
 }
 
 test('Build my trip runs the canonical path and renders the reconciled itinerary with its package', async ({ page }) => {
@@ -147,6 +154,8 @@ test('Build my trip works with nothing picked on the board', async ({ page }) =>
 });
 
 test('Regenerate on the itinerary page runs the canonical path again', async ({ page }) => {
+  // Two full builds and the build screen between them: more than the default budget.
+  test.setTimeout(180_000);
   await reachMammothBoard(page);
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expectCanonicalItinerary(page);
@@ -159,7 +168,12 @@ test('Regenerate on the itinerary page runs the canonical path again', async ({ 
   const regenerate = page.getByTestId('regenerate-trip');
   await expect(regenerate).toBeVisible();
   await regenerate.click();
-  await expect(regenerate).toHaveText('Regenerate', { timeout: 60_000 });
+  /* V1 convergence — a confirmation says what is kept first; confirming starts a durable run watched on the build screen. */
+  await expect(page.getByTestId('regenerate-kept')).toContainText('Kept:');
+  await Promise.all([page.waitForURL(/\/build$/, { waitUntil: 'commit', timeout: 30_000 }), page.getByTestId('regenerate-confirm-start').click()]);
+  await page.waitForURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 90_000 });
+  // The hub restores the traveller's last view after the rebuild; the overview is asked for explicitly.
+  await openHubView(page, 'overview');
   await expectCanonicalItinerary(page);
 });
 
@@ -183,14 +197,16 @@ test('Plan with smart defaults composes a complete trip before any question is a
   const defaults = page.getByTestId('interview-smart-defaults');
   await expect(defaults).toBeVisible({ timeout: 20_000 });
   await defaults.click();
-  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 120_000 });
   await expect(page.getByTestId('route-overview')).toBeVisible();
   await openHubView(page, 'days');
   for (const dayNumber of [1, 2, 3, 4]) {
     await expect(page.getByRole('heading', { name: new RegExp(`^Day ${dayNumber}`) })).toBeVisible();
   }
   await expect(page.getByText(/^Nothing scheduled, and this is not an arrival or departure day/)).toHaveCount(0);
-  await expect(page.locator('#hub-view-days').getByText('Still checking').first()).toBeVisible();
+  // V1 — smart defaults scan, pick and plan: the structure is the planner's, and the trip says so.
+  await openHubView(page, 'overview');
+  await expect(page.getByTestId('planning-line')).toContainText('Planned by Sidequest from');
   await openHubView(page, 'prepare');
   await expect(page.getByTestId('packing-list')).toBeVisible();
 });

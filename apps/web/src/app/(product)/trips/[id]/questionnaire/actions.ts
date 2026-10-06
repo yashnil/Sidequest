@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { seedPlannerAutoPicks } from '@/lib/planning/seed-autopicks';
 import {
-  autoSelect,
   buildTravelerProfile,
   cacheKeyForSpans,
   canRetryModelPass,
@@ -25,12 +25,15 @@ import {
   answersRevision,
   clearItinerary,
   getTrip,
-  replaceAutoSelections,
   saveAnswers,
   saveProfile,
 } from '@/lib/db/repository';
 import type { Trip } from '@sidequest/core';
 import { buildRunView, retryPlanFor, startBuildRun, type BuildRunView } from '@/lib/planning/build-runs';
+import { startDiscoveryScan } from '@/lib/discovery-scan/run';
+import { scanView } from '@/lib/db/scan-repository';
+import { buildPreflight, failureForResult, type BuildPreflight } from '@/lib/planning/build-preflight';
+import type { BuildFailure } from '@/lib/planning/build-failure';
 import { getIntent, saveComposerAnswers } from '@/lib/db/compiler-repository';
 import {
   attributableWorkMs,
@@ -54,7 +57,7 @@ import {
   proposeInterpretations,
   type StructuredModel,
 } from '@/lib/providers/interpretation-model';
-import { boardFor, DYNAMIC_REGION_ID, resolveTripRegion } from '@/lib/region';
+import { boardFor, resolveTripRegion } from '@/lib/region';
 import { generateSidequestPlanForTrip } from '@/lib/planning/production-plan';
 import { ensurePreflightAction, proposeScopeAction } from '@/app/(product)/trips/[id]/plan/actions';
 import { unansweredRequired } from '@sidequest/core';
@@ -155,8 +158,14 @@ export async function saveDraftAction(
  *   the board are built around it.
  * - `build`: straight to the canonical generation, no board needed; see
  *   `completeAndBuildAction`.
+ * - `scan`: V1 convergence — the normal next step for a trip with no board
+ *   yet: the profile is saved, the Discovery scan is started, and the
+ *   traveller lands on `/discover`, which shows the scan and then the board.
+ * - `scan_and_build`: "Plan with smart defaults" on a trip with no board —
+ *   the same scan, flagged so the build starts from Sidequest's picks the
+ *   moment the board is ready (`discovery-scan/auto-build.ts`).
  */
-export type CompletionDestination = 'board' | 'research' | 'build';
+export type CompletionDestination = 'board' | 'research' | 'build' | 'scan' | 'scan_and_build';
 
 export async function completeQuestionnaireAction(
   tripId: string,
@@ -207,17 +216,13 @@ export async function completeQuestionnaireAction(
     // something to confirm rather than an empty grid to work through. Done here,
     // on the write that finishes the questionnaire, rather than as a side effect
     // of rendering the board. Re-running the questionnaire re-seeds it, and any
-    // card the traveller had already decided by hand is left alone.
+    // card the traveller had already decided by hand is left alone — including
+    // one they un-ticked (`dismissed`), which `decided` stops coming back.
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
       const board = boardFor(trip, profile, resolved.context);
-      const selection = autoSelect({
-        candidates: board.candidates,
-        profile,
-        tripDays,
-        transitUnmeasured: board.transitUnmeasured,
-      });
-      replaceAutoSelections(tripId, selection.selectedIds);
+      // V1 — the planner is the pre-selection, so the board's picks are the plan's picks; the traveller's own rows are never re-seeded over.
+      seedPlannerAutoPicks({ trip, profile, region: resolved.context, candidates: board.candidates });
       boardIsUsable = true;
     }
   } catch (error) {
@@ -260,12 +265,21 @@ export async function completeQuestionnaireAction(
   }
 
   /*
-   * A dynamic destination nobody has researched yet has no board to land on;
-   * the research flow is the honest next screen, and it now runs with the
-   * profile already saved. Explicit `research` goes there too.
+   * V1 CONVERGENCE — EVERY FINISHED INTERVIEW LANDS ON THE DISCOVER STEP.
+   *
+   * A trip with a board opens it; a trip without one lands on the scan screen
+   * there, with the scan already running when the traveller pressed "Find
+   * places for my trip" (or "Plan with smart defaults"). The old research
+   * flow under `/plan` is reached only when it is asked for explicitly.
    */
-  if (destination === 'research' || (!boardIsUsable && trip.basics.regionId === DYNAMIC_REGION_ID)) {
-    redirect(`/trips/${tripId}/plan`);
+  if (destination === 'research') redirect(`/trips/${tripId}/plan`);
+  if (!boardIsUsable && (destination === 'scan' || destination === 'scan_and_build') && scanView(tripId).state !== 'running') {
+    const fence = await guardAction('scan_start');
+    if (fence) return { ok: false, error: fence };
+    const caller = await callerKey();
+    const started = startDiscoveryScan(tripId, { autoBuild: destination === 'scan_and_build', caller: caller ?? 'interview_scan_action' });
+    /* A scan that cannot run here is not an error on this screen: the discover page says why, beside the button, and offers what can run. */
+    if (started.failure) console.warn('Discovery scan refused after the interview', { tripId, cause: started.failure.cause });
   }
   redirect(`/trips/${tripId}/discover`);
 }
@@ -286,8 +300,10 @@ export async function completeAndBuildAction(tripId: string, answers: Questionna
   if (refusal) return { ok: false, error: refusal };
   const saved = await persistProfileForBuild(trip, answers);
   if (!saved.ok) return saved;
+  const preflight = buildPreflight(tripId, { caller: 'interview_build_action' });
+  if (!preflight.ok) return refusedByPreflight(tripId, preflight, 'complete_and_build');
   const generated = await generateSidequestPlanForTrip(tripId, { caller: 'interview_build_action', mode: 'full' });
-  if (!generated.ok) return { ok: false, error: generated.error ?? 'We could not compose your trip just now.' };
+  if (!generated.ok) return { ok: false, error: failureForResult(generated, tripId, { caller: 'interview_build_action' }).message };
   revalidatePath(`/trips/${tripId}/itinerary`);
   redirect(`/trips/${tripId}/itinerary`);
 }
@@ -314,8 +330,8 @@ async function persistProfileForBuild(trip: Trip, answers: QuestionnaireAnswers)
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
       const board = boardFor(trip, profile, resolved.context);
-      const selection = autoSelect({ candidates: board.candidates, profile, tripDays, transitUnmeasured: board.transitUnmeasured });
-      replaceAutoSelections(tripId, selection.selectedIds);
+      // The traveller's own decisions (skips, maybes, includes, un-ticked picks) are never re-seeded over.
+      seedPlannerAutoPicks({ trip, profile, region: resolved.context, candidates: board.candidates });
     }
     return { ok: true, revision };
   } catch (error) {
@@ -326,7 +342,18 @@ async function persistProfileForBuild(trip: Trip, answers: QuestionnaireAnswers)
 
 export type StartBuildResult =
   | { ok: true; buildKey: string; view: BuildRunView; revision: string | null }
-  | { ok: false; error: string; stale?: boolean; revision?: string | null };
+  /** V1 convergence — `failure` is present when the preflight refused: the typed cause, its copy and whether a retry can help. */
+  | { ok: false; error: string; stale?: boolean; revision?: string | null; failure?: BuildFailure };
+
+/**
+ * V1 convergence — the refusal a build door returns when `buildPreflight`
+ * says no build path can run. The traveller reads `error` (the failure's own
+ * copy); the operator reads one log line with the precise reason.
+ */
+function refusedByPreflight(tripId: string, preflight: Extract<BuildPreflight, { ok: false }>, door: string): { ok: false; error: string; failure: BuildFailure } {
+  console.warn('Build refused before it started', { tripId, door, cause: preflight.failure.cause, variant: preflight.failure.variant ?? null, reason: preflight.operatorReason });
+  return { ok: false, error: preflight.failure.message, failure: preflight.failure };
+}
 
 const buildKeySchema = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 
@@ -358,9 +385,12 @@ export async function startBuildAction(tripId: string, answers: QuestionnaireAns
   if (answersAreStale(tripId, revision)) return { ok: false, stale: true, error: STALE_ANSWERS_MESSAGE, revision: answersRevision(tripId) };
   const fence = await guardAction('build_start');
   if (fence) return { ok: false, error: fence };
+  const caller = await callerKey();
   const saved = await persistProfileForBuild(trip, answers);
   if (!saved.ok) return { ok: false, error: saved.error ?? 'We could not save your profile.' };
-  const caller = await callerKey();
+  /* V1 convergence — the answers are saved either way; a build that cannot run is refused here, not discovered by a failed run. */
+  const preflight = buildPreflight(tripId, { caller: caller ?? 'interview_build_action' });
+  if (!preflight.ok) return { ...refusedByPreflight(tripId, preflight, 'build'), revision: saved.revision ?? null };
   const run = startBuildRun({ tripId, buildKey, caller: caller ?? 'interview_build_action', mode: 'full' });
   return { ok: true, buildKey, view: run.view, revision: saved.revision ?? null };
 }
@@ -387,6 +417,8 @@ export async function retryBuildAction(tripId: string, buildKey: string): Promis
   if (fence) return { ok: false, error: fence };
   const caller = await callerKey();
   const { reuseStoredDraft } = retryPlanFor(current);
+  const preflight = buildPreflight(tripId, { caller: caller ?? 'interview_retry_action', reuseStoredDraft });
+  if (!preflight.ok) return refusedByPreflight(tripId, preflight, 'retry');
   const run = startBuildRun({ tripId, buildKey, caller: caller ?? 'interview_retry_action', mode: 'full', reuseStoredDraft });
   return { ok: true, buildKey, view: run.view, revision: answersRevision(tripId) };
 }
@@ -400,6 +432,10 @@ export async function retryBuildAction(tripId: string, buildKey: string): Promis
  * and lands on the plan page — which shows only the decisions that remain
  * (a region shape for a broad destination, a clarification, the scope) and
  * then the build. Never a prerequisite for "Build my trip".
+ *
+ * V1 convergence — no longer offered by the normal flow: the Discovery scan
+ * ("Find places for my trip") is the board's door now. Kept, unlinked, so the
+ * compile path under `/plan` stays reachable by direct URL.
  */
 export async function exploreExperiencesAction(tripId: string, answers: QuestionnaireAnswers): Promise<SaveResult> {
   const trip = getTrip(tripId);

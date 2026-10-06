@@ -21,7 +21,7 @@ function stub(handler: (url: string, init?: RequestInit) => { status: number; bo
   const calls: { url: string; init?: RequestInit }[] = [];
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    expect(url).toMatch(/^https:\/\/(places|routes)\.googleapis\.com|^https:\/\/api\.frankfurter\.app/);
+    expect(url).toMatch(/^https:\/\/(places|routes)\.googleapis\.com|^https:\/\/api\.frankfurter\.(app|dev)/);
     calls.push({ url, ...(init ? { init } : {}) });
     const answer = await handler(url, init);
     return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { 'content-type': 'application/json' } });
@@ -241,10 +241,10 @@ describe('routing policy', () => {
 
 describe('capability registry and modes', () => {
   it('fixture, mixed and live are decided from the environment, and live price/availability are never configured', () => {
-    const fixture = capabilityRegistry({ SIDEQUEST_COMPOSER_PROVIDER: 'fixture', SIDEQUEST_COMPILER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'fixture', SIDEQUEST_IMAGERY_PROVIDER: 'fixture' });
+    const fixture = capabilityRegistry({ SIDEQUEST_COMPOSER_PROVIDER: 'fixture', SIDEQUEST_COMPILER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'fixture', SIDEQUEST_IMAGERY_PROVIDER: 'fixture', SIDEQUEST_FX_PROVIDER: 'fixture' });
     expect(fixture.mode).toBe('fixture');
     expect(modeLabel(fixture.mode)).toBe('Fixture');
-    const mixed = capabilityRegistry({ ANTHROPIC_API_KEY: 'sk', SIDEQUEST_COMPILER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'fixture', SIDEQUEST_IMAGERY_PROVIDER: 'fixture' });
+    const mixed = capabilityRegistry({ ANTHROPIC_API_KEY: 'sk', SIDEQUEST_COMPILER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'fixture', SIDEQUEST_IMAGERY_PROVIDER: 'fixture', SIDEQUEST_FX_PROVIDER: 'fixture' });
     expect(mixed.mode).toBe('mixed');
     const live = capabilityRegistry({ ANTHROPIC_API_KEY: 'sk-ant-SECRET-VALUE', SIDEQUEST_COMPILER_PROVIDER: 'open', SIDEQUEST_GEOCODER_PROVIDER: 'nominatim', SIDEQUEST_ROUTES_PROVIDER: 'valhalla', GOOGLE_MAPS_API_KEY: 'AIza-SECRET-VALUE', SIDEQUEST_TRAFFIC_PROVIDER: 'google' });
     expect(live.mode).toBe('live');

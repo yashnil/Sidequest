@@ -153,6 +153,7 @@ export function DiscoveryBoardView({
   storedReadiness,
   groups: incomingGroups,
   initialSelections,
+  initialAutoPicks = [],
   autoPickNotes,
   hasItinerary,
   weatherBackups,
@@ -173,6 +174,8 @@ export function DiscoveryBoardView({
   groups: SerializedGroup[];
   weatherBackups: BoardWeatherBackups | null;
   initialSelections: SelectionMap;
+  /** Included cards Sidequest picked (source `auto`), so a card can say whose pick it is. */
+  initialAutoPicks?: readonly string[];
   autoPickNotes: string[];
   hasItinerary: boolean;
   /** A basemap tile source, resolved on the server from `SIDEQUEST_MAP_TILES`; null draws positions only. */
@@ -241,18 +244,25 @@ export function DiscoveryBoardView({
    * the board version or the stored marks change identity — a stale "12 in"
    * beside a board of nine cards reads as a fact.
    */
-  const serverKey = summaryVersion([boardVersion, marksFingerprint(initialSelections)]);
-  const [mirror, setMirror] = useState<{ key: string; value: SelectionMap; notes: string[] }>({
+  const serverKey = summaryVersion([
+    boardVersion,
+    marksFingerprint(initialSelections),
+    [...initialAutoPicks].sort().join(','),
+  ]);
+  const [mirror, setMirror] = useState<{ key: string; value: SelectionMap; notes: string[]; autoPicks: readonly string[] }>({
     key: serverKey,
     value: initialSelections,
     notes: autoPickNotes,
+    autoPicks: initialAutoPicks,
   });
   if (mirror.key !== serverKey) {
-    setMirror({ key: serverKey, value: initialSelections, notes: autoPickNotes });
+    setMirror({ key: serverKey, value: initialSelections, notes: autoPickNotes, autoPicks: initialAutoPicks });
   }
-  const settled = mirror.key === serverKey ? mirror : { value: initialSelections, notes: autoPickNotes };
+  const settled =
+    mirror.key === serverKey ? mirror : { value: initialSelections, notes: autoPickNotes, autoPicks: initialAutoPicks };
   const selections = settled.value;
   const notes = settled.notes;
+  const autoPickSet = new Set(settled.autoPicks);
 
   const [optimistic, applyOptimistic] = useOptimistic(
     selections,
@@ -350,15 +360,21 @@ export function DiscoveryBoardView({
   const includedCount = summary.counts.included;
   const maybeCount = summary.counts.maybe;
 
-  function choose(placeId: string, status: SelectionStatus) {
+  function choose(placeId: string, status: SelectionStatus, reason?: PassReason) {
     const next = optimistic[placeId] === status ? undefined : status;
     const previous = selections;
     setError(null);
     startTransition(async () => {
       applyOptimistic({ [placeId]: next });
-      const result = await setSelectionAction(tripId, placeId, next ?? null);
+      // Un-ticking an include (ours or theirs) is stored as a decision — see `withdrawSelection`.
+      const result = await setSelectionAction(tripId, placeId, next ?? null, next === 'excluded' ? (reason ?? null) : null);
       if (result.ok) {
-        setMirror((current) => ({ ...current, value: { ...current.value, [placeId]: next } }));
+        // Any hand-made answer makes the card the traveller's, never Sidequest's pick.
+        setMirror((current) => ({
+          ...current,
+          value: { ...current.value, [placeId]: next },
+          autoPicks: current.autoPicks.filter((id) => id !== placeId),
+        }));
       } else {
         // Roll the card back rather than showing a state the server does not have.
         setMirror((current) => ({ ...current, value: previous }));
@@ -379,7 +395,7 @@ export function DiscoveryBoardView({
    */
   function passWithReason(candidate: DiscoveryCandidate, reason: PassReason) {
     setPassing(null);
-    choose(candidate.place.id, 'excluded');
+    choose(candidate.place.id, 'excluded', reason);
     const decided = new Set(
       Object.entries(optimistic)
         .filter(([, status]) => status !== undefined)
@@ -406,11 +422,12 @@ export function DiscoveryBoardView({
     startTransition(async () => {
       applyOptimistic(Object.fromEntries(target.ids.map((id) => [id, 'excluded' as const])));
       const results = await Promise.all(
-        target.ids.map((id) => setSelectionAction(tripId, id, 'excluded')),
+        target.ids.map((id) => setSelectionAction(tripId, id, 'excluded', target.reason)),
       );
       if (results.every((result) => result.ok)) {
         setMirror((current) => ({
           ...current,
+          autoPicks: current.autoPicks.filter((id) => !target.ids.includes(id)),
           value: {
             ...current.value,
             ...Object.fromEntries(target.ids.map((id) => [id, 'excluded' as const])),
@@ -436,7 +453,9 @@ export function DiscoveryBoardView({
       setMirror((current) => ({
         key: current.key,
         value: result.selections!,
-        notes: result.notes ?? [],
+        // What changed comes first, and is said even when the answer is "nothing".
+        notes: [...(result.change ? [result.change] : []), ...(result.notes ?? [])],
+        autoPicks: result.autoPicks ?? [],
       }));
       setAutoPicked(true);
     });
@@ -766,6 +785,7 @@ export function DiscoveryBoardView({
               groups={leadGroups}
               images={images}
               selections={optimistic}
+              autoPicks={autoPickSet}
               focusedId={focusedId}
               shared={shared}
               whys={whys}
@@ -819,6 +839,7 @@ export function DiscoveryBoardView({
               groups={restGroups}
               images={images}
               selections={optimistic}
+              autoPicks={autoPickSet}
               focusedId={focusedId}
               shared={shared}
               whys={whys}
@@ -865,6 +886,7 @@ function BoardSections({
   groups,
   images,
   selections,
+  autoPicks,
   focusedId,
   shared,
   whys,
@@ -878,6 +900,8 @@ function BoardSections({
   groups: readonly RenderedGroup[];
   images: Record<string, ImageRecord>;
   selections: SelectionMap;
+  /** Included cards Sidequest picked rather than the traveller. */
+  autoPicks: ReadonlySet<string>;
   focusedId: string | null;
   shared: SharedBoardFacts;
   /** The sentence each card leads with, chosen across the board. */
@@ -946,6 +970,7 @@ function BoardSections({
                   candidate={candidate}
                   image={cardImage(images, candidate)}
                   status={selections[candidate.place.id]}
+                  pickedBy={autoPicks.has(candidate.place.id) ? 'sidequest' : 'traveller'}
                   focused={focusedId === candidate.place.id}
                   featured={!entry.continued && index === 0 && entry.candidates.length >= 3}
                   shared={shared}
@@ -1035,11 +1060,14 @@ function PlaceCard({
   onStartPass,
   onCancelPass,
   onPass,
+  pickedBy,
 }: {
   candidate: DiscoveryCandidate;
   /** Null where nothing licensable was found, which is most of the world. */
   image: ImageRecord | null;
   status: SelectionStatus | undefined;
+  /** Who put an included card in the trip: Sidequest's auto-pick or the traveller. */
+  pickedBy?: 'sidequest' | 'traveller';
   focused: boolean;
   /** The strongest card in its group. See `BoardSections`. */
   featured: boolean;
@@ -1342,8 +1370,22 @@ function PlaceCard({
           */}
           {blocked && status === 'included' ? (
             <p className="mb-2 rounded-[var(--radius-control)] bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
-              You picked this, and it no longer works on these dates. We have kept your choice —
+              {pickedBy === 'sidequest' ? 'We picked this' : 'You picked this'}, and it no longer works on these dates. We have kept {pickedBy === 'sidequest' ? 'it' : 'your choice'} —
               change your dates, your transport answers, or skip it.
+            </p>
+          ) : null}
+
+          {/*
+            WHO PUT IT IN THE TRIP.
+
+            One quiet line, only on an included card. A Sidequest pick and a
+            traveller's own pick look identical otherwise, and the difference
+            matters: un-ticking ours records "not for me" so it never comes back,
+            and the planner treats theirs as a must and ours as a suggestion.
+          */}
+          {status === 'included' && pickedBy ? (
+            <p className="mb-1.5 text-[11px] font-medium tracking-wide text-ink-faint uppercase" data-testid="card-picked-by" data-picked-by={pickedBy}>
+              {pickedBy === 'sidequest' ? "Sidequest's pick" : 'Your pick'}
             </p>
           ) : null}
 

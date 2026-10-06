@@ -179,8 +179,15 @@ export function buildTravelReality(input: TravelRealityInput): TravelReality {
     if (urbanWanted && urban.length === 0) urban = pick(URBAN_ORDER, 'urban', 'viable').slice(0, 2);
     let regional = regionalWanted ? pick(REGIONAL_ORDER, 'regional', 'recommended') : [];
     if (regionalWanted && regional.length === 0) regional = pick(REGIONAL_ORDER, 'regional', 'viable');
-    /* A road-trip shape with a viable hire car prefers it over a slower viable train — the shape earns that, not the name. */
-    if (regionalWanted && (traits.has('road_trip_region') || traits.has('car_dependent')) && !nobodyDrives && (status('rental_car') === 'recommended' || status('rental_car') === 'viable')) {
+    /*
+     * A road-trip shape with a viable hire car prefers it over a slower viable train — the shape earns that, not the name.
+     * A city and its surroundings in a country whose own facts recommend rail is not that shape: the
+     * screening's `road_trip_region` comes from the containing division's size, and it turned a
+     * city trip into "a car" over a recommended train network.
+     */
+    const cityScale = urbanity === 'urban_plus_region' || urbanity === 'dense_urban';
+    const railRecommended = status('high_speed_rail') === 'recommended' || status('intercity_train') === 'recommended';
+    if (regionalWanted && !(cityScale && railRecommended) && (traits.has('road_trip_region') || traits.has('car_dependent')) && !nobodyDrives && (status('rental_car') === 'recommended' || status('rental_car') === 'viable')) {
       regional = ['rental_car', ...regional.filter((m) => m !== 'rental_car' && m !== 'self_drive')];
     }
     regional = regional.slice(0, 3);

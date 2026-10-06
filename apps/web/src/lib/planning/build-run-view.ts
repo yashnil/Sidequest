@@ -1,6 +1,7 @@
 import 'server-only';
 import { buildRunStateOf, getGenerationProgress, type BuildFailureKind, type BuildRunState, type GenerationProgress } from '../db/generation-progress-repository';
 import { hasItinerary } from '../db/repository';
+import { decodeBuildFailure, failureCopyView, type FailureCopyView } from './build-failure';
 
 /**
  * V8 — THE RUN AS A PAGE READS IT.
@@ -17,8 +18,8 @@ export type BuildRunView =
       buildKey: string | null;
       startedAt: string;
       updatedAt: string;
-      /** Present on `failed` and `lost`; what a retry would cost is a function of `kind`. */
-      failure: { ref: string | null; kind: BuildFailureKind; modelInvoked: boolean; draftSaved: boolean } | null;
+      /** Present on `failed` and `lost`; what a retry would cost is a function of `kind`; what the traveller is told is a function of `cause`. */
+      failure: RunFailureView | null;
       /** A plan exists on this trip (this run's, or an earlier one's), so "your earlier plan is still there" is true. */
       hasItinerary: boolean;
     };
@@ -29,14 +30,26 @@ export function buildRunView(tripId: string, now: Date = new Date()): BuildRunVi
   return viewOf(progress, now);
 }
 
+/**
+ * V1 convergence — a failed or lost run as every screen reads it: how far it
+ * got (`kind`), why it stopped (`cause`, null on a run recorded before the
+ * taxonomy or a lost one) and the traveller copy and retryability that cause
+ * carries. One function, so the progress route, the build page and the
+ * review cannot disagree.
+ */
+export type RunFailureView = { ref: string | null; kind: BuildFailureKind; modelInvoked: boolean; draftSaved: boolean } & FailureCopyView;
+
+export function runFailureView(progress: GenerationProgress, state: BuildRunState): RunFailureView | null {
+  if (state === 'failed') {
+    return { ref: progress.failure?.ref ?? null, kind: progress.failure?.kind ?? 'before_model', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved, ...failureCopyView(decodeBuildFailure(progress.failure?.cause)) };
+  }
+  if (state === 'lost') return { ref: null, kind: 'lost', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved, ...failureCopyView(null) };
+  return null;
+}
+
 export function viewOf(progress: GenerationProgress, now: Date): Exclude<BuildRunView, { state: 'none' }> {
   const state = buildRunStateOf(progress, now);
-  const failure =
-    state === 'failed'
-      ? { ref: progress.failure?.ref ?? null, kind: progress.failure?.kind ?? 'before_model', modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved }
-      : state === 'lost'
-        ? { ref: null, kind: 'lost' as const, modelInvoked: progress.modelInvoked, draftSaved: progress.draftSaved }
-        : null;
+  const failure = runFailureView(progress, state);
   return {
     state,
     buildKey: progress.buildKey,

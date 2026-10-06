@@ -106,7 +106,8 @@ function loadPhotoFixture(key: PhotoFixtureKey): PhotoFixture | null {
   if (fixtureCache.has(key)) return fixtureCache.get(key) ?? null;
   const relative = `src/lib/execution/fixtures/photo-${key}.json`;
   let fixture: PhotoFixture | null = null;
-  for (const root of [process.cwd(), join(process.cwd(), 'apps/web')]) {
+  /* `turbopackIgnore`: fixture files found at runtime from either working directory; never a bundling input. */
+  for (const root of [/* turbopackIgnore: true */ process.cwd(), join(/* turbopackIgnore: true */ process.cwd(), 'apps/web')]) {
     try {
       fixture = JSON.parse(readFileSync(join(root, relative), 'utf8')) as PhotoFixture;
       break;

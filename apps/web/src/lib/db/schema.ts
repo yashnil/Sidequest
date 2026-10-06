@@ -326,6 +326,26 @@ CREATE TABLE IF NOT EXISTS compiled_regions (
 CREATE INDEX IF NOT EXISTS idx_compiled_regions_lookup
   ON compiled_regions(trip_id, scope_fingerprint, created_at);
 
+-- V1 CONVERGENCE — the discovery scan: one row per trip, the latest scan's
+-- progress and outcome. The artifact itself is a compiled_regions row; this is
+-- only the durable record of the run that wrote it (heartbeat, stage, counters,
+-- a traveller-facing failure kind). Lossy on purpose, like generation_progress.
+CREATE TABLE IF NOT EXISTS discovery_scans (
+  trip_id            TEXT PRIMARY KEY REFERENCES trips(id) ON DELETE CASCADE,
+  scan_id            TEXT NOT NULL,
+  state              TEXT NOT NULL,
+  stage              TEXT NOT NULL,
+  counters_json      TEXT NOT NULL DEFAULT '{}',
+  auto_build         INTEGER NOT NULL DEFAULT 0,
+  failure_kind       TEXT,
+  failure_ref        TEXT,
+  compiled_region_id TEXT,
+  extras_json        TEXT,
+  started_at         TEXT NOT NULL,
+  heartbeat_at       TEXT NOT NULL,
+  finished_at        TEXT
+);
+
 -- Provider responses, cached so that a retry or a second trip to the same city
 -- does not mean paying twice.
 --
@@ -2109,6 +2129,14 @@ export const COLUMN_MIGRATIONS: readonly {
   definition: string;
 }[] = [
   /**
+   * V1 convergence — why the traveller skipped a Discovery Board card ("too
+   * expensive", "too far" …), one of `SKIP_REASONS`. Nullable: a skip given
+   * without a reason, every non-skip row, and every row written before the
+   * column existed. The `dismissed` status this slice also introduced needs no
+   * column — `status` is free TEXT validated by the zod schema on read.
+   */
+  { table: 'discovery_selections', column: 'reason', definition: 'TEXT' },
+  /**
    * V7 §16 — what the build has counted so far, for the screen that is waiting.
    * A JSON object of small integers (stops drafted, places matched, legs
    * timed …) written at the same real boundaries as `stage`; never a percentage.
@@ -2136,6 +2164,14 @@ export const COLUMN_MIGRATIONS: readonly {
   { table: 'generation_progress', column: 'draft_saved', definition: 'INTEGER NOT NULL DEFAULT 0' },
   { table: 'generation_progress', column: 'failure_ref', definition: 'TEXT' },
   { table: 'generation_progress', column: 'failure_kind', definition: 'TEXT' },
+  /**
+   * V1 convergence — *why* a run failed, in Sidequest's own taxonomy
+   * (`planning/build-failure.ts`: `cause` or `cause/variant`). `failure_kind`
+   * says how far the run got; this says what stopped it, and decides the copy
+   * and whether "Try build again" is offered. Nullable: a run recorded before
+   * the column existed renders the pre-taxonomy copy.
+   */
+  { table: 'generation_progress', column: 'failure_cause', definition: 'TEXT' },
   {
     table: 'itineraries',
     column: 'transport_strategy_json',

@@ -218,9 +218,14 @@ export function resolveCandidates(
 
   for (const candidate of candidates) {
     const selection = byPlaceId.get(candidate.place.id);
-    // Not chosen at all, or actively skipped. Neither is a conflict worth
-    // reporting — the traveller already made that call.
-    if (!selection || selection.status === 'excluded') continue;
+    // Not chosen at all, actively skipped, or a Sidequest pick the traveller
+    // un-ticked (`dismissed`). None is a conflict worth reporting — the
+    // traveller already made that call — and none is ever scheduled.
+    //
+    // What remains, by band: a traveller include (`manual`, highest), a
+    // Sidequest pick (`auto` include — recommended, scheduled unless capacity
+    // forces it out, lowest of the includes), and a maybe (preferred if it fits).
+    if (!selection || selection.status === 'excluded' || selection.status === 'dismissed') continue;
 
     const manual = selection.source === 'user' && selection.status === 'included';
 
@@ -378,7 +383,7 @@ export function resolveCandidates(
    * class of mistake one layer down.
    */
   for (const selection of selections) {
-    if (selection.status === 'excluded') continue;
+    if (selection.status === 'excluded' || selection.status === 'dismissed') continue;
     if (candidateIds.has(selection.placeId)) continue;
 
     rejected.push({

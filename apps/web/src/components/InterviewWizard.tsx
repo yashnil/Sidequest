@@ -110,7 +110,8 @@ export function InterviewWizard({
   interpretation,
   durationAdvice = null,
   boardAvailable,
-  researchAvailable,
+  scanUnavailable = null,
+  researchDoor = false,
   fixtureMode = false,
   geometry = null,
   tiles = null,
@@ -118,6 +119,7 @@ export function InterviewWizard({
   revision = null,
   activeBuild = null,
   acceptedWindow = null,
+  buildUnavailable = null,
 }: {
   tripId: string;
   context: InterviewContext;
@@ -129,7 +131,14 @@ export function InterviewWizard({
   interpretation?: { set: InterpretationSet; mustDo: string; avoid: string };
   durationAdvice?: string | null;
   boardAvailable: boolean;
-  researchAvailable: boolean;
+  /**
+   * V1 convergence — set when no Discovery scan can run on this deployment
+   * right now, so "Find places for my trip" is disabled with this sentence
+   * beside it rather than failing after the press.
+   */
+  scanUnavailable?: { heading: string; message: string } | null;
+  /** V1 convergence — the old research path's link, shown only when the page was opened with `?research=1`. */
+  researchDoor?: boolean;
   fixtureMode?: boolean;
   /** V7 §7 — true while the traveller has asked Sidequest to choose the dates and has not accepted a window. */
   timingOpen?: boolean;
@@ -139,6 +148,13 @@ export function InterviewWizard({
   activeBuild?: BuildRunView | null;
   /** V8 — the window the traveller accepted, read from the row, so a reload shows the dates they chose. */
   acceptedWindow?: TimingWindowView | null;
+  /**
+   * V1 convergence — set when `buildPreflight` says no build can run on this
+   * deployment right now (no composer, a refused fixture switch, a rejected key,
+   * the day's allowance spent). The Build button is disabled with this sentence
+   * beside it, so nobody finishes the interview to discover it at the end.
+   */
+  buildUnavailable?: { heading: string; message: string } | null;
 }) {
   const router = useRouter();
   const now = useMemo(() => new Date(), []);
@@ -149,7 +165,7 @@ export function InterviewWizard({
   const [position, setPosition] = useState<string>(initialAnswers.interview?.position ?? UNDERSTANDING_POSITION);
   const [error, setError] = useState<string | null>(null);
   /** COMPOSITION RELIABILITY — a build that failed keeps the answers and waits for an explicit Retry; nothing retries on its own. */
-  const [buildFailure, setBuildFailure] = useState<{ answers: QuestionnaireAnswers; message: string } | null>(null);
+  const [buildFailure, setBuildFailure] = useState<{ answers: QuestionnaireAnswers; message: string; heading?: string; retryable: boolean } | null>(null);
   const [call, setCall] = useState<{ id: string; label: string; value: string; decision: SmartDefault } | null>(null);
   const [pending, startTransition] = useTransition();
   const [panelOpen, setPanelOpen] = useState(position === UNDERSTANDING_POSITION);
@@ -297,6 +313,11 @@ export function InterviewWizard({
   function build(next: QuestionnaireAnswers) {
     setError(null);
     setBuildFailure(null);
+    if (buildUnavailable) {
+      /* The preflight already said no: say it again here rather than start a run that cannot succeed. */
+      setBuildFailure({ answers: next, message: buildUnavailable.message, heading: buildUnavailable.heading, retryable: false });
+      return;
+    }
     setBuilding(true);
     buildKeyRef.current ??= newBuildKey();
     const key = buildKeyRef.current;
@@ -312,7 +333,7 @@ export function InterviewWizard({
         }
         setBuilding(false);
         if (result.stale) setStale(true);
-        setBuildFailure({ answers: next, message: result.error });
+        setBuildFailure({ answers: next, message: result.error, ...(result.failure ? { heading: result.failure.heading } : {}), retryable: result.failure?.retryable ?? true });
         return;
       }
       /* The request died on the wire. Did the press land? The run row is the answer, not the request. */
@@ -324,13 +345,26 @@ export function InterviewWizard({
         return;
       }
       setBuilding(false);
-      setBuildFailure({ answers: next, message: outcome.message });
+      setBuildFailure({ answers: next, message: outcome.message, retryable: true });
     });
   }
 
+  /**
+   * V1 CONVERGENCE — "PLAN WITH SMART DEFAULTS" IS SCAN → PICKS → BUILD.
+   *
+   * A trip that already has a board builds from it straight away (the planner
+   * needs no model call). A trip without one starts the Discovery scan flagged
+   * to build the moment the board is ready, and lands on `/discover`, which
+   * shows the scan and then follows the build. Only where no scan can run does
+   * the press fall back to the model-composed build.
+   */
   function planWithDefaults() {
     const { answers: next } = applySmartDefaults({ answers, ctx: context, now: new Date(), ...(region ? { region } : {}) });
-    build(next);
+    if (boardAvailable || scanUnavailable) {
+      build(next);
+      return;
+    }
+    complete(next, 'scan_and_build');
   }
 
   function finish(destination: CompletionDestination) {
@@ -338,25 +372,26 @@ export function InterviewWizard({
       build(answers);
       return;
     }
-    setError(null);
-    startTransition(async () => {
-      const outcome = await callAction(() =>
-        destination === 'research'
-          ? exploreExperiencesAction(tripId, withPosition(answers, REVIEW_POSITION))
-          : completeQuestionnaireAction(tripId, withPosition(answers, REVIEW_POSITION), destination),
-      );
-      if (!outcome.ok) setError(outcome.message);
-      else if (!outcome.value.ok) setError(outcome.value.error ?? 'We could not save your profile.');
-    });
+    complete(answers, destination);
   }
 
-  /** "Explore experiences first" from the understanding screen: research runs while the traveller answers. */
+  /** The old research path, behind `?research=1` only: research runs while the traveller answers. */
   function exploreFirst() {
     setError(null);
     startTransition(async () => {
       const outcome = await callAction(() => exploreExperiencesAction(tripId, withPosition(answers, position)));
       if (!outcome.ok) setError(outcome.message);
       else if (!outcome.value.ok) setError(outcome.value.error ?? 'We could not start exploring just now.');
+    });
+  }
+
+  /** Save the profile and move on: to the board, or to the scan that will make one. */
+  function complete(toSave: QuestionnaireAnswers, destination: Exclude<CompletionDestination, 'build'>) {
+    setError(null);
+    startTransition(async () => {
+      const outcome = await callAction(() => completeQuestionnaireAction(tripId, withPosition(toSave, REVIEW_POSITION), destination));
+      if (!outcome.ok) setError(outcome.message);
+      else if (!outcome.value.ok) setError(outcome.value.error ?? 'We could not save your profile.');
     });
   }
 
@@ -392,7 +427,7 @@ export function InterviewWizard({
       ) : null}
 
       {position === UNDERSTANDING_POSITION ? (
-        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} geometry={geometry} tiles={tiles} {...(researchAvailable && !boardAvailable ? { onExplore: exploreFirst } : {})} />
+        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} geometry={geometry} tiles={tiles} {...(researchDoor ? { onExplore: exploreFirst } : {})} />
       ) : null}
 
       {inInterview || position === REVIEW_POSITION ? (
@@ -442,7 +477,7 @@ export function InterviewWizard({
                 durationAdvice={durationAdvice}
                 unresolved={interpretation?.set.unresolved ?? []}
                 boardAvailable={boardAvailable}
-                researchAvailable={researchAvailable}
+                scanUnavailable={scanUnavailable}
                 pending={pending}
                 analytics={analytics}
                 onJump={jumpTo}
@@ -453,6 +488,7 @@ export function InterviewWizard({
                 timingOpen={timingOpen}
                 activeBuild={activeBuild}
                 acceptedWindow={acceptedWindow}
+                buildUnavailable={buildUnavailable}
               />
             ) : null}
           </div>
@@ -480,7 +516,7 @@ export function InterviewWizard({
       ) : null}
       {buildFailure && !stale ? (
         <section className="card-raised mt-8 rounded-[var(--radius-panel)] p-6" data-testid="build-failure" role="alert" aria-live="polite">
-          <h2 className="font-display text-xl text-ink">Sidequest couldn&rsquo;t start this build.</h2>
+          <h2 className="font-display text-xl text-ink">{buildFailure.heading ?? 'Sidequest couldn’t start this build.'}</h2>
           {/*
             MVP V3, Stage 25 — SAY WHAT ACTUALLY HAPPENED. The reason the server
             gave is rendered, above the recovery; the recovery sentence is the
@@ -489,11 +525,15 @@ export function InterviewWizard({
             build screen, from the row.
           */}
           <p className="mt-2 text-sm leading-relaxed text-ink" data-testid="build-failure-reason">{buildFailure.message}</p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-muted">Your trip profile is saved. Nothing was composed, so trying again costs nothing you have not already chosen to spend.</p>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+            {buildFailure.retryable ? 'Your trip profile is saved. Nothing was composed, so trying again costs nothing you have not already chosen to spend.' : 'Your trip profile is saved. Nothing was composed.'}
+          </p>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" className={buttonClass('primary')} onClick={() => build(buildFailure.answers)} disabled={pending} data-testid="retry-draft">
-              {pending ? 'Starting…' : 'Try build again'}
-            </button>
+            {buildFailure.retryable ? (
+              <button type="button" className={buttonClass('primary')} onClick={() => build(buildFailure.answers)} disabled={pending} data-testid="retry-draft">
+                {pending ? 'Starting…' : 'Try build again'}
+              </button>
+            ) : null}
             <button
               type="button"
               className={buttonClass('secondary')}
@@ -601,11 +641,10 @@ function UnderstandingScreen({
         </div>
         {onExplore ? (
           <p className="mt-4 text-sm text-ink-muted">
-            Prefer to see what is there first?{' '}
             <button type="button" onClick={onExplore} disabled={pending} className={cx('text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-explore">
               Explore experiences first
             </button>
-            {' '}— Sidequest researches the area while you answer, and you choose from a board before building.
+            {' '}— the research path: Sidequest researches the area while you answer, and you choose from a board before building.
           </p>
         ) : null}
       </div>
@@ -1027,7 +1066,7 @@ function ReviewScreen({
   durationAdvice,
   unresolved,
   boardAvailable,
-  researchAvailable,
+  scanUnavailable = null,
   pending,
   analytics,
   onJump,
@@ -1040,6 +1079,7 @@ function ReviewScreen({
   timingOpen = false,
   activeBuild = null,
   acceptedWindow = null,
+  buildUnavailable = null,
 }: {
   tripId: string;
   context: InterviewContext;
@@ -1050,7 +1090,7 @@ function ReviewScreen({
   durationAdvice: string | null;
   unresolved: InterpretationSet['unresolved'];
   boardAvailable: boolean;
-  researchAvailable: boolean;
+  scanUnavailable?: { heading: string; message: string } | null;
   pending: boolean;
   analytics: ReturnType<typeof interviewAnalytics>;
   onJump: (id: string) => void;
@@ -1063,6 +1103,7 @@ function ReviewScreen({
   timingOpen?: boolean;
   activeBuild?: BuildRunView | null;
   acceptedWindow?: TimingWindowView | null;
+  buildUnavailable?: { heading: string; message: string } | null;
 }) {
   const [rangeKept, setRangeKept] = useState(false);
   /* V7 §7 — once a window is accepted here the question is closed for this session too; the row already carries the lock. */
@@ -1112,13 +1153,37 @@ function ReviewScreen({
   );
   const party = context.traveller.party;
   const showTiming = timingOpen || timingAccepted || Boolean(acceptedWindow);
-  const explore = boardAvailable ? (
-    <button type="button" onClick={() => onFinish('board')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-build-board">
+  /*
+   * V1 CONVERGENCE — THE BOARD IS THE NEXT STEP, NOT A DETOUR.
+   *
+   * With a board: open it (primary), or build straight from Sidequest's picks
+   * (secondary). Without one: find places for the trip (primary — the
+   * Discovery scan, then the board), and, only where a composer can write a
+   * trip with no board, a plainly labelled way to skip it. The note under the
+   * bar is about whichever action is primary here.
+   */
+  const buildingNow = activeBuild?.state === 'running';
+  const unavailableNote = boardAvailable ? buildUnavailable : scanUnavailable;
+  const primary = buildingNow ? (
+    <Link href={`/trips/${tripId}/build`} className={cx(buttonClass('accent', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-open-build">
+      Open the build →
+    </Link>
+  ) : boardAvailable ? (
+    <button type="button" onClick={() => onFinish('board')} disabled={pending} className={cx(buttonClass('accent', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-build-board">
       {pending ? 'Opening your board…' : 'Open the Discovery Board'}
     </button>
-  ) : researchAvailable ? (
-    <button type="button" onClick={() => onFinish('research')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-research-first">
-      Explore experiences first
+  ) : (
+    <button type="button" onClick={() => onFinish('scan')} disabled={pending || Boolean(scanUnavailable)} aria-describedby={scanUnavailable ? 'build-unavailable-note' : undefined} className={cx(buttonClass('accent', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-find-places">
+      {pending ? 'Starting the search…' : 'Find places for my trip →'}
+    </button>
+  );
+  const secondary = buildingNow ? null : boardAvailable ? (
+    <button type="button" onClick={() => onFinish('build')} disabled={pending || Boolean(buildUnavailable)} aria-describedby={buildUnavailable ? 'build-unavailable-note' : undefined} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-build-trip">
+      {pending ? 'Starting your build…' : 'Build my trip'}
+    </button>
+  ) : !buildUnavailable ? (
+    <button type="button" onClick={() => onFinish('build')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-build-trip">
+      {pending ? 'Starting your build…' : 'Skip the board and build now'}
     </button>
   ) : null;
 
@@ -1401,19 +1466,17 @@ function ReviewScreen({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {/* ONE PRIMARY ACTION. Building the trip is what the interview is for; the board is an optional detour. */}
-            {explore}
-            {activeBuild?.state === 'running' ? (
-              <Link href={`/trips/${tripId}/build`} className={cx(buttonClass('accent', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-open-build">
-                Open the build →
-              </Link>
-            ) : (
-              <button type="button" onClick={() => onFinish('build')} disabled={pending} className={cx(buttonClass('accent', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-build-trip">
-                {pending ? 'Starting your build…' : 'Build my trip →'}
-              </button>
-            )}
+            {/* ONE PRIMARY ACTION: the board (or the search that makes one); building directly is the secondary path. */}
+            {secondary}
+            {primary}
           </div>
         </div>
+        {unavailableNote ? (
+          /* V1 convergence — the honest state of the primary action, beside it rather than after pressing it. */
+          <p id="build-unavailable-note" className="mx-auto mt-2 max-w-7xl type-small text-ink" role="status" data-testid="build-unavailable">
+            <strong className="font-semibold">{unavailableNote.heading}</strong> {unavailableNote.message}
+          </p>
+        ) : null}
       </div>
     </div>
   );

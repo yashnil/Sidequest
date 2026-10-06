@@ -174,7 +174,7 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
   const context = withRefreshedWeather(tripId, resolved.context);
 
   const selections = getSelections(tripId);
-  if (selections.filter((entry) => entry.status !== 'excluded').length === 0) {
+  if (selections.filter((entry) => entry.status === 'included' || entry.status === 'maybe').length === 0) {
     return {
       ok: false,
       error: 'Nothing is marked to include yet. Pick a few places, or use auto-pick, then try again.',

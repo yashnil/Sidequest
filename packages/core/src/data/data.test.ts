@@ -47,7 +47,8 @@ describe('seed data', () => {
 
   it('resolves the destination a traveller would actually type', () => {
     expect(resolveRegion('Mammoth Lakes')?.id).toBe('eastern-sierra');
-    expect(resolveRegion('mammoth')?.id).toBe('eastern-sierra');
+    // Bare "mammoth" is also a cave in Kentucky and hot springs in Wyoming.
+    expect(resolveRegion('mammoth')).toBeNull();
     expect(resolveRegion('Mammoth Lakes, CA')?.id).toBe('eastern-sierra');
     expect(resolveRegion('Reykjavik')).toBeNull();
     expect(resolveRegion('   ')).toBeNull();

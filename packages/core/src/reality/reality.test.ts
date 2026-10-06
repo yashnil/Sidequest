@@ -59,6 +59,17 @@ describe('buildTravelReality', () => {
     expect(reality.setup.map((s) => s.id)).toContain('is-setup-road');
   });
 
+  it('a city and its region in a rail-recommended country stays on the trains, even with a road-trip trait', () => {
+    const reality = buildTravelReality({ label: 'A city', countries: ['CH'], crossBorder: false, entityType: 'municipality', traits: ['city_region', 'road_trip_region'], tripDays: 5, capabilities: CAPS });
+    expect(reality.recommendation!.regional[0]).toBe('intercity_train');
+    expect(movementFromReality(reality)).not.toBe('car');
+  });
+
+  it('the same country at regional scale with a road-trip shape still earns the hire car', () => {
+    const reality = buildTravelReality({ label: 'Mountain valleys', countries: ['CH'], crossBorder: false, entityType: 'subregion', traits: ['mountain', 'road_trip_region'], tripDays: 7, capabilities: CAPS });
+    expect(reality.recommendation!.regional[0]).toBe('rental_car');
+  });
+
   it('nobody drives: the hire car leaves the recommendation and the driving set-up is not offered', () => {
     const reality = buildTravelReality({ label: 'Ireland', countries: ['IE'], crossBorder: false, traits: ['compact_country', 'road_trip_region'], tripDays: 8, party: { size: 2, drivers: 0 }, capabilities: CAPS });
     expect(reality.recommendation!.regional).not.toContain('rental_car');

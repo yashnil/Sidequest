@@ -219,7 +219,16 @@ export function createOpenResolver(input: {
           const inside = settlements.places.find((place) => {
             const lat = Number(place.lat);
             const lng = Number(place.lon);
-            return isExactNameMatch(query, place) && lat >= lead.bounds!.southWest.lat && lat <= lead.bounds!.northEast.lat && lng >= lead.bounds!.southWest.lng && lng <= lead.bounds!.northEast.lng;
+            /*
+             * V1 — the corroboration has to be a city, not the division again.
+             * Asked for settlements, the geocoder answers "Utah" with the Utah
+             * state record itself; matching it against its own box promoted a
+             * state to a city-region. Chongqing's evidence is a separate row
+             * typed city.
+             */
+            const settlementType = (place.addresstype ?? place.type ?? '').toLowerCase();
+            const isSettlement = ['city', 'town', 'municipality'].includes(settlementType) || ['city', 'town'].includes((place.extratags?.place ?? '').toLowerCase());
+            return isSettlement && isExactNameMatch(query, place) && lat >= lead.bounds!.southWest.lat && lat <= lead.bounds!.northEast.lat && lng >= lead.bounds!.southWest.lng && lng <= lead.bounds!.northEast.lng;
           });
           if (inside) candidates[0] = { ...lead, entityType: 'municipality', note: 'Published both as a first-level division and as a city of the same name inside it.' };
         } catch {

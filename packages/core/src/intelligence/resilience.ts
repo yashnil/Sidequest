@@ -72,20 +72,64 @@ export function buildResilience(input: { itinerary: Itinerary; pkg: TripPackage 
   });
 }
 
+/**
+ * REGRET MINIMISATION (master prompt §20.14), DERIVED FROM THE PLAN'S OWN RECORD.
+ *
+ * - Don't miss: the plan's scored signatures (`package.signatures`, V11 §7) —
+ *   what the trip is built around — then its core stops. Never day order alone.
+ * - Safe to skip: what the plan deliberately left out (`package.omissions`) and
+ *   the board's low-fit famous places.
+ * - Book early: the booking needs Sidequest marked book-first.
+ * - Keep flexible: the weather-dependent stops, each saying whether its day
+ *   already holds a written backup (by pointer — the backup's words are printed
+ *   once, on the day), then the bookings worth leaving open.
+ * - Verify before leaving: gated stops whose hours or season nobody published,
+ *   the stops' own seasonal notes and access warnings, the access constraints
+ *   that shaped the plan, and the rules that change.
+ */
 export function buildRegret(input: { pkg: TripPackage | undefined; itinerary: Itinerary; bookings: readonly BookingItem[]; access: readonly AccessStateEntry[]; weather: readonly DayWeatherSemantics[]; claims: readonly SourceClaim[]; worthSkipping: readonly { name: string; reason: string }[] }): RegretIntelligence {
+  const unique = <T extends { name: string }>(list: readonly T[]): T[] => list.filter((entry, i, all) => all.findIndex((e) => e.name.toLowerCase() === entry.name.toLowerCase()) === i);
   const anchors = input.pkg?.anchors ?? [];
   const scheduledCore = anchors.filter((a) => a.role === 'core' && (a.disposition === 'preserved' || a.disposition === 'preserved_with_verified_facts' || a.disposition === 'moved_same_day' || a.disposition === 'moved_other_day' || a.disposition === 'retained_unverified'));
-  const dontMiss = scheduledCore.filter((a, i, all) => all.findIndex((x) => x.name === a.name) === i).slice(0, 5).map((a) => ({ name: a.name, why: a.verification === 'verified' ? `A core stop, confirmed as a place on the map, on day ${a.scheduledDayNumber ?? a.dayNumber}.` : `A core stop of the plan on day ${a.scheduledDayNumber ?? a.dayNumber}; kept as proposed.` }));
-  const safeToSkip = [
+  const signatures = (input.pkg?.signatures ?? []).map((sig) => ({ name: sig.name, why: sig.why ?? `What this trip is built around, on day ${sig.dayNumber}.` }));
+  const dontMiss = unique([
+    ...signatures,
+    ...scheduledCore.map((a) => ({ name: a.name, why: a.verification === 'verified' ? `A core stop, confirmed as a place on the map, on day ${a.scheduledDayNumber ?? a.dayNumber}.` : `A core stop of the plan on day ${a.scheduledDayNumber ?? a.dayNumber}; kept as proposed.` })),
+  ]).slice(0, 5);
+  const safeToSkip = unique([
     ...(input.pkg?.omissions ?? []).map((o) => ({ name: o.name, why: o.reason })),
     ...input.worthSkipping.map((w) => ({ name: w.name, why: w.reason })),
-  ].filter((entry, i, all) => all.findIndex((e) => e.name === entry.name) === i).slice(0, 5);
-  const bookEarly = input.bookings.filter((b) => b.priority === 'book_first').map((b) => ({ name: b.title, why: b.reason })).filter((entry, i, all) => all.findIndex((e) => e.name === entry.name) === i).slice(0, 5);
-  const sensitive = input.weather.flatMap((d) => d.sensitiveItems.filter((s) => s.sensitivity === 'high').map((s) => ({ name: s.title, why: `Weather decides day ${d.dayNumber}; ${s.fallbackType === 'reschedule_within_trip' ? 'it can move within the trip' : s.fallbackType === 'shorten' ? 'it can be cut short' : 'there is a fallback'}.` })));
-  const keepFlexible = [...sensitive, ...input.bookings.filter((b) => b.priority === 'keep_flexible').map((b) => ({ name: b.title, why: b.reason }))].filter((entry, i, all) => all.findIndex((e) => e.name === entry.name) === i).slice(0, 5);
-  const verify = [
+  ]).slice(0, 5);
+  const bookEarly = unique(input.bookings.filter((b) => b.priority === 'book_first').map((b) => ({ name: b.title, why: b.reason }))).slice(0, 5);
+  /* Whether the day already holds a written backup. Named by pointer, not restated: the backup's own words live once, on the day's Backups card. */
+  const hasBackup = (dayNumber: number): boolean => {
+    const day = input.itinerary.days.find((d) => d.dayNumber === dayNumber);
+    return Boolean(day?.weather.backups[0]) || (input.pkg?.backups ?? []).some((b) => b.dayNumbers?.includes(dayNumber));
+  };
+  const sensitive = input.weather.flatMap((d) =>
+    d.sensitiveItems
+      .filter((s) => s.sensitivity === 'high')
+      .map((s) => {
+        const move = s.fallbackType === 'reschedule_within_trip' ? 'it can move within the trip' : s.fallbackType === 'shorten' ? 'it can be cut short' : 'there is a fallback';
+        return { name: s.title, why: `Weather decides day ${d.dayNumber}; ${move}${hasBackup(d.dayNumber) ? `, and day ${d.dayNumber}'s backup is written out under Backups` : ''}.` };
+      }),
+  );
+  const keepFlexible = unique([...sensitive, ...input.bookings.filter((b) => b.priority === 'keep_flexible').map((b) => ({ name: b.title, why: b.reason }))]).slice(0, 5);
+  const fromStops = input.itinerary.days.flatMap((day) =>
+    day.items
+      .filter((item) => item.kind === 'activity')
+      .flatMap((item) => [
+        ...(item.seasonalNote ? [{ name: item.title, why: item.seasonalNote }] : []),
+        ...(item.accessWarning ? [{ name: item.title, why: item.accessWarning }] : []),
+        ...(item.verifyBeforeTravel ? [{ name: item.title, why: item.verifyBeforeTravel }] : []),
+      ]),
+  );
+  const fromConstraints = (input.pkg?.accessConstraints ?? []).filter((c) => c.status !== 'open').map((c) => ({ name: c.placeName, why: c.travellerNote }));
+  const verify = unique([
     ...input.access.filter((a) => a.verifyBeforeTravel && (a.state === 'hours_unknown' || a.state === 'seasonal_unknown' || a.state === 'permit_required')).map((a) => ({ name: a.title, why: a.note })),
+    ...fromConstraints,
+    ...fromStops,
     ...input.claims.filter((c) => c.freshness === 'regulatory_volatile' && c.state !== 'not_applicable').map((c) => ({ name: c.claim, why: 'Rules can change; re-read the official source before you leave.' })),
-  ].filter((entry, i, all) => all.findIndex((e) => e.name === entry.name) === i).slice(0, 6);
+  ]).slice(0, 6);
   return regretIntelligenceSchema.parse({ dontMiss, safeToSkip, bookEarly, keepFlexible, verifyBeforeLeaving: verify });
 }

@@ -65,3 +65,17 @@ describe('the food provider choice', () => {
     ).toBe(1);
   });
 });
+
+describe('V1 — scan regions located with Google Places expire after the cache window', () => {
+  it('is fresh inside 29 days, expired after, and never expires open-data regions or compiled ones', async () => {
+    const { scanCoordinatesExpired } = await import('./region');
+    const created = '2026-09-01T00:00:00.000Z';
+    const google = { compilerVersion: 'discovery-scan/1', createdAt: created, places: [{ source: { kind: 'google_places' } }] } as never;
+    const osm = { compilerVersion: 'discovery-scan/1', createdAt: created, places: [{ source: { kind: 'osm' } }] } as never;
+    const compiled = { compilerVersion: 'compiler/9', createdAt: created, places: [{ source: { kind: 'google_places' } }] } as never;
+    expect(scanCoordinatesExpired(google, new Date('2026-09-20T00:00:00Z'))).toBe(false);
+    expect(scanCoordinatesExpired(google, new Date('2026-10-05T00:00:00Z'))).toBe(true);
+    expect(scanCoordinatesExpired(osm, new Date('2027-01-01T00:00:00Z'))).toBe(false);
+    expect(scanCoordinatesExpired(compiled, new Date('2027-01-01T00:00:00Z'))).toBe(false);
+  });
+});

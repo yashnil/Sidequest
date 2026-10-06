@@ -178,3 +178,91 @@ describe('the shared copy of a plan', () => {
     await expect(renderShare(token)).rejects.toMatchObject({ digest: expect.stringContaining('404') });
   });
 });
+
+/**
+ * V1 CONVERGENCE — EVERY PRIVATE SURFACE AT ONCE, AND NO MACHINERY.
+ *
+ * The owner has filled in everything a traveller can: a companion with a
+ * strict diet, an allergy and private words; a nationality that is not the
+ * default; the interview's free-text answers. The shared markup is searched
+ * for each, and for the names of Sidequest's own machinery — provider names,
+ * environment variables, the fixture switch, build-failure references — which
+ * belong in logs and never on a page a stranger can open.
+ */
+const OWNER_WORDS = {
+  dietNotes: 'DIET-SENTINEL no sesame at all please',
+  privateNotes: 'PRIVATE-SENTINEL recovering from knee surgery',
+  dietaryNotes: 'ANSWER-SENTINEL I only eat at places with outdoor seating',
+  accessibilityNotes: 'ANSWER-SENTINEL-ACCESS two flights of stairs is my limit',
+  groupNotes: 'ANSWER-SENTINEL-GROUP my sister and I are not speaking',
+  hardNotes: 'ANSWER-SENTINEL-HARD back at the hotel by nine for the baby',
+  preferenceNote: 'ANSWER-SENTINEL-PREF I am very fit but hate early starts',
+};
+
+async function seedEveryPrivateSurface(): Promise<{ tripId: string; token: string }> {
+  const seeded = await seedSharedTrip();
+  const { tripId } = seeded;
+  const { createTraveler, setPartyMember } = await import('@/lib/db/party-repository');
+  const companion = createTraveler(
+    { userId: null, ownerToken: 'owner-browser' },
+    { displayName: 'Companion Sentinel', diet: { needs: ['nut_allergy', 'kosher'], strict: true, allergyCrossContamination: true, notes: OWNER_WORDS.dietNotes }, needs: ['step_free_access'], privateNotes: OWNER_WORDS.privateNotes, profile: { interests: {}, transportComfort: [], lodgingNeeds: [] }, privacy: { hideFromPrint: false } },
+  );
+  setPartyMember({ tripId, travelerId: companion.id, role: 'other', preferencesApply: true, constraintsApply: true, participation: 'described', position: 1 });
+
+  const { saveReadinessProfile } = await import('@/lib/db/intelligence-repository');
+  saveReadinessProfile(tripId, { citizenship: 'IN', residence: 'IN', drivingLicenceCountry: 'IN', transitCountries: [] });
+
+  const { defaultAnswers, buildTravelerProfile } = await import('@sidequest/core');
+  const context = { travelerNeeds: [], tripDays: PLAN.days.length };
+  const answers = {
+    ...defaultAnswers(context),
+    dietaryNeeds: ['kosher'],
+    dietaryNotes: OWNER_WORDS.dietaryNotes,
+    accessibilityNotes: OWNER_WORDS.accessibilityNotes,
+    groupNotes: OWNER_WORDS.groupNotes,
+    hardNotes: OWNER_WORDS.hardNotes,
+    preferenceNotes: { pace: OWNER_WORDS.preferenceNote },
+  } as Parameters<typeof buildTravelerProfile>[0];
+  const { saveProfile } = await import('@/lib/db/repository');
+  saveProfile(tripId, answers, buildTravelerProfile(answers, context));
+  return seeded;
+}
+
+describe('the shared copy, with every private surface filled in', () => {
+  it('carries no party diet or accessibility fact, no nationality, and none of the traveller’s free-text answers', async () => {
+    const { tripId, token } = await seedEveryPrivateSurface();
+    /* The owner's own view is built first, so an owner-only snapshot exists for the share to (wrongly) copy. */
+    const { tripForShareToken, getItinerary } = await import('@/lib/db/repository');
+    const { itineraryViewModel } = await import('@/app/(product)/trips/[id]/itinerary/view-model');
+    const ownerModel = await itineraryViewModel(tripForShareToken(token)!, getItinerary(tripId)!);
+    /* The control: the owner's own model does name the nationality, so its absence below is the strip working. */
+    expect(JSON.stringify(ownerModel)).toContain('India');
+
+    const html = await renderShare(token);
+    expect(html.length).toBeGreaterThan(1000);
+    for (const [name, secret] of Object.entries(OWNER_WORDS)) {
+      expect(html.includes(secret), `${name} reached the shared markup`).toBe(false);
+    }
+    for (const fact of ['Companion Sentinel', 'Nut allergy', 'Kosher', 'kosher', 'step-free', 'Step-free', 'India', 'Indian', 'passport holders']) {
+      expect(html.includes(fact), `${fact} reached the shared markup`).toBe(false);
+    }
+  });
+
+  it('names none of Sidequest’s machinery: providers, environment variables, the fixture switch or failure references', async () => {
+    const { token } = await seedEveryPrivateSurface();
+    const html = await renderShare(token);
+    /*
+     * Visible text only: class names and test ids are markup, not words a reader sees.
+     * A data provider's own attribution (the weather source, a places licence) is a
+     * required credit and stays; this test runs on the offline weather provider, whose
+     * attribution says so, which is why a bare "fixture" is not searched for.
+     */
+    const text = html.replace(/<[^>]+>/g, ' ');
+    /* The dev-only badge is a test id, so it is checked in the markup itself. */
+    expect(html).not.toContain('fixture-planning-badge');
+    expect(html).not.toContain('environment-pill');
+    for (const pattern of [/google[-_ ]?places/i, /\bSIDEQUEST_[A-Z_]+/, /fixture (planning|composer)/i, /\bANTHROPIC\b/, /\bopenrouteservice\b/i, /\bvalhalla\b/i, /failure ref/i, /quote this reference/i, /\bstack\b/i]) {
+      expect(pattern.test(text), `${pattern} appeared in the shared page's text`).toBe(false);
+    }
+  });
+});

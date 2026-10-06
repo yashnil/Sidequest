@@ -82,7 +82,8 @@ export async function decideMustDoAction(
       try {
         const region = compiledRegionFor(tripId);
         const known = region?.places.some((place) => place.id === chosenId) ?? false;
-        const already = getSelections(tripId).some((entry) => entry.placeId === chosenId);
+        // Only the traveller's own row counts: a Sidequest pick of the same place is upgraded to theirs.
+        const already = getSelections(tripId).some((entry) => entry.placeId === chosenId && entry.source === 'user');
         if (known && !already) setSelection(tripId, chosenId, 'included', 'user');
       } catch (error) {
         console.error('Could not mark a chosen must-do as included', { tripId, error });

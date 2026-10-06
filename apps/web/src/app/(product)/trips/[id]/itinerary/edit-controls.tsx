@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass } from '@/components/ui';
+import { callAction, newBuildKey } from '@/components/client-action';
 import {
   easeDayAction,
   regenerateItineraryAction,
@@ -255,46 +256,89 @@ export function PrintExpand() {
 }
 
 /**
- * REGENERATE — THE SAME CANONICAL GENERATION AS "BUILD MY TRIP", FROM THE PLAN.
+ * REGENERATE — A DURABLE REBUILD, AFTER SAYING WHAT IT KEEPS.
  *
- * One model call, a fresh draft, verified and reconciled the same way, and
- * the page refreshes onto the replacement. Disabled while pending so a second
- * press cannot overlap a write.
+ * The press opens a confirmation first: what survives a rebuild (board
+ * decisions, must-keeps and locks, bookings, the party) and — only when there
+ * are some — the edits made on this itinerary that it replaces. Confirming
+ * records a durable build run and goes to the build screen, which shows
+ * progress and returns here when the new plan is saved. The copy comes from the
+ * server (`regenerate-summary.ts`) so it says only what the build will do.
  */
-export function RegenerateButton({ tripId }: { tripId: string }) {
+export function RegenerateButton({ tripId, copy }: { tripId: string; copy?: { kept: string; replaced: readonly string[] } }) {
   const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const key = useRef<string | null>(null);
+
+  const start = () => {
+    setStatus(null);
+    key.current ??= newBuildKey();
+    const buildKey = key.current;
+    startTransition(async () => {
+      const outcome = await callAction(() => regenerateItineraryAction(tripId, buildKey));
+      if (!outcome.ok) {
+        setStatus(outcome.message);
+        return;
+      }
+      if (!outcome.value.ok) {
+        key.current = null;
+        setStatus(outcome.value.error);
+        return;
+      }
+      router.push(`/trips/${tripId}/build`);
+    });
+  };
 
   return (
-    <span className="inline-flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2">
       <button
         type="button"
         disabled={pending}
+        aria-expanded={confirming}
         data-testid="regenerate-trip"
         onClick={() => {
           setStatus(null);
-          startTransition(async () => {
-            const result = await regenerateItineraryAction(tripId);
-            if (!result.ok) {
-              setStatus(result.error ?? 'We could not regenerate your trip just now.');
-              return;
-            }
-            router.refresh();
-          });
+          setConfirming((open) => !open);
         }}
-        className="rounded-[var(--radius-control)] border border-rule bg-paper px-3 py-1.5 text-sm text-ink transition-colors hover:border-ink disabled:opacity-50"
+        className={buttonClass('ghost', 'sm')}
       >
-        {pending ? 'Regenerating…' : 'Regenerate'}
+        Regenerate
       </button>
-      <span role="status" aria-live="polite" className="sr-only">
-        {pending ? 'Regenerating your trip. This can take a minute or two.' : ''}
-      </span>
-      {status ? (
-        <span role="alert" className="text-sm text-clay">
-          {status}
-        </span>
+      {confirming ? (
+        <div role="group" aria-labelledby="regenerate-heading" className="max-w-[22rem] rounded-[var(--radius-control)] border border-rule bg-paper p-3 text-sm" data-testid="regenerate-confirm">
+          <p id="regenerate-heading" className="font-medium text-ink">
+            Plan this trip again from scratch?
+          </p>
+          {copy ? (
+            <>
+              <p className="mt-1.5 leading-relaxed text-ink-muted" data-testid="regenerate-kept">
+                {copy.kept}
+              </p>
+              {copy.replaced.map((line) => (
+                <p key={line} className="mt-1.5 leading-relaxed text-ink" data-testid="regenerate-replaced">
+                  {line}
+                </p>
+              ))}
+            </>
+          ) : null}
+          <p className="mt-1.5 leading-relaxed text-ink-muted">It takes a minute or two. You will watch it build, then come back to the new plan.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={pending} onClick={start} className={buttonClass('primary', 'sm')} data-testid="regenerate-confirm-start">
+              {pending ? 'Starting…' : 'Rebuild the trip'}
+            </button>
+            <button type="button" disabled={pending} onClick={() => setConfirming(false)} className={buttonClass('ghost', 'sm')}>
+              Keep this plan
+            </button>
+          </div>
+          {status ? (
+            <p role="alert" className="mt-2 text-sm text-clay" data-testid="regenerate-error">
+              {status}
+            </p>
+          ) : null}
+        </div>
       ) : null}
-    </span>
+    </div>
   );
 }

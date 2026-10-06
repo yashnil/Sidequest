@@ -43,16 +43,41 @@ function ensureTables(): void {
 // ---------------------------------------------------------------------------
 
 export function saveFxRate(tripId: string, rate: FxRate, now: Date = new Date()): void {
+  saveFxRates(tripId, [rate], now);
+}
+
+/**
+ * V1 CONVERGENCE — every reference rate the budget may use, in one row: the
+ * USD→traveller-currency rate that converts the estimate and the
+ * USD→destination-currency rate behind the local figure. Stored as
+ * `{ rates: [...] }`; a row written before this held a single rate and still
+ * reads.
+ */
+export function saveFxRates(tripId: string, rates: readonly FxRate[], now: Date = new Date()): void {
   ensureTables();
-  getDb().prepare('INSERT OR REPLACE INTO trip_fx_rates (trip_id, payload_json, fetched_at) VALUES (?, ?, ?)').run(tripId, JSON.stringify(rate), now.toISOString());
+  if (rates.length === 0) return;
+  getDb().prepare('INSERT OR REPLACE INTO trip_fx_rates (trip_id, payload_json, fetched_at) VALUES (?, ?, ?)').run(tripId, JSON.stringify({ rates }), now.toISOString());
+}
+
+export function getFxRates(tripId: string): FxRate[] {
+  ensureTables();
+  const row = getDb().prepare('SELECT payload_json FROM trip_fx_rates WHERE trip_id = ?').get(tripId) as { payload_json: string } | undefined;
+  if (!row) return [];
+  let payload: unknown;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    return [];
+  }
+  const list = payload && typeof payload === 'object' && Array.isArray((payload as { rates?: unknown }).rates) ? (payload as { rates: unknown[] }).rates : [payload];
+  return list.flatMap((entry) => {
+    const parsed = fxRateSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 export function getFxRate(tripId: string): FxRate | null {
-  ensureTables();
-  const row = getDb().prepare('SELECT payload_json FROM trip_fx_rates WHERE trip_id = ?').get(tripId) as { payload_json: string } | undefined;
-  if (!row) return null;
-  const parsed = fxRateSchema.safeParse(JSON.parse(row.payload_json));
-  return parsed.success ? parsed.data : null;
+  return getFxRates(tripId)[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------

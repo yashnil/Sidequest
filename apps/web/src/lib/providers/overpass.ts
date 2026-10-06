@@ -378,6 +378,23 @@ export async function fetchFoodPois(
 }
 
 /**
+ * Somewhere to sit down for a meal, and nothing else — one selector group, so
+ * one request per box.
+ *
+ * The Discovery Scan names lunch and dinner venues only; the provisioning and
+ * market groups would be two more requests per box to a volunteer-run service
+ * for records the scan cannot use (an unconfirmed grocery is unrepresentable as
+ * a food venue). Its own `kind`, so it never shares a cache entry with the full
+ * food sweep.
+ */
+export async function fetchMealPois(
+  box: BoundingBox,
+  options: OverpassOptions = {},
+): Promise<OverpassResult> {
+  return fetchTagged(box, FOOD_SELECTORS.filter((entry) => entry.intent === 'meal'), 'food-meal', options);
+}
+
+/**
  * Real, named settlements inside a bounded box — the same query shape as
  * `fetchPois`/`fetchFoodPois`, pointed at `place=city/town/village/hamlet`
  * instead. Used where a search needs "what is a real place to sleep near

@@ -39,7 +39,7 @@ export function liveSpendingConfigured(): boolean {
  * Mirrors `compilerProviderChoice()` in `lib/compiler/readiness.ts` plus the
  * `openProvidersEnabled()` inference behind it, as literal env reads, for the
  * same runtime reason as above. `doctor.test.ts`'s pattern applies here too:
- * `middleware.test.ts` runs the matrix so the two copies cannot disagree
+ * `proxy.test.ts` runs the matrix so the two copies cannot disagree
  * quietly.
  */
 export function compilerIsOpen(): boolean {

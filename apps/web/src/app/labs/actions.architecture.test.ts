@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * EVERY LABS ACTION ASKS THE GATE, BECAUSE THE URL GATE DOES NOT COVER THEM.
  *
- * `middleware.ts` matches on `/labs/:path*`, which decides what a *navigation*
+ * `proxy.ts` (formerly `middleware.ts`) matches on `/labs/:path*`, which decides what a *navigation*
  * may reach. It decides nothing about a server action: Next resolves an action
  * from its `Next-Action` id against a global manifest and runs it whatever URL
  * the POST was addressed to. A reviewer POSTed a labs-only action id to `/`

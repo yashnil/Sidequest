@@ -166,6 +166,8 @@ describe('accounts', () => {
     const { authProviders } = await import('@/lib/auth/config');
     expect(authProviders({ NODE_ENV: 'production', SIDEQUEST_AUTH_PROVIDER: 'fixture' }).fixture).toBe(false);
     expect(authProviders({ NODE_ENV: 'production', SIDEQUEST_AUTH_PROVIDER: 'fixture', SIDEQUEST_AUTH_FIXTURE: 'allow' }).fixture).toBe(true);
+    /* V1 convergence — the rate-limit switch is not a sign-in switch. */
+    expect(authProviders({ NODE_ENV: 'production', SIDEQUEST_AUTH_PROVIDER: 'fixture', SIDEQUEST_ACTION_FENCES: 'off' }).fixture).toBe(false);
     expect(authProviders({ GOOGLE_OAUTH_CLIENT_ID: 'id', GOOGLE_OAUTH_CLIENT_SECRET: 's' }).google).toBe(false);
     expect(authProviders({ GOOGLE_OAUTH_CLIENT_ID: 'id', GOOGLE_OAUTH_CLIENT_SECRET: 's', SIDEQUEST_BASE_URL: 'https://sidequest.example' }).google).toBe(true);
   });

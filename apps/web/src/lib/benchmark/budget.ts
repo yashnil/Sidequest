@@ -178,7 +178,7 @@ export type SpendGate =
 
 /**
  * Whether the compiler is on the billable open stack, from the same literal
- * env reads `middleware.ts` and `compilerProviderChoice()` make. Duplicated
+ * env reads `proxy.ts` and `compilerProviderChoice()` make. Duplicated
  * here rather than imported so this module keeps taking an `env` parameter —
  * the switches read `process.env` at call time and this gate's tests inject
  * environments.

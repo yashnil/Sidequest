@@ -262,8 +262,17 @@ export function auditItinerary(input: {
 
   // --- scope ---------------------------------------------------------------------------
   const nightsPerBase = draft.bases.length > 0 ? nights / draft.bases.length : nights;
-  const broad = /country|multi_country|region/.test(String(trip.basics.regionId === 'dynamic' ? '' : '')) || draft.bases.length > 3;
-  add('scope_disciplined', !broad || nightsPerBase >= 1.5 || profile.interview.baseMoveTolerance === 'move_freely', 'warning', `${draft.bases.length} base(s) over ${nights} nights (${nightsPerBase.toFixed(1)} nights per base)`);
+  /*
+   * V1 — what this check measures, stated: hotel moves against the nights and
+   * against the traveller's own switching tolerance. It used to gate on a
+   * breadth regex over an always-empty string, so only the "more than three
+   * bases" half ever ran.
+   */
+  const tolerance = profile.interview.baseMoveTolerance;
+  const allowedBases = tolerance === 'stay_put' ? 1 : tolerance === 'move_once' ? 2 : Number.POSITIVE_INFINITY;
+  const moving = draft.bases.length > 1;
+  const disciplined = (!moving || nightsPerBase >= 1.5 || tolerance === 'move_freely') && draft.bases.length <= allowedBases;
+  add('scope_disciplined', disciplined, 'warning', `${draft.bases.length} base(s) over ${nights} nights (${nightsPerBase.toFixed(1)} nights per base); you said ${tolerance.replace(/_/g, ' ')}`);
 
   // --- base changes ----------------------------------------------------------------------
   const order: string[] = [];

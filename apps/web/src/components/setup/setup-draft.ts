@@ -75,6 +75,8 @@ export interface SetupDraft {
 
   mustDo: string;
   avoid: string;
+  /** "I already have a plan": the plan as written, one day per line. */
+  existingPlan: string;
 
   /**
    * The steps the traveller has actually answered and moved past.
@@ -129,6 +131,7 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
     departure: 'morning',
     mustDo: '',
     avoid: '',
+    existingPlan: '',
     answered: [],
   };
   if (!prior) return base;
@@ -175,6 +178,7 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
     departure: prior.departure?.precision ?? base.departure,
     mustDo: prior.mustDo ?? '',
     avoid: prior.avoid ?? '',
+    existingPlan: prior.existingPlan ?? '',
     // Everything a stored trip holds has been answered once already.
     answered: [...SETUP_STEPS],
   };
@@ -414,6 +418,7 @@ export function payloadFor(draft: SetupDraft): ComposerInput {
     travelerNeeds: draft.travelerNeeds,
     mustDo: draft.mustDo,
     avoid: draft.avoid,
+    ...(draft.existingPlan.trim() ? { existingPlan: draft.existingPlan } : {}),
     origin: '',
   };
 }

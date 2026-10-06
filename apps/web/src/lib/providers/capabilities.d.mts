@@ -26,7 +26,23 @@ export interface CapabilityRegistry {
   composition: 'anthropic' | 'fixture' | 'off';
   capabilities: Capability[];
   byId: Record<string, Capability>;
+  /** V1 convergence — fixture switches in use and whether production refuses them. */
+  fixtureGuard: FixtureGuard;
+  /** V1 convergence — the operator's hard problems, in words (switch names allowed; never traveller copy). */
+  problems: string[];
 }
+
+export interface FixtureGuard {
+  production: boolean;
+  optedIn: boolean;
+  switches: string[];
+  refused: boolean;
+}
+
+export const FIXTURES_OPT_IN: 'SIDEQUEST_FIXTURES';
+export function fixtureSwitchesInUse(env?: Record<string, string | undefined>): string[];
+export function productionFixtureRefusal(env?: Record<string, string | undefined>): FixtureGuard;
+export function deploymentProblems(env?: Record<string, string | undefined>): string[];
 
 export function capabilityRegistry(env?: Record<string, string | undefined>): CapabilityRegistry;
 export function modeLabel(mode: ProviderMode): string;

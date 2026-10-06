@@ -251,8 +251,11 @@ test('the grounds are still schedulable on a day the visitor centre is shut', as
   await page.locator('#hub-view-days [data-row-kind="activity"]').filter({ hasText: 'Manzanar National Historic Site' }).first().getByTestId('stop-open-sheet').click();
   await expect(page.getByTestId('place-sheet').getByText(/Signed for daylight use only/).first()).toBeVisible();
   await page.keyboard.press('Escape');
-  // No borrowed schedule: the grounds show no opening window.
-  await expect(page.getByText(/Open 09:00–16:30/)).toHaveCount(0);
+  // No borrowed schedule: the grounds' own row shows no opening window. (V1 — the
+  // planner may also schedule the visitor centre on a day it is open, with its own
+  // hours, so the assertion is scoped to the grounds rather than to the page.)
+  const groundsRow = page.locator('#hub-view-days [data-row-kind="activity"]').filter({ hasText: 'Manzanar National Historic Site' }).first();
+  await expect(groundsRow.getByText(/Open 09:00–16:30/)).toHaveCount(0);
 });
 
 test('changing the dates recalculates availability rather than reusing it', async ({ page }) => {

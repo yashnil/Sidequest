@@ -68,6 +68,12 @@ export default defineConfig({
      */
     exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/src/lib/execution/perf-offline.test.ts', 'apps/web/src/lib/destinations/recommend-perf.test.ts'],
     environment: 'node',
+    /*
+     * FX is on by default in the product (keyless ECB rates). The unit suite
+     * stays hermetic: no generation under test reaches the network for a rate
+     * unless a test opts in with its own choice or fetch stub.
+     */
+    env: { SIDEQUEST_FX_PROVIDER: process.env.SIDEQUEST_FX_PROVIDER ?? 'off' },
     passWithNoTests: false,
   },
 });

@@ -1,5 +1,10 @@
 import 'server-only';
 import {
+  buildDiscoveryDecisions,
+  SKIP_REASON_PHRASES,
+  type DecisionCandidate,
+  type DiscoverySelection,
+  type DiscoveryDecisions,
   buildTravelerBrief,
   countNights,
   journeyFromSegment,
@@ -15,7 +20,6 @@ import {
   tripDates,
   unavailableWeatherDataset,
   type DestinationCandidate,
-  type Place,
   type Region,
   type TravelerProfile,
   type Trip,
@@ -31,7 +35,7 @@ import { verificationProviders } from './verification-providers';
 import { getIntent, saveComposerAnswers } from '../db/compiler-repository';
 import { getTripDraft, listCompositionAttempts, recordCompositionParse, saveCompositionAttempt, saveTripDraft } from '../db/draft-repository';
 import { randomUUID } from 'node:crypto';
-import { getAnswers, getProfile, getSelections, getTrip, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
+import { getAnswers, getItineraryLocks, getProfile, getSelections, getTrip, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-repository';
@@ -39,7 +43,7 @@ import { weatherAvailability, type WeatherDataset, type WeatherLocation } from '
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
 import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
-import { buildFeasibilityReport, buildStructuralMetrics, buildTripQualityReport, tripStructureOf, decomposeDestination, itineraryStatusForVerdict, needsDecomposition, routeObjectivesFor } from '@sidequest/core';
+import { buildFeasibilityReport, buildStructuralMetrics, buildTripQualityReport, tripStructureOf, itineraryStatusForVerdict } from '@sidequest/core';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -66,12 +70,16 @@ import { auditItinerary, type QualityAudit } from './quality-audit';
 import { compileQualitySafely } from './quality-compiler';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
+import { destinationEnvelopeFor } from './destination-envelope';
+import { composeWithPlanner, planningRecordOf, type PlannerComposition } from './planner-composer';
+import { getScanProposalExtras } from '../db/scan-repository';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
 import { beginGeneration, finishGeneration, markGenerationDraftSaved, markGenerationModelInvoked, markGenerationStage, noteGenerationCounters, noteGenerationPlaced, type GenerationCounters } from '../db/generation-progress-repository';
-import { fetchReferenceRate } from '../providers/fx';
-import { saveFxRate } from '@/lib/db/intelligence-repository';
+import { fetchReferenceRates } from '../providers/fx';
+import { buildFailure, classifyCompositionFailure, encodeBuildFailure, type BuildFailure } from './build-failure';
+import { saveFxRates } from '@/lib/db/intelligence-repository';
 
 /**
  * THE ONE CANONICAL PRODUCTION ITINERARY-GENERATION ORCHESTRATOR.
@@ -125,6 +133,13 @@ export interface ProductionPlanResult {
   quality?: QualityAudit;
   /** True when verification stopped at the product deadline and the trip was returned with what had verified. */
   degraded?: boolean;
+  /**
+   * V1 convergence — why the build failed, typed (`build-failure.ts`). Present
+   * wherever this function knows the cause; `error` stays for older callers.
+   * A caller that needs a failure for every `ok: false` uses
+   * `build-preflight.ts#failureForResult`.
+   */
+  failure?: BuildFailure;
 }
 
 /**
@@ -345,8 +360,14 @@ export async function generateSidequestPlanForTrip(
    * indistinguishable from the paid one at the point it matters most.
    */
   const willCompose = !options.reuseStoredDraft && !options.useDraft;
-  if (willCompose && !fixture && !isCompositionModelConfigured()) {
-    return { ok: false, error: 'No model credential is configured, so we cannot compose a first draft yet.' };
+  /*
+   * V1 CONVERGENCE — the credential is checked where a model would actually be
+   * asked. A trip with a Discovery Board is planned by the deterministic
+   * planner and needs no model; only the regionless fallback composes.
+   */
+  if (willCompose && !fixture && !isCompositionModelConfigured() && !(await tripHasRegion(trip))) {
+    const failure = buildFailure('composer_not_configured');
+    return { ok: false, error: failure.message, failure };
   }
 
   // --- Preparation: region evidence and destination identity, in parallel ---
@@ -370,131 +391,11 @@ export async function generateSidequestPlanForTrip(
   const board = region ? boardFor(trip, profile, region) : null;
 
   /*
-   * MVP V3, Stages 10–12 — THE DURABLE INTENT DECIDES WHAT THIS TRIP IS CALLED.
-   *
-   * The traveller's own phrase, and whether anything has earned the right to
-   * replace it. "inland Alaska" resolving to a town is a *lead*, not a
-   * correction, so `interpretedLabel` is still their words and the town travels
-   * as a centre. Where no intent was ever recorded — a trip made before this
-   * existed — the old derivation stands unchanged.
+   * V10 §2/§3/§8/§11 — the destination envelope, built once by the shared
+   * `destinationEnvelopeFor` so the discovery scan's proposal call and this
+   * build read the same account of the destination.
    */
-  const storedIntent = intent?.destinationIntent ?? null;
-  /*
-   * V10 §2 — THE ONE CANONICAL DESTINATION OBJECT.
-   *
-   * Setup resolved it, the questionnaire read it, and from here it is what
-   * composition, the placement ladder, the quality compiler and the jurisdiction
-   * language all read. Nothing downstream derives its own second account of the
-   * destination, which is how a mountain region became a country on one screen
-   * and a currency sentence on another.
-   */
-  const concept = storedIntent?.semantics ?? null;
-  const conceptCountries = concept?.countries ?? (candidate?.countryCode ? [candidate.countryCode] : []);
-  const divisions = (concept?.jurisdictions ?? []).filter((j) => j.level === 'subnational').map((j) => j.name);
-  /*
-   * V10 §8 — the gateways, in order of authority.
-   *
-   * The traveller's own scope first, because a gateway they named (`fixed`) is a
-   * fact and not a suggestion; then the rest of the scope's gateways; then the
-   * ones the semantic layer inferred for the destination, already placed and
-   * gated. Context, never the destination — the plan's edges are built around
-   * them, and no gateway is ever a place to spend the trip.
-   */
-  const scopeGateways = [...(intent?.scope?.gateways ?? [])].sort((a, b) => Number(b.fixed) - Number(a.fixed));
-  const conceptGateways = [
-    ...scopeGateways.map((g) => ({ label: g.name, ...(g.coordinates ? { coordinates: g.coordinates } : {}) })),
-    ...(concept?.gateways ?? []).map((g) => ({ label: g.label, ...(g.center ? { coordinates: g.center } : {}) })),
-  ].filter((g, index, all) => all.findIndex((other) => other.label.toLowerCase() === g.label.toLowerCase()) === index);
-  /*
-   * V10 §3 — the coverage graph, derived from what already placed. A broad
-   * natural or cultural region is decomposed before composition; a city is one
-   * zone; a destination nobody has placed is no zones and a sentence saying so.
-   * Pure and free: no provider call, no model call, no destination name in the
-   * code that produces it.
-   */
-  const decomposition =
-    concept && needsDecomposition(concept)
-      ? decomposeDestination({
-          concept,
-          ...(region ? { signatureExperiences: region.compiled.subregions.slice(0, 6).map((s) => ({ name: s.name, ...(s.center ? { near: s.center } : {}) })) } : {}),
-        })
-      : null;
-  /*
-   * V10 §9 §11 — the operational facts that shape the plan, in the composition's
-   * hands rather than corrected out of it afterwards. A closure the model never
-   * proposes needs no correction; a shuttle-only lake designed for as a shuttle
-   * day is a better day than one turned into a warning.
-   */
-  const accessFacts = accessConstraintsFor(conceptCountries)
-    .filter((c) => c.status !== 'unknown' && c.status !== 'open')
-    .filter((c) => {
-      const from = c.validFrom ?? '0000-01-01';
-      const until = c.validUntil ?? '9999-12-31';
-      return trip.basics.endDate >= from && trip.basics.startDate <= until;
-    })
-    .slice(0, 10)
-    .map((c) => `${c.travellerNote} (${c.sourceName})`);
-  /* V10 §11 — the route's objectives, derived from the traveller's own answers and the destination's own shape. */
-  const routeObjectives = routeObjectivesFor({
-    concept,
-    profile,
-    nights: countNights(trip.basics.startDate, trip.basics.endDate),
-    ...(decomposition ? { coreZones: decomposition.zones.filter((z) => z.role === 'core').length } : {}),
-  });
-  const resolvedName = candidate?.displayName ?? region?.region.name ?? trip.basics.destinationInput;
-  const rawDestinationPhrase = (storedIntent?.rawText || intent?.destinationQuery || composer?.destinationQuery || trip.basics.destinationInput || '').trim();
-  const destinationName = storedIntent?.interpretedLabel || resolvedName;
-  const referenceTimeZone = (() => {
-    const codes = [...(intent?.destinationIntent?.graph?.countries ?? []), ...(candidate?.countryCode ? [candidate.countryCode] : [])];
-    for (const code of codes) {
-      const zone = countryFacts(code)?.timeZone;
-      if (zone) return zone;
-    }
-    return null;
-  })();
-  const envelope: DestinationEnvelope = {
-    name: destinationName,
-    ...(candidate?.qualifiedName ? { qualifiedName: candidate.qualifiedName } : {}),
-    ...(candidate?.countryCode ? { countryCode: candidate.countryCode } : {}),
-    ...(candidate?.countryName ? { countryName: candidate.countryName } : {}),
-    ...(candidate?.breadth ? { scale: candidate.breadth } : {}),
-    center: candidate?.center ?? region?.region.baseCoordinates ?? { lat: 0, lng: 0 },
-    /* The candidate's zone, else the first named country's reference zone: a sunset computed in UTC is a wrong sunset, not a missing one. */
-    ...(candidate?.timeZones?.[0] ? { timeZone: candidate.timeZones[0] } : referenceTimeZone ? { timeZone: referenceTimeZone } : {}),
-    ...(region ? { knownAreas: region.compiled.subregions.map((s) => s.name).slice(0, 8) } : {}),
-    ...(storedIntent && storedIntent.interpretationType !== 'unresolved' ? { interpretation: storedIntent.interpretationType } : {}),
-    /*
-     * The resolved place, when it did not earn the destination's name. It is a
-     * centre to plan around and it is labelled as one; the model is told which
-     * of the two is the traveller's own word.
-     */
-    ...(storedIntent?.anchor && normalizePhrase(storedIntent.anchor.label) !== normalizePhrase(destinationName)
-      ? { anchorName: storedIntent.anchor.label }
-      : {}),
-    ...(rawDestinationPhrase && normalizePhrase(rawDestinationPhrase) !== normalizePhrase(destinationName) ? { travellerPhrase: rawDestinationPhrase } : {}),
-    /*
-     * V10 §3 §11 — THE SEMANTIC ENVELOPE THE COMPOSITION CALL DESERVES.
-     *
-     * Before V10 a broad region reached the one call as a name, a scale word and
-     * a centre, and was asked to invent both the geography and the trip. It now
-     * arrives with its coverage graph (the areas a trip here can be built from,
-     * their roles and their distances), its jurisdictions kept separate from
-     * itself, its gateways, the operational facts that would otherwise have to be
-     * corrected afterwards, and what the route is for. Every one of those is
-     * derived from evidence Sidequest already holds — nothing here is a new
-     * provider call, and nothing is an allow-list.
-     */
-    ...(decomposition && decomposition.zones.length > 0
-      ? {
-          coverage: decomposition.zones.map((zone) => ({ label: zone.label, role: zone.role, kmFromCentre: zone.kmFromCentre, signatureExperiences: zone.signatureExperiences })),
-          coverageNote: decomposition.note,
-        }
-      : {}),
-    ...(concept && concept.jurisdictions.length > 0 ? { jurisdictions: concept.jurisdictions.map((j) => ({ level: j.level, name: j.name })) } : {}),
-    ...(conceptGateways.length > 0 ? { gateways: conceptGateways.map((g) => g.label) } : {}),
-    ...(accessFacts.length > 0 ? { accessFacts } : {}),
-    ...(routeObjectives.length > 0 ? { routeObjectives } : {}),
-  };
+  const { envelope, concept, conceptCountries, divisions, conceptGateways, rawDestinationPhrase } = destinationEnvelopeFor({ trip, intent, candidate, region, profile });
 
   const boardSignals = mode === 'full' && board ? boardSignalsFor(board.candidates, getSelections(tripId)) : undefined;
   /*
@@ -603,6 +504,31 @@ export async function generateSidequestPlanForTrip(
   const preparationMs = since(preparationStartedMs);
 
   let model: StructuredModel;
+  let plannerComposition: PlannerComposition | null = null;
+  /*
+   * The planner runs first whenever there is a board; a board too thin to give
+   * every day between arrival and departure something falls back to the
+   * composition below (and says so on the package), or — with no composer —
+   * refuses with an actionable reason rather than shipping an empty day.
+   */
+  const plannerAttempt =
+    !options.useDraft && !options.reuseStoredDraft && process.env.SIDEQUEST_PLANNING_MODE?.trim() !== 'model' && plannerScheduledAnything(region, board) && region && board
+      ? composeWithPlanner({
+          trip,
+          profile,
+          region,
+          candidates: board.candidates,
+          selections: getSelections(tripId),
+          extras: getScanProposalExtras(tripId),
+          destinationName: envelope.name,
+          carAvailable: input.movement.carAvailable !== false,
+          maxDailyTravelMinutes: input.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes,
+          ...(input.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value } : {}),
+          locks: getItineraryLocks(tripId),
+        })
+      : null;
+  const plannerTooThin = plannerAttempt ? plannerAttempt.plan.days.slice(1, -1).some((day) => day.stops.length === 0) : false;
+  if (plannerTooThin) console.warn('The board could not fill every day; falling back to composition', { tripId, pool: plannerAttempt?.poolSize });
   if (options.useDraft) {
     const supplied = options.useDraft;
     model = { callsRemaining: 1, structured: async () => supplied as never } as unknown as StructuredModel;
@@ -610,6 +536,19 @@ export async function generateSidequestPlanForTrip(
     const stored = getTripDraft(tripId);
     if (!stored) return { ok: false, error: 'There is no saved draft for this trip to verify again.' };
     model = { callsRemaining: 1, structured: async () => stored.draft as never } as unknown as StructuredModel;
+  } else if (plannerAttempt && !plannerTooThin) {
+    /*
+     * V1 CONVERGENCE — THE PLANNER DECIDES THE STRUCTURE.
+     *
+     * The Discovery Board exists, so Sidequest's deterministic planner chose the
+     * places, the days, the order, the bases, lunch and the weather swaps
+     * (`structure-planner.ts`); the draft it wrote goes through exactly the
+     * verification below. No model call: the prose is the scan's research and
+     * deterministic sentences.
+     */
+    plannerComposition = plannerAttempt;
+    const supplied = plannerAttempt.draft;
+    model = { callsRemaining: 1, structured: async () => supplied as never } as unknown as StructuredModel;
   } else if (fixture) {
     model = new FixtureComposer(context, {
       placeNames: (board?.candidates ?? []).slice(0, 40).map((c) => ({ name: displayNameOf(c.place), category: c.place.category })),
@@ -619,6 +558,10 @@ export async function generateSidequestPlanForTrip(
       destinationInput: trip.basics.destinationInput,
     });
   } else {
+    if (!isCompositionModelConfigured()) {
+      const failure = buildFailure(plannerTooThin ? 'planner_refused' : 'composer_not_configured');
+      return { ok: false, error: failure.message, failure };
+    }
     const reservation = reserveModelCalls(1, { now, caller: options.caller });
     if (!reservation.allowed) {
       return { ok: false, error: reservation.message ?? 'Today’s planning allowance is used up. Try again tomorrow.' };
@@ -677,6 +620,8 @@ export async function generateSidequestPlanForTrip(
      * plain sentence and an explicit Retry. Nothing here retries.
      */
     const diagnostics = { failureKind: outcome.failureKind, issueKind: outcome.issueKind ?? null, detail: outcome.detail.slice(0, 500), issues: (outcome.issues ?? []).slice(0, 40), enforcement: outcome.enforcement };
+    /* V1 convergence — the cause in Sidequest's own taxonomy: a rate limit is not a malformed draft. */
+    const compositionFailure = buildFailure(classifyCompositionFailure(outcome));
     if (!fixture && !options.reuseStoredDraft && !options.useDraft) {
       try {
         recordCompositionParse({ id: attemptId, parseStatus: outcome.failureKind === 'malformed_output' ? (outcome.issueKind ?? 'no_json') : 'model_failed', parse: diagnostics, draftLinked: false });
@@ -686,12 +631,12 @@ export async function generateSidequestPlanForTrip(
     }
     let failureRef: string | null = null;
     try {
-      failureRef = finishGeneration(tripId, 'failed', new Date(), { kind: 'model_failed' }).ref;
+      failureRef = finishGeneration(tripId, 'failed', new Date(), { kind: 'model_failed', cause: encodeBuildFailure(compositionFailure) }).ref;
     } catch {
       /* the failure is already reported */
     }
     console.error(`Composition failed [ref ${failureRef ?? 'none'}]: ${outcome.failureKind}${outcome.issueKind ? `/${outcome.issueKind}` : ''} — ${outcome.detail.slice(0, 300)}${outcome.issues?.length ? ` | issues: ${JSON.stringify(outcome.issues.slice(0, 10))}` : ''} | calls: ${JSON.stringify(modelCalls.map((call) => ({ ...(call as unknown as Record<string, unknown>), schemaValidationIssues: undefined })))}`);
-    return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, timings: emptyTimings(), modelCalls, diagnostics };
+    return { ok: false, error: TRAVELLER_COMPOSITION_FAILURE, failure: compositionFailure, timings: emptyTimings(), modelCalls, diagnostics };
   }
   /*
    * V6 §2 — ENFORCE THE CONTRACT BEFORE ANYTHING READS THE DRAFT.
@@ -1139,19 +1084,22 @@ export async function generateSidequestPlanForTrip(
   const intelligenceMs = since(intelligenceStartedMs);
 
   /*
-   * LIVE WORLD V1 — one dated reference rate, fetched at plan time and read on
-   * every render, only when the destination's currency differs from the
-   * traveller's and an FX provider is configured. A failure leaves the budget
-   * in the traveller's currency and says nothing about rates.
+   * LIVE WORLD V1 / V1 CONVERGENCE — the budget is worked out in US dollars, so
+   * the rates it needs are USD→the traveller's currency (to convert the
+   * estimate) and USD→the destination's currency (a second, local view). One
+   * request for both, at plan time, read on every render. A failure, or a
+   * currency the ECB does not publish, leaves the budget in US dollars saying
+   * so; nothing is invented and nothing is relabelled.
    */
   const localCurrency = currencyForCountry(candidate?.countryCode ?? envelope.countryCode);
   const travellerCurrency = (profile.interview.budgetEnvelope as { currency?: string } | undefined)?.currency ?? 'USD';
-  if (localCurrency && localCurrency !== travellerCurrency && capability('currency.fx')?.configured && budget.take('fx') && !degraded) {
+  const fxQuotes = [...new Set([travellerCurrency, localCurrency].filter((c): c is string => Boolean(c) && c !== 'USD'))];
+  if (fxQuotes.length > 0 && capability('currency.fx')?.configured && budget.take('fx') && !degraded) {
     try {
-      const rate = await fetchReferenceRate(travellerCurrency, localCurrency, { now });
-      if (rate) saveFxRate(tripId, rate, now);
+      const rates = await fetchReferenceRates('USD', fxQuotes, { now });
+      if (rates.length > 0) saveFxRates(tripId, rates, now);
     } catch {
-      /* the budget stays unconverted; nothing is invented */
+      /* the budget stays in US dollars; nothing is invented */
     }
   }
 
@@ -1181,6 +1129,7 @@ export async function generateSidequestPlanForTrip(
         package: {
           ...applied.itinerary.package,
           ...(reality ? { reality } : {}),
+          planning: plannerComposition ? planningRecordOf(plannerComposition) : { mode: 'model_composed' as const, reason: options.useDraft || options.reuseStoredDraft ? 'Re-verified an existing draft.' : plannerTooThin ? 'The Discovery Board had too few places to fill every day, so a model composed the draft.' : region ? 'Composed by the model at the traveller\u2019s request (regression mode).' : 'No Discovery Board existed for this trip, so a model composed the draft.', weatherMoves: [], mustConflicts: [] },
           feasibility,
           preservation: {
             version: 1 as const,
@@ -1391,10 +1340,6 @@ function monthLabelFor(startDate: string, endDate: string): string {
 }
 
 
-/** Case- and punctuation-insensitive, so "Hong Kong" and "hong kong" are one phrase. */
-function normalizePhrase(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
 
 /**
  * QUALITY V1 — one compact traveller brief instead of forty settings. Built
@@ -1440,7 +1385,11 @@ export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelo
     signals: {
       mustInclude: [...(input.boardSignals?.mustInclude ?? []), ...canonical.ownWords.mustDo],
       boardLikes: input.boardSignals?.interested ?? [],
-      boardRejects: input.boardSignals?.avoid ?? [],
+      boardRejects: (input.boardSignals?.avoid ?? []).map((name) => (input.boardSignals?.avoidReasons?.[name] ? `${name} — ${input.boardSignals.avoidReasons[name]}` : name)),
+      sidequestRecommended: input.boardSignals?.recommended ?? [],
+      ...(input.boardSignals?.omitted
+        ? { omitted: { boardLikes: input.boardSignals.omitted.interested, boardRejects: input.boardSignals.omitted.avoid, sidequestRecommended: input.boardSignals.omitted.recommended } }
+        : {}),
     },
     ownWords: { mustDo: canonical.ownWords.mustDo, dislikes: canonical.ownWords.dislikes, freeText: canonical.ownWords.freeText, mobilityNotes: canonical.party.mobilityNotes },
     ...(input.party && input.party.length > 0 ? { party: input.party } : {}),
@@ -1456,28 +1405,62 @@ export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelo
  */
 export { defaultProfileFor } from './default-profile';
 
-/** Discovery Board decisions as compact signals — never a list of what exists. */
+/**
+ * Discovery Board decisions as compact signals — never a list of what exists.
+ *
+ * A projection of the one `DiscoveryDecisions` object (`@sidequest/core`), so
+ * the brief, the composition payload and the reconciler's manual set all read
+ * the same split: `mustInclude` is the traveller's own includes only (never
+ * capped), and Sidequest's automatic picks travel as `recommended` — never as
+ * something the traveller marked. Every capped list carries its omitted count.
+ */
 export function boardSignalsFor(
-  candidates: readonly { place: Place }[],
-  selections: readonly { placeId: string; status: string }[],
+  candidates: readonly DecisionCandidate[],
+  selections: readonly (Pick<DiscoverySelection, 'placeId' | 'status'> & Partial<DiscoverySelection>)[],
 ): BoardSignals | undefined {
   if (selections.length === 0) return undefined;
-  const nameById = new Map(candidates.map((c) => [c.place.id, displayNameOf(c.place)] as const));
-  const mustInclude: string[] = [];
-  const interested: string[] = [];
-  const avoid: string[] = [];
-  for (const selection of selections) {
-    const name = nameById.get(selection.placeId);
-    if (!name) continue;
-    if (selection.status === 'included') mustInclude.push(name);
-    else if (selection.status === 'maybe') interested.push(name);
-    else if (selection.status === 'excluded') avoid.push(name);
-  }
-  if (mustInclude.length + interested.length + avoid.length === 0) return undefined;
-  return { mustInclude: mustInclude.slice(0, 10), interested: interested.slice(0, 10), avoid: avoid.slice(0, 10) };
+  const decisions = buildDiscoveryDecisions(
+    candidates,
+    selections.map((selection, index) => ({
+      placeId: selection.placeId,
+      status: selection.status,
+      // A row with no stated author is the traveller's: the safe reading for a caller that only knows statuses.
+      source: selection.source ?? 'user',
+      ...(selection.reason ? { reason: selection.reason } : {}),
+      // No timestamp: keep the caller's order.
+      updatedAt: selection.updatedAt ?? String(index).padStart(8, '0'),
+    })),
+  );
+  return boardSignalsFromDecisions(decisions);
 }
 
-async function destinationCandidateFor(
+/** The composition's view of a `DiscoveryDecisions` object. */
+export function boardSignalsFromDecisions(decisions: DiscoveryDecisions): BoardSignals | undefined {
+  const names = (list: { entries: readonly { name: string }[] }) => list.entries.map((entry) => entry.name);
+  const mustInclude = names(decisions.travellerMustIncludes);
+  const interested = names(decisions.travellerMaybes);
+  const avoid = names(decisions.travellerExclusions);
+  const recommended = names(decisions.sidequestRecommended);
+  if (mustInclude.length + interested.length + avoid.length + recommended.length === 0) return undefined;
+  const avoidReasons: Record<string, string> = {};
+  for (const entry of decisions.travellerExclusions.entries) {
+    if (entry.reason) avoidReasons[entry.name] = SKIP_REASON_PHRASES[entry.reason];
+  }
+  return {
+    mustInclude,
+    interested,
+    avoid,
+    ...(Object.keys(avoidReasons).length > 0 ? { avoidReasons } : {}),
+    recommended,
+    omitted: {
+      interested: decisions.travellerMaybes.omittedCount,
+      avoid: decisions.travellerExclusions.omittedCount,
+      recommended: decisions.sidequestRecommended.omittedCount,
+    },
+  };
+}
+
+export async function destinationCandidateFor(
   trip: Trip,
   resolution: { candidates: readonly DestinationCandidate[]; unambiguousCandidateId?: string } | null,
   selectedCandidateId: string | null,
@@ -1606,4 +1589,18 @@ async function fetchRegionlessWeather(input: { tripId: string; trip: Trip; envel
 /** Exposed for tests that assert what the composition call is (and is not) told. */
 export function compositionPreview(context: CompositionContext): { task: string; untrusted: Record<string, unknown> } {
   return { task: buildCompositionTask(context), untrusted: compositionUntrustedPayload(context) };
+}
+
+/** A board with at least one candidate the planner may use; otherwise there is nothing to plan from. */
+function plannerScheduledAnything(region: RegionContext | null, board: { candidates: readonly unknown[] } | null): boolean {
+  return Boolean(region && board && board.candidates.length > 0);
+}
+
+/** Whether a trip has a region to plan from, without spending anything: an adopted or authored region resolves from the database. */
+async function tripHasRegion(trip: Trip): Promise<boolean> {
+  try {
+    return (await resolveTripRegion(trip)).ok;
+  } catch {
+    return false;
+  }
 }

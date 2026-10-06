@@ -8,6 +8,11 @@ import {
 /**
  * THE SPENDING GATE ON THE `/labs` **PAGES**.
  *
+ * V1 convergence — Next 16 renamed the `middleware` file convention to `proxy`
+ * (same behaviour, Node.js runtime by default; `node_modules/next/dist/docs/
+ * 01-app/03-api-reference/03-file-conventions/proxy.md`). This was
+ * `src/middleware.ts`; the function, the matcher and the decision are unchanged.
+ *
  * `/labs` is the internal comparison harness. Pressing its start control runs
  * two planners, one of which makes billed model calls, and until this existed
  * nothing stood between the open internet and that button.
@@ -36,7 +41,7 @@ import {
  * Both ask the same question of the same module, so a deployment cannot be open
  * to one and closed to the other.
  */
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   /*
    * `??` on a trimmed string is the wrong operator: an empty-but-present header
    * is not nullish, so it short-circuited the cookie and refused an operator who
@@ -58,7 +63,7 @@ export const config = {
   /**
    * Only the labs tree. The customer journey is untouched by this file — and
    * this constant is what decides whether the check above runs at all, so
-   * `middleware.test.ts` asserts the matcher itself rather than only the
+   * `proxy.test.ts` asserts the matcher itself rather than only the
    * predicate behind it. A one-token typo here (or a future move to
    * `/internal/labs`) would otherwise silently open the harness with the whole
    * suite green.

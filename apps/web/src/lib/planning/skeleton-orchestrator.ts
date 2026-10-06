@@ -289,8 +289,18 @@ export async function productionFindNearbyLocalities(
     }
   }
 
-  const fallback = await productionReverseGeocodeLocality(point);
-  return fallback ? [fallback] : [];
+  /*
+   * A geocoder that does not answer is an absence, not a verdict: the corridor
+   * remedy finds no locality here and the leg keeps its own classification.
+   * Unguarded, a Nominatim timeout on this optional fallback failed a whole
+   * live build (Hanoi, 2026-10-06) after every stop had already been placed.
+   */
+  try {
+    const fallback = await productionReverseGeocodeLocality(point);
+    return fallback ? [fallback] : [];
+  } catch {
+    return [];
+  }
 }
 
 /**

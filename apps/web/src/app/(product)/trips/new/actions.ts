@@ -99,6 +99,7 @@ const inputSchema = z.object({
   travelerNeeds: z.array(z.enum(TRAVELER_NEEDS)),
   mustDo: z.string().max(600),
   avoid: z.string().max(600),
+  existingPlan: z.string().max(2000).optional(),
   origin: z.string().max(120),
   /*
    * QUALITY V1 — the composer form no longer asks these; the interview does.
@@ -261,6 +262,7 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
     ...(input.freeTime ? { freeTime: input.freeTime } : {}),
     ...(input.mustDo ? { mustDo: input.mustDo } : {}),
     ...(input.avoid ? { avoid: input.avoid } : {}),
+    ...(input.existingPlan?.trim() ? { existingPlan: input.existingPlan.trim() } : {}),
     /*
      * What we made of that text, proposed and unconfirmed.
      *
@@ -306,7 +308,7 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
    * else goes through the compiler. Preserving this is what keeps every Eastern
    * Sierra journey, fixture and test green through this phase.
    */
-  const region = resolveRegion(input.destinationText);
+  const region = resolveRegion(input.destinationText, { center: destination?.center ?? null });
 
   const basics = tripBasicsSchema.safeParse({
     mode: 'known_destination',

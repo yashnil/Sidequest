@@ -4,7 +4,7 @@ import { itineraryStructureFingerprint, type BookedPlanItem, type BookingResolut
 import { getProfile } from '@/lib/db/repository';
 import { profileWithPartyDiet } from '@/lib/db/party-repository';
 import { getIntent } from '@/lib/db/compiler-repository';
-import { getDraftHints, getFxRate, getReadinessProfile, getTravelIntelligence, listBookedItems, listChecks, saveTravelIntelligence, type CheckList } from '@/lib/db/intelligence-repository';
+import { getDraftHints, getFxRates, getReadinessProfile, getTravelIntelligence, listBookedItems, listChecks, saveTravelIntelligence, type CheckList } from '@/lib/db/intelligence-repository';
 import { defaultProfileFor } from '@/lib/planning/default-profile';
 import { applyBookedFacts, type BookedAffectedScope } from './booked-reconcile';
 import { listBookingResolutions } from '@/lib/db/execution-repository';
@@ -144,7 +144,7 @@ export function loadTripIntelligence(input: {
     .update(JSON.stringify(profile.interview))
     .update(profile.budgetStyle)
     .update(userPlaces.join('|'))
-    .update(JSON.stringify(getFxRate(trip.id)))
+    .update(JSON.stringify(getFxRates(trip.id)))
     .digest('hex')
     .slice(0, 32);
 
@@ -179,7 +179,7 @@ export function loadTripIntelligence(input: {
       bookedHonored: applied.honored,
       bookedConflicts: applied.conflicts,
       now,
-      fx: getFxRate(trip.id),
+      fxRates: getFxRates(trip.id),
       resolutions,
     });
     /*

@@ -1296,6 +1296,23 @@ export type PackageAnchor = z.infer<typeof packageAnchorSchema>;
 
 export const tripPackageSchema = z.object({
   source: z.literal('model_draft'),
+  /**
+   * V1 CONVERGENCE — who decided the structure. `planner`: Sidequest's
+   * deterministic planner chose the places, days, order and meals from the
+   * Discovery Board; `model_composed`: no board was available (or the planner
+   * could place nothing) and a model composed the draft, verified as before.
+   * Absent on plans built before this existed, which were all model-composed.
+   */
+  planning: z
+    .object({
+      mode: z.enum(['planner', 'model_composed']),
+      reason: z.string().min(1).optional(),
+      poolSize: z.number().int().min(0).optional(),
+      scheduled: z.object({ traveller: z.number().int().min(0), sidequest: z.number().int().min(0), maybe: z.number().int().min(0), filler: z.number().int().min(0) }).optional(),
+      weatherMoves: z.array(z.object({ name: z.string().min(1), avoidedDate: z.string().min(1), chosenDate: z.string().min(1) })).default([]),
+      mustConflicts: z.array(z.object({ name: z.string().min(1), detail: z.string().min(1) })).default([]),
+    })
+    .optional(),
   draftVersion: z.number().int().min(1),
   /** The trip shape the model chose. Legacy values (`single_base`, `moving_route`, `loop`) still parse for stored plans. */
   archetype: tripArchetypeSchema,

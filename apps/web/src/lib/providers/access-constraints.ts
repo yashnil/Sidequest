@@ -39,7 +39,8 @@ export function accessConstraintsForCountry(countryCode: string): readonly Acces
   if (cached) return cached;
   for (const dir of FIXTURE_DIRS) {
     try {
-      const raw = readFileSync(join(process.cwd(), dir, `${code}.json`), 'utf8');
+      /* `turbopackIgnore`: a computed path over two candidate roots; tracing it traced the project. The app runs `next start` from the tree, so the files are on disk. */
+      const raw = readFileSync(join(/* turbopackIgnore: true */ process.cwd(), dir, `${code}.json`), 'utf8');
       const parsed = accessConstraintSetSchema.parse({ version: 1, constraints: (JSON.parse(raw) as { constraints: unknown[] }).constraints });
       cache.set(code, parsed.constraints);
       return parsed.constraints;

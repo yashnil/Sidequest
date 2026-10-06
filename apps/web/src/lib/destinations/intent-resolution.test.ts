@@ -33,6 +33,11 @@ const KNOWN: Record<string, DestinationCandidate> = {
   tanzania: candidate({ id: 'r195270', displayName: 'Tanzania', entityType: 'country', breadth: 'country', center: { lat: -6.5, lng: 35.7 }, bounds: { southWest: { lat: -11.8, lng: 29.3 }, northEast: { lat: -0.98, lng: 40.4 } }, countryCode: 'TZ' }),
   edinburgh: candidate({ id: 'r1920901', displayName: 'Edinburgh', center: { lat: 55.95, lng: -3.19 }, countryCode: 'GB' }),
   'scottish highlands, united kingdom': candidate({ id: 'r-highlands', displayName: 'Highland', entityType: 'subregion', breadth: 'subregion', center: { lat: 57.5, lng: -4.7 }, bounds: { southWest: { lat: 56.5, lng: -7 }, northEast: { lat: 58.7, lng: -2.9 } }, countryCode: 'GB' }),
+  moab: candidate({ id: 'r198930', displayName: 'Moab', center: { lat: 38.57, lng: -109.55 }, bounds: { southWest: { lat: 38.54, lng: -109.58 }, northEast: { lat: 38.6, lng: -109.52 } }, countryCode: 'US' }),
+  utah: candidate({ id: 'r161993', displayName: 'Utah', entityType: 'state_or_province', breadth: 'region', center: { lat: 39.42, lng: -111.71 }, bounds: { southWest: { lat: 37.0, lng: -114.05 }, northEast: { lat: 42.0, lng: -109.04 } }, countryCode: 'US' }),
+  'zurich, switzerland': candidate({ id: 'r1682248', displayName: 'Zurich', center: { lat: 47.37, lng: 8.54 }, bounds: { southWest: { lat: 47.32, lng: 8.45 }, northEast: { lat: 47.43, lng: 8.63 } }, countryCode: 'CH' }),
+  tokyo: candidate({ id: 'r1543125', displayName: 'Tokyo', center: { lat: 35.68, lng: 139.76 }, bounds: { southWest: { lat: 35.5, lng: 138.9 }, northEast: { lat: 35.9, lng: 139.9 } }, countryCode: 'JP' }),
+  kyoto: candidate({ id: 'r357794', displayName: 'Kyoto', center: { lat: 35.01, lng: 135.77 }, bounds: { southWest: { lat: 34.88, lng: 135.56 }, northEast: { lat: 35.32, lng: 135.88 } }, countryCode: 'JP' }),
   chongqing: candidate({ id: 'r913069', displayName: 'Chongqing', entityType: 'municipality', breadth: 'region', center: { lat: 29.56, lng: 106.55 }, bounds: { southWest: { lat: 28.2, lng: 105.3 }, northEast: { lat: 32.2, lng: 110.2 } }, countryCode: 'CN' }),
 };
 
@@ -125,5 +130,48 @@ describe('resolveDestinationPhrase', () => {
     const graph = parseDestinationIntent('the steppes of Kyrgyzstan and Kyrgyzstan');
     expect(resolverQueryFor(graph.children[0]!)).toBe('steppes of Kyrgyzstan');
     expect(resolverQueryFor(graph.children[1]!)).toBe('Kyrgyzstan');
+  });
+});
+
+describe('V1 — parts are looked up inside the container the phrase named', () => {
+  it('asks "Arches, Utah", and falls back to the bare part when the container finds nothing', async () => {
+    const graph = parseDestinationIntent('Moab, Arches and Capitol Reef, Utah');
+    const arches = graph.children.find((c) => c.label === 'Arches')!;
+    expect(resolverQueryFor(arches)).toBe('Arches, Utah');
+    const asked: string[] = [];
+    const resolver = {
+      async resolve({ query }: { query: string }) {
+        asked.push(query);
+        return { schemaVersion: DESTINATION_RESOLUTION_VERSION, query, normalizedQuery: query.toLowerCase(), candidates: [], ambiguityReasons: [], providersConsulted: ['test'], resolvedAt: NOW.toISOString() } as DestinationResolution;
+      },
+    } as unknown as DestinationResolver;
+    await resolveDestinationPhrase({ text: 'Moab, Arches and Capitol Reef, Utah', resolver, now: NOW, maxGeocoderCalls: 20 });
+    expect(asked).toContain('Arches, Utah');
+    expect(asked).toContain('Arches');
+  });
+});
+
+describe('a place and the area it sits in (V1)', () => {
+  it('"Zurich, Switzerland" asks for the city inside the country and reads it as the city, not the country', async () => {
+    const log: string[] = [];
+    const { outcome, semantics } = await resolveDestinationPhrase({ text: 'Zurich, Switzerland', resolver: fakeResolver(log), now: NOW, interpreter: null });
+    expect(log).toEqual(['Zurich, Switzerland']);
+    expect(outcome.graph.children.map((c) => c.label)).toEqual(['Zurich']);
+    expect(semantics.type).toBe('settlement');
+    expect(semantics.extent?.source).toBe('published');
+  });
+
+  it('"Moab, Utah": the state is the address, so the trip is the town, not the union with the state', async () => {
+    const { outcome, semantics } = await resolveDestinationPhrase({ text: 'Moab, Utah', resolver: fakeResolver(), now: NOW, interpreter: null });
+    expect(outcome.graph.children).toHaveLength(1);
+    expect(outcome.graph.children[0]!.label).toBe('Moab');
+    expect(outcome.graph.children[0]!.within).toBe('Utah');
+    expect(semantics.type).toBe('settlement');
+    expect(semantics.extent?.bounds.northEast.lat).toBeLessThan(39);
+  });
+
+  it('"Tokyo, Kyoto" stays two places: neither sits inside the other', async () => {
+    const { outcome } = await resolveDestinationPhrase({ text: 'Tokyo, Kyoto', resolver: fakeResolver(), now: NOW, interpreter: null });
+    expect(outcome.graph.children.map((c) => c.label)).toEqual(['Tokyo', 'Kyoto']);
   });
 });

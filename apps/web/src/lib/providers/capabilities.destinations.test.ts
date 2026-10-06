@@ -31,7 +31,7 @@ describe('destination capabilities', () => {
    * test is this capability's contribution.
    */
   it('does not make an offline deployment look live merely by holding bundled reference data', () => {
-    const offline = capabilityRegistry({ SIDEQUEST_COMPOSER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'off', SIDEQUEST_IMAGERY_PROVIDER: 'off', SIDEQUEST_CLIMATE_PROVIDER: 'off' });
+    const offline = capabilityRegistry({ SIDEQUEST_COMPOSER_PROVIDER: 'fixture', SIDEQUEST_WEATHER_PROVIDER: 'off', SIDEQUEST_IMAGERY_PROVIDER: 'off', SIDEQUEST_CLIMATE_PROVIDER: 'off', SIDEQUEST_FX_PROVIDER: 'off' });
     expect(offline.byId['destinations.resolution']?.provider).toBe('sidequest');
     expect(offline.byId['destinations.resolution']?.costClass).toBe('none');
     expect(offline.mode).toBe('fixture');

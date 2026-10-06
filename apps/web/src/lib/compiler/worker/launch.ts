@@ -60,9 +60,10 @@ export function compilerIsolationMode(): CompilerIsolation {
  * tests run from the repository root.
  */
 export function workerEntryPath(cwd = process.cwd()): string | null {
+  /* `turbopackIgnore`: found at runtime on purpose (see above); never a bundling input. */
   const candidates = [
-    join(cwd, 'src/lib/compiler/worker/compile-worker.mjs'),
-    join(cwd, 'apps/web/src/lib/compiler/worker/compile-worker.mjs'),
+    join(/* turbopackIgnore: true */ cwd, 'src/lib/compiler/worker/compile-worker.mjs'),
+    join(/* turbopackIgnore: true */ cwd, 'apps/web/src/lib/compiler/worker/compile-worker.mjs'),
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
@@ -93,9 +94,10 @@ export function launchCompilationWorker(input: {
   }
 
   try {
-    const logDir = join(process.cwd(), 'data', 'compile-logs');
+    /* The compile logs are written at runtime; the bundler must not trace the directory (or the project around it). */
+    const logDir = join(/* turbopackIgnore: true */ process.cwd(), 'data', 'compile-logs');
     mkdirSync(logDir, { recursive: true });
-    const log = openSync(join(logDir, `${input.jobId}.log`), 'a');
+    const log = openSync(join(/* turbopackIgnore: true */ logDir, `${input.jobId}.log`), 'a');
 
     /*
      * The parent's loader hooks stay with the parent. `NODE_OPTIONS` is how a

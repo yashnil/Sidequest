@@ -2783,6 +2783,9 @@ function sameOvernightPlace(a: ResolvedBase, b: ResolvedBase): boolean {
   return Boolean(from && to && haversineKm(from, to) <= COLOCATED_KM);
 }
 
+/** A matrix that answers nothing: lets `measuredLeg` consult only the router's own ledger. */
+const EMPTY_TRAVEL_MATRIX = { mode: 'car', ids: [], minutes: [], km: [], provenance: { kind: 'estimated', note: 'No matrix consulted.' } } as unknown as ReconcileContext['matrix'];
+
 function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor[]): { day: ItineraryDay; overflowMinutes: number; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
   const { context, window, draftDay, base, previousBase } = input;
   const canDrive = context.profile.transport.willDrive;
@@ -2931,13 +2934,26 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     }
     // LIVE WORLD V1 — on a transit-mode trip a metro/rail/bus hint is what the network measures, not a mode the road router refuses.
     const routable = roadRoutable(hint) || (context.matrix.mode === 'transit' && (hint === 'metro' || hint === 'rail' || hint === 'bus'));
-    let measured = from.coordinates && to.coordinates && routable ? measuredLeg(context.matrix, input.extraMatrix, from.id, to.id) : null;
+    /*
+     * V1 — A MATRIX IS ONLY "MEASURED" WHEN ITS PROVENANCE SAYS SO.
+     *
+     * A discovery-scan region carries a distance-estimated matrix and an
+     * authored region a modelled one; both used to be counted here as measured
+     * legs ("16 of 16 measured by estimated road data"), which also made the
+     * daily drive ceiling trim stops on evidence that was never measured. Such a
+     * figure is now an estimate, labelled with where it came from; only a
+     * router's answer (the ledger) or a measured matrix is measured.
+     */
+    /* `modelled` (an authored region's road-topology times) keeps its existing, labelled standing; `estimated` (distance) is an estimate. */
+    const trustedMatrix = context.matrix.provenance.kind !== 'estimated' ? context.matrix : null;
+    let measured = from.coordinates && to.coordinates && routable ? (trustedMatrix ? measuredLeg(trustedMatrix, input.extraMatrix, from.id, to.id) : measuredLeg(EMPTY_TRAVEL_MATRIX, input.extraMatrix, from.id, to.id)) : null;
+    const matrixFigure = !measured && !trustedMatrix && from.coordinates && to.coordinates && routable ? measuredLeg(context.matrix, null, from.id, to.id) : null;
     let confirmation = measured ? memoFor(from.id, to.id) : null;
     let viaBases = false;
     if (!measured && role === 'transfer' && input.previousBase?.identity && input.base?.identity && routable) {
       const prevId = input.previousBase.identity.id;
       const nextId = input.base.identity.id;
-      const baseLeg = measuredLeg(context.matrix, input.extraMatrix, prevId, nextId);
+      const baseLeg = measuredLeg(trustedMatrix ?? EMPTY_TRAVEL_MATRIX, input.extraMatrix, prevId, nextId);
       if (baseLeg) {
         measured = baseLeg;
         confirmation = memoFor(prevId, nextId);
@@ -3053,7 +3069,11 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
           )
         : null;
     const walkRefused = walk?.verdict === 'refuse';
-    const estimate = !measured && routable && !walkRefused && fromCoordinates && toCoordinates ? estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode }) : null;
+    const estimate = !measured && routable && !walkRefused && fromCoordinates && toCoordinates
+      ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive') === (context.matrix.mode === 'car')
+        ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
+        : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode })
+      : null;
     const noRouteAnswered = ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;
     const unmeasuredReason: TravelSegment['unmeasuredReason'] =
       walkRefused
@@ -3588,11 +3608,15 @@ function nameVenuesForDay(
 ): number {
   let named = 0;
   const items = day.items;
+  /** Lunch and dinner at the same table on one day is a gap in the data, not a recommendation. */
+  const namedToday = new Set<string>();
   const bandCeiling = PRICE_BAND_ORDER[profile.food.everydayPriceBand];
   for (const [index, item] of items.entries()) {
     if (item.kind !== 'meal') continue;
     const slot: 'lunch' | 'dinner' | null = item.id.endsWith('lunch') ? 'lunch' : item.id.endsWith('dinner') ? 'dinner' : null;
     if (!slot) continue;
+    // The plan said to carry this one ("Pack a lunch — food is thin out here"); naming a restaurant would contradict it.
+    if (/\b(pack(ed)? (a )?lunch|picnic|carry (your )?(own )?food)\b/i.test(item.title)) continue;
     // Where the traveller is at this meal: the last stop before it, or the base.
     let near: { lat: number; lng: number } | null = null;
     for (let i = index - 1; i >= 0; i -= 1) {
@@ -3605,21 +3629,32 @@ function nameVenuesForDay(
     const atBase = near === null;
     const origin = near ?? base;
     if (!origin) continue;
+    const declaredNeeds = profile.food.dietaryNeeds;
     const candidates = food.venues
       .filter((venue) => venue.mealPeriods.includes(slot))
+      // A venue whose record says it cannot do one of the traveller's needs is never named for them.
+      .filter((venue) => !venue.dietary.some((claim) => claim.evidence === 'venue_states_unsuitable' && declaredNeeds.includes(claim.need)))
       .filter((venue) => PRICE_BAND_ORDER[venue.priceBand] <= bandCeiling)
-      .filter((venue) => (venueUse.get(venue.id) ?? 0) < MAX_TIMES_ONE_VENUE_IS_NAMED)
+      .filter((venue) => (venueUse.get(venue.id) ?? 0) < MAX_TIMES_ONE_VENUE_IS_NAMED && !namedToday.has(venue.id))
       .filter((venue) => venue.hours.kind === 'unknown' || venue.hours.kind === 'always_open' || operatingOn(venue.hours, day.date).status !== 'closed')
       .map((venue) => ({ venue, km: kmBetween(origin, venue.coordinates) }))
       .filter((entry) => entry.km <= VENUE_SEARCH_KM)
       .sort((a, b) => a.km - b.km);
-    const best = candidates[0];
+    /*
+     * With a declared need, a venue whose record says it serves it wins over a
+     * marginally nearer one that says nothing — within two kilometres of the
+     * nearest, so a diet never sends anyone across town for lunch.
+     */
+    const supports = (venue: FoodVenue) => declaredNeeds.length > 0 && declaredNeeds.every((need) => venue.dietary.some((claim) => claim.need === need && claim.evidence !== 'venue_states_unsuitable' && claim.evidence !== 'unknown'));
+    const nearest = candidates[0];
+    const best = nearest ? (candidates.find((entry) => supports(entry.venue) && entry.km <= nearest.km + 2) ?? nearest) : undefined;
     if (!best) continue;
     const { venue } = best;
     venueUse.set(venue.id, (venueUse.get(venue.id) ?? 0) + 1);
+    namedToday.add(venue.id);
     const hours = venueHoursOn(venue, day.date);
     const declared = profile.food.dietaryNeeds;
-    const claims = venue.dietary.filter((claim) => declared.includes(claim.need));
+    const claims = venue.dietary.filter((claim) => declared.includes(claim.need) && claim.evidence !== 'venue_states_unsuitable');
     const unverified = declared.filter((need) => !claims.some((claim) => claim.need === need));
     const routeContext = atBase ? 'at_base' : best.km <= 2 ? 'on_route' : 'near_route';
     /*
@@ -3634,7 +3669,7 @@ function nameVenuesForDay(
     items[index] = {
       ...item,
       title: `${slot === 'lunch' ? 'Lunch' : 'Dinner'} — ${venue.name}`,
-      reason: `${venue.name} is ${where}${venue.localSpecialty ? `; ${venue.localSpecialty.note}` : ''}. Named from the region's own food data; we have not checked today that it is open, and nothing is booked.`,
+      reason: `${venue.name} is ${where}${venue.localSpecialty ? `; ${venue.localSpecialty.note}` : ''}. ${venue.source.kind === 'osm' ? 'Named from OpenStreetMap map data (© OpenStreetMap contributors), not a review or a booking site' : "Named from the region's own food data"}; we have not checked today that it is open, and nothing is booked.`,
       food: {
         slot,
         stopKind: 'venue',
